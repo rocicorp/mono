@@ -430,7 +430,7 @@ test('qualified selectors in where', async () => {
     .prepare();
 
   const rows = await stmt.exec();
-  expect(rows).toEqual([{id: 'b'}]);
+  expect(rows).toEqual([issues[1]]);
 
   await r.close();
 });
@@ -443,7 +443,23 @@ test('qualified selectors in group-by', async () => {
   const stmt = q.select(agg.count()).groupBy('issue.status').prepare();
 
   const rows = await stmt.exec();
-  expect(rows).toEqual([{count: 2}, {count: 1}]);
+  expect(rows).toEqual([
+    {...issues[0], count: 2},
+    {...issues[2], count: 1},
+  ]);
+
+  await r.close();
+});
+
+test('qualified selectors in order-by', async () => {
+  const {q, r} = setup();
+  const issues = defaultIssues;
+  await Promise.all(issues.map(r.mutate.initIssue));
+
+  const stmt = q.select('id').asc('issue.priority').prepare();
+  const rows = await stmt.exec();
+  console.log(rows);
+  expect(rows).toEqual([issues[0], issues[2], issues[1]]);
 
   await r.close();
 });

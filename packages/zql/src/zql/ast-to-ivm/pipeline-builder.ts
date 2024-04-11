@@ -106,16 +106,8 @@ function applySimpleCondition<T extends Entity>(
   if (selector.includes('.')) {
     [source, field] = selector.split('.');
   }
-  return stream.filter(x => {
-    if (isJoinResult(x)) {
-      return operator(
-        ((x as Record<string, unknown>)[source] as Record<string, unknown>)[
-          field
-        ],
-      );
-    }
-    return operator((x as Record<string, unknown>)[field]);
-  });
+  const qualifiedColumn = [source, field] as [string, string];
+  return stream.filter(x => operator(pullValueFromEntity(x, qualifiedColumn)));
 }
 
 function applyGroupBy<T extends Entity>(
@@ -226,26 +218,11 @@ function applyFullTableAggregation<T extends Entity>(
 }
 
 function makeKeyFunction(selectors: string[]) {
-  const qualifiedColumns = selectors.map(x => {
-    if (x.includes('.')) {
-      return x.split('.') as [string, string];
-    }
-    return [undefined, x] as const;
-  });
+  const qualifiedColumns = selectorsToQualifiedColumns(selectors);
   return (x: Record<string, unknown>) => {
     const ret: unknown[] = [];
     for (const qualifiedColumn of qualifiedColumns) {
-      if (isJoinResult(x)) {
-        ret.push(
-          (
-            (x as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
-              string,
-              unknown
-            >
-          )[qualifiedColumn[1]],
-        );
-      }
-      ret.push(x[qualifiedColumn[1]]);
+      ret.push(pullValueFromEntity(x, qualifiedColumn));
     }
     // Would it be better to come up with some hash function
     // which can handle complex types?
@@ -350,4 +327,30 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
     }
   }
   return new RegExp(pattern + '$', flags);
+}
+
+export function selectorsToQualifiedColumns(
+  selectors: string[],
+): [string | undefined, string][] {
+  return selectors.map(x => {
+    if (x.includes('.')) {
+      return x.split('.') as [string, string];
+    }
+    return [undefined, x] as const;
+  });
+}
+
+export function pullValueFromEntity(
+  entity: Record<string, unknown>,
+  qualifiedColumn: [table: string | undefined, column: string],
+) {
+  if (isJoinResult(entity)) {
+    return (
+      (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
+        string,
+        unknown
+      >
+    )[qualifiedColumn[1]];
+  }
+  return entity[qualifiedColumn[1]];
 }
