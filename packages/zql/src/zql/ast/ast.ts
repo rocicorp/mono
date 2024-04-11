@@ -2,6 +2,7 @@
 // https://www.sqlite.org/lang_select.html
 
 import {compareUTF8} from 'compare-utf8';
+import {defined} from 'shared/src/arrays.js';
 
 // TODO: the chosen operator needs to constrain the allowed values for the value
 // input to the query builder.
@@ -137,11 +138,11 @@ function flattened(cond: Condition | undefined): Condition | undefined {
   if (cond.type === 'simple') {
     return cond;
   }
-  const conditions = cond.conditions
-    .flatMap(c =>
+  const conditions = defined(
+    cond.conditions.flatMap(c =>
       c.op === cond.op ? c.conditions.map(c => flattened(c)) : flattened(c),
-    )
-    .reduce((defined, c) => (c ? [...defined, c] : defined), [] as Condition[]);
+    ),
+  );
 
   switch (conditions.length) {
     case 0:
