@@ -267,11 +267,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     otherField: SimpleSelector<OtherFromSet>,
   ): EntityQuery<
     From & {
-      [K in Alias]: OtherReturn extends []
-        ? OtherFromSet[keyof OtherFromSet]
-        : OtherReturn extends Array<unknown>
-        ? OtherReturn[number]
-        : OtherReturn;
+      [K in Alias]: OtherFromSet[keyof OtherFromSet];
     },
     Return
   > {
@@ -281,7 +277,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
         ...(this.#ast.joins ?? []),
         {
           type: 'inner',
-          table: other.#name,
+          other: other.#ast,
           as: alias,
           on: [thisField, otherField],
         },
