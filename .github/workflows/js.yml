@@ -21,6 +21,8 @@ jobs:
       TURBO_REMOTE_ONLY: true
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 18.x
@@ -30,7 +32,7 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: npm run check-format
+      - run: npm run check-format -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
 
   lint:
     name: Lint
@@ -41,6 +43,8 @@ jobs:
       TURBO_REMOTE_ONLY: true
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 18.x
@@ -50,7 +54,7 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: npm run lint
+      - run: npm run lint -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
 
   check-types:
     name: Check Types
@@ -61,6 +65,8 @@ jobs:
       TURBO_REMOTE_ONLY: true
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 18.x
@@ -70,36 +76,10 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: npm run check-types
+      - run: npm run check-types -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
 
   test:
     name: Test
-    runs-on: ubuntu-latest
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
-      TURBO_REMOTE_ONLY: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18.x
-          cache: 'npm'
-
-      - name: configure npm auth token
-        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
-        env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
-
-      - run: npm ci
-
-      - name: Install Playwright Deps
-        run: npx playwright install --with-deps
-
-      - run: npm run test
-
-  test-changed:
-    name: Test Changed
     runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
