@@ -166,6 +166,9 @@ function applyGroupBy<T extends Entity>(
   aggregations: Aggregation[],
 ) {
   const keyFunction = makeKeyFunction(columns);
+  const qualifiedColumns = aggregations.map(q =>
+    q.field === undefined ? undefined : selectorToQualifiedColumn(q.field),
+  );
   return stream.reduce(
     keyFunction,
     value => value.id as string,
@@ -173,7 +176,9 @@ function applyGroupBy<T extends Entity>(
       const first = values[Symbol.iterator]().next().value;
       const ret: Record<string, unknown> = {...first};
 
-      for (const aggregation of aggregations) {
+      for (let i = 0; i < aggregations.length; i++) {
+        const aggregation = aggregations[i];
+        const qualifiedColumn = qualifiedColumns[i];
         switch (aggregation.aggregate) {
           case 'count': {
             let count = 0;
@@ -186,7 +191,7 @@ function applyGroupBy<T extends Entity>(
           case 'sum': {
             let sum = 0;
             for (const value of values) {
-              sum += value[aggregation.field as keyof T] as number;
+              sum += getValueFromEntity(value, must(qualifiedColumn)) as number;
             }
             ret[aggregation.alias] = sum;
             break;
@@ -195,7 +200,7 @@ function applyGroupBy<T extends Entity>(
             let sum = 0;
             let count = 0;
             for (const value of values) {
-              sum += value[aggregation.field as keyof T] as number;
+              sum += getValueFromEntity(value, must(qualifiedColumn)) as number;
               count++;
             }
             ret[aggregation.alias] = sum / count;
@@ -204,7 +209,10 @@ function applyGroupBy<T extends Entity>(
           case 'min': {
             let min;
             for (const value of values) {
-              const newValue = value[aggregation.field as keyof T];
+              const newValue = getValueFromEntity(
+                value,
+                must(qualifiedColumn),
+              ) as number | string;
               if (min === undefined || (min as T[keyof T]) > newValue) {
                 min = newValue;
               }
@@ -215,7 +223,10 @@ function applyGroupBy<T extends Entity>(
           case 'max': {
             let max;
             for (const value of values) {
-              const newValue = value[aggregation.field as keyof T];
+              const newValue = getValueFromEntity(
+                value,
+                must(qualifiedColumn),
+              ) as number | string;
               if (max === undefined || (max as T[keyof T]) < newValue) {
                 max = newValue;
               }
@@ -224,8 +235,8 @@ function applyGroupBy<T extends Entity>(
             break;
           }
           case 'array': {
-            ret[aggregation.alias] = Array.from(values).map(
-              x => x[aggregation.field as keyof T],
+            ret[aggregation.alias] = Array.from(values).map(x =>
+              getValueFromEntity(x, must(qualifiedColumn)),
             );
             break;
           }
