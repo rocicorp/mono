@@ -1,6 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
 import type {Entity} from '../../entity.js';
-import type {Ordering} from '../ast/ast.js';
 import {Materialite} from '../ivm/materialite.js';
 import type {Source} from '../ivm/source/source.js';
 
@@ -13,7 +12,7 @@ import type {Source} from '../ivm/source/source.js';
  */
 export type Context = {
   materialite: Materialite;
-  getSource: <T extends Entity>(name: string, ordering?: Ordering) => Source<T>;
+  getSource: <T extends Entity>(name: string) => Source<T>;
 };
 
 export function makeTestContext(): Context {

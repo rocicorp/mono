@@ -31,8 +31,7 @@ export class Statement<Return> implements IStatement<Return> {
     this.#ast = ast;
     this.#pipeline = buildPipeline(
       <T extends Entity>(sourceName: string) =>
-        context.getSource(sourceName, this.#ast.orderBy)
-          .stream as unknown as DifferenceStream<T>,
+        context.getSource(sourceName).stream as unknown as DifferenceStream<T>,
       ast,
     );
     this.#context = context;
