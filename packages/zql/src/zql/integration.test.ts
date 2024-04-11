@@ -41,6 +41,36 @@ const mutators = {
   deleteIssue,
 };
 
+const defaultIssues: readonly Issue[] = [
+  {
+    id: 'a',
+    title: 'foo',
+    status: 'open',
+    priority: 'high',
+    assignee: 'charles',
+    created: Date.now(),
+    updated: Date.now(),
+  },
+  {
+    id: 'b',
+    title: 'bar',
+    status: 'open',
+    priority: 'medium',
+    assignee: 'bob',
+    created: Date.now(),
+    updated: Date.now(),
+  },
+  {
+    id: 'c',
+    title: 'baz',
+    status: 'closed',
+    priority: 'low',
+    assignee: 'alice',
+    created: Date.now(),
+    updated: Date.now(),
+  },
+] as const;
+
 function newRep() {
   return new Replicache({
     licenseKey: TEST_LICENSE_KEY,
@@ -388,6 +418,23 @@ test('order by optional field', async () => {
   );
 });
 
+test('qualified selectors in where', async () => {
+  const {q, r} = setup();
+  const issues = defaultIssues;
+  await Promise.all(issues.map(r.mutate.initIssue));
+
+  const stmt = q
+    .select('id')
+    .where('issue.status', '=', 'open')
+    .where('issue.priority', '>=', 'medium')
+    .prepare();
+
+  const rows = await stmt.exec();
+  expect(rows).toEqual([{id: 'b'}]);
+
+  await r.close();
+});
+
 test('join', () => {});
 test('having', () => {});
 
@@ -510,35 +557,7 @@ test('sorted groupings', () => {});
 
 test('compound where', async () => {
   const {q, r} = setup();
-  const issues: readonly Issue[] = [
-    {
-      id: 'a',
-      title: 'foo',
-      status: 'open',
-      priority: 'high',
-      assignee: 'charles',
-      created: Date.now(),
-      updated: Date.now(),
-    },
-    {
-      id: 'b',
-      title: 'bar',
-      status: 'open',
-      priority: 'medium',
-      assignee: 'bob',
-      created: Date.now(),
-      updated: Date.now(),
-    },
-    {
-      id: 'c',
-      title: 'baz',
-      status: 'closed',
-      priority: 'low',
-      assignee: 'alice',
-      created: Date.now(),
-      updated: Date.now(),
-    },
-  ] as const;
+  const issues = defaultIssues;
   await Promise.all(issues.map(r.mutate.initIssue));
 
   const stmt = q

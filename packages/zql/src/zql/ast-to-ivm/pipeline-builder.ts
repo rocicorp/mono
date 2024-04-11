@@ -2,6 +2,7 @@ import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import type {AST, Aggregation, Condition, SimpleCondition} from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
+import {isJoinResult} from '../ivm/types.js';
 
 export function buildPipeline(
   sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
@@ -99,8 +100,22 @@ function applySimpleCondition<T extends Entity>(
   condition: SimpleCondition,
 ) {
   const operator = getOperator(condition);
-  const {field} = condition;
-  return stream.filter(x => operator((x as Record<string, unknown>)[field]));
+  const {field: selector} = condition;
+  let source: string = selector;
+  let field = selector;
+  if (selector.includes('.')) {
+    [source, field] = selector.split('.');
+  }
+  return stream.filter(x => {
+    if (isJoinResult(x)) {
+      return operator(
+        ((x as Record<string, unknown>)[source] as Record<string, unknown>)[
+          field
+        ],
+      );
+    }
+    return operator((x as Record<string, unknown>)[field]);
+  });
 }
 
 function applyGroupBy<T extends Entity>(
