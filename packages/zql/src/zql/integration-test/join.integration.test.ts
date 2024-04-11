@@ -497,3 +497,6 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
 //    an example of this is `agg.array('artists.name', 'artists')`
 //    we really want to full `artists` row, not just the name.
 // - agg array not following a qualified selector
+// - proposal:
+//    - user defined lambdas for map and filter. Only applicable after `select`
+//      - select must then be the last operation before exec
