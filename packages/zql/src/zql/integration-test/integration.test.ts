@@ -4,10 +4,10 @@ import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
-import {makeReplicacheContext} from './context/replicache-context.js';
-import * as agg from './query/agg.js';
-import {EntityQuery, expression, not, or} from './query/entity-query.js';
-import {joinSymbol} from './ivm/types.js';
+import {makeReplicacheContext} from '../context/replicache-context.js';
+import * as agg from '../query/agg.js';
+import {EntityQuery, expression, not, or} from '../query/entity-query.js';
+import {joinSymbol} from '../ivm/types.js';
 
 export async function tickAFewTimes(n = 10, time = 0) {
   for (let i = 0; i < n; i++) {
