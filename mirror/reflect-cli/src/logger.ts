@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from '@rocicorp/reflect';
+import type {ReadonlyJSONValue} from 'shared/src/json.js';
 
 interface Logger {
   log: typeof console.log;
