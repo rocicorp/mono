@@ -3,7 +3,7 @@ import type {EntityQuery} from '@rocicorp/zql/src';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {generateKeyBetween} from 'fractional-indexing';
-import {isEqual, minBy, pickBy} from 'lodash';
+import {minBy, pickBy} from 'lodash';
 import {useQueryState} from 'next-usequerystate';
 import {memo, useCallback, useEffect, useReducer, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
@@ -28,100 +28,6 @@ import type {M} from './mutators';
 import TopFilter from './top-filter';
 import {getQuery, useQuery} from './zql.jsx';
 
-class Filters {
-  readonly #viewStatuses: Set<Status> | undefined;
-  readonly #issuesStatuses: Set<Status> | undefined;
-  readonly #issuesPriorities: Set<Priority> | undefined;
-  readonly hasNonViewFilters: boolean;
-  constructor(
-    view: string | null,
-    priorityFilter: string | null,
-    statusFilter: string | null,
-  ) {
-    this.#viewStatuses = undefined;
-    switch (view?.toLowerCase()) {
-      case 'active':
-        this.#viewStatuses = new Set([Status.InProgress, Status.Todo]);
-        break;
-      case 'backlog':
-        this.#viewStatuses = new Set([Status.Backlog]);
-        break;
-      default:
-        this.#viewStatuses = undefined;
-    }
-
-    this.#issuesStatuses = undefined;
-    this.#issuesPriorities = undefined;
-    this.hasNonViewFilters = false;
-    if (statusFilter) {
-      this.#issuesStatuses = new Set<Status>();
-      for (const s of statusFilter.split(',')) {
-        const parseResult = statusEnumSchema.safeParse(s);
-        if (
-          parseResult.success &&
-          (!this.#viewStatuses || this.#viewStatuses.has(parseResult.data))
-        ) {
-          this.hasNonViewFilters = true;
-          this.#issuesStatuses.add(parseResult.data);
-        }
-      }
-    }
-    if (!this.hasNonViewFilters) {
-      this.#issuesStatuses = this.#viewStatuses;
-    }
-
-    if (priorityFilter) {
-      this.#issuesPriorities = new Set<Priority>();
-      for (const p of priorityFilter.split(',')) {
-        const parseResult = priorityEnumSchema.safeParse(p);
-        if (parseResult.success) {
-          this.hasNonViewFilters = true;
-          this.#issuesPriorities.add(parseResult.data);
-        }
-      }
-      if (this.#issuesPriorities.size === 0) {
-        this.#issuesPriorities = undefined;
-      }
-    }
-  }
-
-  viewFilter(issue: Issue): boolean {
-    return this.#viewStatuses ? this.#viewStatuses.has(issue.status) : true;
-  }
-
-  issuesFilter(issue: Issue): boolean {
-    if (this.#issuesStatuses) {
-      if (!this.#issuesStatuses.has(issue.status)) {
-        return false;
-      }
-    }
-    if (this.#issuesPriorities) {
-      if (!this.#issuesPriorities.has(issue.priority)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  equals(other: Filters): boolean {
-    return (
-      this === other ||
-      (isEqual(this.#viewStatuses, other.#viewStatuses) &&
-        isEqual(this.#issuesStatuses, other.#issuesStatuses) &&
-        isEqual(this.#issuesPriorities, other.#issuesPriorities) &&
-        isEqual(this.hasNonViewFilters, other.hasNonViewFilters))
-    );
-  }
-}
-
-function getFilters(
-  view: string | null,
-  priorityFilter: string | null,
-  statusFilter: string | null,
-): Filters {
-  return new Filters(view, priorityFilter, statusFilter);
-}
-
 function getIssueOrder(view: string | null, orderBy: string | null): Order {
   if (view === 'board') {
     return Order.Kanban;
@@ -144,20 +50,14 @@ function getTitle(view: string | null) {
 }
 
 type State = {
-  filters: Filters;
   issueOrder: Order;
 };
 function timedReducer(
   state: State,
-  action:
-    | {
-        type: 'setFilters';
-        filters: Filters;
-      }
-    | {
-        type: 'setIssueOrder';
-        issueOrder: Order;
-      },
+  action: {
+    type: 'setIssueOrder';
+    issueOrder: Order;
+  },
 ): State {
   const start = Date.now();
   const result = reducer(state, action);
@@ -167,26 +67,12 @@ function timedReducer(
 
 function reducer(
   state: State,
-  action:
-    | {
-        type: 'setFilters';
-        filters: Filters;
-      }
-    | {
-        type: 'setIssueOrder';
-        issueOrder: Order;
-      },
+  action: {
+    type: 'setIssueOrder';
+    issueOrder: Order;
+  },
 ): State {
   switch (action.type) {
-    case 'setFilters': {
-      if (action.filters.equals(state.filters)) {
-        return state;
-      }
-      return {
-        ...state,
-        filters: action.filters,
-      };
-    }
     case 'setIssueOrder': {
       if (action.issueOrder === state.issueOrder) {
         return state;
@@ -215,7 +101,6 @@ const App = ({zero, undoManager}: AppProps) => {
   const [menuVisible, setMenuVisible] = useState(false);
 
   const [state, dispatch] = useReducer(timedReducer, {
-    filters: getFilters(view, priorityFilter, statusFilter),
     issueOrder: getIssueOrder(view, orderBy),
   });
 
@@ -235,10 +120,13 @@ const App = ({zero, undoManager}: AppProps) => {
 
   const allIssues = useQuery(issueQuery.select(...allIssueColumns));
 
-  const filteredQuery = orderQuery(
-    filterQuery(issueQuery, view, priorityFilter, statusFilter),
-    state.issueOrder,
+  const {q, hasNonViewFilters} = filterQuery(
+    issueQuery,
+    view,
+    priorityFilter,
+    statusFilter,
   );
+  const filteredQuery = orderQuery(q, state.issueOrder);
   const filteredIssues = useQuery(filteredQuery, [
     view,
     priorityFilter,
@@ -248,15 +136,6 @@ const App = ({zero, undoManager}: AppProps) => {
 
   const viewIssueCount =
     useQuery(filteredQuery.select(agg.count()))[0]?.count ?? 0;
-
-  useEffect(
-    () =>
-      dispatch({
-        type: 'setFilters',
-        filters: getFilters(view, priorityFilter, statusFilter),
-      }),
-    [view, priorityFilter, statusFilter],
-  );
 
   useEffect(
     () =>
@@ -349,9 +228,9 @@ const App = ({zero, undoManager}: AppProps) => {
         detailIssueID={detailIssueID}
         // TODO: base on whether initial sync is done
         isLoading={false}
-        state={state}
         viewIssueCount={viewIssueCount}
         filteredIssues={filteredIssues}
+        hasNonViewFilters={hasNonViewFilters}
         zero={zero}
         onCloseMenu={handleCloseMenu}
         onToggleMenu={handleToggleMenu}
@@ -374,9 +253,9 @@ interface LayoutProps {
   view: string | null;
   detailIssueID: string | null;
   isLoading: boolean;
-  state: State;
   viewIssueCount: number;
   filteredIssues: Issue[];
+  hasNonViewFilters: boolean;
   zero: Zero<M>;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
@@ -391,9 +270,9 @@ function RawLayout({
   view,
   detailIssueID,
   isLoading,
-  state,
   viewIssueCount,
   filteredIssues,
+  hasNonViewFilters,
   zero,
   onCloseMenu,
   onToggleMenu,
@@ -420,9 +299,7 @@ function RawLayout({
               onToggleMenu={onToggleMenu}
               title={getTitle(view)}
               filteredIssuesCount={
-                state.filters.hasNonViewFilters
-                  ? filteredIssues.length
-                  : undefined
+                hasNonViewFilters ? filteredIssues.length : undefined
               }
               issuesCount={viewIssueCount}
               showSortOrderMenu={view !== 'board'}
@@ -528,7 +405,7 @@ function filterQuery(
   if (issuesPriorities) {
     q = q.where('priority', 'IN', [...issuesPriorities]);
   }
-  return q;
+  return {q, hasNonViewFilters};
 }
 
 function orderQuery(issueQuery: EntityQuery<{issue: Issue}, []>, order: Order) {
