@@ -81,6 +81,7 @@ export class InnerJoinOperator<
     const bKeysForCompaction: K[] = [];
     const deltaA = new DifferenceIndex<K, AValue>(getAPrimaryKey);
     for (const entry of inputA || []) {
+      console.log('a', entry[0]);
       const aKey = getAJoinKey(entry[0]);
       deltaA.add(aKey, entry);
       aKeysForCompaction.push(aKey);
@@ -88,6 +89,7 @@ export class InnerJoinOperator<
 
     const deltaB = new DifferenceIndex<K, BValue>(getBPrimaryKey);
     for (const entry of inputB || []) {
+      console.log('b', entry[0]);
       const bKey = getBJoinKey(entry[0]);
       deltaB.add(bKey, entry);
       bKeysForCompaction.push(bKey);
@@ -106,6 +108,7 @@ export class InnerJoinOperator<
 
     this.#indexA.compact(aKeysForCompaction);
     this.#indexB.compact(bKeysForCompaction);
+    console.log(result);
     return result;
   }
 

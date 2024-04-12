@@ -40,10 +40,13 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
         const changed = this._newDifference(data);
         if (changed) {
           this.#didVersionChange = true;
+        } else {
+          console.log('no change');
         }
       },
       commit: (v: Version) => {
         this.#hydrated = true;
+        console.log('notify committed...');
         this._notifyCommitted(this.value, v);
       },
     };
@@ -62,9 +65,11 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
 
   protected _notifyCommitted(d: CT, version: Version) {
     if (!this.#didVersionChange) {
+      console.log('no version change');
       return;
     }
     for (const listener of this.#listeners) {
+      console.log(d);
       listener(d, version);
     }
   }

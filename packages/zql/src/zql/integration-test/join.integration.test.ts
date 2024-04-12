@@ -208,7 +208,7 @@ function setup() {
   };
 }
 
-test('direct foreign key join: join a track to an album', async () => {
+test.only('direct foreign key join: join a track to an album', async () => {
   const {r, trackQuery, albumQuery} = setup();
 
   const track: Track = {
@@ -224,6 +224,7 @@ test('direct foreign key join: join a track to an album', async () => {
   };
 
   await Promise.all([r.mutate.initTrack(track), r.mutate.initAlbum(album)]);
+  await new Promise(resolve => setTimeout(resolve, 100));
 
   const stmt = await trackQuery
     .join(albumQuery, 'album', 'albumId', 'id')

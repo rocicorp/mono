@@ -182,26 +182,12 @@ function makeComparator(...fields: (keyof Issue)[]) {
     return 0;
   };
 }
-// test('experimental watch with no data', async () => {
-//   const {r} = setup();
-//   const spy = vi.fn(() => {});
-//   r.experimentalWatch(spy, {initialValuesInFirstDiff: true});
-//   await tickAFewTimes();
-//   expect(spy).toHaveBeenCalledTimes(1);
 
-//   await r.close();
-// });
-
-// This test fails because `experimentalWatch` does not call us with an empty array when we want initial data from an empty collection.
-// So we wait for forever for data to be available.
-// test('1-shot against an empty collection', async () => {
-//   expect(
-//     'This test fails for some unknown reason. ExperimentalWatch does notify with empty data so it is not that',
-//   ).toEqual('');
-//   const {q} = setup();
-//   const rows = q.select('id').prepare().exec();
-//   expect(await rows).toEqual([]);
-// });
+test('1-shot against an empty collection', async () => {
+  const {issueQuery} = setup();
+  const rows = issueQuery.select('id').prepare().exec();
+  expect(await rows).toEqual([]);
+});
 
 test('prepare a query before the collection has writes then run it', async () => {
   const issues = sampleTenUniqueIssues();

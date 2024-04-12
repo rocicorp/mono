@@ -16,10 +16,10 @@ test('basic materialization', () => {
 
   const stmt = q.select('id', 'n').where('n', '>', 100).prepare();
 
-  let callCount = 0;
+  const expected: E1[] = [];
+  const calledWith: (readonly E1[])[] = [];
   stmt.subscribe(data => {
-    ++callCount;
-    expect(data).toEqual(expected);
+    calledWith.push(data);
   });
 
   const items = [
@@ -27,7 +27,6 @@ test('basic materialization', () => {
     {id: 'b', n: 101},
     {id: 'c', n: 102},
   ] as const;
-  const expected: E1[] = [];
 
   context.getSource('e1').add(items[0]);
 
@@ -36,7 +35,7 @@ test('basic materialization', () => {
 
   expected.push(items[2]);
   context.getSource('e1').add(items[2]);
-  expect(callCount).toBe(2);
+  expect(calledWith).toEqual([[], [items[1]], [items[1], items[2]]]);
 });
 
 test('sorted materialization', () => {
