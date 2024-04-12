@@ -328,10 +328,8 @@ class Matcher {
  * This is used for processing an AND conjunction.
  */
 function outerProduct(m1: Matcher[], m2: Matcher[]): Matcher[] {
-  const cumulativeOuterProduct = defined(
-    m1.flatMap(a => m2.flatMap(b => a.concat(b))),
-  );
-  return removeRedundant(cumulativeOuterProduct);
+  const product = defined(m1.flatMap(a => m2.flatMap(b => a.concat(b))));
+  return removeRedundant(product);
 }
 
 /**
