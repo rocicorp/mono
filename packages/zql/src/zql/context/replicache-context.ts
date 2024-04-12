@@ -80,12 +80,14 @@ class ReplicacheSource {
     // to views that have explicitly requested history whereas `add` will
     // send them to everyone as if they were changes happening _now_.
     if (this.#receivedFirstDiff === false) {
-      this.#canonicalSource.seed(
-        mapIter(changes, diff => {
-          assert(diff.op === 'add');
-          return diff.newValue as Entity;
-        }),
-      );
+      this.#materialite.tx(() => {
+        this.#canonicalSource.seed(
+          mapIter(changes, diff => {
+            assert(diff.op === 'add');
+            return diff.newValue as Entity;
+          }),
+        );
+      });
       this.#receivedFirstDiff = true;
       return;
     }

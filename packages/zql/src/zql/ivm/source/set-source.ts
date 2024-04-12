@@ -6,11 +6,12 @@ import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import {must} from 'shared/src/must.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
-import {PullMsg, Request, createPullResponseMessage} from '../graph/message.js';
+import {Request, createPullResponseMessage} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
 import type {Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
+import {assert} from 'shared/src/asserts.js';
 
 /**
  * A source that remembers what values it contains.
@@ -25,10 +26,9 @@ export abstract class SetSource<T extends object> implements Source<T> {
   protected readonly _materialite: MaterialiteForSourceInternal;
   readonly #listeners = new Set<(data: ITree<T>, v: Version) => void>();
   #pending: Entry<T>[] = [];
+  #pendingSeed: Iterable<T> | undefined;
   #tree: ITree<T>;
   #seeded = false;
-  // Use a set instead of an array to avoid duplicates due to branching.
-  #historyRequests = new Set<PullMsg>();
   readonly comparator: Comparator<T>;
 
   constructor(
@@ -50,6 +50,24 @@ export abstract class SetSource<T extends object> implements Source<T> {
 
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
+        assert(
+          this.#pendingSeed === undefined || this.#pending.length === 0,
+          'cannot have both pending and pending seed',
+        );
+
+        if (this.#pendingSeed !== undefined) {
+          this.#seeded = true;
+          for (const v of this.#pendingSeed) {
+            this.#tree = this.#tree.add(v);
+          }
+          this.#pendingSeed = undefined;
+          this.#stream.newDifference(
+            this._materialite.getVersion(),
+            asEntries(this.#tree),
+          );
+          return;
+        }
+
         for (let i = 0; i < this.#pending.length; i++) {
           const [val, mult] = must(this.#pending[i]);
           // small optimization to reduce operations for replace
@@ -137,19 +155,22 @@ export abstract class SetSource<T extends object> implements Source<T> {
   /**
    * Seeds the source with historical data.
    *
-   * Does not send historical data to downstreams
-   * unless they have asked for it.
+   * We have a separate path for seed to avoid copying
+   * the entire set of `values` into the `pending` array before
+   * sending it to the stream.
+   *
+   * We also have a separate path for `seed` so we know if the
+   * source has history available or not yet.
+   *
+   * If a view is created and asks for history before the source
+   * has history available, we need to wait for the seed to come in.
+   *
+   * This can happen since `experimentalWatch` will asynchronously call us
+   * back with the seed/inital values.
    */
   seed(values: Iterable<T>): this {
-    for (const v of values) {
-      this.#tree = this.#tree.add(v);
-    }
-    this.#seeded = true;
-    const requests = this.#historyRequests;
-    this.#historyRequests = new Set();
-    for (const message of requests) {
-      this.#sendHistoricalData(message);
-    }
+    this.#pendingSeed = values;
+    this._materialite.addDirtySource(this.#internal);
     return this;
   }
 
@@ -172,8 +193,13 @@ export abstract class SetSource<T extends object> implements Source<T> {
 
   #sendHistoricalData(message: Request) {
     if (!this.#seeded) {
-      // wait till we're seeded.
-      this.#historyRequests.add(message);
+      // the source has not been seeded by `experimentalWatch` yet.
+      // this means we can ignore the request and just wait for the
+      // seed to come in.
+      // Note: as a future optimization we would keep the message request
+      // and only send the seed/history to those that requested it.
+      // We'd also use the message request to determine where in the seed set to start from
+      // e.g., in case there's `where time > x` or `where id = y` etc.
       return;
     }
 
@@ -184,7 +210,6 @@ export abstract class SetSource<T extends object> implements Source<T> {
       asEntries(this.#tree, message),
       response,
     );
-    this.#stream.commit(this._materialite.nextVersion());
   }
 }
 
@@ -201,7 +226,10 @@ export class MutableSetSource<T extends object> extends SetSource<T> {
   }
 }
 
-function asEntries<T>(m: ITree<T>, _message: Request): Multiset<T> {
+function asEntries<T>(
+  m: ITree<T>,
+  _message?: Request | undefined,
+): Multiset<T> {
   // message will contain hoisted expressions so we can do relevant
   // index selection against the source.
   // const after = hoisted.expressions.filter((e) => e._tag === "after")[0];
@@ -212,6 +240,10 @@ function asEntries<T>(m: ITree<T>, _message: Request): Multiset<T> {
   //     },
   //   };
   // }
+  // Optimizations we can do:
+  // 1. if it compares on a unique field by equality, just send the single row
+  // 2. if the view is in the same order as the source, start the iterator at the where clause
+  // which matches this position in the source. (e.g., where id > x)
   return {
     [Symbol.iterator]() {
       return gen(m);

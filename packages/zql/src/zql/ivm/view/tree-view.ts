@@ -63,7 +63,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   }
 
   protected _newDifference(data: Multiset<T>): boolean {
-    let changed = false;
+    let changed = false || this.hydrated === false;
 
     let newData = this.#data;
     [changed, newData] = this.#sink(data, newData, changed);
@@ -93,18 +93,10 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
       }
     };
 
-    const fullRecompute = false;
+    // TODO: process with a limit if we have a limit and we're in source order.
     while (!(next = iterator.next()).done) {
       const [value, mult] = next.value;
-      if (this.#limit !== undefined && fullRecompute && this.#order) {
-        if (data.size >= this.#limit && mult > 0) {
-          // bail early. During a re-compute with a source in the same order
-          // as the view we can bail once we've consumed `LIMIT` items.
-          break;
-        }
-      }
 
-      // empty = false;
       const nextNext = iterator.next();
       if (!nextNext.done) {
         const [nextValue, nextMult] = nextNext.value;
