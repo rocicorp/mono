@@ -31,7 +31,10 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: npm run check-format -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name == 'pull_request'
+        run: npm run check-format -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name != 'pull_request'
+        run: npm run check-format
 
   lint:
     name: Lint
@@ -52,7 +55,10 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: npm run lint -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name == 'pull_request'
+        run: npm run lint -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name != 'pull_request'
+        run: npm run lint
 
   check-types:
     name: Check Types
@@ -73,7 +79,10 @@ jobs:
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
-      - run: npm run check-types -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name == 'pull_request'
+        run: npm run check-types -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name != 'pull_request'
+        run: npm run check-types
 
   test:
     name: Test
@@ -99,5 +108,7 @@ jobs:
 
       - name: Install Playwright Deps
         run: npx playwright install --with-deps
-
-      - run: npm run test -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name == 'pull_request'
+        run: npm run test -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
+      - if: github.event_name != 'pull_request'
+        run: npm run test
