@@ -253,7 +253,7 @@ class Matcher {
       for (const [k, v] of m.#match.entries()) {
         const exists = this.#match.get(k);
         if (exists !== undefined && exists !== v) {
-          return undefined; // impossible to satisfy two v's for a single k.
+          return undefined; // impossible to satisfy different v's for the same k.
         }
         this.#match.set(k, v);
       }
@@ -262,8 +262,8 @@ class Matcher {
   }
 
   /**
-   * @returns Whether this Matchers object subsumes the `other`, meaning that
-   *    this Matchers object will necessarily match when the `other` does, obviating
+   * @returns Whether this Matcher subsumes the `other`, meaning that this
+   *    Matcher will necessarily match whenever the `other` does, obviating
    *    the `other`. Technically, this means that `this` set of Matches is a
    *    subset of the `other` set, with the base case being an empty set, which
    *    subsumes (i.e. matches) everything.
@@ -300,7 +300,7 @@ class Matcher {
       ),
     };
     // Note: Even though bigints will not appear in ASTs, BigIntJSON.stringify() is used
-    //       to match exactly what is done on the replication side.
+    //       here so that the hashing behavior matches exactly what is done in the Replicator.
     //       @see InvalidationProcessor.#computeInvalidationHashes()
     const rowTag: RowTag = {
       ...base,
