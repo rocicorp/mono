@@ -12,8 +12,8 @@ import {stringify} from './bigint-json.js';
 export const filterOperationSchema = v.literal('=');
 
 const rawFilterSpecSchema = v.object({
-  schema: v.string(),
-  table: v.string(),
+  schema: v.readonly(v.string()),
+  table: v.readonly(v.string()),
 
   /**
    * Encodes one or more AND'ed column filters. Each column name is mapped
@@ -48,14 +48,14 @@ const rawFilterSpecSchema = v.object({
    * (i.e. conservatively representing the filter expression as an OR of the
    *  transitive set of filtered columns).
    */
-  filteredColumns: v.record(filterOperationSchema),
+  filteredColumns: v.readonlyRecord(filterOperationSchema),
 
   /**
    * The columns selected by the query, or absent for `SELECT *`. This is used
    * to suppress invalidation tags for UPDATE changes in which none of the
    * filtered, selected, or key columns changed.
    */
-  selectedColumns: v.array(v.string()).optional(),
+  selectedColumns: v.readonlyArray(v.string()).optional(),
 });
 
 export type InvalidationFilterSpec = v.Infer<typeof rawFilterSpecSchema>;
@@ -67,12 +67,6 @@ export type InvalidationFilterSpec = v.Infer<typeof rawFilterSpecSchema>;
  * identify the spec.
  */
 export const normalizedFilterSpecSchema = rawFilterSpecSchema.map(val => {
-  val.filteredColumns = Object.fromEntries(
-    Object.entries(val.filteredColumns).sort(([a], [b]) => compareUTF8(a, b)),
-  );
-  if (val.selectedColumns) {
-    val.selectedColumns = val.selectedColumns.sort(compareUTF8);
-  }
   // Normalized field ordering.
   const normalized: InvalidationFilterSpec = {
     schema: val.schema,
@@ -82,7 +76,7 @@ export const normalizedFilterSpecSchema = rawFilterSpecSchema.map(val => {
     ),
   };
   if (val.selectedColumns) {
-    normalized.selectedColumns = val.selectedColumns.sort(compareUTF8);
+    normalized.selectedColumns = [...val.selectedColumns].sort(compareUTF8);
   }
   return {
     id: XXH.h64(SEED).update(stringify(normalized)).digest().toString(36),
@@ -112,8 +106,8 @@ export function parseFilterSpec(
  * otherwise have a more specific filter spec.
  */
 const tableTagSchema = v.object({
-  schema: v.string(),
-  table: v.string(),
+  schema: v.readonly(v.string()),
+  table: v.readonly(v.string()),
 });
 
 export type TableTag = v.Infer<typeof tableTagSchema>;
@@ -143,14 +137,14 @@ const rowTagSchema = v.object({
    * The names and JSON-encoded values of the `filteredColumns` of the
    * InvalidationFilterSpec, i.e. `{[columnName]: [bigintJsonStringifiedValue]}`.
    */
-  filteredColumns: v.record(v.string()),
+  filteredColumns: v.readonlyRecord(v.string()),
 
   /**
    * The `selectedColumns` array from the spec. This is used to distinguish
    * invalidation tags for specs that have the same filtered columns but different
    * selected columns.
    */
-  selectedColumns: v.array(v.string()).optional(),
+  selectedColumns: v.readonlyArray(v.string()).optional(),
 });
 
 export type RowTag = v.Infer<typeof rowTagSchema>;
@@ -168,25 +162,25 @@ export function invalidationHash(tag: InvalidationTag): string {
   if ('allRows' in tag) {
     // FullTableTag
     hasher.update('|allRows|');
-  } else if ('filteredColumns' in tag) {
-    // RowTag
-    const filteredColumns = Object.entries(tag.filteredColumns);
-    if (filteredColumns.length) {
-      hasher.update('|filteredColumns|'); // Delimiter
-      filteredColumns
-        .sort(([a], [b]) => compareUTF8(a, b))
-        .forEach(([col, val]) => {
-          hasher.update(col).update(val);
-        });
+  } else {
+    if ('filteredColumns' in tag) {
+      // RowTag
+      const filteredColumns = Object.entries(tag.filteredColumns);
+      if (filteredColumns.length) {
+        hasher.update('|filteredColumns|'); // Delimiter
+        filteredColumns
+          .sort(([a], [b]) => compareUTF8(a, b))
+          .forEach(([col, val]) => {
+            hasher.update(col).update(val);
+          });
+      }
     }
-    if (tag.selectedColumns) {
+    if ('selectedColumns' in tag && tag.selectedColumns) {
       hasher.update('|selectedColumns|'); // Delimiter
       [...tag.selectedColumns]
         .sort(compareUTF8)
         .forEach(col => hasher.update(col));
     }
-  } else {
-    // TableTag (already done)
   }
   const hex = hasher.digest().toString(16);
   // Pad to whole byte lengths to ensure roundtrip integrity when

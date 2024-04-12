@@ -21,7 +21,7 @@ export function getNormalized(ast: AST): Normalized {
   return new Normalized(ast);
 }
 
-class Normalized {
+export class Normalized {
   readonly #ast: AST;
   readonly #values: JSONValue[] = [];
   #query = '';
