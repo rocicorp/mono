@@ -1,30 +1,24 @@
 import type {UndoManager} from '@rocicorp/undo';
+import type {EntityQuery} from '@rocicorp/zql/src';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {generateKeyBetween} from 'fractional-indexing';
-import {isEqual, minBy, partial, pickBy, sortBy, sortedIndexBy} from 'lodash';
+import {isEqual, minBy, pickBy} from 'lodash';
 import {useQueryState} from 'next-usequerystate';
 import {memo, useCallback, useEffect, useReducer, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
-import type {
-  ExperimentalDiff as Diff,
-  ReadonlyJSONValue,
-  Zero,
-} from 'zero-client';
+import type {Zero} from 'zero-client';
 import {
   Comment,
-  ISSUE_KEY_PREFIX,
+  ISSUE_ENTITY_NAME,
   Issue,
   IssueUpdate,
   Order,
   Priority,
   Status,
-  issueFromKeyAndValue,
   orderEnumSchema,
   priorityEnumSchema,
-  priorityOrderValues,
-  reverseTimestampSortKey,
   statusEnumSchema,
-  statusOrderValues,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -32,6 +26,7 @@ import IssueList from './issue-list';
 import LeftMenu from './left-menu';
 import type {M} from './mutators';
 import TopFilter from './top-filter';
+import {getQuery, useQuery} from './zql.jsx';
 
 class Filters {
   readonly #viewStatuses: Set<Status> | undefined;
@@ -60,8 +55,6 @@ class Filters {
     this.hasNonViewFilters = false;
     if (statusFilter) {
       this.#issuesStatuses = new Set<Status>();
-      console.error('!!!!!!!', statusFilter);
-      console.error('AAAAAAA', statusFilter.split(','));
       for (const s of statusFilter.split(',')) {
         const parseResult = statusEnumSchema.safeParse(s);
         if (
@@ -151,19 +144,12 @@ function getTitle(view: string | null) {
 }
 
 type State = {
-  allIssuesMap: Map<string, Issue>;
-  viewIssueCount: number;
-  filteredIssues: Issue[];
   filters: Filters;
   issueOrder: Order;
 };
 function timedReducer(
   state: State,
   action:
-    | {
-        type: 'diff';
-        diff: Diff;
-      }
     | {
         type: 'setFilters';
         filters: Filters;
@@ -179,41 +165,9 @@ function timedReducer(
   return result;
 }
 
-function getOrderValue(issueOrder: Order, issue: Issue): string {
-  let orderValue: string;
-  switch (issueOrder) {
-    case Order.Created:
-      orderValue = reverseTimestampSortKey(issue.created, issue.id);
-      break;
-    case Order.Modified:
-      orderValue = reverseTimestampSortKey(issue.modified, issue.id);
-      break;
-    case Order.Status:
-      orderValue =
-        statusOrderValues[issue.status] +
-        '-' +
-        reverseTimestampSortKey(issue.modified, issue.id);
-      break;
-    case Order.Priority:
-      orderValue =
-        priorityOrderValues[issue.priority] +
-        '-' +
-        reverseTimestampSortKey(issue.modified, issue.id);
-      break;
-    case Order.Kanban:
-      orderValue = issue.kanbanOrder + '-' + issue.id;
-      break;
-  }
-  return orderValue;
-}
-
 function reducer(
   state: State,
   action:
-    | {
-        type: 'diff';
-        diff: Diff;
-      }
     | {
         type: 'setFilters';
         filters: Filters;
@@ -223,40 +177,14 @@ function reducer(
         issueOrder: Order;
       },
 ): State {
-  const filters = action.type === 'setFilters' ? action.filters : state.filters;
-  const issueOrder =
-    action.type === 'setIssueOrder' ? action.issueOrder : state.issueOrder;
-  const orderIteratee = partial(getOrderValue, issueOrder);
-  function filterAndSort(issues: Issue[]): Issue[] {
-    return sortBy(
-      issues.filter(issue => filters.issuesFilter(issue)),
-      orderIteratee,
-    );
-  }
-  function countViewIssues(issues: Issue[]): number {
-    let count = 0;
-    for (const issue of issues) {
-      if (filters.viewFilter(issue)) {
-        count++;
-      }
-    }
-    return count;
-  }
-
   switch (action.type) {
-    case 'diff': {
-      return diffReducer(state, action.diff);
-    }
     case 'setFilters': {
       if (action.filters.equals(state.filters)) {
         return state;
       }
-      const allIssues = [...state.allIssuesMap.values()];
       return {
         ...state,
-        viewIssueCount: countViewIssues(allIssues),
         filters: action.filters,
-        filteredIssues: filterAndSort(allIssues),
       };
     }
     case 'setIssueOrder': {
@@ -265,72 +193,10 @@ function reducer(
       }
       return {
         ...state,
-        filteredIssues: sortBy(state.filteredIssues, orderIteratee),
         issueOrder: action.issueOrder,
       };
     }
   }
-
-  return state;
-}
-
-function diffReducer(state: State, diff: Diff): State {
-  if (diff.length === 0) {
-    return state;
-  }
-  const newAllIssuesMap = new Map(state.allIssuesMap);
-  let newViewIssueCount = state.viewIssueCount;
-  const newFilteredIssues = [...state.filteredIssues];
-  const orderIteratee = partial(getOrderValue, state.issueOrder);
-
-  function add(key: string, newValue: ReadonlyJSONValue) {
-    const newIssue = issueFromKeyAndValue(key, newValue);
-    newAllIssuesMap.set(key, newIssue);
-    if (state.filters.viewFilter(newIssue)) {
-      newViewIssueCount++;
-    }
-    if (state.filters.issuesFilter(newIssue)) {
-      newFilteredIssues.splice(
-        sortedIndexBy(newFilteredIssues, newIssue, orderIteratee),
-        0,
-        newIssue,
-      );
-    }
-  }
-  function del(key: string, oldValue: ReadonlyJSONValue) {
-    const oldIssue = issueFromKeyAndValue(key, oldValue);
-    const index = sortedIndexBy(newFilteredIssues, oldIssue, orderIteratee);
-    newAllIssuesMap.delete(key);
-    if (state.filters.viewFilter(oldIssue)) {
-      newViewIssueCount--;
-    }
-    if (newFilteredIssues[index]?.id === oldIssue.id) {
-      newFilteredIssues.splice(index, 1);
-    }
-  }
-  for (const diffOp of diff) {
-    switch (diffOp.op) {
-      case 'add': {
-        add(diffOp.key as string, diffOp.newValue);
-        break;
-      }
-      case 'del': {
-        del(diffOp.key as string, diffOp.oldValue);
-        break;
-      }
-      case 'change': {
-        del(diffOp.key as string, diffOp.oldValue);
-        add(diffOp.key as string, diffOp.newValue);
-        break;
-      }
-    }
-  }
-  return {
-    ...state,
-    allIssuesMap: newAllIssuesMap,
-    viewIssueCount: newViewIssueCount,
-    filteredIssues: newFilteredIssues,
-  };
 }
 
 type AppProps = {
@@ -349,23 +215,39 @@ const App = ({zero, undoManager}: AppProps) => {
   const [menuVisible, setMenuVisible] = useState(false);
 
   const [state, dispatch] = useReducer(timedReducer, {
-    allIssuesMap: new Map(),
-    viewIssueCount: 0,
-    filteredIssues: [],
     filters: getFilters(view, priorityFilter, statusFilter),
     issueOrder: getIssueOrder(view, orderBy),
   });
 
-  useEffect(() => {
-    zero.experimentalWatch(
-      diff =>
-        dispatch({
-          type: 'diff',
-          diff,
-        }),
-      {prefix: ISSUE_KEY_PREFIX, initialValuesInFirstDiff: true},
-    );
-  }, [zero]);
+  const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
+
+  const allIssueColumns = [
+    'id',
+    'title',
+    'priority',
+    'status',
+    'modified',
+    'created',
+    'creatorID',
+    'kanbanOrder',
+    'description',
+  ] as const;
+
+  const allIssues = useQuery(issueQuery.select(...allIssueColumns));
+
+  const filteredQuery = orderQuery(
+    filterQuery(issueQuery, view, priorityFilter, statusFilter),
+    state.issueOrder,
+  );
+  const filteredIssues = useQuery(filteredQuery, [
+    view,
+    priorityFilter,
+    statusFilter,
+    state.issueOrder,
+  ]);
+
+  const viewIssueCount =
+    useQuery(filteredQuery.select(agg.count()))[0]?.count ?? 0;
 
   useEffect(
     () =>
@@ -387,10 +269,8 @@ const App = ({zero, undoManager}: AppProps) => {
 
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {
-      const minKanbanOrderIssue = minBy(
-        [...state.allIssuesMap.values()],
-        issue => issue.kanbanOrder,
-      );
+      // TODO(arv): Use zql min
+      const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
       const minKanbanOrder = minKanbanOrderIssue
         ? minKanbanOrderIssue.kanbanOrder
         : null;
@@ -402,7 +282,7 @@ const App = ({zero, undoManager}: AppProps) => {
         },
       });
     },
-    [zero.mutate, state.allIssuesMap],
+    [zero.mutate, allIssues],
   );
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
@@ -470,6 +350,8 @@ const App = ({zero, undoManager}: AppProps) => {
         // TODO: base on whether initial sync is done
         isLoading={false}
         state={state}
+        viewIssueCount={viewIssueCount}
+        filteredIssues={filteredIssues}
         zero={zero}
         onCloseMenu={handleCloseMenu}
         onToggleMenu={handleToggleMenu}
@@ -493,6 +375,8 @@ interface LayoutProps {
   detailIssueID: string | null;
   isLoading: boolean;
   state: State;
+  viewIssueCount: number;
+  filteredIssues: Issue[];
   zero: Zero<M>;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
@@ -508,6 +392,8 @@ function RawLayout({
   detailIssueID,
   isLoading,
   state,
+  viewIssueCount,
+  filteredIssues,
   zero,
   onCloseMenu,
   onToggleMenu,
@@ -535,17 +421,17 @@ function RawLayout({
               title={getTitle(view)}
               filteredIssuesCount={
                 state.filters.hasNonViewFilters
-                  ? state.filteredIssues.length
+                  ? filteredIssues.length
                   : undefined
               }
-              issuesCount={state.viewIssueCount}
+              issuesCount={viewIssueCount}
               showSortOrderMenu={view !== 'board'}
             />
           </div>
           <div className="relative flex flex-1 min-h-0">
             {detailIssueID && (
               <IssueDetail
-                issues={state.filteredIssues}
+                issues={filteredIssues}
                 zero={zero}
                 onUpdateIssues={onUpdateIssues}
                 onAddComment={onCreateComment}
@@ -561,13 +447,13 @@ function RawLayout({
             >
               {view === 'board' ? (
                 <IssueBoard
-                  issues={state.filteredIssues}
+                  issues={filteredIssues}
                   onUpdateIssues={onUpdateIssues}
                   onOpenDetail={onOpenDetail}
                 />
               ) : (
                 <IssueList
-                  issues={state.filteredIssues}
+                  issues={filteredIssues}
                   onUpdateIssues={onUpdateIssues}
                   onOpenDetail={onOpenDetail}
                   view={view}
@@ -583,5 +469,82 @@ function RawLayout({
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const Layout = memo(RawLayout);
+
+function filterQuery(
+  q: EntityQuery<{issue: Issue}, []>,
+  view: string | null,
+  priorityFilter: string | null,
+  statusFilter: string | null,
+) {
+  console.log(view, priorityFilter, statusFilter);
+  let viewStatuses: Set<Status> | undefined;
+  switch (view?.toLowerCase()) {
+    case 'active':
+      viewStatuses = new Set([Status.InProgress, Status.Todo]);
+      break;
+    case 'backlog':
+      viewStatuses = new Set([Status.Backlog]);
+      break;
+  }
+
+  let issuesStatuses: Set<Status> | undefined;
+  let issuesPriorities: Set<Priority> | undefined;
+  let hasNonViewFilters = false;
+  if (statusFilter) {
+    issuesStatuses = new Set<Status>();
+    for (const s of statusFilter.split(',')) {
+      const parseResult = statusEnumSchema.safeParse(s);
+      if (
+        parseResult.success &&
+        (!viewStatuses || viewStatuses.has(parseResult.data))
+      ) {
+        hasNonViewFilters = true;
+        issuesStatuses.add(parseResult.data);
+      }
+    }
+  }
+  if (!hasNonViewFilters) {
+    issuesStatuses = viewStatuses;
+  }
+
+  if (priorityFilter) {
+    issuesPriorities = new Set<Priority>();
+    for (const p of priorityFilter.split(',')) {
+      const parseResult = priorityEnumSchema.safeParse(p);
+      if (parseResult.success) {
+        hasNonViewFilters = true;
+        issuesPriorities.add(parseResult.data);
+      }
+    }
+    if (issuesPriorities.size === 0) {
+      issuesPriorities = undefined;
+    }
+  }
+
+  if (issuesStatuses) {
+    // Consider allowing Set<T>for IN
+    q = q.where('status', 'IN', [...issuesStatuses]);
+  }
+  if (issuesPriorities) {
+    q = q.where('priority', 'IN', [...issuesPriorities]);
+  }
+  return q;
+}
+
+function orderQuery(issueQuery: EntityQuery<{issue: Issue}, []>, order: Order) {
+  switch (order) {
+    case Order.Created:
+      return issueQuery.desc('created');
+    case Order.Modified:
+      return issueQuery.desc('modified');
+    // TODO(arv): Change Status and Priority to numeric enums
+    case Order.Status:
+      return issueQuery.desc('status', 'modified');
+    case Order.Priority:
+      return issueQuery.desc('priority', 'modified');
+    case Order.Kanban:
+      return issueQuery.asc('kanbanOrder');
+  }
+}
 
 export default App;
