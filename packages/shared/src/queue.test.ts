@@ -1,4 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
+import {resolver} from '@rocicorp/resolver';
 import {Queue} from './queue.js';
 
 describe('Queue', () => {
@@ -73,5 +74,65 @@ describe('Queue', () => {
     expect(await val1).toBe('a');
     expect(await val2).toBe('b');
     expect(await val3).toBe('c');
+  });
+
+  test('async iterator cleanup on break', async () => {
+    const {promise: cleanedUp, resolve: cleanup} = resolver<void>();
+    const q = new Queue<string>();
+    void q.enqueue('foo');
+    void q.enqueue('bar');
+    void q.enqueue('baz');
+    const received = [];
+    for await (const snapshot of q.asAsyncIterable(cleanup)) {
+      received.push(snapshot);
+      if (received.length === 3) {
+        break;
+      }
+    }
+    await cleanedUp;
+    expect(received).toEqual(['foo', 'bar', 'baz']);
+  });
+
+  test('async iterator cleanup on thrown error', async () => {
+    const {promise: cleanedUp, resolve: cleanup} = resolver<void>();
+    const q = new Queue<string>();
+    void q.enqueue('foo');
+    void q.enqueue('bar');
+    void q.enqueue('baz');
+    const received = [];
+    let err: unknown;
+    try {
+      for await (const snapshot of q.asAsyncIterable(cleanup)) {
+        received.push(snapshot);
+        if (received.length === 3) {
+          throw new Error('bonk');
+        }
+      }
+    } catch (e) {
+      err = e;
+    }
+    await cleanedUp;
+    expect(received).toEqual(['foo', 'bar', 'baz']);
+    expect(String(err)).toBe('Error: bonk');
+  });
+
+  test('async iterator cleanup on enqueued rejection error', async () => {
+    const {promise: cleanedUp, resolve: cleanup} = resolver<void>();
+    const q = new Queue<string>();
+    void q.enqueue('foo');
+    void q.enqueue('bar');
+    void q.enqueueRejection(new Error('bonk'));
+    const received = [];
+    let err: unknown;
+    try {
+      for await (const snapshot of q.asAsyncIterable(cleanup)) {
+        received.push(snapshot);
+      }
+    } catch (e) {
+      err = e;
+    }
+    await cleanedUp;
+    expect(received).toEqual(['foo', 'bar']);
+    expect(String(err)).toBe('Error: bonk');
   });
 });
