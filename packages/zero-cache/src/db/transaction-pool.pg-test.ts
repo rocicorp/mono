@@ -444,7 +444,7 @@ describe('db/transaction-pool', () => {
     pool.process(readTask());
     pool.process(readTask());
 
-    // Verify that the followers only see the initial snapshot.
+    // Verify that the all workers only see the initial snapshot.
     for (let i = 0; i < 6; i++) {
       // [4, 5, 6] should not appear.
       expect(await processed.dequeue()).toEqual([1, 2, 3]);

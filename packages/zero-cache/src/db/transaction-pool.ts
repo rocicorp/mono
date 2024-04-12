@@ -311,7 +311,7 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
 }
 
 /**
- * Returns init and cleanup {@link Task}s for a TransactionPool that ensure its workers
+ * Returns `init` and `cleanup` {@link Task}s for a TransactionPool that ensure its workers
  * share a single `READ ONLY` view of the database. This is used for View Notifier and
  * View Syncer logic that allows multiple entities to perform parallel reads on the same
  * snapshot of the database.
