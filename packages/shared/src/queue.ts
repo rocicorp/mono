@@ -58,12 +58,11 @@ export class Queue<T> {
     return this.#produced.length;
   }
 
-  //todo(darick): add a test for this
-  asAsyncIterator(
-    cleanup = () => {
-      /* nop */
-    },
-  ): AsyncIterator<T> {
+  asAsyncIterable(cleanup = NOOP): AsyncIterable<T> {
+    return {[Symbol.asyncIterator]: () => this.asAsyncIterator(cleanup)};
+  }
+
+  asAsyncIterator(cleanup = NOOP): AsyncIterator<T> {
     return {
       next: async () => {
         try {
@@ -81,3 +80,5 @@ export class Queue<T> {
     };
   }
 }
+
+const NOOP = () => {};
