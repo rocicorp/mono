@@ -329,7 +329,7 @@ export function sharedReadOnlySnapshot(): {init: Task; cleanup: Task} {
 
   // Set when any worker is done, signalling that all non-sentinel Tasks have been
   // dequeued, and thus any subsequently spawned workers should skip their initTask
-  // since the snapshot is soon to go away (as it is no longer needed).
+  // since the snapshot is no longer needed (and soon to become invalid).
   let firstWorkerDone = false;
 
   return {
