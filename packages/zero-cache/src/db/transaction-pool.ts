@@ -129,7 +129,7 @@ export class TransactionPool {
         const pending: Promise<unknown>[] = [];
 
         const executeTask = async (task: Task) => {
-          const result = await task(tx, this.#lc);
+          const result = await task(tx, lc);
           if (Array.isArray(result)) {
             // Execute the statements (i.e. send to the db) immediately and add them to
             // `pending` for the final await.
@@ -306,6 +306,57 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
 
     cleanupExport: async () => {
       await snapshotCaptured;
+    },
+  };
+}
+
+/**
+ * Returns `init` and `cleanup` {@link Task}s for a TransactionPool that ensure its workers
+ * share a single `READ ONLY` view of the database. This is used for View Notifier and
+ * View Syncer logic that allows multiple entities to perform parallel reads on the same
+ * snapshot of the database.
+ */
+export function sharedReadOnlySnapshot(): {init: Task; cleanup: Task} {
+  const {
+    promise: snapshotExported,
+    resolve: exportSnapshot,
+    reject: failExport,
+  } = resolver<string>();
+
+  // Set by the first worker to run its initTask, who becomes responsible for
+  // exporting the snapshot.
+  let firstWorkerRun = false;
+
+  // Set when any worker is done, signalling that all non-sentinel Tasks have been
+  // dequeued, and thus any subsequently spawned workers should skip their initTask
+  // since the snapshot is no longer needed (and soon to become invalid).
+  let firstWorkerDone = false;
+
+  return {
+    init: (tx, lc) => {
+      if (!firstWorkerRun) {
+        firstWorkerRun = true;
+        const stmt = tx.unsafe(`
+          SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+          SELECT pg_export_snapshot() AS snapshot;`);
+        // Intercept the promise to propagate the information to `snapshotExported`.
+        stmt.then(result => exportSnapshot(result[1][0].snapshot), failExport);
+        return [stmt]; // Also return the stmt so that it gets awaited (and errors handled).
+      }
+      if (!firstWorkerDone) {
+        return snapshotExported.then(snapshotID => [
+          tx.unsafe(`
+          SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+          SET TRANSACTION SNAPSHOT '${snapshotID}';
+        `),
+        ]);
+      }
+      lc.debug?.('All work is done. No need to set snapshot');
+      return [];
+    },
+
+    cleanup: () => {
+      firstWorkerDone = true;
     },
   };
 }

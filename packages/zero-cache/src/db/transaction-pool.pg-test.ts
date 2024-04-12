@@ -5,7 +5,11 @@ import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {expectTables, testDBs} from '../test/db.js';
 import {createSilentLogContext} from '../test/logger.js';
-import {TransactionPool, synchronizedSnapshots} from './transaction-pool.js';
+import {
+  TransactionPool,
+  sharedReadOnlySnapshot,
+  synchronizedSnapshots,
+} from './transaction-pool.js';
 
 describe('db/transaction-pool', () => {
   let db: postgres.Sql<{bigint: bigint}>;
@@ -393,6 +397,70 @@ describe('db/transaction-pool', () => {
         {id: 7, val: null},
         {id: 8, val: null},
         {id: 9, val: null},
+      ],
+    });
+  });
+
+  test('sharedReadOnlySnapshot', async () => {
+    const processing = new Queue<boolean>();
+    const processed = new Queue<number[]>();
+    const readTask = () => async (tx: postgres.TransactionSql) => {
+      void processing.enqueue(true);
+      const ids = await tx<{id: number}[]>`SELECT id FROM foo;`.values();
+      void processed.enqueue(ids.flat());
+    };
+
+    const {init, cleanup} = sharedReadOnlySnapshot();
+    const pool = new TransactionPool(lc, init, cleanup, 2, 5);
+
+    // Start off with some existing values in the db.
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    // Run the pool.
+    const done = pool.run(db);
+
+    // Process one read.
+    pool.process(readTask());
+
+    // Verify that at least one task is processed, which guarantees that
+    // the snapshot was exported.
+    await processing.dequeue();
+
+    // Do some writes outside of the transaction.
+    await db`
+    INSERT INTO foo (id) VALUES (4);
+    INSERT INTO foo (id) VALUES (5);
+    INSERT INTO foo (id) VALUES (6);
+    `.simple();
+
+    // Process a few more reads to expand the worker pool
+    pool.process(readTask());
+    pool.process(readTask());
+    pool.process(readTask());
+    pool.process(readTask());
+    pool.process(readTask());
+
+    // Verify that the all workers only see the initial snapshot.
+    for (let i = 0; i < 6; i++) {
+      // [4, 5, 6] should not appear.
+      expect(await processed.dequeue()).toEqual([1, 2, 3]);
+    }
+
+    pool.setDone();
+    await done;
+
+    await expectTables(db, {
+      ['public.foo']: [
+        {id: 1, val: null},
+        {id: 2, val: null},
+        {id: 3, val: null},
+        {id: 4, val: null},
+        {id: 5, val: null},
+        {id: 6, val: null},
       ],
     });
   });
