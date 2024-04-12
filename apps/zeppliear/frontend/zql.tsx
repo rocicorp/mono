@@ -4,7 +4,7 @@ import type {Context} from '@rocicorp/zql/src/zql/context/context.js';
 import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {useEffect, useMemo, useRef, useState} from 'react';
 
-// TOUCH
+// TOUCH 2
 
 export function useQuery<From extends FromSet, Return>(
   q: EntityQuery<From, Return>,
