@@ -327,9 +327,9 @@ export function sharedReadOnlySnapshot(): {init: Task; cleanup: Task} {
   // exporting the snapshot.
   let firstWorkerRun = false;
 
-  // Set when any worker is done, signalling that all Tasks have been processed,
-  // and any unnecessarily spawned workers should skip their initTask, since the
-  // snapshot may no longer be available.
+  // Set when any worker is done, signalling that all non-sentinel Tasks have been
+  // dequeued, and thus any subsequently spawned workers should skip their initTask
+  // since the snapshot is soon to go away (as it is no longer needed).
   let firstWorkerDone = false;
 
   return {
