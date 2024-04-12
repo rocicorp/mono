@@ -5,7 +5,7 @@ import classnames from 'classnames';
 import {generateKeyBetween} from 'fractional-indexing';
 import {minBy, pickBy} from 'lodash';
 import {useQueryState} from 'next-usequerystate';
-import {memo, useCallback, useEffect, useReducer, useState} from 'react';
+import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {Zero} from 'zero-client';
 import {
@@ -49,42 +49,6 @@ function getTitle(view: string | null) {
   }
 }
 
-type State = {
-  issueOrder: Order;
-};
-function timedReducer(
-  state: State,
-  action: {
-    type: 'setIssueOrder';
-    issueOrder: Order;
-  },
-): State {
-  const start = Date.now();
-  const result = reducer(state, action);
-  console.log(`Reducer took ${Date.now() - start}ms`, action);
-  return result;
-}
-
-function reducer(
-  state: State,
-  action: {
-    type: 'setIssueOrder';
-    issueOrder: Order;
-  },
-): State {
-  switch (action.type) {
-    case 'setIssueOrder': {
-      if (action.issueOrder === state.issueOrder) {
-        return state;
-      }
-      return {
-        ...state,
-        issueOrder: action.issueOrder,
-      };
-    }
-  }
-}
-
 type AppProps = {
   zero: Zero<M>;
   undoManager: UndoManager;
@@ -99,10 +63,6 @@ const App = ({zero, undoManager}: AppProps) => {
   const [orderBy] = useQueryState('orderBy');
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
-
-  const [state, dispatch] = useReducer(timedReducer, {
-    issueOrder: getIssueOrder(view, orderBy),
-  });
 
   const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
 
@@ -126,25 +86,17 @@ const App = ({zero, undoManager}: AppProps) => {
     priorityFilter,
     statusFilter,
   );
-  const filteredQuery = orderQuery(q, state.issueOrder);
+  const issueOrder = getIssueOrder(view, orderBy);
+  const filteredQuery = orderQuery(q, issueOrder);
   const filteredIssues = useQuery(filteredQuery, [
     view,
     priorityFilter,
     statusFilter,
-    state.issueOrder,
+    issueOrder,
   ]);
 
   const viewIssueCount =
     useQuery(filteredQuery.select(agg.count()))[0]?.count ?? 0;
-
-  useEffect(
-    () =>
-      dispatch({
-        type: 'setIssueOrder',
-        issueOrder: getIssueOrder(view, orderBy),
-      }),
-    [view, orderBy],
-  );
 
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {
