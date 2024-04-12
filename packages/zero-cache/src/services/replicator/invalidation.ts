@@ -364,7 +364,7 @@ export class InvalidationProcessor {
       return;
     }
     // Lookup preValues for UPDATEs and DELETEs.
-    await lookupUnknownPreValues(
+    const preValues = await lookupUnknownPreValues(
       lc,
       tx,
       table.schema,
@@ -405,9 +405,15 @@ export class InvalidationProcessor {
     };
 
     for (const row of changes.values()) {
-      assert(row.preValue !== 'unknown'); // all preValues should have looked up.
       if (row.preValue !== 'none') {
-        processRow(row.preValue);
+        if (row.preValue !== 'unknown') {
+          processRow(row.preValue);
+        } else {
+          const rowKey = rowKeyString(row.rowKey);
+          const preValue = preValues.get(rowKeyString(row.rowKey));
+          assert(preValue, `Missing preValue for ${rowKey}`);
+          processRow(preValue);
+        }
       }
       if (row.postValue !== 'none') {
         processRow(row.postValue);
@@ -426,28 +432,22 @@ async function lookupUnknownPreValues(
   table: string,
   rowKeyType: RowKeyType,
   changes: Map<string, EffectiveRowChange>,
-) {
+): Promise<Map<string, RowValue>> {
   const keys = [...changes.values()]
     .filter(change => change.preValue === 'unknown')
     .map(change => change.rowKey);
   if (keys.length === 0) {
-    return;
+    return new Map();
   }
 
   lc.debug?.(`Looking up ${keys.length} pre-tx values from ${schema}.${table}`);
 
-  let count = 0;
   const keyCols = Object.keys(rowKeyType);
-  await lookupRowsWithKeys(tx, schema, table, rowKeyType, keys).forEach(row => {
-    const key = rowKeyString(
-      Object.fromEntries(keyCols.map(col => [col, row[col]])),
-    );
-    const c = changes.get(key);
-    assert(c, `Row does not correspond to change ${key}`);
-    assert(c.preValue === 'unknown', `Unexpected preValue: ${key}`);
-    c.preValue = row;
-    count++;
-  });
-
-  assert(count === keys.length, `Expected ${keys.length}, got ${count}`);
+  const rows = await lookupRowsWithKeys(tx, schema, table, rowKeyType, keys);
+  return new Map(
+    rows.map(row => [
+      rowKeyString(Object.fromEntries(keyCols.map(col => [col, row[col]]))),
+      row,
+    ]),
+  );
 }

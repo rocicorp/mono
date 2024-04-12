@@ -53,9 +53,9 @@ export type RowChange = InsertRowChange | UpdateRowChange | DeleteRowChange;
  * (i.e. before and after the transaction).
  */
 export type EffectiveRowChange = {
-  rowKey: RowKeyValue;
-  preValue: RowValue | 'none' | 'unknown';
-  postValue: RowValue | 'none';
+  readonly rowKey: RowKeyValue;
+  readonly preValue: 'unknown' | 'none';
+  readonly postValue: RowValue | 'none';
 };
 
 /**
@@ -88,7 +88,7 @@ export class TableTracker {
     const sameKeyNodes = this.#rows.get(postKey);
 
     if (sameKeyNodes) {
-      sameKeyNodes.postValue = postValue;
+      this.#rows.set(postKey, {...sameKeyNodes, postValue});
     } else {
       // First time this row has appeared in this transaction.
       // If this was an UPDATE from a preRowKey, treat it as an INSERT of the postRowKey.
@@ -107,7 +107,7 @@ export class TableTracker {
       // old row key to `null` as if it were DELETE'd.
       const parentNodes = this.#rows.get(preKey);
       if (parentNodes) {
-        parentNodes.postValue = 'none';
+        this.#rows.set(preKey, {...parentNodes, postValue: 'none'});
       } else {
         // First time this row has appeared in this transaction.
         this.#rows.set(preKey, {

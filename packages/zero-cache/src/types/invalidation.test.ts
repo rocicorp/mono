@@ -38,6 +38,15 @@ describe('types/invalidation', () => {
       hash: '0438451ab415ecac', // Different from TableTag
     },
     {
+      name: 'RowTag with selectedColumns but no filtered columns',
+      tag: {
+        schema: 'public',
+        table: 'foo',
+        selectedColumns: ['bar'],
+      },
+      hash: '0438451ab415ecac', // Same as preceding
+    },
+    {
       name: 'FullTableTag',
       tag: {schema: 'public', table: 'foo', allRows: true},
       hash: '2b2fae818d8427ad', // Different from TableTag.
@@ -187,7 +196,7 @@ describe('types/invalidation', () => {
 
         if (spec.selectedColumns) {
           expect(reparsed.selectedColumns).toEqual(
-            spec.selectedColumns.sort(compareUTF8),
+            [...spec.selectedColumns].sort(compareUTF8),
           );
         }
       }
