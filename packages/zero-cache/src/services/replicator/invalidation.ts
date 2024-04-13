@@ -258,7 +258,6 @@ export class InvalidationFilters {
 
 export class InvalidationProcessor {
   readonly #filters: InvalidationFilters;
-  readonly #invalidationHashes = new Set<string>();
 
   #cachedFilters: Promise<CachedFilters> | undefined;
 
@@ -311,24 +310,28 @@ export class InvalidationProcessor {
     stateVersion: LexiVersion,
     tables: Iterable<TableTracker>,
   ) {
-    // Fire off tasks on the `readers` pool to process the effective row changes of each
+    const cachedFilters = this.#cachedFilters;
+    assert(cachedFilters, `#cachedFilters is setup in processInitTasks`);
+
+    // Fire off reads on the `readers` pool to process the effective row changes of each
     // table in parallel. Workers will be spawned as necessary up to the configured
     // maxWorkers parameter of the TransactionPool.
+    const hashers: Promise<Set<string>>[] = [];
     for (const table of tables) {
-      readers.process((tx, lc) =>
-        this.#computeInvalidationHashes(lc, tx, table),
+      hashers.push(
+        readers.processReadTask((tx, lc) =>
+          computeInvalidationHashes(lc, tx, table, cachedFilters),
+        ),
       );
     }
 
     writer.process(async (tx, lc) => {
-      // Wait for all #computeInvalidationHashes Tasks on the #readers pool to complete.
-      await readers.done();
+      const hashSets = await Promise.all(hashers);
+      const allHashes = new Set<string>();
+      hashSets.forEach(set => set.forEach(hash => allHashes.add(hash)));
 
-      lc.debug?.(
-        `Committing ${this.#invalidationHashes.size} invalidation tags`,
-        [...this.#invalidationHashes],
-      );
-      return [...this.#invalidationHashes].map(
+      lc.debug?.(`Committing ${allHashes.size} invalidation tags`);
+      return [...allHashes].map(
         hash => tx`
       INSERT INTO _zero."InvalidationIndex" ${tx({
         hash: Buffer.from(hash, 'hex'),
@@ -340,89 +343,88 @@ export class InvalidationProcessor {
       );
     });
   }
+}
 
-  /**
-   * The Task run on the `readers` pool to compute invalidation hashes for the row
-   * changes of a `table`.
-   */
-  async #computeInvalidationHashes(
-    lc: LogContext,
-    tx: postgres.TransactionSql,
-    table: TableTracker,
-  ) {
-    const {truncated, changes} = table.getEffectiveRowChanges();
-    if (truncated) {
-      this.#invalidationHashes.add(
-        invalidationHash({
-          schema: table.schema,
-          table: table.table,
-          allRows: true,
-        }),
-      );
-      // When a table is truncated, all queries for the table are effected.
-      // There is no need to compute any finer-grained invalidation tags.
-      return;
-    }
-    // Lookup preValues for UPDATEs and DELETEs.
-    const preValues = await lookupUnknownPreValues(
-      lc,
-      tx,
-      table.schema,
-      table.table,
-      table.rowKeyType,
-      changes,
+/**
+ * The ReadTask run on the `readers` pool to compute invalidation hashes for
+ * the row changes of a `table`.
+ */
+async function computeInvalidationHashes(
+  lc: LogContext,
+  tx: postgres.TransactionSql,
+  table: TableTracker,
+  cachedFilters: Promise<CachedFilters>,
+): Promise<Set<string>> {
+  const hashes = new Set<string>();
+  const {truncated, changes} = table.getEffectiveRowChanges();
+  if (truncated) {
+    hashes.add(
+      invalidationHash({
+        schema: table.schema,
+        table: table.table,
+        allRows: true,
+      }),
     );
-
-    lc.info?.(
-      `Computing invalidation tags for ${changes.size} rows in ${table.schema}.${table.table}`,
-    );
-
-    // Await the cached filters
-    assert(this.#cachedFilters, `#cachedFilters is setup in processInitTasks`);
-    const cachedFilters = await this.#cachedFilters;
-
-    const filters = cachedFilters.specs.filter(
-      f => f.schema === table.schema && f.table === table.table,
-    );
-    const processRow = (row: RowValue) => {
-      // Lazily stringified values of filtered columns.
-      const stringified: Record<string, string> = {};
-
-      for (const filter of filters) {
-        const rowTag: RowTag = {
-          schema: table.schema,
-          table: table.table,
-          filteredColumns: Object.fromEntries(
-            Object.keys(filter.filteredColumns).map(col => [
-              col,
-              (stringified[col] ??= stringify(row[col])),
-            ]),
-          ),
-          selectedColumns: filter.selectedColumns,
-        };
-        this.#invalidationHashes.add(invalidationHash(rowTag));
-      }
-    };
-
-    for (const row of changes.values()) {
-      if (row.preValue !== 'none') {
-        if (row.preValue !== 'unknown') {
-          processRow(row.preValue);
-        } else {
-          const rowKey = rowKeyString(row.rowKey);
-          const preValue = preValues.get(rowKeyString(row.rowKey));
-          assert(preValue, `Missing preValue for ${rowKey}`);
-          processRow(preValue);
-        }
-      }
-      if (row.postValue !== 'none') {
-        processRow(row.postValue);
-      }
-      // TODO: For UPDATEs there will be both a preValue and postValue.
-      // Updates only need to produce invalidations if a filter's selectedColumns
-      // or filteredColumns changed. Otherwise, the filter can be skipped.
-    }
+    // When a table is truncated, all queries for the table are effected.
+    // There is no need to compute any finer-grained invalidation tags.
+    return hashes;
   }
+  // Lookup preValues for UPDATEs and DELETEs.
+  const preValues = await lookupUnknownPreValues(
+    lc,
+    tx,
+    table.schema,
+    table.table,
+    table.rowKeyType,
+    changes,
+  );
+
+  lc.info?.(
+    `Computing invalidation tags for ${changes.size} rows in ${table.schema}.${table.table}`,
+  );
+
+  const filters = (await cachedFilters).specs.filter(
+    f => f.schema === table.schema && f.table === table.table,
+  );
+  const processRow = (row: RowValue) => {
+    // Lazily stringified values of filtered columns.
+    const stringified: Record<string, string> = {};
+
+    for (const filter of filters) {
+      const rowTag: RowTag = {
+        schema: table.schema,
+        table: table.table,
+        filteredColumns: Object.fromEntries(
+          Object.keys(filter.filteredColumns).map(col => [
+            col,
+            (stringified[col] ??= stringify(row[col])),
+          ]),
+        ),
+        selectedColumns: filter.selectedColumns,
+      };
+      hashes.add(invalidationHash(rowTag));
+    }
+  };
+
+  for (const row of changes.values()) {
+    if (row.preValue !== 'none') {
+      if (row.preValue !== 'unknown') {
+        processRow(row.preValue);
+      } else {
+        const rowKey = rowKeyString(row.rowKey);
+        const preValue = preValues.get(rowKeyString(row.rowKey));
+        assert(preValue, `Missing preValue for ${rowKey}`);
+        processRow(preValue);
+      }
+    }
+    if (row.postValue !== 'none') {
+      processRow(row.postValue);
+    }
+    // TODO: For UPDATEs there will be both a preValue and postValue.
+    // Updates only need to produce invalidations if a filter's selectedColumns
+    // or filteredColumns changed. Otherwise, the filter can be skipped.
+  }
+  return hashes;
 }
 
 async function lookupUnknownPreValues(
