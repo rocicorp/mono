@@ -91,15 +91,19 @@ type AggregateResult<
 type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
   // array aggregation
   K extends AggArray<infer Selection, infer Alias>
-    ? AggregateResult<
-        Selection,
-        From,
-        Alias,
-        ExtractFieldValue<
+    ? Selection extends `${infer Table}.*`
+      ? {
+          [K in Alias]: From[Table][];
+        }
+      : AggregateResult<
+          Selection,
           From,
-          Selection extends SimpleSelector<From> ? Selection : never
-        >[]
-      >
+          Alias,
+          ExtractFieldValue<
+            From,
+            Selection extends SimpleSelector<From> ? Selection : never
+          >[]
+        >
     : K extends
         | Min<infer Selection, infer Alias>
         | Max<infer Selection, infer Alias>
@@ -177,7 +181,9 @@ type CombineSelections<
     : never
   : unknown;
 
-type Aggregator<From extends FromSet> = Aggregate<SimpleSelector<From>, string>;
+type Aggregator<From extends FromSet> =
+  | Aggregate<SimpleSelector<From>, string>
+  | AggArray<Selector<From>, string>;
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows
@@ -256,6 +262,33 @@ export class EntityQuery<From extends FromSet, Return = []> {
         aggregate,
       },
     );
+  }
+
+  // AFAICT `EntityQuery` would need to carry its table name in a third generic parameter
+  // in order for us to be able make `Alias` optional. Seems doable.
+  join<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): EntityQuery<
+    From & {
+      [K in Alias]: OtherFromSet[keyof OtherFromSet];
+    },
+    Return
+  > {
+    return new EntityQuery(this.#context, this.#name, {
+      ...this.#ast,
+      joins: [
+        ...(this.#ast.joins ?? []),
+        {
+          type: 'inner',
+          other: other.#ast,
+          as: alias,
+          on: [thisField, otherField],
+        },
+      ],
+    });
   }
 
   groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {

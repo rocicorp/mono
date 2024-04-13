@@ -165,7 +165,21 @@ describe('zql/invalidation matchers', () => {
       ],
     },
     {
-      name: 'Max depth', // is set to 3 for the test.
+      name: 'Max depth successful', // MAX_DEPTH is set to 3 for the test.
+      cond: and(
+        cond('foo', '=', 1),
+        or(
+          cond('bar', '=', 3),
+          and(cond('boo', '=', 'bonk'), cond('do', '=', 4)),
+        ),
+      ),
+      matches: [
+        {foo: 1, bar: 3},
+        {foo: 1, boo: 'bonk', do: 4},
+      ],
+    },
+    {
+      name: 'Max depth exceeded', // MAX_DEPTH is set to 3 for the test.
       cond: and(
         cond('foo', '=', 1),
         or(

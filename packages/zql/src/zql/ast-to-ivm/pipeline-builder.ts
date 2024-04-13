@@ -1,27 +1,40 @@
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
-import type {AST, Aggregation, Condition, SimpleCondition} from '../ast/ast.js';
+import type {
+  AST,
+  Aggregation,
+  Condition,
+  Join,
+  Primitive,
+  SimpleCondition,
+} from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {isJoinResult} from '../ivm/types.js';
+
+function getId(e: Entity) {
+  return e.id;
+}
 
 export function buildPipeline(
   sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
   ast: AST,
 ) {
-  // filters first
-  // select last
-  // order is a param to the source or view
-  // as well as limit? How does limit work in materialite again?
   let stream = sourceStreamProvider(
     must(ast.table, 'Table not specified in the AST'),
   );
+
+  // TODO: start working on pipeline sharing so we don't have to
+  // re-build the join index every time.
+  if (ast.joins) {
+    stream = applyJoins(sourceStreamProvider, ast.table, stream, ast.joins);
+  }
 
   if (ast.where) {
     stream = applyWhere(stream, ast.where);
   }
 
   let ret: DifferenceStream<Entity> = stream;
-  // groupBy also applied aggregations
+  // groupBy also applies aggregations
   if (ast.groupBy) {
     ret = applyGroupBy(
       ret as DifferenceStream<Entity>,
@@ -40,6 +53,43 @@ export function buildPipeline(
   // Note: the stream is technically attached at this point.
   // We could detach it until the user actually runs (or subscribes to) the statement as a tiny optimization.
   return ret;
+}
+
+export function applyJoins<T extends Entity, O extends Entity>(
+  sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
+  sourceTableOrAlias: string,
+  stream: DifferenceStream<T>,
+  joins: Join[],
+): DifferenceStream<O> {
+  let ret: DifferenceStream<Entity> =
+    stream as unknown as DifferenceStream<Entity>;
+  for (const join of joins) {
+    if (join.type !== 'inner') {
+      throw new Error('unimplemented');
+    }
+
+    const bPipeline = buildPipeline(sourceStreamProvider, join.other);
+
+    const aQualifiedColumn = selectorToQualifiedColumn(join.on[0]);
+    const bQualifiedColumn = selectorToQualifiedColumn(join.on[1]);
+    ret = ret.join({
+      aAs: sourceTableOrAlias,
+      getAJoinKey(e: Entity) {
+        // TODO: runtime validation?
+        return getValueFromEntity(e, aQualifiedColumn) as Primitive;
+      },
+      getAPrimaryKey: getId,
+
+      b: bPipeline,
+      bAs: join.as,
+      getBJoinKey(e: Entity) {
+        // TODO: runtime validation?
+        return getValueFromEntity(e, bQualifiedColumn) as Primitive;
+      },
+      getBPrimaryKey: getId,
+    }) as unknown as DifferenceStream<Entity>;
+  }
+  return ret as unknown as DifferenceStream<O>;
 }
 
 function applyWhere<T extends Entity>(
@@ -116,6 +166,9 @@ function applyGroupBy<T extends Entity>(
   aggregations: Aggregation[],
 ) {
   const keyFunction = makeKeyFunction(columns);
+  const qualifiedColumns = aggregations.map(q =>
+    q.field === undefined ? undefined : selectorToQualifiedColumn(q.field),
+  );
   return stream.reduce(
     keyFunction,
     value => value.id as string,
@@ -123,7 +176,9 @@ function applyGroupBy<T extends Entity>(
       const first = values[Symbol.iterator]().next().value;
       const ret: Record<string, unknown> = {...first};
 
-      for (const aggregation of aggregations) {
+      for (let i = 0; i < aggregations.length; i++) {
+        const aggregation = aggregations[i];
+        const qualifiedColumn = qualifiedColumns[i];
         switch (aggregation.aggregate) {
           case 'count': {
             let count = 0;
@@ -136,7 +191,7 @@ function applyGroupBy<T extends Entity>(
           case 'sum': {
             let sum = 0;
             for (const value of values) {
-              sum += value[aggregation.field as keyof T] as number;
+              sum += getValueFromEntity(value, must(qualifiedColumn)) as number;
             }
             ret[aggregation.alias] = sum;
             break;
@@ -145,7 +200,7 @@ function applyGroupBy<T extends Entity>(
             let sum = 0;
             let count = 0;
             for (const value of values) {
-              sum += value[aggregation.field as keyof T] as number;
+              sum += getValueFromEntity(value, must(qualifiedColumn)) as number;
               count++;
             }
             ret[aggregation.alias] = sum / count;
@@ -154,7 +209,10 @@ function applyGroupBy<T extends Entity>(
           case 'min': {
             let min;
             for (const value of values) {
-              const newValue = value[aggregation.field as keyof T];
+              const newValue = getValueFromEntity(
+                value,
+                must(qualifiedColumn),
+              ) as number | string;
               if (min === undefined || (min as T[keyof T]) > newValue) {
                 min = newValue;
               }
@@ -165,7 +223,10 @@ function applyGroupBy<T extends Entity>(
           case 'max': {
             let max;
             for (const value of values) {
-              const newValue = value[aggregation.field as keyof T];
+              const newValue = getValueFromEntity(
+                value,
+                must(qualifiedColumn),
+              ) as number | string;
               if (max === undefined || (max as T[keyof T]) < newValue) {
                 max = newValue;
               }
@@ -174,8 +235,8 @@ function applyGroupBy<T extends Entity>(
             break;
           }
           case 'array': {
-            ret[aggregation.alias] = Array.from(values).map(
-              x => x[aggregation.field as keyof T],
+            ret[aggregation.alias] = Array.from(values).map(x =>
+              getValueFromEntity(x, must(qualifiedColumn)),
             );
             break;
           }
@@ -332,19 +393,26 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
 export function selectorsToQualifiedColumns(
   selectors: string[],
 ): [string | undefined, string][] {
-  return selectors.map(x => {
-    if (x.includes('.')) {
-      return x.split('.') as [string, string];
-    }
-    return [undefined, x] as const;
-  });
+  return selectors.map(selectorToQualifiedColumn);
+}
+
+export function selectorToQualifiedColumn(
+  x: string,
+): [string | undefined, string] {
+  if (x.includes('.')) {
+    return x.split('.') as [string, string];
+  }
+  return [undefined, x] as const;
 }
 
 export function getValueFromEntity(
   entity: Record<string, unknown>,
   qualifiedColumn: [table: string | undefined, column: string],
 ) {
-  if (isJoinResult(entity)) {
+  if (isJoinResult(entity) && qualifiedColumn[0] !== undefined) {
+    if (qualifiedColumn[1] === '*') {
+      return (entity as Record<string, unknown>)[qualifiedColumn[0]];
+    }
     return (
       (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
         string,

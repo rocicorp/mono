@@ -12,15 +12,24 @@ export type Statement =
 
 /**
  * A {@link Task} is logic run from within a transaction in a {@link TransactionPool}.
- * It can return a list of `Statements` (for write transactions), which the transaction
- * will execute asynchronously and await when it receives the 'done' signal, or it can
- * return a `Promise<void>` (typical for read transactions) that is awaited when
- * the task is processed.
+ * It returns a list of `Statements` that the transaction executes asynchronously and
+ * awaits when it receives the 'done' signal.
+ *
  */
 export type Task = (
   tx: postgres.TransactionSql,
   lc: LogContext,
-) => MaybePromise<Statement[] | void>;
+) => MaybePromise<Statement[]>;
+
+/**
+ * A {@link ReadTask} is run from within a transaction, but unlike a {@link Task},
+ * the results of a ReadTask are opaque to the TransactionPool and returned to the
+ * caller of {@link TransactionPool.processReadTask}.
+ */
+export type ReadTask<T> = (
+  tx: postgres.TransactionSql,
+  lc: LogContext,
+) => MaybePromise<T>;
 
 /**
  * A TransactionPool is a pool of one or more {@link postgres.TransactionSql}
@@ -129,7 +138,7 @@ export class TransactionPool {
         const pending: Promise<unknown>[] = [];
 
         const executeTask = async (task: Task) => {
-          const result = await task(tx, this.#lc);
+          const result = await task(tx, lc);
           if (Array.isArray(result)) {
             // Execute the statements (i.e. send to the db) immediately and add them to
             // `pending` for the final await.
@@ -182,7 +191,7 @@ export class TransactionPool {
     }
   }
 
-  process(task: Task) {
+  process(task: Task): void {
     assert(!this.#done, 'already set done');
     if (this.#failure) {
       return;
@@ -205,6 +214,23 @@ export class TransactionPool {
         this.#lc.info?.(`Increased pool size to: ${this.#numWorkers}`);
       }
     }
+  }
+
+  processReadTask<T>(readTask: ReadTask<T>): Promise<T> {
+    const {promise, resolve, reject} = resolver<T>();
+    if (this.#failure) {
+      reject(this.#failure);
+    } else {
+      this.process(async (tx, lc) => {
+        try {
+          resolve(await readTask(tx, lc));
+        } catch (e) {
+          reject(e);
+        }
+        return [];
+      });
+    }
+    return promise;
   }
 
   /**
@@ -306,6 +332,62 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
 
     cleanupExport: async () => {
       await snapshotCaptured;
+      return [];
+    },
+  };
+}
+
+/**
+ * Returns `init` and `cleanup` {@link Task}s for a TransactionPool that ensure its workers
+ * share a single `READ ONLY` view of the database. This is used for View Notifier and
+ * View Syncer logic that allows multiple entities to perform parallel reads on the same
+ * snapshot of the database.
+ */
+export function sharedReadOnlySnapshot(): {
+  init: Task;
+  cleanup: Task;
+} {
+  const {
+    promise: snapshotExported,
+    resolve: exportSnapshot,
+    reject: failExport,
+  } = resolver<string>();
+
+  // Set by the first worker to run its initTask, who becomes responsible for
+  // exporting the snapshot.
+  let firstWorkerRun = false;
+
+  // Set when any worker is done, signalling that all non-sentinel Tasks have been
+  // dequeued, and thus any subsequently spawned workers should skip their initTask
+  // since the snapshot is no longer needed (and soon to become invalid).
+  let firstWorkerDone = false;
+
+  return {
+    init: (tx, lc) => {
+      if (!firstWorkerRun) {
+        firstWorkerRun = true;
+        const stmt = tx.unsafe(`
+          SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+          SELECT pg_export_snapshot() AS snapshot;`);
+        // Intercept the promise to propagate the information to `snapshotExported`.
+        stmt.then(result => exportSnapshot(result[1][0].snapshot), failExport);
+        return [stmt]; // Also return the stmt so that it gets awaited (and errors handled).
+      }
+      if (!firstWorkerDone) {
+        return snapshotExported.then(snapshotID => [
+          tx.unsafe(`
+          SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+          SET TRANSACTION SNAPSHOT '${snapshotID}';
+        `),
+        ]);
+      }
+      lc.debug?.('All work is done. No need to set snapshot');
+      return [];
+    },
+
+    cleanup: () => {
+      firstWorkerDone = true;
+      return [];
     },
   };
 }
