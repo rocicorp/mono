@@ -12,8 +12,8 @@ export type Statement =
 
 /**
  * A {@link Task} is logic run from within a transaction in a {@link TransactionPool}.
- * It returns a list of `Statements` that the transaction will execute asynchronously and
- * await when it receives the 'done' signal.
+ * It returns a list of `Statements` that the transaction executes asynchronously and
+ * awaits when it receives the 'done' signal.
  *
  */
 export type Task = (
@@ -22,9 +22,9 @@ export type Task = (
 ) => MaybePromise<Statement[]>;
 
 /**
- * A {@link ReadTask} is run from within a transaction, but unlike a {@link Task}
- * the results are opaque to the TransactionPool and returned to the caller of
- * {@link #processReadTask}.
+ * A {@link ReadTask} is run from within a transaction, but unlike a {@link Task},
+ * the results of a ReadTask are opaque to the TransactionPool and returned to the
+ * caller of {@link TransactionPool.processReadTask}.
  */
 export type ReadTask<T> = (
   tx: postgres.TransactionSql,
@@ -191,7 +191,7 @@ export class TransactionPool {
     }
   }
 
-  process(task: Task) {
+  process(task: Task): void {
     assert(!this.#done, 'already set done');
     if (this.#failure) {
       return;
