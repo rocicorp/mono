@@ -80,15 +80,21 @@ class ReplicacheSource {
     // to views that have explicitly requested history whereas `add` will
     // send them to everyone as if they were changes happening _now_.
     if (this.#receivedFirstDiff === false) {
-      this.#materialite.tx(() => {
+      // this is an attempt to put all `experimentalWatch` calls into the same
+      // transaction.
+      const commit = this.#materialite.imperativeTx();
+      try {
         this.#canonicalSource.seed(
           mapIter(changes, diff => {
             assert(diff.op === 'add');
             return diff.newValue as Entity;
           }),
         );
-      });
-      this.#receivedFirstDiff = true;
+        this.#receivedFirstDiff = true;
+      } finally {
+        queueMicrotask(() => commit());
+      }
+
       return;
     }
     this.#materialite.tx(() => {
