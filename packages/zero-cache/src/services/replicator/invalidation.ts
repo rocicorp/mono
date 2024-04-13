@@ -326,7 +326,6 @@ export class InvalidationProcessor {
     }
 
     writer.process(async (tx, lc) => {
-      // Wait for all #computeInvalidationHashes Tasks on the #readers pool to complete.
       const hashSets = await Promise.all(hashers);
       const allHashes = new Set<string>();
       hashSets.forEach(set => set.forEach(hash => allHashes.add(hash)));
