@@ -465,4 +465,27 @@ describe('db/transaction-pool', () => {
       ],
     });
   });
+
+  test('failures reflected in readTasks', async () => {
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    const pool = new TransactionPool(lc);
+    const done = pool.run(db);
+
+    const readTask = () => async (tx: postgres.TransactionSql) =>
+      (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
+    expect(await pool.processReadTask(readTask())).toEqual([1, 2, 3]);
+
+    const error = new Error('oh nose');
+    pool.fail(error);
+
+    const result = await pool.processReadTask(readTask()).catch(e => e);
+    expect(result).toBe(error);
+
+    expect(await done.catch(e => e)).toBe(error);
+  });
 });
