@@ -12,15 +12,24 @@ export type Statement =
 
 /**
  * A {@link Task} is logic run from within a transaction in a {@link TransactionPool}.
- * It can return a list of `Statements` (for write transactions), which the transaction
- * will execute asynchronously and await when it receives the 'done' signal, or it can
- * return a `Promise<void>` (typical for read transactions) that is awaited when
- * the task is processed.
+ * It returns a list of `Statements` that the transaction will execute asynchronously and
+ * await when it receives the 'done' signal.
+ *
  */
 export type Task = (
   tx: postgres.TransactionSql,
   lc: LogContext,
-) => MaybePromise<Statement[] | void>;
+) => MaybePromise<Statement[]>;
+
+/**
+ * A {@link ReadTask} is run from within a transaction, but unlike a {@link Task}
+ * the results are opaque to the TransactionPool and returned to the caller of
+ * {@link #processReadTask}.
+ */
+export type ReadTask<T> = (
+  tx: postgres.TransactionSql,
+  lc: LogContext,
+) => MaybePromise<T>;
 
 /**
  * A TransactionPool is a pool of one or more {@link postgres.TransactionSql}
@@ -207,6 +216,19 @@ export class TransactionPool {
     }
   }
 
+  processReadTask<T>(readTask: ReadTask<T>): Promise<T> {
+    const {promise, resolve, reject} = resolver<T>();
+    this.process(async (tx, lc) => {
+      try {
+        resolve(await readTask(tx, lc));
+      } catch (e) {
+        reject(e);
+      }
+      return [];
+    });
+    return promise;
+  }
+
   /**
    * Signals to all workers to end their transaction once all pending tasks have
    * been completed.
@@ -306,6 +328,7 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
 
     cleanupExport: async () => {
       await snapshotCaptured;
+      return [];
     },
   };
 }
@@ -316,7 +339,10 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
  * View Syncer logic that allows multiple entities to perform parallel reads on the same
  * snapshot of the database.
  */
-export function sharedReadOnlySnapshot(): {init: Task; cleanup: Task} {
+export function sharedReadOnlySnapshot(): {
+  init: Task;
+  cleanup: Task;
+} {
   const {
     promise: snapshotExported,
     resolve: exportSnapshot,
@@ -357,6 +383,7 @@ export function sharedReadOnlySnapshot(): {init: Task; cleanup: Task} {
 
     cleanup: () => {
       firstWorkerDone = true;
+      return [];
     },
   };
 }

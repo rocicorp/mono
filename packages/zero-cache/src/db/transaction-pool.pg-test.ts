@@ -369,16 +369,18 @@ describe('db/transaction-pool', () => {
     `.simple();
 
     // Verify that the followers only see the initial snapshot.
-    const queryResults = new Queue<number[]>();
+    const reads: Promise<number[]>[] = [];
     for (let i = 0; i < 3; i++) {
-      followers.process(async tx => {
-        const ids = await tx<{id: number}[]>`SELECT id FROM foo;`.values();
-        void queryResults.enqueue(ids.flat());
-      });
+      reads.push(
+        followers.processReadTask(async tx =>
+          (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat(),
+        ),
+      );
     }
-    for (let i = 0; i < 3; i++) {
+    const results = await Promise.all(reads);
+    for (const result of results) {
       // Neither [4, 5, 6] nor [7, 8, 9] should appear.
-      expect(await queryResults.dequeue()).toEqual([1, 2, 3]);
+      expect(result).toEqual([1, 2, 3]);
     }
 
     followers.setDone();
@@ -403,11 +405,9 @@ describe('db/transaction-pool', () => {
 
   test('sharedReadOnlySnapshot', async () => {
     const processing = new Queue<boolean>();
-    const processed = new Queue<number[]>();
     const readTask = () => async (tx: postgres.TransactionSql) => {
       void processing.enqueue(true);
-      const ids = await tx<{id: number}[]>`SELECT id FROM foo;`.values();
-      void processed.enqueue(ids.flat());
+      return (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
     };
 
     const {init, cleanup} = sharedReadOnlySnapshot();
@@ -423,8 +423,10 @@ describe('db/transaction-pool', () => {
     // Run the pool.
     const done = pool.run(db);
 
+    const processed: Promise<number[]>[] = [];
+
     // Process one read.
-    pool.process(readTask());
+    processed.push(pool.processReadTask(readTask()));
 
     // Verify that at least one task is processed, which guarantees that
     // the snapshot was exported.
@@ -438,16 +440,15 @@ describe('db/transaction-pool', () => {
     `.simple();
 
     // Process a few more reads to expand the worker pool
-    pool.process(readTask());
-    pool.process(readTask());
-    pool.process(readTask());
-    pool.process(readTask());
-    pool.process(readTask());
+    for (let i = 0; i < 5; i++) {
+      processed.push(pool.processReadTask(readTask()));
+    }
 
     // Verify that the all workers only see the initial snapshot.
-    for (let i = 0; i < 6; i++) {
+    const results = await Promise.all(processed);
+    for (const result of results) {
       // [4, 5, 6] should not appear.
-      expect(await processed.dequeue()).toEqual([1, 2, 3]);
+      expect(result).toEqual([1, 2, 3]);
     }
 
     pool.setDone();
