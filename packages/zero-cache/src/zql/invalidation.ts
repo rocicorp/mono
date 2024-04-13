@@ -154,10 +154,10 @@ export function computeInvalidationInfo(
  * The above examples results in the following Matchers:
  * * `{a = 1, b = 2, e = 5}`
  * * `{a = 1, c = 3, e = 5}`
- * * `{a = 1, d = 3, e = 5}`
+ * * `{a = 1, d = 4, e = 5}`
  * * `{a = 1, b = 2, f = 6}`
  * * `{a = 1, c = 3, f = 6}`
- * * `{a = 1, d = 3, f = 6}`
+ * * `{a = 1, d = 4, f = 6}`
  *
  * ## Result Normalization
  *
