@@ -218,14 +218,18 @@ export class TransactionPool {
 
   processReadTask<T>(readTask: ReadTask<T>): Promise<T> {
     const {promise, resolve, reject} = resolver<T>();
-    this.process(async (tx, lc) => {
-      try {
-        resolve(await readTask(tx, lc));
-      } catch (e) {
-        reject(e);
-      }
-      return [];
-    });
+    if (this.#failure) {
+      reject(this.#failure);
+    } else {
+      this.process(async (tx, lc) => {
+        try {
+          resolve(await readTask(tx, lc));
+        } catch (e) {
+          reject(e);
+        }
+        return [];
+      });
+    }
     return promise;
   }
 
