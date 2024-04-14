@@ -1,9 +1,9 @@
 import {generateNKeysBetween} from 'fractional-indexing';
 import {groupBy, indexOf} from 'lodash';
-import React, {memo, useCallback} from 'react';
+import {memo, useCallback} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
-import {Status, Issue, IssueUpdate, Priority} from './issue';
+import {Issue, IssueUpdate, Priority, Status, statusFromString} from './issue';
 import IssueCol from './issue-col';
 
 export type IssuesByStatusType = {
@@ -84,12 +84,12 @@ function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
       if (!destination) {
         return;
       }
-      const sourceStatus = source?.droppableId as Status;
+      const sourceStatus = statusFromString(source.droppableId);
       const draggedIssue = issuesByType[sourceStatus][source.index];
       if (!draggedIssue) {
         return;
       }
-      const newStatus = destination.droppableId as Status;
+      const newStatus = statusFromString(destination.droppableId);
       const newIndex =
         sourceStatus === newStatus && source.index < destination.index
           ? destination.index + 1

@@ -40,7 +40,7 @@ export const priorityOrderValues: Record<Priority, string> = {
   NONE: '5',
 };
 
-export enum Status {
+export enum StatusString {
   Backlog = 'BACKLOG',
   Todo = 'TODO',
   InProgress = 'IN_PROGRESS',
@@ -48,21 +48,56 @@ export enum Status {
   Canceled = 'CANCELED',
 }
 
-export const statusOrderValues: Record<Status, string> = {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  BACKLOG: '1',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  TODO: '2',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  IN_PROGRESS: '3',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DONE: '4',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  CANCELED: '5',
-};
+export const statusStringSchema = z
+  .nativeEnum(StatusString)
+  .transform(statusFromString);
 
-export const statusEnumSchema = z.nativeEnum(Status);
-export type StatusEnum = z.infer<typeof statusEnumSchema>;
+export const enum Status {
+  Backlog = 1,
+  Todo,
+  InProgress,
+  Done,
+  Canceled,
+}
+
+export const statusSchema = z.union([
+  z.literal(Status.Backlog),
+  z.literal(Status.Todo),
+  z.literal(Status.InProgress),
+  z.literal(Status.Done),
+  z.literal(Status.Canceled),
+]);
+
+export function statusToStatusString(status: Status): StatusString {
+  switch (status) {
+    case Status.Backlog:
+      return StatusString.Backlog;
+    case Status.Todo:
+      return StatusString.Todo;
+    case Status.InProgress:
+      return StatusString.InProgress;
+    case Status.Done:
+      return StatusString.Done;
+    case Status.Canceled:
+      return StatusString.Canceled;
+  }
+}
+
+export function statusFromString(status: string): Status {
+  switch (status) {
+    case StatusString.Backlog:
+      return Status.Backlog;
+    case StatusString.Todo:
+      return Status.Todo;
+    case StatusString.InProgress:
+      return Status.InProgress;
+    case StatusString.Done:
+      return Status.Done;
+    case StatusString.Canceled:
+      return Status.Canceled;
+  }
+  throw new Error('Invalid status');
+}
 
 export enum Order {
   Created = 'CREATED',
@@ -87,7 +122,7 @@ export const issueSchema = z.object({
   id: z.string(),
   title: z.string(),
   priority: priorityEnumSchema,
-  status: statusEnumSchema,
+  status: statusSchema,
   modified: z.number(),
   created: z.number(),
   creatorID: z.string(),

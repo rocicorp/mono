@@ -1,11 +1,18 @@
+import {memo} from 'react';
 import MenuIcon from './assets/icons/menu.svg';
-import React, {memo} from 'react';
 
-import SortOrderMenu from './sort-order-menu';
+import {noop} from 'lodash';
 import {queryTypes, useQueryState} from 'next-usequerystate';
 import FilterMenu from './filter-menu';
-import {Order, Priority, Status} from './issue';
-import {noop} from 'lodash';
+import {
+  Order,
+  Priority,
+  Status,
+  StatusString,
+  statusFromString,
+  statusToStatusString,
+} from './issue';
+import SortOrderMenu from './sort-order-menu';
 
 interface Props {
   title: string;
@@ -68,10 +75,10 @@ function TopFilter({
       .stringEnum<Order>(Object.values(Order))
       .withDefault(Order.Modified),
   );
-  const [statusFilters, setStatusFilterByParam] = useQueryState(
+  const [statusStringFilters, setStatusStringFilterByParam] = useQueryState(
     'statusFilter',
-    queryTypes.array<Status>(
-      queryTypes.stringEnum<Status>(Object.values(Status)),
+    queryTypes.array<StatusString>(
+      queryTypes.stringEnum<StatusString>(Object.values(StatusString)),
     ),
   );
   const [priorityFilters, setPriorityFilterByParam] = useQueryState(
@@ -80,6 +87,10 @@ function TopFilter({
       queryTypes.stringEnum<Priority>(Object.values(Priority)),
     ),
   );
+
+  const statusFilters = statusStringFilters?.map(statusFromString) ?? null;
+  const setStatusFilterByParam = (value: Status[] | null) =>
+    setStatusStringFilterByParam(value && value.map(statusToStatusString));
 
   return (
     <>
@@ -119,9 +130,7 @@ function TopFilter({
               } else {
                 statusSet.add(status);
               }
-              await setStatusFilterByParam(
-                statusSet.size === 0 ? null : [...statusSet],
-              );
+              await setStatusFilterByParam([...statusSet]);
             }}
           />
         </div>
@@ -140,7 +149,7 @@ function TopFilter({
       (priorityFilters && priorityFilters.length) ? (
         <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
           <FilterStatus
-            filter={statusFilters}
+            filter={statusStringFilters?.map(statusFromString) ?? null}
             onDelete={() => setStatusFilterByParam(null)}
             label="Status"
           />

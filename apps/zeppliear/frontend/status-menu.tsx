@@ -1,13 +1,13 @@
 import React, {memo, MouseEvent, RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
-import StatusIcon from './status-icon';
 import CancelIcon from './assets/icons/cancel.svg';
 import BacklogIcon from './assets/icons/circle-dot.svg';
 import TodoIcon from './assets/icons/circle.svg';
 import DoneIcon from './assets/icons/done.svg';
 import InProgressIcon from './assets/icons/half-circle.svg';
-import {Status, StatusEnum} from './issue';
 import {useClickOutside} from './hooks/useClickOutside';
+import {Status} from './issue';
+import StatusIcon from './status-icon';
 
 interface Props {
   labelVisible?: boolean;
@@ -23,7 +23,7 @@ export const statuses = [
   [CancelIcon, Status.Canceled, 'Canceled'],
 ];
 
-const getStatusString = (status: StatusEnum) => {
+const getStatusString = (status: Status) => {
   switch (status) {
     case Status.Backlog:
       return 'Backlog';

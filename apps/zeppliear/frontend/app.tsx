@@ -18,7 +18,7 @@ import {
   Status,
   orderEnumSchema,
   priorityEnumSchema,
-  statusEnumSchema,
+  statusStringSchema,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -322,13 +322,13 @@ function filterQuery(
   if (statusFilter) {
     issuesStatuses = new Set<Status>();
     for (const s of statusFilter.split(',')) {
-      const parseResult = statusEnumSchema.safeParse(s);
-      if (
-        parseResult.success &&
-        (!viewStatuses || viewStatuses.has(parseResult.data))
-      ) {
-        hasNonViewFilters = true;
-        issuesStatuses.add(parseResult.data);
+      const parseResult = statusStringSchema.safeParse(s);
+      if (parseResult.success) {
+        const {data} = parseResult;
+        if (!viewStatuses || viewStatuses.has(data)) {
+          hasNonViewFilters = true;
+          issuesStatuses.add(data);
+        }
       }
     }
   }
