@@ -16,7 +16,23 @@ export const issueID = (key: string) => {
   return key.substring(ISSUE_KEY_PREFIX.length);
 };
 
-export enum Priority {
+export const enum Priority {
+  None = 1,
+  Low,
+  Medium,
+  High,
+  Urgent,
+}
+
+export const prioritySchema = z.union([
+  z.literal(Priority.None),
+  z.literal(Priority.Low),
+  z.literal(Priority.Medium),
+  z.literal(Priority.High),
+  z.literal(Priority.Urgent),
+]);
+
+export enum PriorityString {
   None = 'NONE',
   Low = 'LOW',
   Medium = 'MEDIUM',
@@ -24,23 +40,42 @@ export enum Priority {
   Urgent = 'URGENT',
 }
 
-export const priorityEnumSchema = z.nativeEnum(Priority);
-export type PriorityEnum = z.infer<typeof priorityEnumSchema>;
+export const priorityEnumSchema = z
+  .nativeEnum(PriorityString)
+  .transform(priorityFromString);
 
-export const priorityOrderValues: Record<Priority, string> = {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  URGENT: '1',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  HIGH: '2',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  MEDIUM: '3',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  LOW: '4',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  NONE: '5',
-};
+export function priorityFromString(priority: string): Priority {
+  switch (priority) {
+    case PriorityString.None:
+      return Priority.None;
+    case PriorityString.Low:
+      return Priority.Low;
+    case PriorityString.Medium:
+      return Priority.Medium;
+    case PriorityString.High:
+      return Priority.High;
+    case PriorityString.Urgent:
+      return Priority.Urgent;
+  }
+  throw new Error('Invalid priority');
+}
 
-export enum Status {
+export function priorityToPriorityString(priority: Priority): PriorityString {
+  switch (priority) {
+    case Priority.None:
+      return PriorityString.None;
+    case Priority.Low:
+      return PriorityString.Low;
+    case Priority.Medium:
+      return PriorityString.Medium;
+    case Priority.High:
+      return PriorityString.High;
+    case Priority.Urgent:
+      return PriorityString.Urgent;
+  }
+}
+
+export enum StatusString {
   Backlog = 'BACKLOG',
   Todo = 'TODO',
   InProgress = 'IN_PROGRESS',
@@ -48,21 +83,56 @@ export enum Status {
   Canceled = 'CANCELED',
 }
 
-export const statusOrderValues: Record<Status, string> = {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  BACKLOG: '1',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  TODO: '2',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  IN_PROGRESS: '3',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DONE: '4',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  CANCELED: '5',
-};
+export const statusStringSchema = z
+  .nativeEnum(StatusString)
+  .transform(statusFromString);
 
-export const statusEnumSchema = z.nativeEnum(Status);
-export type StatusEnum = z.infer<typeof statusEnumSchema>;
+export const enum Status {
+  Backlog = 1,
+  Todo,
+  InProgress,
+  Done,
+  Canceled,
+}
+
+export const statusSchema = z.union([
+  z.literal(Status.Backlog),
+  z.literal(Status.Todo),
+  z.literal(Status.InProgress),
+  z.literal(Status.Done),
+  z.literal(Status.Canceled),
+]);
+
+export function statusToStatusString(status: Status): StatusString {
+  switch (status) {
+    case Status.Backlog:
+      return StatusString.Backlog;
+    case Status.Todo:
+      return StatusString.Todo;
+    case Status.InProgress:
+      return StatusString.InProgress;
+    case Status.Done:
+      return StatusString.Done;
+    case Status.Canceled:
+      return StatusString.Canceled;
+  }
+}
+
+export function statusFromString(status: string): Status {
+  switch (status) {
+    case StatusString.Backlog:
+      return Status.Backlog;
+    case StatusString.Todo:
+      return Status.Todo;
+    case StatusString.InProgress:
+      return Status.InProgress;
+    case StatusString.Done:
+      return Status.Done;
+    case StatusString.Canceled:
+      return Status.Canceled;
+  }
+  throw new Error('Invalid status');
+}
 
 export enum Order {
   Created = 'CREATED',
@@ -86,8 +156,8 @@ export type FilterEnum = z.infer<typeof filterEnumSchema>;
 export const issueSchema = z.object({
   id: z.string(),
   title: z.string(),
-  priority: priorityEnumSchema,
-  status: statusEnumSchema,
+  priority: prioritySchema,
+  status: statusSchema,
   modified: z.number(),
   created: z.number(),
   creatorID: z.string(),

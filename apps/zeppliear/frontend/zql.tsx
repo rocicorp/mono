@@ -6,7 +6,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 
 export function useQuery<From extends FromSet, Return>(
   q: EntityQuery<From, Return>,
-  dependencies: unknown[] = [],
+  dependencies: readonly unknown[] = [],
 ): Return {
   const [snapshot, setSnapshot] = useState([] as Return);
   // eslint-disable-next-line react-hooks/exhaustive-deps

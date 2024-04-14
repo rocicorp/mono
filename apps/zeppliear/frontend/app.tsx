@@ -18,7 +18,7 @@ import {
   Status,
   orderEnumSchema,
   priorityEnumSchema,
-  statusEnumSchema,
+  statusStringSchema,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -88,15 +88,11 @@ const App = ({zero, undoManager}: AppProps) => {
   );
   const issueOrder = getIssueOrder(view, orderBy);
   const filteredQuery = orderQuery(q, issueOrder);
-  const filteredIssues = useQuery(filteredQuery, [
-    view,
-    priorityFilter,
-    statusFilter,
-    issueOrder,
-  ]);
+  const deps = [view, priorityFilter, statusFilter, issueOrder] as const;
+  const filteredIssues = useQuery(filteredQuery, deps);
 
   const viewIssueCount =
-    useQuery(filteredQuery.select(agg.count()))[0]?.count ?? 0;
+    useQuery(filteredQuery.select(agg.count()), deps)[0]?.count ?? 0;
 
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {
@@ -322,13 +318,13 @@ function filterQuery(
   if (statusFilter) {
     issuesStatuses = new Set<Status>();
     for (const s of statusFilter.split(',')) {
-      const parseResult = statusEnumSchema.safeParse(s);
-      if (
-        parseResult.success &&
-        (!viewStatuses || viewStatuses.has(parseResult.data))
-      ) {
-        hasNonViewFilters = true;
-        issuesStatuses.add(parseResult.data);
+      const parseResult = statusStringSchema.safeParse(s);
+      if (parseResult.success) {
+        const {data} = parseResult;
+        if (!viewStatuses || viewStatuses.has(data)) {
+          hasNonViewFilters = true;
+          issuesStatuses.add(data);
+        }
       }
     }
   }
