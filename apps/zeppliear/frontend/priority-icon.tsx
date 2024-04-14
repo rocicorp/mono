@@ -1,15 +1,13 @@
+import classNames from 'classnames';
 import SignalUrgentIcon from './assets/icons/claim.svg';
 import SignalNoPriorityIcon from './assets/icons/dots.svg';
 import SignalMediumIcon from './assets/icons/signal-medium.svg';
 import SignalStrongIcon from './assets/icons/signal-strong.svg';
 import SignalWeakIcon from './assets/icons/signal-weak.svg';
-import classNames from 'classnames';
-import React from 'react';
-import type {PriorityEnum as PriorityType} from './issue';
 import {Priority} from './issue';
 
 interface Props {
-  priority: PriorityType;
+  priority: Priority;
   className?: string;
 }
 

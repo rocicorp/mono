@@ -16,7 +16,23 @@ export const issueID = (key: string) => {
   return key.substring(ISSUE_KEY_PREFIX.length);
 };
 
-export enum Priority {
+export const enum Priority {
+  None = 1,
+  Low,
+  Medium,
+  High,
+  Urgent,
+}
+
+export const prioritySchema = z.union([
+  z.literal(Priority.None),
+  z.literal(Priority.Low),
+  z.literal(Priority.Medium),
+  z.literal(Priority.High),
+  z.literal(Priority.Urgent),
+]);
+
+export enum PriorityString {
   None = 'NONE',
   Low = 'LOW',
   Medium = 'MEDIUM',
@@ -24,21 +40,40 @@ export enum Priority {
   Urgent = 'URGENT',
 }
 
-export const priorityEnumSchema = z.nativeEnum(Priority);
-export type PriorityEnum = z.infer<typeof priorityEnumSchema>;
+export const priorityEnumSchema = z
+  .nativeEnum(PriorityString)
+  .transform(priorityFromString);
 
-export const priorityOrderValues: Record<Priority, string> = {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  URGENT: '1',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  HIGH: '2',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  MEDIUM: '3',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  LOW: '4',
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  NONE: '5',
-};
+export function priorityFromString(priority: string): Priority {
+  switch (priority) {
+    case PriorityString.None:
+      return Priority.None;
+    case PriorityString.Low:
+      return Priority.Low;
+    case PriorityString.Medium:
+      return Priority.Medium;
+    case PriorityString.High:
+      return Priority.High;
+    case PriorityString.Urgent:
+      return Priority.Urgent;
+  }
+  throw new Error('Invalid priority');
+}
+
+export function priorityToPriorityString(priority: Priority): PriorityString {
+  switch (priority) {
+    case Priority.None:
+      return PriorityString.None;
+    case Priority.Low:
+      return PriorityString.Low;
+    case Priority.Medium:
+      return PriorityString.Medium;
+    case Priority.High:
+      return PriorityString.High;
+    case Priority.Urgent:
+      return PriorityString.Urgent;
+  }
+}
 
 export enum StatusString {
   Backlog = 'BACKLOG',
@@ -121,7 +156,7 @@ export type FilterEnum = z.infer<typeof filterEnumSchema>;
 export const issueSchema = z.object({
   id: z.string(),
   title: z.string(),
-  priority: priorityEnumSchema,
+  priority: prioritySchema,
   status: statusSchema,
   modified: z.number(),
   created: z.number(),

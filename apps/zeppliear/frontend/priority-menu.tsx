@@ -1,13 +1,13 @@
 import React, {memo, MouseEvent, RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
-import PriorityIcon from './priority-icon';
-import HighPriorityIcon from './assets/icons/signal-strong.svg';
-import LowPriorityIcon from './assets/icons/signal-weak.svg';
-import MediumPriorityIcon from './assets/icons/signal-medium.svg';
 import NoPriorityIcon from './assets/icons/dots.svg';
 import UrgentPriorityIcon from './assets/icons/rounded-claim.svg';
-import {Priority, PriorityEnum} from './issue';
+import MediumPriorityIcon from './assets/icons/signal-medium.svg';
+import HighPriorityIcon from './assets/icons/signal-strong.svg';
+import LowPriorityIcon from './assets/icons/signal-weak.svg';
 import {useClickOutside} from './hooks/useClickOutside';
+import {Priority} from './issue';
+import PriorityIcon from './priority-icon';
 
 interface Props {
   labelVisible?: boolean;
@@ -21,7 +21,7 @@ export const statusOpts = [
   [HighPriorityIcon, 'High', Priority.High],
   [MediumPriorityIcon, 'Medium', Priority.Medium],
   [LowPriorityIcon, 'Low', Priority.Low],
-];
+] as const;
 
 function PriorityMenu({
   labelVisible,
@@ -37,7 +37,7 @@ function PriorityMenu({
     setPriorityDropDownVisible(!priorityDropDownVisible);
   };
 
-  const getPriorityString = (priority: PriorityEnum) => {
+  const getPriorityString = (priority: Priority) => {
     switch (priority) {
       case Priority.None:
         return 'None';

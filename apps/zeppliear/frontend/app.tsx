@@ -88,15 +88,11 @@ const App = ({zero, undoManager}: AppProps) => {
   );
   const issueOrder = getIssueOrder(view, orderBy);
   const filteredQuery = orderQuery(q, issueOrder);
-  const filteredIssues = useQuery(filteredQuery, [
-    view,
-    priorityFilter,
-    statusFilter,
-    issueOrder,
-  ]);
+  const deps = [view, priorityFilter, statusFilter, issueOrder] as const;
+  const filteredIssues = useQuery(filteredQuery, deps);
 
   const viewIssueCount =
-    useQuery(filteredQuery.select(agg.count()))[0]?.count ?? 0;
+    useQuery(filteredQuery.select(agg.count()), deps)[0]?.count ?? 0;
 
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {

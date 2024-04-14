@@ -21,7 +21,7 @@ export const statuses = [
   [InProgressIcon, Status.InProgress, 'In Progress'],
   [DoneIcon, Status.Done, 'Done'],
   [CancelIcon, Status.Canceled, 'Canceled'],
-];
+] as const;
 
 const getStatusString = (status: Status) => {
   switch (status) {

@@ -7,8 +7,11 @@ import FilterMenu from './filter-menu';
 import {
   Order,
   Priority,
+  PriorityString,
   Status,
   StatusString,
+  priorityFromString,
+  priorityToPriorityString,
   statusFromString,
   statusToStatusString,
 } from './issue';
@@ -22,27 +25,35 @@ interface Props {
   showSortOrderMenu: boolean;
 }
 
-interface FilterStatusProps {
-  filter: Status[] | Priority[] | null;
+interface FilterStatusProps<Enum extends number | string> {
+  filter: Enum[] | null;
+  displayStrings: Record<Enum, string>;
   onDelete: () => void;
   label: string;
 }
 
-const displayStrings: Record<Priority | Status, string> = {
+const priorityDisplayStrings = {
   [Priority.None]: 'None',
   [Priority.Low]: 'Low',
   [Priority.Medium]: 'Medium',
   [Priority.High]: 'High',
   [Priority.Urgent]: 'Urgent',
+} as const;
 
+const statusDisplayStrings = {
   [Status.Backlog]: 'Backlog',
   [Status.Todo]: 'Todo',
   [Status.InProgress]: 'In Progress',
   [Status.Done]: 'Done',
   [Status.Canceled]: 'Canceled',
-};
+} as const;
 
-function FilterStatus({filter, onDelete, label}: FilterStatusProps) {
+function FilterStatus<Enum extends number | string>({
+  filter,
+  onDelete,
+  label,
+  displayStrings,
+}: FilterStatusProps<Enum>) {
   if (!filter || filter.length === 0) return null;
   return (
     <div className="flex items-center pr-4 space-x-[1px]">
@@ -81,16 +92,23 @@ function TopFilter({
       queryTypes.stringEnum<StatusString>(Object.values(StatusString)),
     ),
   );
-  const [priorityFilters, setPriorityFilterByParam] = useQueryState(
+  const [priorityStringFilters, setPriorityStringFilterByParam] = useQueryState(
     'priorityFilter',
-    queryTypes.array<Priority>(
-      queryTypes.stringEnum<Priority>(Object.values(Priority)),
+    queryTypes.array<PriorityString>(
+      queryTypes.stringEnum<PriorityString>(Object.values(PriorityString)),
     ),
   );
 
   const statusFilters = statusStringFilters?.map(statusFromString) ?? null;
   const setStatusFilterByParam = (value: Status[] | null) =>
     setStatusStringFilterByParam(value && value.map(statusToStatusString));
+
+  const priorityFilters =
+    priorityStringFilters?.map(priorityFromString) ?? null;
+  const setPriorityFilterByParam = (value: Priority[] | null) =>
+    setPriorityStringFilterByParam(
+      value && value.map(priorityToPriorityString),
+    );
 
   return (
     <>
@@ -149,13 +167,15 @@ function TopFilter({
       (priorityFilters && priorityFilters.length) ? (
         <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
           <FilterStatus
-            filter={statusStringFilters?.map(statusFromString) ?? null}
+            filter={statusFilters}
+            displayStrings={statusDisplayStrings}
             onDelete={() => setStatusFilterByParam(null)}
             label="Status"
           />
           <FilterStatus
             filter={priorityFilters}
-            onDelete={() => setPriorityFilterByParam(null)}
+            displayStrings={priorityDisplayStrings}
+            onDelete={() => setPriorityStringFilterByParam(null)}
             label="Priority"
           />
         </div>
