@@ -72,30 +72,25 @@ export class Materialite {
       fn();
       return;
     }
+    let failed = false;
 
     try {
-      fn();
-      this.#commit();
-    } catch (e) {
-      this.#rollback();
-      throw e;
-    } finally {
-      this.#dirtySources.clear();
-    }
-  }
-
-  imperativeTx() {
-    if (this.#currentTx === null) {
-      this.#currentTx = this.#version + 1;
-      return () => {
-        this.#commit();
+      // ideally we do not need to queue a micro task
+      // in order to place all experimental watch calls into the same transaction.
+      // arv is working on this.
+      queueMicrotask(() => {
+        if (!failed) {
+          this.#commit();
+        } else {
+          this.#rollback();
+        }
         this.#dirtySources.clear();
-      };
+      });
+      fn();
+    } catch (e) {
+      failed = true;
+      throw e;
     }
-
-    // we're in a nested transaction
-    // the outer most will commit for us.
-    return () => {};
   }
 
   #rollback() {

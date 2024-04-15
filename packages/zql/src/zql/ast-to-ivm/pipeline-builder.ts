@@ -402,7 +402,7 @@ export function selectorToQualifiedColumn(
   if (x.includes('.')) {
     return x.split('.') as [string, string];
   }
-  return [undefined, x] as const;
+  return [undefined, x];
 }
 
 export function getValueFromEntity(

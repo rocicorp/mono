@@ -20,12 +20,11 @@ export function makeTestContext(): Context {
   const sources = new Map<string, Source<object>>();
   const getSource = <T extends Entity>(name: string) => {
     if (!sources.has(name)) {
-      sources.set(
-        name,
-        materialite.newSetSource((l: T, r: T) =>
-          compareUTF8(l.id, r.id),
-        ) as unknown as Source<object>,
-      );
+      const source = materialite.newSetSource((l: T, r: T) =>
+        compareUTF8(l.id, r.id),
+      ) as unknown as Source<object>;
+      source.seed([]);
+      sources.set(name, source);
     }
     return sources.get(name)! as unknown as Source<T>;
   };
