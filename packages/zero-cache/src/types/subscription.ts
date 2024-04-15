@@ -22,10 +22,10 @@ import type {CancelableAsyncIterable} from './streams.js';
  * * **cancel()**, not close(): The underlying data in a subscription is logically infinite
  *   and only terminated when the consumer is no longer interested in receiving the messages
  *   (or requires a Subscription with a different configuration). As such, there is no API
- *   for gracefully closing the subscription after pending messages are consumed; rather, cancellation
- *   is immediate, and upon cancellation pending messages are dropped. A Subscription can also be
- *   terminated with exceptional (i.e. `Error`) circumstances, for which the behavior is
- *   equivalent.
+ *   for gracefully closing the subscription after pending messages are consumed; rather,
+ *   cancellation is immediate, and upon cancellation, pending messages are dropped. A
+ *   Subscription can also be terminated with exceptional (i.e. `Error`) circumstances,
+ *   for which the behavior is equivalent.
  *
  * * **Coalescing** (optional): A producer can configure pending messages in the Subscription
  *   to be merged together with a {@link Options.coalesce coalesce} function. This is useful
