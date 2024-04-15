@@ -10,7 +10,7 @@ const e1 = z.object({
   optStr: z.string().optional(),
 });
 type E1 = z.infer<typeof e1>;
-test('basic materialization', () => {
+test('basic materialization', async () => {
   const context = makeTestContext();
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
@@ -35,10 +35,12 @@ test('basic materialization', () => {
 
   expected.push(items[2]);
   context.getSource('e1').add(items[2]);
-  expect(calledWith).toEqual([[], [items[1]], [items[1], items[2]]]);
+
+  await Promise.resolve();
+  expect(calledWith).toEqual([[items[1], items[2]]]);
 });
 
-test('sorted materialization', () => {
+test('sorted materialization', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
@@ -57,6 +59,7 @@ test('sorted materialization', () => {
     id: 'c',
     n: 1,
   });
+  await Promise.resolve();
 
   expect(ascView.value).toEqual([
     {id: 'c', n: 1},
@@ -70,7 +73,7 @@ test('sorted materialization', () => {
   ]);
 });
 
-test('sorting is stable via suffixing the primary key to the order', () => {
+test('sorting is stable via suffixing the primary key to the order', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
@@ -90,6 +93,7 @@ test('sorting is stable via suffixing the primary key to the order', () => {
     id: 'c',
     n: 1,
   });
+  await Promise.resolve();
   expect(ascView.value).toEqual([
     {id: 'a', n: 1},
     {id: 'b', n: 1},
@@ -155,10 +159,12 @@ test('destroying the statement stops updating the view', async () => {
   ] as const;
 
   context.getSource('e1').add(items[0]);
+  await Promise.resolve();
   expect(callCount).toBe(1);
   stmt.destroy();
   context.getSource('e1').add(items[1]);
   context.getSource('e1').add(items[2]);
+  await Promise.resolve();
   expect(callCount).toBe(1);
   expect(await stmt.exec()).toEqual([{id: 'a', n: 1}]);
 });

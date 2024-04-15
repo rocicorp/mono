@@ -63,32 +63,36 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   }
 
   protected _newDifference(data: Multiset<T>): boolean {
-    let changed = false || this.hydrated === false;
+    let needsUpdate = false || this.hydrated === false;
 
     let newData = this.#data;
-    [changed, newData] = this.#sink(data, newData, changed);
+    [needsUpdate, newData] = this.#sink(data, newData, needsUpdate);
     this.#data = newData;
 
-    if (changed) {
+    if (needsUpdate) {
       // idk.. would be more efficient for users to just use the
       // treap directly. We have a PersistentTreap variant for React users
       // or places where immutability is important.
       this.#jsSlice = this.#data.toArray();
     }
 
-    return changed;
+    return needsUpdate;
   }
 
-  #sink(c: Multiset<T>, data: ITree<T>, changed: boolean): [boolean, ITree<T>] {
+  #sink(
+    c: Multiset<T>,
+    data: ITree<T>,
+    needsUpdate: boolean,
+  ): [boolean, ITree<T>] {
     const iterator = c[Symbol.iterator]();
     let next;
 
     const process = (value: T, mult: number) => {
       if (mult > 0) {
-        changed = true;
+        needsUpdate = true;
         data = this.#addAll(data, value);
       } else if (mult < 0) {
-        changed = true;
+        needsUpdate = true;
         data = this.#removeAll(data, value);
       }
     };
@@ -105,7 +109,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
           mult === -nextMult &&
           this.#comparator(nextValue, value) === 0
         ) {
-          changed = true;
+          needsUpdate = true;
           // The tree doesn't allow dupes -- so this is a replace.
           data = data.add(nextMult > 0 ? nextValue : value);
           continue;
@@ -119,7 +123,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
       }
     }
 
-    return [changed, data];
+    return [needsUpdate, data];
   }
 
   // TODO: if we're not in source order --
@@ -187,10 +191,12 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   }
 
   pullHistoricalData(): void {
-    this.stream.messageUpstream(
-      createPullMessage(this.#order, 'select'),
-      this._listener,
-    );
+    this._materialite.tx(() => {
+      this.stream.messageUpstream(
+        createPullMessage(this.#order, 'select'),
+        this._listener,
+      );
+    });
   }
 
   #updateMinMax(value: T) {

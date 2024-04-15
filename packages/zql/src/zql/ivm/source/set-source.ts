@@ -6,12 +6,11 @@ import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import {must} from 'shared/src/must.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
-import {Request, createPullResponseMessage} from '../graph/message.js';
+import {PullMsg, Request, createPullResponseMessage} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
 import type {Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
-import {assert} from 'shared/src/asserts.js';
 
 /**
  * A source that remembers what values it contains.
@@ -26,9 +25,10 @@ export abstract class SetSource<T extends object> implements Source<T> {
   protected readonly _materialite: MaterialiteForSourceInternal;
   readonly #listeners = new Set<(data: ITree<T>, v: Version) => void>();
   #pending: Entry<T>[] = [];
-  #pendingSeed: Iterable<T> | undefined;
+  #historyRequests: Set<PullMsg> = new Set();
   #tree: ITree<T>;
   #seeded = false;
+  #noChange = false;
   readonly comparator: Comparator<T>;
 
   constructor(
@@ -50,22 +50,24 @@ export abstract class SetSource<T extends object> implements Source<T> {
 
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
-        assert(
-          this.#pendingSeed === undefined || this.#pending.length === 0,
-          'cannot have both pending and pending seed',
-        );
-
-        if (this.#pendingSeed !== undefined) {
-          this.#seeded = true;
-          for (const v of this.#pendingSeed) {
-            this.#tree = this.#tree.add(v);
-          }
-          this.#pendingSeed = undefined;
-          this.#stream.newDifference(
-            this._materialite.getVersion(),
-            asEntries(this.#tree),
-          );
+        if (
+          !(
+            this.#pending.length > 0 ||
+            (this.#seeded && this.#historyRequests.size > 0)
+          )
+        ) {
+          this.#noChange = true;
           return;
+        }
+
+        if (this.#seeded) {
+          for (const request of this.#historyRequests) {
+            this.#stream.newDifference(
+              this._materialite.getVersion(),
+              asEntries(this.#tree, request),
+              createPullResponseMessage(request),
+            );
+          }
         }
 
         for (let i = 0; i < this.#pending.length; i++) {
@@ -95,6 +97,14 @@ export abstract class SetSource<T extends object> implements Source<T> {
         this.#pending = [];
       },
       onCommitted: (version: Version) => {
+        if (this.#noChange) {
+          this.#noChange = false;
+          return;
+        }
+        if (this.#seeded) {
+          this.#historyRequests.clear();
+        }
+
         // In case we have direct source observers
         const tree = this.#tree;
         for (const l of this.#listeners) {
@@ -103,6 +113,7 @@ export abstract class SetSource<T extends object> implements Source<T> {
         this.#stream.commit(version);
       },
       onRollback: () => {
+        this.#noChange = false;
         this.#pending = [];
       },
     };
@@ -169,7 +180,10 @@ export abstract class SetSource<T extends object> implements Source<T> {
    * back with the seed/inital values.
    */
   seed(values: Iterable<T>): this {
-    this.#pendingSeed = values;
+    for (const v of values) {
+      this.#tree = this.#tree.add(v);
+    }
+    this.#seeded = true;
     this._materialite.addDirtySource(this.#internal);
     return this;
   }
@@ -185,31 +199,11 @@ export abstract class SetSource<T extends object> implements Source<T> {
   processMessage(message: Request): void {
     switch (message.type) {
       case 'pull': {
-        this.#sendHistoricalData(message);
+        this.#historyRequests.add(message);
+        this._materialite.addDirtySource(this.#internal);
         break;
       }
     }
-  }
-
-  #sendHistoricalData(message: Request) {
-    if (!this.#seeded) {
-      // the source has not been seeded by `experimentalWatch` yet.
-      // this means we can ignore the request and just wait for the
-      // seed to come in.
-      // Note: as a future optimization we would keep the message request
-      // and only send the seed/history to those that requested it.
-      // We'd also use the message request to determine where in the seed set to start from
-      // e.g., in case there's `where time > x` or `where id = y` etc.
-      return;
-    }
-
-    const response = createPullResponseMessage(message);
-
-    this.#stream.newDifference(
-      this._materialite.getVersion(),
-      asEntries(this.#tree, message),
-      response,
-    );
   }
 }
 

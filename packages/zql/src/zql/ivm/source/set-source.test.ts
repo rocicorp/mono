@@ -21,20 +21,21 @@ test('add', () => {
   );
 });
 
-test('delete', () => {
-  fc.assert(
-    fc.property(fc.uniqueArray(fc.integer()), arr => {
+test('delete', async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
       const m = new Materialite();
       const source = m.newSetSource(comparator);
 
       arr.forEach(x => source.add({id: x}));
       arr.forEach(x => source.delete({id: x}));
+      await Promise.resolve();
       expect([...source.value]).toEqual([]);
     }),
   );
 });
 
-test('on', () => {
+test('on', async () => {
   const m = new Materialite();
   const source = m.newSetSource(comparator);
 
@@ -50,6 +51,7 @@ test('on', () => {
     source.add({id: 2});
     source.delete({id: 3});
   });
+  await Promise.resolve();
 
   // only called at the end of a transaction.
   expect(callCount).toBe(1);
@@ -67,9 +69,9 @@ test('on', () => {
   // We could track this in the source by checking if add events returned false
 });
 
-test('replace', () => {
-  fc.assert(
-    fc.property(fc.uniqueArray(fc.integer()), (arr): void => {
+test('replace', async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
       const m = new Materialite();
       const source = m.newSetSource(comparator);
 
@@ -86,6 +88,7 @@ test('replace', () => {
           source.add({id});
         });
       });
+      await Promise.resolve();
 
       expect([...source.value]).toEqual(arr.map(id => ({id})).sort(comparator));
     }),
@@ -93,7 +96,7 @@ test('replace', () => {
 });
 
 // the pending items are not included in the next tx
-test('rollback', () => {
+test('rollback', async () => {
   const m = new Materialite();
   const source = m.newSetSource(comparator);
 
@@ -105,14 +108,16 @@ test('rollback', () => {
   } catch (e) {
     // ignore
   }
+  await Promise.resolve();
 
   expect([...source.value]).toEqual([]);
 
   source.add({id: 2});
+  await Promise.resolve();
   expect([...source.value]).toEqual([{id: 2}]);
 });
 
-test('withNewOrdering - we do not update the derived thing / withNewOrdering is not tied to the original. User must do that.', () => {
+test('withNewOrdering - we do not update the derived thing / withNewOrdering is not tied to the original. User must do that.', async () => {
   const m = new Materialite();
   const source = m.newSetSource(comparator);
   const derived = source.withNewOrdering((l, r) => r.id - l.id);
@@ -121,16 +126,17 @@ test('withNewOrdering - we do not update the derived thing / withNewOrdering is 
     source.add({id: 1});
     source.add({id: 2});
   });
+  await Promise.resolve();
 
   expect([...source.value]).toEqual([{id: 1}, {id: 2}]);
   expect([...derived.value]).toEqual([]);
 });
 
-test('withNewOrdering - is correctly ordered', () => {
+test('withNewOrdering - is correctly ordered', async () => {
   const m = new Materialite();
 
-  fc.assert(
-    fc.property(fc.uniqueArray(fc.integer()), (arr): void => {
+  await fc.assert(
+    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
       const source = m.newSetSource(comparator);
       const derived = source.withNewOrdering((l, r) => r.id - l.id);
       m.tx(() => {
@@ -139,6 +145,7 @@ test('withNewOrdering - is correctly ordered', () => {
           derived.add({id});
         });
       });
+      await Promise.resolve();
 
       expect([...source.value]).toEqual(arr.map(id => ({id})).sort(comparator));
       expect([...derived.value]).toEqual(

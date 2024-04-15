@@ -208,7 +208,7 @@ function setup() {
   };
 }
 
-test.only('direct foreign key join: join a track to an album', async () => {
+test('direct foreign key join: join a track to an album', async () => {
   const {r, trackQuery, albumQuery} = setup();
 
   const track: Track = {
@@ -224,7 +224,7 @@ test.only('direct foreign key join: join a track to an album', async () => {
   };
 
   await Promise.all([r.mutate.initTrack(track), r.mutate.initAlbum(album)]);
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await Promise.resolve();
 
   const stmt = await trackQuery
     .join(albumQuery, 'album', 'albumId', 'id')
@@ -378,34 +378,34 @@ test.only('direct foreign key join: join a track to an album', async () => {
   ]);
 
   // sort by track id
-  // const stmt2 = await trackQuery
-  //   .join(albumQuery, 'album', 'albumId', 'id')
-  //   .select('*')
-  //   .asc('track.id')
-  //   .prepare();
+  const stmt2 = await trackQuery
+    .join(albumQuery, 'album', 'albumId', 'id')
+    .select('*')
+    .asc('track.id')
+    .prepare();
 
-  // rows = await stmt2.exec();
-  // expect(rows).toEqual([
-  //   track2Album1,
-  //   track3Album3,
-  //   track4Album2,
-  //   track5Album1,
-  // ]);
+  rows = await stmt2.exec();
+  expect(rows).toEqual([
+    track2Album1,
+    track3Album3,
+    track4Album2,
+    track5Album1,
+  ]);
 
-  // // delete all the things
-  // await Promise.all([
-  //   r.mutate.deleteTrack('2'),
-  //   r.mutate.deleteTrack('3'),
-  //   r.mutate.deleteTrack('4'),
-  //   r.mutate.deleteAlbum('1'),
-  //   r.mutate.deleteAlbum('2'),
-  //   r.mutate.deleteAlbum('3'),
-  // ]);
+  // delete all the things
+  await Promise.all([
+    r.mutate.deleteTrack('2'),
+    r.mutate.deleteTrack('3'),
+    r.mutate.deleteTrack('4'),
+    r.mutate.deleteAlbum('1'),
+    r.mutate.deleteAlbum('2'),
+    r.mutate.deleteAlbum('3'),
+  ]);
 
-  // rows = await stmt.exec();
-  // expect(rows).toEqual([]);
+  rows = await stmt.exec();
+  expect(rows).toEqual([]);
 
-  // await r.close();
+  await r.close();
 });
 
 test('junction table join: join a track to its artists', async () => {});

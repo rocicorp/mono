@@ -54,9 +54,9 @@ test('asc and descComparator on Entities', () => {
   ]);
 });
 
-test('add & remove', () => {
-  fc.assert(
-    fc.property(fc.uniqueArray(fc.integer()), arr => {
+test('add & remove', async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
       const m = new Materialite();
       const source = m.newSetSource<{x: number}>((l, r) => l.x - r.x);
       const view = new MutableTreeView(
@@ -69,19 +69,21 @@ test('add & remove', () => {
       m.tx(() => {
         arr.forEach(x => source.add({x}));
       });
+      await Promise.resolve();
       expect(view.value).toEqual(arr.sort(numberComparator).map(x => ({x})));
 
       m.tx(() => {
         arr.forEach(x => source.delete({x}));
       });
+      await Promise.resolve();
       expect(view.value).toEqual([]);
     }),
   );
 });
 
-test('replace', () => {
-  fc.assert(
-    fc.property(fc.uniqueArray(fc.integer()), arr => {
+test('replace', async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
       const m = new Materialite();
       const source = m.newSetSource<{x: number}>((l, r) => l.x - r.x);
       const view = new MutableTreeView(m, source.stream, (l, r) => l.x - r.x, [
@@ -92,6 +94,7 @@ test('replace', () => {
       m.tx(() => {
         arr.forEach(x => source.add({x}));
       });
+      await Promise.resolve();
       expect(view.value).toEqual(arr.sort(numberComparator).map(x => ({x})));
       m.tx(() => {
         arr.forEach(x => {
@@ -102,11 +105,13 @@ test('replace', () => {
           source.add({x});
         });
       });
+      await Promise.resolve();
       expect(view.value).toEqual(arr.sort(numberComparator).map(x => ({x})));
 
       m.tx(() => {
         arr.forEach(x => source.delete({x}));
       });
+      await Promise.resolve();
       expect(view.value).toEqual([]);
     }),
   );
