@@ -2,33 +2,25 @@ import {EntityQuery, makeReplicacheContext} from '@rocicorp/zql/src/index.js';
 import type {ReplicacheLike} from '@rocicorp/zql/src/replicache-like.js';
 import type {Context} from '@rocicorp/zql/src/zql/context/context.js';
 import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useState} from 'react';
 
 export function useQuery<From extends FromSet, Return>(
   q: EntityQuery<From, Return>,
   dependencies: readonly unknown[] = [],
 ): Return {
   const [snapshot, setSnapshot] = useState([] as Return);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const statement = useMemo(() => q.prepare(), dependencies);
-  const unsubscribe = useRef<() => void>(() => {});
 
   useEffect(() => {
-    let unloaded = false;
-    void statement.exec().then(v => {
-      if (!unloaded) {
-        setSnapshot(v as Return);
-        unsubscribe.current = statement.subscribe(v =>
-          setSnapshot(v as Return),
-        );
-      }
-    });
+    const statement = q.prepare();
+    void statement.exec().then(v => setSnapshot(v as Return));
+    const unsubscribe = statement.subscribe(v => setSnapshot(v as Return));
     return () => {
-      unloaded = true;
-      unsubscribe.current();
+      unsubscribe();
       statement.destroy();
     };
-  }, [statement]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, dependencies);
 
   return snapshot;
 }

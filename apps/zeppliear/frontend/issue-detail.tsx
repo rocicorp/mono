@@ -17,6 +17,7 @@ import {
   IssueUpdate,
   Priority,
   Status,
+  allIssueColumns,
 } from './issue';
 import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
@@ -92,17 +93,7 @@ export default function IssueDetail({
   const issue =
     useQuery(
       issueQuery
-        .select(
-          'id',
-          'title',
-          'priority',
-          'status',
-          'modified',
-          'created',
-          'creatorID',
-          'kanbanOrder',
-          'description',
-        )
+        .select(...allIssueColumns)
         .where('id', '=', detailIssueID ?? ''),
       [detailIssueID],
     )[0] ?? null;
