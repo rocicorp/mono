@@ -20,6 +20,7 @@ import {
   InvalidationProcessor,
   Invalidator,
 } from './invalidation.js';
+import type {RegisterInvalidationFiltersResponse} from './replicator.js';
 import {TableTracker, type RowChange} from './types/table-tracker.js';
 
 describe('replicator/invalidation', () => {
@@ -75,7 +76,7 @@ describe('replicator/invalidation', () => {
     type RegistrationTestCase = {
       name: string;
       specs: NormalizedInvalidationFilterSpec[];
-      version: string;
+      response: RegisterInvalidationFiltersResponse;
       setup?: Record<string, Record<string, unknown>[]>;
       expected?: Record<string, Record<string, unknown>[]>;
     };
@@ -84,21 +85,32 @@ describe('replicator/invalidation', () => {
       {
         name: 'empty registry, no transactions',
         specs: [FOO_SPEC1, FOO_SPEC2],
-        version: '00',
+        response: {
+          specs: [
+            {
+              id: FOO_SPEC1.id,
+              fromStateVersion: '00',
+            },
+            {
+              id: FOO_SPEC2.id,
+              fromStateVersion: '00',
+            },
+          ],
+        },
         expected: {
           ['_zero.InvalidationRegistryVersion']: [
             {stateVersionAtLastSpecChange: '00', lock: 'v'},
           ],
           ['_zero.InvalidationRegistry']: [
             {
-              id: FOO_SPEC2.id,
-              spec: FOO_SPEC2,
+              id: FOO_SPEC1.id,
+              spec: FOO_SPEC1,
               fromStateVersion: '00',
               lastRequested: NOW,
             },
             {
-              id: FOO_SPEC1.id,
-              spec: FOO_SPEC1,
+              id: FOO_SPEC2.id,
+              spec: FOO_SPEC2,
               fromStateVersion: '00',
               lastRequested: NOW,
             },
@@ -124,12 +136,21 @@ describe('replicator/invalidation', () => {
           ],
         },
         specs: [FOO_SPEC1, FOO_SPEC2],
-        version: '03',
+        response: {
+          specs: [
+            {
+              id: FOO_SPEC2.id,
+              fromStateVersion: '02',
+            },
+            {
+              id: FOO_SPEC1.id,
+              fromStateVersion: '03',
+            },
+          ],
+        },
       },
       {
         name: 'partially registered, existing changes',
-        specs: [FOO_SPEC1, FOO_SPEC2],
-        version: '04',
         setup: {
           ['_zero.TxLog']: [
             {stateVersion: '04', lsn: '0/023', time: DATE2, xid: 123},
@@ -143,6 +164,19 @@ describe('replicator/invalidation', () => {
               spec: FOO_SPEC2,
               fromStateVersion: '02',
               lastRequested: DATE1,
+            },
+          ],
+        },
+        specs: [FOO_SPEC1, FOO_SPEC2],
+        response: {
+          specs: [
+            {
+              id: FOO_SPEC2.id,
+              fromStateVersion: '02',
+            },
+            {
+              id: FOO_SPEC1.id,
+              fromStateVersion: '04',
             },
           ],
         },
@@ -179,7 +213,7 @@ describe('replicator/invalidation', () => {
           NOW,
         );
 
-        expect(resp.invalidatingFromVersion).toBe(c.version);
+        expect(resp).toEqual(c.response);
         await expectTables(db, c.expected);
       });
     }
