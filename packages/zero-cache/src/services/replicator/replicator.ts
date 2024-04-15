@@ -18,7 +18,12 @@ export type RegisterInvalidationFiltersRequest = v.Infer<
 >;
 
 export const registerInvalidationFiltersResponse = v.object({
-  invalidatingFromVersion: v.string(),
+  specs: v.array(
+    v.object({
+      id: v.string(),
+      fromStateVersion: v.string(),
+    }),
+  ),
 });
 
 export type RegisterInvalidationFiltersResponse = v.Infer<
@@ -29,33 +34,33 @@ export interface Replicator {
   /**
    * Registers a set of InvalidationFilterSpecs.
    *
-   * This is called by the ViewSyncer when initiating a session for a client.
+   * This is called by the View Syncer (via the View Notifier) when initiating a
+   * session for a client, either from scratch or from an existing CVR, and when
+   * its set of queries (and thus filters) changes.
    *
-   * * For new clients / specs, the Replicator registers the specs with the InvalidationRegistry
-   *   and returns the (current) state version at which it is safe to query the database and
-   *   construct a CVR.
+   * The Replicator ensures all filters are registered, returning the state versions
+   * from which each filter has been active (i.e. used for populating the Invalidation
+   * Index during replication).
    *
-   * * For catching up existing CVRs, the Replicator similarly checks the specs with the
-   *   InvalidationRegistry and returns the latest `fromStateVersion` of all specs. If this
-   *   version is equal to or earlier than the CVR version, the caller can proceed with catchup.
-   *   However, it is possible for the Replicator to return a state version later than that of the
-   *   CVR. This can happen, for example:
+   * In the common case, the filters will have been registered in the past and all
+   * versions will be older than the CVR version. However, it is possible for a spec's
+   * `fromStateVersion` to be later than that of the CVR. This can happen because:
    *
-   *   1. Old entries of the `InvalidationIndex` and `ChangeLog` are periodically pruned up to an
-   *      "earliest version threshold" in order to manage storage usage. When this happens, the
-   *     `fromStateVersion` entries of all older invalidation specs are bumped accordingly.
+   * 1. Old entries of the `InvalidationIndex` and `ChangeLog` are periodically pruned up to an
+   *    "earliest version threshold" in order to manage storage usage. When this happens, the
+   *   `fromStateVersion` entries of all older invalidation specs are bumped accordingly.
    *
-   *   2. The `InvalidationRegistry` itself also goes through periodic cleanup whereby specs
-   *      with a `lastRequested` time too far in the past are deleted to avoid unnecessary work.
-   *      When the happens, requested specs may no longer be in the registry, and the Replicator
-   *      will re-register them and return a (current) state version from which a CVR can safely
-   *      be constructed.
+   * 2. The `InvalidationRegistry` itself also goes through periodic cleanup whereby specs
+   *    with a `lastRequested` time very far in the past are deleted to avoid unnecessary work.
+   *    When the happens, requested specs may no longer be in the registry, and the Replicator
+   *    will re-register them and return a (current) state version.
    *
-   *   If the returned state version is later than that of the CVR, the client "reset", by dropping
-   *   all state and rerunning all queries from scratch.
+   * Note that in both cases the CVR is very old and the queries are likely to be invalid
+   * anyway. If the returned state version of a spec is later than that of the CVR, the
+   * the associated queries must be considered invalidated and re-executed.
    *
-   * @param req The {@link InvalidationFilterSpec}s needed by the caller.
-   * @returns The version from which all filters in the request are (or have been) active.
+   * @param req The {@link NormalizedInvalidationFilterSpec}s needed by the caller.
+   * @returns The versions from which each filter has been active.
    */
   registerInvalidationFilters(
     req: RegisterInvalidationFiltersRequest,

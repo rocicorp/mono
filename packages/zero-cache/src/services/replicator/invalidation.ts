@@ -143,7 +143,7 @@ export class Invalidator {
 
     const values = [...specsByID.keys()].map(id => this.#replica`${id}`);
     const getVersions = (db: postgres.Sql) => db<
-      {id: string; fromStateVersion: LexiVersion | null}[]
+      {id: string; fromStateVersion: LexiVersion}[]
     >`
     WITH ids (id) AS (VALUES (${values.flatMap((id, i) =>
       i ? [db`),(`, id] : id,
@@ -153,11 +153,14 @@ export class Invalidator {
       ORDER BY "fromStateVersion";
   `;
 
-    const versions = await getVersions(this.#replica);
-    const latest = versions[versions.length - 1].fromStateVersion;
+    const specs = (await getVersions(this.#replica)).map(row => ({
+      id: row.id,
+      fromStateVersion: row.fromStateVersion,
+    }));
+    const latest = specs[specs.length - 1].fromStateVersion;
     if (latest) {
       // Common case: All specs are already registered. Return the latest version.
-      return {invalidatingFromVersion: latest};
+      return {specs};
     }
 
     // Register the specs from within the txSerializer.
@@ -165,10 +168,13 @@ export class Invalidator {
       this.#replica.begin(async tx => {
         // Check again in case registration happened while waiting for the lock
         // (e.g. a concurrent request).
-        const versions = await getVersions(tx);
-        const latest = versions[versions.length - 1].fromStateVersion;
+        const specs = (await getVersions(tx)).map(row => ({
+          id: row.id,
+          fromStateVersion: row.fromStateVersion,
+        }));
+        const latest = specs[specs.length - 1].fromStateVersion;
         if (latest) {
-          return {invalidatingFromVersion: latest};
+          return {specs};
         }
 
         // Get the current stateVersion.
@@ -176,15 +182,15 @@ export class Invalidator {
         SELECT MAX("stateVersion") FROM _zero."TxLog";`;
         const fromStateVersion = stateVersion[0].max ?? '00';
 
-        const unregistered = versions.filter(
-          row => row.fromStateVersion === null,
-        );
-        for (const {id} of unregistered) {
+        const unregistered = specs.filter(row => row.fromStateVersion === null);
+        for (const row of unregistered) {
+          const {id} = row;
           const spec = specsByID.get(id);
-          const row = {id, spec, fromStateVersion, lastRequested: now};
+          const registration = {id, spec, fromStateVersion, lastRequested: now};
           void tx`
-          INSERT INTO _zero."InvalidationRegistry" ${tx(row)}
+          INSERT INTO _zero."InvalidationRegistry" ${tx(registration)}
           `.execute();
+          row.fromStateVersion = fromStateVersion;
         }
 
         // UPSERT the latest version into the InvalidationRegistryVersion.
@@ -198,7 +204,7 @@ export class Invalidator {
 
         await this.#filters.ensureCachedFilters(lc, tx, fromStateVersion);
 
-        return {invalidatingFromVersion: fromStateVersion};
+        return {specs};
       }),
     );
   }

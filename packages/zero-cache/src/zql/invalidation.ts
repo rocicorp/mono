@@ -7,14 +7,16 @@ import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
 import {BigIntJSON} from '../types/bigint-json.js';
 import {
+  NormalizedInvalidationFilterSpec,
   invalidationHash,
+  normalizeFilterSpec,
   type InvalidationFilterSpec,
   type RowTag,
 } from '../types/invalidation.js';
 import type {Normalized} from './normalize.js';
 
 export type InvalidationInfo = {
-  readonly filters: readonly InvalidationFilterSpec[];
+  readonly filters: readonly NormalizedInvalidationFilterSpec[];
   readonly hashes: readonly string[];
 };
 
@@ -33,7 +35,7 @@ export function computeInvalidationInfo(
     : [...selected].sort(compareUTF8);
 
   const hashes = new Set<string>();
-  const filters = new Map<string, InvalidationFilterSpec>();
+  const filters = new Map<string, NormalizedInvalidationFilterSpec>();
 
   computeMatchers(where).forEach(matcher =>
     matcher.addInvalidationInfo(
@@ -289,10 +291,9 @@ class Matcher {
       selectedColumns: readonly string[] | undefined;
     },
     hashes: Set<string>,
-    filters: Map<string, InvalidationFilterSpec>,
+    filters: Map<string, NormalizedInvalidationFilterSpec>,
   ) {
     const filteredColumns = [...this.#match.keys()].sort(compareUTF8);
-    const filterKey = JSON.stringify(filteredColumns);
     const filterSpec: InvalidationFilterSpec = {
       ...base,
       filteredColumns: Object.fromEntries(
@@ -313,7 +314,8 @@ class Matcher {
     };
 
     hashes.add(invalidationHash(rowTag));
-    filters.set(filterKey, filterSpec);
+    const normalizedSpec = normalizeFilterSpec(filterSpec);
+    filters.set(normalizedSpec.id, normalizedSpec);
   }
 
   /** For testing convenience. */
