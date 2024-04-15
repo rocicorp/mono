@@ -1,6 +1,7 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
+import {EventEmitter} from 'eventemitter3';
 import {
   LogicalReplicationService,
   Pgoutput,
@@ -20,6 +21,8 @@ import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
 import {RowKeyType, RowKeyValue, rowKeyHash} from '../../types/row-key.js';
+import type {CancelableAsyncIterable} from '../../types/streams.js';
+import {Subscription} from '../../types/subscription.js';
 import {
   PUB_PREFIX,
   ZERO_VERSION_COLUMN_NAME,
@@ -30,6 +33,7 @@ import {
   InvalidationFilters,
   InvalidationProcessor,
 } from './invalidation.js';
+import type {VersionChange} from './replicator.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
@@ -127,6 +131,7 @@ export class IncrementalSyncer {
   readonly #upstreamUri: string;
   readonly #replicaID: string;
   readonly #replica: postgres.Sql;
+  readonly #eventEmitter: EventEmitter = new EventEmitter();
 
   // This lock ensures that transactions are processed serially, even
   // across re-connects to the upstream db.
@@ -174,6 +179,7 @@ export class IncrementalSyncer {
         this.#txSerializer,
         this.#invalidationFilters,
         (lsn: string) => service.acknowledge(lsn),
+        (v: VersionChange) => this.#eventEmitter.emit('version', v),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on(
@@ -202,6 +208,28 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
+  versionChanges(): CancelableAsyncIterable<VersionChange> {
+    const subscribe = (v: VersionChange) => subscription.push(v);
+    const subscription: Subscription<VersionChange> =
+      new Subscription<VersionChange>({
+        coalesce: (curr, prev) => ({
+          newVersion: curr.newVersion,
+          prevVersion: prev.prevVersion,
+          invalidations:
+            !curr.invalidations || !prev.invalidations
+              ? undefined
+              : {
+                  ...prev.invalidations,
+                  ...curr.invalidations,
+                },
+        }),
+        cleanup: () => this.#eventEmitter.off('version', subscribe),
+      });
+
+    this.#eventEmitter.on('version', subscribe);
+    return subscription;
+  }
+
   async stop(lc: LogContext, err?: unknown) {
     if (this.#service) {
       if (err) {
@@ -214,6 +242,7 @@ export class IncrementalSyncer {
     }
   }
 }
+
 function ensureError(err: unknown): Error {
   if (err instanceof Error) {
     return err;
@@ -315,6 +344,7 @@ export class MessageProcessor {
   readonly #txSerializer: Lock;
   readonly #invalidationFilters: InvalidationFilters;
   readonly #acknowledge: (lsn: string) => unknown;
+  readonly #emitVersion: (v: VersionChange) => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
   #failure: Error | undefined;
@@ -326,6 +356,7 @@ export class MessageProcessor {
     txSerializer: Lock,
     invalidationFilters: InvalidationFilters,
     acknowledge: (lsn: string) => unknown,
+    emitVersion: (v: VersionChange) => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#replica = replica;
@@ -333,6 +364,7 @@ export class MessageProcessor {
     this.#txSerializer = txSerializer;
     this.#invalidationFilters = invalidationFilters;
     this.#acknowledge = acknowledge;
+    this.#emitVersion = emitVersion;
     this.#failService = failService;
   }
 
@@ -351,8 +383,9 @@ export class MessageProcessor {
           // If a preceding transaction failed, all subsequent transactions must also fail.
           txProcessor.fail(new PrecedingTransactionError(this.#failure));
         }
-        await txProcessor.execute(this.#replica);
+        const versionChange = await txProcessor.execute(this.#replica);
         this.#acknowledge(commitLsn);
+        this.#emitVersion(versionChange);
         lc.debug?.(`Committed tx`);
       } catch (e) {
         if (
@@ -506,6 +539,8 @@ class TransactionProcessor {
   readonly #readers: TransactionPool;
   readonly #tableTrackers = new Map<string, TableTracker>();
 
+  #prevVersion: string | undefined;
+
   constructor(lc: LogContext, lsn: string, filters: InvalidationFilters) {
     this.#version = toLexiVersion(lsn);
     this.#lc = lc.withContext('tx', this.#version);
@@ -527,7 +562,7 @@ class TransactionProcessor {
     );
   }
 
-  async execute(db: postgres.Sql) {
+  async execute(db: postgres.Sql): Promise<VersionChange> {
     const [writes, reads] = await Promise.allSettled([
       this.#writer.run(db),
       this.#readers.run(db),
@@ -546,7 +581,17 @@ class TransactionProcessor {
     if (writes.status === 'rejected') {
       throw writes.reason;
     }
-    return writes.value;
+
+    assert(this.#prevVersion, `#prevVersion not fetched`);
+    const invalidations = this.#invalidation.getInvalidations();
+
+    return {
+      newVersion: this.#version,
+      prevVersion: this.#prevVersion,
+      invalidations: Object.fromEntries(
+        [...invalidations.keys()].map(hash => [hash, this.#version]),
+      ),
+    };
   }
 
   fail(err: unknown) {
@@ -564,9 +609,14 @@ class TransactionProcessor {
       xid: begin.xid,
     };
 
-    return this.#writer.process(tx => [
-      tx`INSERT INTO _zero."TxLog" ${tx(row)}`,
-    ]);
+    return this.#writer.process(tx => {
+      const prevVersion = tx<{max: LexiVersion | null}[]>`
+      SELECT MAX("stateVersion") FROM _zero."TxLog";`;
+      prevVersion
+        .then(result => (this.#prevVersion = result[0].max ?? '00'))
+        .catch(e => this.fail(e));
+      return [tx`INSERT INTO _zero."TxLog" ${tx(row)}`];
+    });
   }
 
   processInsert(insert: Pgoutput.MessageInsert) {

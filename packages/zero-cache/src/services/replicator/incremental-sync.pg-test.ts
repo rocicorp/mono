@@ -18,6 +18,7 @@ import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
 import {IncrementalSyncer, setupReplicationTables} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
+import type {VersionChange} from './replicator.js';
 import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
 
@@ -57,6 +58,8 @@ describe('replicator/incremental-sync', () => {
     writeUpstream?: string[];
     invalidationFilters?: InvalidationFilterSpec[];
     expectedTransactions?: number;
+    expectedVersionChanges?: VersionChange[];
+    coalescedVersionChange?: VersionChange;
     specs: Record<string, TableSpec>;
     data: Record<string, Record<string, unknown>[]>;
   };
@@ -235,6 +238,66 @@ describe('replicator/incremental-sync', () => {
       `,
       ],
       expectedTransactions: 2,
+      expectedVersionChanges: [
+        {
+          prevVersion: '00',
+          newVersion: '01',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '123'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '456'},
+            })]: '01',
+          },
+        },
+        {
+          prevVersion: '01',
+          newVersion: '02',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '789'},
+            })]: '02',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '987'},
+            })]: '02',
+          },
+        },
+      ],
+      coalescedVersionChange: {
+        prevVersion: '00',
+        newVersion: '02',
+        invalidations: {
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '123'},
+          })]: '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '456'},
+          })]: '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '789'},
+          })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '987'},
+          })]: '02',
+        },
+      },
       data: {
         ['public.issues']: [
           {
@@ -479,6 +542,15 @@ describe('replicator/incremental-sync', () => {
       `,
       ],
       expectedTransactions: 2,
+      expectedVersionChanges: [
+        {prevVersion: '00', newVersion: '01', invalidations: {}},
+        {prevVersion: '01', newVersion: '02', invalidations: {}},
+      ],
+      coalescedVersionChange: {
+        prevVersion: '00',
+        newVersion: '02',
+        invalidations: {},
+      },
       data: {
         ['public.issues']: [
           {orgID: 2, issueID: 123, description: 'bar', ['_0_version']: '02'},
@@ -635,6 +707,15 @@ describe('replicator/incremental-sync', () => {
       `,
       ],
       expectedTransactions: 2,
+      expectedVersionChanges: [
+        {prevVersion: '00', newVersion: '01', invalidations: {}},
+        {prevVersion: '01', newVersion: '02', invalidations: {}},
+      ],
+      coalescedVersionChange: {
+        prevVersion: '00',
+        newVersion: '02',
+        invalidations: {},
+      },
       data: {
         ['public.issues']: [
           {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
@@ -833,6 +914,66 @@ describe('replicator/incremental-sync', () => {
       `,
       ],
       expectedTransactions: 2,
+      expectedVersionChanges: [
+        {
+          prevVersion: '00',
+          newVersion: '01',
+          invalidations: {
+            [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
+              '01',
+            [invalidationHash({schema: 'public', table: 'baz', allRows: true})]:
+              '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'bar',
+              filteredColumns: {id: '4'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'bar',
+              filteredColumns: {id: '5'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'bar',
+              filteredColumns: {id: '6'},
+            })]: '01',
+          },
+        },
+        {
+          prevVersion: '01',
+          newVersion: '02',
+          invalidations: {
+            [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
+              '02',
+          },
+        },
+      ],
+      coalescedVersionChange: {
+        prevVersion: '00',
+        newVersion: '02',
+        invalidations: {
+          [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
+            '02',
+          [invalidationHash({schema: 'public', table: 'baz', allRows: true})]:
+            '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'bar',
+            filteredColumns: {id: '4'},
+          })]: '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'bar',
+            filteredColumns: {id: '5'},
+          })]: '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'bar',
+            filteredColumns: {id: '6'},
+          })]: '01',
+        },
+      },
       data: {
         ['public.foo']: [{id: 101, ['_0_version']: '02'}],
         ['public.bar']: [
@@ -1029,6 +1170,50 @@ describe('replicator/incremental-sync', () => {
       `,
       ],
       expectedTransactions: 1,
+      expectedVersionChanges: [
+        {
+          prevVersion: '00',
+          newVersion: '01',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {
+                orgID: '1',
+                issueID: '456',
+              },
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {
+                orgID: '1',
+              },
+            })]: '01',
+          },
+        },
+      ],
+      coalescedVersionChange: {
+        prevVersion: '00',
+        newVersion: '01',
+        invalidations: {
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {
+              orgID: '1',
+              issueID: '456',
+            },
+          })]: '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {
+              orgID: '1',
+            },
+          })]: '01',
+        },
+      },
       data: {
         ['public.issues']: [
           {orgID: 1, issueID: 456, description: 'foo', ['_0_version']: '01'},
@@ -1105,6 +1290,22 @@ describe('replicator/incremental-sync', () => {
       }
 
       const syncing = syncer.start(lc);
+      const incrementalVersionSubscription = syncer.versionChanges();
+      const coalescedVersionSubscription = syncer.versionChanges();
+
+      // Listen concurrently to capture incremental version changes.
+      const incrementalVersions = (async () => {
+        const versions: VersionChange[] = [];
+        if (c.expectedTransactions) {
+          for await (const v of incrementalVersionSubscription) {
+            versions.push(v);
+            if (versions.length === c.expectedTransactions) {
+              break;
+            }
+          }
+        }
+        return versions;
+      })();
 
       for (const query of c.writeUpstream ?? []) {
         await upstream.unsafe(query);
@@ -1130,7 +1331,41 @@ describe('replicator/incremental-sync', () => {
       expect(published.tables).toEqual(c.specs);
 
       await expectTables(replica, replaceVersions(c.data, versions));
+
+      if (c.expectedVersionChanges) {
+        expect(await incrementalVersions).toEqual(
+          c.expectedVersionChanges.map(v => convertVersionChange(v, versions)),
+        );
+      }
+      if (c.coalescedVersionChange) {
+        for await (const v of coalescedVersionSubscription) {
+          expect(v).toEqual(
+            convertVersionChange(c.coalescedVersionChange, versions),
+          );
+          break;
+        }
+      }
     });
+  }
+
+  function convertVersionChange(
+    v: VersionChange,
+    versions: string[],
+  ): VersionChange {
+    const convert = (obj: object) =>
+      Object.fromEntries(
+        Object.entries(obj).map(([key, val]): [string, object | string] => {
+          if (typeof val === 'string') {
+            const index = Number(versionFromLexi(val));
+            return [key, index > 0 ? versions[index - 1] : val];
+          }
+          if (typeof val === 'object') {
+            return [key, convert(val)];
+          }
+          throw Error(`Unexpected value`, val);
+        }),
+      );
+    return convert(v) as VersionChange;
   }
 
   function replaceVersions(

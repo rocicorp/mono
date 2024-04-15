@@ -8,6 +8,7 @@ import {expectTables, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {MessageProcessor, setupReplicationTables} from './incremental-sync.js';
 import {InvalidationFilters} from './invalidation.js';
+import type {VersionChange} from './replicator.js';
 
 describe('replicator/message-processor', () => {
   let replica: postgres.Sql;
@@ -60,6 +61,7 @@ describe('replicator/message-processor', () => {
     name: string;
     messages: Record<string, Pgoutput.Message[]>;
     acknowledged: string[];
+    versions: VersionChange[];
     replicated: Record<string, object[]>;
     expectFailure: boolean;
   };
@@ -110,6 +112,7 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
+      versions: [{prevVersion: '00', newVersion: '0e', invalidations: {}}],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0e'},
@@ -163,6 +166,7 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
+      versions: [{prevVersion: '00', newVersion: '0e', invalidations: {}}],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0e'},
@@ -215,6 +219,7 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
+      versions: [{prevVersion: '00', newVersion: '0e', invalidations: {}}],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0e'},
@@ -272,6 +277,10 @@ describe('replicator/message-processor', () => {
         '0/a', // Note: The acknowledgement should be resent.
         '0/f',
       ],
+      versions: [
+        {prevVersion: '00', newVersion: '0a', invalidations: {}},
+        {prevVersion: '0a', newVersion: '0f', invalidations: {}},
+      ],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0a'},
@@ -288,6 +297,7 @@ describe('replicator/message-processor', () => {
     test(c.name, async () => {
       const failures = new Queue<unknown>();
       const acknowledgements = new Queue<string>();
+      const versionChanges = new Queue<VersionChange>();
 
       const processor = new MessageProcessor(
         replica,
@@ -299,6 +309,7 @@ describe('replicator/message-processor', () => {
         new Lock(),
         new InvalidationFilters(),
         (lsn: string) => acknowledgements.enqueue(lsn),
+        (v: VersionChange) => versionChanges.enqueue(v),
         (_: LogContext, err: unknown) => failures.enqueue(err),
       );
 
@@ -311,6 +322,9 @@ describe('replicator/message-processor', () => {
 
       for (const lsn of c.acknowledged) {
         expect(await acknowledgements.dequeue()).toBe(lsn);
+      }
+      for (const version of c.versions) {
+        expect(await versionChanges.dequeue()).toEqual(version);
       }
       if (c.expectFailure) {
         expect(await failures.dequeue()).toBeInstanceOf(Error);

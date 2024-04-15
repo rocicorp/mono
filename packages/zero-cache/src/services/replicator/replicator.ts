@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import * as v from 'shared/src/valita.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import {postgresTypeConfig} from '../../types/pg.js';
+import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
@@ -29,6 +30,29 @@ export const registerInvalidationFiltersResponse = v.object({
 export type RegisterInvalidationFiltersResponse = v.Infer<
   typeof registerInvalidationFiltersResponse
 >;
+
+export const versionChangeSchema = v.object({
+  /** The new version. */
+  newVersion: v.string(),
+
+  /**
+   * The previous version. Note that multiple VersionChanges may be coalesced
+   * such that multiple transactions occurred between the `prevVersion` and
+   * `newVersion`.
+   */
+  prevVersion: v.string(),
+
+  /**
+   * A mapping from hex invalidation hash to the latest version in which
+   * the invalidation occurred, if greater than `prevVersion`. The inclusion
+   * of the invalidations is optional and may be absent if the number of
+   * invalidations exceeds a certain limit. Consumers must consider this field
+   * an optional optimization and handle its absence accordingly.
+   */
+  invalidations: v.readonlyRecord(v.string()).optional(),
+});
+
+export type VersionChange = v.Infer<typeof versionChangeSchema>;
 
 export interface Replicator {
   /**
@@ -65,6 +89,12 @@ export interface Replicator {
   registerInvalidationFilters(
     req: RegisterInvalidationFiltersRequest,
   ): Promise<RegisterInvalidationFiltersResponse>;
+
+  /**
+   * Creates a cancelable subscription to {@link VersionChange} messages for the
+   * stream of replicated transactions.
+   */
+  versionChanges(): CancelableAsyncIterable<VersionChange>;
 }
 
 export class ReplicatorService implements Replicator, Service {
@@ -123,6 +153,10 @@ export class ReplicatorService implements Replicator, Service {
     req: RegisterInvalidationFiltersRequest,
   ): Promise<RegisterInvalidationFiltersResponse> {
     return this.#invalidator.registerInvalidationFilters(this.#lc, req);
+  }
+
+  versionChanges(): CancelableAsyncIterable<VersionChange> {
+    return this.#incrementalSyncer.versionChanges();
   }
 
   async stop() {}
