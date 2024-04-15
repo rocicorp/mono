@@ -8,8 +8,8 @@ import type {
   SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
 import {
+  NormalizedInvalidationFilterSpec,
   invalidationHash,
-  type InvalidationFilterSpec,
 } from '../types/invalidation.js';
 import {computeInvalidationInfo, computeMatchers} from './invalidation.js';
 import {getNormalized} from './normalize.js';
@@ -212,7 +212,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
   type Case = {
     name: string;
     ast: AST;
-    filters: InvalidationFilterSpec[];
+    filters: NormalizedInvalidationFilterSpec[];
     hashes: string[];
   };
 
@@ -228,6 +228,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {table: 'foo', select: [['id', 'id']], orderBy: [['id'], 'asc']},
       filters: [
         {
+          id: '1scpn2ec370qk',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
@@ -252,6 +253,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: 'jx5gcczzxpcz',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['priority'],
@@ -276,6 +278,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: '36jnh0mt9ui1w',
           schema: 'public',
           table: 'foo',
           filteredColumns: {},
@@ -303,6 +306,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: '3aqv7m9tgnnqr',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
@@ -333,18 +337,21 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: 's10pisblnaw5',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {foo: '='},
         },
         {
+          id: 'blpzmgykw6hk',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {bar: '='},
         },
         {
+          id: '3aqv7m9tgnnqr',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
@@ -387,12 +394,14 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: 's10pisblnaw5',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {foo: '='},
         },
         {
+          id: 'blpzmgykw6hk',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
@@ -429,6 +438,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: 's10pisblnaw5',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
@@ -471,48 +481,56 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: '2t1fufx1makbn',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {a: '=', c: '=', e: '='},
         },
         {
+          id: '2br2e2gteqg2u',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {a: '=', d: '=', e: '='},
         },
         {
+          id: '19qclbkdx7o4b',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {a: '=', c: '=', f: '='},
         },
         {
+          id: '38l330qvpozvv',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {a: '=', d: '=', f: '='},
         },
         {
+          id: 'im36hl0oh86g',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {b: '=', c: '=', e: '='},
         },
         {
+          id: '1ypj3fl6fjjjh',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {b: '=', d: '=', e: '='},
         },
         {
+          id: 'lw9gqwn29foc',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {b: '=', c: '=', f: '='},
         },
         {
+          id: '3flty9g04yhjn',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
@@ -585,6 +603,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [
         {
+          id: '3mozdzxkk72v',
           schema: 'public',
           table: 'foo',
           selectedColumns: ['id'],
