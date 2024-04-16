@@ -77,8 +77,8 @@ describe('list and scan', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      const {roomDO} = getMiniflareBindings();
-      const id = roomDO.newUniqueId();
+      const {runnerDO} = getMiniflareBindings();
+      const id = runnerDO.newUniqueId();
       const storage = new DurableStorage(
         await getMiniflareDurableObjectStorage(id),
       );

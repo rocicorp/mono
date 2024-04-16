@@ -2,8 +2,8 @@ import {expect, test} from '@jest/globals';
 import * as valita from 'shared/src/valita.js';
 import {delEntry, getEntries, getEntry, listEntries, putEntry} from './data.js';
 
-const {roomDO} = getMiniflareBindings();
-const id = roomDO.newUniqueId();
+const {runnerDO} = getMiniflareBindings();
+const id = runnerDO.newUniqueId();
 
 // Schema that sometimes produces a normalized value.
 const numberToString = valita.union(

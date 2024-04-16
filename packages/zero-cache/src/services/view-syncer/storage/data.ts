@@ -1,3 +1,9 @@
+import type {
+  DurableObjectGetOptions,
+  DurableObjectListOptions,
+  DurableObjectPutOptions,
+  DurableObjectStorage,
+} from '@cloudflare/workers-types';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
