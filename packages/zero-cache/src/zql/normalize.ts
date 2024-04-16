@@ -1,4 +1,6 @@
 import {
+  isJoinWithQuery,
+  Join,
   normalizeAST,
   type AST,
   type Condition,
@@ -104,6 +106,87 @@ export class Normalized {
       .digest()
       .toString(radix);
   }
+}
+
+/**
+ * Given an AST, select all the primary keys from all tables for all rows that are in the
+ * final result.
+ */
+export type SelectedPrimaryKey = {
+  // The table (or aliased table) from which we are selecting the primary key
+  from: string;
+  column: string;
+  // How we'll put this in the final result `${sourceTable}_${reAlias}_id`
+  // E.g., SELECT issue.id as issue_1_id, parent.id as issue_2_id FROM
+  //        issue JOIN issue as parent ON parent.id = issue.parent_id
+  as: {
+    sourceTable: string;
+    // incrementing counter to ensure that we don't have conflicts with other aliases
+    // One case this handles is self joins. Each self-join needs the primary keys aliased
+    // to different names.
+    reAlias: number;
+    column: string;
+  };
+};
+export type ASTWithPrimaryKeys = AST & {
+  primaryKeys: SelectedPrimaryKey[];
+  joins?: ((Join & {other: ASTWithPrimaryKeys}) | Join)[] | undefined;
+};
+export function selectPrimaryKeysForExplosion(
+  ast: AST,
+  reAlias: number,
+  alias?: string | undefined,
+): ASTWithPrimaryKeys {
+  const ret: ASTWithPrimaryKeys = {
+    ...ast,
+    joins: [...(ast.joins ?? [])],
+    primaryKeys: [
+      {
+        from: alias ?? ast.table,
+        column: 'id',
+        as: {
+          sourceTable: ast.table,
+          reAlias,
+          column: 'id',
+        },
+      },
+    ],
+  };
+  for (let i = 0; i < (ret.joins?.length ?? 0); i++) {
+    if (ret.joins === undefined) {
+      break;
+    }
+    const join = ret.joins[i];
+    // Joining with a sub-query?
+    if (isJoinWithQuery(join)) {
+      // Recurse into the sub-query and do primary key selection for the sub-query
+      const subqueryJoin = selectPrimaryKeysForExplosion(join.other, ++reAlias);
+      // Now pull the sub-query's primary keys up a level
+      ret.primaryKeys.push(
+        ...subqueryJoin.primaryKeys.map(pk => ({
+          from: join.as,
+          column: `${pk.as.sourceTable}_${pk.as.reAlias}_id`,
+          as: {
+            sourceTable: pk.as.sourceTable,
+            reAlias: pk.as.reAlias,
+            column: pk.as.column,
+          },
+        })),
+      );
+      ret.joins[i] = {
+        ...join,
+        other: subqueryJoin,
+      };
+    } else {
+      // regular join? just add the primary keys to the top level
+      ret.primaryKeys.push(
+        ...selectPrimaryKeysForExplosion(join.other, ++reAlias, join.as)
+          .primaryKeys,
+      );
+    }
+  }
+
+  return ret;
 }
 
 const SEED = 0x1234567890;
