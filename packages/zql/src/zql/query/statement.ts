@@ -48,8 +48,8 @@ export class Statement<Return> implements IStatement<Return> {
           Return extends [] ? Return[number] : never
         >,
         makeComparator<readonly string[], Record<string, unknown>>(
-          this.#ast.orderBy[0],
-          this.#ast.orderBy[1],
+          must(this.#ast.orderBy)[0],
+          must(this.#ast.orderBy)[1],
         ),
         this.#ast.orderBy,
         this.#ast.limit,

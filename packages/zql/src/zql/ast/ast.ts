@@ -48,7 +48,7 @@ export type AST = {
   readonly joins?: Join[];
   readonly limit?: number | undefined;
   readonly groupBy?: string[] | undefined;
-  readonly orderBy: Ordering;
+  readonly orderBy?: Ordering | undefined;
   // readonly after?: Primitive;
 };
 
