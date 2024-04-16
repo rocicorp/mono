@@ -11,7 +11,7 @@ const metafile = process.argv.includes('--metafile');
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // jest-environment-miniflare looks at the wrangler.toml file which builds the local miniflare.
-function buildExample() {
+function buildMiniflareEnvironment() {
   return buildInternal({
     entryPoints: [path.join(dirname, 'tool', 'miniflare-environment.ts')],
     outdir: path.join(dirname, 'out', 'tool'),
@@ -33,7 +33,7 @@ function buildInternal(options) {
 }
 
 try {
-  await buildExample();
+  await buildMiniflareEnvironment();
 } catch (e) {
   console.error(e);
   process.exit(1);
