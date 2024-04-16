@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
+    "build": "rm -rf out && node build.js",
+    "test": "npm run build && node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "pg-tests": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --config=jest-pg.config.js",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "check-types": "tsc --noEmit",
@@ -21,6 +22,7 @@
     "@rocicorp/resolver": "^1.0.1",
     "@rocicorp/zql": "0.0.0",
     "compare-utf8": "^0.1.1",
+    "eventemitter3": "^5.0.1",
     "json-custom-numbers": "^3.1.1",
     "pg": "^8.11.3",
     "pg-format": "^1.0.4",

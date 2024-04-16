@@ -266,6 +266,7 @@ export class InvalidationProcessor {
   readonly #filters: InvalidationFilters;
 
   #cachedFilters: Promise<CachedFilters> | undefined;
+  #invalidations: Set<string> | undefined;
 
   constructor(filters: InvalidationFilters) {
     this.#filters = filters;
@@ -335,6 +336,7 @@ export class InvalidationProcessor {
       const hashSets = await Promise.all(hashers);
       const allHashes = new Set<string>();
       hashSets.forEach(set => set.forEach(hash => allHashes.add(hash)));
+      this.#invalidations = allHashes;
 
       lc.debug?.(`Committing ${allHashes.size} invalidation tags`);
       return [...allHashes].map(
@@ -348,6 +350,12 @@ export class InvalidationProcessor {
         `,
       );
     });
+  }
+
+  /** Must only be called after reader and writer pools are done. */
+  getInvalidations(): Set<string> {
+    assert(this.#invalidations, `Invalidations not yet processed`);
+    return this.#invalidations;
   }
 }
 
