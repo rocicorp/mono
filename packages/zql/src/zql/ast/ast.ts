@@ -215,3 +215,13 @@ function cmp(a: Condition, b: Condition): number {
   // prefixes first
   return a.conditions.length - b.conditions.length;
 }
+
+export function isJoinWithQuery(join: Join) {
+  const {other} = join;
+  return (
+    other.aggregate !== undefined ||
+    other.groupBy !== undefined ||
+    other.joins !== undefined ||
+    other.where !== undefined
+  );
+}
