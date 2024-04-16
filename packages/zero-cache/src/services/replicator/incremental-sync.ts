@@ -157,7 +157,7 @@ export class IncrementalSyncer {
     this.#invalidationFilters = invalidationFilters;
   }
 
-  async start(lc: LogContext) {
+  async run(lc: LogContext) {
     assert(!this.#started, `IncrementalSyncer has already been started`);
     this.#started = true;
 
@@ -182,13 +182,10 @@ export class IncrementalSyncer {
         (v: VersionChange) => this.#eventEmitter.emit('version', v),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
-      this.#service.on(
-        'data',
-        async (lsn: string, message: Pgoutput.Message) => {
-          this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
-          await processor.processMessage(lc, lsn, message);
-        },
-      );
+      this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
+        this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
+        processor.processMessage(lc, lsn, message);
+      });
 
       try {
         // TODO: Start from the last acknowledged LSN.
