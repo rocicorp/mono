@@ -42,7 +42,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     this.#watcher = watcher;
   }
 
-  start(): Promise<void> {
+  run(): Promise<void> {
     // TODO: Implement
     this.#lc;
     this.#storage;

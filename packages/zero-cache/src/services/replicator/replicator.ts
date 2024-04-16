@@ -139,14 +139,14 @@ export class ReplicatorService implements Replicator, Service {
     );
   }
 
-  async start() {
+  async run() {
     await initSyncSchema(
       this.#lc,
       this.id,
       this.#syncReplica,
       this.#upstreamUri,
     );
-    await this.#incrementalSyncer.start(this.#lc);
+    await this.#incrementalSyncer.run(this.#lc);
   }
 
   registerInvalidationFilters(
