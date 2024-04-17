@@ -214,6 +214,7 @@ export class Zero<MD extends MutatorDefs> {
   };
 
   readonly #zqlContext: ZQLContext;
+  readonly #zqlQueriesMap = new Map<string, EntityQuery<FromSet>>();
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -1417,8 +1418,16 @@ export class Zero<MD extends MutatorDefs> {
     console.log('TODO: addZQLSubscription', JSON.stringify(ast));
   }
 
-  getQuery<From extends FromSet>(collection: string) {
+  getQuery<From extends FromSet>(collection: string): EntityQuery<From> {
+    // This returns the same instance every time.
+    // When the API is zero.query.issue it will be more obvious.
+    const existing = this.#zqlQueriesMap.get(collection);
+    if (existing) {
+      return existing as EntityQuery<From>;
+    }
+
     const entityQuery = new EntityQuery<From>(this.#zqlContext, collection);
+    this.#zqlQueriesMap.set(collection, entityQuery as EntityQuery<FromSet>);
     return entityQuery;
   }
 }
