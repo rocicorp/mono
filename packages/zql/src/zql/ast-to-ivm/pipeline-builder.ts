@@ -422,7 +422,7 @@ export function getValueFromEntity(
         string,
         unknown
       >
-    )[qualifiedColumn[1]];
+    )?.[qualifiedColumn[1]];
   }
   return entity[qualifiedColumn[1]];
 }

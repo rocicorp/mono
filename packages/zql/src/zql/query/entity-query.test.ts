@@ -231,6 +231,62 @@ test('join types', () => {
     .select('name');
 });
 
+test('left join types', () => {
+  type Issue = {
+    id: string;
+    title: string;
+    ownerId: string;
+    creatorId: string;
+  };
+
+  type User = {
+    id: string;
+    name: string;
+  };
+
+  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
+  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+
+  const r1 = issueQuery
+    .leftJoin(userQuery, 'owner', 'ownerId', 'id')
+    .select('owner.name')
+    .prepare()
+    .exec();
+
+  expectTypeOf(r1).toMatchTypeOf<
+    Promise<readonly {readonly owner?: {readonly name: string} | undefined}[]>
+  >();
+
+  const r2 = issueQuery
+    .leftJoin(userQuery, 'owner', 'ownerId', 'id')
+    .select('owner.*')
+    .prepare()
+    .exec();
+
+  expectTypeOf(r2).toMatchTypeOf<
+    Promise<
+      readonly {
+        readonly owner?: User | undefined;
+      }[]
+    >
+  >();
+
+  const r3 = issueQuery
+    .leftJoin(userQuery, 'owner', 'ownerId', 'id')
+    .select('*')
+    .prepare()
+    .exec();
+
+  expectTypeOf(r3).toMatchTypeOf<
+    Promise<
+      readonly {
+        readonly issue: Issue;
+        readonly owner?: User | undefined;
+      }[]
+    >
+  >();
+});
+
 test('FieldValue type', () => {
   type E = {
     e: {

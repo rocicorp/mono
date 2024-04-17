@@ -1,7 +1,6 @@
 import {expect, test} from 'vitest';
 import {joinSymbol} from '../ivm/types.js';
 import * as agg from '../query/agg.js';
-import {nanoid} from 'nanoid';
 import {
   Album,
   Artist,
@@ -9,6 +8,10 @@ import {
   Track,
   TrackArtist,
   setup,
+  createRandomTracks,
+  linkTracksToArtists,
+  createRandomAlbums,
+  createRandomArtists,
 } from '../benchmarks/setup.js';
 
 test('direct foreign key join: join a track to an album', async () => {
@@ -210,8 +213,6 @@ test('direct foreign key join: join a track to an album', async () => {
 
   await r.close();
 });
-
-test('junction table join: join a track to its artists', async () => {});
 
 /**
  * A playlist has tracks.
@@ -461,50 +462,193 @@ test('track list composition with lots and lots of data then tracking incrementa
   expect(rows.length).toBe(10_000);
 });
 
-function createRandomArtists(n: number): Artist[] {
-  return Array.from({length: n}, () => ({
-    id: nanoid(),
-    name: nanoid(),
-  }));
-}
+// test('left-join and aggregation to gather artists for a track', async () => {
+//   const {r, trackQuery, artistQuery, trackArtistQuery} = setup();
 
-function createRandomAlbums(n: number, artists: Artist[]): Album[] {
-  return Array.from({length: n}, () => ({
-    id: nanoid(),
-    title: nanoid(),
-    artistId: artists[Math.floor(Math.random() * artists.length)].id,
-  }));
-}
+//   const artists = createRandomArtists(5);
+//   const albums = createRandomAlbums(2, artists);
+//   const tracks = createRandomTracks(5, albums);
+//   // only link the first 50 tracks to artists
+//   const trackArtists = linkTracksToArtists(artists, tracks.slice(0, 2));
 
-function createRandomTracks(n: number, albums: Album[]): Track[] {
-  return Array.from({length: n}, () => ({
-    id: nanoid(),
-    title: nanoid(),
-    length: Math.floor(Math.random() * 300000) + 1000,
-    albumId: albums[Math.floor(Math.random() * albums.length)].id,
-  }));
-}
+//   await r.mutate.bulkSet({
+//     tracks,
+//     albums,
+//     artists,
+//     trackArtists,
+//   });
 
-function linkTracksToArtists(
-  artists: Artist[],
-  tracks: Track[],
-): TrackArtist[] {
-  // assign each track to 1-3 artists
-  return tracks.flatMap(t => {
-    const numArtists = Math.floor(Math.random() * 3) + 1;
-    const artistsForTrack = new Set<string>();
-    while (artistsForTrack.size < numArtists) {
-      artistsForTrack.add(
-        artists[Math.floor(Math.random() * artists.length)].id,
-      );
-    }
-    return [...artistsForTrack].map(a => ({
-      id: `${t.id}-${a}`,
-      trackId: t.id,
-      artistId: a,
-    }));
+//   const stmt = trackQuery
+//     .leftJoin(
+//       trackArtistQuery,
+//       'trackArtist',
+//       'track.id',
+//       'trackArtist.trackId',
+//     )
+//     .leftJoin(artistQuery, 'artists', 'trackArtist.artistId', 'id')
+//     .groupBy('track.id')
+//     .select('track.*', 'artists.*')
+//     .asc('track.id')
+//     .prepare();
+
+//   const rows = await stmt.exec();
+//   console.log(rows);
+// });
+
+test('left-join through single table', async () => {
+  const {r, trackQuery, albumQuery} = setup();
+
+  const album: Album = {
+    id: '1',
+    artistId: '',
+    title: 'album 1',
+  };
+
+  const track: Track = {
+    id: '1',
+    albumId: '1',
+    title: 'track 1',
+    length: 1,
+  };
+
+  await r.mutate.bulkSet({
+    albums: [album],
+    tracks: [track],
   });
-}
+
+  const stmt = trackQuery
+    .leftJoin(albumQuery, 'album', 'albumId', 'id')
+    .prepare();
+  let rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: '1_1',
+      track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      album: {id: '1', artistId: '', title: 'album 1'},
+      [joinSymbol]: true,
+    },
+  ]);
+
+  await r.mutate.setTrack({
+    id: '2',
+    albumId: '2',
+    title: 'track 2',
+    length: 2,
+  });
+
+  rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: '1_1',
+      track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      album: {id: '1', artistId: '', title: 'album 1'},
+      [joinSymbol]: true,
+    },
+    {
+      id: '2',
+      track: {id: '2', albumId: '2', title: 'track 2', length: 2},
+      [joinSymbol]: true,
+    },
+  ]);
+
+  await r.mutate.setAlbum({
+    id: '2',
+    artistId: '',
+    title: 'album 2',
+  });
+
+  rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: '1_1',
+      track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      album: {id: '1', artistId: '', title: 'album 1'},
+      [joinSymbol]: true,
+    },
+    {
+      id: '2_2',
+      album: {id: '2', artistId: '', title: 'album 2'},
+      track: {id: '2', albumId: '2', title: 'track 2', length: 2},
+      [joinSymbol]: true,
+    },
+  ]);
+
+  await r.mutate.deleteTrack('1');
+
+  rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: '2_2',
+      album: {id: '2', artistId: '', title: 'album 2'},
+      track: {id: '2', albumId: '2', title: 'track 2', length: 2},
+      [joinSymbol]: true,
+    },
+  ]);
+
+  await r.mutate.deleteAlbum('2');
+
+  rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: '2_2',
+      track: {id: '2', albumId: '2', title: 'track 2', length: 2},
+      [joinSymbol]: true,
+    },
+  ]);
+});
+
+test('remove album', async () => {
+  const {r, trackQuery, albumQuery} = setup();
+
+  const album: Album = {
+    id: '1',
+    artistId: '',
+    title: 'album 1',
+  };
+
+  const track: Track = {
+    id: '1',
+    albumId: '1',
+    title: 'track 1',
+    length: 1,
+  };
+
+  await r.mutate.bulkSet({
+    albums: [album],
+    tracks: [track],
+  });
+
+  const stmt = trackQuery
+    .leftJoin(albumQuery, 'album', 'albumId', 'id')
+    .prepare();
+
+  let rows = await stmt.exec();
+
+  expect(rows).toEqual([
+    {
+      id: '1_1',
+      track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      album: {id: '1', artistId: '', title: 'album 1'},
+      [joinSymbol]: true,
+    },
+  ]);
+
+  await r.mutate.deleteAlbum('1');
+
+  rows = await stmt.exec();
+
+  console.log(rows);
+});
+
+// left join through single table and aggregate
+// playlist -> tracks -> agg_array?x
+
+// junction join and aggregate (artists)
 
 // Observations / future things to test:
 // - we should add `HAVING` to the language. It'll let us filter against compeleted aggregations.
