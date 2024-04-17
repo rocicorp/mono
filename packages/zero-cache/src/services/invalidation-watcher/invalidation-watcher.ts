@@ -1,6 +1,22 @@
+import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import type postgres from 'postgres';
+import {assert} from 'shared/src/asserts.js';
+import {union} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
+import {
+  TransactionPool,
+  sharedReadOnlySnapshot,
+} from '../../db/transaction-pool.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
+import {max, min, type LexiVersion} from '../../types/lexi-version.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
+import {Subscription} from '../../types/subscription.js';
+import {queryStateVersion} from '../replicator/queries.js';
+import type {ReplicatorRegistry} from '../replicator/registry.js';
+import type {VersionChange} from '../replicator/replicator.js';
+import type {Service} from '../service.js';
+import {HashSubscriptions} from './hash-subscriptions.js';
 
 // Note: Same as zql/invalidation.ts:InvalidationInfo
 const queryInvalidationSchema = v.object({
@@ -23,20 +39,22 @@ export const watchRequestSchema = v.object({
 
 export type WatchRequest = v.Infer<typeof watchRequestSchema>;
 
-const queryInvalidationUpdateSchema = v.object({
+export type QueryInvalidationUpdate = {
   /** The version of the database at the time the invalidations were processed. */
-  newVersion: v.string(),
+  newVersion: LexiVersion;
 
   /** The starting point (exclusive) from which invalidations were computed. */
-  fromVersion: v.string(),
+  fromVersion: LexiVersion;
 
-  /** Maps caller-defined query IDs to the versions at which they were invalidated. */
-  invalidatedQueries: v.record(v.string()),
-});
+  /** Set of caller-defined query IDs which were within the version range. */
+  invalidatedQueries: Set<string>;
 
-export type QueryInvalidationUpdate = v.Infer<
-  typeof queryInvalidationUpdateSchema
->;
+  /**
+   * A `READ ONLY` TransactionPool snapshotted at the `newVersion` for re-executing
+   * invalidated queries.
+   */
+  reader: TransactionPool;
+};
 
 /**
  * An Invalidation Watcher is a per-Service Runner (i.e. Durable Object) service that
@@ -79,13 +97,17 @@ export type QueryInvalidationUpdate = v.Infer<
  * concurrency and reduce latency. When the View Syncers finish, the `Subscription` cleanup
  * logic facilitates reference counting to close TransactionPools when they are no longer
  * needed.
+ *
+ * In other words, the InvalidationWatcher is where all TransactionPools for view
+ * queries originate. All View Syncers access the database via TransactionPools
+ * (and corresponding invalidation info) managed by the InvalidationWatcher.
  */
 export interface InvalidationWatcher {
   /**
    * Creates a Subscription of {@link QueryInvalidationUpdate}s for the set of queries
    * specified in the {@link WatchRequest}.
    *
-   * * `watch()` first ensures that all Invalidation Filter Specs are
+   * * `watch()` ensures that all Invalidation Filter Specs are
    *   registered with the Replicator, noting the starting version from which each
    *   filter has been active.
    *
@@ -111,5 +133,310 @@ export interface InvalidationWatcher {
    */
   watch(
     request: WatchRequest,
-  ): CancelableAsyncIterable<QueryInvalidationUpdate>;
+  ): Promise<CancelableAsyncIterable<QueryInvalidationUpdate>>;
+}
+
+export class InvalidationWatcherService
+  implements InvalidationWatcher, Service
+{
+  readonly id: string;
+  readonly #lc: LogContext;
+  readonly #registry: ReplicatorRegistry;
+  readonly #replica: postgres.Sql;
+
+  readonly #readers = new Map<TransactionPool, number>();
+  readonly #hashSubscriptions = new HashSubscriptions();
+
+  #started = false;
+  readonly #shouldRun = resolver<false>();
+  #hasWatchRequests = resolver<true>();
+
+  #versionChangeSubscription:
+    | CancelableAsyncIterable<VersionChange>
+    | undefined;
+
+  constructor(
+    serviceID: string,
+    lc: LogContext,
+    registry: ReplicatorRegistry,
+    replica: postgres.Sql,
+  ) {
+    this.id = serviceID;
+    this.#lc = lc
+      .withContext('component', 'invalidation-watcher')
+      .withContext('id', this.id);
+    this.#registry = registry;
+    this.#replica = replica;
+  }
+
+  /**
+   * The `run` loop waits for {@link watch} requests to arrive, and subscribes to
+   * VersionChanges from the Replicator when they do. Where there are no watch
+   * requests running (i.e. all canceled), the VersionChange subscription is
+   * canceled and the loop again waits for {@link watch} requests to arrive.
+   */
+  async run(): Promise<void> {
+    assert(!this.#started, `InvalidationWatcher has already been started`);
+    this.#started = true;
+
+    this.#lc.info?.('started');
+    while (
+      await Promise.race([
+        this.#shouldRun.promise, // resolves to false on stop()
+        this.#hasWatchRequests.promise, // resolves to true on a watch request
+      ])
+    ) {
+      const replicator = await this.#registry.getReplicator();
+      this.#lc.info?.('subscribing to VersionChanges');
+
+      // The Subscription is canceled when there are no longer any watchers.
+      this.#versionChangeSubscription = replicator.versionChanges();
+      for await (const versionChange of this.#versionChangeSubscription) {
+        await this.#processVersionChange(versionChange);
+      }
+
+      this.#versionChangeSubscription = undefined;
+      this.#lc.info?.(`waiting for watchers`);
+    }
+
+    this.#lc.info?.('stopped');
+  }
+
+  // eslint-disable-next-line require-await
+  async stop(): Promise<void> {
+    this.#shouldRun.resolve(false);
+    this.#versionChangeSubscription?.cancel();
+    this.#versionChangeSubscription = undefined;
+  }
+
+  async watch(
+    request: WatchRequest,
+  ): Promise<CancelableAsyncIterable<QueryInvalidationUpdate>> {
+    const subscription: Subscription<QueryInvalidationUpdate> =
+      new Subscription<QueryInvalidationUpdate>({
+        // Coalescing {@link QueryInvalidationUpdate} messages is important in two contexts:
+        //
+        // * Capping the amount of outstanding work a subscriber has to process when
+        //   the rate of incremental updates outpaces the rate at which queries are
+        //   re-executing and views updated.
+        //
+        // * Combining the initial QueryInvalidationUpdate, computed from the parameters of the
+        //   view's {@link WatchRequest}, with that of updates concurrently produced from
+        //   incremental {@link VersionChange} updates from the Replicator. This ensures that
+        //   the invalidations in the first Subscription message correctly catch the caller
+        //   up to the main {@link VersionChange} stream.
+        coalesce: (curr, prev) => {
+          // Since the update for the initial filter registration step may be out of order
+          // with respect to incremental VersionChange updates, ensure that `curr` (and
+          // importantly, its `reader`) is the one with the latest `newVersion`.
+          if (prev.newVersion > curr.newVersion) {
+            const tmp = curr;
+            curr = prev;
+            prev = tmp;
+          }
+          // The Subscription will not call `consumed()` on coalesced `prev` messages.
+          // cleanup must be done explicitly when coalescing.
+          this.#decrementRefCount(prev.reader);
+
+          return {
+            newVersion: max(prev.newVersion, curr.newVersion),
+            fromVersion: min(prev.fromVersion, curr.fromVersion),
+            invalidatedQueries: union(
+              prev.invalidatedQueries,
+              curr.invalidatedQueries,
+            ),
+            reader: curr.reader,
+          };
+        },
+
+        consumed: prev => {
+          this.#decrementRefCount(prev.reader);
+        },
+
+        cleanup: unconsumed => {
+          for (const update of unconsumed) {
+            this.#decrementRefCount(update.reader);
+          }
+          this.#hashSubscriptions.remove(subscription, request);
+          if (this.#hashSubscriptions.empty()) {
+            this.#hasWatchRequests = resolver<true>(); // reset to wait for next watch()
+            this.#versionChangeSubscription?.cancel();
+          }
+        },
+      });
+
+    // Add the subscription to #hashSubscriptions so that it starts receiving incremental
+    // updates. However, don't return the subscription to the caller until filters
+    // are registered and the resulting initial invalidation update is pushed,
+    // which will be coalesced with any concurrently received the incremental updates.
+    this.#hashSubscriptions.add(subscription, request);
+
+    // Start a subscription to Replicator.versionChanges() in run() if there isn't one already.
+    this.#hasWatchRequests.resolve(true);
+
+    // Compute and push/coalesce the initial update.
+    await this.#registerFilters(request, subscription);
+
+    // Now return the subscription, which is guaranteed to have the initial update,
+    // possibly coalesced with incremental VersionChanges from the Replicator.
+    return subscription;
+  }
+
+  /**
+   * Registers the invalidation filters specified in the {@link WatchRequest} and
+   * pushes an initial {@link QueryInvalidationUpdate} to the `subscription` based
+   * on the registration version of the filters and any `hashes` from the
+   * WatchRequest that were updated since its `fromVersion`.
+   */
+  async #registerFilters(
+    request: WatchRequest,
+    subscription: Subscription<QueryInvalidationUpdate>,
+  ) {
+    const lc = this.#lc.withContext('registerFilters', request.fromVersion);
+
+    const replicator = await this.#registry.getReplicator();
+    const registered = await replicator.registerInvalidationFilters({
+      specs: Object.values(request.queries)
+        .map(({filters}) => filters)
+        .flat(),
+    });
+
+    const {fromVersion} = request;
+    const {update, hashes} = await this.#createBaseUpdate(lc, fromVersion);
+
+    const invalidatedQueries =
+      this.#hashSubscriptions.computeInvalidationUpdate(hashes, subscription);
+
+    if (fromVersion) {
+      // Invalidate any queries associated with newly registered filters.
+      const newlyRegisteredFilterIDs = new Set(
+        registered.specs
+          .filter(({fromStateVersion}) => fromStateVersion > fromVersion)
+          .map(({id}) => id),
+      );
+      Object.entries(request.queries).forEach(([queryID, {filters}]) => {
+        if (filters.some(({id}) => newlyRegisteredFilterIDs.has(id))) {
+          invalidatedQueries.add(queryID);
+        }
+      });
+      this.#lc.info?.(
+        `initial update has ${invalidatedQueries.size} invalidated queries ` +
+          `from ${hashes.size} hashes and ${newlyRegisteredFilterIDs.size} ` +
+          `new filters`,
+      );
+    }
+
+    this.#trackRefCount(update.reader, 1);
+    subscription.push({...update, invalidatedQueries});
+  }
+
+  /**
+   * Processes a {@link VersionChange} update from the Replicator and pushes
+   * {@link QueryInvalidationUpdate} messages to all affected subscribers.
+   */
+  async #processVersionChange(versionChange: VersionChange) {
+    const lc = this.#lc.withContext('versionChange', versionChange.newVersion);
+    lc.debug?.(`processing VersionChange`, versionChange);
+
+    const {update, hashes} = await this.#createBaseUpdate(
+      lc,
+      versionChange.prevVersion,
+      versionChange.invalidations,
+      versionChange.newVersion,
+    );
+
+    const updates = this.#hashSubscriptions.computeInvalidationUpdates(hashes);
+    const numUpdates = updates.size;
+
+    if (numUpdates === 0) {
+      lc.debug?.(`no views to update from ${hashes.size} hashes`);
+      update.reader.setDone();
+      return update.reader.done();
+    }
+    lc.info?.(`${numUpdates} view updates for ${hashes.size} hashes`);
+
+    this.#trackRefCount(update.reader, numUpdates); // Reference counting to close the pool.
+    for (const [subscription, queryIDs] of updates) {
+      subscription.push({...update, invalidatedQueries: queryIDs});
+    }
+  }
+
+  /**
+   * Creates a "base" {@link QueryInvalidationUpdate} with a TransactionPool at the current
+   * snapshot of the database, querying invalidated hashes since `fromVersion` if specified.
+   * The update will not contain the `invalidatedQueries` field, as those are Subscription
+   * specific and are left to the caller to supply based on the returned invalidated `hashes`.
+   *
+   * It is the responsibility of the caller to properly clean up the {@link TransactionPool}
+   * `reader` field by calling {@link TransactionPool.setDone setDone()} when it is no longer
+   * needed (e.g. via `#trackRefCount()` and `#decrementRefCount()`).
+   *
+   * @param fromVersion The version after which to query invalidated `hashes`, or unspecified
+   *                    to skip hash querying (e.g. for new CVRs).
+   * @param invalidations Existing invalidation hashes to use if the version of the resulting
+   *                    snapshot is equal to `atVersion`.
+   * @param atVersion The version at which `invalidations` were computed (e.g. from a
+   *                  {@link VersionChange} update). If the TransactionPool snapshot is
+   *                  at this version, the `invalidation` can be used directly instead of
+   *                  querying them from the invalidation index.
+   */
+  async #createBaseUpdate(
+    lc: LogContext,
+    fromVersion: LexiVersion | undefined,
+    invalidations?: Record<string, string>,
+    atVersion?: LexiVersion,
+  ): Promise<{
+    update: Omit<QueryInvalidationUpdate, 'invalidatedQueries'>;
+    hashes: Set<string>;
+  }> {
+    const {init, cleanup} = sharedReadOnlySnapshot();
+    const reader = new TransactionPool(lc, init, cleanup, 1, 5); // TODO: Choose maxWorkers more intelligently / dynamically.
+    reader.run(this.#replica).catch(e => lc.error?.(e));
+
+    const snapshotQuery = await reader.processReadTask(queryStateVersion);
+    const newVersion = snapshotQuery[0].max ?? '00';
+    const update = {newVersion, fromVersion: fromVersion ?? newVersion, reader};
+
+    if (!fromVersion) {
+      // Brand new CVR. Invalidations are irrelevant and need not be looked up.
+      return {update, hashes: new Set()};
+    }
+
+    if (invalidations && atVersion === newVersion) {
+      // Invalidations sent from the Replicator's VersionChange message can be used
+      // directly if `atVersion` matches that of the `reader` snapshot.
+      lc.debug?.(`using hashes from VersionChange`);
+      const hashes = new Set(Object.keys(invalidations));
+      return {update, hashes};
+    }
+
+    lc.debug?.(`looking up hashes at ${newVersion} from ${fromVersion}`);
+    const rows = await reader.processReadTask(
+      tx => tx<{hash: Buffer}[]>`
+        SELECT "hash" FROM _zero."InvalidationIndex" WHERE "stateVersion" > ${fromVersion};
+      `,
+    );
+    const hashes = new Set(rows.map(row => row.hash.toString('hex')));
+    return {update, hashes};
+  }
+
+  #trackRefCount(reader: TransactionPool, subscribers: number) {
+    // TODO: Consider adding timeout logic to handle the hypothetical
+    //       pathological scenario in which a Subscription is orphaned
+    //       and never canceled.
+    this.#readers.set(reader, subscribers);
+  }
+
+  #decrementRefCount(reader: TransactionPool) {
+    const count = this.#readers.get(reader);
+    assert(count && count > 0, `invalid subscriber count ${count}`);
+
+    if (count > 1) {
+      this.#readers.set(reader, count - 1);
+    } else {
+      this.#lc.debug?.('closing TransactionPool');
+      reader.setDone();
+      this.#readers.delete(reader);
+    }
+  }
 }
