@@ -15,6 +15,7 @@ import {
   FullCountOperator,
   FullSumOperator,
 } from './operators/full-agg-operators.js';
+import {LeftJoinOperator} from './operators/left-join-operator.js';
 import {InnerJoinOperator, JoinArgs} from './operators/join-operator.js';
 import {MapOperator} from './operators/map-operator.js';
 import type {Operator} from './operators/operator.js';
@@ -153,6 +154,26 @@ export class DifferenceStream<T extends object> {
     );
   }
 
+  leftJoin<
+    Key extends Primitive,
+    BValue extends object,
+    AAlias extends string | undefined,
+    BAlias extends string | undefined,
+  >(
+    args: Omit<JoinArgs<Key, T, BValue, AAlias, BAlias>, 'a' | 'output'>,
+  ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
+    const stream = new DifferenceStream<
+      JoinResult<T, BValue, AAlias, BAlias>
+    >();
+    return stream.setUpstream(
+      new LeftJoinOperator({
+        ...args,
+        a: this,
+        output: stream,
+      }),
+    );
+  }
+
   join<
     Key extends Primitive,
     BValue extends object,
@@ -166,9 +187,9 @@ export class DifferenceStream<T extends object> {
     >();
     return stream.setUpstream(
       new InnerJoinOperator({
+        ...args,
         a: this,
         output: stream,
-        ...args,
       }),
     );
   }
