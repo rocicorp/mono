@@ -33,6 +33,7 @@ import {
   InvalidationFilters,
   InvalidationProcessor,
 } from './invalidation.js';
+import {queryStateVersion} from './queries.js';
 import type {VersionChange} from './replicator.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
@@ -607,8 +608,7 @@ class TransactionProcessor {
     };
 
     return this.#writer.process(tx => {
-      const prevVersion = tx<{max: LexiVersion | null}[]>`
-      SELECT MAX("stateVersion") FROM _zero."TxLog";`;
+      const prevVersion = queryStateVersion(tx);
       prevVersion
         .then(result => (this.#prevVersion = result[0].max ?? '00'))
         .catch(e => this.fail(e));

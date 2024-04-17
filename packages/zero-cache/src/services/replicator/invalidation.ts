@@ -16,6 +16,7 @@ import {
 import type {LexiVersion} from '../../types/lexi-version.js';
 import type {RowKeyType, RowValue} from '../../types/row-key.js';
 import {rowKeyString} from '../../types/row-key.js';
+import {queryStateVersion} from './queries.js';
 import type {
   RegisterInvalidationFiltersRequest,
   RegisterInvalidationFiltersResponse,
@@ -178,8 +179,7 @@ export class Invalidator {
         }
 
         // Get the current stateVersion.
-        const stateVersion = await tx<{max: LexiVersion | null}[]>`
-        SELECT MAX("stateVersion") FROM _zero."TxLog";`;
+        const stateVersion = await queryStateVersion(tx);
         const fromStateVersion = stateVersion[0].max ?? '00';
 
         const unregistered = specs.filter(row => row.fromStateVersion === null);

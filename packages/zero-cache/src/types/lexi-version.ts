@@ -61,3 +61,11 @@ export function versionFromLexi(lexiVersion: LexiVersion): bigint {
   );
   return parseBigInt(base36Version, 36);
 }
+
+export function max(a: LexiVersion, b: LexiVersion): LexiVersion {
+  return a > b ? a : b;
+}
+
+export function min(a: LexiVersion, b: LexiVersion): LexiVersion {
+  return a < b ? a : b;
+}
