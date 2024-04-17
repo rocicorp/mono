@@ -57,7 +57,7 @@ export class Statement<Return> implements IStatement<Return> {
 
       this.#materialization.pullHistoricalData();
     }
-    return this.#materialization;
+    return this.#materialization as View<Return>;
   }
 
   subscribe(cb: (value: MakeHumanReadable<Return>) => void) {

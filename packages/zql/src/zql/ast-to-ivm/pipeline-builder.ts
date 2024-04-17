@@ -64,15 +64,11 @@ export function applyJoins<T extends Entity, O extends Entity>(
   let ret: DifferenceStream<Entity> =
     stream as unknown as DifferenceStream<Entity>;
   for (const join of joins) {
-    if (join.type !== 'inner') {
-      throw new Error('unimplemented');
-    }
-
     const bPipeline = buildPipeline(sourceStreamProvider, join.other);
 
     const aQualifiedColumn = selectorToQualifiedColumn(join.on[0]);
     const bQualifiedColumn = selectorToQualifiedColumn(join.on[1]);
-    ret = ret.join({
+    const joinArgs = {
       aAs: sourceTableOrAlias,
       getAJoinKey(e: Entity) {
         // TODO: runtime validation?
@@ -87,7 +83,15 @@ export function applyJoins<T extends Entity, O extends Entity>(
         return getValueFromEntity(e, bQualifiedColumn) as Primitive;
       },
       getBPrimaryKey: getId,
-    }) as unknown as DifferenceStream<Entity>;
+    } as const;
+    switch (join.type) {
+      case 'inner':
+        ret = ret.join(joinArgs) as unknown as DifferenceStream<Entity>;
+        break;
+      case 'left':
+        ret = ret.leftJoin(joinArgs) as unknown as DifferenceStream<Entity>;
+        break;
+    }
   }
   return ret as unknown as DifferenceStream<O>;
 }
@@ -392,13 +396,13 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
 
 export function selectorsToQualifiedColumns(
   selectors: string[],
-): [string | undefined, string][] {
+): (readonly [string | undefined, string])[] {
   return selectors.map(selectorToQualifiedColumn);
 }
 
 export function selectorToQualifiedColumn(
   x: string,
-): [string | undefined, string] {
+): readonly [string | undefined, string] {
   if (x.includes('.')) {
     return x.split('.') as [string, string];
   }
@@ -407,7 +411,7 @@ export function selectorToQualifiedColumn(
 
 export function getValueFromEntity(
   entity: Record<string, unknown>,
-  qualifiedColumn: [table: string | undefined, column: string],
+  qualifiedColumn: readonly [table: string | undefined, column: string],
 ) {
   if (isJoinResult(entity) && qualifiedColumn[0] !== undefined) {
     if (qualifiedColumn[1] === '*') {
