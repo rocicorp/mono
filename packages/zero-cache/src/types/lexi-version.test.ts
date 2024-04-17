@@ -1,5 +1,5 @@
 import {expect, test} from '@jest/globals';
-import {versionFromLexi, versionToLexi} from './lexi-version.js';
+import {max, min, versionFromLexi, versionToLexi} from './lexi-version.js';
 
 test('LexiVersion encoding', () => {
   type Case = [number | bigint, string];
@@ -28,9 +28,20 @@ test('LexiVersion sorting', () => {
   // A few explicit tests.
   expect(versionToLexi(35).localeCompare(versionToLexi(36))).toBe(-1);
   expect(versionToLexi(36).localeCompare(versionToLexi(35))).toBe(1);
+  expect(min(versionToLexi(36), versionToLexi(35))).toBe(versionToLexi(35));
+  expect(max(versionToLexi(36), versionToLexi(35))).toBe(versionToLexi(36));
+
   expect(versionToLexi(1000).localeCompare(versionToLexi(9))).toBe(1);
+  expect(min(versionToLexi(1000), versionToLexi(9))).toBe(versionToLexi(9));
+  expect(max(versionToLexi(1000), versionToLexi(9))).toBe(versionToLexi(1000));
+
   expect(versionToLexi(89).localeCompare(versionToLexi(1234))).toBe(-1);
+  expect(min(versionToLexi(89), versionToLexi(1234))).toBe(versionToLexi(89));
+  expect(max(versionToLexi(89), versionToLexi(1234))).toBe(versionToLexi(1234));
+
   expect(versionToLexi(238).localeCompare(versionToLexi(238))).toBe(0);
+  expect(min(versionToLexi(238), versionToLexi(238))).toBe(versionToLexi(238));
+  expect(max(versionToLexi(238), versionToLexi(238))).toBe(versionToLexi(238));
 
   const cmp = (a: number, b: number) =>
     a === b ? 0 : (a - b) / Math.abs(a - b);
@@ -44,6 +55,10 @@ test('LexiVersion sorting', () => {
     const lexiV2 = versionToLexi(v2);
 
     expect(cmp(v1, v2)).toEqual(lexiV1.localeCompare(lexiV2));
+    expect(versionToLexi(Math.min(v1, v2))).toBe(min(lexiV1, lexiV2));
+    expect(versionToLexi(Math.min(v1, v2))).toBe(min(lexiV2, lexiV1));
+    expect(versionToLexi(Math.max(v1, v2))).toBe(max(lexiV1, lexiV2));
+    expect(versionToLexi(Math.max(v1, v2))).toBe(max(lexiV2, lexiV1));
   }
 });
 
