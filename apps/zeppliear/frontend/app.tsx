@@ -59,40 +59,25 @@ const App = ({zero, undoManager}: AppProps) => {
   const [view] = useQueryState('view');
   const [priorityFilter] = useQueryState('priorityFilter');
   const [statusFilter] = useQueryState('statusFilter');
-  console.log('useQueryState', statusFilter, typeof statusFilter);
   const [orderBy] = useQueryState('orderBy');
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
 
   const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
 
-  const allIssueColumns = [
-    'id',
-    'title',
-    'priority',
-    'status',
-    'modified',
-    'created',
-    'creatorID',
-    'kanbanOrder',
-    'description',
-  ] as const;
+  const allIssues = useQuery(issueQuery.select('*'));
 
-  const allIssues = useQuery(issueQuery.select(...allIssueColumns));
-
-  const {q, hasNonViewFilters} = filterQuery(
+  const {filteredQuery, hasNonViewFilters, viewCountQuery} = filterQuery(
     issueQuery,
     view,
     priorityFilter,
     statusFilter,
   );
   const issueOrder = getIssueOrder(view, orderBy);
-  const filteredQuery = orderQuery(q, issueOrder);
+  const filteredAndOrderedQuery = orderQuery(filteredQuery, issueOrder);
   const deps = [view, priorityFilter, statusFilter, issueOrder] as const;
-  const filteredIssues = useQuery(filteredQuery, deps);
-
-  const viewIssueCount =
-    useQuery(filteredQuery.select(agg.count()), deps)[0]?.count ?? 0;
+  const filteredIssues = useQuery(filteredAndOrderedQuery, deps);
+  const viewIssueCount = useQuery(viewCountQuery, deps)[0]?.count ?? 0;
 
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {
@@ -301,7 +286,6 @@ function filterQuery(
   priorityFilter: string | null,
   statusFilter: string | null,
 ) {
-  console.log(view, priorityFilter, statusFilter);
   let viewStatuses: Set<Status> | undefined;
   switch (view?.toLowerCase()) {
     case 'active':
@@ -346,14 +330,20 @@ function filterQuery(
     }
   }
 
+  const viewStatusesQuery = viewStatuses
+    ? q.where('status', 'IN', [...viewStatuses])
+    : q;
+  const viewCountQuery = viewStatusesQuery.select(agg.count());
+
   if (issuesStatuses) {
-    // Consider allowing Set<T>for IN
+    // Consider allowing Iterable<T> for IN
     q = q.where('status', 'IN', [...issuesStatuses]);
   }
   if (issuesPriorities) {
     q = q.where('priority', 'IN', [...issuesPriorities]);
   }
-  return {q, hasNonViewFilters};
+
+  return {filteredQuery: q, hasNonViewFilters, viewCountQuery};
 }
 
 function orderQuery(issueQuery: EntityQuery<{issue: Issue}, []>, order: Order) {
@@ -362,7 +352,6 @@ function orderQuery(issueQuery: EntityQuery<{issue: Issue}, []>, order: Order) {
       return issueQuery.desc('created');
     case Order.Modified:
       return issueQuery.desc('modified');
-    // TODO(arv): Change Status and Priority to numeric enums
     case Order.Status:
       return issueQuery.desc('status', 'modified');
     case Order.Priority:

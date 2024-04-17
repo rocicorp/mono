@@ -1,3 +1,4 @@
+import {compareUTF8} from 'compare-utf8';
 import type {ExperimentalNoIndexDiff} from 'replicache';
 import {assert} from 'shared/src//asserts.js';
 import type {Entity} from '../../entity.js';
@@ -7,7 +8,6 @@ import type {MutableSetSource} from '../ivm/source/set-source.js';
 import type {Source} from '../ivm/source/source.js';
 import {mapIter} from '../util/iterables.js';
 import type {Context} from './context.js';
-import {compareUTF8} from 'compare-utf8';
 
 export function makeReplicacheContext(rep: ReplicacheLike): Context {
   const materialite = new Materialite();
@@ -92,6 +92,12 @@ class ReplicacheSource {
     this.#materialite.tx(() => {
       for (const diff of changes) {
         if (diff.op === 'del' || diff.op === 'change') {
+          // TODO(arv): This doesn't work as expected. We sometimes evict values
+          // from LazyStore so the value is not going to be the same. If we
+          // really need to do it this way the only way to do this would be to
+          // use the JSON string as a key. But since the storage is KV store we
+          // can do better. The #canonicalSource should not be a "Set" but a
+          // "Map".
           const old = this.#canonicalSource.get(diff.oldValue as Entity);
           assert(old, 'oldValue not found in canonical source');
           this.#canonicalSource.delete(old);

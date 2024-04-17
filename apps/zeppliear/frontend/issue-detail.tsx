@@ -90,22 +90,9 @@ export default function IssueDetail({
   const commentQuery = getQuery<{comment: Comment}>(zero, COMMENT_ENTITY_NAME);
 
   const issue =
-    useQuery(
-      issueQuery
-        .select(
-          'id',
-          'title',
-          'priority',
-          'status',
-          'modified',
-          'created',
-          'creatorID',
-          'kanbanOrder',
-          'description',
-        )
-        .where('id', '=', detailIssueID ?? ''),
-      [detailIssueID],
-    )[0] ?? null;
+    useQuery(issueQuery.select('*').where('id', '=', detailIssueID ?? ''), [
+      detailIssueID,
+    ])[0] ?? null;
 
   const comments = useQuery(
     commentQuery
