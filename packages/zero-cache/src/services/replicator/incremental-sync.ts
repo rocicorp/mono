@@ -33,6 +33,7 @@ import {
   InvalidationFilters,
   InvalidationProcessor,
 } from './invalidation.js';
+import {queryStateVersion} from './queries.js';
 import type {VersionChange} from './replicator.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
@@ -157,7 +158,7 @@ export class IncrementalSyncer {
     this.#invalidationFilters = invalidationFilters;
   }
 
-  async start(lc: LogContext) {
+  async run(lc: LogContext) {
     assert(!this.#started, `IncrementalSyncer has already been started`);
     this.#started = true;
 
@@ -182,13 +183,10 @@ export class IncrementalSyncer {
         (v: VersionChange) => this.#eventEmitter.emit('version', v),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
-      this.#service.on(
-        'data',
-        async (lsn: string, message: Pgoutput.Message) => {
-          this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
-          await processor.processMessage(lc, lsn, message);
-        },
-      );
+      this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
+        this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
+        processor.processMessage(lc, lsn, message);
+      });
 
       try {
         // TODO: Start from the last acknowledged LSN.
@@ -610,8 +608,7 @@ class TransactionProcessor {
     };
 
     return this.#writer.process(tx => {
-      const prevVersion = tx<{max: LexiVersion | null}[]>`
-      SELECT MAX("stateVersion") FROM _zero."TxLog";`;
+      const prevVersion = queryStateVersion(tx);
       prevVersion
         .then(result => (this.#prevVersion = result[0].max ?? '00'))
         .catch(e => this.fail(e));

@@ -1289,7 +1289,7 @@ describe('replicator/incremental-sync', () => {
         await invalidator.registerInvalidationFilters(lc, {specs});
       }
 
-      const syncing = syncer.start(lc);
+      const syncing = syncer.run(lc);
       const incrementalVersionSubscription = syncer.versionChanges();
       const coalescedVersionSubscription = syncer.versionChanges();
 
