@@ -17,7 +17,6 @@ import {
   IssueUpdate,
   Priority,
   Status,
-  allIssueColumns,
 } from './issue';
 import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
@@ -91,12 +90,9 @@ export default function IssueDetail({
   const commentQuery = getQuery<{comment: Comment}>(zero, COMMENT_ENTITY_NAME);
 
   const issue =
-    useQuery(
-      issueQuery
-        .select(...allIssueColumns)
-        .where('id', '=', detailIssueID ?? ''),
-      [detailIssueID],
-    )[0] ?? null;
+    useQuery(issueQuery.select('*').where('id', '=', detailIssueID ?? ''), [
+      detailIssueID,
+    ])[0] ?? null;
 
   const comments = useQuery(
     commentQuery

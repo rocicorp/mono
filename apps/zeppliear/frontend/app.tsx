@@ -16,7 +16,6 @@ import {
   Order,
   Priority,
   Status,
-  allIssueColumns,
   orderEnumSchema,
   priorityEnumSchema,
   statusStringSchema,
@@ -66,7 +65,7 @@ const App = ({zero, undoManager}: AppProps) => {
 
   const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
 
-  const allIssues = useQuery(issueQuery.select(...allIssueColumns));
+  const allIssues = useQuery(issueQuery.select('*'));
 
   const {filteredQuery, hasNonViewFilters, viewCountQuery} = filterQuery(
     issueQuery,

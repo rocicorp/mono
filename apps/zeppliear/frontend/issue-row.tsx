@@ -1,6 +1,6 @@
 import React from 'react';
-import type {Issue, Priority, Status} from './issue';
 import {formatDate} from '../util/date';
+import type {Issue, Priority, Status} from './issue';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
 
@@ -38,7 +38,7 @@ function IssueRow({
         <StatusMenu onSelect={handleChangeStatus} status={issue.status} />
       </div>
       <div className="flex-wrap flex-shrink-1 flex-grow ml-2 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
-        {issue.title.substr(0, 3000) || ''}
+        {issue.title.slice(0, 3000) || ''}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
         {formatDate(new Date(issue.modified))}

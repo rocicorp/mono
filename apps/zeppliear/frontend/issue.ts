@@ -165,18 +165,6 @@ export const issueSchema = z.object({
   description: z.string(),
 });
 
-export const allIssueColumns = [
-  'id',
-  'title',
-  'priority',
-  'status',
-  'modified',
-  'created',
-  'creatorID',
-  'kanbanOrder',
-  'description',
-] as const;
-
 export type Issue = Immutable<z.TypeOf<typeof issueSchema>>;
 export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
 
