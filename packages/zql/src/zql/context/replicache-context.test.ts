@@ -1,8 +1,8 @@
+import {generate} from '@rocicorp/rails';
 import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
-import {generate} from '@rocicorp/rails';
 import type {SetSource} from '../ivm/source/set-source.js';
 import {makeReplicacheContext} from './replicache-context.js';
 
@@ -37,7 +37,10 @@ const newRep = () =>
 
 test('getSource - no ordering', async () => {
   const r = newRep();
-  const context = makeReplicacheContext(r);
+  const context = makeReplicacheContext(r, {
+    subscriptionAdded() {},
+    subscriptionRemoved() {},
+  });
   const source = context.getSource('e1');
   expect(source).toBeDefined();
 

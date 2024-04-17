@@ -1,5 +1,4 @@
 import type {UndoManager} from '@rocicorp/undo';
-import type {EntityQuery} from '@rocicorp/zql/src';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {generateKeyBetween} from 'fractional-indexing';
@@ -7,7 +6,7 @@ import {minBy, pickBy} from 'lodash';
 import {useQueryState} from 'next-usequerystate';
 import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
-import type {Zero} from 'zero-client';
+import type {EntityQuery, Zero} from 'zero-client';
 import {
   Comment,
   ISSUE_ENTITY_NAME,
@@ -26,7 +25,7 @@ import IssueList from './issue-list';
 import LeftMenu from './left-menu';
 import type {M} from './mutators';
 import TopFilter from './top-filter';
-import {getQuery, useQuery} from './zql.jsx';
+import {useQuery} from './zql.jsx';
 
 function getIssueOrder(view: string | null, orderBy: string | null): Order {
   if (view === 'board') {
@@ -63,7 +62,7 @@ const App = ({zero, undoManager}: AppProps) => {
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
+  const issueQuery = zero.getQuery<{issue: Issue}>(ISSUE_ENTITY_NAME);
 
   const allIssues = useQuery(issueQuery.select('*'));
 

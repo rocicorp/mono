@@ -21,7 +21,7 @@ import {
 import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
-import {getQuery, useQuery} from './zql';
+import {useQuery} from './zql';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
@@ -86,8 +86,8 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
-  const issueQuery = getQuery<{issue: Issue}>(zero, ISSUE_ENTITY_NAME);
-  const commentQuery = getQuery<{comment: Comment}>(zero, COMMENT_ENTITY_NAME);
+  const issueQuery = zero.getQuery<{issue: Issue}>(ISSUE_ENTITY_NAME);
+  const commentQuery = zero.getQuery<{comment: Comment}>(COMMENT_ENTITY_NAME);
 
   const issue =
     useQuery(issueQuery.select('*').where('id', '=', detailIssueID ?? ''), [

@@ -177,7 +177,10 @@ function newRep() {
 
 export function setup() {
   const r = newRep();
-  const c = makeReplicacheContext(r);
+  const c = makeReplicacheContext(r, {
+    subscriptionAdded(_ast) {},
+    subscriptionRemoved(_ast) {},
+  });
   const trackQuery = new EntityQuery<{track: Track}>(c, 'track');
   const albumQuery = new EntityQuery<{album: Album}>(c, 'album');
   const artistQuery = new EntityQuery<{artist: Artist}>(c, 'artist');

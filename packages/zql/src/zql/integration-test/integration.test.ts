@@ -150,7 +150,10 @@ function sampleTenUniqueIssues() {
 
 function setup() {
   const r = newRep();
-  const c = makeReplicacheContext(r);
+  const c = makeReplicacheContext(r, {
+    subscriptionAdded() {},
+    subscriptionRemoved() {},
+  });
   const issueQuery = new EntityQuery<{issue: Issue}>(c, 'issue');
   const labelQuery = new EntityQuery<{label: Label}>(c, 'label');
   const issueLabelQuery = new EntityQuery<{issueLabel: IssueLabel}>(

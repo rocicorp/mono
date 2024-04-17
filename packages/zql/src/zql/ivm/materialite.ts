@@ -45,7 +45,7 @@ export class Materialite {
   }
 
   /**
-   * Run the provided lambda in a transaciton.
+   * Run the provided lambda in a transaction.
    * Will be committed when the lambda exits
    * and all incremental computations that depend on modified inputs
    * will be run.
