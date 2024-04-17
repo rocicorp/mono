@@ -1290,8 +1290,8 @@ describe('replicator/incremental-sync', () => {
       }
 
       const syncing = syncer.run(lc);
-      const incrementalVersionSubscription = syncer.versionChanges();
-      const coalescedVersionSubscription = syncer.versionChanges();
+      const incrementalVersionSubscription = await syncer.versionChanges();
+      const coalescedVersionSubscription = await syncer.versionChanges();
 
       // Listen concurrently to capture incremental version changes.
       const incrementalVersions = (async () => {

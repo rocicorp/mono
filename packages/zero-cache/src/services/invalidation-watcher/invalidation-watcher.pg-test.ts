@@ -384,7 +384,7 @@ describe('invalidation-watcher', () => {
       const versionChanges = new Subscription<VersionChange>();
       const registerFilterResponses = c.registerFilterResponses ?? [];
       const replicator: Replicator = {
-        versionChanges: () => versionChanges,
+        versionChanges: () => Promise.resolve(versionChanges),
         registerInvalidationFilters: () =>
           Promise.resolve(registerFilterResponses.shift() ?? {specs: []}),
       };
@@ -454,9 +454,11 @@ describe('invalidation-watcher', () => {
     const replicator: Replicator = {
       versionChanges: () => {
         void subscriptionOpened.enqueue(true);
-        return new Subscription<VersionChange>({
-          cleanup: () => void subscriptionClosed.enqueue(true),
-        });
+        return Promise.resolve(
+          new Subscription<VersionChange>({
+            cleanup: () => void subscriptionClosed.enqueue(true),
+          }),
+        );
       },
       registerInvalidationFilters: () => Promise.resolve({specs: []}),
     };

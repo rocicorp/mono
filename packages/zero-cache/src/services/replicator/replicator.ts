@@ -94,7 +94,7 @@ export interface Replicator {
    * Creates a cancelable subscription to {@link VersionChange} messages for the
    * stream of replicated transactions.
    */
-  versionChanges(): CancelableAsyncIterable<VersionChange>;
+  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>>;
 }
 
 export class ReplicatorService implements Replicator, Service {
@@ -155,7 +155,7 @@ export class ReplicatorService implements Replicator, Service {
     return this.#invalidator.registerInvalidationFilters(this.#lc, req);
   }
 
-  versionChanges(): CancelableAsyncIterable<VersionChange> {
+  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
     return this.#incrementalSyncer.versionChanges();
   }
 

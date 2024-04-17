@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as v from 'shared/src/valita.js';
-import type {InvalidationWatcher} from '../invalidation-watcher/invalidation-watcher.js';
+import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
 import type {Service} from '../service.js';
 import type {Storage} from './storage/storage.js';
 
@@ -26,27 +26,27 @@ export class ViewSyncerService implements ViewSyncer, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #storage: Storage;
-  readonly #watcher: InvalidationWatcher;
+  readonly #registry: InvalidationWatcherRegistry;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
     storage: Storage,
-    watcher: InvalidationWatcher,
+    registry: InvalidationWatcherRegistry,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
     this.#storage = storage;
-    this.#watcher = watcher;
+    this.#registry = registry;
   }
 
   run(): Promise<void> {
     // TODO: Implement
     this.#lc;
     this.#storage;
-    this.#watcher;
+    this.#registry;
 
     throw new Error('todo');
   }
