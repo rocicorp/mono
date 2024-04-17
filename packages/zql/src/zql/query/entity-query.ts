@@ -56,14 +56,14 @@ type ObjectHasSingleProperty<T> = {
 
 type SimpleSelector<F extends FromSet> =
   | {
-      [K in keyof F]: `${string & K}.${string & keyof F[K]}`;
+      [K in keyof F]: `${string & K}.${string & keyof NotUndefined<F[K]>}`;
     }[keyof F]
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
 type Selector<F extends FromSet> =
   | {
       [K in keyof F]:
-        | `${string & K}.${string & keyof F[K]}`
+        | `${string & K}.${string & keyof NotUndefined<F[K]>}`
         | `${string & K}.*`;
     }[keyof F]
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never)
@@ -136,9 +136,15 @@ type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
           [K in Column]: ExtractFieldValue<From, Selection>;
         }
       : {
-          [K in Table]: {
-            [K in Column]: ExtractFieldValue<From, Selection>;
-          };
+          [K in Table]: undefined extends From[Table]
+            ?
+                | {
+                    [K in Column]: ExtractFieldValue<From, Selection>;
+                  }
+                | undefined
+            : {
+                [K in Column]: ExtractFieldValue<From, Selection>;
+              };
         }
     : // '*'
     Selection extends '*'
@@ -160,7 +166,9 @@ type ExtractNestedTypeByName<T, S extends string> = {
 type ExtractFieldValue<
   F extends FromSet,
   S extends SimpleSelector<F>,
-> = S extends `${infer T}.${infer K}` ? F[T][K] : ExtractNestedTypeByName<F, S>;
+> = S extends `${infer T}.${infer K}`
+  ? NotUndefined<F[T]>[K]
+  : ExtractNestedTypeByName<F, S>;
 
 type CombineSelections<
   From extends FromSet,
@@ -283,6 +291,31 @@ export class EntityQuery<From extends FromSet, Return = []> {
         ...(this.#ast.joins ?? []),
         {
           type: 'inner',
+          other: other.#ast,
+          as: alias,
+          on: [thisField, otherField],
+        },
+      ],
+    });
+  }
+
+  leftJoin<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): EntityQuery<
+    From & {
+      [K in Alias]?: OtherFromSet[keyof OtherFromSet] | undefined;
+    },
+    Return
+  > {
+    return new EntityQuery(this.#context, this.#name, {
+      ...this.#ast,
+      joins: [
+        ...(this.#ast.joins ?? []),
+        {
+          type: 'left',
           other: other.#ast,
           as: alias,
           on: [thisField, otherField],
