@@ -1,7 +1,11 @@
 import {describe, expect, test} from '@jest/globals';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {JSONValue} from 'postgres';
-import {getNormalized} from './normalize.js';
+import {
+  ASTWithPrimaryKeys,
+  getNormalized,
+  selectPrimaryKeysForExplosion,
+} from './normalize.js';
 
 describe('zql/normalize-query-hash', () => {
   type Case = {
@@ -1052,5 +1056,303 @@ describe('zql/normalize-query-hash', () => {
   }
   test('unique hashes', () => {
     expect(allHashes.size).toBe(cases.length);
+  });
+});
+
+describe('zql/selectPrimaryKeysForExplosion', () => {
+  test.each([
+    {
+      name: 'simple select',
+      ast: {
+        table: 'issue',
+        select: [
+          ['id', 'i'],
+          ['a', 'a'],
+        ],
+      },
+      expected: {
+        table: 'issue',
+        select: [
+          ['id', 'i'],
+          ['a', 'a'],
+        ],
+        joins: [],
+        primaryKeys: [
+          {
+            from: 'issue',
+            column: 'id',
+            as: {
+              sourceTable: 'issue',
+              reAlias: 1,
+              column: 'id',
+            },
+          },
+        ],
+      },
+    },
+    {
+      name: 'simple select with foreign key join',
+      ast: {
+        table: 'issue',
+        select: [
+          ['issue.title', 'title'],
+          ['owner.name', 'name'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'user',
+            },
+            as: 'owner',
+            on: ['issue.user_id', 'user.id'],
+          },
+        ],
+      },
+      expected: {
+        table: 'issue',
+        select: [
+          ['issue.title', 'title'],
+          ['owner.name', 'name'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'user',
+            },
+            as: 'owner',
+            on: ['issue.user_id', 'user.id'],
+          },
+        ],
+        primaryKeys: [
+          {
+            from: 'issue',
+            column: 'id',
+            as: {
+              sourceTable: 'issue',
+              reAlias: 1,
+              column: 'id',
+            },
+          },
+          {
+            from: 'owner',
+            column: 'id',
+            as: {
+              sourceTable: 'user',
+              reAlias: 2,
+              column: 'id',
+            },
+          },
+        ],
+      },
+    },
+    {
+      name: 'self join',
+      ast: {
+        table: 'issue',
+        select: [
+          ['issue.title', 'title'],
+          ['parent.title', 'parent_title'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'issue',
+            },
+            as: 'parent',
+            on: ['issue.parent_id', 'parent.id'],
+          },
+        ],
+      },
+      expected: {
+        table: 'issue',
+        select: [
+          ['issue.title', 'title'],
+          ['parent.title', 'parent_title'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'issue',
+            },
+            as: 'parent',
+            on: ['issue.parent_id', 'parent.id'],
+          },
+        ],
+        primaryKeys: [
+          {
+            from: 'issue',
+            column: 'id',
+            as: {
+              sourceTable: 'issue',
+              reAlias: 1,
+              column: 'id',
+            },
+          },
+          {
+            from: 'parent',
+            column: 'id',
+            as: {
+              sourceTable: 'issue',
+              reAlias: 2,
+              column: 'id',
+            },
+          },
+        ],
+      },
+    },
+    {
+      // SELECT issue.title, owner.name FROM issue
+      //  JOIN user AS owner ON owner.id = issue.user_id
+      //  JOIN (SELECT * FROM issue JOIN user AS owner ON owner.id = issue.user_id) AS parent
+      //  ON parent.id = issue.parent_id
+      // ->
+      // SELECT issue.id as issue_1_id,
+      //        owner.id as user_2_id,
+      //        parent.issue_3_id as issue_3_id,
+      //        parent.user_4_id as user_4_id,
+      //  JOIN user AS owner ON owner.id = issue.user_id
+      //  JOIN (SELECT issue.id as issue_3_id, owner.id as user_4_id FROM issue JOIN user AS owner ON owner.id = issue.user_id)
+      //    AS parent
+      name: 'join on a query rather than table',
+      ast: {
+        table: 'issue',
+        select: [
+          ['issue.title', 'title'],
+          ['owner.name', 'name'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'user',
+            },
+            as: 'owner',
+            on: ['issue.user_id', 'user.id'],
+          },
+          {
+            type: 'inner',
+            other: {
+              table: 'issue',
+              joins: [
+                {
+                  type: 'inner',
+                  other: {
+                    table: 'user',
+                  },
+                  as: 'owner',
+                  on: ['issue.user_id', 'user.id'],
+                },
+              ],
+            },
+            as: 'parent',
+            on: ['issue.parent_id', 'parent.id'],
+          },
+        ],
+      },
+      expected: {
+        table: 'issue',
+        select: [
+          ['issue.title', 'title'],
+          ['owner.name', 'name'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'user',
+            },
+            as: 'owner',
+            on: ['issue.user_id', 'user.id'],
+          },
+          {
+            type: 'inner',
+            other: {
+              table: 'issue',
+              joins: [
+                {
+                  type: 'inner',
+                  other: {
+                    table: 'user',
+                  },
+                  as: 'owner',
+                  on: ['issue.user_id', 'user.id'],
+                },
+              ],
+              primaryKeys: [
+                {
+                  from: 'issue',
+                  column: 'id',
+                  as: {
+                    sourceTable: 'issue',
+                    reAlias: 3,
+                    column: 'id',
+                  },
+                },
+                {
+                  from: 'owner',
+                  column: 'id',
+                  as: {
+                    sourceTable: 'user',
+                    reAlias: 4,
+                    column: 'id',
+                  },
+                },
+              ],
+            },
+            as: 'parent',
+            on: ['issue.parent_id', 'parent.id'],
+          },
+        ],
+        primaryKeys: [
+          {
+            from: 'issue',
+            column: 'id',
+            as: {
+              sourceTable: 'issue',
+              reAlias: 1,
+              column: 'id',
+            },
+          },
+          {
+            from: 'owner',
+            column: 'id',
+            as: {
+              sourceTable: 'user',
+              reAlias: 2,
+              column: 'id',
+            },
+          },
+          {
+            from: 'parent',
+            column: 'issue_3_id',
+            as: {
+              sourceTable: 'issue',
+              reAlias: 3,
+              column: 'id',
+            },
+          },
+          {
+            from: 'parent',
+            column: 'user_4_id',
+            as: {
+              sourceTable: 'user',
+              reAlias: 4,
+              column: 'id',
+            },
+          },
+        ],
+      },
+    },
+  ] satisfies {
+    name: string;
+    ast: AST;
+    expected: ASTWithPrimaryKeys;
+  }[])('$name', ({ast, expected}) => {
+    const result = selectPrimaryKeysForExplosion(ast, 1);
+    expect(result).toEqual(expected);
   });
 });
