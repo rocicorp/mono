@@ -16,7 +16,6 @@ import type {MakeHumanReadable} from './entity-query.js';
 export interface IStatement<TReturn> {
   subscribe(cb: (value: MakeHumanReadable<TReturn>) => void): () => void;
   exec(): Promise<MakeHumanReadable<TReturn>>;
-  view(): View<TReturn>;
   destroy(): void;
 }
 
@@ -37,7 +36,7 @@ export class Statement<Return> implements IStatement<Return> {
     this.#context = context;
   }
 
-  view(): View<Return> {
+  #getMaterialization(): View<Return> {
     // TODO: invariants to throw if the statement is not completely bound before materialization.
     if (this.#materialization === null) {
       this.#materialization = new MutableTreeView<
@@ -54,37 +53,31 @@ export class Statement<Return> implements IStatement<Return> {
         this.#ast.orderBy,
         this.#ast.limit,
       ) as unknown as View<Return extends [] ? Return[number] : Return>;
+
+      this.#materialization.pullHistoricalData();
     }
-
-    this.#materialization.pullHistoricalData();
-
-    return this.#materialization as View<Return>;
+    return this.#materialization;
   }
 
   subscribe(cb: (value: MakeHumanReadable<Return>) => void) {
-    if (this.#materialization === null) {
-      this.view();
-    }
-
-    return must(this.#materialization).on(cb);
+    const materialization = this.#getMaterialization();
+    return materialization.on(cb);
   }
 
   // Note: should we provide a version that takes a callback?
   // So it can resolve in the same micro task?
   // since, in the common case, the data will always be available.
   exec() {
-    if (this.#materialization === null) {
-      this.view();
-    }
+    const materialization = this.#getMaterialization();
 
-    if (this.#materialization?.hydrated) {
-      return Promise.resolve(this.#materialization.value) as Promise<
+    if (materialization.hydrated) {
+      return Promise.resolve(materialization.value) as Promise<
         MakeHumanReadable<Return>
       >;
     }
 
     return new Promise<MakeHumanReadable<Return>>(resolve => {
-      const cleanup = must(this.#materialization).on(value => {
+      const cleanup = materialization.on(value => {
         resolve(value as MakeHumanReadable<Return>);
         cleanup();
       });

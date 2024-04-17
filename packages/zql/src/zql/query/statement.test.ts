@@ -44,8 +44,8 @@ test('sorted materialization', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
-  const ascView = q.select('id').asc('n').prepare().view();
-  const descView = q.select('id').desc('n').prepare().view();
+  const ascStatement = q.select('id').asc('n').prepare();
+  const descStatement = q.select('id').desc('n').prepare();
 
   context.getSource<E1>('e1').add({
     id: 'a',
@@ -61,12 +61,12 @@ test('sorted materialization', async () => {
   });
   await Promise.resolve();
 
-  expect(ascView.value).toEqual([
+  expect(await ascStatement.exec()).toEqual([
     {id: 'c', n: 1},
     {id: 'b', n: 2},
     {id: 'a', n: 3},
   ]);
-  expect(descView.value).toEqual([
+  expect(await descStatement.exec()).toEqual([
     {id: 'a', n: 3},
     {id: 'b', n: 2},
     {id: 'c', n: 1},
@@ -78,8 +78,8 @@ test('sorting is stable via suffixing the primary key to the order', async () =>
   type E1 = z.infer<typeof e1>;
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
-  const ascView = q.select('id').asc('n').prepare().view();
-  const descView = q.select('id').desc('n').prepare().view();
+  const ascStatement = q.select('id').asc('n').prepare();
+  const descStatement = q.select('id').desc('n').prepare();
 
   context.getSource<E1>('e1').add({
     id: 'a',
@@ -94,12 +94,12 @@ test('sorting is stable via suffixing the primary key to the order', async () =>
     n: 1,
   });
   await Promise.resolve();
-  expect(ascView.value).toEqual([
+  expect(await ascStatement.exec()).toEqual([
     {id: 'a', n: 1},
     {id: 'b', n: 1},
     {id: 'c', n: 1},
   ]);
-  expect(descView.value).toEqual([
+  expect(await descStatement.exec()).toEqual([
     {id: 'c', n: 1},
     {id: 'b', n: 1},
     {id: 'a', n: 1},
