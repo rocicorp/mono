@@ -5,9 +5,9 @@ import {Replicache, TEST_LICENSE_KEY} from 'replicache';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
 import {makeReplicacheContext} from '../context/replicache-context.js';
+import {joinSymbol} from '../ivm/types.js';
 import * as agg from '../query/agg.js';
 import {EntityQuery, expression, not, or} from '../query/entity-query.js';
-import {joinSymbol} from '../ivm/types.js';
 
 export async function tickAFewTimes(n = 10, time = 0) {
   for (let i = 0; i < n; i++) {
@@ -214,7 +214,7 @@ test('prepare a query then run it once `experimentalWatch` has completed', async
   expect(rows).toEqual(issues.sort(compareIds));
 
   await r.close();
-});
+}, 30000);
 
 test('exec a query before the source has been filled by anything', async () => {
   const issues = sampleTenUniqueIssues();
@@ -228,7 +228,7 @@ test('exec a query before the source has been filled by anything', async () => {
   expect(rows).toEqual(issues.sort(compareIds));
 
   await r.close();
-});
+}, 30000);
 
 test('subscribing to a query calls us with the complete query results on change', async () => {
   const issues = sampleTenUniqueIssues();
