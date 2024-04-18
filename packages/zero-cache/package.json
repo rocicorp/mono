@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "rm -rf out && node build.js",
-    "test": "npm run build && node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "pg-tests": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --config=jest-pg.config.js",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
+    "test": "npm run build && vitest run",
+    "pg-test": "vitest run -c vitest-pg.config.ts",
+    "all-test": "npm run build && vitest run -c vitest-all.config.ts",
+    "test:watch": "npm run build && vitest watch",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
@@ -33,6 +34,7 @@
     "xxhashjs": "^0.2.2"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.2.0",
     "@cloudflare/workers-types": "^4.20231010.0",
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
@@ -41,8 +43,8 @@
     "@types/pg-format": "^1.0.5",
     "@types/xxhashjs": "^0.2.4",
     "rollup-plugin-dts": "^5.3.0",
-    "ts-jest": "^29.1.0",
-    "typescript": "^5.4.2"
+    "typescript": "^5.4.2",
+    "vitest": "1.3.0"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

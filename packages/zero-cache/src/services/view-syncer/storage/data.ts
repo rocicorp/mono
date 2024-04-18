@@ -4,7 +4,6 @@ import type {
   DurableObjectPutOptions,
   DurableObjectStorage,
 } from '@cloudflare/workers-types';
-import {compareUTF8} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
@@ -44,16 +43,7 @@ export async function listEntries<T extends ReadonlyJSONValue>(
   schema: valita.Type<T>,
   options: DurableObjectListOptions,
 ): Promise<Map<string, T>> {
-  let result = await durable.list(options);
-
-  // `durable.list()` on CF prod returns keys UTF-8 sorted.
-  // When running in miniflare, this is JS/UTF-16 collation.
-  if (typeof MINIFLARE !== 'undefined') {
-    const entries = Array.from(result);
-    entries.sort((a, b) => compareUTF8(a[0], b[0]));
-    result = new Map(entries);
-  }
-
+  const result = await durable.list(options);
   return validateOrNormalize(result, schema);
 }
 
