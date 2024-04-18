@@ -1,6 +1,6 @@
 import * as valita from 'shared/src/valita.js';
 import {expect, test} from 'vitest';
-import {runWithDurableObjectStorage} from '../../../test/do.js';
+import {runWithDurableObjectStorage} from '../test/do.js';
 import {delEntry, getEntries, getEntry, listEntries, putEntry} from './data.js';
 
 // Schema that sometimes produces a normalized value.

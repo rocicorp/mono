@@ -1,7 +1,7 @@
 import {randInt} from 'shared/src/rand.js';
 import * as valita from 'shared/src/valita.js';
 import {describe, expect, test} from 'vitest';
-import {runWithDurableObjectStorage} from '../../../test/do.js';
+import {runWithDurableObjectStorage} from '../test/do.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 

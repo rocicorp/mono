@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as v from 'shared/src/valita.js';
 import {describe, expect, test} from 'vitest';
-import {runWithDurableObjectStorage} from '../../../test/do.js';
-import {createSilentLogContext} from '../../../test/logger.js';
+import {runWithDurableObjectStorage} from '../test/do.js';
+import {createSilentLogContext} from '../test/logger.js';
 import {DurableStorage} from './durable-storage.js';
 import {
   StorageSchemaMeta,
