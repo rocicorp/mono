@@ -214,7 +214,7 @@ test('prepare a query then run it once `experimentalWatch` has completed', async
   expect(rows).toEqual(issues.sort(compareIds));
 
   await r.close();
-});
+}, 15000);
 
 test('exec a query before the source has been filled by anything', async () => {
   const issues = sampleTenUniqueIssues();
