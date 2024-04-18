@@ -31,15 +31,13 @@
     "versionGroups": [
       {
         "dependencies": [
-          "@cloudflare/workers-types",
-          "vitest"
+          "@cloudflare/workers-types"
         ],
         "packages": [
           "mirror-cli",
           "mirror-workers",
           "zero-cache"
-        ],
-        "label": "@cloudflare/vitest-pool-workers only works with Vitest 1.3.0: https://developers.cloudflare.com/workers/testing/vitest-integration/get-started/write-your-first-test/#install-vitest-and-cloudflarevitest-pool-workers"
+        ]
       }
     ]
   }
