@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as v from 'shared/src/valita.js';
+import type {Storage} from '../../storage/storage.js';
 import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
 import type {Service} from '../service.js';
-import type {Storage} from './storage/storage.js';
 
 export const viewShapeUpdateSchema = v.object({
   // TODO: Define
