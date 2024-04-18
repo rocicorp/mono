@@ -190,7 +190,7 @@ export class InvalidationWatcherService
       this.#lc.info?.('subscribing to VersionChanges');
 
       // The Subscription is canceled when there are no longer any watchers.
-      this.#versionChangeSubscription = replicator.versionChanges();
+      this.#versionChangeSubscription = await replicator.versionChanges();
       for await (const versionChange of this.#versionChangeSubscription) {
         await this.#processVersionChange(versionChange);
       }

@@ -1,7 +1,7 @@
-import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type postgres from 'postgres';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {initDB, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {normalizeFilterSpec} from '../../types/invalidation.js';
@@ -384,7 +384,7 @@ describe('invalidation-watcher', () => {
       const versionChanges = new Subscription<VersionChange>();
       const registerFilterResponses = c.registerFilterResponses ?? [];
       const replicator: Replicator = {
-        versionChanges: () => versionChanges,
+        versionChanges: () => Promise.resolve(versionChanges),
         registerInvalidationFilters: () =>
           Promise.resolve(registerFilterResponses.shift() ?? {specs: []}),
       };
@@ -454,9 +454,11 @@ describe('invalidation-watcher', () => {
     const replicator: Replicator = {
       versionChanges: () => {
         void subscriptionOpened.enqueue(true);
-        return new Subscription<VersionChange>({
-          cleanup: () => void subscriptionClosed.enqueue(true),
-        });
+        return Promise.resolve(
+          new Subscription<VersionChange>({
+            cleanup: () => void subscriptionClosed.enqueue(true),
+          }),
+        );
       },
       registerInvalidationFilters: () => Promise.resolve({specs: []}),
     };

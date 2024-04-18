@@ -1,7 +1,7 @@
-import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {Lock} from '@rocicorp/lock';
 import type postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
   expectTables,
@@ -1290,8 +1290,8 @@ describe('replicator/incremental-sync', () => {
       }
 
       const syncing = syncer.run(lc);
-      const incrementalVersionSubscription = syncer.versionChanges();
-      const coalescedVersionSubscription = syncer.versionChanges();
+      const incrementalVersionSubscription = await syncer.versionChanges();
+      const coalescedVersionSubscription = await syncer.versionChanges();
 
       // Listen concurrently to capture incremental version changes.
       const incrementalVersions = (async () => {

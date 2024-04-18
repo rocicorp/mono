@@ -1,6 +1,6 @@
-import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../../test/db.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {

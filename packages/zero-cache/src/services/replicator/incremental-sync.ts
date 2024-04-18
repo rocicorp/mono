@@ -206,7 +206,7 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  versionChanges(): CancelableAsyncIterable<VersionChange> {
+  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
     const subscribe = (v: VersionChange) => subscription.push(v);
     const subscription: Subscription<VersionChange> =
       new Subscription<VersionChange>({
@@ -225,7 +225,7 @@ export class IncrementalSyncer {
       });
 
     this.#eventEmitter.on('version', subscribe);
-    return subscription;
+    return Promise.resolve(subscription);
   }
 
   async stop(lc: LogContext, err?: unknown) {

@@ -1,5 +1,5 @@
-import {describe, expect, test} from '@jest/globals';
 import pg from 'pg';
+import {describe, expect, test} from 'vitest';
 import {typeNameByOID} from './pg.js';
 
 describe('types/pg-types', () => {

@@ -1,6 +1,7 @@
-import {describe, expect, test} from '@jest/globals';
 import type {LogContext} from '@rocicorp/logger';
 import * as v from 'shared/src/valita.js';
+import {describe, expect, test} from 'vitest';
+import {runWithDurableObjectStorage} from '../../../test/do.js';
 import {createSilentLogContext} from '../../../test/logger.js';
 import {DurableStorage} from './durable-storage.js';
 import {
@@ -169,30 +170,28 @@ describe('storage schema', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      const {runnerDO} = getMiniflareBindings();
-      const id = runnerDO.newUniqueId();
-      const storage = await getMiniflareDurableObjectStorage(id);
+      await runWithDurableObjectStorage(async storage => {
+        if (c.preSchema) {
+          await storage.put('storage_schema_meta', c.preSchema);
+        }
 
-      if (c.preSchema) {
-        await storage.put('storage_schema_meta', c.preSchema);
-      }
+        let err: string | undefined;
+        try {
+          await initStorageSchema(
+            createSilentLogContext(),
+            new DurableStorage(storage),
+            c.migrations,
+          );
+        } catch (e) {
+          err = String(e);
+        }
+        expect(err).toBe(c.expectedErr);
 
-      let err: string | undefined;
-      try {
-        await initStorageSchema(
-          createSilentLogContext(),
-          new DurableStorage(storage),
-          c.migrations,
+        expect(await storage.get('storage_schema_meta')).toEqual(c.postSchema);
+        expect(await storage.get('migration_history')).toBe(
+          c.expectedMigrationHistory,
         );
-      } catch (e) {
-        err = String(e);
-      }
-      expect(err).toBe(c.expectedErr);
-
-      expect(await storage.get('storage_schema_meta')).toEqual(c.postSchema);
-      expect(await storage.get('migration_history')).toBe(
-        c.expectedMigrationHistory,
-      );
+      });
     });
   }
 });

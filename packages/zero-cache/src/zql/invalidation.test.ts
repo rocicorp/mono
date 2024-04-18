@@ -1,4 +1,3 @@
-import {describe, expect, test} from '@jest/globals';
 import type {
   AST,
   Condition,
@@ -7,6 +6,7 @@ import type {
   SimpleCondition,
   SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
+import {describe, expect, test} from 'vitest';
 import {
   NormalizedInvalidationFilterSpec,
   invalidationHash,

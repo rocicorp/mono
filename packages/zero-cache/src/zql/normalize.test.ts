@@ -1,6 +1,6 @@
-import {describe, expect, test} from '@jest/globals';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {JSONValue} from 'postgres';
+import {describe, expect, test} from 'vitest';
 import {
   ASTWithPrimaryKeys,
   getNormalized,

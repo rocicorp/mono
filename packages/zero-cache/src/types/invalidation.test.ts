@@ -1,5 +1,5 @@
-import {describe, expect, test} from '@jest/globals';
 import {compareUTF8} from 'compare-utf8';
+import {describe, expect, test} from 'vitest';
 import {parse, stringify} from './bigint-json.js';
 import {
   InvalidationFilterSpec,

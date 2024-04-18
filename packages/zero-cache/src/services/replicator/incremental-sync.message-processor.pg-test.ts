@@ -1,9 +1,9 @@
-import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import type {Pgoutput} from 'pg-logical-replication';
 import type postgres from 'postgres';
 import {Queue} from 'shared/src/queue.js';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {MessageProcessor, setupReplicationTables} from './incremental-sync.js';

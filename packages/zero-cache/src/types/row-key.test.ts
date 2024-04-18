@@ -1,4 +1,4 @@
-import {describe, expect, test} from '@jest/globals';
+import {describe, expect, test} from 'vitest';
 import {RowKeyValue, rowKeyHash, rowKeyString} from './row-key.js';
 
 describe('types/row-key', () => {

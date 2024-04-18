@@ -1,12 +1,5 @@
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from '@jest/globals';
 import type postgres from 'postgres';
+import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../../test/db.js';
 import {createTableStatement} from './create.js';
 import {getPublicationInfo} from './published.js';

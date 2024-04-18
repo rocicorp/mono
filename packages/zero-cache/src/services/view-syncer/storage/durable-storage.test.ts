@@ -1,6 +1,7 @@
-import {describe, expect, test} from '@jest/globals';
 import {randInt} from 'shared/src/rand.js';
 import * as valita from 'shared/src/valita.js';
+import {describe, expect, test} from 'vitest';
+import {runWithDurableObjectStorage} from '../../../test/do.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
 
@@ -77,38 +78,38 @@ describe('list and scan', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      const {runnerDO} = getMiniflareBindings();
-      const id = runnerDO.newUniqueId();
-      const storage = new DurableStorage(
-        await getMiniflareDurableObjectStorage(id),
-      );
+      await runWithDurableObjectStorage(async doStorage => {
+        const storage = new DurableStorage(doStorage);
 
-      for (const [k, v] of Object.entries(entries)) {
-        await storage.put(k, v);
-      }
+        for (const [k, v] of Object.entries(entries)) {
+          await storage.put(k, v);
+        }
 
-      const results = [...(await storage.list(c.opts || {}, valita.number()))];
-      expect(results).toEqual(c.expected);
+        const results = [
+          ...(await storage.list(c.opts || {}, valita.number())),
+        ];
+        expect(results).toEqual(c.expected);
 
-      // Test scan()
-      const scanResults: [string, number][] = [];
-      for await (const entry of storage.scan(c.opts || {}, valita.number())) {
-        scanResults.push(entry);
-      }
-      expect(scanResults).toEqual(c.expected);
-
-      // Test batchScan() with a variety of batch sizes.
-      for (const batchSize of [1, 2, 3, 128]) {
+        // Test scan()
         const scanResults: [string, number][] = [];
-        for await (const batch of storage.batchScan(
-          c.opts || {},
-          valita.number(),
-          batchSize,
-        )) {
-          scanResults.push(...batch);
+        for await (const entry of storage.scan(c.opts || {}, valita.number())) {
+          scanResults.push(entry);
         }
         expect(scanResults).toEqual(c.expected);
-      }
+
+        // Test batchScan() with a variety of batch sizes.
+        for (const batchSize of [1, 2, 3, 128]) {
+          const scanResults: [string, number][] = [];
+          for await (const batch of storage.batchScan(
+            c.opts || {},
+            valita.number(),
+            batchSize,
+          )) {
+            scanResults.push(...batch);
+          }
+          expect(scanResults).toEqual(c.expected);
+        }
+      });
     });
   }
 });
@@ -121,33 +122,31 @@ describe('getEntries', () => {
       );
       const entries = new Map(orderedKeys.map(key => [key, `value of ${key}`]));
 
-      const {runnerDO} = getMiniflareBindings();
-      const id = runnerDO.newUniqueId();
-      const storage = new DurableStorage(
-        await getMiniflareDurableObjectStorage(id),
-      );
+      await runWithDurableObjectStorage(async doStorage => {
+        const storage = new DurableStorage(doStorage);
 
-      for (const [k, v] of entries) {
-        await storage.put(k, v);
-      }
+        for (const [k, v] of entries) {
+          await storage.put(k, v);
+        }
 
-      const shuffledKeys = orderedKeys
-        .map(key => ({key, sort: Math.random()}))
-        .sort((a, b) => a.sort - b.sort)
-        .map(({key}) => key);
+        const shuffledKeys = orderedKeys
+          .map(key => ({key, sort: Math.random()}))
+          .sort((a, b) => a.sort - b.sort)
+          .map(({key}) => key);
 
-      // Add a couple of non-existent keys that shouldn't affect the results.
-      for (let i = 0; i < 10; i++) {
-        shuffledKeys.push(randInt(500, 600).toString());
-      }
+        // Add a couple of non-existent keys that shouldn't affect the results.
+        for (let i = 0; i < 10; i++) {
+          shuffledKeys.push(randInt(500, 600).toString());
+        }
 
-      const gotEntries = await storage.getEntries(
-        shuffledKeys,
-        valita.string(),
-      );
+        const gotEntries = await storage.getEntries(
+          shuffledKeys,
+          valita.string(),
+        );
 
-      // Validate order as well as contents.
-      expect([...gotEntries]).toEqual([...entries]);
+        // Validate order as well as contents.
+        expect([...gotEntries]).toEqual([...entries]);
+      });
     });
   }
 });

@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {max, min, versionFromLexi, versionToLexi} from './lexi-version.js';
 
 test('LexiVersion encoding', () => {

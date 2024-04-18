@@ -1,11 +1,11 @@
-import {describe, expect, jest, test} from '@jest/globals';
 import {sleep} from 'shared/src/sleep.js';
+import {describe, expect, test, vi} from 'vitest';
 import {Subscription} from './subscription.js';
 
 describe('types/subscription', () => {
   test('cancel', async () => {
     const consumed = new Set<number>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<number>({
       cleanup,
@@ -37,7 +37,7 @@ describe('types/subscription', () => {
 
   test('fail', async () => {
     const consumed = new Set<number>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<number>({
       cleanup,
@@ -75,7 +75,7 @@ describe('types/subscription', () => {
 
   test('iteration break', async () => {
     const consumed = new Set<number>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<number>({
       cleanup,
@@ -106,7 +106,7 @@ describe('types/subscription', () => {
 
   test('iteration throw', async () => {
     const consumed = new Set<number>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<number>({
       cleanup,
@@ -144,7 +144,7 @@ describe('types/subscription', () => {
 
   test('pushed while iterating', async () => {
     const consumed = new Set<number>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<number>({
       cleanup,
@@ -181,7 +181,7 @@ describe('types/subscription', () => {
 
   test('coalesce cancel', async () => {
     const consumed = new Set<string>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<string>({
       cleanup,
@@ -216,7 +216,7 @@ describe('types/subscription', () => {
 
   test('coalesce break', async () => {
     const consumed = new Set<string>();
-    const cleanup = jest.fn();
+    const cleanup = vi.fn();
 
     const subscription = new Subscription<string>({
       cleanup,

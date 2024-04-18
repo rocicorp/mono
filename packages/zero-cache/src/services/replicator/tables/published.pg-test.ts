@@ -1,5 +1,5 @@
-import {afterEach, beforeEach, describe, expect, test} from '@jest/globals';
 import type postgres from 'postgres';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../../test/db.js';
 import {PublicationInfo, getPublicationInfo} from './published.js';
 

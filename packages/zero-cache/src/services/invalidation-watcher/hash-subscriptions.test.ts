@@ -1,4 +1,4 @@
-import {describe, expect, test} from '@jest/globals';
+import {describe, expect, test} from 'vitest';
 import {Subscription} from '../../types/subscription.js';
 import {HashSubscriptions} from './hash-subscriptions.js';
 import type {QueryInvalidationUpdate} from './invalidation-watcher.js';

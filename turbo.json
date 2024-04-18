@@ -4,7 +4,7 @@
   "pipeline": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["out/**", "dist/**", ".next/**"]
+      "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts"]
     },
     "lint": {
       "outputs": []
