@@ -663,6 +663,12 @@ test('index in options', async () => {
     [['4', 'a/4'], {a: '4'}],
   ]);
 
+  await testScanResult(rep, {indexName: 'aIndex', limit: 3}, [
+    [['0', 'a/0'], {a: '0'}],
+    [['1', 'a/1'], {a: '1'}],
+    [['2', 'a/2'], {a: '2'}],
+  ]);
+
   await testScanResult(rep, {indexName: 'bc'}, [[['8', 'c/0'], {bc: '8'}]]);
   await add({
     'c/1': {bc: '88'},
