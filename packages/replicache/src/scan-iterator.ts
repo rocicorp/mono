@@ -204,8 +204,11 @@ async function* scanIterator<Options extends ScanOptions, Value>(
 
     yield toValue(entry);
 
-    if (--limit === 0 && !isIndexScan) {
-      onLimitKey(key as string);
+    if (--limit === 0) {
+      // We do not do the limit optimization for index scans in subscriptions.
+      if (!isIndexScan) {
+        onLimitKey(key as string);
+      }
       return;
     }
   }
