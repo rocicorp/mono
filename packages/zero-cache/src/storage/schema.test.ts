@@ -23,10 +23,16 @@ describe('storage schema', () => {
 
   const logMigrationHistory =
     (name: string) => async (_log: LogContext, storage: DurableStorage) => {
-      const meta = await storage.get('storage_schema_meta', storageSchemaMeta);
-      const history = await storage.get('migration_history', v.string());
+      const meta = await storage.get(
+        '/vs/1234/storage_schema_meta',
+        storageSchemaMeta,
+      );
+      const history = await storage.get(
+        '/vs/1234/migration_history',
+        v.string(),
+      );
       void storage.put(
-        'migration_history',
+        '/vs/1234/migration_history',
         `${history ?? ''} ${name}-at(${meta?.version})`,
       );
     };
@@ -172,7 +178,7 @@ describe('storage schema', () => {
     test(c.name, async () => {
       await runWithDurableObjectStorage(async storage => {
         if (c.preSchema) {
-          await storage.put('storage_schema_meta', c.preSchema);
+          await storage.put('/vs/1234/storage_schema_meta', c.preSchema);
         }
 
         let err: string | undefined;
@@ -180,6 +186,7 @@ describe('storage schema', () => {
           await initStorageSchema(
             createSilentLogContext(),
             new DurableStorage(storage),
+            '/vs/1234',
             c.migrations,
           );
         } catch (e) {
@@ -187,8 +194,10 @@ describe('storage schema', () => {
         }
         expect(err).toBe(c.expectedErr);
 
-        expect(await storage.get('storage_schema_meta')).toEqual(c.postSchema);
-        expect(await storage.get('migration_history')).toBe(
+        expect(await storage.get('/vs/1234/storage_schema_meta')).toEqual(
+          c.postSchema,
+        );
+        expect(await storage.get('/vs/1234/migration_history')).toBe(
           c.expectedMigrationHistory,
         );
       });

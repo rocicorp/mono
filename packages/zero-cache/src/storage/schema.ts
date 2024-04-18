@@ -31,10 +31,15 @@ export type VersionMigrationMap = {
 /**
  * Ensures that the storage schema is compatible with the current code,
  * updating and migrating the schema if necessary.
+ *
+ * @param schemaRoot The root of the storage schema, with no trailing slash.
+ *        The storage schema meta information will be stored at
+ *        `${schemaRoot}/storage_schema_meta`.
  */
 export async function initStorageSchema(
   log: LogContext,
   storage: DurableStorage,
+  schemaRoot: string,
   versionMigrationMap: VersionMigrationMap,
 ): Promise<void> {
   try {
@@ -49,7 +54,7 @@ export async function initStorageSchema(
       `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
     );
 
-    let meta = await getStorageSchemaMeta(storage);
+    let meta = await getStorageSchemaMeta(storage, schemaRoot);
     if (codeSchemaVersion < meta.minSafeRollbackVersion) {
       throw new Error(
         `Cannot run server at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
@@ -60,7 +65,11 @@ export async function initStorageSchema(
       log.info?.(
         `Storage is at v${meta.version}. Resetting to v${codeSchemaVersion}`,
       );
-      meta = await setStorageSchemaVersion(storage, codeSchemaVersion);
+      meta = await setStorageSchemaVersion(
+        storage,
+        schemaRoot,
+        codeSchemaVersion,
+      );
     } else {
       for (const [dest, migration] of versionMigrations) {
         if (meta.version < dest) {
@@ -70,6 +79,7 @@ export async function initStorageSchema(
           meta = await migrateStorageSchemaVersion(
             log,
             storage,
+            schemaRoot,
             dest,
             migration,
           );
@@ -111,9 +121,13 @@ export type StorageSchemaMeta = v.Infer<typeof storageSchemaMeta>;
 
 async function getStorageSchemaMeta(
   storage: Storage,
+  schemaRoot: string,
 ): Promise<StorageSchemaMeta> {
   return (
-    (await storage.get(STORAGE_SCHEMA_META_KEY, storageSchemaMeta)) ?? {
+    (await storage.get(
+      `${schemaRoot}/${STORAGE_SCHEMA_META_KEY}`,
+      storageSchemaMeta,
+    )) ?? {
       version: 0,
       maxVersion: 0,
       minSafeRollbackVersion: 0,
@@ -123,14 +137,15 @@ async function getStorageSchemaMeta(
 
 async function setStorageSchemaVersion(
   storage: DurableStorage,
+  schemaRoot: string,
   newVersion: number,
 ): Promise<StorageSchemaMeta> {
-  const meta = await getStorageSchemaMeta(storage);
+  const meta = await getStorageSchemaMeta(storage, schemaRoot);
   meta.version = newVersion;
   meta.maxVersion = Math.max(newVersion, meta.maxVersion);
 
   // No need to await the put; flush() will take care of it.
-  void storage.put(STORAGE_SCHEMA_META_KEY, meta);
+  void storage.put(`${schemaRoot}/${STORAGE_SCHEMA_META_KEY}`, meta);
   await storage.flush();
   return meta;
 }
@@ -138,15 +153,21 @@ async function setStorageSchemaVersion(
 async function migrateStorageSchemaVersion(
   log: LogContext,
   storage: DurableStorage,
+  schemaRoot: string,
   destinationVersion: number,
   migration: Migration,
 ): Promise<StorageSchemaMeta> {
   if (typeof migration === 'function') {
     await migration(log, storage);
   } else {
-    await ensureRollbackLimit(migration.minSafeRollbackVersion, log, storage);
+    await ensureRollbackLimit(
+      migration.minSafeRollbackVersion,
+      log,
+      storage,
+      schemaRoot,
+    );
   }
-  return setStorageSchemaVersion(storage, destinationVersion);
+  return setStorageSchemaVersion(storage, schemaRoot, destinationVersion);
 }
 
 /**
@@ -157,8 +178,9 @@ async function ensureRollbackLimit(
   toAtLeast: number,
   log: LogContext,
   storage: DurableStorage,
+  schemaRoot: string,
 ): Promise<void> {
-  const meta = await getStorageSchemaMeta(storage);
+  const meta = await getStorageSchemaMeta(storage, schemaRoot);
 
   // Sanity check to maintain the invariant that running code is never
   // earlier than the rollback limit.
@@ -174,7 +196,7 @@ async function ensureRollbackLimit(
       `bumping rollback limit from ${meta.minSafeRollbackVersion} to ${toAtLeast}`,
     );
     // Don't [[await]]. Let the put() be atomically flushed with the version update.
-    void storage.put(STORAGE_SCHEMA_META_KEY, {
+    void storage.put(`${schemaRoot}/${STORAGE_SCHEMA_META_KEY}`, {
       ...meta,
       minSafeRollbackVersion: toAtLeast,
     });
