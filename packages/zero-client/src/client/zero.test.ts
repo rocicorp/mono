@@ -1704,13 +1704,18 @@ test('ensure we get the same query object back', () => {
     issueID: string;
     text: string;
   };
-  const r = zeroForTest();
-  const issueQuery1 = r.getQuery<{issue: Issue}>('issue');
-  const issueQuery2 = r.getQuery<{issue: Issue}>('issue');
+  const r = zeroForTest({
+    collections: {
+      issue: (v: ReadonlyJSONObject) => v as Issue,
+      comment: (v: ReadonlyJSONObject) => v as Comment,
+    },
+  });
+  const issueQuery1 = r.collection.issue;
+  const issueQuery2 = r.collection.issue;
   expect(issueQuery1).to.equal(issueQuery2);
 
-  const commentQuery1 = r.getQuery<{comment: Comment}>('comment');
-  const commentQuery2 = r.getQuery<{comment: Comment}>('comment');
+  const commentQuery1 = r.collection.comment;
+  const commentQuery2 = r.collection.comment;
   expect(commentQuery1).to.equal(commentQuery2);
 
   expect(issueQuery1).to.not.equal(commentQuery1);
