@@ -20,7 +20,7 @@ import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
-import {RowKeyType, RowKeyValue, rowKeyHash} from '../../types/row-key.js';
+import {RowKey, RowKeyType, RowValue, rowKeyHash} from '../../types/row-key.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {
@@ -751,8 +751,8 @@ class TransactionProcessor {
     tx: postgres.TransactionSql,
     schema: string,
     table: string,
-    key?: RowKeyValue,
-    row?: RowKeyValue,
+    key?: RowKey,
+    row?: RowValue,
   ) {
     const change: ChangeLogEntry = {
       stateVersion: this.#version,
