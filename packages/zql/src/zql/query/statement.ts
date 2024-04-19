@@ -42,7 +42,8 @@ export class Statement<Return> implements IStatement<Return> {
       this.#materialization = new MutableTreeView<
         Return extends [] ? Return[number] : never
       >(
-        this.#context.materialite,
+        this.#context,
+        this.#ast,
         this.#pipeline as unknown as DifferenceStream<
           Return extends [] ? Return[number] : never
         >,

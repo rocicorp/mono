@@ -3,21 +3,41 @@ import type {ExperimentalNoIndexDiff} from 'replicache';
 import {assert} from 'shared/src//asserts.js';
 import type {Entity} from '../../entity.js';
 import type {ReplicacheLike} from '../../replicache-like.js';
+import type {AST} from '../ast/ast.js';
 import {Materialite} from '../ivm/materialite.js';
 import type {MutableSetSource} from '../ivm/source/set-source.js';
 import type {Source} from '../ivm/source/source.js';
 import {mapIter} from '../util/iterables.js';
-import type {Context} from './context.js';
+import type {Context, SubscriptionDelegate} from './context.js';
 
-export function makeReplicacheContext(rep: ReplicacheLike): Context {
-  const materialite = new Materialite();
-  const sourceStore = new ReplicacheSourceStore(rep, materialite);
+export function makeReplicacheContext(
+  rep: ReplicacheLike,
+  delegate: SubscriptionDelegate,
+): Context {
+  return new ReplicacheContext(rep, delegate);
+}
 
-  return {
-    materialite,
-    getSource: <T extends Entity>(name: string) =>
-      sourceStore.getSource(name) as unknown as Source<T>,
-  };
+class ReplicacheContext implements Context {
+  readonly materialite = new Materialite();
+  readonly #sourceStore: ReplicacheSourceStore;
+  readonly #subscriptionDelegate: SubscriptionDelegate;
+
+  constructor(rep: ReplicacheLike, subscriptionDelegate: SubscriptionDelegate) {
+    this.#sourceStore = new ReplicacheSourceStore(rep, this.materialite);
+    this.#subscriptionDelegate = subscriptionDelegate;
+  }
+
+  getSource<T extends Entity>(name: string): Source<T> {
+    return this.#sourceStore.getSource(name) as unknown as Source<T>;
+  }
+
+  subscriptionAdded(ast: AST): void {
+    this.#subscriptionDelegate.subscriptionAdded(ast);
+  }
+
+  subscriptionRemoved(ast: AST): void {
+    this.#subscriptionDelegate.subscriptionRemoved(ast);
+  }
 }
 
 /**

@@ -1,5 +1,10 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
+import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
+import {makeReplicacheContext} from '@rocicorp/zql/src/zql/context/replicache-context.js';
+import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
+import {EntityQuery} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {
   ConnectedMessage,
   Downstream,
@@ -16,7 +21,6 @@ import {
 } from 'reflect-protocol';
 import {ROOM_ID_REGEX, isValidRoomID} from 'reflect-shared/src/room-id.js';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared/src/types.js';
-import {version} from './version.js';
 import {
   ClientGroupID,
   ClientID,
@@ -63,6 +67,7 @@ import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
+import {version} from './version.js';
 
 declare const TESTING: boolean;
 
@@ -207,6 +212,9 @@ export class Zero<MD extends MutatorDefs> {
   #abortPingTimeout = () => {
     // intentionally empty
   };
+
+  readonly #zqlContext: ZQLContext;
+  readonly #zqlQueriesMap = new Map<string, EntityQuery<FromSet>>();
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -374,6 +382,11 @@ export class Zero<MD extends MutatorDefs> {
       {roomID, clientID: this.#rep.clientID},
       logOptions.logSink,
     );
+
+    this.#zqlContext = makeReplicacheContext(this.#rep, {
+      subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
+      subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
+    });
 
     reportReloadReason(this.#lc);
 
@@ -1395,6 +1408,27 @@ export class Zero<MD extends MutatorDefs> {
     this.#baseCookieResolver ??= resolver();
     void this.#rep.pull();
     return this.#baseCookieResolver.promise;
+  }
+
+  #zqlSubscriptionRemoved(ast: AST) {
+    console.log('TODO: removeZQLSubscription', JSON.stringify(ast));
+  }
+
+  #zqlSubscriptionAdded(ast: AST) {
+    console.log('TODO: addZQLSubscription', JSON.stringify(ast));
+  }
+
+  getQuery<From extends FromSet>(collection: string): EntityQuery<From> {
+    // This returns the same instance every time.
+    // When the API is zero.query.issue it will be more obvious.
+    const existing = this.#zqlQueriesMap.get(collection);
+    if (existing) {
+      return existing as EntityQuery<From>;
+    }
+
+    const entityQuery = new EntityQuery<From>(this.#zqlContext, collection);
+    this.#zqlQueriesMap.set(collection, entityQuery as EntityQuery<FromSet>);
+    return entityQuery;
   }
 }
 

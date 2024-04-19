@@ -1,3 +1,5 @@
+import type {AST} from '../../ast/ast.js';
+import type {Context} from '../../context/context.js';
 import type {DifferenceStream, Listener} from '../graph/difference-stream.js';
 import type {Materialite} from '../materialite.js';
 import type {Multiset} from '../multiset.js';
@@ -5,8 +7,9 @@ import type {Version} from '../types.js';
 import type {View} from './view.js';
 
 export abstract class AbstractView<T extends object, CT> implements View<CT> {
+  readonly #context: Context;
+  readonly #ast: AST;
   readonly #stream;
-  protected readonly _materialite: Materialite;
   protected readonly _listener: Listener<T>;
   readonly #listeners: Set<(s: CT, v: Version) => void> = new Set();
   readonly name;
@@ -24,12 +27,14 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
    * @param comparator How to sort results
    */
   constructor(
-    materialite: Materialite,
+    context: Context,
+    ast: AST,
     stream: DifferenceStream<T>,
     name: string = '',
   ) {
+    this.#context = context;
+    this.#ast = ast;
     this.name = name;
-    this._materialite = materialite;
     this.#stream = stream;
     this._listener = {
       newDifference: (version: Version, data: Multiset<T>) => {
@@ -48,6 +53,10 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
       },
     };
     this.#stream.addDownstream(this._listener);
+  }
+
+  protected get _materialite(): Materialite {
+    return this.#context.materialite;
   }
 
   get stream() {
@@ -71,6 +80,7 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
 
   on(listener: (s: CT, v: Version) => void) {
     this.#listeners.add(listener);
+    this.#context.subscriptionAdded(this.#ast);
     return () => {
       this.off(listener);
     };
@@ -84,10 +94,13 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
    */
   off(listener: (s: CT, v: Version) => void) {
     this.#listeners.delete(listener);
+    this.#context.subscriptionRemoved(this.#ast);
   }
 
   destroy() {
-    this.#listeners.clear();
+    for (const listener of this.#listeners) {
+      this.off(listener);
+    }
   }
 
   protected abstract _newDifference(data: Multiset<T>): boolean;

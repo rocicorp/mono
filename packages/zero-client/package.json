@@ -28,6 +28,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/zql": "0.0.0",
     "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.11",
     "@web/dev-server": "^0.4.0",
