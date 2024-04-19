@@ -28,7 +28,7 @@ const baseOptions = {
  * Implements the Storage interface in terms of the database.
  */
 export class DurableStorage implements Storage {
-  #durable: DurableObjectStorage;
+  readonly #durable: DurableObjectStorage;
   readonly #baseOptions: Readonly<DurableObjectPutOptions>;
 
   constructor(durable: DurableObjectStorage, allowUnconfirmed = true) {
