@@ -49,7 +49,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     await initStorageSchema(
       this.#lc,
       this.#storage,
-      schemaRoot(this.id),
+      schemaRoot,
       SCHEMA_MIGRATIONS,
     );
     // TODO: Implement
