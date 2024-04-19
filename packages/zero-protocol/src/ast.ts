@@ -1,3 +1,11 @@
+/**
+ * Wire-format representation of the zql AST interface.
+ *
+ * `v.Type<...>` types are explicitly declared to facilitate Typescript verification
+ * that the schemas satisfy the zql type definitions. (Incidentally, explicit types
+ * are also required for recursive schema definitions.)
+ */
+
 import type {
   AST,
   Aggregate,
@@ -15,14 +23,6 @@ import type {
   SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
 import * as v from 'shared/src/valita.js';
-
-/**
- * Wire-format representation of the zql AST interface.
- *
- * Note that `v.Type<...>` types are explicitly declared to allow Typescript
- * to verify that the schemas satisfy the zql type definitions. (Incidentally,
- * explicit types are also required for recursive schema definitions.)
- */
 
 export const orderingSchema: v.Type<Ordering> = v.tuple([
   v.array(v.string()),
