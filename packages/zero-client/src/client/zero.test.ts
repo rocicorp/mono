@@ -9,11 +9,16 @@ import type {
   ReadonlyJSONValue,
   WriteTransaction,
 } from 'reflect-shared/src/mod.js';
-import type {PullRequestV1, PushRequestV1} from 'replicache';
+import type {
+  PullRequestV1,
+  PushRequestV1,
+  ReadonlyJSONObject,
+} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
+import type {EntityQuery} from '../mod.js';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
@@ -29,6 +34,7 @@ import {
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
 import {
   CONNECT_TIMEOUT_MS,
+  CollectionDefs,
   ConnectionState,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   PING_INTERVAL_MS,
@@ -1035,7 +1041,7 @@ test('Ping timeout', async () => {
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
 
-function expectLogMessages(r: TestZero<MutatorDefs>) {
+function expectLogMessages(r: TestZero<MutatorDefs, CollectionDefs>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1164,7 +1170,7 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<MutatorDefs>) => Promise<unknown>,
+  fn: (r: TestZero<MutatorDefs, CollectionDefs>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
@@ -1284,7 +1290,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<MutatorDefs>,
+      r: TestZero<MutatorDefs, CollectionDefs>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1561,7 +1567,10 @@ test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
   const t = async (
-    kvStore: ZeroOptions<Record<string, never>>['kvStore'],
+    kvStore: ZeroOptions<
+      Record<string, never>,
+      Record<string, never>
+    >['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: JSONValue | undefined = undefined,
@@ -1705,4 +1714,33 @@ test('ensure we get the same query object back', () => {
   expect(commentQuery1).to.equal(commentQuery2);
 
   expect(issueQuery1).to.not.equal(commentQuery1);
+});
+
+test('the type of collection should be inferred from options with parse', () => {
+  type Issue = {
+    id: string;
+    title: string;
+  };
+  type Comment = {
+    id: string;
+    issueID: string;
+    text: string;
+  };
+  const r = zeroForTest({
+    collections: {
+      issue: (v: ReadonlyJSONObject) => v as Issue,
+      comment: (v: ReadonlyJSONObject) => v as Comment,
+    },
+  });
+
+  const c: {
+    readonly issue: EntityQuery<{issue: Issue}, []>;
+    readonly comment: EntityQuery<{comment: Comment}, []>;
+  } = r.collection;
+  expect(c).not.undefined;
+
+  const issueQ: EntityQuery<{issue: Issue}> = r.collection.issue;
+  const commentQ: EntityQuery<{comment: Comment}> = r.collection.comment;
+  expect(issueQ).not.undefined;
+  expect(commentQ).not.undefined;
 });

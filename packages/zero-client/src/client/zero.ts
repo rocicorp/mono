@@ -1,5 +1,6 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
+import type {Entity} from '@rocicorp/zql/src/entity.js';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
 import {makeReplicacheContext} from '@rocicorp/zql/src/zql/context/replicache-context.js';
@@ -62,12 +63,20 @@ import {
   Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {ZeroOptions} from './options.js';
+import type {CollectionParseDefs, ZeroOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
+
+export type CollectionDefs = {
+  readonly [name: string]: Entity;
+};
+
+type MakeEntityQueriesFromCollectionDefs<CD extends CollectionDefs> = {
+  readonly [K in keyof CD]: EntityQuery<{[P in K]: CD[K]}, []>;
+};
 
 declare const TESTING: boolean;
 
@@ -94,7 +103,9 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function forTesting<MD extends MutatorDefs>(r: Zero<MD>): TestZero {
+function forTesting<MD extends MutatorDefs, CD extends CollectionDefs>(
+  r: Zero<MD, CD>,
+): TestZero {
   return r as unknown as TestZero;
 }
 
@@ -170,7 +181,7 @@ export interface ReplicacheInternalAPI {
   lastMutationID(): number;
 }
 
-export class Zero<MD extends MutatorDefs> {
+export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
   readonly version = version;
 
   readonly #rep: Replicache<MD>;
@@ -293,7 +304,9 @@ export class Zero<MD extends MutatorDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<MD>;
+  readonly #options: ZeroOptions<MD, CD>;
+
+  readonly collection: MakeEntityQueriesFromCollectionDefs<CD>;
 
   #metrics: MetricManager;
 
@@ -304,7 +317,7 @@ export class Zero<MD extends MutatorDefs> {
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<MD>) {
+  constructor(options: ZeroOptions<MD, CD>) {
     const {
       userID,
       roomID,
@@ -312,6 +325,7 @@ export class Zero<MD extends MutatorDefs> {
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'mem',
+      collections = {} as CollectionParseDefs<CD>,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -387,6 +401,8 @@ export class Zero<MD extends MutatorDefs> {
       subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
       subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
     });
+
+    this.collection = this.#registerCollections(collections);
 
     reportReloadReason(this.#lc);
 
@@ -1408,6 +1424,19 @@ export class Zero<MD extends MutatorDefs> {
     this.#baseCookieResolver ??= resolver();
     void this.#rep.pull();
     return this.#baseCookieResolver.promise;
+  }
+
+  #registerCollections(
+    collectionDefs: CollectionParseDefs<CD>,
+  ): MakeEntityQueriesFromCollectionDefs<CD> {
+    const rv = {} as Record<string, EntityQuery<FromSet, []>>;
+    const context = this.#zqlContext;
+    // Not using parse yet
+    for (const name of Object.keys(collectionDefs)) {
+      rv[name] = new EntityQuery(context, name);
+    }
+
+    return rv as MakeEntityQueriesFromCollectionDefs<CD>;
   }
 
   #zqlSubscriptionRemoved(ast: AST) {

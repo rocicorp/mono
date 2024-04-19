@@ -1,11 +1,20 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import type {KVStoreProvider, MaybePromise} from 'replicache';
+import type {ReadonlyJSONObject} from 'shared/src/json.js';
+import type {CollectionDefs} from './zero.js';
+
+export type CollectionParseDefs<CD extends CollectionDefs> = {
+  readonly [K in keyof CD]: (value: ReadonlyJSONObject) => CD[K];
+};
 
 /**
  * Configuration for [[Zero]].
  */
-export interface ZeroOptions<MD extends MutatorDefs> {
+export interface ZeroOptions<
+  MD extends MutatorDefs,
+  CD extends CollectionDefs,
+> {
   /**
    * Server to connect to, for example "https://myapp-myteam.zero.ms/".
    */
@@ -143,6 +152,8 @@ export interface ZeroOptions<MD extends MutatorDefs> {
    * the cache while they run.
    */
   mutators?: MD | undefined;
+
+  collections?: CollectionParseDefs<CD> | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes
