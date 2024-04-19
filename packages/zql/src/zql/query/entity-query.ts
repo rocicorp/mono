@@ -311,7 +311,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
   ): EntityQuery<From, Return> {
     let expr: WhereCondition<From>;
     if (typeof exprOrField === 'string') {
-      expr = expression(exprOrField, op!, value!);
+      expr = exp(exprOrField, op!, value!);
     } else {
       expr = exprOrField;
     }
@@ -410,7 +410,7 @@ function flatten<F extends FromSet>(
   return {op, conditions: flattened};
 }
 
-export function expression<
+export function exp<
   From extends FromSet,
   Selector extends SimpleSelector<From>,
   Op extends SimpleOperator,
