@@ -11,7 +11,7 @@ import {
   WhereCondition,
   and,
   astForTesting,
-  expression,
+  exp,
   not,
   or,
 } from './entity-query.js';
@@ -92,38 +92,38 @@ test('query types', () => {
   ).toMatchTypeOf<Promise<readonly {id: string; alias: readonly string[]}[]>>();
 
   // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'.ts(2345)
-  q.where(expression('id', '=', 123));
+  q.where(exp('id', '=', 123));
 
   // @ts-expect-error - Argument of type '"id2"' is not assignable to parameter of type 'Selectable<{ fields: E1; }>'.ts(2345)
-  q.where(expression('id2', '=', 'abc'));
+  q.where(exp('id2', '=', 'abc'));
 
   // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'.ts(2345)
-  q.where(and(expression('id', '=', 'a'), expression('str', '=', 42)));
+  q.where(and(exp('id', '=', 'a'), exp('str', '=', 42)));
 
   // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'.ts(2345)
-  q.where(or(expression('id', '=', 'a'), expression('str', '=', 42)));
+  q.where(or(exp('id', '=', 'a'), exp('str', '=', 42)));
 
   // @ts-expect-error - Argument of type '"id2"' is not assignable to parameter of type 'Selectable<{ fields: E1; }>'.ts(2345)
-  q.where(and(expression('id2', '=', 'a'), expression('str', '=', 42)));
+  q.where(and(exp('id2', '=', 'a'), exp('str', '=', 42)));
 
   // @ts-expect-error - Argument of type '"id2"' is not assignable to parameter of type 'Selectable<{ fields: E1; }>'.ts(2345)
-  q.where(or(expression('id2', '=', 'a'), expression('str', '=', 42)));
+  q.where(or(exp('id2', '=', 'a'), exp('str', '=', 42)));
 
   // and nest
   q.where(
     or(
       // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'.ts(2345)
-      and(expression('id', '=', 'a'), expression('str', '=', 123)),
+      and(exp('id', '=', 'a'), exp('str', '=', 123)),
       // @ts-expect-error - Argument of type '"id2"' is not assignable to parameter of type 'Selectable<{ fields: E1; }>'.ts(2345)
-      and(expression('id2', '=', 'a'), expression('str', '=', 'b')),
+      and(exp('id2', '=', 'a'), exp('str', '=', 'b')),
     ),
   );
   q.where(
     and(
       // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'.ts(2345)
-      or(expression('id', '=', 'a'), expression('str', '=', 123)),
+      or(exp('id', '=', 'a'), exp('str', '=', 123)),
       // @ts-expect-error - Argument of type '"id2"' is not assignable to parameter of type 'Selectable<{ fields: E1; }>'.ts(2345)
-      or(expression('id2', '=', 'a'), expression('str', '=', 'b')),
+      or(exp('id2', '=', 'a'), exp('str', '=', 'b')),
     ),
   );
 
@@ -598,9 +598,7 @@ describe('ast', () => {
   test('or', () => {
     const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
-    expect(
-      ast(q.where(or(expression('a', '=', 123), expression('c', '=', 'abc')))),
-    ).toEqual({
+    expect(ast(q.where(or(exp('a', '=', 123), exp('c', '=', 'abc'))))).toEqual({
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
@@ -616,8 +614,8 @@ describe('ast', () => {
       ast(
         q.where(
           and(
-            expression('a', '=', 1),
-            or(expression('d', '=', true), expression('c', '=', 'hello')),
+            exp('a', '=', 1),
+            or(exp('d', '=', true), exp('c', '=', 'hello')),
           ),
         ),
       ),
@@ -645,60 +643,60 @@ describe('ast', () => {
 
     expect(
       and<S>(
-        expression('a', '=', 1),
-        expression('b', '=', '2'),
-        and<S>(expression('c', '=', true), expression('d', '=', '3')),
+        exp('a', '=', 1),
+        exp('b', '=', '2'),
+        and<S>(exp('c', '=', true), exp('d', '=', '3')),
       ),
     ).toEqual(
       and<S>(
-        expression('a', '=', 1),
-        expression('b', '=', '2'),
-        expression('c', '=', true),
-        expression('d', '=', '3'),
+        exp('a', '=', 1),
+        exp('b', '=', '2'),
+        exp('c', '=', true),
+        exp('d', '=', '3'),
       ),
     );
 
     expect(
       and<S>(
-        expression('a', '=', 1),
-        and<S>(expression('c', '=', true), expression('d', '=', '3')),
-        expression('b', '=', '2'),
+        exp('a', '=', 1),
+        and<S>(exp('c', '=', true), exp('d', '=', '3')),
+        exp('b', '=', '2'),
       ),
     ).toEqual(
       and<S>(
-        expression('a', '=', 1),
-        expression('c', '=', true),
-        expression('d', '=', '3'),
-        expression('b', '=', '2'),
+        exp('a', '=', 1),
+        exp('c', '=', true),
+        exp('d', '=', '3'),
+        exp('b', '=', '2'),
       ),
     );
 
     expect(
       and<S>(
-        and<S>(expression('c', '=', true), expression('d', '=', '3')),
-        expression('a', '=', 1),
-        expression('b', '=', '2'),
+        and<S>(exp('c', '=', true), exp('d', '=', '3')),
+        exp('a', '=', 1),
+        exp('b', '=', '2'),
       ),
     ).toEqual(
       and<S>(
-        expression('c', '=', true),
-        expression('d', '=', '3'),
-        expression('a', '=', 1),
-        expression('b', '=', '2'),
+        exp('c', '=', true),
+        exp('d', '=', '3'),
+        exp('a', '=', 1),
+        exp('b', '=', '2'),
       ),
     );
 
     expect(
       and<S>(
-        and<S>(expression('c', '=', true), expression('d', '=', '3')),
-        and<S>(expression('a', '=', 1), expression('b', '=', '2')),
+        and<S>(exp('c', '=', true), exp('d', '=', '3')),
+        and<S>(exp('a', '=', 1), exp('b', '=', '2')),
       ),
     ).toEqual(
       and<S>(
-        expression('c', '=', true),
-        expression('d', '=', '3'),
-        expression('a', '=', 1),
-        expression('b', '=', '2'),
+        exp('c', '=', true),
+        exp('d', '=', '3'),
+        exp('a', '=', 1),
+        exp('b', '=', '2'),
       ),
     );
   });
@@ -708,16 +706,16 @@ describe('ast', () => {
 
     expect(
       or<S>(
-        expression('a', '=', 1),
-        or<S>(expression('c', '=', true), expression('d', '=', '3')),
-        expression('b', '=', '2'),
+        exp('a', '=', 1),
+        or<S>(exp('c', '=', true), exp('d', '=', '3')),
+        exp('b', '=', '2'),
       ),
     ).toEqual(
       or<S>(
-        expression('a', '=', 1),
-        expression('c', '=', true),
-        expression('d', '=', '3'),
-        expression('b', '=', '2'),
+        exp('a', '=', 1),
+        exp('c', '=', true),
+        exp('d', '=', '3'),
+        exp('b', '=', '2'),
       ),
     );
   });
@@ -728,8 +726,8 @@ describe('ast', () => {
     expect(
       ast(
         q
-          .where(and(expression('a', '=', 1), expression('a', '=', 2)))
-          .where(and(expression('c', '=', 'a'), expression('c', '=', 'b'))),
+          .where(and(exp('a', '=', 1), exp('a', '=', 2)))
+          .where(and(exp('c', '=', 'a'), exp('c', '=', 'b'))),
       ).where,
     ).toEqual({
       op: 'AND',
@@ -772,9 +770,9 @@ describe('ast', () => {
     expect(
       ast(
         q
-          .where(expression('a', '=', 123))
-          .where(expression('c', '=', 'abc'))
-          .where(expression('d', '=', true)),
+          .where(exp('a', '=', 123))
+          .where(exp('c', '=', 'abc'))
+          .where(exp('d', '=', true)),
       ).where,
     ).toEqual({
       op: 'AND',
@@ -809,9 +807,9 @@ describe('ast', () => {
     expect(
       ast(
         q
-          .where(expression('a', '=', 123))
-          .where(or(expression('c', '=', 'abc'), expression('c', '=', 'def')))
-          .where(expression('d', '=', true)),
+          .where(exp('a', '=', 123))
+          .where(or(exp('c', '=', 'abc'), exp('c', '=', 'def')))
+          .where(exp('d', '=', true)),
       ).where,
     ).toEqual({
       op: 'AND',
@@ -861,8 +859,7 @@ describe('ast', () => {
     const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
     expect(
-      ast(q.where(or(expression('a', '=', 123), expression('a', '=', 456))))
-        .where,
+      ast(q.where(or(exp('a', '=', 123), exp('a', '=', 456)))).where,
     ).toEqual({
       op: 'OR',
       conditions: [
@@ -888,8 +885,8 @@ describe('ast', () => {
     expect(
       ast(
         q
-          .where(or(expression('a', '=', 123), expression('a', '=', 456)))
-          .where(or(expression('c', '=', 'abc'), expression('c', '=', 'def'))),
+          .where(or(exp('a', '=', 123), exp('a', '=', 456)))
+          .where(or(exp('c', '=', 'abc'), exp('c', '=', 'def'))),
       ).where,
     ).toEqual({
       op: 'AND',
@@ -964,7 +961,7 @@ describe('NOT', () => {
     for (const c of cases) {
       test(`${c.in} -> ${c.out}`, () => {
         const q = new EntityQuery<{e1: E1}>(context, 'e1');
-        expect(ast(q.where(not(expression('a', c.in, 1)))).where).toEqual({
+        expect(ast(q.where(not(exp('a', c.in, 1)))).where).toEqual({
           op: c.out,
           field: 'a',
           value: {type: 'literal', value: 1},
@@ -988,50 +985,50 @@ describe("De Morgan's Law", () => {
     expected: WhereCondition<S>;
   }[] = [
     {
-      condition: expression('n', '=', 1),
-      expected: expression('n', '!=', 1),
+      condition: exp('n', '=', 1),
+      expected: exp('n', '!=', 1),
     },
 
     {
-      condition: and(expression('n', '!=', 1), expression('n', '<', 2)),
-      expected: or(expression('n', '=', 1), expression('n', '>=', 2)),
+      condition: and(exp('n', '!=', 1), exp('n', '<', 2)),
+      expected: or(exp('n', '=', 1), exp('n', '>=', 2)),
     },
 
     {
-      condition: or(expression('n', '<=', 1), expression('n', '>', 2)),
-      expected: and(expression('n', '>', 1), expression('n', '<=', 2)),
+      condition: or(exp('n', '<=', 1), exp('n', '>', 2)),
+      expected: and(exp('n', '>', 1), exp('n', '<=', 2)),
     },
 
     {
       condition: or(
-        and(expression('n', '>=', 1), expression('n', 'IN', [1, 2])),
-        expression('n', 'NOT IN', [3, 4]),
+        and(exp('n', '>=', 1), exp('n', 'IN', [1, 2])),
+        exp('n', 'NOT IN', [3, 4]),
       ),
       expected: and(
-        or(expression('n', '<', 1), expression('n', 'NOT IN', [1, 2])),
-        expression('n', 'IN', [3, 4]),
+        or(exp('n', '<', 1), exp('n', 'NOT IN', [1, 2])),
+        exp('n', 'IN', [3, 4]),
       ),
     },
 
     {
       condition: and(
-        or(expression('n', 'NOT IN', [5, 6]), expression('s', 'LIKE', 'Hi')),
-        expression('s', 'NOT LIKE', 'Hi'),
+        or(exp('n', 'NOT IN', [5, 6]), exp('s', 'LIKE', 'Hi')),
+        exp('s', 'NOT LIKE', 'Hi'),
       ),
       expected: or(
-        and(expression('n', 'IN', [5, 6]), expression('s', 'NOT LIKE', 'Hi')),
-        expression('s', 'LIKE', 'Hi'),
+        and(exp('n', 'IN', [5, 6]), exp('s', 'NOT LIKE', 'Hi')),
+        exp('s', 'LIKE', 'Hi'),
       ),
     },
 
     {
-      condition: not(expression('s', 'ILIKE', 'hi')),
-      expected: expression('s', 'ILIKE', 'hi'),
+      condition: not(exp('s', 'ILIKE', 'hi')),
+      expected: exp('s', 'ILIKE', 'hi'),
     },
 
     {
-      condition: not(expression('s', 'NOT ILIKE', 'bye')),
-      expected: expression('s', 'NOT ILIKE', 'bye'),
+      condition: not(exp('s', 'NOT ILIKE', 'bye')),
+      expected: exp('s', 'NOT ILIKE', 'bye'),
     },
   ];
 

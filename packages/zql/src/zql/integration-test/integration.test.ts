@@ -7,7 +7,7 @@ import {z} from 'zod';
 import {makeReplicacheContext} from '../context/replicache-context.js';
 import {joinSymbol} from '../ivm/types.js';
 import * as agg from '../query/agg.js';
-import {EntityQuery, expression, not, or} from '../query/entity-query.js';
+import {EntityQuery, exp, not, or} from '../query/entity-query.js';
 
 export async function tickAFewTimes(n = 10, time = 0) {
   for (let i = 0; i < n; i++) {
@@ -831,12 +831,7 @@ test('or where', async () => {
 
   const stmt = q
     .select('id')
-    .where(
-      or(
-        expression('status', '=', 'open'),
-        expression('priority', '>=', 'medium'),
-      ),
-    )
+    .where(or(exp('status', '=', 'open'), exp('priority', '>=', 'medium')))
     .prepare();
   const rows = await stmt.exec();
   expect(rows).toEqual([issues[0], issues[1]]);
@@ -883,7 +878,7 @@ test('not', async () => {
 
   const stmt = q
     .select('id')
-    .where(not(expression('status', '=', 'closed')))
+    .where(not(exp('status', '=', 'closed')))
     .prepare();
   const rows = await stmt.exec();
   expect(rows).toEqual([issues[0], issues[1]]);
