@@ -13,14 +13,11 @@ describe('view-syncer/migrations', () => {
     postState: object;
   };
 
-  const serviceID = '321';
-
   const cases: Case[] = [
     {
       name: 'storage schema meta',
       postState: {
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        ['/vs/321/storage_schema_meta']: {
+        ['/vs/storage_schema_meta']: {
           // Update these as necessary.
           version: 1,
           maxVersion: 1,
@@ -40,7 +37,7 @@ describe('view-syncer/migrations', () => {
         await initStorageSchema(
           createSilentLogContext(),
           new DurableStorage(storage),
-          schemaRoot(serviceID),
+          schemaRoot,
           SCHEMA_MIGRATIONS,
         );
 

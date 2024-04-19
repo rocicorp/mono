@@ -19,7 +19,7 @@ describe('view-syncer/service', () => {
 
       await vs.run();
 
-      expect(await storage.get('/vs/9876/storage_schema_meta')).toEqual({
+      expect(await storage.get('/vs/storage_schema_meta')).toEqual({
         // Update versions as necessary
         version: 1,
         maxVersion: 1,
