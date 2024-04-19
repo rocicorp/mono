@@ -21,9 +21,11 @@ export type Context = SubscriptionDelegate & {
   getSource: <T extends Entity>(name: string) => Source<T>;
 };
 
-class TestContext implements Context {
+export class TestContext implements Context {
   readonly materialite = new Materialite();
   readonly #sources = new Map<string, Source<object>>();
+
+  subscriptionsChangedLog: {type: 'added' | 'removed'; ast: AST}[] = [];
 
   getSource<T extends Entity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {
@@ -36,15 +38,15 @@ class TestContext implements Context {
     return this.#sources.get(name)! as unknown as Source<T>;
   }
 
-  subscriptionAdded(_ast: AST): void {
-    // Implement the subscriptionAdded method here
+  subscriptionAdded(ast: AST): void {
+    this.subscriptionsChangedLog.push({type: 'added', ast});
   }
 
-  subscriptionRemoved(_ast: AST): void {
-    // Implement the subscriptionRemoved method here
+  subscriptionRemoved(ast: AST): void {
+    this.subscriptionsChangedLog.push({type: 'removed', ast});
   }
 }
 
-export function makeTestContext(): Context {
+export function makeTestContext(): TestContext {
   return new TestContext();
 }

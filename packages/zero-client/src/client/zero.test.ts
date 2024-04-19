@@ -17,6 +17,16 @@ import * as sinon from 'sinon';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
+import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
+import {ServerError} from './server-error.js';
+import {
+  MockSocket,
+  TestLogSink,
+  TestZero,
+  tickAFewTimes,
+  waitForUpstreamMessage,
+  zeroForTest,
+} from './test-utils.js'; // Why use fakes when we can use the real thing!
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -28,16 +38,6 @@ import {
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
-import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
-import {ServerError} from './server-error.js';
-import {
-  MockSocket,
-  TestLogSink,
-  TestZero,
-  zeroForTest,
-  tickAFewTimes,
-  waitForUpstreamMessage,
-} from './test-utils.js'; // Why use fakes when we can use the real thing!
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1683,4 +1683,26 @@ test('subscribe where body returns non json', async () => {
   ]);
 
   cancel();
+});
+
+test('ensure we get the same query object back', () => {
+  type Issue = {
+    id: string;
+    title: string;
+  };
+  type Comment = {
+    id: string;
+    issueID: string;
+    text: string;
+  };
+  const r = zeroForTest();
+  const issueQuery1 = r.getQuery<{issue: Issue}>('issue');
+  const issueQuery2 = r.getQuery<{issue: Issue}>('issue');
+  expect(issueQuery1).to.equal(issueQuery2);
+
+  const commentQuery1 = r.getQuery<{comment: Comment}>('comment');
+  const commentQuery2 = r.getQuery<{comment: Comment}>('comment');
+  expect(commentQuery1).to.equal(commentQuery2);
+
+  expect(issueQuery1).to.not.equal(commentQuery1);
 });

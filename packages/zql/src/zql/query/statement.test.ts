@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
 import {z} from 'zod';
 import {makeTestContext} from '../context/context.js';
-import {EntityQuery} from './entity-query.js';
+import {EntityQuery, astForTesting as ast} from './entity-query.js';
 import {makeComparator} from './statement.js';
 
 const e1 = z.object({
@@ -167,6 +167,26 @@ test('destroying the statement stops updating the view', async () => {
   await Promise.resolve();
   expect(callCount).toBe(1);
   expect(await stmt.exec()).toEqual([{id: 'a', n: 1}]);
+});
+
+test('ensure we get callbacks when subscribing and unsubscribing', () => {
+  const context = makeTestContext();
+  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+
+  const statement = q.prepare();
+  const unsubscribe = statement.subscribe(_ => {
+    // noop
+  });
+
+  expect(context.subscriptionsChangedLog).toEqual([
+    {type: 'added', ast: ast(q)},
+  ]);
+
+  context.subscriptionsChangedLog.length = 0;
+  unsubscribe();
+  expect(context.subscriptionsChangedLog).toEqual([
+    {type: 'removed', ast: ast(q)},
+  ]);
 });
 
 //
