@@ -1,9 +1,9 @@
 import {describe, expect, test} from 'vitest';
-import {RowKeyValue, rowKeyHash, rowKeyString} from './row-key.js';
+import {RowKey, rowKeyHash, rowKeyString} from './row-key.js';
 
 describe('types/row-key', () => {
   type Case = {
-    keys: RowKeyValue[];
+    keys: RowKey[];
     rowKeyString: string;
     rowKeyHash: string;
   };

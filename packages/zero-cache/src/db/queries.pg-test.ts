@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../test/db.js';
-import type {RowKeyValue} from '../types/row-key.js';
+import type {RowKey} from '../types/row-key.js';
 import {lookupRowsWithKeys} from './queries.js';
 
 describe('db/queries', () => {
@@ -30,7 +30,7 @@ describe('db/queries', () => {
     INSERT INTO foo (id, str, val) VALUES (5, 'five', 'boom');
     `);
 
-    const rowKeys: RowKeyValue[] = [
+    const rowKeys: RowKey[] = [
       {id: 1, str: 'one'},
       {id: 3, str: 'three'},
       {id: 3, str: 'four'}, // Should not match

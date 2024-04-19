@@ -5,18 +5,18 @@ import {stringify} from './bigint-json.js';
 
 export type ColumnType = {typeOid: number};
 export type RowKeyType = Record<string, ColumnType>;
-export type RowKeyValue = Record<string, postgres.SerializableParameter>;
+export type RowKey = Record<string, postgres.SerializableParameter>;
 
 // Aliased for documentation purposes when dealing with full rows vs row keys.
 // The actual structure of the objects is the same.
 export type RowType = RowKeyType;
-export type RowValue = RowKeyValue;
+export type RowValue = RowKey;
 
 /**
  * Returns a normalized string suitable for representing a row key in a form
  * that can be used as a Map key.
  */
-export function rowKeyString(key: RowKeyValue): string {
+export function rowKeyString(key: RowKey): string {
   const tuples = Object.entries(key)
     .sort(([col1], [col2]) => compareUTF8(col1, col2))
     .flat();
@@ -38,7 +38,7 @@ export function rowKeyString(key: RowKeyValue): string {
  *
  * The hash is encoded in `base64url`, with the maximum 128-bit value being 22 characters long.
  */
-export function rowKeyHash(key: RowKeyValue): string {
+export function rowKeyHash(key: RowKey): string {
   const str = rowKeyString(key);
 
   // xxhash only computes 64-bit values. Run it on the forward and reverse string

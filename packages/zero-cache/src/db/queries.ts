@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
 import {typeNameByOID} from '../types/pg.js';
-import type {RowKeyType, RowKeyValue} from '../types/row-key.js';
+import type {RowKey, RowKeyType} from '../types/row-key.js';
 
 /**
  * Efficient lookup of multiple rows from a table from row keys.
@@ -24,7 +24,7 @@ export function lookupRowsWithKeys(
   schema: string,
   table: string,
   rowKeyType: RowKeyType,
-  rowKeys: RowKeyValue[],
+  rowKeys: RowKey[],
 ): postgres.PendingQuery<postgres.Row[]> {
   const colNames = Object.keys(rowKeyType).sort(compareUTF8);
   const cols = colNames

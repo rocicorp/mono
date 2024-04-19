@@ -16,32 +16,28 @@
  * intermediate and ephemeral changes.
  */
 import {assert} from 'shared/src/asserts.js';
-import type {
-  RowKeyType,
-  RowKeyValue,
-  RowValue,
-} from '../../../types/row-key.js';
+import type {RowKey, RowKeyType, RowValue} from '../../../types/row-key.js';
 import {rowKeyString} from '../../../types/row-key.js';
 
 export type InsertRowChange = {
   preRowKey?: undefined;
   preValue: 'none';
-  postRowKey: RowKeyValue;
+  postRowKey: RowKey;
   postValue: RowValue;
 };
 
 export type UpdateRowChange = {
   /** `preRowKey` is set for an UPDATE in which the row key changed. */
-  preRowKey?: RowKeyValue | null;
+  preRowKey?: RowKey | null;
   preValue: 'unknown';
-  postRowKey: RowKeyValue;
+  postRowKey: RowKey;
   postValue: RowValue;
 };
 
 export type DeleteRowChange = {
   preRowKey?: undefined;
   preValue: 'unknown';
-  postRowKey: RowKeyValue;
+  postRowKey: RowKey;
   postValue: 'none';
 };
 
@@ -53,7 +49,7 @@ export type RowChange = InsertRowChange | UpdateRowChange | DeleteRowChange;
  * (i.e. before and after the transaction).
  */
 export type EffectiveRowChange = {
-  readonly rowKey: RowKeyValue;
+  readonly rowKey: RowKey;
   readonly preValue: 'unknown' | 'none';
   readonly postValue: RowValue | 'none';
 };
