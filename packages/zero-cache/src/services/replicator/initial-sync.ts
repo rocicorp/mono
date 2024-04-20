@@ -5,11 +5,11 @@ import {postgresTypeConfig} from '../../types/pg.js';
 import {id, idList} from '../../types/sql.js';
 import {createTableStatement} from './tables/create.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
+import {ZERO_VERSION_COLUMN_NAME} from './tables/replication.js';
 import type {ColumnSpec} from './tables/specs.js';
 
 export const PUB_PREFIX = 'zero_';
 
-export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: 38,
   columnDefault: "'00'::text",

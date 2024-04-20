@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {setupReplicationTables} from '../incremental-sync.js';
 import {
   handoffPostgresReplication,
   startPostgresReplication,
   waitForInitialDataSynchronization,
 } from '../initial-sync.js';
+import {setupReplicationTables} from '../tables/replication.js';
 import {
   runSyncSchemaMigrations,
   type VersionMigrationMap,
