@@ -66,17 +66,14 @@ export async function setupReplicationTables(
   lc.info?.(`Setting up replication tables for ${upstreamUri}`);
 
   const replicated = await getPublicationInfo(tx, 'zero_');
-  const alterStmts = Object.keys(replicated.tables).map(
-    table => `
-      ALTER TABLE ${table} 
-        ALTER COLUMN ${ZERO_VERSION_COLUMN_NAME} DROP DEFAULT, 
-        ALTER COLUMN ${ZERO_VERSION_COLUMN_NAME} SET NOT NULL;
+  const alterStmts = replicated.tables.map(
+    table => tx`
+      ALTER TABLE ${tx(table.schema)}.${tx(table.name)} 
+        ALTER COLUMN ${tx(ZERO_VERSION_COLUMN_NAME)} DROP DEFAULT, 
+        ALTER COLUMN ${tx(ZERO_VERSION_COLUMN_NAME)} SET NOT NULL;
         `,
   );
 
-  await tx.unsafe(
-    alterStmts.join('') +
-      CREATE_REPLICATION_TABLES +
-      CREATE_INVALIDATION_TABLES,
-  );
+  await Promise.all(alterStmts);
+  await tx.unsafe(CREATE_REPLICATION_TABLES + CREATE_INVALIDATION_TABLES);
 }
