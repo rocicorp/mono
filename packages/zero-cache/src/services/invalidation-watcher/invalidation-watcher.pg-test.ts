@@ -6,13 +6,13 @@ import {initDB, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {normalizeFilterSpec} from '../../types/invalidation.js';
 import {Subscription} from '../../types/subscription.js';
-import {CREATE_REPLICATION_TABLES} from '../replicator/incremental-sync.js';
-import {CREATE_INVALIDATION_TABLES} from '../replicator/invalidation.js';
 import type {
   RegisterInvalidationFiltersResponse,
   Replicator,
   VersionChange,
 } from '../replicator/replicator.js';
+import {CREATE_INVALIDATION_TABLES} from '../replicator/tables/invalidation.js';
+import {CREATE_REPLICATION_TABLES} from '../replicator/tables/replication.js';
 import {
   InvalidationWatcherService,
   WatchRequest,

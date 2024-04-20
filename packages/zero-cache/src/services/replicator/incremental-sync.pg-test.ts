@@ -15,11 +15,12 @@ import {
   type InvalidationFilterSpec,
 } from '../../types/invalidation.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
-import {IncrementalSyncer, setupReplicationTables} from './incremental-sync.js';
+import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
 import {getPublicationInfo} from './tables/published.js';
+import {setupReplicationTables} from './tables/replication.js';
 import type {TableSpec} from './tables/specs.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';

@@ -45,7 +45,7 @@ export type AST = {
   //   readonly query: AST;
   // }[];
   readonly where?: Condition | undefined;
-  readonly joins?: Join[];
+  readonly joins?: Join[] | undefined;
   readonly limit?: number | undefined;
   readonly groupBy?: string[] | undefined;
   readonly orderBy?: Ordering | undefined;
