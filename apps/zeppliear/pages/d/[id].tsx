@@ -1,12 +1,11 @@
-import type {Comment, Issue} from '@/frontend/issue.js';
-import {UndoManager} from '@rocicorp/undo';
 import {useEffect, useRef, useState} from 'react';
 import {Zero} from 'zero-client';
-import App, {Collections} from '../../frontend/app';
 import {M, mutators} from '../../frontend/mutators';
+import App from '../../frontend/app';
+import {UndoManager} from '@rocicorp/undo';
 
 export default function Home() {
-  const [zero, setZero] = useState<Zero<M, Collections> | null>(null);
+  const [zero, setZero] = useState<Zero<M> | null>(null);
   const undoManagerRef = useRef(new UndoManager());
   useEffect(() => {
     // disabled eslint await requirement
@@ -23,10 +22,6 @@ export default function Home() {
         roomID: spaceID,
         mutators,
         kvStore: 'idb',
-        queries: {
-          issue: v => v as Issue,
-          comment: v => v as Comment,
-        },
       });
 
       setZero(z);

@@ -5,12 +5,19 @@ import {useCallback, useEffect, useState} from 'react';
 import {Remark} from 'react-remark';
 import type {Zero} from 'zero-client';
 import {timeAgo} from '../util/date';
-import type {Collections} from './app.jsx';
 import ArrowIcon from './assets/icons/arrow.svg';
 import DefaultAvatarIcon from './assets/icons/avatar.svg';
 import CloseIcon from './assets/icons/close.svg';
 import {useKeyPressed} from './hooks/useKeyPressed';
-import {Comment, Issue, IssueUpdate, Priority, Status} from './issue';
+import {
+  COMMENT_ENTITY_NAME,
+  Comment,
+  ISSUE_ENTITY_NAME,
+  Issue,
+  IssueUpdate,
+  Priority,
+  Status,
+} from './issue';
 import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
@@ -21,7 +28,7 @@ interface Props {
   onAddComment: (comment: Comment) => void;
   issues: Issue[];
   isLoading: boolean;
-  zero: Zero<M, Collections>;
+  zero: Zero<M>;
 }
 
 // TODO: join comment.creatorID with members
@@ -79,8 +86,8 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
-  const issueQuery = zero.query.issue;
-  const commentQuery = zero.query.comment;
+  const issueQuery = zero.getQuery<{issue: Issue}>(ISSUE_ENTITY_NAME);
+  const commentQuery = zero.getQuery<{comment: Comment}>(COMMENT_ENTITY_NAME);
 
   const issue =
     useQuery(issueQuery.select('*').where('id', '=', detailIssueID ?? ''), [

@@ -9,16 +9,11 @@ import type {
   ReadonlyJSONValue,
   WriteTransaction,
 } from 'reflect-shared/src/mod.js';
-import type {
-  PullRequestV1,
-  PushRequestV1,
-  ReadonlyJSONObject,
-} from 'replicache';
+import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
-import type {EntityQuery} from '../mod.js';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
@@ -39,7 +34,6 @@ import {
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
-  QueryDefs,
   RUN_LOOP_INTERVAL_MS,
   createSocket,
   serverAheadReloadReason,
@@ -1041,7 +1035,7 @@ test('Ping timeout', async () => {
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
 
-function expectLogMessages(r: TestZero<MutatorDefs, QueryDefs>) {
+function expectLogMessages(r: TestZero<MutatorDefs>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1170,7 +1164,7 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<MutatorDefs, QueryDefs>) => Promise<unknown>,
+  fn: (r: TestZero<MutatorDefs>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
@@ -1290,7 +1284,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<MutatorDefs, QueryDefs>,
+      r: TestZero<MutatorDefs>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1567,10 +1561,7 @@ test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
   const t = async (
-    kvStore: ZeroOptions<
-      Record<string, never>,
-      Record<string, never>
-    >['kvStore'],
+    kvStore: ZeroOptions<Record<string, never>>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: JSONValue | undefined = undefined,
@@ -1585,11 +1576,9 @@ test('kvStore option', async () => {
         },
       },
     });
-    expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).to.equal(
-      expectedValue,
-    );
+    expect(await r.query(tx => tx.get('foo'))).to.equal(expectedValue);
     await r.mutate.putFoo('bar');
-    expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).to.equal('bar');
+    expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
     await r.close();
@@ -1706,48 +1695,14 @@ test('ensure we get the same query object back', () => {
     issueID: string;
     text: string;
   };
-  const r = zeroForTest({
-    queries: {
-      issue: (v: ReadonlyJSONObject) => v as Issue,
-      comment: (v: ReadonlyJSONObject) => v as Comment,
-    },
-  });
-  const issueQuery1 = r.query.issue;
-  const issueQuery2 = r.query.issue;
+  const r = zeroForTest();
+  const issueQuery1 = r.getQuery<{issue: Issue}>('issue');
+  const issueQuery2 = r.getQuery<{issue: Issue}>('issue');
   expect(issueQuery1).to.equal(issueQuery2);
 
-  const commentQuery1 = r.query.comment;
-  const commentQuery2 = r.query.comment;
+  const commentQuery1 = r.getQuery<{comment: Comment}>('comment');
+  const commentQuery2 = r.getQuery<{comment: Comment}>('comment');
   expect(commentQuery1).to.equal(commentQuery2);
 
   expect(issueQuery1).to.not.equal(commentQuery1);
-});
-
-test('the type of collection should be inferred from options with parse', () => {
-  type Issue = {
-    id: string;
-    title: string;
-  };
-  type Comment = {
-    id: string;
-    issueID: string;
-    text: string;
-  };
-  const r = zeroForTest({
-    queries: {
-      issue: (v: ReadonlyJSONObject) => v as Issue,
-      comment: (v: ReadonlyJSONObject) => v as Comment,
-    },
-  });
-
-  const c: {
-    readonly issue: EntityQuery<{issue: Issue}, []>;
-    readonly comment: EntityQuery<{comment: Comment}, []>;
-  } = r.query;
-  expect(c).not.undefined;
-
-  const issueQ: EntityQuery<{issue: Issue}> = r.query.issue;
-  const commentQ: EntityQuery<{comment: Comment}> = r.query.comment;
-  expect(issueQ).not.undefined;
-  expect(commentQ).not.undefined;
 });
