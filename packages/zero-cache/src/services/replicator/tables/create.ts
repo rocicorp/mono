@@ -3,15 +3,23 @@ import type {ColumnSpec, TableSpec} from './specs.js';
 
 /**
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
+ *
+ * For replication purposes, the `notNull` (i.e. `NOT NULL`) constraint is ignored.
+ * Although logical replication notifies the subscriber of changes to the table
+ * _structure_, it does not notify the subscriber of changes to table constraints
+ * (other than primary keys). As such, it is unsafe to initialize a replicated table
+ * with a constraint that might be removed without our knowledge.
+ *
+ * Instead, it is sufficient to assume that the data in the logical replication stream
+ * satisfies the constraints of the upstream table.
  */
-export function createTableStatement(spec: TableSpec): string {
+export function createTableStatementIgnoringNotNullConstraint(
+  spec: TableSpec,
+): string {
   function colDef(name: string, colSpec: ColumnSpec): string {
     const parts = [`${id(name)} ${colSpec.dataType}`];
     if (colSpec.characterMaximumLength !== null) {
       parts.push(`(${colSpec.characterMaximumLength})`);
-    }
-    if (colSpec.notNull) {
-      parts.push(' NOT NULL');
     }
     if (colSpec.columnDefault) {
       parts.push(` DEFAULT ${colSpec.columnDefault}`);

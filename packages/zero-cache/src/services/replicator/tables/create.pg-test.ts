@@ -1,20 +1,21 @@
 import type postgres from 'postgres';
 import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../../test/db.js';
-import {createTableStatement} from './create.js';
+import {createTableStatementIgnoringNotNullConstraint} from './create.js';
 import {getPublicationInfo} from './published.js';
 import type {TableSpec} from './specs.js';
 
 describe('tables/create', () => {
   type Case = {
     name: string;
-    tableSpec: TableSpec;
+    srcTableSpec: TableSpec;
+    dstTableSpec?: TableSpec;
   };
 
   const cases: Case[] = [
     {
       name: 'zero clients',
-      tableSpec: {
+      srcTableSpec: {
         schema: 'public',
         name: 'clients',
         columns: {
@@ -33,10 +34,29 @@ describe('tables/create', () => {
         },
         primaryKey: ['clientID'],
       },
+      dstTableSpec: {
+        schema: 'public',
+        name: 'clients',
+        columns: {
+          clientID: {
+            dataType: 'varchar',
+            characterMaximumLength: 180,
+            columnDefault: null,
+            notNull: true, // NOT NULL by virtue of being a PRIMARY KEY
+          },
+          lastMutationID: {
+            dataType: 'int8',
+            characterMaximumLength: null,
+            columnDefault: null,
+            notNull: false, // NOT NULL constraint is ignored
+          },
+        },
+        primaryKey: ['clientID'],
+      },
     },
     {
       name: 'types and array types and defaults',
-      tableSpec: {
+      srcTableSpec: {
         schema: 'public',
         name: 'users',
         columns: {
@@ -116,10 +136,14 @@ describe('tables/create', () => {
 
   for (const c of cases) {
     test(c.name, async () => {
-      await db.unsafe(createTableStatement(c.tableSpec));
+      await db.unsafe(
+        createTableStatementIgnoringNotNullConstraint(c.srcTableSpec),
+      );
 
       const published = await getPublicationInfo(db, 'zero_');
-      expect(published.tables).toEqual(expect.arrayContaining([c.tableSpec]));
+      expect(published.tables).toEqual(
+        expect.arrayContaining([c.dstTableSpec ?? c.srcTableSpec]),
+      );
     });
   }
 });

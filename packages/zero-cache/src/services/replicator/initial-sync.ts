@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
 import {postgresTypeConfig} from '../../types/pg.js';
 import {id, idList} from '../../types/sql.js';
-import {createTableStatement} from './tables/create.js';
+import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {ZERO_VERSION_COLUMN_NAME} from './tables/replication.js';
 import type {ColumnSpec} from './tables/specs.js';
@@ -62,7 +62,7 @@ export async function startPostgresReplication(
     schemas.add(table.schema);
     // Add the _0_version column with a default value of "00".
     table.columns[ZERO_VERSION_COLUMN_NAME] = ZERO_VERSION_COLUMN_SPEC;
-    return createTableStatement(table);
+    return createTableStatementIgnoringNotNullConstraint(table);
   });
 
   const schemaStmts = [...schemas].map(
