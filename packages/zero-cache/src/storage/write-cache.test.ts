@@ -1,10 +1,9 @@
-import type {Patch} from 'reflect-protocol';
 import * as valita from 'shared/src/valita.js';
 import {describe, expect, test} from 'vitest';
 import {runWithDurableObjectStorage} from '../test/do.js';
 import {DurableStorage} from './durable-storage.js';
 import type {ListOptions} from './storage.js';
-import {EntryCache} from './write-cache.js';
+import {WriteCache, type Patch} from './write-cache.js';
 
 type Case = {
   name: string;
@@ -19,7 +18,7 @@ type Case = {
   expected: [string, string][];
   expectedPending: Patch;
 };
-describe('entry-cache', () => {
+describe('write-cache', () => {
   const durableEntryKeys: string[] = ['bar-1', 'baz-1', 'foo-1'];
 
   const cases: Case[] = [
@@ -163,9 +162,9 @@ describe('entry-cache', () => {
         ['foo-1', 'new-foo-1'],
       ],
       expectedPending: [
-        {op: 'put', key: 'foo-1', value: 'new-foo-1'},
         {op: 'put', key: 'baz-2', value: 'new-baz-2'},
         {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'foo-1', value: 'new-foo-1'},
       ],
     },
     {
@@ -557,7 +556,7 @@ describe('entry-cache', () => {
           await durable.put(k, `orig-${k}`);
         }
 
-        const cache = new EntryCache(durable);
+        const cache = new WriteCache(durable);
 
         expect(cache.isDirty()).toBe(false);
         expect(await cache.get('foo-1', valita.string())).toEqual('orig-foo-1');
@@ -676,7 +675,7 @@ describe('entry-cache', () => {
   }
 });
 
-async function testGetEntries(keys: string[], cache: EntryCache, c: Case) {
+async function testGetEntries(keys: string[], cache: WriteCache, c: Case) {
   const compareEntries = (
     [k1, _1]: [string, string],
     [k2, _2]: [string, string],

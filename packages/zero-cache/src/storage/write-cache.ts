@@ -1,30 +1,29 @@
 import {compareUTF8} from 'compare-utf8';
-import type {DelOp, PutOp} from 'reflect-protocol';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import {batchScan, scan} from './scan-storage.js';
 import type {ListOptions, Storage} from './storage.js';
 
 /**
- * Implements a read/write cache for key/value pairs on top of some lower-level
- * storage.
+ * Implements a write cache for key/value pairs on top of some lower-level
+ * storage. Writes are buffered in the cache, with their effects readable from
+ * the cache, but not applied to the underlying {@link Storage} until
+ * {@link WriteCache.flush flush()} is called. This provides the mechanism for
+ * atomic flushing of multiple writes.
  *
- * This is designed to be stacked: EntryCache itself implements Storage so that
+ * WriteCaches can be stacked: WriteCache itself implements Storage so that
  * you can create multiple layers of caches and control when they flush.
- *
- * TODO: We can remove the read side of this since DO does caching itself internally!
  */
-export class EntryCache implements Storage {
+export class WriteCache implements Storage {
   #storage: Storage;
-  #cache: Map<string, {value?: ReadonlyJSONValue | undefined; dirty: boolean}> =
-    new Map();
+  #cache: Map<string, {value: ReadonlyJSONValue | undefined}> = new Map();
 
   constructor(storage: Storage) {
     this.#storage = storage;
   }
 
   #put<T extends ReadonlyJSONValue>(key: string, value: T) {
-    this.#cache.set(key, {value, dirty: true});
+    this.#cache.set(key, {value});
   }
 
   // eslint-disable-next-line require-await
@@ -42,7 +41,7 @@ export class EntryCache implements Storage {
   }
 
   #del(key: string) {
-    this.#cache.set(key, {value: undefined, dirty: true});
+    this.#cache.set(key, {value: undefined});
   }
 
   // eslint-disable-next-line require-await
@@ -57,20 +56,18 @@ export class EntryCache implements Storage {
     }
   }
 
+  // eslint-disable-next-line require-await
   async get<T extends ReadonlyJSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
     const cached = this.#cache.get(key);
-    if (cached) {
-      // We don't validate on cache hits partly for perf reasons and also
-      // because we should have already validated with same schema during
-      // initial read.
-      return cached.value as T | undefined;
-    }
-    const value = await this.#storage.get(key, schema);
-    this.#cache.set(key, {value, dirty: false});
-    return value;
+    return cached
+      ? // We don't validate on cache hits partly for perf reasons and also
+        // because we should have already validated with same schema during
+        // initial read.
+        (cached.value as T | undefined)
+      : this.#storage.get(key, schema);
   }
 
   async getEntries<T extends ReadonlyJSONValue>(
@@ -97,7 +94,6 @@ export class EntryCache implements Storage {
       schema,
     );
     for (const [key, value] of fromStorage.entries()) {
-      this.#cache.set(key, {value, dirty: false});
       result.set(key, value);
     }
     return result;
@@ -108,23 +104,16 @@ export class EntryCache implements Storage {
    * redundant writes (e.g. deleting a non-existing key) are still considered writes.
    */
   isDirty(): boolean {
-    for (const value of this.#cache.values()) {
-      if (value.dirty) {
-        return true;
-      }
-    }
-    return false;
+    return this.#cache.size > 0;
   }
 
   pending(): (PutOp | DelOp)[] {
     const res: (PutOp | DelOp)[] = [];
-    for (const [key, {value, dirty}] of this.#cache.entries()) {
-      if (dirty) {
-        if (value === undefined) {
-          res.push({op: 'del', key});
-        } else {
-          res.push({op: 'put', key, value});
-        }
+    for (const [key, {value}] of this.#cache.entries()) {
+      if (value === undefined) {
+        res.push({op: 'del', key});
+      } else {
+        res.push({op: 'put', key, value});
       }
     }
     return res;
@@ -138,13 +127,11 @@ export class EntryCache implements Storage {
       delCount: 0,
       putCount: 0,
     };
-    for (const {value, dirty} of this.#cache.values()) {
-      if (dirty) {
-        if (value === undefined) {
-          counts.delCount++;
-        } else {
-          counts.putCount++;
-        }
+    for (const {value} of this.#cache.values()) {
+      if (value === undefined) {
+        counts.delCount++;
+      } else {
+        counts.putCount++;
       }
     }
     return counts;
@@ -155,15 +142,13 @@ export class EntryCache implements Storage {
     // invoked before await. This ensures atomicity of the flushed
     // writes, as described in:
     //
-    // https://developers.cloudflare.com/workers/learning/using-durable-objects/#accessing-persistent-storage-from-a-durable-object
+    // https://developers.cloudflare.com/durable-objects/api/transactional-storage-api/#supported-options-1
     const promises = [];
-    for (const [key, {value, dirty}] of this.#cache.entries()) {
-      if (dirty) {
-        if (value === undefined) {
-          promises.push(this.#storage.del(key));
-        } else {
-          promises.push(this.#storage.put(key, value));
-        }
+    for (const [key, {value}] of this.#cache.entries()) {
+      if (value === undefined) {
+        promises.push(this.#storage.del(key));
+      } else {
+        promises.push(this.#storage.put(key, value));
       }
     }
     await Promise.all(promises);
@@ -198,8 +183,8 @@ export class EntryCache implements Storage {
     let adjustedLimit = limit;
     if (adjustedLimit !== undefined) {
       let deleted = 0;
-      for (const [, {value, dirty}] of this.#cache.entries()) {
-        if (dirty && value === undefined) {
+      for (const [, {value}] of this.#cache.entries()) {
+        if (value === undefined) {
           deleted++;
         }
       }
@@ -216,7 +201,6 @@ export class EntryCache implements Storage {
       const [k, v] = entry;
 
       if (
-        v.dirty &&
         (!prefix || k.startsWith(prefix)) &&
         (!startKey ||
           (exclusive
@@ -285,3 +269,17 @@ export class EntryCache implements Storage {
     return out;
   }
 }
+
+// Carried over from `reflect-protocol`. No longer used by still useful for testing.
+export type PutOp = {
+  op: 'put';
+  key: string;
+  value: ReadonlyJSONValue;
+};
+
+export type DelOp = {
+  op: 'del';
+  key: string;
+};
+
+export type Patch = (PutOp | DelOp)[];
