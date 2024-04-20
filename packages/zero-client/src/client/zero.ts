@@ -1,6 +1,5 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import type {Entity} from '@rocicorp/zql/src/entity.js';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
 import {makeReplicacheContext} from '@rocicorp/zql/src/zql/context/replicache-context.js';
@@ -63,20 +62,12 @@ import {
   Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {QueryParseDefs, ZeroOptions} from './options.js';
+import type {ZeroOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
-
-export type QueryDefs = {
-  readonly [name: string]: Entity;
-};
-
-type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
-  readonly [K in keyof QD]: EntityQuery<{[P in K]: QD[K]}, []>;
-};
 
 declare const TESTING: boolean;
 
@@ -103,9 +94,7 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function forTesting<MD extends MutatorDefs, QD extends QueryDefs>(
-  r: Zero<MD, QD>,
-): TestZero {
+function forTesting<MD extends MutatorDefs>(r: Zero<MD>): TestZero {
   return r as unknown as TestZero;
 }
 
@@ -181,7 +170,7 @@ export interface ReplicacheInternalAPI {
   lastMutationID(): number;
 }
 
-export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
+export class Zero<MD extends MutatorDefs> {
   readonly version = version;
 
   readonly #rep: Replicache<MD>;
@@ -225,6 +214,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   };
 
   readonly #zqlContext: ZQLContext;
+  readonly #zqlQueriesMap = new Map<string, EntityQuery<FromSet>>();
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -303,9 +293,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<MD, QD>;
-
-  readonly query: MakeEntityQueriesFromQueryDefs<QD>;
+  readonly #options: ZeroOptions<MD>;
 
   #metrics: MetricManager;
 
@@ -316,7 +304,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<MD, QD>) {
+  constructor(options: ZeroOptions<MD>) {
     const {
       userID,
       roomID,
@@ -324,7 +312,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'mem',
-      queries = {} as QueryParseDefs<QD>,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -400,8 +387,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
       subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
     });
-
-    this.query = this.#registerQueries(queries);
 
     reportReloadReason(this.#lc);
 
@@ -542,9 +527,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   /**
    * Transactionally read Zero data.
    */
-  oldReplicacheQuery<R>(
-    body: (tx: ReadTransaction) => Promise<R> | R,
-  ): Promise<R> {
+  query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
     return this.#rep.query(body);
   }
 
@@ -1427,25 +1410,25 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     return this.#baseCookieResolver.promise;
   }
 
-  #registerQueries(
-    queryDefs: QueryParseDefs<QD>,
-  ): MakeEntityQueriesFromQueryDefs<QD> {
-    const rv = {} as Record<string, EntityQuery<FromSet, []>>;
-    const context = this.#zqlContext;
-    // Not using parse yet
-    for (const name of Object.keys(queryDefs)) {
-      rv[name] = new EntityQuery(context, name);
-    }
-
-    return rv as MakeEntityQueriesFromQueryDefs<QD>;
-  }
-
   #zqlSubscriptionRemoved(ast: AST) {
     console.log('TODO: removeZQLSubscription', JSON.stringify(ast));
   }
 
   #zqlSubscriptionAdded(ast: AST) {
     console.log('TODO: addZQLSubscription', JSON.stringify(ast));
+  }
+
+  getQuery<From extends FromSet>(collection: string): EntityQuery<From> {
+    // This returns the same instance every time.
+    // When the API is zero.query.issue it will be more obvious.
+    const existing = this.#zqlQueriesMap.get(collection);
+    if (existing) {
+      return existing as EntityQuery<From>;
+    }
+
+    const entityQuery = new EntityQuery<From>(this.#zqlContext, collection);
+    this.#zqlQueriesMap.set(collection, entityQuery as EntityQuery<FromSet>);
+    return entityQuery;
   }
 }
 

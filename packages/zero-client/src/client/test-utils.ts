@@ -19,9 +19,8 @@ import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
   ConnectionState,
-  QueryDefs,
-  TestingContext,
   Zero,
+  TestingContext,
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
@@ -59,10 +58,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestZero<
-  MD extends MutatorDefs,
-  QD extends QueryDefs,
-> extends Zero<MD, QD> {
+export class TestZero<MD extends MutatorDefs> extends Zero<MD> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -186,13 +182,13 @@ export class TestZero<
 
 declare const TESTING: boolean;
 
-const testZeroInstances = new Set<TestZero<MutatorDefs, QueryDefs>>();
+const testZeroInstances = new Set<TestZero<MutatorDefs>>();
 
 let testZeroCounter = 0;
 
-export function zeroForTest<MD extends MutatorDefs, QD extends QueryDefs>(
-  options: Partial<ZeroOptions<MD, QD>> = {},
-): TestZero<MD, QD> {
+export function zeroForTest<MD extends MutatorDefs>(
+  options: Partial<ZeroOptions<MD>> = {},
+): TestZero<MD> {
   const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
@@ -208,7 +204,7 @@ export function zeroForTest<MD extends MutatorDefs, QD extends QueryDefs>(
   };
 
   // Keep track of all instances so we can close them in teardown.
-  testZeroInstances.add(r as TestZero<MutatorDefs, QueryDefs>);
+  testZeroInstances.add(r);
   return r;
 }
 // This file is imported in a worker and web-test-runner does not inject the
@@ -239,7 +235,7 @@ export class TestLogSink implements LogSink {
 }
 
 export async function waitForUpstreamMessage(
-  r: TestZero<MutatorDefs, QueryDefs>,
+  r: TestZero<MutatorDefs>,
   name: string,
   clock: SinonFakeTimers,
 ) {
