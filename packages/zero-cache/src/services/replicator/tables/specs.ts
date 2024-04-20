@@ -1,13 +1,13 @@
 export type ColumnSpec = {
-  dataType: string;
-  characterMaximumLength: number | null;
-  columnDefault: string | null;
-  notNull: boolean;
+  readonly dataType: string;
+  readonly characterMaximumLength: number | null;
+  readonly columnDefault: string | null;
+  readonly notNull: boolean;
 };
 
 export type TableSpec = {
-  schema: string;
-  name: string;
-  columns: Record<string, ColumnSpec>;
-  primaryKey: string[];
+  readonly schema: string;
+  readonly name: string;
+  readonly columns: Readonly<Record<string, ColumnSpec>>;
+  readonly primaryKey: readonly string[];
 };

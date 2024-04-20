@@ -33,9 +33,12 @@ const publicationsResultSchema = v.array(publicationSchema);
 export type Publication = v.Infer<typeof publicationSchema>;
 
 export type PublicationInfo = {
-  publications: Publication[];
-  tables: TableSpec[];
+  readonly publications: Publication[];
+  readonly tables: TableSpec[];
 };
+
+/** The publication prefix used for tables replicated to zero. */
+export const ZERO_PUB_PREFIX = 'zero_';
 
 /**
  * Retrieves all tables and columns published under any PUBLICATION
@@ -43,7 +46,7 @@ export type PublicationInfo = {
  */
 export async function getPublicationInfo(
   sql: postgres.Sql,
-  pubPrefix: string,
+  pubPrefix = ZERO_PUB_PREFIX,
 ): Promise<PublicationInfo> {
   const result = await sql.unsafe(`
   SELECT ${Object.keys(publicationSchema.shape).join(',')} FROM pg_publication
@@ -79,8 +82,12 @@ export async function getPublicationInfo(
 
   const publications = v.parse(result[0], publicationsResultSchema);
   const columns = v.parse(result[1], publishedColumnsSchema);
-  const tables: TableSpec[] = [];
-  let table: TableSpec | undefined;
+
+  // For convenience when building the table spec. The returned TableSpec type is readonly.
+  type Writeable<T> = {-readonly [P in keyof T]: Writeable<T[P]>};
+
+  const tables: Writeable<TableSpec>[] = [];
+  let table: Writeable<TableSpec> | undefined;
 
   columns.forEach(col => {
     if (col.schema !== table?.schema || col.table !== table?.name) {

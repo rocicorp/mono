@@ -65,7 +65,7 @@ export async function setupReplicationTables(
 ) {
   lc.info?.(`Setting up replication tables for ${upstreamUri}`);
 
-  const replicated = await getPublicationInfo(tx, 'zero_');
+  const replicated = await getPublicationInfo(tx);
   const alterStmts = replicated.tables.map(
     table => tx`
       ALTER TABLE ${tx(table.schema)}.${tx(table.name)} 
