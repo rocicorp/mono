@@ -9,7 +9,6 @@ import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
 import {
   Comment,
-  ISSUE_ENTITY_NAME,
   Issue,
   IssueUpdate,
   Order,
@@ -48,8 +47,13 @@ function getTitle(view: string | null) {
   }
 }
 
+export type Collections = {
+  issue: Issue;
+  comment: Comment;
+};
+
 type AppProps = {
-  zero: Zero<M>;
+  zero: Zero<M, Collections>;
   undoManager: UndoManager;
 };
 
@@ -62,7 +66,7 @@ const App = ({zero, undoManager}: AppProps) => {
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const issueQuery = zero.getQuery<{issue: Issue}>(ISSUE_ENTITY_NAME);
+  const issueQuery = zero.query.issue;
 
   const allIssues = useQuery(issueQuery.select('*'));
 
@@ -188,7 +192,7 @@ interface LayoutProps {
   viewIssueCount: number;
   filteredIssues: Issue[];
   hasNonViewFilters: boolean;
-  zero: Zero<M>;
+  zero: Zero<M, Collections>;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
