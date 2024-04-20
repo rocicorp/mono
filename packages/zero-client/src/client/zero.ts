@@ -540,15 +540,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   }
 
   /**
-   * Transactionally read Zero data.
-   */
-  oldReplicacheQuery<R>(
-    body: (tx: ReadTransaction) => Promise<R> | R,
-  ): Promise<R> {
-    return this.#rep.query(body);
-  }
-
-  /**
    * Watches Zero for changes.
    *
    * The `callback` gets called whenever the underlying data changes and the
