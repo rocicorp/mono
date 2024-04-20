@@ -13,14 +13,14 @@ import {
   invalidationHash,
   normalizeFilterSpec,
 } from '../../types/invalidation.js';
-import {CREATE_REPLICATION_TABLES} from './incremental-sync.js';
 import {
-  CREATE_INVALIDATION_TABLES,
   InvalidationFilters,
   InvalidationProcessor,
   Invalidator,
 } from './invalidation.js';
 import type {RegisterInvalidationFiltersResponse} from './replicator.js';
+import {CREATE_INVALIDATION_TABLES} from './tables/invalidation.js';
+import {CREATE_REPLICATION_TABLES} from './tables/replication.js';
 import {TableTracker, type RowChange} from './types/table-tracker.js';
 
 describe('replicator/invalidation', () => {

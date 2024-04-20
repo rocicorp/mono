@@ -6,9 +6,10 @@ import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
-import {MessageProcessor, setupReplicationTables} from './incremental-sync.js';
+import {MessageProcessor} from './incremental-sync.js';
 import {InvalidationFilters} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
+import {setupReplicationTables} from './tables/replication.js';
 
 describe('replicator/message-processor', () => {
   let replica: postgres.Sql;
