@@ -17,37 +17,54 @@ onmessage = async (e: MessageEvent) => {
 async function testBasics(userID: string) {
   console.log('testBasics', WebSocket);
 
+  type E = {
+    id: string;
+    value: number;
+  };
+
   const r = zeroForTest({
     userID,
     mutators: {
-      async inc(tx, key: string) {
-        const v = (await tx.get<number>(key)) ?? 0;
-        await tx.set(key, v + 1);
+      async inc(tx, id: string) {
+        const rows = await q.exec();
+        const value = rows[0]?.value ?? 0;
+        await tx.set(`e/${id}`, {id, value: value + 1});
       },
     },
+    queries: {
+      e: v => v as E,
+    },
   });
+
+  const q = r.query.e.select('*').limit(1).prepare();
+
   await r.triggerConnected();
 
-  const log: (number | undefined)[] = [];
-  const cancelSubscribe = r.subscribe(
-    tx => tx.get<number>('foo'),
-    v => log.push(v),
-  );
+  const log: (readonly E[])[] = [];
+  const cancelSubscribe = q.subscribe(rows => {
+    log.push(rows);
+  });
 
   await sleep(1);
-  expect(log).deep.equal([undefined]);
+  expect(log).deep.equal([[]]);
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([undefined, 1]);
-  expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).equal(1);
+  expect(log).deep.equal([[], [{id: 'foo', value: 1}]]);
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([undefined, 1, 2]);
-  expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).equal(2);
+  expect(log).deep.equal([
+    [],
+    [{id: 'foo', value: 1}],
+    [{id: 'foo', value: 2}],
+  ]);
 
   cancelSubscribe();
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([undefined, 1, 2]);
-  expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).equal(3);
+  expect(log).deep.equal([
+    [],
+    [{id: 'foo', value: 1}],
+    [{id: 'foo', value: 2}],
+  ]);
+  expect(await q.exec()).deep.equal([{id: 'foo', value: 3}]);
 }
