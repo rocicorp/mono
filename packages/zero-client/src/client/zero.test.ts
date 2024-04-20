@@ -34,12 +34,12 @@ import {
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
 import {
   CONNECT_TIMEOUT_MS,
-  CollectionDefs,
   ConnectionState,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
+  QueryDefs,
   RUN_LOOP_INTERVAL_MS,
   createSocket,
   serverAheadReloadReason,
@@ -1041,7 +1041,7 @@ test('Ping timeout', async () => {
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
 
-function expectLogMessages(r: TestZero<MutatorDefs, CollectionDefs>) {
+function expectLogMessages(r: TestZero<MutatorDefs, QueryDefs>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1170,7 +1170,7 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<MutatorDefs, CollectionDefs>) => Promise<unknown>,
+  fn: (r: TestZero<MutatorDefs, QueryDefs>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
@@ -1290,7 +1290,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<MutatorDefs, CollectionDefs>,
+      r: TestZero<MutatorDefs, QueryDefs>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1585,9 +1585,11 @@ test('kvStore option', async () => {
         },
       },
     });
-    expect(await r.query(tx => tx.get('foo'))).to.equal(expectedValue);
+    expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).to.equal(
+      expectedValue,
+    );
     await r.mutate.putFoo('bar');
-    expect(await r.query(tx => tx.get('foo'))).to.equal('bar');
+    expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).to.equal('bar');
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
     await r.close();
@@ -1705,17 +1707,17 @@ test('ensure we get the same query object back', () => {
     text: string;
   };
   const r = zeroForTest({
-    collections: {
+    queries: {
       issue: (v: ReadonlyJSONObject) => v as Issue,
       comment: (v: ReadonlyJSONObject) => v as Comment,
     },
   });
-  const issueQuery1 = r.collection.issue;
-  const issueQuery2 = r.collection.issue;
+  const issueQuery1 = r.query.issue;
+  const issueQuery2 = r.query.issue;
   expect(issueQuery1).to.equal(issueQuery2);
 
-  const commentQuery1 = r.collection.comment;
-  const commentQuery2 = r.collection.comment;
+  const commentQuery1 = r.query.comment;
+  const commentQuery2 = r.query.comment;
   expect(commentQuery1).to.equal(commentQuery2);
 
   expect(issueQuery1).to.not.equal(commentQuery1);
@@ -1732,7 +1734,7 @@ test('the type of collection should be inferred from options with parse', () => 
     text: string;
   };
   const r = zeroForTest({
-    collections: {
+    queries: {
       issue: (v: ReadonlyJSONObject) => v as Issue,
       comment: (v: ReadonlyJSONObject) => v as Comment,
     },
@@ -1741,11 +1743,11 @@ test('the type of collection should be inferred from options with parse', () => 
   const c: {
     readonly issue: EntityQuery<{issue: Issue}, []>;
     readonly comment: EntityQuery<{comment: Comment}, []>;
-  } = r.collection;
+  } = r.query;
   expect(c).not.undefined;
 
-  const issueQ: EntityQuery<{issue: Issue}> = r.collection.issue;
-  const commentQ: EntityQuery<{comment: Comment}> = r.collection.comment;
+  const issueQ: EntityQuery<{issue: Issue}> = r.query.issue;
+  const commentQ: EntityQuery<{comment: Comment}> = r.query.comment;
   expect(issueQ).not.undefined;
   expect(commentQ).not.undefined;
 });

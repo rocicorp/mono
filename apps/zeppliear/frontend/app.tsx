@@ -66,7 +66,7 @@ const App = ({zero, undoManager}: AppProps) => {
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const issueQuery = zero.collection.issue;
+  const issueQuery = zero.query.issue;
 
   const allIssues = useQuery(issueQuery.select('*'));
 

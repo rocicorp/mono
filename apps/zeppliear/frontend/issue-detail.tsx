@@ -79,8 +79,8 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
-  const issueQuery = zero.collection.issue;
-  const commentQuery = zero.collection.comment;
+  const issueQuery = zero.query.issue;
+  const commentQuery = zero.query.comment;
 
   const issue =
     useQuery(issueQuery.select('*').where('id', '=', detailIssueID ?? ''), [

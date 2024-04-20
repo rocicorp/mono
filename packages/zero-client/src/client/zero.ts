@@ -63,19 +63,19 @@ import {
   Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {CollectionParseDefs, ZeroOptions} from './options.js';
+import type {QueryParseDefs, ZeroOptions} from './options.js';
 import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 
-export type CollectionDefs = {
+export type QueryDefs = {
   readonly [name: string]: Entity;
 };
 
-type MakeEntityQueriesFromCollectionDefs<CD extends CollectionDefs> = {
-  readonly [K in keyof CD]: EntityQuery<{[P in K]: CD[K]}, []>;
+type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
+  readonly [K in keyof QD]: EntityQuery<{[P in K]: QD[K]}, []>;
 };
 
 declare const TESTING: boolean;
@@ -103,8 +103,8 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function forTesting<MD extends MutatorDefs, CD extends CollectionDefs>(
-  r: Zero<MD, CD>,
+function forTesting<MD extends MutatorDefs, QD extends QueryDefs>(
+  r: Zero<MD, QD>,
 ): TestZero {
   return r as unknown as TestZero;
 }
@@ -181,7 +181,7 @@ export interface ReplicacheInternalAPI {
   lastMutationID(): number;
 }
 
-export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
+export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   readonly version = version;
 
   readonly #rep: Replicache<MD>;
@@ -303,9 +303,9 @@ export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<MD, CD>;
+  readonly #options: ZeroOptions<MD, QD>;
 
-  readonly collection: MakeEntityQueriesFromCollectionDefs<CD>;
+  readonly query: MakeEntityQueriesFromQueryDefs<QD>;
 
   #metrics: MetricManager;
 
@@ -316,7 +316,7 @@ export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<MD, CD>) {
+  constructor(options: ZeroOptions<MD, QD>) {
     const {
       userID,
       roomID,
@@ -324,7 +324,7 @@ export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'mem',
-      collections = {} as CollectionParseDefs<CD>,
+      queries = {} as QueryParseDefs<QD>,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -401,7 +401,7 @@ export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
       subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
     });
 
-    this.collection = this.#registerCollections(collections);
+    this.query = this.#registerQueries(queries);
 
     reportReloadReason(this.#lc);
 
@@ -542,7 +542,9 @@ export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
   /**
    * Transactionally read Zero data.
    */
-  query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
+  oldReplicacheQuery<R>(
+    body: (tx: ReadTransaction) => Promise<R> | R,
+  ): Promise<R> {
     return this.#rep.query(body);
   }
 
@@ -1425,17 +1427,17 @@ export class Zero<MD extends MutatorDefs, CD extends CollectionDefs> {
     return this.#baseCookieResolver.promise;
   }
 
-  #registerCollections(
-    collectionDefs: CollectionParseDefs<CD>,
-  ): MakeEntityQueriesFromCollectionDefs<CD> {
+  #registerQueries(
+    queryDefs: QueryParseDefs<QD>,
+  ): MakeEntityQueriesFromQueryDefs<QD> {
     const rv = {} as Record<string, EntityQuery<FromSet, []>>;
     const context = this.#zqlContext;
     // Not using parse yet
-    for (const name of Object.keys(collectionDefs)) {
+    for (const name of Object.keys(queryDefs)) {
       rv[name] = new EntityQuery(context, name);
     }
 
-    return rv as MakeEntityQueriesFromCollectionDefs<CD>;
+    return rv as MakeEntityQueriesFromQueryDefs<QD>;
   }
 
   #zqlSubscriptionRemoved(ast: AST) {

@@ -23,7 +23,7 @@ export default function Home() {
         roomID: spaceID,
         mutators,
         kvStore: 'idb',
-        collections: {
+        queries: {
           issue: v => v as Issue,
           comment: v => v as Comment,
         },
