@@ -1,7 +1,7 @@
 /**
  * Replication metadata, used for incremental view maintenance and catchup.
  *
- * These tables are created atomically in `IncrementalSyncer.setupReplicationTables()`
+ * These tables are created atomically in {@link setupReplicationTables}
  * after the logical replication handoff when initial data synchronization has completed.
  */
 

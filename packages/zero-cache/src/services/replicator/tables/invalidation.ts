@@ -1,7 +1,7 @@
 /**
  * Metadata, used for selective invalidation and catchup.
  *
- * These tables are created atomically in `IncrementalSyncer.setupReplicationTables()`
+ * These tables are created atomically in the setupReplicationTables migration step
  * after the logical replication handoff when initial data synchronization has completed.
  */
 export const CREATE_INVALIDATION_TABLES =
