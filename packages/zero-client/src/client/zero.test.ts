@@ -1566,11 +1566,6 @@ suite('Invalid Downstream message', () => {
 test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
-  type E = {
-    id: string;
-    value: number;
-  };
-
   const t = async (
     kvStore: ZeroOptions<
       Record<string, never>,
@@ -1578,28 +1573,23 @@ test('kvStore option', async () => {
     >['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
-    expectedValue: E[],
+    expectedValue: JSONValue | undefined = undefined,
   ) => {
     const r = zeroForTest({
       server: null,
       userID,
       kvStore,
       mutators: {
-        putE: async (tx, val: E) => {
-          await tx.set(`e/${val.id}`, val);
+        putFoo: async (tx, val: string) => {
+          await tx.set('foo', val);
         },
       },
-      queries: {
-        e: v => v as E,
-      },
     });
-    expect(await r.query.e.select('*').prepare().exec()).deep.equal(
+    expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).to.equal(
       expectedValue,
     );
-    await r.mutate.putE({id: 'a', value: 1});
-    expect(
-      await r.query.e.select('*').where('id', '=', 'a').prepare().exec(),
-    ).deep.equal([{id: 'a', value: 1}]);
+    await r.mutate.putFoo('bar');
+    expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).to.equal('bar');
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
     await r.close();
@@ -1608,10 +1598,10 @@ test('kvStore option', async () => {
     spy.resetHistory();
   };
 
-  await t('idb', 'kv-store-test-user-id-1', true, []);
-  await t('idb', 'kv-store-test-user-id-1', true, [{id: 'a', value: 1}]);
-  await t('mem', 'kv-store-test-user-id-2', false, []);
-  await t(undefined, 'kv-store-test-user-id-3', false, []);
+  await t('idb', 'kv-store-test-user-id-1', true);
+  await t('idb', 'kv-store-test-user-id-1', true, 'bar');
+  await t('mem', 'kv-store-test-user-id-2', false);
+  await t(undefined, 'kv-store-test-user-id-3', false);
 });
 
 test('Close during connect should sleep', async () => {
