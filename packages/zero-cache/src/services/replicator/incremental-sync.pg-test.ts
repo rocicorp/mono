@@ -83,6 +83,10 @@ describe('replicator/incremental-sync', () => {
         "issueID" INTEGER PRIMARY KEY,
         _0_version VARCHAR(38) DEFAULT '00'
       );
+      CREATE TABLE "table-with-special-characters" (
+        "id" INTEGER PRIMARY KEY,
+        _0_version VARCHAR(38) DEFAULT '00'
+      );
       CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;
 
       CREATE SCHEMA zero;
@@ -112,6 +116,25 @@ describe('replicator/incremental-sync', () => {
             },
           },
           primaryKey: ['issueID'],
+        },
+        ['public.table-with-special-characters']: {
+          schema: 'public',
+          name: 'table-with-special-characters',
+          columns: {
+            id: {
+              dataType: 'int4',
+              characterMaximumLength: null,
+              columnDefault: null,
+              notNull: true,
+            },
+            ['_0_version']: {
+              dataType: 'varchar',
+              characterMaximumLength: 38,
+              columnDefault: null,
+              notNull: true,
+            },
+          },
+          primaryKey: ['id'],
         },
         ['zero.clients']: {
           schema: 'zero',
@@ -1329,7 +1352,14 @@ describe('replicator/incremental-sync', () => {
       }
 
       const published = await getPublicationInfo(replica, 'zero_');
-      expect(published.tables).toEqual(c.specs);
+      expect(
+        Object.fromEntries(
+          published.tables.map(table => [
+            `${table.schema}.${table.name}`,
+            table,
+          ]),
+        ),
+      ).toEqual(c.specs);
 
       await expectTables(replica, replaceVersions(c.data, versions));
 

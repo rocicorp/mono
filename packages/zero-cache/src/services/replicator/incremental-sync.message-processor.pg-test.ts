@@ -305,7 +305,7 @@ describe('replicator/message-processor', () => {
         {
           // Unused in this test.
           publications: [],
-          tables: {},
+          tables: [],
         },
         new Lock(),
         new InvalidationFilters(),

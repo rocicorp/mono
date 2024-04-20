@@ -47,7 +47,7 @@ export async function startPostgresReplication(
   // Create the corresponding schemas and tables in the Sync Replica, with the
   // additional _0_version column to track row versions.
   const schemas = new Set<string>();
-  const tablesStmts = Object.values(published.tables).map(table => {
+  const tablesStmts = published.tables.map(table => {
     if (table.schema === '_zero') {
       throw new Error(`Schema _zero is reserved for internal use`);
     }
@@ -273,7 +273,11 @@ function ensurePublishedTables(
 ): Promise<PublicationInfo> {
   return upstreamDB.begin(async tx => {
     const published = await getPublicationInfo(tx, PUB_PREFIX);
-    if ('zero.clients' in published.tables) {
+    if (
+      published.tables.find(
+        table => table.schema === 'zero' && table.name === 'clients',
+      )
+    ) {
       // upstream is already set up for replication.
       return published;
     }

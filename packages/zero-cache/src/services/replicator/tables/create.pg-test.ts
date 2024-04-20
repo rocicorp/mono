@@ -119,9 +119,7 @@ describe('tables/create', () => {
       await db.unsafe(createTableStatement(c.tableSpec));
 
       const published = await getPublicationInfo(db, 'zero_');
-      expect(
-        published.tables[`${c.tableSpec.schema}.${c.tableSpec.name}`],
-      ).toEqual(c.tableSpec);
+      expect(published.tables).toEqual(expect.arrayContaining([c.tableSpec]));
     });
   }
 });

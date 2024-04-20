@@ -34,7 +34,7 @@ export type Publication = v.Infer<typeof publicationSchema>;
 
 export type PublicationInfo = {
   publications: Publication[];
-  tables: Record<string, TableSpec>;
+  tables: TableSpec[];
 };
 
 /**
@@ -79,7 +79,7 @@ export async function getPublicationInfo(
 
   const publications = v.parse(result[0], publicationsResultSchema);
   const columns = v.parse(result[1], publishedColumnsSchema);
-  const tables: Record<string, TableSpec> = {};
+  const tables: TableSpec[] = [];
   let table: TableSpec | undefined;
 
   columns.forEach(col => {
@@ -91,7 +91,7 @@ export async function getPublicationInfo(
         columns: {},
         primaryKey: [],
       };
-      tables[`${table.schema}.${table.name}`] = table;
+      tables.push(table);
     }
 
     // https://stackoverflow.com/a/52376230

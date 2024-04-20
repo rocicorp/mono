@@ -226,13 +226,24 @@ describe('replicator/initial-sync', () => {
       );
 
       const published = await getPublicationInfo(upstream, 'zero_');
-      expect(published.tables).toEqual(c.published);
+      expect(
+        Object.fromEntries(
+          published.tables.map(table => [
+            `${table.schema}.${table.name}`,
+            table,
+          ]),
+        ),
+      ).toEqual(c.published);
       expect(published.publications.map(p => p.pubname)).toEqual(
         expect.arrayContaining(c.publications),
       );
 
       const synced = await getPublicationInfo(replica, 'zero_');
-      expect(synced.tables).toMatchObject(c.published);
+      expect(
+        Object.fromEntries(
+          synced.tables.map(table => [`${table.schema}.${table.name}`, table]),
+        ),
+      ).toMatchObject(c.published);
       expect(synced.publications.map(p => p.pubname)).toEqual(
         expect.arrayContaining(c.publications),
       );

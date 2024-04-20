@@ -16,7 +16,7 @@ describe('tables/published', () => {
       setupQuery: `CREATE SCHEMA zero`,
       expectedResult: {
         publications: [],
-        tables: {},
+        tables: [],
       },
     },
     {
@@ -39,8 +39,8 @@ describe('tables/published', () => {
             pubtruncate: true,
           },
         ],
-        tables: {
-          ['zero.clients']: {
+        tables: [
+          {
             schema: 'zero',
             name: 'clients',
             columns: {
@@ -59,7 +59,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['clientID'],
           },
-        },
+        ],
       },
     },
     {
@@ -89,8 +89,8 @@ describe('tables/published', () => {
             pubtruncate: true,
           },
         ],
-        tables: {
-          ['test.users']: {
+        tables: [
+          {
             schema: 'test',
             name: 'users',
             columns: {
@@ -151,7 +151,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['user_id'],
           },
-        },
+        ],
       },
     },
     {
@@ -180,8 +180,8 @@ describe('tables/published', () => {
             pubtruncate: true,
           },
         ],
-        tables: {
-          ['test.users']: {
+        tables: [
+          {
             schema: 'test',
             name: 'users',
             columns: {
@@ -212,7 +212,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['user_id'],
           },
-        },
+        ],
       },
     },
     {
@@ -238,8 +238,8 @@ describe('tables/published', () => {
             pubtruncate: true,
           },
         ],
-        tables: {
-          ['test.issues']: {
+        tables: [
+          {
             schema: 'test',
             name: 'issues',
             columns: {
@@ -270,7 +270,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['org_id', 'component_id', 'issue_id'],
           },
-        },
+        ],
       },
     },
     {
@@ -316,8 +316,8 @@ describe('tables/published', () => {
             pubtruncate: true,
           },
         ],
-        tables: {
-          ['test.issues']: {
+        tables: [
+          {
             schema: 'test',
             name: 'issues',
             columns: {
@@ -348,7 +348,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['org_id', 'component_id', 'issue_id'],
           },
-          ['test.users']: {
+          {
             schema: 'test',
             name: 'users',
             columns: {
@@ -367,7 +367,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['user_id'],
           },
-          ['zero.clients']: {
+          {
             schema: 'zero',
             name: 'clients',
             columns: {
@@ -386,7 +386,7 @@ describe('tables/published', () => {
             },
             primaryKey: ['clientID'],
           },
-        },
+        ],
       },
     },
   ];
