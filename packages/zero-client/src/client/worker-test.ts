@@ -39,15 +39,15 @@ async function testBasics(userID: string) {
 
   await r.mutate.inc('foo');
   expect(log).deep.equal([undefined, 1]);
-  expect(await r.query(tx => tx.get('foo'))).equal(1);
+  expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).equal(1);
 
   await r.mutate.inc('foo');
   expect(log).deep.equal([undefined, 1, 2]);
-  expect(await r.query(tx => tx.get('foo'))).equal(2);
+  expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).equal(2);
 
   cancelSubscribe();
 
   await r.mutate.inc('foo');
   expect(log).deep.equal([undefined, 1, 2]);
-  expect(await r.query(tx => tx.get('foo'))).equal(3);
+  expect(await r.oldReplicacheQuery(tx => tx.get('foo'))).equal(3);
 }
