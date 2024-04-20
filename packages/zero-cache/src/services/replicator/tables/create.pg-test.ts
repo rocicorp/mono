@@ -140,7 +140,7 @@ describe('tables/create', () => {
         createTableStatementIgnoringNotNullConstraint(c.srcTableSpec),
       );
 
-      const published = await getPublicationInfo(db, 'zero_');
+      const published = await getPublicationInfo(db);
       expect(published.tables).toEqual(
         expect.arrayContaining([c.dstTableSpec ?? c.srcTableSpec]),
       );

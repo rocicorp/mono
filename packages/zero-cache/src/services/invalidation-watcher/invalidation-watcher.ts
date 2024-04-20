@@ -15,6 +15,8 @@ import {Subscription} from '../../types/subscription.js';
 import {queryStateVersion} from '../replicator/queries.js';
 import type {ReplicatorRegistry} from '../replicator/registry.js';
 import type {VersionChange} from '../replicator/replicator.js';
+import {getPublicationInfo} from '../replicator/tables/published.js';
+import type {TableSpec} from '../replicator/tables/specs.js';
 import type {Service} from '../service.js';
 import {HashSubscriptions} from './hash-subscriptions.js';
 
@@ -54,6 +56,9 @@ export type QueryInvalidationUpdate = {
    * invalidated queries.
    */
   reader: TransactionPool;
+
+  /** New table schemas if there was a schema change. */
+  tableSchemas?: TableSpec[];
 };
 
 /**
@@ -104,6 +109,11 @@ export type QueryInvalidationUpdate = {
  */
 export interface InvalidationWatcher {
   /**
+   * Returns the current table schemas (needed for primary key information).
+   */
+  getTableSchemas(): Promise<readonly TableSpec[]>;
+
+  /**
    * Creates a Subscription of {@link QueryInvalidationUpdate}s for the set of queries
    * specified in the {@link WatchRequest}.
    *
@@ -150,6 +160,8 @@ export class InvalidationWatcherService
   #started = false;
   readonly #shouldRun = resolver<false>();
   #hasWatchRequests = resolver<true>();
+
+  #cachedTableSchemas: readonly TableSpec[] | undefined;
 
   #versionChangeSubscription:
     | CancelableAsyncIterable<VersionChange>
@@ -207,6 +219,14 @@ export class InvalidationWatcherService
     this.#shouldRun.resolve(false);
     this.#versionChangeSubscription?.cancel();
     this.#versionChangeSubscription = undefined;
+  }
+
+  async getTableSchemas(): Promise<readonly TableSpec[]> {
+    if (!this.#cachedTableSchemas) {
+      const published = await getPublicationInfo(this.#replica);
+      this.#cachedTableSchemas = published.tables;
+    }
+    return this.#cachedTableSchemas;
   }
 
   async watch(
@@ -338,6 +358,9 @@ export class InvalidationWatcherService
     const lc = this.#lc.withContext('versionChange', versionChange.newVersion);
     lc.debug?.(`processing VersionChange`, versionChange);
 
+    // TODO: Plumb schema changes from the logical replication stream through the
+    //       VersionChange updates, and handle them by reloading the table schemas
+    //       when constructing the base update.
     const {update, hashes} = await this.#createBaseUpdate(
       lc,
       versionChange.prevVersion,

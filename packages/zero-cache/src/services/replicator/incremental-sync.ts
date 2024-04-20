@@ -23,7 +23,7 @@ import {registerPostgresTypeParsers} from '../../types/pg.js';
 import {RowKey, RowKeyType, RowValue, rowKeyHash} from '../../types/row-key.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import {PUB_PREFIX, replicationSlot} from './initial-sync.js';
+import {replicationSlot} from './initial-sync.js';
 import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
 import {queryStateVersion} from './queries.js';
 import type {VersionChange} from './replicator.js';
@@ -79,7 +79,7 @@ export class IncrementalSyncer {
     this.#started = true;
 
     lc.info?.(`Starting IncrementalSyncer`);
-    const replicated = await getPublicationInfo(this.#replica, PUB_PREFIX);
+    const replicated = await getPublicationInfo(this.#replica);
     const publicationNames = replicated.publications.map(p => p.pubname);
 
     lc.info?.(`Syncing publications ${publicationNames}`);

@@ -1351,7 +1351,7 @@ describe('replicator/incremental-sync', () => {
         }
       }
 
-      const published = await getPublicationInfo(replica, 'zero_');
+      const published = await getPublicationInfo(replica);
       expect(
         Object.fromEntries(
           published.tables.map(table => [

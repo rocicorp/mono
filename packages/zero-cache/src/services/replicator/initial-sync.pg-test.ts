@@ -225,7 +225,7 @@ describe('replicator/initial-sync', () => {
         ),
       );
 
-      const published = await getPublicationInfo(upstream, 'zero_');
+      const published = await getPublicationInfo(upstream);
       expect(
         Object.fromEntries(
           published.tables.map(table => [
@@ -238,7 +238,7 @@ describe('replicator/initial-sync', () => {
         expect.arrayContaining(c.publications),
       );
 
-      const synced = await getPublicationInfo(replica, 'zero_');
+      const synced = await getPublicationInfo(replica);
       expect(
         Object.fromEntries(
           synced.tables.map(table => [`${table.schema}.${table.name}`, table]),

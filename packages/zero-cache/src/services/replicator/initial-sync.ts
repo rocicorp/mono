@@ -4,11 +4,13 @@ import {sleep} from 'shared/src/sleep.js';
 import {postgresTypeConfig} from '../../types/pg.js';
 import {id, idList} from '../../types/sql.js';
 import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
-import {PublicationInfo, getPublicationInfo} from './tables/published.js';
+import {
+  PublicationInfo,
+  ZERO_PUB_PREFIX,
+  getPublicationInfo,
+} from './tables/published.js';
 import {ZERO_VERSION_COLUMN_NAME} from './tables/replication.js';
 import type {ColumnSpec} from './tables/specs.js';
-
-export const PUB_PREFIX = 'zero_';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: 38,
@@ -60,9 +62,17 @@ export async function startPostgresReplication(
       throw new Error(`Table ${table.name} does not have a PRIMARY KEY`);
     }
     schemas.add(table.schema);
-    // Add the _0_version column with a default value of "00".
-    table.columns[ZERO_VERSION_COLUMN_NAME] = ZERO_VERSION_COLUMN_SPEC;
-    return createTableStatementIgnoringNotNullConstraint(table);
+
+    const tableWithVersionColumn = {
+      ...table,
+      columns: {
+        ...table.columns,
+        [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
+      },
+    };
+    return createTableStatementIgnoringNotNullConstraint(
+      tableWithVersionColumn,
+    );
   });
 
   const schemaStmts = [...schemas].map(
@@ -85,7 +95,7 @@ export async function startPostgresReplication(
     // The publication that we manage, "zero_meta", is used to track all of the
     // replicated schemas. This is the only publication that would need to be
     // altered if, for example, a new schema is encountered from upstream.
-    pub === PUB_PREFIX + 'meta'
+    pub === ZERO_PUB_PREFIX + 'meta'
       ? `CREATE PUBLICATION ${id(pub)} FOR TABLES IN SCHEMA ${idList(schemas)};`
       : // All of the other publications are created simply to indicate that they should be
         // subscribed to on upstream.
@@ -272,7 +282,7 @@ function ensurePublishedTables(
   upstreamDB: postgres.Sql,
 ): Promise<PublicationInfo> {
   return upstreamDB.begin(async tx => {
-    const published = await getPublicationInfo(tx, PUB_PREFIX);
+    const published = await getPublicationInfo(tx, ZERO_PUB_PREFIX);
     if (
       published.tables.find(
         table => table.schema === 'zero' && table.name === 'clients',
@@ -295,9 +305,9 @@ function ensurePublishedTables(
           `PUBLICATION ${pub.pubname} must publish insert, update, delete, and truncate`,
         );
       }
-      if (pub.pubname === `${PUB_PREFIX}metadata`) {
+      if (pub.pubname === `${ZERO_PUB_PREFIX}metadata`) {
         throw new Error(
-          `PUBLICATION name ${PUB_PREFIX}metadata is reserved for internal use`,
+          `PUBLICATION name ${ZERO_PUB_PREFIX}metadata is reserved for internal use`,
         );
       }
     });
@@ -305,7 +315,7 @@ function ensurePublishedTables(
     let dataPublication = '';
     if (published.publications.length === 0) {
       // If there are no custom zero_* publications, set one up to publish all tables.
-      dataPublication = `CREATE PUBLICATION ${PUB_PREFIX}data FOR ALL TABLES;`;
+      dataPublication = `CREATE PUBLICATION ${ZERO_PUB_PREFIX}data FOR ALL TABLES;`;
     }
 
     // Send everything as a single batch.
@@ -316,11 +326,11 @@ function ensurePublishedTables(
       "clientID" TEXT PRIMARY KEY,
       "lastMutationID" BIGINT
     );
-    CREATE PUBLICATION "${PUB_PREFIX}meta" FOR TABLES IN SCHEMA zero;
+    CREATE PUBLICATION "${ZERO_PUB_PREFIX}meta" FOR TABLES IN SCHEMA zero;
     ${dataPublication}
     `,
     );
 
-    return getPublicationInfo(tx, PUB_PREFIX);
+    return getPublicationInfo(tx, ZERO_PUB_PREFIX);
   });
 }

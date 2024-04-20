@@ -497,4 +497,85 @@ describe('invalidation-watcher', () => {
     await watcher.stop();
     await watcherDone;
   });
+
+  test('get table schemas', async () => {
+    const replicator: Replicator = {
+      versionChanges: () => Promise.reject('unused'),
+      registerInvalidationFilters: () => Promise.reject('unused'),
+    };
+    const watcher = new InvalidationWatcherService(
+      'id',
+      createSilentLogContext(),
+      {getReplicator: () => Promise.resolve(replicator)},
+      db,
+    );
+
+    await db.unsafe(`
+    CREATE TABLE issues (
+      issue_id INTEGER,
+      description TEXT,
+      org_id INTEGER,
+      component_id INTEGER,
+      PRIMARY KEY (org_id, component_id, issue_id)
+    );
+    CREATE TABLE users (
+      user_id INTEGER PRIMARY KEY,
+      handle text
+    );
+    CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;
+    `);
+
+    expect(await watcher.getTableSchemas()).toEqual([
+      {
+        schema: 'public',
+        name: 'issues',
+        columns: {
+          ['issue_id']: {
+            dataType: 'int4',
+            characterMaximumLength: null,
+            columnDefault: null,
+            notNull: true,
+          },
+          ['description']: {
+            dataType: 'text',
+            characterMaximumLength: null,
+            columnDefault: null,
+            notNull: false,
+          },
+          ['org_id']: {
+            dataType: 'int4',
+            characterMaximumLength: null,
+            columnDefault: null,
+            notNull: true,
+          },
+          ['component_id']: {
+            dataType: 'int4',
+            characterMaximumLength: null,
+            columnDefault: null,
+            notNull: true,
+          },
+        },
+        primaryKey: ['org_id', 'component_id', 'issue_id'],
+      },
+      {
+        schema: 'public',
+        name: 'users',
+        columns: {
+          ['user_id']: {
+            dataType: 'int4',
+            characterMaximumLength: null,
+            columnDefault: null,
+            notNull: true,
+          },
+          handle: {
+            characterMaximumLength: null,
+            columnDefault: null,
+            dataType: 'text',
+            notNull: false,
+          },
+        },
+        primaryKey: ['user_id'],
+      },
+    ]);
+  });
 });

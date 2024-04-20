@@ -404,7 +404,7 @@ describe('tables/published', () => {
     test(c.name, async () => {
       await db.unsafe(c.setupQuery);
 
-      const tables = await getPublicationInfo(db, 'zero_');
+      const tables = await getPublicationInfo(db);
       expect(tables).toEqual(c.expectedResult);
     });
   }
