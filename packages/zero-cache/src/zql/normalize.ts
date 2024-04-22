@@ -26,7 +26,7 @@ export function getNormalized(ast: AST): Normalized {
 export class Normalized {
   readonly #ast: AST;
   readonly #values: JSONValue[] = [];
-  #query = '';
+  readonly #query;
   #nextParam = 1;
 
   constructor(ast: AST) {
@@ -35,12 +35,29 @@ export class Normalized {
     // equivalent ASTs produce the same queries and hash identifier.
     this.#ast = normalizeAST(ast);
 
-    const {table, select, aggregate, where, groupBy, orderBy, limit} =
-      this.#ast;
+    assert(this.#ast.select?.length || this.#ast.aggregate?.length);
 
-    assert(select?.length || aggregate?.length);
+    this.#query = this.#constructQuery(this.#ast);
+  }
+
+  #constructQuery(ast: AST): string {
+    const {
+      table,
+      alias,
+      select,
+      aggregate,
+      joins,
+      where,
+      groupBy,
+      orderBy,
+      limit,
+    } = ast;
+
+    let query = '';
     const selection = [
-      ...(select ?? []).map(([col]) => ident(col)),
+      ...(select ?? []).map(
+        ([sel, alias]) => `${selector(sel)} AS ${ident(alias)}`,
+      ),
       ...(aggregate ?? []).map(a => {
         // Aggregation aliases are ignored for normalization, and instead aliased
         // to the string representation of the aggregation, e.g.
@@ -50,20 +67,37 @@ export class Normalized {
       }),
     ].join(', ');
 
-    this.#query = `SELECT ${selection} FROM ${ident(table)}`;
+    if (selection) {
+      query += `SELECT ${selection} FROM `;
+    }
+    query += ident(table);
+    if (alias) {
+      query += ` AS ${ident(alias)}`;
+    }
+    joins?.forEach(join => {
+      const {
+        type,
+        other,
+        on: [left, right],
+        as,
+      } = join;
+      query += ` ${type.toUpperCase()} JOIN (${this.#constructQuery(other)})`;
+      query += ` AS ${ident(as)} ON ${selector(left)} = ${selector(right)}`;
+    });
     if (where) {
-      this.#query += ` WHERE ${this.#condition(where)}`;
+      query += ` WHERE ${this.#condition(where)}`;
     }
     if (groupBy) {
-      this.#query += ` GROUP BY ${groupBy.map(x => ident(x)).join(', ')}`;
+      query += ` GROUP BY ${groupBy.map(x => ident(x)).join(', ')}`;
     }
     if (orderBy) {
       const [names, dir] = orderBy;
-      this.#query += ` ORDER BY ${names.map(x => ident(x)).join(', ')} ${dir}`;
+      query += ` ORDER BY ${names.map(x => ident(x)).join(', ')} ${dir}`;
     }
     if (limit !== undefined) {
-      this.#query += ` LIMIT ${limit}`;
+      query += ` LIMIT ${limit}`;
     }
+    return query;
   }
 
   #condition(cond: Condition): string {
@@ -106,6 +140,13 @@ export class Normalized {
       .digest()
       .toString(radix);
   }
+}
+
+function selector(x: string): string {
+  const parts = x.split('.');
+  return parts.length === 2
+    ? `${ident(parts[0])}.${ident(parts[1])}`
+    : ident(x);
 }
 
 /**
