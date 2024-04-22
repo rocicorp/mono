@@ -116,6 +116,7 @@ export function normalizeAST(ast: AST): AST {
         )
       : undefined,
     where: where ? sorted(where) : undefined,
+    joins: ast.joins?.map(join => ({...join, other: normalizeAST(join.other)})),
     groupBy: ast.groupBy ? [...ast.groupBy].sort(compareUTF8) : undefined,
     // The order of ORDER BY expressions is semantically significant, so it
     // is left as is (i.e. not sorted).

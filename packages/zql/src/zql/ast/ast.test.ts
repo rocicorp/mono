@@ -193,6 +193,80 @@ describe('zql/ast', () => {
       },
     },
     {
+      name: 'joins',
+      asts: [
+        {
+          table: 'issues',
+          select: [
+            ['id', 'id_alias'],
+            ['name', 'a_name'],
+          ],
+          joins: [
+            {
+              type: 'inner',
+              other: {
+                table: 'users',
+                select: [
+                  ['id', 'id_alias'],
+                  ['name', 'b_alias'],
+                ],
+                orderBy: [['id'], 'asc'],
+              },
+              as: 'owner',
+              on: ['issues.owner_id', 'users.id'],
+            },
+          ],
+          orderBy: [['id'], 'asc'],
+        },
+        {
+          table: 'issues',
+          select: [
+            ['name', 'a_name'],
+            ['id', 'id_alias'],
+          ],
+          joins: [
+            {
+              type: 'inner',
+              other: {
+                table: 'users',
+                select: [
+                  ['name', 'b_alias'],
+                  ['id', 'id_alias'],
+                ],
+                orderBy: [['id'], 'asc'],
+              },
+              as: 'owner',
+              on: ['issues.owner_id', 'users.id'],
+            },
+          ],
+          orderBy: [['id'], 'asc'],
+        },
+      ],
+      normalized: {
+        table: 'issues',
+        select: [
+          ['id', 'id_alias'],
+          ['name', 'a_name'],
+        ],
+        joins: [
+          {
+            type: 'inner',
+            other: {
+              table: 'users',
+              select: [
+                ['id', 'id_alias'],
+                ['name', 'b_alias'],
+              ],
+              orderBy: [['id'], 'asc'],
+            },
+            as: 'owner',
+            on: ['issues.owner_id', 'users.id'],
+          },
+        ],
+        orderBy: [['id'], 'asc'],
+      },
+    },
+    {
       name: 'simple condition',
       asts: [
         {

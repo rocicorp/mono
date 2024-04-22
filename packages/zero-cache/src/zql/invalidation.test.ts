@@ -1,11 +1,4 @@
-import type {
-  AST,
-  Condition,
-  Conjunction,
-  Primitive,
-  SimpleCondition,
-  SimpleOperator,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {AST, Condition, Primitive} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {describe, expect, test} from 'vitest';
 import {
   NormalizedInvalidationFilterSpec,
@@ -13,6 +6,7 @@ import {
 } from '../types/invalidation.js';
 import {computeInvalidationInfo, computeMatchers} from './invalidation.js';
 import {getNormalized} from './normalize.js';
+import {and, cond, or} from './query-test-util.js';
 
 describe('zql/invalidation matchers', () => {
   type Case = {
@@ -651,37 +645,3 @@ describe('zql/invalidation hashes filters and hashes', () => {
     });
   }
 });
-
-// Readability helpers
-
-function and(...conditions: Condition[]): Conjunction {
-  return {
-    type: 'conjunction',
-    op: 'AND',
-    conditions,
-  };
-}
-
-function or(...conditions: Condition[]): Conjunction {
-  return {
-    type: 'conjunction',
-    op: 'OR',
-    conditions,
-  };
-}
-
-function cond(
-  field: string,
-  op: SimpleOperator,
-  value: Primitive,
-): SimpleCondition {
-  return {
-    type: 'simple',
-    field,
-    op,
-    value: {
-      type: 'literal',
-      value,
-    },
-  };
-}
