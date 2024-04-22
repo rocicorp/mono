@@ -5,15 +5,15 @@ import {union} from 'shared/src/set-utils.js';
 export type PrimaryKeys = (table: string) => readonly string[];
 
 /**
- * Expands the selection of a query to include all of the column values necessary to
- * recompute the query on the client, and aliases the columns so that the result can
- * be easily deconstructed into its constituent rows.
+ * Expands the selection of a query to include all of the rows and column values
+ * necessary to re-execute the query on the client, and aliases the columns so
+ * that the result can be deconstructed into its constituent rows.
  *
  * ### Self Describing Aliases
  *
  * Given that a single result from JOIN query can include rows from multiple tables,
  * and even multiple rows from a single table in the case of self JOINs, a mechanism
- * for deconstructing the result is necessary to compute the views of the original
+ * for deconstructing the result is necessary to compute the views of the constituent
  * rows to send to the client.
  *
  * The format for aliasing columns is either of:
@@ -23,14 +23,12 @@ export type PrimaryKeys = (table: string) => readonly string[];
  * {subquery-id}/{source-table}/{column-name}  // e.g. "owner/users/id"
  * ```
  *
- * The following examples of selection expansion will clarify how the first part,
- * the "subquery-id", is determined.
- *
  * ### Simple Queries
  *
  * For simple queries, a selection must be expanded to include:
  * * The primary keys of the table in order to identify the row.
- * * The columns used to filter and order the rows (i.e. `WHERE` and `ORDER BY`).
+ * * The columns examined during the course of query execution,
+ *    (e.g. `WHERE`, `ORDER BY`, etc.).
  *
  * Logically:
  * ```sql
@@ -39,13 +37,14 @@ export type PrimaryKeys = (table: string) => readonly string[];
  *
  * becomes:
  * ```sql
- * SELECT id AS "users/id", name AS "users/name", level AS "users/level"
+ * SELECT id AS "users/id",
+ *        name AS "users/name",
+ *        level AS "users/level"
  *   FROM users WHERE level = 'superstar';
  * ```
  *
- * Note that the keys of the returned row prefix the column name with the source
- * table, obviating the need for the query result processor to inspect the query
- * AST itself.
+ * Note that the returned field names include the source table and the column name,
+ * obviating the need for the query result processor to inspect the query AST itself.
  *
  * ```
  *  users/id | users/name | users/level
@@ -54,14 +53,13 @@ export type PrimaryKeys = (table: string) => readonly string[];
  *         2 | Bob        | superstar
  * ```
  *
- * Note that in case of a simple SELECT statement, no subquery id alias is needed.
+ * In case of a simple SELECT statement, no subquery id alias is needed.
  *
  * ### Simple table joins
  *
- * For simple join queries, this is expanded to:
- * * The primary keys of the joined table.
- * * The columns used in the `ON` clause to select the rows of the joined table.
- * * Any columns selected by the containing query.
+ * For simple join queries, this is expanded to also include:
+ * * The columns referenced by the outer query, such as those used
+ *   in the `ON` clause (or `SELECT`, `GROUP BY`, etc.).
  *
  * Logically:
  * ```sql
@@ -94,7 +92,8 @@ export type PrimaryKeys = (table: string) => readonly string[];
  * ```
  *
  * Also note that the columns from the JOIN'ed table have the subquery-id "owner", which
- * is the alias assigned to the JOIN statement.
+ * is the alias assigned to the JOIN statement. This allows distinguishing between rows
+ * from different subqueries on the same table.
  *
  * ### Joins with queries
  *
@@ -117,7 +116,7 @@ export type PrimaryKeys = (table: string) => readonly string[];
  * within the `parent` subquery use the `owner` alias. Again, this is legal because the
  * latter is scoped within the inner subquery. When bubbling up its columns to the
  * higher level SELECT, the alias of the subquery is prepended with its containing JOIN
- * to ensure prevent ambiguous names.
+ * alias to eliminate the possibility of ambiguous names.
  *
  * ```sql
  * SELECT issues.id                  AS  "issues/id",
@@ -163,10 +162,10 @@ export function expandSelection(ast: AST, primaryKeys: PrimaryKeys): AST {
  * The first step of full query expansion is sub-query expansion. In this step,
  * all AST's are converted to explicit `SELECT` statements that select all of the
  * columns necessary to recompute the execution. In this step, column references are
- * plumbed downward into sub-queries; higher level `SELECT` and `ON` references are
- * passed down to the subqueries so that those subqueries can explicitly SELECT on
- * them. Within each sub-query `WHERE` statements are also traversed and their columns
- * are added to the selection.
+ * plumbed downward into sub-queries; higher level `SELECT`, `ON`, etc. references to
+ * columns from subqueries are passed down to the subqueries so that they can explicitly
+ * SELECT them. Within each sub-query, its own AST is examined (`WHERE`, `ORDER BY`, etc.)
+ * so that referenced columns are also surfaced in the selection.
  *
  * At the end of this step, all JOIN queries become sub-selects with explicit column
  * declarations. For example:
@@ -262,9 +261,8 @@ function getWhereColumns(
 /**
  * The second step of query expansion, after subqueries have been expanded, is the
  * renaming of the aliases to conform to the `{table}/{column}` suffix. The aliases
- * are then bubbled up from nested selects up to the top level select so that the
- * final query returns all columns from all rows that are analyzed as part of query
- * execution.
+ * are then bubbled up from nested selects so that the top level `SELECT` returns all
+ * columns from all rows that are analyzed as part of query execution.
  */
 // Exported for testing
 export function reAliasAndBubbleSelections(
