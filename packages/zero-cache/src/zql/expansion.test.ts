@@ -294,40 +294,44 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT
-        issue.issue_id             AS "issue/issue_id",
-        issue.issue_key            AS "issue/issue_key",
-        issue.parent_id            AS "issue/parent_id",
-        issue.title                AS "issue/title",
-        issue.user_id              AS "issue/user_id",
-        owner."users/awesomeness"  AS "owner/users/awesomeness",
-        owner."users/id"           AS "owner/users/id",
-        owner."users/name"         AS "owner/users/name",
-        owner."users/users_id"     AS "owner/users/users_id",
-        owner."users/users_key"    AS "owner/users/users_key",
-        parent."issue/id"          AS "parent/issue/id",
-        parent."issue/issue_id"    AS "parent/issue/issue_id",
-        parent."issue/issue_key"   AS "parent/issue/issue_key",
-        parent."issue/user_id"     AS "parent/issue/user_id"
+        issue.issue_id                 AS "issue/issue_id",
+        issue.issue_key                AS "issue/issue_key",
+        issue.parent_id                AS "issue/parent_id",
+        issue.title                    AS "issue/title",
+        issue.user_id                  AS "issue/user_id",
+        owner."users/awesomeness"      AS "owner/users/awesomeness",
+        owner."users/id"               AS "owner/users/id",
+        owner."users/name"             AS "owner/users/name",
+        owner."users/users_id"         AS "owner/users/users_id",
+        owner."users/users_key"        AS "owner/users/users_key",
+        parent."issue/id"              AS "parent/issue/id",
+        parent."issue/issue_id"        AS "parent/issue/issue_id",
+        parent."issue/issue_key"       AS "parent/issue/issue_key",
+        parent."issue/user_id"         AS "parent/issue/user_id",
+        parent."owner/users/id"        AS "parent/owner/users/id",
+        parent."owner/users/users_id"  AS "parent/owner/users/users_id",
+        parent."owner/users/users_key" AS "parent/owner/users/users_key"
       FROM issue INNER JOIN (SELECT 
-        users.awesomeness          AS "users/awesomeness",
-        users.id                   AS "users/id",
-        users.name                 AS "users/name",
-        users.users_id             AS "users/users_id",
-        users.users_key            AS "users/users_key"
+        users.awesomeness              AS "users/awesomeness",
+        users.id                       AS "users/id",
+        users.name                     AS "users/name",
+        users.users_id                 AS "users/users_id",
+        users.users_key                AS "users/users_key"
       FROM users) AS owner ON issue.user_id = owner."users/id"
       INNER JOIN (SELECT 
-        issue.id                 AS "issue/id",
-        issue.issue_id           AS "issue/issue_id",
-        issue.issue_key          AS "issue/issue_key",
-        issue.user_id            AS "issue/user_id",
-        owner."users/id"         AS "owner/users/id",
-        owner."users/users_id"   AS "owner/users/users_id",
-        owner."users/users_key"  AS "owner/users/users_key"
-      FROM issue INNER JOIN (SELECT 
-          users.id               AS "users/id",
-          users.users_id         AS "users/users_id",
-          users.users_key        AS "users/users_key"
-        FROM users) AS owner ON issue.user_id = owner."users/id")
+        issue.id                       AS "issue/id",
+        issue.issue_id                 AS "issue/issue_id",
+        issue.issue_key                AS "issue/issue_key",
+        issue.user_id                  AS "issue/user_id",
+        owner."users/id"               AS "owner/users/id",
+        owner."users/users_id"         AS "owner/users/users_id",
+        owner."users/users_key"        AS "owner/users/users_key"
+      FROM issue INNER JOIN (SELECT
+          users.id                     AS "users/id",
+          users.users_id               AS "users/users_id",
+          users.users_key              AS "users/users_key"
+        FROM users)
+        AS owner ON issue.user_id = owner."users/id")
       AS parent ON issue.parent_id = parent."issue/id"
       ORDER BY owner."users/awesomeness" desc
       `,

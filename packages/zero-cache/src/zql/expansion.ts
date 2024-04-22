@@ -321,10 +321,11 @@ export function reAliasAndBubbleSelections(
       }),
       ...bubbleUp
         .filter(selector => !exported.has(selector))
-        .map(
-          selector =>
-            [selector, selector.replaceAll('.', '/')] as [string, string],
-        ),
+        .map(selector => {
+          const alias = selector.replaceAll('.', '/');
+          exports.set(alias, alias);
+          return [selector, alias] as [string, string];
+        }),
     ],
     joins: reAliasedJoins?.map(join => ({
       ...join,
