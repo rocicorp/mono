@@ -1,7 +1,6 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {
@@ -18,6 +17,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import type {EntityQuery} from '../mod.js';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
@@ -53,7 +53,7 @@ let fetchStub: sinon.SinonStub<
   ReturnType<typeof fetch>
 >;
 
-setup(() => {
+beforeEach(() => {
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
   sinon.replace(
@@ -66,7 +66,7 @@ setup(() => {
     .returns(Promise.resolve(new Response()));
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
   resetAllConfig();
 });
@@ -88,7 +88,7 @@ test('onOnlineChange callback', async () => {
 
   {
     // Offline by default.
-    await clock.tickAsync(0);
+    await clock.tickAsync(1);
     expect(r.online).false;
   }
 
@@ -1608,10 +1608,12 @@ test('kvStore option', async () => {
     spy.resetHistory();
   };
 
-  await t('idb', 'kv-store-test-user-id-1', true, []);
-  await t('idb', 'kv-store-test-user-id-1', true, [{id: 'a', value: 1}]);
-  await t('mem', 'kv-store-test-user-id-2', false, []);
-  await t(undefined, 'kv-store-test-user-id-3', false, []);
+  const uuid = Math.random().toString().slice(2);
+
+  await t('idb', 'kv-store-test-user-id-1' + uuid, true, []);
+  await t('idb', 'kv-store-test-user-id-1' + uuid, true, [{id: 'a', value: 1}]);
+  await t('mem', 'kv-store-test-user-id-2' + uuid, false, []);
+  await t(undefined, 'kv-store-test-user-id-3' + uuid, false, []);
 });
 
 test('Close during connect should sleep', async () => {

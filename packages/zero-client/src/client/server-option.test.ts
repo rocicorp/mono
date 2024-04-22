@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {getServer} from './server-option.js';
 
 test('getServer', () => {

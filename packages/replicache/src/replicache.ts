@@ -42,6 +42,7 @@ import {
 } from './kv/idb-store-with-mem-fallback.js';
 import {dropMemStore, MemStore} from './kv/mem-store.js';
 import type {StoreProvider} from './kv/store.js';
+import {createLogContext} from './log-options.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -105,7 +106,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
-import {createLogContext} from './log-options.js';
 
 declare const TESTING: boolean;
 export interface TestingReplicacheWithTesting extends Replicache {
@@ -1692,7 +1692,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
         this.#lastMutationID = lastMutationID;
 
         // Send is not supposed to reject
-        void this.#pushConnectionLoop.send(false);
+        this.#pushConnectionLoop.send(false).catch(() => void 0);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;

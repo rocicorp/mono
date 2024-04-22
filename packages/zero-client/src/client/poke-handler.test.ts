@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
 import {PokeHandler} from './poke-handler.js';
 
 let rafStub: sinon.SinonStub;
 
-setup(() => {
+beforeEach(() => {
   rafStub = sinon.stub(globalThis, 'requestAnimationFrame');
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 

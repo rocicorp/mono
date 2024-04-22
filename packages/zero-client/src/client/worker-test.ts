@@ -3,6 +3,7 @@
 import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
 import {zeroForTest} from './test-utils.js';
+import {version} from './version.js';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
@@ -15,7 +16,7 @@ onmessage = async (e: MessageEvent) => {
 };
 
 async function testBasics(userID: string) {
-  console.log('testBasics', WebSocket);
+  console.log('testBasics', WebSocket, version);
 
   type E = {
     id: string;

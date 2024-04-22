@@ -22,11 +22,6 @@ import {
 } from 'reflect-protocol';
 import {ROOM_ID_REGEX, isValidRoomID} from 'reflect-shared/src/room-id.js';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared/src/types.js';
-import {
-  MaybePromise,
-  Replicache,
-  UpdateNeededReason as ReplicacheUpdateNeededReason,
-} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {
   Puller,
@@ -35,6 +30,11 @@ import type {
 } from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
+import {
+  MaybePromise,
+  Replicache,
+  UpdateNeededReason as ReplicacheUpdateNeededReason,
+} from 'replicache/src/replicache.js';
 import type {
   WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
   WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
@@ -1414,7 +1414,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   // Total hack to get base cookie, see #puller for how the promise is resolved.
   #getBaseCookie(): Promise<NullableVersion> {
     this.#baseCookieResolver ??= resolver();
-    void this.#rep.pull();
+    void this.#rep.pull().catch(() => {});
     return this.#baseCookieResolver.promise;
   }
 
