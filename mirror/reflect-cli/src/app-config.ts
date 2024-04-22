@@ -1,6 +1,7 @@
 import {doc, getDoc, getFirestore} from 'firebase/firestore';
 import {createApp} from 'mirror-protocol/src/app.js';
 import {ensureTeam} from 'mirror-protocol/src/team.js';
+import {isValidAppName} from 'mirror-schema/src/external/app.js';
 import {
   appNameIndexDataConverter,
   appNameIndexPath,
@@ -8,14 +9,12 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {pkgUpSync} from 'pkg-up';
-
 import * as v from 'shared/src/valita.js';
 import {ErrorWrapper, UserError} from './error.js';
 import type {AuthContext} from './handler.js';
 import {logErrorAndExit} from './log-error-and-exit.js';
-import {makeRequester} from './requester.js';
-import {isValidAppName} from 'mirror-schema/src/external/app.js';
 import {getLogger} from './logger.js';
+import {makeRequester} from './requester.js';
 // { srcFile: destFile }
 const templateFiles = v.record(v.string());
 

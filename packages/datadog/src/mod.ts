@@ -1,1 +1,4 @@
-export {DatadogLogSink, DatadogLogSinkOptions} from './datadog-log-sink.js';
+export {
+  DatadogLogSink,
+  type DatadogLogSinkOptions,
+} from './datadog-log-sink.js';
