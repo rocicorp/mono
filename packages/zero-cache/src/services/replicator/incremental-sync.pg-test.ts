@@ -1,5 +1,4 @@
 import {Lock} from '@rocicorp/lock';
-import type postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
@@ -15,6 +14,7 @@ import {
   type InvalidationFilterSpec,
 } from '../../types/invalidation.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
+import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
@@ -26,8 +26,8 @@ import type {TableSpec} from './tables/specs.js';
 const REPLICA_ID = 'incremental_sync_test_id';
 
 describe('replicator/incremental-sync', () => {
-  let upstream: postgres.Sql;
-  let replica: postgres.Sql;
+  let upstream: PostgresDB;
+  let replica: PostgresDB;
   let syncer: IncrementalSyncer;
   let invalidator: Invalidator;
 
@@ -410,7 +410,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'mB47UNOLHRciNkgYYlEm1A',
             rowKey: {issueID: 123},
             row: {
               issueID: 123,
@@ -428,7 +427,7 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'Lap0XW7zwx6r-rGbUDWBrw',
+
             rowKey: {issueID: 456},
             row: {
               issueID: 456,
@@ -446,7 +445,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'yyqwdGt-8VzhDgeVMot1pw',
             rowKey: {issueID: 789},
             row: {
               issueID: 789,
@@ -464,7 +462,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'iXRVI9CkqApw0uyS73RXSQ',
             rowKey: {issueID: 987},
             row: {
               issueID: 987,
@@ -482,7 +479,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'ItM1pBE76QO2FqTP1IS3rA',
             rowKey: {issueID: 234},
             row: {
               issueID: 234,
@@ -653,7 +649,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
             rowKey: {orgID: 1, issueID: 123},
             row: {
               orgID: 1,
@@ -667,7 +662,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'HFQhV6itMdKyZv81WpOGAg',
             rowKey: {orgID: 1, issueID: 456},
             row: {
               orgID: 1,
@@ -681,7 +675,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'kHZmjyGbDssRKHHEbU2z2g',
             rowKey: {orgID: 2, issueID: 789},
             row: {
               orgID: 2,
@@ -695,7 +688,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'HFQhV6itMdKyZv81WpOGAg',
             rowKey: {orgID: 1, issueID: 456},
             row: {
               orgID: 1,
@@ -709,7 +701,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
             rowKey: {orgID: 1, issueID: 123},
             row: null,
           },
@@ -718,7 +709,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: '2qJu-IDPIs7PqBsrtmwZRg',
             rowKey: {orgID: 2, issueID: 123},
             row: {
               orgID: 2,
@@ -816,7 +806,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
             rowKey: {orgID: 1, issueID: 123},
             row: {
               orgID: 1,
@@ -830,7 +819,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'HFQhV6itMdKyZv81WpOGAg',
             rowKey: {orgID: 1, issueID: 456},
             row: {
               orgID: 1,
@@ -844,7 +832,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'kHZmjyGbDssRKHHEbU2z2g',
             rowKey: {orgID: 2, issueID: 789},
             row: {
               orgID: 2,
@@ -858,7 +845,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: '3TEkNvn8CfoW4xZsp43_Cg',
             rowKey: {orgID: 2, issueID: 987},
             row: {
               orgID: 2,
@@ -872,7 +858,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKeyHash: 'd4LTXQRobCPxSnobs_FcLg',
             rowKey: {orgID: 1, issueID: 123},
             row: null,
           },
@@ -881,7 +866,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKeyHash: 'HFQhV6itMdKyZv81WpOGAg',
             rowKey: {orgID: 1, issueID: 456},
             row: null,
           },
@@ -890,7 +874,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKeyHash: '3TEkNvn8CfoW4xZsp43_Cg',
             rowKey: {orgID: 2, issueID: 987},
             row: null,
           },
@@ -1078,7 +1061,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'bar',
             op: 's',
-            rowKeyHash: 'fa47EdYvwqHKjgDA9ZGxmg',
             rowKey: {id: 4},
             row: {id: 4, ['_0_version']: '01'},
           },
@@ -1087,7 +1069,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'bar',
             op: 's',
-            rowKeyHash: 'dTBYbmDGWw6O3zYGoshFkA',
             rowKey: {id: 5},
             row: {id: 5, ['_0_version']: '01'},
           },
@@ -1096,7 +1077,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'bar',
             op: 's',
-            rowKeyHash: 'LQ0Dp-So9WR8sPPTypl-',
             rowKey: {id: 6},
             row: {id: 6, ['_0_version']: '01'},
           },
@@ -1105,8 +1085,7 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'foo',
             op: 't',
-            rowKeyHash: '',
-            rowKey: null,
+            rowKey: {},
             row: null,
           },
           {
@@ -1114,8 +1093,7 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'baz',
             op: 't',
-            rowKeyHash: '',
-            rowKey: null,
+            rowKey: {},
             row: null,
           },
           {
@@ -1123,8 +1101,7 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'foo',
             op: 't',
-            rowKeyHash: '',
-            rowKey: null,
+            rowKey: {},
             row: null,
           },
           {
@@ -1132,7 +1109,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'foo',
             op: 's',
-            rowKeyHash: 'TNPmtn5B494le1zcxmsLRQ',
             rowKey: {id: 101},
             row: {id: 101, ['_0_version']: '02'},
           },
@@ -1314,7 +1290,6 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             table: 'issues',
             op: 's',
-            rowKeyHash: 'HFQhV6itMdKyZv81WpOGAg',
             rowKey: {orgID: 1, issueID: 456},
             row: {
               orgID: 1,

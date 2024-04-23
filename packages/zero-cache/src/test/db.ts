@@ -2,7 +2,7 @@ import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterAll, expect} from 'vitest';
-import {postgresTypeConfig} from '../types/pg.js';
+import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
 class TestDBs {
   // Connects to the main "postgres" DB of the local Postgres cluster.
@@ -19,7 +19,7 @@ class TestDBs {
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
 
-  async create(database: string) {
+  async create(database: string): Promise<PostgresDB> {
     assert(!(database in this.#dbs), `${database} has already been created`);
 
     await this.#sql`
