@@ -9,15 +9,17 @@ import {entitiesPatchSchema} from './entities-patch.js';
  * be multiple mega-bytes in size. Using a multi-part format allows the server
  * to avoid having to have the full poke in memory at one time.
  *
- * Each poke is assigned a `pokeID`, a unique id for identifying the
- * poke.  All messages for a poke will have the same `pokeID`.
+ * Each poke is assigned a `pokeID`, a unique id (within the context of the
+ * connection) for identifying the poke.  All messages for a poke will have the
+ * same `pokeID`.
  *
- * A poke begins with a `poke-start` message which contains the
- * `baseCookie` the poke is updating from and the `cookie` the poke is updating
- * to.
+ * A poke begins with a `poke-start` message which contains the `baseCookie`
+ * the poke is updating from and the `cookie` the poke is updating to.
+ *
  * The poke continues with zero to many `poke-part` messages, each of which
  * can contain patch parts.  These patch parts should be merged in the order
  * received.
+ *
  * Finally, the poke ends with a `poke-end` message.  The merged `poke-parts`
  * can now be applied as a whole to update from `baseCookie` to `cookie`.
  *
