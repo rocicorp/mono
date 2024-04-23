@@ -10,16 +10,16 @@
     "build": "rm -rf out && npm run build-dts",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
     "check-types": "tsc --noEmit",
-    "test": "node --no-warnings --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "test:watch": "node --no-warnings --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
-    "esbuild": "^0.19.4",
+    "esbuild": "^0.20.2",
     "replicache": "15.0.0",
     "rollup": "^3.24.0",
-    "ts-jest": "^29.1.0",
+    "shared": "0.0.0",
     "typescript": "^5.4.2"
   },
   "eslintConfig": {

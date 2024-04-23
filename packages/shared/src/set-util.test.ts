@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {difference, equals, symmetricDifference, union} from './set-utils.js';
 
 test('equals', () => {

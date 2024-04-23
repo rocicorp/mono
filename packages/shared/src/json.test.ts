@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {JSONValue, assertJSONValue, deepEqual, isJSONValue} from './json.js';
 
 test('JSON deep equal', () => {

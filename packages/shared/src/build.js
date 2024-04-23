@@ -1,6 +1,9 @@
 // @ts-check
 /* eslint-env node, es2022 */
 
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+
 const external = [
   'node:*',
   '@badrap/valita',
@@ -36,12 +39,29 @@ export function sharedOptions(minify = true, metafile = false) {
 }
 
 /**
+ * @param {string} name
+ * @return {string}
+ */
+
+function getVersion(name) {
+  const url = new URL(`../../${name}/package.json`, import.meta.url);
+  const s = readFileSync(fileURLToPath(url), 'utf-8');
+  return JSON.parse(s).version;
+}
+
+/**
  * @param {'debug'|'release'|'unknown'} mode
  * @return {Record<string, string>}
  */
-export function makeDefine(mode) {
+export function makeDefine(mode = 'unknown') {
   /** @type {Record<string, string>} */
-  const define = {};
+  const define = {
+    ['REPLICACHE_VERSION']: JSON.stringify(getVersion('replicache')),
+    ['ZERO_VERSION']: JSON.stringify(getVersion('zero-client')),
+    ['REFLECT_VERSION']: JSON.stringify(getVersion('reflect')),
+    ['REFLECT_CLI_NAME']: JSON.stringify('reflect-cli'),
+    ['TESTING']: 'false',
+  };
   if (mode === 'unknown') {
     return define;
   }

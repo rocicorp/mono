@@ -1,4 +1,5 @@
-import {jest} from '@jest/globals';
+import type {jest} from '@jest/globals';
+import type * as vitest from 'vitest';
 
 type Method = 'GET' | 'PUT' | 'PATCH' | 'POST' | 'DELETE';
 
@@ -26,21 +27,49 @@ function defaultErrorResponse(code: number, message?: string): Response {
   } as unknown as Response;
 }
 
+export interface SpyOn {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  spyOn(obj: object, methodName: string): any;
+}
+
+type FetchSpy =
+  | vitest.MockInstance<
+      [input: string | Request | URL, init?: RequestInit | undefined],
+      Promise<Response>
+    >
+  | jest.SpiedFunction<{
+      (
+        input: URL | RequestInfo,
+        init?: RequestInit | undefined,
+      ): Promise<Response>;
+      (
+        input: string | Request | URL,
+        init?: RequestInit | undefined,
+      ): Promise<Response>;
+    }>;
+
 export class FetchMocker {
   #success: (result: unknown) => Response;
   #error: (code: number, message?: string) => Response;
+
+  readonly spy: FetchSpy;
+
   constructor(
+    spyOn: SpyOn,
     success: (result: unknown) => Response = defaultSuccessResponse,
     error: (code: number, message?: string) => Response = defaultErrorResponse,
   ) {
+    this.spy = spyOn
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(
+        (input: RequestInfo | URL, init: RequestInit | undefined) =>
+          this.#handle(input, init),
+      );
     this.#success = success;
     this.#error = error;
   }
-  readonly spy = jest
-    .spyOn(globalThis, 'fetch')
-    .mockImplementation((input, init) => this.#handle(input, init));
 
-  readonly #handlers: Handler[] = [];
+  readonly handlers: Handler[] = [];
   #defaultResponse: Response = {
     ok: false,
     status: 404,
@@ -48,14 +77,14 @@ export class FetchMocker {
   } as unknown as Response;
 
   #handle(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    for (let i = 0; i < this.#handlers.length; i++) {
-      const handler = this.#handlers[i];
+    for (let i = 0; i < this.handlers.length; i++) {
+      const handler = this.handlers[i];
       if (
         handler.method === (init?.method ?? 'GET') &&
         input.toString().includes(handler.urlSubstring)
       ) {
         if (handler.once) {
-          this.#handlers.splice(i, 1);
+          this.handlers.splice(i, 1);
         }
         return Promise.resolve(handler.response);
       }
@@ -77,7 +106,7 @@ export class FetchMocker {
   }
 
   result<T>(method: Method, urlSubstring: string, json: T): this {
-    this.#handlers.push({
+    this.handlers.push({
       method,
       urlSubstring,
       response: this.#success(json),
@@ -91,7 +120,7 @@ export class FetchMocker {
     code: number,
     message?: string,
   ): this {
-    this.#handlers.push({
+    this.handlers.push({
       method,
       urlSubstring,
       response: this.#error(code, message),
@@ -103,7 +132,7 @@ export class FetchMocker {
    * Configures the last specified handler (via result() or error()) to only be applied once.
    */
   once(): this {
-    this.#handlers[this.#handlers.length - 1].once = true;
+    this.handlers[this.handlers.length - 1].once = true;
     return this;
   }
 

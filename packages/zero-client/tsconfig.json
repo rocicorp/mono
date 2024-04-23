@@ -1,7 +1,21 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["dom", "esnext"]
+    "lib": ["dom", "esnext"],
+    "paths": {
+      "@rocicorp/zql": ["../zql/src/mod.ts"],
+      "@rocicorp/zql/src/*": ["../zql/src/*"],
+      "datadog": ["../datadog/src/mod.ts"],
+      "reflect-client": ["../reflect-client/src/mod.ts"],
+      "reflect-client/src/*": ["../reflect-client/src/*"],
+      "reflect-protocol": ["../reflect-protocol/src/mod.ts"],
+      "reflect-shared/src/*": ["../reflect-shared/src/*"],
+      "replicache": ["../replicache/src/mod.ts"],
+      "replicache/src/*": ["../replicache/src/*"],
+      "shared/src/*": ["../shared/src/*"],
+      "zero-protocol": ["../zero-protocol/src/mod.ts"],
+      "zero-protocol/src/*": ["../zero-protocol/src/*"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

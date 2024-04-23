@@ -1,3 +1,6 @@
+import webpack from 'webpack';
+import {makeDefine} from '../../packages/shared/src/build.js';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
@@ -23,6 +26,8 @@ const nextConfig = {
       '.js': ['.js', '.ts'],
       '.jsx': ['.jsx', '.tsx'],
     };
+
+    config.plugins.push(new webpack.DefinePlugin(makeDefine()));
 
     return config;
   },

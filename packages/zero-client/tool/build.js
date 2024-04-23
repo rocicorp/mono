@@ -30,7 +30,7 @@ async function buildPackages() {
   // minified builds we can re-enable this.
   const minify = false;
   let shared = sharedOptions(minify, false);
-  const define = makeDefine('unknown');
+  const define = makeDefine();
 
   fs.rmSync(basePath('out'), {recursive: true, force: true});
 
@@ -40,7 +40,6 @@ async function buildPackages() {
     platform: 'browser',
     define: {
       ...define,
-      ['ZERO_VERSION']: JSON.stringify(getZeroVersion()),
       ['TESTING']: 'false',
     },
     format: 'esm',

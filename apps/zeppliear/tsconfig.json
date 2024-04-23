@@ -3,14 +3,9 @@
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "moduleResolution": "node",
-    "skipLibCheck": true,
     "jsx": "preserve",
     "noEmit": true,
     "isolatedModules": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["*"]
-    },
     "module": "esnext"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],

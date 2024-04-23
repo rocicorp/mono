@@ -1,8 +1,10 @@
 // This test file is loaded by worker.test.ts
 
-import {expect} from 'chai';
+import {assert} from 'shared/src/asserts.js';
+import {deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import {zeroForTest} from './test-utils.js';
+import {version} from './version.js';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
@@ -15,7 +17,7 @@ onmessage = async (e: MessageEvent) => {
 };
 
 async function testBasics(userID: string) {
-  console.log('testBasics', WebSocket);
+  console.log('testBasics', WebSocket, version);
 
   type E = {
     id: string;
@@ -46,25 +48,21 @@ async function testBasics(userID: string) {
   });
 
   await sleep(1);
-  expect(log).deep.equal([[]]);
+  assert(deepEqual(log, [[]]));
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([[], [{id: 'foo', value: 1}]]);
+  assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([
-    [],
-    [{id: 'foo', value: 1}],
-    [{id: 'foo', value: 2}],
-  ]);
+  assert(
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+  );
 
   cancelSubscribe();
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([
-    [],
-    [{id: 'foo', value: 1}],
-    [{id: 'foo', value: 2}],
-  ]);
-  expect(await q.exec()).deep.equal([{id: 'foo', value: 3}]);
+  assert(
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+  );
+  assert(deepEqual(await q.exec(), [{id: 'foo', value: 3}]));
 }

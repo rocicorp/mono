@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {assert} from './asserts.js';
 import {jsonSchema} from './json-schema.js';
 import * as v from './valita.js';

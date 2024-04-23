@@ -1,7 +1,7 @@
 import {consoleLogSink, type LogSink} from '@rocicorp/logger';
-import {expect} from 'chai';
 import type {DatadogLogSinkOptions} from 'datadog';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {createLogOptions} from './log-options.js';
 import {TestLogSink} from './test-utils.js';
 
@@ -9,7 +9,7 @@ let consoleLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
 let datadogLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
 let fakeCreateDatadogLogSink: sinon.SinonSpy<[DatadogLogSinkOptions], LogSink>;
 
-setup(() => {
+beforeEach(() => {
   consoleLogSinkSpy = sinon.spy(consoleLogSink);
   fakeCreateDatadogLogSink = sinon.fake((_options: DatadogLogSinkOptions) => {
     const testLogSink = new TestLogSink();
@@ -18,7 +18,7 @@ setup(() => {
   });
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 

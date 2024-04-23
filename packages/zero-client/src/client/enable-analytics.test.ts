@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, suite, test} from 'vitest';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 
 suite('when server indicates testing or local dev', () => {

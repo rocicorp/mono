@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {encode} from './base62.js';
 
 test('it should encode base62', () => {

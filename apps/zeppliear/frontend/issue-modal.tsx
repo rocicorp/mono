@@ -1,13 +1,10 @@
-import CloseIcon from './assets/icons/close.svg';
-import Modal from './modal';
-import React, {useState} from 'react';
-import {Issue, Priority, Status} from './issue';
 import {nanoid} from 'nanoid';
-
+import {useState} from 'react';
+import CloseIcon from './assets/icons/close.svg';
+import {Issue, Priority, Status} from './issue';
+import Modal from './modal';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
-
-// import { showInfo, showWarning } from 'utils/notification';
 
 interface Props {
   isOpen: boolean;

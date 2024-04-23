@@ -1,5 +1,5 @@
-import {describe, expect, test} from '@jest/globals';
 import {resolver} from '@rocicorp/resolver';
+import {describe, expect, test} from 'vitest';
 import {Queue} from './queue.js';
 
 describe('Queue', () => {

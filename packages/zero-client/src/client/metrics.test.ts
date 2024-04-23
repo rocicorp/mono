@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import sinon from 'sinon';
+import {afterEach, expect, test} from 'vitest';
 import {
   DID_NOT_CONNECT_VALUE,
   DisconnectReason,
@@ -12,7 +12,7 @@ import {
   State,
 } from './metrics.js';
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 

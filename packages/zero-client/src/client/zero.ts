@@ -22,28 +22,28 @@ import {
 } from 'reflect-protocol';
 import {ROOM_ID_REGEX, isValidRoomID} from 'reflect-shared/src/room-id.js';
 import type {MutatorDefs, ReadTransaction} from 'reflect-shared/src/types.js';
-import {
-  ClientGroupID,
-  ClientID,
-  ExperimentalWatchCallbackForOptions,
-  ExperimentalWatchNoIndexCallback,
-  ExperimentalWatchOptions,
-  MaybePromise,
-  PullRequestV0,
-  PullRequestV1,
+import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
+import type {
   Puller,
   PullerResultV0,
   PullerResultV1,
-  PushRequestV0,
-  PushRequestV1,
-  Pusher,
-  PusherResult,
+} from 'replicache/src/puller.js';
+import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
+import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
+import {
+  MaybePromise,
   Replicache,
-  ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
+} from 'replicache/src/replicache.js';
+import type {
+  WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
+  WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
+  WatchOptions as ExperimentalWatchOptions,
   SubscribeOptions,
-  dropDatabase,
-} from 'replicache';
+} from 'replicache/src/subscriptions.js';
+import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
+import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
+import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
@@ -1414,7 +1414,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   // Total hack to get base cookie, see #puller for how the promise is resolved.
   #getBaseCookie(): Promise<NullableVersion> {
     this.#baseCookieResolver ??= resolver();
-    void this.#rep.pull();
+    void this.#rep.pull().catch(() => {});
     return this.#baseCookieResolver.promise;
   }
 

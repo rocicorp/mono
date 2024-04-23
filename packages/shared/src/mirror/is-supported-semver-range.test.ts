@@ -1,5 +1,5 @@
-import {expect, test} from '@jest/globals';
 import {Range} from 'semver';
+import {expect, test} from 'vitest';
 import {isSupportedSemverRange} from './is-supported-semver-range.js';
 
 test('isSupportedSemverRange', () => {

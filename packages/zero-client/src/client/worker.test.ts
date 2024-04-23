@@ -1,5 +1,5 @@
-import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
+import {expect, test} from 'vitest';
 
 test('worker test', async () => {
   const url = new URL('./worker-test.ts', import.meta.url);
@@ -25,6 +25,6 @@ function send(w: Worker, data: {userID: string}): Promise<unknown> {
 function withTimeout<T>(p: Promise<T>): Promise<T> {
   return Promise.race([
     p,
-    sleep(3000).then(() => Promise.reject(new Error('Timed out'))),
+    sleep(6000).then(() => Promise.reject(new Error('Timed out'))),
   ]);
 }

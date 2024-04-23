@@ -3,7 +3,6 @@
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "moduleResolution": "node",
-    "skipLibCheck": true,
     "jsx": "preserve",
     "noEmit": true,
     "isolatedModules": true,

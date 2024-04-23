@@ -211,18 +211,6 @@ export function zeroForTest<MD extends MutatorDefs, QD extends QueryDefs>(
   testZeroInstances.add(r as TestZero<MutatorDefs, QueryDefs>);
   return r;
 }
-// This file is imported in a worker and web-test-runner does not inject the
-// teardown function there.
-if (typeof teardown === 'function') {
-  teardown(async () => {
-    for (const r of testZeroInstances) {
-      if (!r.closed) {
-        await r.close();
-        testZeroInstances.delete(r);
-      }
-    }
-  });
-}
 
 export class TestLogSink implements LogSink {
   messages: [LogLevel, Context | undefined, unknown[]][] = [];
