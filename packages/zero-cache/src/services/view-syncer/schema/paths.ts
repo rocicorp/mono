@@ -1,5 +1,5 @@
 import {versionToLexi} from '../../../types/lexi-version.js';
-import type {CVRVersion, QueryRecord, RowID} from './types.js';
+import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 
 // At a glance
 //
@@ -11,8 +11,12 @@ import type {CVRVersion, QueryRecord, RowID} from './types.js';
 // -----------------------------------------------------------------------
 // CVR
 // -----------------------------------------------------------------------
-// /vs/cvr/{id}/meta/version: {stateVersion: LexiVersion, querySetVersion?: number}
+// /vs/cvr/{id}/meta/version: {stateVersion: LexiVersion, metaVersion?: number}
 // /vs/cvr/{id}/meta/lastActive: {day: Date}  // Updated at most once per day
+//
+// /vs/cvr/{id}/meta/clients/{cid}: ClientRecord (desiredQueries)
+// /vs/cvr/{id}/meta/clients/{cid}: ClientRecord
+// /vs/cvr/{id}/meta/clients/{cid}: ClientRecord
 //
 // /vs/cvr/{id}/meta/queries/{qid}: QueryRecord (ast, transformationHash)
 // /vs/cvr/{id}/meta/queries/{qid}: QueryRecord
@@ -22,13 +26,19 @@ import type {CVRVersion, QueryRecord, RowID} from './types.js';
 // /vs/cvr/{id}/rows/{schema}/{table}/{row-key-hash}: RowRecord
 // /vs/cvr/{id}/rows/{schema}/{table}/{row-key-hash}: RowRecord
 //
+// Note: /patches/... rows are ordered by {version-str} and thus types are interleaved.
+// /vs/cvr/{id}/patches/{version-str}/clients/{cid}}: ClientPatch
+// /vs/cvr/{id}/patches/{version-str}/clients/{cid}}: ClientPatch
+// /vs/cvr/{id}/patches/{version-str}/clients/{cid}}: ClientPatch
 // /vs/cvr/{id}/patches/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
 // /vs/cvr/{id}/patches/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
 // /vs/cvr/{id}/patches/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
-//          ... interleaved with ...
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch
+// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/patches/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/patches/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/patches/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
 //
 // -----------------------------------------------------------------------
 // Last Active Index
@@ -71,6 +81,10 @@ export class CVRPaths {
     return `${this.root}/meta/lastActive`;
   }
 
+  client(client: ClientRecord | {id: string}): string {
+    return `${this.root}/meta/clients/${client.id}`;
+  }
+
   query(query: QueryRecord | {id: string}): string {
     return `${this.root}/meta/queries/${query.id}`;
   }
@@ -80,6 +94,14 @@ export class CVRPaths {
     const table = pathEscape(row.table);
     const hash = row.rowKeyHash;
     return `${this.root}/rows/${schema}/${table}/${hash}`;
+  }
+
+  clientPatch(
+    cvrVersion: CVRVersion,
+    client: ClientRecord | {id: string},
+  ): string {
+    const v = versionString(cvrVersion);
+    return `${this.root}/patches/${v}/clients/${client.id}`;
   }
 
   rowPatch(cvrVersion: CVRVersion, row: RowID): string {
@@ -97,6 +119,15 @@ export class CVRPaths {
     const v = versionString(cvrVersion);
     return `${this.root}/patches/${v}/queries/${query.id}`;
   }
+
+  desiredQueryPatch(
+    cvrVersion: CVRVersion,
+    query: QueryRecord | {id: string},
+    client: ClientRecord | {id: string},
+  ): string {
+    const v = versionString(cvrVersion);
+    return `${this.root}/patches/${v}/queries/${query.id}/clients/${client.id}`;
+  }
 }
 
 const pathEscapeChars = /[\\/\\"]/;
@@ -109,7 +140,7 @@ function pathEscape(part: string) {
 }
 
 function versionString(v: CVRVersion) {
-  return v.querySetVersion === undefined
+  return v.metaVersion === undefined
     ? v.stateVersion
-    : `${v.stateVersion}-${versionToLexi(v.querySetVersion)}`;
+    : `${v.stateVersion}-${versionToLexi(v.metaVersion)}`;
 }
