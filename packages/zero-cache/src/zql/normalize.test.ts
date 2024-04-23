@@ -142,7 +142,7 @@ describe('zql/normalize-query-hash', () => {
             ['id', 'i'],
             ['name', 'n'],
           ],
-          groupBy: ['name', 'id'],
+          groupBy: ['name', 'issues.id'],
           // ORDER BY expression order must be preserved.
           orderBy: [['dueDate', 'priority'], 'desc'],
           limit: 10,
@@ -150,7 +150,7 @@ describe('zql/normalize-query-hash', () => {
       ],
       query:
         'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY id, name ORDER BY "dueDate", priority desc LIMIT 10',
+        'GROUP BY issues.id, name ORDER BY "dueDate", priority desc LIMIT 10',
     },
     {
       name: 'group by, order by (ordering preserved), limit',
@@ -212,12 +212,12 @@ describe('zql/normalize-query-hash', () => {
               on: ['issues.ownerID', 'users.id'],
             },
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [['owner.id'], 'asc'],
         },
       ],
       query:
         'SELECT id AS id FROM issues INNER JOIN (users) AS owner' +
-        ' ON issues."ownerID" = users.id ORDER BY id asc',
+        ' ON issues."ownerID" = users.id ORDER BY owner.id asc',
     },
     {
       name: 'join subquery',

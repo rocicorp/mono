@@ -88,11 +88,11 @@ export class Normalized {
       query += ` WHERE ${this.#condition(where)}`;
     }
     if (groupBy) {
-      query += ` GROUP BY ${groupBy.map(x => ident(x)).join(', ')}`;
+      query += ` GROUP BY ${groupBy.map(x => selector(x)).join(', ')}`;
     }
     if (orderBy) {
       const [names, dir] = orderBy;
-      query += ` ORDER BY ${names.map(x => ident(x)).join(', ')} ${dir}`;
+      query += ` ORDER BY ${names.map(x => selector(x)).join(', ')} ${dir}`;
     }
     if (limit !== undefined) {
       query += ` LIMIT ${limit}`;

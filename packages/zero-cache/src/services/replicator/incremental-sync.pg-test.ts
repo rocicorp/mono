@@ -175,6 +175,7 @@ describe('replicator/incremental-sync', () => {
       CREATE TABLE issues(
         "issueID" INTEGER PRIMARY KEY,
         big BIGINT,
+        flt FLOAT8,
         ints INTEGER[],
         bigs BIGINT[],
         time TIMESTAMPTZ,
@@ -186,6 +187,7 @@ describe('replicator/incremental-sync', () => {
       CREATE TABLE issues(
         "issueID" INTEGER PRIMARY KEY,
         big BIGINT,
+        flt FLOAT8,
         ints INTEGER[],
         bigs BIGINT[],
         time TIMESTAMPTZ,
@@ -210,6 +212,12 @@ describe('replicator/incremental-sync', () => {
             },
             big: {
               dataType: 'int8',
+              characterMaximumLength: null,
+              columnDefault: null,
+              notNull: false,
+            },
+            flt: {
+              dataType: 'float8',
               characterMaximumLength: null,
               columnDefault: null,
               notNull: false,
@@ -256,6 +264,7 @@ describe('replicator/incremental-sync', () => {
         `
       INSERT INTO issues ("issueID", big) VALUES (789, 9223372036854775807);
       INSERT INTO issues ("issueID", ints) VALUES (987, '{92233720,123}');
+      INSERT INTO issues ("issueID", flt) VALUES (234, 123.456);
 
       -- https://github.com/porsager/postgres/issues/837
       -- INSERT INTO issues ("issueID", bigs) VALUES (2468, '{9223372036854775807,123}');
@@ -293,6 +302,11 @@ describe('replicator/incremental-sync', () => {
               table: 'issues',
               filteredColumns: {issueID: '987'},
             })]: '02',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '234'},
+            })]: '02',
           },
         },
       ],
@@ -320,6 +334,11 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             filteredColumns: {issueID: '987'},
           })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '234'},
+          })]: '02',
         },
       },
       data: {
@@ -327,6 +346,7 @@ describe('replicator/incremental-sync', () => {
           {
             issueID: 123,
             big: null,
+            flt: null,
             ints: null,
             bigs: null,
             time: null,
@@ -336,6 +356,7 @@ describe('replicator/incremental-sync', () => {
           {
             issueID: 456,
             big: null,
+            flt: null,
             ints: null,
             bigs: null,
             time: new Date(Date.UTC(2024, 2, 21, 18, 50, 23, 646)), // Note: we lost the microseconds
@@ -346,6 +367,7 @@ describe('replicator/incremental-sync', () => {
             issueID: 789,
             big: 9223372036854775807n,
             ints: null,
+            flt: null,
             bigs: null,
             time: null,
             description: null,
@@ -354,7 +376,18 @@ describe('replicator/incremental-sync', () => {
           {
             issueID: 987,
             big: null,
+            flt: null,
             ints: [92233720, 123],
+            bigs: null,
+            time: null,
+            description: null,
+            ['_0_version']: '02',
+          },
+          {
+            issueID: 234,
+            big: null,
+            flt: 123.456,
+            ints: null,
             bigs: null,
             time: null,
             description: null,
@@ -382,6 +415,7 @@ describe('replicator/incremental-sync', () => {
             row: {
               issueID: 123,
               big: null,
+              flt: null,
               ints: null,
               bigs: null,
               time: null,
@@ -399,6 +433,7 @@ describe('replicator/incremental-sync', () => {
             row: {
               issueID: 456,
               big: null,
+              flt: null,
               ints: null,
               bigs: null,
               time: '2024-03-21T18:50:23.646Z',
@@ -417,6 +452,7 @@ describe('replicator/incremental-sync', () => {
               issueID: 789,
               big: 9223372036854775807n,
               ints: null,
+              flt: null,
               bigs: null,
               time: null,
               description: null,
@@ -433,7 +469,26 @@ describe('replicator/incremental-sync', () => {
             row: {
               issueID: 987,
               big: null,
+              flt: null,
               ints: [92233720, 123],
+              bigs: null,
+              time: null,
+              description: null,
+              ['_0_version']: '02',
+            },
+          },
+          {
+            stateVersion: '02',
+            schema: 'public',
+            table: 'issues',
+            op: 's',
+            rowKeyHash: 'ItM1pBE76QO2FqTP1IS3rA',
+            rowKey: {issueID: 234},
+            row: {
+              issueID: 234,
+              big: null,
+              flt: 123.456,
+              ints: null,
               bigs: null,
               time: null,
               description: null,
@@ -492,6 +547,17 @@ describe('replicator/incremental-sync', () => {
                 schema: 'public',
                 table: 'issues',
                 filteredColumns: {issueID: '987'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '234'},
               }),
               'hex',
             ),

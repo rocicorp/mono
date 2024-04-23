@@ -8,21 +8,47 @@ export const cvrVersionSchema = v.object({
   stateVersion: v.string(), // LexiVersion
 
   /**
-   * `querySetVersion` is an initially absent counter that is incremented when
-   * the stateVersion remains the same but either (1) the query set changes or
-   * (2) query transformations change (the latter of which happens for changes
-   * in server-side logic or authorization policies).
+   * `metaVersion` is an initially absent counter that is incremented when
+   * the stateVersion remains the same but the metadata of the CVR changes,
+   * including:
+   * * client set changes
+   * * query set changes
+   * * query transformation changes (which may happen for changes
+   *   in server-side logic or authorization policies)
    *
-   * When the `stateVersion` moves forward, the `queryVersion` can be reset to
+   * When the `stateVersion` moves forward, the `metaVersion` can be reset to
    * absent.
    */
-  querySetVersion: v.number().optional(),
+  metaVersion: v.number().optional(),
 });
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
-export const queryRecordSchema = v.object({
-  /** The client-specified ID used to identify this query. */
+const cvrRecordSchema = v.object({
+  /**
+   * CVR records store the CVRVersion at which record was "put" into the CVR,
+   * which corresponds with a patch row that can be cleaned up when the record
+   * is deleted (or updated in the case of rows).
+   *
+   * Note that this do delete patches are not tracked, as tombstones are
+   * not stored, so logic to expire old patch entries is still needed to
+   * bound storage usage.
+   */
+  putPatch: cvrVersionSchema,
+});
+
+export const clientRecordSchema = cvrRecordSchema.extend({
+  /** The client ID, of which there can be multiple for a client group view. */
+  id: v.string(),
+
+  /** The client's desired query IDs. Patch information is stored in the QueryRecord. */
+  desiredQueryIDs: v.array(v.string()),
+});
+
+export type ClientRecord = v.Infer<typeof clientRecordSchema>;
+
+export const queryRecordSchema = cvrRecordSchema.extend({
+  /** The client-specified ID used to identify this query. Typically a hash. */
   id: v.string(),
 
   /** The original AST as supplied by the client. */
@@ -38,7 +64,7 @@ export const queryRecordSchema = v.object({
    * Transformations depend on conditions that are independent of the db state version,
    * such as server-side logic and authorization policies. As such, the version of a CVR
    * version may need to be advanced independent of db state changes. This is done
-   * via the `querySetVersion` counter of the CVRVersion object, which is used to account
+   * via the `metaVersion` counter of the CVRVersion object, which is used to account
    * for both changes to the query set and changes to query transformations (which are
    * effectively remove-old-query + add-new-query).
    *
@@ -50,9 +76,17 @@ export const queryRecordSchema = v.object({
    */
   transformationHash: v.string(),
 
+  // For queries, the putPatch indicates when query was added to the got set,
+  // which can be undefined if not yet gotten.
+  putPatch: cvrVersionSchema.optional(),
+
+  // Maps each of the desiring client's IDs to the version at which
+  // the queryID was added to their desired query set (i.e. individual `putPatch`es).
+  desiredBy: v.record(cvrVersionSchema),
+
   // TODO: Iron this out.
   // estimatedBytes: v.number(),
-  // evictable: v.boolean().optional(),
+  // lru information?
 });
 
 export type QueryRecord = v.Infer<typeof queryRecordSchema>;
@@ -92,15 +126,20 @@ export const rowViewSchema = v.object({
 
 export type RowView = v.Infer<typeof rowViewSchema>;
 
-export const rowRecordSchema = v.object({
+export const rowRecordSchema = cvrRecordSchema.extend({
   row: rowViewSchema,
   queryIDs: v.array(v.string()),
 });
 
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
 
-export const rowPatchSchema = v.object({
-  op: v.union(v.literal('set'), v.literal('del')),
+export const patchSchema = v.object({
+  type: v.union(v.literal('client'), v.literal('row'), v.literal('query')),
+  op: v.union(v.literal('put'), v.literal('del')),
+});
+
+export const rowPatchSchema = patchSchema.extend({
+  type: v.literal('row'),
   // Note that the row key needs to be looked up from the ChangeLog even for
   // deletes, since only row key hashes are stored in the CVR.
   //
@@ -123,9 +162,17 @@ export const rowPatchSchema = v.object({
 
 export type RowPatch = v.Infer<typeof rowPatchSchema>;
 
-export const queryPatch = v.object({
-  op: v.union(v.literal('set'), v.literal('del')),
+export const queryPatchSchema = patchSchema.extend({
+  type: v.literal('query'),
+  id: v.string(),
+  clientID: v.string().optional(), // defined for "desired", undefined for "got"
+});
+
+export type QueryPatch = v.Infer<typeof queryPatchSchema>;
+
+export const clientPatchSchema = patchSchema.extend({
+  type: v.literal('client'),
   id: v.string(),
 });
 
-export type QueryPatch = v.Infer<typeof queryPatch>;
+export type ClientPatch = v.Infer<typeof clientPatchSchema>;

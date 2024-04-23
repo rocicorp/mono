@@ -12,16 +12,25 @@ describe('view-syncer/schema/paths', () => {
     const paths2 = new CVRPaths('456');
     expect(
       paths2.queryPatch(
-        {stateVersion: '2abc', querySetVersion: 35},
+        {stateVersion: '2abc', metaVersion: 35},
         {id: 'boo-query'},
       ),
     ).toBe('/vs/cvr/456/patches/2abc-0z/queries/boo-query');
     expect(
       paths2.queryPatch(
-        {stateVersion: '2abc', querySetVersion: 36},
+        {stateVersion: '2abc', metaVersion: 36},
         {id: 'boo-query'},
       ),
     ).toBe('/vs/cvr/456/patches/2abc-110/queries/boo-query');
+  });
+
+  test('client paths', () => {
+    const paths = new CVRPaths('abc');
+
+    expect(paths.client({id: 'foo'})).toBe('/vs/cvr/abc/meta/clients/foo');
+    expect(paths.clientPatch({stateVersion: '2321'}, {id: 'foo'})).toBe(
+      '/vs/cvr/abc/patches/2321/clients/foo',
+    );
   });
 
   test('row paths', () => {
