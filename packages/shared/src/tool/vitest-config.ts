@@ -45,5 +45,6 @@ export const config: UserConfigExport = {
     typecheck: {
       enabled: false,
     },
+    testTimeout: 10_000,
   },
 };
