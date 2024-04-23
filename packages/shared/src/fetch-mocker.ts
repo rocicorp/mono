@@ -1,4 +1,4 @@
-import type { jest } from '@jest/globals';
+import type {jest} from '@jest/globals';
 import type * as vitest from 'vitest';
 
 type Method = 'GET' | 'PUT' | 'PATCH' | 'POST' | 'DELETE';
@@ -28,6 +28,7 @@ function defaultErrorResponse(code: number, message?: string): Response {
 }
 
 interface SpyOn {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   spyOn(obj: object, methodName: string): any;
 }
 
