@@ -114,10 +114,6 @@ export class LeftJoinOperator<
         ? aRow.id
         : getAPrimaryKey(aRow as AValue);
 
-      // if we're adding a thing
-      //  if we go from 0, retract unmatches aRow mult?
-      // if we're removing a thing
-      //  if we go to 0, send unmatches aRow mult?
       const existing = this.#aMatches.get(aPrimaryKey);
       if (joinEntry[1] > 0 && existing && existing[1] === 0) {
         // row `a` now has matches. Remove the un-match.
