@@ -30,11 +30,7 @@ import type {
 } from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import {
-  MaybePromise,
-  Replicache,
-  UpdateNeededReason as ReplicacheUpdateNeededReason,
-} from 'replicache/src/replicache.js';
+import {Replicache} from 'replicache/src/replicache.js';
 import type {
   WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
   WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
@@ -44,6 +40,10 @@ import type {
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
+import type {
+  MaybePromise,
+  UpdateNeededReason as ReplicacheUpdateNeededReason,
+} from 'replicache/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
