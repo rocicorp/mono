@@ -1,12 +1,12 @@
+import {FetchMocker} from 'shared/src/fetch-mocker.js';
 import {
   afterEach,
   beforeEach,
   describe,
   expect,
-  jest,
+  vi as jest,
   test,
-} from '@jest/globals';
-import {FetchMocker} from 'shared/src/fetch-mocker.js';
+} from 'vitest';
 import {CustomHostnames} from './custom-hostnames.js';
 import {mockFetch} from './fetch-test-helper.js';
 

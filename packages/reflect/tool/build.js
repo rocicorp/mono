@@ -113,7 +113,7 @@ async function buildPackages() {
   // minified builds we can re-enable this.
   const minify = false;
   let shared = sharedOptions(minify, false);
-  const define = makeDefine('unknown');
+  const define = makeDefine();
 
   fs.rmSync(basePath('out'), {recursive: true, force: true});
 
@@ -129,11 +129,7 @@ async function buildPackages() {
     ...shared,
     external,
     platform: 'browser',
-    define: {
-      ...define,
-      ['REFLECT_VERSION']: JSON.stringify(getReflectVersion()),
-      ['TESTING']: 'false',
-    },
+    define,
     format: 'esm',
     entryPoints: [
       basePath('src', 'client.ts'),

@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {wrapIterable} from './iterables.js';
 
 function* range(start = 0, end = Infinity, step = 1) {

@@ -1,12 +1,12 @@
-import {afterEach, beforeEach, expect, jest, test} from '@jest/globals';
+import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {getDocumentVisibilityWatcher} from './document-visible.js';
 
 beforeEach(() => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
 });
 
 afterEach(() => {
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 class Document extends EventTarget {
@@ -45,7 +45,7 @@ test('waitForHidden', async () => {
   });
   doc.visibilityState = 'hidden';
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(1000);
+  await vi.advanceTimersByTimeAsync(1000);
   expect(resolved).toBe(true);
   await p;
 });
@@ -62,7 +62,7 @@ test('waitForHidden flip back to visible', async () => {
 
   doc.visibilityState = 'hidden';
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(500);
+  await vi.advanceTimersByTimeAsync(500);
   expect(resolved).toBe(false);
 
   // Flip back to visible.
@@ -70,7 +70,7 @@ test('waitForHidden flip back to visible', async () => {
   expect(resolved).toBe(false);
 
   // And wait a bit more.
-  await jest.advanceTimersByTimeAsync(50_000);
+  await vi.advanceTimersByTimeAsync(50_000);
   expect(resolved).toBe(false);
 });
 
@@ -86,19 +86,19 @@ test('waitForHidden flip back and forth', async () => {
 
   doc.visibilityState = 'hidden';
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(500);
+  await vi.advanceTimersByTimeAsync(500);
   expect(resolved).toBe(false);
 
   // Flip back to visible.
   doc.visibilityState = 'visible';
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(500);
+  await vi.advanceTimersByTimeAsync(500);
   expect(resolved).toBe(false);
 
   doc.visibilityState = 'hidden';
-  await jest.advanceTimersByTimeAsync(500);
+  await vi.advanceTimersByTimeAsync(500);
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(500);
+  await vi.advanceTimersByTimeAsync(500);
   expect(resolved).toBe(true);
 
   await p;
@@ -121,10 +121,10 @@ test('waitForHidden no document', async () => {
     resolved = true;
   });
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(1000);
+  await vi.advanceTimersByTimeAsync(1000);
   expect(resolved).toBe(false);
 
-  await jest.advanceTimersByTimeAsync(100_000);
+  await vi.advanceTimersByTimeAsync(100_000);
   expect(resolved).toBe(false);
 });
 
@@ -143,9 +143,9 @@ test('DocumentVisibleWatcher', async () => {
   expect(resolved).toBe(false);
   doc.visibilityState = 'hidden';
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(1_000 - 1);
+  await vi.advanceTimersByTimeAsync(1_000 - 1);
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(1);
+  await vi.advanceTimersByTimeAsync(1);
   expect(resolved).toBe(true);
   await p;
 
@@ -159,7 +159,7 @@ test('DocumentVisibleWatcher', async () => {
     });
     expect(resolved).toBe(false);
     doc.visibilityState = 'visible';
-    await jest.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
     expect(resolved).toBe(true);
     await p;
   }
@@ -177,8 +177,8 @@ test('DocumentVisibleWatcher controller abort', async () => {
     resolved = true;
   });
   doc.visibilityState = 'visible';
-  await jest.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(0);
   expect(resolved).toBe(false);
-  await jest.advanceTimersByTimeAsync(10_000);
+  await vi.advanceTimersByTimeAsync(10_000);
   expect(resolved).toBe(false);
 });

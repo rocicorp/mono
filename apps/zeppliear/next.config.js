@@ -1,5 +1,5 @@
-import {readFileSync} from 'node:fs';
 import webpack from 'webpack';
+import {makeDefine} from '../../packages/shared/src/build.js';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -27,13 +27,7 @@ const nextConfig = {
       '.jsx': ['.jsx', '.tsx'],
     };
 
-    const s = readFileSync('../../packages/replicache/package.json', 'utf8');
-    const REPLICACHE_VERSION = JSON.parse(s).version;
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        REPLICACHE_VERSION: JSON.stringify(REPLICACHE_VERSION),
-      }),
-    );
+    config.plugins.push(new webpack.DefinePlugin(makeDefine()));
 
     return config;
   },

@@ -4,8 +4,7 @@ import * as esbuild from 'esbuild';
 import {writeFile} from 'fs/promises';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
-import {sharedOptions} from '../../shared/src/build.js';
-import {makeDefine} from './make-define.js';
+import {makeDefine, sharedOptions} from '../../shared/src/build.js';
 import {readPackageJSON} from './read-package-json.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
@@ -43,10 +42,7 @@ async function buildReplicache(options) {
     format: 'esm',
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
-    define: {
-      ...define,
-      ['TESTING']: 'false',
-    },
+    define,
     outfile,
     entryPoints: [path.join(dirname, '..', 'src', 'mod.ts')],
   });

@@ -33,11 +33,9 @@
     "esbuild": "^0.20.2",
     "playwright": "^1.43.1",
     "rollup": "^3.24.0",
+    "shared": "0.0.0",
     "sinon": "^13.0.1",
-    "typescript": "^5.4.2",
-    "vite-tsconfig-paths": "^4.3.2",
-    "@vitest/browser": "^1.5.0",
-    "vitest": "^1.5.0"
+    "typescript": "^5.4.2"
   },
   "files": [
     "out"

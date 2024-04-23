@@ -4,7 +4,7 @@
 
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import {playwrightLauncher} from '@web/test-runner-playwright';
-import {makeDefine} from './tool/make-define.js';
+import {makeDefine} from '../shared/src/build.js';
 
 const chromium = playwrightLauncher({product: 'chromium'});
 const webkit = playwrightLauncher({product: 'webkit'});
@@ -20,7 +20,7 @@ const config = {
       ts: true,
       target: 'es2022',
       define: {
-        ...(await makeDefine('debug')),
+        ...makeDefine('debug'),
         ['TESTING']: 'true',
       },
     }),

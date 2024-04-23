@@ -1,5 +1,5 @@
-import {describe, test, expect} from '@jest/globals';
 import {LogContext} from '@rocicorp/logger';
+import {describe, expect, test} from 'vitest';
 import {BufferSizer} from './buffer-sizer.js';
 
 type Case = {

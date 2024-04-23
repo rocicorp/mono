@@ -1,4 +1,4 @@
-import {expect, test} from '@jest/globals';
+import {expect, test} from 'vitest';
 import {sha256OfString} from './sha256.js';
 
 test('basic', async () => {

@@ -1,5 +1,5 @@
-import {describe, expect, test} from '@jest/globals';
 import * as v from 'shared/src/valita.js';
+import {describe, expect, test} from 'vitest';
 import {Dataset, timestampSchema} from './dataset.js';
 
 const runningConnectionSeconds = new Dataset(

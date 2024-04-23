@@ -1,4 +1,4 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
 type Method = 'GET' | 'PUT' | 'PATCH' | 'POST' | 'DELETE';
 
@@ -36,7 +36,7 @@ export class FetchMocker {
     this.#success = success;
     this.#error = error;
   }
-  readonly spy = jest
+  readonly spy = vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation((input, init) => this.#handle(input, init));
 

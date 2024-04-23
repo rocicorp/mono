@@ -2,7 +2,7 @@
 
 import * as esbuild from 'esbuild';
 import {readFile} from 'node:fs/promises';
-import {getVersion} from '../../../packages/reflect-shared/tool/get-version.js';
+import {makeDefine} from '../../../packages/shared/src/build.js';
 import {getExternalFromPackageJSON} from '../../../packages/shared/src/tool/get-external-from-package-json.js';
 import {injectRequire} from '../../../packages/shared/src/tool/inject-require.js';
 
@@ -15,7 +15,7 @@ async function packageJSON(relPath) {
   return JSON.parse(s);
 }
 
-const reflectVersion = getVersion();
+const define = makeDefine();
 const reflectCliName = (await packageJSON('../package.json')).name;
 
 async function main() {
@@ -33,7 +33,7 @@ async function main() {
       js: injectRequire(),
     },
     define: {
-      REFLECT_VERSION: JSON.stringify(reflectVersion),
+      ...define,
       REFLECT_CLI_NAME: JSON.stringify(reflectCliName),
       TESTING: 'false',
     },

@@ -1,9 +1,9 @@
-import {afterEach, expect, jest, test} from '@jest/globals';
+import {afterEach, expect, test, vi} from 'vitest';
 import {CustomHostnames} from './custom-hostnames.js';
 import {mockFetch} from './fetch-test-helper.js';
 
 afterEach(() => {
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 test('custom-hostnames', async () => {
