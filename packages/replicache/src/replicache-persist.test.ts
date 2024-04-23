@@ -22,6 +22,7 @@ import {uuidChunkHasher} from './dag/chunk.js';
 import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
 import {assertHash} from './hash.js';
+import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
 import {
   ClientGroup,
@@ -34,10 +35,9 @@ import {
   ClientStateNotFoundError,
   getClient,
 } from './persist/clients.js';
-import type {MutatorDefs} from './replicache.js';
 import type {WriteTransaction} from './transactions.js';
+import type {MutatorDefs} from './types.js';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 
 initReplicacheTesting();
 

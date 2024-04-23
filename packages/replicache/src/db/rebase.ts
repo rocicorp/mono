@@ -3,9 +3,9 @@ import {assert} from 'shared/src/asserts.js';
 import type {Write as DagWrite} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
-import type {MutatorDefs} from '../replicache.js';
 import type {ClientID} from '../sync/ids.js';
 import {WriteTransactionImpl} from '../transactions.js';
+import type {MutatorDefs} from '../types.js';
 import {
   Commit,
   LocalMeta,

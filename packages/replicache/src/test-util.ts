@@ -21,15 +21,11 @@ import type {
   ReplicacheInternalOptions,
   ReplicacheOptions,
 } from './replicache-options.js';
-import {
-  BeginPullResult,
-  MutatorDefs,
-  Replicache,
-  getTestInstance,
-} from './replicache.js';
+import {Replicache, getTestInstance} from './replicache.js';
 import type {DiffComputationConfig} from './sync/diff.js';
 import type {ClientID} from './sync/ids.js';
 import type {WriteTransaction} from './transactions.js';
+import type {BeginPullResult, MutatorDefs} from './types.js';
 import {uuid} from './uuid.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.

@@ -1,7 +1,6 @@
 import {expect} from 'chai';
 import * as sinon from 'sinon';
 import type {VersionNotSupportedResponse} from './error-responses.js';
-import type {Poke, UpdateNeededReason} from './replicache.js';
 import {
   addData,
   disableAllBackgroundProcesses,
@@ -10,6 +9,7 @@ import {
   replicacheForTesting,
 } from './test-util.js';
 import type {WriteTransaction} from './transactions.js';
+import type {Poke, UpdateNeededReason} from './types.js';
 
 initReplicacheTesting();
 

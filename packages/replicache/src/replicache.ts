@@ -69,7 +69,7 @@ import {
 import {persistDD31} from './persist/persist.js';
 import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
-import type {Puller, PullResponseV1} from './puller.js';
+import type {Puller} from './puller.js';
 import {Pusher, PushError} from './pusher.js';
 import type {
   ReplicacheInternalOptions,
@@ -99,6 +99,18 @@ import {SYNC_HEAD_NAME} from './sync/sync-head-name.js';
 import {throwIfClosed} from './transaction-closed-error.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
+import type {
+  BeginPullResult,
+  MakeMutator,
+  MakeMutators,
+  MaybePromise,
+  MutatorDefs,
+  MutatorReturn,
+  Poke,
+  QueryInternal,
+  RequestOptions,
+  UpdateNeededReason,
+} from './types.js';
 import {uuid as makeUuid} from './uuid.js';
 import {version} from './version.js';
 import {
@@ -137,17 +149,6 @@ function exposeToTesting(rep: object, testingInstance: TestingInstance): void {
   exposedToTestingMap.set(rep, testingInstance);
 }
 
-export type BeginPullResult = {
-  requestID: string;
-  syncHead: Hash;
-  ok: boolean;
-};
-
-export type Poke = {
-  baseCookie: ReadonlyJSONValue;
-  pullResponse: PullResponseV1;
-};
-
 export const httpStatusUnauthorized = 401;
 
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
@@ -155,10 +156,6 @@ const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 const RECOVER_MUTATIONS_INTERVAL_MS = 5 * 60 * 1000; // 5 mins
 const LICENSE_ACTIVE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TEST_LICENSE_KEY_TTL_MS = 5 * 60 * 1000;
-
-export type MaybePromise<T> = T | Promise<T>;
-
-type ToPromise<P> = P extends Promise<unknown> ? P : Promise<P>;
 
 /**
  * Returns the name of the IDB database that will be used for a particular Replicache instance.
@@ -197,77 +194,9 @@ const noop = () => {
   // noop
 };
 
-export type MutatorReturn<T extends ReadonlyJSONValue = ReadonlyJSONValue> =
-  MaybePromise<T | void>;
-/**
- * The type used to describe the mutator definitions passed into [Replicache](classes/Replicache)
- * constructor as part of the {@link ReplicacheOptions}.
- *
- * See {@link ReplicacheOptions} {@link ReplicacheOptions.mutators | mutators} for more
- * info.
- */
-export type MutatorDefs = {
-  [key: string]: (
-    tx: WriteTransaction,
-    // Not sure how to not use any here...
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    args?: any,
-  ) => MutatorReturn;
-};
-
-type MakeMutator<
-  F extends (
-    tx: WriteTransaction,
-    ...args: [] | [ReadonlyJSONValue]
-  ) => MutatorReturn,
-> = F extends (tx: WriteTransaction, ...args: infer Args) => infer Ret
-  ? (...args: Args) => ToPromise<Ret>
-  : never;
-
-type MakeMutators<T extends MutatorDefs> = {
-  readonly [P in keyof T]: MakeMutator<T[P]>;
-};
-
-/**
- * Base options for {@link PullOptions} and {@link PushOptions}
- */
-export interface RequestOptions {
-  /**
-   * When there are pending pull or push requests this is the _minimum_ amount
-   * of time to wait until we try another pull/push.
-   */
-  minDelayMs?: number;
-
-  /**
-   * When there are pending pull or push requests this is the _maximum_ amount
-   * of time to wait until we try another pull/push.
-   */
-  maxDelayMs?: number;
-}
-
-/**
- * The reason {@link onUpdateNeeded} was called.
- */
-export type UpdateNeededReason =
-  | {
-      // There is a new client group due to a new tab loading new code with
-      // different mutators, indexes, schema version, or format version.
-      // This tab cannot sync locally with this new tab until it updates to
-      // the new code.
-      type: 'NewClientGroup';
-    }
-  | {
-      type: 'VersionNotSupported';
-      versionType?: 'push' | 'pull' | 'schema' | undefined;
-    };
-
 const updateNeededReasonNewClientGroup: UpdateNeededReason = {
   type: 'NewClientGroup',
 } as const;
-
-export type QueryInternal = <R>(
-  body: (tx: ReadTransactionImpl) => MaybePromise<R>,
-) => Promise<R>;
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
