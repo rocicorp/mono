@@ -23,7 +23,6 @@ import type {ReadTransaction, WriteTransaction} from './transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import type {TestingReplicacheWithTesting} from './replicache.js';
 
 initReplicacheTesting();
 
@@ -827,7 +826,7 @@ test('subscription coalescing', async () => {
     enablePullAndPushInOpen: false,
   });
 
-  const store = sinon.spy((rep as TestingReplicacheWithTesting).memdag);
+  const store = sinon.spy(rep.memdag);
   const resetCounters = () => {
     store.read.resetHistory();
     store.write.resetHistory();
