@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as playwright from 'playwright';
 import {fileURLToPath} from 'url';
-import {makeDefine} from '../tool/make-define.js';
+import {makeDefine} from '../../shared/src/build.js';
 
 /** @typedef {'chromium' | 'firefox' | 'webkit'} Browser */
 
