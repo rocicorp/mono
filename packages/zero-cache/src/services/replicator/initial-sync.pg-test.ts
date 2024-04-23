@@ -295,7 +295,7 @@ describe('replicator/initial-sync', () => {
       `,
       },
       {
-        error: 'uses reserved column name _0_version',
+        error: 'uses reserved column name "_0_version"',
         setupUpstreamQuery: `
         CREATE TABLE issues(
           "issueID" INTEGER PRIMARY KEY, 
@@ -304,7 +304,7 @@ describe('replicator/initial-sync', () => {
       `,
       },
       {
-        error: 'Schema _zero is reserved for internal use',
+        error: 'Schema "_zero" is reserved for internal use',
         setupUpstreamQuery: `
         CREATE SCHEMA _zero;
         CREATE TABLE _zero.is_not_allowed(
@@ -312,6 +312,39 @@ describe('replicator/initial-sync', () => {
           "orgID" INTEGER
         );
         `,
+      },
+      {
+        error: 'Only the default "public" schema is supported',
+        setupUpstreamQuery: `
+        CREATE SCHEMA unsupported;
+        CREATE TABLE unsupported.issues ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
+      `,
+      },
+      {
+        error: 'Table "table/with/slashes" has invalid characters',
+        setupUpstreamQuery: `
+        CREATE TABLE "table/with/slashes" ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
+      `,
+      },
+      {
+        error: 'Table "table.with.dots" has invalid characters',
+        setupUpstreamQuery: `
+        CREATE TABLE "table.with.dots" ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
+      `,
+      },
+      {
+        error:
+          'Column "column/with/slashes" in table "issues" has invalid characters',
+        setupUpstreamQuery: `
+        CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column/with/slashes" INTEGER);
+      `,
+      },
+      {
+        error:
+          'Column "column.with.dots" in table "issues" has invalid characters',
+        setupUpstreamQuery: `
+        CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column.with.dots" INTEGER);
+      `,
       },
     ];
 
