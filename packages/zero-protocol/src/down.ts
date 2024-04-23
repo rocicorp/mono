@@ -7,14 +7,16 @@ import {
   pokeStartMessageSchema,
 } from './poke.js';
 import {pongMessageSchema} from './pong.js';
+import {pullResponseMessageSchema} from './pull.js';
 
 export const downstreamSchema = v.union(
   connectedMessageSchema,
+  errorMessageSchema,
+  pongMessageSchema,
   pokeStartMessageSchema,
   pokePartMessageSchema,
   pokeEndMessageSchema,
-  errorMessageSchema,
-  pongMessageSchema,
+  pullResponseMessageSchema,
 );
 
 export type Downstream = v.Infer<typeof downstreamSchema>;
