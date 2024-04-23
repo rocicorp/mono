@@ -535,6 +535,19 @@ test('junction table left join', () => {
       },
       -1,
     ],
+    [
+      {
+        id: '1',
+        track: {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        [joinSymbol]: true,
+      },
+      1,
+    ],
   ]);
   items.length = 0;
 
@@ -570,6 +583,19 @@ test('junction table left join', () => {
         [joinSymbol]: true,
       },
       1,
+    ],
+    [
+      {
+        id: '1',
+        track: {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        [joinSymbol]: true,
+      },
+      -1,
     ],
     [
       {
@@ -616,6 +642,15 @@ test('junction table left join', () => {
     ],
     [
       {
+        id: '1_1-1',
+        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
+        [joinSymbol]: true,
+      },
+      1,
+    ],
+    [
+      {
         id: '1_1-2_2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
@@ -623,6 +658,15 @@ test('junction table left join', () => {
         [joinSymbol]: true,
       },
       -1,
+    ],
+    [
+      {
+        id: '1_1-2',
+        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
+        [joinSymbol]: true,
+      },
+      1,
     ],
   ]);
   items.length = 0;
@@ -654,7 +698,7 @@ test('junction table left join', () => {
   ]);
 });
 
-test('repro', () => {
+test('repro 1', () => {
   let version = 0;
   const trackInput = new DifferenceStream<Track>();
   const trackArtistInput = new DifferenceStream<TrackArtist>();
@@ -1100,4 +1144,145 @@ test('one to many, remove the one, add the one', () => {
     ],
   ]);
   items.length = 0;
+});
+
+test('two tracks, only 1 is linked to artists', () => {
+  let version = 0;
+  const trackInput = new DifferenceStream<Track>();
+  const trackArtistInput = new DifferenceStream<TrackArtist>();
+  const artistInput = new DifferenceStream<Artist>();
+
+  const trackTrackArtist = trackInput.leftJoin({
+    aAs: 'track',
+    getAJoinKey: track => track.id,
+    getAPrimaryKey: track => track.id,
+    b: trackArtistInput,
+    bAs: 'trackArtist',
+    getBJoinKey: trackArtist => trackArtist.trackId,
+    getBPrimaryKey: trackArtist => trackArtist.id,
+  });
+
+  const output = trackTrackArtist.leftJoin({
+    aAs: undefined,
+    getAJoinKey: x => x.trackArtist?.artistId,
+    getAPrimaryKey: x => x?.id,
+    b: artistInput,
+    bAs: 'artist',
+    getBJoinKey: artist => artist.id,
+    getBPrimaryKey: artist => artist.id,
+  });
+
+  const items: [
+    JoinResult<Track, TrackArtist, 'track', 'trackArtist'>,
+    number,
+  ][] = [];
+  output.effect((e, m) => {
+    items.push([e, m]);
+  });
+
+  trackInput.newDifference(version, [
+    [
+      {
+        id: '1',
+        title: 'Track One',
+        length: 1,
+        albumId: '1',
+      },
+      1,
+    ],
+    [
+      {
+        id: '2',
+        albumId: '1',
+        title: 'track 2',
+        length: 1,
+      },
+      1,
+    ],
+  ]);
+  artistInput.newDifference(version, [
+    [
+      {
+        id: '1',
+        name: 'Artist One',
+      },
+      1,
+    ],
+    [
+      {
+        id: '2',
+        name: 'Artist Two',
+      },
+      1,
+    ],
+  ]);
+  trackArtistInput.newDifference(version, [
+    [
+      {
+        id: '1-1',
+        trackId: '1',
+        artistId: '1',
+      },
+      1,
+    ],
+    [
+      {
+        id: '1-2',
+        trackId: '1',
+        artistId: '2',
+      },
+      1,
+    ],
+  ]);
+  trackInput.commit(version);
+  artistInput.commit(version);
+  trackArtistInput.commit(version);
+
+  ++version;
+  expect(items).toEqual([
+    [
+      {
+        id: '1',
+        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        [joinSymbol]: true,
+      },
+      1,
+    ],
+    [
+      {
+        id: '2',
+        track: {id: '2', albumId: '1', title: 'track 2', length: 1},
+        [joinSymbol]: true,
+      },
+      1,
+    ],
+    [
+      {
+        id: '1_1_1-1',
+        trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
+        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        artist: {id: '1', name: 'Artist One'},
+        [joinSymbol]: true,
+      },
+      1,
+    ],
+    [
+      {
+        id: '1',
+        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        [joinSymbol]: true,
+      },
+      -1,
+    ],
+    [
+      {
+        id: '1_1-2_2',
+        trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
+        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        artist: {id: '2', name: 'Artist Two'},
+        [joinSymbol]: true,
+      },
+      1,
+    ],
+  ]);
 });
