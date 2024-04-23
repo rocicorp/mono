@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
@@ -10,6 +9,7 @@ import {
 } from '../../db/transaction-pool.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import {max, min, type LexiVersion} from '../../types/lexi-version.js';
+import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {queryStateVersion} from '../replicator/queries.js';
@@ -152,7 +152,7 @@ export class InvalidationWatcherService
   readonly id: string;
   readonly #lc: LogContext;
   readonly #registry: ReplicatorRegistry;
-  readonly #replica: postgres.Sql;
+  readonly #replica: PostgresDB;
 
   readonly #readers = new Map<TransactionPool, number>();
   readonly #hashSubscriptions = new HashSubscriptions();
@@ -171,7 +171,7 @@ export class InvalidationWatcherService
     serviceID: string,
     lc: LogContext,
     registry: ReplicatorRegistry,
-    replica: postgres.Sql,
+    replica: PostgresDB,
   ) {
     this.id = serviceID;
     this.#lc = lc

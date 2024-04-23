@@ -16,6 +16,17 @@ function numberParser(_: unknown, v: string) {
   return BigInt(v);
 }
 
+// Variant of postgres.JSONValue adapted to include bigints
+export type JSONValue =
+  | null
+  | string
+  | number
+  | bigint
+  | boolean
+  | Date // serialized as `string`
+  | readonly JSONValue[]
+  | {readonly [prop: string | number]: undefined | JSONValue};
+
 /**
  * Parses JSON strings that may contain arbitrarily large integers. Integers
  * larger than {@link Number.MAX_SAFE_INTEGER} are deserialized as a `bigint`.
@@ -23,7 +34,7 @@ function numberParser(_: unknown, v: string) {
 export function parse(
   str: string,
   reviver?: (k: string, v: unknown) => unknown,
-): unknown {
+): JSONValue {
   return customParse(str, reviver, numberParser);
 }
 

@@ -2,7 +2,7 @@ import {OID} from '@postgresql-typed/oids';
 import pg from 'pg';
 import postgres from 'postgres';
 import array from 'postgres-array';
-import {BigIntJSON} from './bigint-json.js';
+import {BigIntJSON, type JSONValue} from './bigint-json.js';
 
 const {
   types: {builtins, setTypeParser},
@@ -33,6 +33,16 @@ export const postgresTypeConfig = () => ({
     },
   },
 });
+
+export type PostgresDB = postgres.Sql<{
+  bigint: bigint;
+  json: JSONValue;
+}>;
+
+export type PostgresTransaction = postgres.TransactionSql<{
+  bigint: bigint;
+  json: JSONValue;
+}>;
 
 export const typeNameByOID: Record<number, string> = Object.fromEntries(
   Object.entries(OID).map(([name, oid]) => [

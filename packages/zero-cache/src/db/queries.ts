@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
-import {typeNameByOID} from '../types/pg.js';
+import {PostgresDB, typeNameByOID} from '../types/pg.js';
 import type {RowKey, RowKeyType} from '../types/row-key.js';
 
 /**
@@ -20,7 +20,7 @@ import type {RowKey, RowKeyType} from '../types/row-key.js';
  * "WHERE IN (array or keys)" query when there is a large number of keys.
  */
 export function lookupRowsWithKeys(
-  db: postgres.Sql,
+  db: PostgresDB,
   schema: string,
   table: string,
   rowKeyType: RowKeyType,
