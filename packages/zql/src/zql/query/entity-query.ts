@@ -8,6 +8,7 @@ import type {
   LikeOps,
   OrderOps,
   SimpleOperator,
+  SetOps,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -32,6 +33,8 @@ export type ValueAsOperatorInput<
     : NotUndefined<V>
   : Op extends EqualityOps
   ? NotUndefined<V>
+  : Op extends SetOps
+  ? NotUndefined<V>[]
   : never;
 
 export type FieldAsOperatorInput<
@@ -54,10 +57,12 @@ type ObjectHasSingleProperty<T> = {
   [K in keyof T]: Exclude<keyof Omit<T, K>, K>;
 }[keyof T];
 
+type QualifiedSelector<F extends FromSet> = {
+  [K in keyof F]: `${string & K}.${string & keyof NotUndefined<F[K]>}`;
+}[keyof F];
+
 type SimpleSelector<F extends FromSet> =
-  | {
-      [K in keyof F]: `${string & K}.${string & keyof NotUndefined<F[K]>}`;
-    }[keyof F]
+  | QualifiedSelector<F>
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
 type Selector<F extends FromSet> =
@@ -512,5 +517,17 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
       return 'NOT ILIKE';
     case 'NOT ILIKE':
       return 'ILIKE';
+    case 'INTERSECTS':
+      return 'DISJOINT';
+    case 'DISJOINT':
+      return 'INTERSECTS';
+    case 'SUPERSET':
+      return 'SUBSET';
+    case 'SUBSET':
+      return 'SUPERSET';
+    case 'CONGRUENT':
+      return 'INCONGRUENT';
+    case 'INCONGRUENT':
+      return 'CONGRUENT';
   }
 }

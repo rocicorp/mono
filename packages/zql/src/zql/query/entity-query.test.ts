@@ -383,6 +383,46 @@ test('FieldValue type', () => {
     boolean[]
   >();
 
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'SUPERSET'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'DISJOINT'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'CONGRUENT'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'n', 'INCONGRUENT'>>().toEqualTypeOf<
+    number[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'SUPERSET'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'DISJOINT'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'CONGRUENT'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 's', 'INCONGRUENT'>>().toEqualTypeOf<
+    string[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.b', 'SUPERSET'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.b', 'DISJOINT'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.b', 'CONGRUENT'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'e.b', 'INCONGRUENT'>>().toEqualTypeOf<
+    boolean[]
+  >();
+  expectTypeOf<FieldAsOperatorInput<E, 'b', 'DISJOINT'>>().toEqualTypeOf<
+    boolean[]
+  >();
+
   expectTypeOf<FieldAsOperatorInput<E, 'n', 'LIKE'>>().toEqualTypeOf<never>();
   expectTypeOf<
     FieldAsOperatorInput<E, 'n', 'NOT LIKE'>
