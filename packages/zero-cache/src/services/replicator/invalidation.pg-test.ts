@@ -1,5 +1,4 @@
 import {Lock} from '@rocicorp/lock';
-import type postgres from 'postgres';
 import {randInt} from 'shared/src/rand.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
@@ -13,6 +12,7 @@ import {
   invalidationHash,
   normalizeFilterSpec,
 } from '../../types/invalidation.js';
+import type {PostgresDB} from '../../types/pg.js';
 import {
   InvalidationFilters,
   InvalidationProcessor,
@@ -24,7 +24,7 @@ import {CREATE_REPLICATION_TABLES} from './tables/replication.js';
 import {TableTracker, type RowChange} from './types/table-tracker.js';
 
 describe('replicator/invalidation', () => {
-  let db: postgres.Sql;
+  let db: PostgresDB;
   let invalidator: Invalidator;
 
   const FOO_SPEC1 = normalizeFilterSpec({

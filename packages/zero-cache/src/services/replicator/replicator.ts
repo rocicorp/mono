@@ -3,7 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import * as v from 'shared/src/valita.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
-import {postgresTypeConfig} from '../../types/pg.js';
+import {PostgresDB, postgresTypeConfig} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
@@ -101,7 +101,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
-  readonly #syncReplica: postgres.Sql;
+  readonly #syncReplica: PostgresDB;
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #invalidator: Invalidator;
 

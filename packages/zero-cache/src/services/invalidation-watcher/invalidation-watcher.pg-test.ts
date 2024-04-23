@@ -1,10 +1,10 @@
-import type postgres from 'postgres';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {initDB, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {normalizeFilterSpec} from '../../types/invalidation.js';
+import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
 import type {
   RegisterInvalidationFiltersResponse,
@@ -20,7 +20,7 @@ import {
 } from './invalidation-watcher.js';
 
 describe('invalidation-watcher', () => {
-  let db: postgres.Sql;
+  let db: PostgresDB;
 
   beforeEach(async () => {
     db = await testDBs.create('invalidation_watcher_test');

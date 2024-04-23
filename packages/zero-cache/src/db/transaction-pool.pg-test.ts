@@ -5,6 +5,7 @@ import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../test/db.js';
 import {createSilentLogContext} from '../test/logger.js';
+import type {PostgresDB} from '../types/pg.js';
 import {
   TransactionPool,
   sharedReadOnlySnapshot,
@@ -12,7 +13,7 @@ import {
 } from './transaction-pool.js';
 
 describe('db/transaction-pool', () => {
-  let db: postgres.Sql<{bigint: bigint}>;
+  let db: PostgresDB;
   const lc = createSilentLogContext();
 
   beforeEach(async () => {

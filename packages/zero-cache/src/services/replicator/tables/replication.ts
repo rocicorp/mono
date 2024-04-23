@@ -28,8 +28,7 @@ export const CREATE_REPLICATION_TABLES =
   // The change log contains row changes.
   //
   // * `op`        : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
-  // * `rowKeyHash`: Hash of the row key for row identification (see {@link rowKeyHash}). Empty string for truncate op.
-  // * `rowKey`    : JSON row key, as `{[$columnName]: $columnValue}`, or NULL for TRUNCATE
+  // * `rowKey`    : JSONB row key, as `{[$columnName]: $columnValue}`, or '{}' for TRUNCATE
   // * `row`       : JSON formatted full row contents, NULL for DELETE / TRUNCATE
   //
   // Note that the `row` data is stored as JSON rather than JSONB to prioritize write
@@ -41,10 +40,9 @@ export const CREATE_REPLICATION_TABLES =
     "schema"       VARCHAR(128) NOT NULL,
     "table"        VARCHAR(128) NOT NULL,
     "op"           CHAR         NOT NULL,
-    "rowKeyHash"   VARCHAR(22)  NOT NULL,
-    "rowKey"       JSON,
+    "rowKey"       JSONB        NOT NULL,
     "row"          JSON,
-    CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "schema", "table", "rowKeyHash")
+    CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "schema", "table", "rowKey")
   );
 `; /**
  * Migration step that sets up the initialized Sync Replica for incremental replication.

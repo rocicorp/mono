@@ -2,7 +2,6 @@ import type {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {stringify} from 'json-custom-numbers';
-import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {lookupRowsWithKeys} from '../../db/queries.js';
 import type {TransactionPool} from '../../db/transaction-pool.js';
@@ -14,6 +13,7 @@ import {
   type NormalizedInvalidationFilterSpec,
 } from '../../types/invalidation.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
+import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {RowKeyType, RowValue} from '../../types/row-key.js';
 import {rowKeyString} from '../../types/row-key.js';
 import {queryStateVersion} from './queries.js';
@@ -24,13 +24,13 @@ import type {
 import type {EffectiveRowChange, TableTracker} from './types/table-tracker.js';
 
 export class Invalidator {
-  readonly #replica: postgres.Sql;
+  readonly #replica: PostgresDB;
   readonly #txSerializer: Lock;
   readonly #filters: InvalidationFilters;
   readonly #lastRequestedTimes = new Map<string, Date>();
 
   constructor(
-    replica: postgres.Sql,
+    replica: PostgresDB,
     txSerializer: Lock,
     invalidationFilters: InvalidationFilters,
   ) {
@@ -56,7 +56,7 @@ export class Invalidator {
     }
 
     const values = [...specsByID.keys()].map(id => this.#replica`${id}`);
-    const getVersions = (db: postgres.Sql) => db<
+    const getVersions = (db: PostgresDB) => db<
       {id: string; fromStateVersion: LexiVersion}[]
     >`
     WITH ids (id) AS (VALUES (${values.flatMap((id, i) =>
@@ -147,7 +147,7 @@ export class InvalidationFilters {
    */
   async ensureCachedFilters(
     lc: LogContext,
-    db: postgres.Sql,
+    db: PostgresDB,
     expectedVersion?: LexiVersion,
   ): Promise<CachedFilters> {
     const cached = this.#cachedFilters;
@@ -278,7 +278,7 @@ export class InvalidationProcessor {
  */
 async function computeInvalidationHashes(
   lc: LogContext,
-  tx: postgres.TransactionSql,
+  tx: PostgresTransaction,
   table: TableTracker,
   cachedFilters: Promise<CachedFilters>,
 ): Promise<Set<string>> {
@@ -356,7 +356,7 @@ async function computeInvalidationHashes(
 
 async function lookupUnknownPreValues(
   lc: LogContext,
-  tx: postgres.Sql,
+  tx: PostgresTransaction,
   schema: string,
   table: string,
   rowKeyType: RowKeyType,

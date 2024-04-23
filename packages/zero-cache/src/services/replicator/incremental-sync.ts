@@ -19,8 +19,8 @@ import {
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
-import {registerPostgresTypeParsers} from '../../types/pg.js';
-import {RowKey, RowKeyType, RowValue, rowKeyHash} from '../../types/row-key.js';
+import {PostgresDB, registerPostgresTypeParsers} from '../../types/pg.js';
+import type {RowKey, RowKeyType, RowValue} from '../../types/row-key.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {replicationSlot} from './initial-sync.js';
@@ -47,7 +47,7 @@ const MAX_RETRY_DELAY_MS = 10000;
 export class IncrementalSyncer {
   readonly #upstreamUri: string;
   readonly #replicaID: string;
-  readonly #replica: postgres.Sql;
+  readonly #replica: PostgresDB;
   readonly #eventEmitter: EventEmitter = new EventEmitter();
 
   // This lock ensures that transactions are processed serially, even
@@ -63,7 +63,7 @@ export class IncrementalSyncer {
   constructor(
     upstreamUri: string,
     replicaID: string,
-    replica: postgres.Sql,
+    replica: PostgresDB,
     txSerializer: Lock,
     invalidationFilters: InvalidationFilters,
   ) {
@@ -253,7 +253,7 @@ class PrecedingTransactionError extends ControlFlowError {
  */
 // Exported for testing.
 export class MessageProcessor {
-  readonly #replica: postgres.Sql;
+  readonly #replica: PostgresDB;
   readonly #replicated: PublicationInfo;
   readonly #txSerializer: Lock;
   readonly #invalidationFilters: InvalidationFilters;
@@ -265,7 +265,7 @@ export class MessageProcessor {
   #tx: TransactionProcessor | undefined;
 
   constructor(
-    replica: postgres.Sql,
+    replica: PostgresDB,
     replicated: PublicationInfo,
     txSerializer: Lock,
     invalidationFilters: InvalidationFilters,
@@ -476,7 +476,7 @@ class TransactionProcessor {
     );
   }
 
-  async execute(db: postgres.Sql): Promise<VersionChange> {
+  async execute(db: PostgresDB): Promise<VersionChange> {
     const [writes, reads] = await Promise.allSettled([
       this.#writer.run(db),
       this.#readers.run(db),
@@ -675,8 +675,7 @@ class TransactionProcessor {
       schema,
       table,
       op: row ? 's' : key ? 'd' : 't',
-      rowKeyHash: key ? rowKeyHash(key) : '', // Empty string for truncate,
-      rowKey: (key as postgres.JSONValue) ?? null,
+      rowKey: (key as postgres.JSONValue) ?? {}, // Empty object for truncate
       row: (row as postgres.JSONValue) ?? null,
     };
     return tx`INSERT INTO _zero."ChangeLog" ${tx(change)};`;
@@ -705,7 +704,6 @@ type ChangeLogEntry = {
   schema: string;
   table: string;
   op: 't' | 's' | 'd';
-  rowKeyHash: string;
   rowKey: postgres.JSONValue;
   row: postgres.JSONValue;
 };

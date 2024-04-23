@@ -1,18 +1,18 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import type {Pgoutput} from 'pg-logical-replication';
-import type postgres from 'postgres';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../../test/db.js';
 import {createSilentLogContext} from '../../test/logger.js';
+import type {PostgresDB} from '../../types/pg.js';
 import {MessageProcessor} from './incremental-sync.js';
 import {InvalidationFilters} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
 import {setupReplicationTables} from './tables/replication.js';
 
 describe('replicator/message-processor', () => {
-  let replica: postgres.Sql;
+  let replica: PostgresDB;
 
   beforeEach(async () => {
     replica = await testDBs.create('message_processor_test_replica');

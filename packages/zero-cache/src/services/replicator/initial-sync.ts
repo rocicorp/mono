@@ -23,6 +23,8 @@ export function replicationSlot(replicaID: string): string {
   return `zero_slot_${replicaID}`;
 }
 
+const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
+
 /**
  * Starts Postgres logical replication from the upstream DB to the Sync Replica.
  * Specifically, we rely on Postgres to perform the "initial data synchronization" phase
@@ -51,15 +53,32 @@ export async function startPostgresReplication(
   const schemas = new Set<string>();
   const tablesStmts = published.tables.map(table => {
     if (table.schema === '_zero') {
-      throw new Error(`Schema _zero is reserved for internal use`);
+      throw new Error(`Schema "_zero" is reserved for internal use`);
+    }
+    if (!['public', 'zero'].includes(table.schema)) {
+      // This may be relaxed in the future. We would need a plan for support in the AST first.
+      throw new Error('Only the default "public" schema is supported.');
     }
     if (ZERO_VERSION_COLUMN_NAME in table.columns) {
       throw new Error(
-        `Table ${table.name} uses reserved column name ${ZERO_VERSION_COLUMN_NAME}`,
+        `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
       );
     }
     if (table.primaryKey.length === 0) {
-      throw new Error(`Table ${table.name} does not have a PRIMARY KEY`);
+      throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
+    }
+    if (!ALLOWED_IDENTIFIER_CHARS.test(table.schema)) {
+      throw new Error(`Schema "${table.schema}" has invalid characters.`);
+    }
+    if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
+      throw new Error(`Table "${table.name}" has invalid characters.`);
+    }
+    for (const col in table.columns) {
+      if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
+        throw new Error(
+          `Column "${col}" in table "${table.name}" has invalid characters.`,
+        );
+      }
     }
     schemas.add(table.schema);
 

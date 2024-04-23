@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
+import type {PostgresDB, PostgresTransaction} from '../types/pg.js';
 
 type MaybePromise<T> = Promise<T> | T;
 
@@ -17,7 +18,7 @@ export type Statement =
  *
  */
 export type Task = (
-  tx: postgres.TransactionSql,
+  tx: PostgresTransaction,
   lc: LogContext,
 ) => MaybePromise<Statement[]>;
 
@@ -27,7 +28,7 @@ export type Task = (
  * caller of {@link TransactionPool.processReadTask}.
  */
 export type ReadTask<T> = (
-  tx: postgres.TransactionSql,
+  tx: PostgresTransaction,
   lc: LogContext,
 ) => MaybePromise<T>;
 
@@ -47,7 +48,7 @@ export class TransactionPool {
   readonly #workers: Promise<unknown>[] = [];
   readonly #maxWorkers: number;
   #numWorkers: number;
-  #db: postgres.Sql | undefined; // set when running. stored to allow adaptive pool sizing.
+  #db: PostgresDB | undefined; // set when running. stored to allow adaptive pool sizing.
 
   #done = false;
   #failure: Error | undefined;
@@ -87,7 +88,7 @@ export class TransactionPool {
    *
    * Returns {@link done()}.
    */
-  async run(db: postgres.Sql): Promise<void> {
+  async run(db: PostgresDB): Promise<void> {
     assert(!this.#db, 'already running');
     this.#db = db;
     for (let i = 0; i < this.#numWorkers; i++) {
@@ -129,9 +130,9 @@ export class TransactionPool {
     }
   }
 
-  #addWorker(db: postgres.Sql) {
+  #addWorker(db: PostgresDB) {
     const lc = this.#lc.withContext('worker', `#${this.#workers.length + 1}`);
-    const worker = async (tx: postgres.TransactionSql) => {
+    const worker = async (tx: PostgresTransaction) => {
       try {
         lc.debug?.('started worker');
 
