@@ -108,7 +108,7 @@ export class LeftJoinOperator<
       result.push(joinEntry);
 
       // TODO: aRow should be an entry so we can apply proper mult
-      const aRow = joinSourceRows[i][0];
+      const aRow = joinSourceRows[i][1];
       ++i;
       const aPrimaryKey = isJoinResult(aRow)
         ? aRow.id

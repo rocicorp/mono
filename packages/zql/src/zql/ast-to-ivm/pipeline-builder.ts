@@ -195,7 +195,8 @@ function applyGroupBy<T extends Entity>(
           case 'sum': {
             let sum = 0;
             for (const value of values) {
-              sum += getValueFromEntity(value, must(qualifiedColumn)) as number;
+              sum += (getValueFromEntity(value, must(qualifiedColumn)) ??
+                0) as number;
             }
             ret[aggregation.alias] = sum;
             break;
@@ -204,7 +205,11 @@ function applyGroupBy<T extends Entity>(
             let sum = 0;
             let count = 0;
             for (const value of values) {
-              sum += getValueFromEntity(value, must(qualifiedColumn)) as number;
+              const v = getValueFromEntity(value, must(qualifiedColumn));
+              if (v === undefined) {
+                continue;
+              }
+              sum += v as number;
               count++;
             }
             ret[aggregation.alias] = sum / count;
@@ -217,6 +222,9 @@ function applyGroupBy<T extends Entity>(
                 value,
                 must(qualifiedColumn),
               ) as number | string;
+              if (newValue === undefined) {
+                continue;
+              }
               if (min === undefined || (min as T[keyof T]) > newValue) {
                 min = newValue;
               }
@@ -231,6 +239,9 @@ function applyGroupBy<T extends Entity>(
                 value,
                 must(qualifiedColumn),
               ) as number | string;
+              if (newValue === undefined) {
+                continue;
+              }
               if (max === undefined || (max as T[keyof T]) < newValue) {
                 max = newValue;
               }
@@ -239,9 +250,17 @@ function applyGroupBy<T extends Entity>(
             break;
           }
           case 'array': {
-            ret[aggregation.alias] = Array.from(values).map(x =>
-              getValueFromEntity(x, must(qualifiedColumn)),
-            );
+            const arr: unknown[] = [];
+            for (const value of values) {
+              const extracted = getValueFromEntity(
+                value,
+                must(qualifiedColumn),
+              );
+              if (extracted !== undefined) {
+                arr.push(extracted);
+              }
+            }
+            ret[aggregation.alias] = arr;
             break;
           }
           default:

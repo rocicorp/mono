@@ -206,18 +206,29 @@ export function setup() {
   };
 }
 
-export function createRandomArtists(n: number): Artist[] {
+export function createRandomArtists(
+  n: number,
+  autoIncr: boolean = false,
+): Artist[] {
+  let id = 0;
   return Array.from({length: n}, () => ({
-    id: nanoid(),
-    name: nanoid(),
+    id: autoIncr ? `${++id}` : nanoid(),
+    name: autoIncr ? `Artist ${id}` : nanoid(),
   }));
 }
 
-export function createRandomAlbums(n: number, artists: Artist[]): Album[] {
+export function createRandomAlbums(
+  n: number,
+  artists: Artist[],
+  autoIncr: boolean = false,
+): Album[] {
+  let id = 0;
   return Array.from({length: n}, () => ({
-    id: nanoid(),
-    title: nanoid(),
-    artistId: artists[Math.floor(Math.random() * artists.length)].id,
+    id: autoIncr ? `${++id}` : nanoid(),
+    title: autoIncr ? `Album ${id}` : nanoid(),
+    artistId: autoIncr
+      ? artists[0].id
+      : artists[Math.floor(Math.random() * artists.length)].id,
   }));
 }
 
@@ -229,19 +240,24 @@ export function createRandomTracks(
   let id = 0;
   return Array.from({length: n}, () => ({
     id: autoIncr ? `${++id}` : nanoid(),
-    title: nanoid(),
-    length: Math.floor(Math.random() * 300000) + 1000,
-    albumId: albums[Math.floor(Math.random() * albums.length)].id,
+    title: autoIncr ? `Track ${id}` : nanoid(),
+    length: autoIncr ? id * 1000 : Math.floor(Math.random() * 300000) + 1000,
+    albumId: autoIncr
+      ? albums[0].id
+      : albums[Math.floor(Math.random() * albums.length)].id,
   }));
 }
 
 export function linkTracksToArtists(
   artists: Artist[],
   tracks: Track[],
+  assignAll: boolean = false,
 ): TrackArtist[] {
   // assign each track to 1-3 artists
   return tracks.flatMap(t => {
-    const numArtists = Math.floor(Math.random() * 3) + 1;
+    const numArtists = assignAll
+      ? artists.length
+      : Math.floor(Math.random() * 3) + 1;
     const artistsForTrack = new Set<string>();
     while (artistsForTrack.size < numArtists) {
       artistsForTrack.add(
