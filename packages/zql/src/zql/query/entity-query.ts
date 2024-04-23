@@ -347,6 +347,29 @@ export class EntityQuery<From extends FromSet, Return = []> {
     op?: Op,
     value?: FieldAsOperatorInput<From, K, Op>,
   ): EntityQuery<From, Return> {
+    return this.#whereOrHaving('where', exprOrField, op, value);
+  }
+
+  having(expr: WhereCondition<From>): EntityQuery<From, Return>;
+  having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    field: K,
+    op: Op,
+    value: FieldAsOperatorInput<From, K, Op>,
+  ): EntityQuery<From, Return>;
+  having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ): EntityQuery<From, Return> {
+    return this.#whereOrHaving('having', exprOrField, op, value);
+  }
+
+  #whereOrHaving<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    whereOrHaving: 'where' | 'having',
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ) {
     let expr: WhereCondition<From>;
     if (typeof exprOrField === 'string') {
       expr = exp(exprOrField, op!, value!);
@@ -355,22 +378,22 @@ export class EntityQuery<From extends FromSet, Return = []> {
     }
 
     let cond: WhereCondition<From>;
-    const where = this.#ast.where as WhereCondition<From> | undefined;
-    if (!where) {
+    const having = this.#ast.having as WhereCondition<From> | undefined;
+    if (!having) {
       cond = expr;
-    } else if (where.op === 'AND') {
-      const {conditions} = where;
+    } else if (having.op === 'AND') {
+      const {conditions} = having;
       cond = flatten('AND', [...conditions, expr]);
     } else {
       cond = {
         op: 'AND',
-        conditions: [where, expr],
+        conditions: [having, expr],
       };
     }
 
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      where: cond as Condition,
+      [whereOrHaving]: cond as Condition,
     });
   }
 

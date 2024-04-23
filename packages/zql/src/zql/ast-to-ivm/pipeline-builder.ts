@@ -50,6 +50,10 @@ export function buildPipeline(
     );
   }
 
+  if (ast.having) {
+    ret = applyWhere(ret, ast.having);
+  }
+
   // Note: the stream is technically attached at this point.
   // We could detach it until the user actually runs (or subscribes to) the statement as a tiny optimization.
   return ret;

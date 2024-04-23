@@ -49,7 +49,7 @@ export type AST = {
   readonly limit?: number | undefined;
   readonly groupBy?: string[] | undefined;
   readonly orderBy?: Ordering | undefined;
-  // readonly having?: Condition | undefined;
+  readonly having?: Condition | undefined;
   // readonly after?: Primitive;
 };
 

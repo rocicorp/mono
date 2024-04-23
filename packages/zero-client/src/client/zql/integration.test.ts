@@ -774,33 +774,6 @@ test('0 copy', async () => {
   expect(replicacheIssues.length).toBe(10);
 });
 
-// Need to pull this implementation into here from Materialite.
-// The one thing we need to address when doing so is when the
-// view goes under the limit (because a remove). in that case we should re-compute the query.
-test('limit', () => {});
-
-// To be implemented here: `asEntries` in `set-source.ts`
-test('after', () => {});
-
-test('adding items late to a source materializes them in the correct order', () => {});
-test('disposing of a subscription causes us to no longer be called back', () => {});
-
-test('hoisting `after` operations to the source', () => {});
-test('hoisting `limit` operations to the source', () => {});
-test('hoisting `where` operations to the source', () => {});
-
-test('order by joined fields', () => {});
-
-test('correctly sorted source is used to optimize joins', () => {});
-
-test('order-by selects the correct source', () => {});
-
-test('write delay with 1, 10, 100, 1000s of active queries', () => {});
-
-test('asc/desc difference does not create new sources', () => {});
-
-test('we do not do a full scan when the source order matches the view order', () => {});
-
 test('or where', async () => {
   const z = newZero();
   const issues: readonly Issue[] = [
@@ -897,7 +870,7 @@ test('not', async () => {
 
 test('count', async () => {
   const z = newZero();
-  const issues: Issue[] = [
+  const issues: readonly Issue[] = [
     {
       id: 'a',
       title: 'foo',
@@ -940,3 +913,15 @@ test('count', async () => {
 
   await z.close();
 });
+
+// test('limit', () => {});
+// test('adding items late to a source materializes them in the correct order', () => {});
+// test('disposing of a subscription causes us to no longer be called back', () => {});
+// test('hoisting `after` operations to the source', () => {});
+// test('hoisting `limit` operations to the source', () => {});
+// test('hoisting `where` operations to the source', () => {});
+// test('correctly sorted source is used to optimize joins', () => {});
+// test('order-by selects the correct source', () => {});
+// test('write delay with 1, 10, 100, 1000s of active queries', () => {});
+// test('asc/desc difference does not create new sources', () => {});
+// test('we do not do a full scan when the source order matches the view order', () => {});
