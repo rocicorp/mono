@@ -3,7 +3,7 @@ import type {Entry, Multiset} from '../../multiset.js';
 import type {JoinResult, StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {BinaryOperator} from './binary-operator.js';
-import {DifferenceIndex} from './difference-index.js';
+import {DifferenceIndex, joinType} from './difference-index.js';
 
 export type JoinArgs<
   Key extends Primitive,
@@ -14,11 +14,11 @@ export type JoinArgs<
 > = {
   a: DifferenceStream<AValue>;
   aAs: AAlias | undefined;
-  getAJoinKey: (value: AValue) => Key;
+  getAJoinKey: (value: AValue) => Key | undefined;
   getAPrimaryKey: (value: AValue) => StringOrNumber;
   b: DifferenceStream<BValue>;
   bAs: BAlias | undefined;
-  getBJoinKey: (value: BValue) => Key;
+  getBJoinKey: (value: BValue) => Key | undefined;
   getBPrimaryKey: (value: BValue) => StringOrNumber;
   output: DifferenceStream<JoinResult<AValue, BValue, AAlias, BAlias>>;
 };
@@ -82,6 +82,9 @@ export class InnerJoinOperator<
     const deltaA = new DifferenceIndex<K, AValue>(getAPrimaryKey);
     for (const entry of inputA || []) {
       const aKey = getAJoinKey(entry[0]);
+      if (aKey === undefined) {
+        continue;
+      }
       deltaA.add(aKey, entry);
       aKeysForCompaction.push(aKey);
     }
@@ -89,17 +92,34 @@ export class InnerJoinOperator<
     const deltaB = new DifferenceIndex<K, BValue>(getBPrimaryKey);
     for (const entry of inputB || []) {
       const bKey = getBJoinKey(entry[0]);
+      if (bKey === undefined) {
+        continue;
+      }
       deltaB.add(bKey, entry);
       bKeysForCompaction.push(bKey);
     }
 
     const result: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
-    for (const x of deltaA.join(aAs, this.#indexB, bAs, getBPrimaryKey)) {
+    // TODO: just concat the two iterables rather than pushing onto result
+    for (const x of deltaA.join(
+      joinType.inner,
+      aAs,
+      this.#indexB,
+      bAs,
+      getBPrimaryKey,
+    )[0]) {
       result.push(x);
     }
     this.#indexA.extend(deltaA);
 
-    for (const x of deltaB.join(bAs, this.#indexA, aAs, getAPrimaryKey)) {
+    // TODO: just concat the two iterables rather than pushing onto result
+    for (const x of deltaB.join(
+      joinType.inner,
+      bAs,
+      this.#indexA,
+      aAs,
+      getAPrimaryKey,
+    )[0]) {
       result.push(x);
     }
     this.#indexB.extend(deltaB);

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {DifferenceIndex} from './difference-index.js';
+import {DifferenceIndex, joinType} from './difference-index.js';
 import {joinSymbol} from '../../types.js';
 
 test('get', () => {
@@ -68,33 +68,33 @@ test('join', () => {
   const indexA = new DifferenceIndex<string, number>(identity);
   const indexB = new DifferenceIndex<string, number>(identity);
 
-  let result = indexA.join('a', indexB, 'b', identity);
+  let result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([]);
 
   indexA.add('a', [1, 1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([]);
 
   indexB.add('a', [1, 1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([[{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1]]);
 
   indexA.add('a', [1, 1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
   ]);
 
   indexA.add('b', [2, 1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
   ]);
 
   indexB.add('b', [2, 1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
@@ -102,7 +102,7 @@ test('join', () => {
   ]);
 
   indexA.add('a', [1, -1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
@@ -111,14 +111,14 @@ test('join', () => {
   ]);
 
   indexA.compact(['a']);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
     [{id: '2_2', a: 2, b: 2, [joinSymbol]: true}, 1],
   ]);
 
   indexB.add('b', [2, -1]);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
     [{id: '2_2', a: 2, b: 2, [joinSymbol]: true}, 1],
@@ -126,6 +126,6 @@ test('join', () => {
   ]);
 
   indexB.compact(['b']);
-  result = indexA.join('a', indexB, 'b', identity);
+  result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([[{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1]]);
 });
