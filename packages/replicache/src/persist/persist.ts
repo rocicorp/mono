@@ -19,8 +19,8 @@ import {
 import {rebaseMutationAndPutCommit} from '../db/rebase.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
-import type {MutatorDefs} from '../replicache.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
+import type {MutatorDefs} from '../types.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {

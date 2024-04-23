@@ -3,7 +3,7 @@ import type {IndexDefinitions} from './index-defs.js';
 import type {StoreProvider} from './kv/store.js';
 import type {Puller} from './puller.js';
 import type {Pusher} from './pusher.js';
-import type {MutatorDefs, RequestOptions} from './replicache.js';
+import type {MutatorDefs, RequestOptions} from './types.js';
 
 /**
  * The options passed to {@link Replicache}.

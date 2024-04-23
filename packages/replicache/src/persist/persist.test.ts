@@ -22,10 +22,10 @@ import {
 } from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
-import type {MutatorDefs} from '../replicache.js';
 import {promiseVoid} from '../resolved-promises.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
+import type {MutatorDefs} from '../types.js';
 import {uuid} from '../uuid.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {

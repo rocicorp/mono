@@ -14,11 +14,11 @@ import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {IDBDatabasesStore} from './persist/idb-databases-store.js';
 import {persistSDD} from './persist/persist-test-helpers.js';
 import {persistDD31} from './persist/persist.js';
-import type {MutatorDefs} from './replicache.js';
 import {makeIDBNameForTesting} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
 import {closeablesToClose, dbsToDrop} from './test-util.js';
+import type {MutatorDefs} from './types.js';
 import {uuid} from './uuid.js';
 
 export async function createPerdag(args: {

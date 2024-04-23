@@ -33,10 +33,10 @@ import {
   getClient,
   setClient,
 } from '../persist/clients.js';
-import type {MutatorDefs} from '../replicache.js';
 import type {ClientID} from '../sync/ids.js';
 import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
 import type {WriteTransaction} from '../transactions.js';
+import type {MutatorDefs} from '../types.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {refresh} from './refresh.js';
 
