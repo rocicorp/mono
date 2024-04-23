@@ -5,13 +5,12 @@ import {queriesPatchSchema} from './queries-patch.js';
 import {entitiesPatchSchema} from './entities-patch.js';
 
 /**
- * Pokes use a multi-part format. Pokes send row data
- * to the client and can be multiple mega-bytes in size. Using a multi-part
- * format allows the server to avoid having to have the full poke in memory
- * at one time.
+ * Pokes use a multi-part format. Pokes send entity data to the client and can
+ * be multiple mega-bytes in size. Using a multi-part format allows the server
+ * to avoid having to have the full poke in memory at one time.
  *
  * Each poke is assigned a `pokeID`, a unique id for identifying the
- * poke.  All messages for the poke will have the same `pokeID`.
+ * poke.  All messages for a poke will have the same `pokeID`.
  *
  * A poke begins with a `poke-start` message which contains the
  * `baseCookie` the poke is updating from and the `cookie` the poke is updating
@@ -24,8 +23,8 @@ import {entitiesPatchSchema} from './entities-patch.js';
  *
  * Poke messages can be intermingled with other `down` messages, but cannot be
  * intermingled with poke messages for a different `pokeID`. If this is
- * observed it is an unexpected error, and the client should not apply either
- * poke, disconnect, and reconnect.
+ * observed it is an unexpected error; the client should ignore both pokes,
+ * disconnect, and reconnect.
  */
 
 export const pokeStartBodySchema = v.object({
@@ -44,8 +43,8 @@ export const pokePartBodySchema = v.object({
   lastMutationIDChanges: v.record(v.number()).optional(),
   // Patches to the desired query sets by client id.
   desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
-  // Patches to the set of alive clients (according to server) for this client
-  // group.
+  // Patches to the set of "alive" clients (according to server) belonging to
+  // this client group.
   clientsPatch: clientsPatchSchema.optional(),
   // Patches to the set of queries for which entities are sync'd in
   // entitiesPatch.

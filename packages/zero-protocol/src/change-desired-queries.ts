@@ -5,7 +5,7 @@ const changeDesiredQueriesBodySchema = v.object({
   desiredQueriesPatch: queriesPatchSchema,
 });
 
-const changeDesiredQueriesMessageSchema = v.tuple([
+export const changeDesiredQueriesMessageSchema = v.tuple([
   v.literal('changeDesiredQueries'),
   changeDesiredQueriesBodySchema,
 ]);
