@@ -346,9 +346,66 @@ export function getOperator(condition: SimpleCondition): (lhs: any) => boolean {
       return getLikeOp(rhs, 'i');
     case 'NOT ILIKE':
       return not(getLikeOp(rhs, 'i'));
-    default:
-      throw new Error(`Operator ${op} not supported`);
+    case 'INTERSECTS': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return lhs.some(x => rhSet.has(x));
+        }
+        return rhSet.has(lhs);
+      };
+    }
+    case 'DISJOINT': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return lhs.every(x => !rhSet.has(x));
+        }
+        return !rhSet.has(lhs);
+      };
+    }
+    case 'SUPERSET': {
+      return lhs => {
+        if (rhs.length === 0) {
+          return true;
+        }
+        if (Array.isArray(lhs)) {
+          const lhSet = new Set(lhs);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return rhs.every((x: any) => lhSet.has(x));
+        }
+        return rhs.length === 1 && lhs === rhs[0];
+      };
+    }
+    case 'CONGRUENT': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return rhSet.size === lhs.length && lhs.every(x => rhSet.has(x));
+        }
+        return rhs.length === 1 && lhs === rhs[0];
+      };
+    }
+    case 'INCONGRUENT': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return rhSet.size !== lhs.length || !lhs.every(x => rhSet.has(x));
+        }
+        return rhs.length !== 1 || lhs !== rhs[0];
+      };
+    }
+    case 'SUBSET': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return lhs.every(x => rhSet.has(x));
+        }
+        return rhSet.has(lhs);
+      };
+    }
   }
+  throw new Error(`unexpected op: ${op}`);
 }
 
 function not<T>(f: (lhs: T) => boolean) {
