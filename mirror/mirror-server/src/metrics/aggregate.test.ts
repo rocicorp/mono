@@ -59,7 +59,7 @@ describe('aggregateHourBefore', () => {
   });
 
   test('success', async () => {
-    const fetcher = new FetchMocker().result(
+    const fetcher = new FetchMocker(jest).result(
       'POST',
       '/analytics',
       QUERY_RESULT,

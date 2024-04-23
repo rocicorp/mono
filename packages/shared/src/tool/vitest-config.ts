@@ -1,5 +1,4 @@
 import tsconfigPaths from 'vite-tsconfig-paths';
-import type {UserConfigExport} from 'vitest/config.js';
 import {makeDefine} from '../build.js';
 
 const define = {
@@ -7,7 +6,7 @@ const define = {
   ['TESTING']: 'true',
 };
 
-export const config: UserConfigExport = {
+export const config = {
   // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
   optimizeDeps: {
     include: ['vitest > @vitest/expect > chai'],
@@ -22,7 +21,7 @@ export const config: UserConfigExport = {
   plugins: [tsconfigPaths()] as any[],
 
   test: {
-    onConsoleLog(log) {
+    onConsoleLog(log: string) {
       if (
         log.includes('Skipping license check for TEST_LICENSE_KEY.') ||
         log.includes('REPLICACHE LICENSE NOT VALID') ||
@@ -47,4 +46,4 @@ export const config: UserConfigExport = {
     },
     testTimeout: 10_000,
   },
-};
+} as const;

@@ -1,8 +1,9 @@
-import type {FetchResult} from './fetch.js';
 import {FetchMocker} from 'shared/src/fetch-mocker.js';
+import {vi} from 'vitest';
+import type {FetchResult} from './fetch.js';
 
 export function mockFetch(): FetchMocker {
-  return new FetchMocker(success, error);
+  return new FetchMocker(vi, success, error);
 }
 
 function success<T>(result: T): Response {

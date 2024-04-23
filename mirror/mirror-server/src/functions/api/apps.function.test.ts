@@ -331,7 +331,7 @@ describe('api-apps', () => {
 
   let fetchMocker: FetchMocker;
   beforeEach(() => {
-    fetchMocker = new FetchMocker(apiSuccessResponse, apiErrorResponse)
+    fetchMocker = new FetchMocker(jest, apiSuccessResponse, apiErrorResponse)
       .result('GET', '/rooms/yo', {room: 'yo'})
       .result('POST', '/connections/all:invalidate', {});
   });

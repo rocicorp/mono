@@ -35,7 +35,7 @@ describe('metrics-backup', () => {
     }
 
     test('success', async () => {
-      const fetcher = new FetchMocker(textResult).result(
+      const fetcher = new FetchMocker(jest, textResult).result(
         'POST',
         '/analytics',
         WELL_FORMED_RESULT,
@@ -69,7 +69,7 @@ describe('metrics-backup', () => {
     });
 
     test('empty', async () => {
-      const fetcher = new FetchMocker(textResult).result(
+      const fetcher = new FetchMocker(jest, textResult).result(
         'POST',
         '/analytics',
         '',
@@ -116,7 +116,7 @@ describe('metrics-backup', () => {
     });
 
     test('malformed response', () => {
-      new FetchMocker(textResult).result(
+      new FetchMocker(jest, textResult).result(
         'POST',
         '/analytics',
         'Some error message',

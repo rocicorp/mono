@@ -71,7 +71,7 @@ describe('metrics-aggregate', () => {
   }
 
   test('queries the correct hour window', async () => {
-    const fetcher = new FetchMocker().result('POST', '/', {
+    const fetcher = new FetchMocker(jest).result('POST', '/', {
       meta: [],
       data: [],
       rows: 0,
@@ -113,7 +113,7 @@ describe('metrics-aggregate', () => {
   });
 
   test('leaves aggregation upon failure', async () => {
-    const fetcher = new FetchMocker(); // Defaults to 404
+    const fetcher = new FetchMocker(jest); // Defaults to 404
 
     const result = await runAggregate(Date.UTC(2024, 0, 25, 16, 1)).catch(
       e => e,
@@ -141,7 +141,7 @@ describe('metrics-aggregate', () => {
   });
 
   test('retries previous aggregations (success)', async () => {
-    const fetcher = new FetchMocker().result('POST', '/', {
+    const fetcher = new FetchMocker(jest).result('POST', '/', {
       meta: [],
       data: [],
       rows: 0,
@@ -180,7 +180,7 @@ describe('metrics-aggregate', () => {
   });
 
   test('retries previous aggregations (failure)', async () => {
-    const fetcher = new FetchMocker(); // Defaults to 404
+    const fetcher = new FetchMocker(jest); // Defaults to 404
 
     // Previous attempt.
     await firestore
@@ -214,7 +214,7 @@ describe('metrics-aggregate', () => {
   });
 
   test('retries previous aggregations (partial failure)', async () => {
-    const fetcher = new FetchMocker()
+    const fetcher = new FetchMocker(jest)
       .result('POST', '/', {
         meta: [],
         data: [],

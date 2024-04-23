@@ -1,11 +1,11 @@
-import {expect, test} from '@jest/globals';
+import React from 'react';
+import {ReactTestRenderer, act, create} from 'react-test-renderer';
+import {expect, test} from 'vitest';
 import {
   PresenceSubscribable,
   SubscribeToPresenceCallback,
   usePresence,
 } from './index.js';
-import React from 'react';
-import {create, act, ReactTestRenderer} from 'react-test-renderer';
 
 test('undefined/null PresenceSubscribable', async () => {
   function A({presenceSubscribable}: {presenceSubscribable: null | undefined}) {

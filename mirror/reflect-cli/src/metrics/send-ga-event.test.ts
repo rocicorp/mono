@@ -1,13 +1,13 @@
-import {expect, jest, test, afterEach} from '@jest/globals';
+import {afterEach, expect, jest, test} from '@jest/globals';
 import {FetchMocker} from 'shared/src/fetch-mocker.js';
-const fetch = new FetchMocker().result(
+import type {AuthenticatedUser} from '../auth-config.js';
+import {authContext} from '../login.test.helper.js';
+import {sendGAEvent} from './send-ga-event.js';
+const fetch = new FetchMocker(jest).result(
   'POST',
   'https://www.google-analytics.com/g/collect',
   [],
 );
-import {sendGAEvent} from './send-ga-event.js';
-import {authContext} from '../login.test.helper.js';
-import type {AuthenticatedUser} from '../auth-config.js';
 
 afterEach(() => {
   jest.restoreAllMocks();

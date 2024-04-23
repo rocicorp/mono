@@ -71,7 +71,7 @@ describe('auth-team-validators', () => {
   mockFunctionParamsAndSecrets();
 
   beforeEach(() => {
-    fetchMocker = new FetchMocker().result('POST', '/apiKeys-update', {});
+    fetchMocker = new FetchMocker(jest).result('POST', '/apiKeys-update', {});
   });
 
   afterEach(async () => {
