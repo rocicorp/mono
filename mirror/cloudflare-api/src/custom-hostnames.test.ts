@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 test('custom-hostnames', async () => {
-  const fetch = mockFetch().default({});
+  const fetch = mockFetch(vi).default({});
 
   const resource = new CustomHostnames({
     apiToken: 'api-token',

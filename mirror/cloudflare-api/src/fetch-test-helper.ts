@@ -1,9 +1,8 @@
-import {FetchMocker} from 'shared/src/fetch-mocker.js';
-import {vi} from 'vitest';
+import {FetchMocker, SpyOn} from 'shared/src/fetch-mocker.js';
 import type {FetchResult} from './fetch.js';
 
-export function mockFetch(): FetchMocker {
-  return new FetchMocker(vi, success, error);
+export function mockFetch(spyOn: SpyOn): FetchMocker {
+  return new FetchMocker(spyOn, success, error);
 }
 
 function success<T>(result: T): Response {

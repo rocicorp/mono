@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 test('dns-records', async () => {
-  const fetch = mockFetch().default({});
+  const fetch = mockFetch(vi).default({});
 
   const resource = new DNSRecords({apiToken: 'api-token', zoneID: 'zone-id'});
   await resource.list();

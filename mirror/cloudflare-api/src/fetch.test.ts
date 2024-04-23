@@ -52,7 +52,7 @@ describe('cf fetch', () => {
     ];
     for (const c of cases) {
       test(c.name, async () => {
-        mockFetch().error('GET', 'custom_hostnames', c.code, c.message);
+        mockFetch(vi).error('GET', 'custom_hostnames', c.code, c.message);
 
         const result = await resource.get('ch-id').catch(err => err);
         expect(result).toBeInstanceOf(Error);

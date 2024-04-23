@@ -1,13 +1,17 @@
 import {afterEach, describe, expect, jest, test} from '@jest/globals';
+import type {DNSRecord} from 'cloudflare-api/src/dns-records.js';
+import {mockFetch as mockFetchGeneric} from 'cloudflare-api/src/fetch-test-helper.js';
+import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
+import {NamespacedScript} from 'cloudflare-api/src/scripts.js';
+import type {ZoneConfig} from './config.js';
 import {
   deleteCustomHostnames,
   publishCustomHostname,
 } from './publish-custom-hostnames.js';
-import {mockFetch} from 'cloudflare-api/src/fetch-test-helper.js';
-import type {ZoneConfig} from './config.js';
-import {NamespacedScript} from 'cloudflare-api/src/scripts.js';
-import type {DNSRecord} from 'cloudflare-api/src/dns-records.js';
-import {Errors, FetchResultError} from 'cloudflare-api/src/fetch.js';
+
+function mockFetch() {
+  return mockFetchGeneric(jest);
+}
 
 afterEach(() => {
   jest.restoreAllMocks();

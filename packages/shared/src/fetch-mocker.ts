@@ -27,39 +27,44 @@ function defaultErrorResponse(code: number, message?: string): Response {
   } as unknown as Response;
 }
 
-interface SpyOn {
+export interface SpyOn {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   spyOn(obj: object, methodName: string): any;
 }
+
+type FetchSpy =
+  | vitest.MockInstance<
+      [input: string | Request | URL, init?: RequestInit | undefined],
+      Promise<Response>
+    >
+  | jest.SpiedFunction<{
+      (
+        input: URL | RequestInfo,
+        init?: RequestInit | undefined,
+      ): Promise<Response>;
+      (
+        input: string | Request | URL,
+        init?: RequestInit | undefined,
+      ): Promise<Response>;
+    }>;
 
 export class FetchMocker {
   #success: (result: unknown) => Response;
   #error: (code: number, message?: string) => Response;
 
-  readonly spy:
-    | vitest.MockInstance<
-        [input: string | Request | URL, init?: RequestInit | undefined],
-        Promise<Response>
-      >
-    | jest.SpiedFunction<{
-        (
-          input: URL | RequestInfo,
-          init?: RequestInit | undefined,
-        ): Promise<Response>;
-        (
-          input: string | Request | URL,
-          init?: RequestInit | undefined,
-        ): Promise<Response>;
-      }>;
+  readonly spy: FetchSpy;
 
   constructor(
     spyOn: SpyOn,
     success: (result: unknown) => Response = defaultSuccessResponse,
     error: (code: number, message?: string) => Response = defaultErrorResponse,
   ) {
-    this.spy = (spyOn as vitest.VitestUtils)
+    this.spy = spyOn
       .spyOn(globalThis, 'fetch')
-      .mockImplementation((input, init) => this.handle(input, init));
+      .mockImplementation(
+        (input: RequestInfo | URL, init: RequestInit | undefined) =>
+          this.#handle(input, init),
+      );
     this.#success = success;
     this.#error = error;
   }
@@ -71,7 +76,7 @@ export class FetchMocker {
     text: () => Promise.resolve('not found'),
   } as unknown as Response;
 
-  handle(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  #handle(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     for (let i = 0; i < this.handlers.length; i++) {
       const handler = this.handlers[i];
       if (
