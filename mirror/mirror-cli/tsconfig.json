@@ -1,9 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "types": ["node"],
-    // @google-cloud/secret-manager has internal errors
-    "skipLibCheck": true
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "tool/build.js"]
 }

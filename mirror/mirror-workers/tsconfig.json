@@ -4,7 +4,6 @@
     "lib": ["es2022"],
     "types": ["@cloudflare/workers-types/2023-07-01"],
     "module": "Node16",
-    "skipLibCheck": true,
     "noEmit": true,
     "declaration": false,
     "declarationMap": false

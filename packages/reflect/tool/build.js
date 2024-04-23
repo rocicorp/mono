@@ -86,14 +86,6 @@ function copyReflectCLI() {
 }
 
 /**
- * @return {string}
- */
-function getReflectVersion() {
-  const pkg = fs.readFileSync(basePath('package.json'), 'utf-8');
-  return JSON.parse(pkg).version;
-}
-
-/**
  * @param {any[]} names
  * @returns {Promise<string[]>}
  */

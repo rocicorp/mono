@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["dom", "esnext"],
-    "skipLibCheck": true,
     "paths": {
       "@rocicorp/zql": ["../zql/src/mod.ts"],
       "@rocicorp/zql/src/*": ["../zql/src/*"],

@@ -3,8 +3,7 @@
   "compilerOptions": {
     "types": ["node"],
     "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "skipLibCheck": true
+    "moduleResolution": "NodeNext"
   },
   "include": ["src/**/*.ts"]
 }
