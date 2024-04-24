@@ -63,8 +63,7 @@ import {
 import {persistDD31} from './persist/persist.js';
 import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
-import type {Puller} from './puller.js';
-import {Pusher, PushError} from './pusher.js';
+import {PushError} from './pusher.js';
 import type {
   ReplicacheInternalOptions,
   ReplicacheOptions,
@@ -136,6 +135,29 @@ import {
 
 declare const TESTING: boolean;
 
+export interface ReplicacheState {
+  auth: string;
+  clientID: ClientID;
+  closed: boolean;
+  getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined;
+  idbName: string;
+  name: string;
+  onClientStateNotFound: (() => void) | null;
+  online: boolean;
+  onOnlineChange: ((online: boolean) => void) | null;
+  onSync: ((syncing: boolean) => void) | null;
+  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
+  profileID: Promise<string>;
+  puller: Puller;
+  pullInterval: number | null;
+  pullURL: string;
+  pushDelay: number;
+  pusher: Pusher;
+  pushURL: string;
+  requestOptions: Required<RequestOptions>;
+  schemaVersion: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
@@ -153,14 +175,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #kvStoreProvider: StoreProvider;
 
   #lastMutationID: number = 0;
-  readonly #replicacheDelegate: ReplicacheDelegate;
+  readonly #state: ReplicacheState;
 
   /**
    * This is the name Replicache uses for the IndexedDB database where data is
    * stored.
    */
   get idbName(): string {
-    return makeIDBName(this.name, this.#replicacheDelegate.schemaVersion);
+    return makeIDBName(this.name, this.#state.schemaVersion);
   }
 
   get #idbDatabase(): IndexedDBDatabase {
@@ -168,7 +190,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       name: this.idbName,
       replicacheName: this.name,
       replicacheFormatVersion: FormatVersion.Latest,
-      schemaVersion: this.#replicacheDelegate.schemaVersion,
+      schemaVersion: this.#state.schemaVersion,
     };
   }
   #closed = false;
@@ -238,10 +260,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return this.#requestOptions;
   }
 
-  constructor(
-    options: ReplicacheOptions<MD>,
-    replicacheDelegate: ReplicacheDelegate,
-  ) {
+  constructor(options: ReplicacheOptions<MD>, state: ReplicacheState) {
     const {
       name,
       logLevel = 'info',
@@ -251,7 +270,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       licenseKey,
       indexes = {},
     } = options;
-    this.#replicacheDelegate = replicacheDelegate;
+    this.#state = state;
     if (typeof name !== 'string' || !name) {
       throw new TypeError('name is required and must be non-empty');
     }
@@ -345,13 +364,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     this.#pullConnectionLoop = new ConnectionLoop(
       this.#lc.withContext('PULL'),
-      new PullDelegate(this.#replicacheDelegate, () => this.#invokePull()),
+      new PullDelegate(this.#state, () => this.#invokePull()),
       visibilityWatcher,
     );
 
     this.#pushConnectionLoop = new ConnectionLoop(
       this.#lc.withContext('PUSH'),
-      new PushDelegate(this.#replicacheDelegate, () => this.#invokePush()),
+      new PushDelegate(this.#state, () => this.#invokePush()),
     );
 
     this.mutate = this.#registerMutators(mutators);
@@ -362,7 +381,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#clientGroupIDPromise = clientGroupIDResolver.promise;
 
     this.#mutationRecovery = new MutationRecovery({
-      delegate: this.#replicacheDelegate,
+      delegate: this.#state,
       lc: this.#lc,
       enableMutationRecovery,
       wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
@@ -788,8 +807,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #isPullDisabled() {
     return (
       this.#isClientGroupDisabled ||
-      (this.#replicacheDelegate.pullURL === '' &&
-        isDefaultPuller(this.#replicacheDelegate.puller))
+      (this.#state.pullURL === '' && isDefaultPuller(this.#state.puller))
     );
   }
 
@@ -825,7 +843,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     } finally {
       if (this.#online !== online) {
         this.#online = online;
-        this.#replicacheDelegate.onOnlineChange?.(online);
+        this.#state.onOnlineChange?.(online);
         if (online) {
           void this.#recoverMutations();
         }
@@ -880,7 +898,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           authFailure: false,
         };
       }
-      if (!this.#replicacheDelegate.getAuth) {
+      if (!this.#state.getAuth) {
         return {
           result,
           authFailure: true,
@@ -889,7 +907,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       let auth;
       try {
         await preAuth();
-        auth = await this.#replicacheDelegate.getAuth();
+        auth = await this.#state.getAuth();
       } finally {
         await postAuth();
       }
@@ -899,7 +917,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           authFailure: true,
         };
       }
-      this.#replicacheDelegate.auth = auth;
+      this.#state.auth = auth;
       reauthAttempts++;
     } while (reauthAttempts < MAX_REAUTH_TRIES);
     lc.info?.('Tried to reauthenticate too many times');
@@ -912,8 +930,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #isPushDisabled() {
     return (
       this.#isClientGroupDisabled ||
-      (this.#replicacheDelegate.pushURL === '' &&
-        isDefaultPusher(this.#replicacheDelegate.pusher))
+      (this.#state.pushURL === '' && isDefaultPusher(this.#state.pusher))
     );
   }
 
@@ -941,8 +958,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
               profileID,
               clientGroupID,
               clientID,
-              this.#replicacheDelegate.pusher,
-              this.#replicacheDelegate.schemaVersion,
+              this.#state.pusher,
+              this.#state.schemaVersion,
               PUSH_VERSION_DD31,
             );
             return {
@@ -1099,8 +1116,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           profileID,
           clientID,
           clientGroupID,
-          this.#replicacheDelegate.schemaVersion,
-          this.#replicacheDelegate.puller,
+          this.#state.schemaVersion,
+          this.#state.puller,
           requestID,
           this.#memdag,
           FormatVersion.Latest,
@@ -1199,7 +1216,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   #fireOnClientStateNotFound() {
-    this.#replicacheDelegate.onClientStateNotFound?.();
+    this.#state.onClientStateNotFound?.();
   }
 
   #clientStateNotFoundOnClient(clientID: ClientID) {
@@ -1222,7 +1239,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   #fireOnUpdateNeeded(reason: UpdateNeededReason) {
     this.#lc.debug?.(`Update needed, reason: ${reason}`);
-    this.#replicacheDelegate.onUpdateNeeded?.(reason);
+    this.#state.onUpdateNeeded?.(reason);
   }
 
   async #schedulePersist(): Promise<void> {
@@ -1270,7 +1287,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const syncing = counter > 0;
       // Run in a new microtask.
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      Promise.resolve().then(() => this.#replicacheDelegate.onSync?.(syncing));
+      Promise.resolve().then(() => this.#state.onSync?.(syncing));
     }
   }
 
@@ -1502,26 +1519,4 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
     return withRead(this.#memdag, pendingMutationsForAPI);
   }
-}
-export interface ReplicacheDelegate {
-  auth: string;
-  clientID: ClientID;
-  closed: boolean;
-  getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined;
-  idbName: string;
-  name: string;
-  onClientStateNotFound: (() => void) | null;
-  online: boolean;
-  onOnlineChange: ((online: boolean) => void) | null;
-  onSync: ((syncing: boolean) => void) | null;
-  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
-  profileID: Promise<string>;
-  puller: Puller;
-  pullInterval: number | null;
-  pullURL: string;
-  pushDelay: number;
-  pusher: Pusher;
-  pushURL: string;
-  requestOptions: Required<RequestOptions>;
-  schemaVersion: string;
 }

@@ -127,7 +127,7 @@ export const updateNeededReasonNewClientGroup: UpdateNeededReason = {
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
-  readonly #rep: ReplicacheImpl<MD>;
+  readonly #impl: ReplicacheImpl<MD>;
 
   /** The URL to use when doing a pull request. */
   pullURL: string;
@@ -185,7 +185,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * object is live so changes to it will affect the next pull or push call.
    */
   get requestOptions(): Required<RequestOptions> {
-    return this.#rep.requestOptions;
+    return this.#impl.requestOptions;
   }
 
   /**
@@ -268,9 +268,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this.pushURL = pushURL;
     this.schemaVersion = schemaVersion;
 
-    this.#rep = new ReplicacheImpl<MD>(options, this);
-    this.mutate = this.#rep.mutate;
-    repToImpl.set(this, this.#rep);
+    this.#impl = new ReplicacheImpl<MD>(options, this);
+    this.mutate = this.#impl.mutate;
+    repToImpl.set(this, this.#impl);
   }
 
   /**
@@ -278,7 +278,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * browser-profile-wide shares the same profile ID.
    */
   get profileID(): Promise<string> {
-    return this.#rep.profileID;
+    return this.#impl.profileID;
   }
 
   /**
@@ -286,7 +286,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * gets a unique client ID.
    */
   get clientID(): string {
-    return this.#rep.clientID;
+    return this.#impl.clientID;
   }
 
   /**
@@ -296,7 +296,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * browser profile.
    */
   get clientGroupID(): Promise<string> {
-    return this.#rep.clientGroupID;
+    return this.#impl.clientGroupID;
   }
 
   /**
@@ -312,7 +312,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * and false otherwise.
    */
   get online(): boolean {
-    return this.#rep.online;
+    return this.#impl.online;
   }
 
   /**
@@ -322,7 +322,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * used any more.
    */
   get closed(): boolean {
-    return this.#rep.closed;
+    return this.#impl.closed;
   }
 
   /**
@@ -331,7 +331,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   close(): Promise<void> {
-    return this.#rep.close();
+    return this.#impl.close();
   }
 
   /**
@@ -352,7 +352,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   push(options: {now?: boolean | undefined} = {}): Promise<void> {
-    return this.#rep.push(options);
+    return this.#impl.push(options);
   }
 
   /**
@@ -370,7 +370,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   pull(options: {now?: boolean | undefined} = {}): Promise<void> {
-    return this.#rep.pull(options);
+    return this.#impl.pull(options);
   }
 
   /**
@@ -383,7 +383,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * @experimental This method is under development and its semantics will change.
    */
   poke(poke: Poke): Promise<void> {
-    return this.#rep.poke(poke);
+    return this.#impl.poke(poke);
   }
 
   /**
@@ -424,7 +424,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     body: (tx: ReadTransaction) => Promise<R>,
     options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {
-    return this.#rep.subscribe(body, options);
+    return this.#impl.subscribe(body, options);
   }
 
   /**
@@ -451,7 +451,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     callback: WatchCallbackForOptions<Options>,
     options?: Options,
   ): () => void {
-    return this.#rep.experimentalWatch(callback, options);
+    return this.#impl.experimentalWatch(callback, options);
   }
 
   /**
@@ -460,7 +460,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * and `scan`.
    */
   query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
-    return this.#rep.query(body);
+    return this.#impl.query(body);
   }
 
   /**
@@ -472,7 +472,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * @experimental This method is experimental and may change in the future.
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
-    return this.#rep.experimentalPendingMutations();
+    return this.#impl.experimentalPendingMutations();
   }
 }
 
