@@ -20,13 +20,13 @@ describe('view-syncer/schema/paths', () => {
         {stateVersion: '2abc', minorVersion: 35},
         {id: 'boo-query'},
       ),
-    ).toBe('/vs/cvr/456/patches/meta/2abc-0z/queries/boo-query');
+    ).toBe('/vs/cvr/456/patches/meta/2abc.0z/queries/boo-query');
     expect(
       paths2.queryPatch(
         {stateVersion: '2abc', minorVersion: 36},
         {id: 'boo-query'},
       ),
-    ).toBe('/vs/cvr/456/patches/meta/2abc-110/queries/boo-query');
+    ).toBe('/vs/cvr/456/patches/meta/2abc.110/queries/boo-query');
   });
 
   test('client paths', () => {
@@ -76,7 +76,7 @@ describe('view-syncer/schema/paths', () => {
         },
       ),
     ).toBe(
-      '/vs/cvr/fbr/patches/data/28c8-12s/rows/public/issues/4XQuBMS98x-1M2Gg-VMrlA',
+      '/vs/cvr/fbr/patches/data/28c8.12s/rows/public/issues/4XQuBMS98x-1M2Gg-VMrlA',
     );
   });
 
