@@ -188,6 +188,11 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/meta/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23),
         } satisfies LastActive,
+        ['/vs/cvr/abc123/meta/clients/dooClient']: {
+          id: 'dooClient',
+          desiredQueryIDs: ['oneHash', 'nonExistentQuery'],
+          putPatch: {stateVersion: '1a8'},
+        } satisfies ClientRecord,
         ['/vs/cvr/abc123/meta/clients/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
@@ -198,10 +203,17 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
           desiredBy: {
+            dooClient: {stateVersion: '1a8'},
             fooClient: {stateVersion: '1a9', minorVersion: 1},
           },
           putPatch: {stateVersion: '1a9', minorVersion: 2},
         } satisfies QueryRecord,
+        ['/vs/cvr/abc123/patches/meta/1a8/queries/oneHash/clients/dooClient']: {
+          type: 'query',
+          op: 'put',
+          id: 'oneHash',
+          clientID: 'dooClient,',
+        } satisfies QueryPatch,
         ['/vs/cvr/abc123/patches/meta/1a9.01/queries/oneHash/clients/fooClient']:
           {
             type: 'query',
@@ -219,17 +231,19 @@ describe('view-syncer/cvr', () => {
       );
 
       // This removes and adds desired queries to the existing fooClient.
-      updater.setDesiredQueries('fooClient', {
+      updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']);
+      updater.putDesiredQueries('fooClient', {
         fourHash: {table: 'users'},
         threeHash: {table: 'comments'},
       });
       // This adds a new barClient with desired queries.
-      updater.setDesiredQueries('barClient', {
+      updater.putDesiredQueries('barClient', {
         oneHash: {table: 'issues'}, // oneHash is already "got", formerly desired by foo.
         threeHash: {table: 'comments'},
       });
       // Adds a new client with no desired queries.
-      updater.setDesiredQueries('bonkClient', {});
+      updater.putDesiredQueries('bonkClient', {});
+      updater.clearDesiredQueries('dooClient');
 
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 24)));
 
@@ -238,6 +252,11 @@ describe('view-syncer/cvr', () => {
         version: {stateVersion: '1aa'},
         lastActive: {epochMillis: 1713830400000},
         clients: {
+          dooClient: {
+            id: 'dooClient',
+            desiredQueryIDs: ['oneHash', 'nonExistentQuery'],
+            putPatch: {stateVersion: '1a8'},
+          },
           fooClient: {
             id: 'fooClient',
             desiredQueryIDs: ['oneHash'],
@@ -249,7 +268,10 @@ describe('view-syncer/cvr', () => {
             id: 'oneHash',
             ast: {table: 'issues'},
             transformationHash: 'twoHash',
-            desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+            desiredBy: {
+              dooClient: {stateVersion: '1a8'},
+              fooClient: {stateVersion: '1a9', minorVersion: 1},
+            },
             putPatch: {stateVersion: '1a9', minorVersion: 2},
           },
         },
@@ -265,15 +287,20 @@ describe('view-syncer/cvr', () => {
             desiredQueryIDs: ['oneHash', 'threeHash'],
             putPatch: {stateVersion: '1aa', minorVersion: 1},
           },
-          fooClient: {
-            id: 'fooClient',
-            desiredQueryIDs: ['fourHash', 'threeHash'],
-            putPatch: {stateVersion: '1a9', minorVersion: 1},
-          },
           bonkClient: {
             id: 'bonkClient',
             desiredQueryIDs: [],
             putPatch: {stateVersion: '1aa', minorVersion: 1},
+          },
+          dooClient: {
+            id: 'dooClient',
+            desiredQueryIDs: [],
+            putPatch: {stateVersion: '1a8'},
+          },
+          fooClient: {
+            id: 'fooClient',
+            desiredQueryIDs: ['fourHash', 'threeHash'],
+            putPatch: {stateVersion: '1a9', minorVersion: 1},
           },
         },
         queries: {
@@ -308,8 +335,9 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/meta/version']: updated.version,
         ['/vs/cvr/abc123/meta/lastActive']: updated.lastActive,
         ['/vs/cvr/abc123/meta/clients/barClient']: updated.clients.barClient,
-        ['/vs/cvr/abc123/meta/clients/fooClient']: updated.clients.fooClient,
         ['/vs/cvr/abc123/meta/clients/bonkClient']: updated.clients.bonkClient,
+        ['/vs/cvr/abc123/meta/clients/dooClient']: updated.clients.dooClient,
+        ['/vs/cvr/abc123/meta/clients/fooClient']: updated.clients.fooClient,
         ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
         ['/vs/cvr/abc123/meta/queries/threeHash']: updated.queries.threeHash,
         ['/vs/cvr/abc123/meta/queries/fourHash']: updated.queries.fourHash,
@@ -344,6 +372,13 @@ describe('view-syncer/cvr', () => {
             op: 'put',
             id: 'oneHash',
             clientID: 'barClient',
+          } satisfies QueryPatch,
+        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash/clients/dooClient']:
+          {
+            type: 'query',
+            op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
+            id: 'oneHash',
+            clientID: 'dooClient',
           } satisfies QueryPatch,
         ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash/clients/fooClient']:
           {
@@ -406,7 +441,7 @@ describe('view-syncer/cvr', () => {
       );
 
       // Same desired query set. Nothing should change except last active time.
-      updater.setDesiredQueries('fooClient', {oneHash: {table: 'issues'}});
+      updater.putDesiredQueries('fooClient', {oneHash: {table: 'issues'}});
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));

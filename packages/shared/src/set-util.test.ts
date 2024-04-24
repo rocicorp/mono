@@ -1,5 +1,11 @@
 import {expect, test} from 'vitest';
-import {difference, equals, symmetricDifference, union} from './set-utils.js';
+import {
+  difference,
+  equals,
+  intersection,
+  symmetricDifference,
+  union,
+} from './set-utils.js';
 
 test('equals', () => {
   const t = <T>(a: Iterable<T>, b: Iterable<T>, expected: boolean) => {
@@ -32,6 +38,22 @@ test('union', () => {
   t('ab', 'ab');
   t('a', 'b', 'c', 'abc');
   t('ab', 'bc', 'cd', 'abcd');
+});
+
+test('intersection', () => {
+  const t = <T>(a: Iterable<T>, b: Iterable<T>, expected: Iterable<T>) => {
+    expect(intersection(new Set(a), new Set(b))).toEqual(new Set(expected));
+  };
+  t('', '', '');
+  t('a', '', '');
+  t('', 'a', '');
+  t('a', 'a', 'a');
+  t('a', 'b', '');
+  t('a', 'ab', 'a');
+  t('ab', 'b', 'b');
+  t('abc', 'cb', 'bc');
+  t('ab', 'bc', 'b');
+  t('abc', 'abc', 'cba');
 });
 
 test('difference', () => {

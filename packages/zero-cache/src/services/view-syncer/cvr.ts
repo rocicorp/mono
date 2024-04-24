@@ -2,7 +2,7 @@ import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
 import type {DeepReadonly} from 'shared/src/json.js';
-import {equals, symmetricDifference} from 'shared/src/set-utils.js';
+import {difference, intersection, union} from 'shared/src/set-utils.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import type {Storage} from '../../storage/storage.js';
 import {WriteCache} from '../../storage/write-cache.js';
@@ -151,65 +151,95 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     super(storage, cvr);
   }
 
-  setDesiredQueries(clientID: string, queries: {[id: string]: AST}) {
-    let client = this._cvr.clients[clientID];
-    const current = new Set(client?.desiredQueryIDs);
-    const desired = new Set(Object.keys(queries));
-    if (client && equals(current, desired)) {
-      return; // Nothing to do.
-    }
-
-    const newVersion = this._ensureMinorVersionBump();
+  #ensureClient(id: string): ClientRecord {
+    let client = this._cvr.clients[id];
     if (client) {
-      // Update the ClientRecord
-      client.desiredQueryIDs = [...desired].sort(compareUTF8);
-    } else {
-      // Add the ClientRecord and PutPatch
-      client = {
-        id: clientID,
-        putPatch: newVersion,
-        desiredQueryIDs: [...desired].sort(compareUTF8),
-      };
-      this._cvr.clients[clientID] = client;
-      void this._writes.put(this._paths.clientPatch(newVersion, client), {
-        type: 'client',
-        op: 'put',
-        id: clientID,
-      } satisfies ClientPatch);
+      return client;
     }
-    void this._writes.put(this._paths.client({id: clientID}), client);
+    // Add the ClientRecord and PutPatch
+    const newVersion = this._ensureMinorVersionBump();
+    client = {id, putPatch: newVersion, desiredQueryIDs: []};
+    this._cvr.clients[id] = client;
 
-    // Add/remove desired queries.
-    for (const id of symmetricDifference(current, desired)) {
-      const put = desired.has(id);
+    void this._writes.put(this._paths.client(client), client);
+    void this._writes.put(this._paths.clientPatch(newVersion, client), {
+      type: 'client',
+      op: 'put',
+      id,
+    } satisfies ClientPatch);
+
+    return client;
+  }
+
+  putDesiredQueries(clientID: string, queries: {[id: string]: AST}) {
+    const client = this.#ensureClient(clientID);
+    const current = new Set(client.desiredQueryIDs);
+    const additional = new Set(Object.keys(queries));
+    const needed = difference(additional, current);
+    if (needed.size === 0) {
+      return;
+    }
+    const newVersion = this._ensureMinorVersionBump();
+    client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
+    void this._writes.put(this._paths.client(client), client);
+
+    for (const id of needed) {
       const query = this._cvr.queries[id] ?? {
         id,
         ast: queries[id],
         desiredBy: {},
       };
-      if (put) {
-        query.desiredBy[clientID] = newVersion;
-        this._cvr.queries[id] = query;
-      } else {
-        const oldPutVersion = query.desiredBy[clientID];
-        delete query.desiredBy[clientID];
-        void this._writes.del(
-          this._paths.desiredQueryPatch(oldPutVersion, query, client),
-        );
-      }
+      query.desiredBy[clientID] = newVersion;
+      this._cvr.queries[id] = query;
+
+      void this._writes.put(this._paths.query(query), query);
       void this._writes.put(
         this._paths.desiredQueryPatch(newVersion, query, client),
-        {
-          type: 'query',
-          op: put ? 'put' : 'del',
-          id,
-          clientID,
-        } satisfies QueryPatch,
+        {type: 'query', op: 'put', id, clientID} satisfies QueryPatch,
       );
-      void this._writes.put(this._paths.query(query), query);
     }
+  }
 
-    // TODO: In flush(), add potential cleanup of got queries and constituent rows.
+  deleteDesiredQueries(clientID: string, queries: string[]) {
+    const client = this.#ensureClient(clientID);
+    const current = new Set(client.desiredQueryIDs);
+    const unwanted = new Set(queries);
+    const remove = intersection(unwanted, current);
+    if (remove.size === 0) {
+      return;
+    }
+    const newVersion = this._ensureMinorVersionBump();
+    client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
+    void this._writes.put(this._paths.client(client), client);
+
+    for (const id of remove) {
+      const query = this._cvr.queries[id];
+      if (!query) {
+        continue; // Query itself has already been removed. Should not happen?
+      }
+      // Delete the old put-desired-patch
+      const oldPutVersion = query.desiredBy[clientID];
+      delete query.desiredBy[clientID];
+      void this._writes.del(
+        this._paths.desiredQueryPatch(oldPutVersion, query, client),
+      );
+
+      void this._writes.put(this._paths.query(query), query);
+      void this._writes.put(
+        this._paths.desiredQueryPatch(newVersion, query, client),
+        {type: 'query', op: 'del', id, clientID} satisfies QueryPatch,
+      );
+    }
+  }
+
+  clearDesiredQueries(clientID: string) {
+    const client = this.#ensureClient(clientID);
+    this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
+  }
+
+  flush(lastActive = new Date()): Promise<CVRSnapshot> {
+    // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
+    return super.flush(lastActive);
   }
 }
 
