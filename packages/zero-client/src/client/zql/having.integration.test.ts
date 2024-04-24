@@ -123,12 +123,9 @@ test('having against arrays / sets', async () => {
     .groupBy('track.id');
 
   const stmt = queryPiece
-    .select('track.id', 'track.title', agg.array('artists.name', 'artists'))
-    .having('artists', 'CONGRUENT', ['Artist 1'])
+    .select('track.id', 'track.title', agg.array('artists.*', 'artists'))
+    .having('artists.name', 'CONGRUENT', ['Artist 1'])
     .prepare();
-
-  // TODO:
-  // - follow path if the agg array is a row.
 
   const rows = await stmt.exec();
 

@@ -493,12 +493,26 @@ export function getValueFromEntity(
     if (qualifiedColumn[1] === '*') {
       return (entity as Record<string, unknown>)[qualifiedColumn[0]];
     }
-    return (
+    return getOrLiftValue(
       (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
         string,
         unknown
-      >
-    )?.[qualifiedColumn[1]];
+      >,
+      qualifiedColumn[1],
+    );
   }
-  return entity[qualifiedColumn[1]];
+  return getOrLiftValue(entity, qualifiedColumn[1]);
+}
+
+export function getOrLiftValue(
+  containerOrValue:
+    | Record<string, unknown>
+    | Array<Record<string, unknown>>
+    | undefined,
+  field: string,
+) {
+  if (Array.isArray(containerOrValue)) {
+    return containerOrValue.map(x => x?.[field]);
+  }
+  return containerOrValue?.[field];
 }
