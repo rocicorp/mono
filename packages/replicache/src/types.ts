@@ -54,16 +54,20 @@ export interface RequestOptions {
    */
   maxDelayMs?: number;
 }
+
 export type MakeMutators<T extends MutatorDefs> = {
   readonly [P in keyof T]: MakeMutator<T[P]>;
 };
+
 export type ToPromise<P> = P extends Promise<unknown> ? P : Promise<P>;
+
 export type QueryInternal = <R>(
   body: (tx: ReadTransactionImpl) => MaybePromise<R>,
-) => Promise<R>; /**
+) => Promise<R>;
+
+/**
  * The reason {@link onUpdateNeeded} was called.
  */
-
 export type UpdateNeededReason =
   | {
       // There is a new client group due to a new tab loading new code with

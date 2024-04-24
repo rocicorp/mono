@@ -40,9 +40,9 @@ import type {
   PullResponseOKV1,
   PullResponseV0,
   PullResponseV1,
+  Puller,
 } from './puller.js';
-import type {PushResponse} from './pusher.js';
-import type {ReplicacheState} from './replicache-impl.js';
+import type {PushResponse, Pusher} from './pusher.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {beginPullV0, beginPullV1} from './sync/pull.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD, push} from './sync/push.js';
@@ -51,8 +51,18 @@ import {withRead, withWrite} from './with-transactions.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
 
+type OwnerReplicache = Readonly<{
+  name: string;
+  idbName: string;
+  clientID: ClientID;
+  closed: boolean;
+  profileID: Promise<string>;
+  online: boolean;
+}>;
+
 interface MutationRecoveryOptions {
-  delegate: ReplicacheState;
+  readonly delegate: {puller: Puller; pusher: Pusher};
+  readonly owner: OwnerReplicache;
   readonly wrapInOnlineCheck: (
     f: () => Promise<boolean>,
     name: string,
@@ -96,14 +106,13 @@ export class MutationRecovery {
     idbDatabases: IDBDatabasesStore,
     createStore: CreateStore,
   ): Promise<boolean> {
-    const {lc, enableMutationRecovery, isPushDisabled, delegate} =
-      this.#options;
+    const {lc, enableMutationRecovery, isPushDisabled, owner} = this.#options;
 
     if (
       !enableMutationRecovery ||
       this.#recoveringMutations ||
-      !delegate.online ||
-      delegate.closed ||
+      !owner.online ||
+      owner.closed ||
       isPushDisabled()
     ) {
       return false;
@@ -120,13 +129,13 @@ export class MutationRecovery {
         preReadClientMap,
       );
       for (const database of Object.values(await idbDatabases.getDatabases())) {
-        if (delegate.closed) {
+        if (owner.closed) {
           lc.debug?.('Exiting early due to close:', stepDescription);
           return true;
         }
         if (
-          database.replicacheName === delegate.name &&
-          database.name !== delegate.idbName
+          database.replicacheName === owner.name &&
+          database.name !== owner.idbName
         ) {
           switch (database.replicacheFormatVersion) {
             case FormatVersion.SDD:
@@ -143,7 +152,7 @@ export class MutationRecovery {
         }
       }
     } catch (e) {
-      logMutationRecoveryError(e, lc, stepDescription, delegate);
+      logMutationRecoveryError(e, lc, stepDescription, owner.closed);
     } finally {
       lc.debug?.('End:', stepDescription);
       this.#recoveringMutations = false;
@@ -156,9 +165,9 @@ function logMutationRecoveryError(
   e: unknown,
   lc: LogContext,
   stepDescription: string,
-  closedDelegate: {closed: boolean},
+  closed: boolean,
 ) {
-  if (closedDelegate.closed) {
+  if (closed) {
     lc.debug?.(
       `Mutation recovery error likely due to close during:\n${stepDescription}\nError:\n`,
       e,
@@ -190,13 +199,14 @@ async function recoverMutationsOfClientV4(
 
   const {
     delegate,
+    owner,
     lc,
     wrapInOnlineCheck,
     wrapInReauthRetries,
     isPushDisabled,
     isPullDisabled,
   } = options;
-  const selfClientID = delegate.clientID;
+  const selfClientID = owner.clientID;
   if (selfClientID === clientID) {
     return;
   }
@@ -233,7 +243,7 @@ async function recoverMutationsOfClientV4(
             requestID,
             lazyDagForOtherClient,
             requestLc,
-            await delegate.profileID,
+            await owner.profileID,
             undefined,
             clientID,
             pusher,
@@ -275,7 +285,7 @@ async function recoverMutationsOfClientV4(
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
           const beginPullResponse = await beginPullV0(
-            await delegate.profileID,
+            await owner.profileID,
             clientID,
             database.schemaVersion,
             puller,
@@ -369,7 +379,7 @@ async function recoverMutationsOfClientV4(
       return setNewClients(newClients);
     });
   } catch (e) {
-    logMutationRecoveryError(e, lc, stepDescription, delegate);
+    logMutationRecoveryError(e, lc, stepDescription, owner.closed);
   } finally {
     await lazyDagForOtherClient.close();
     lc.debug?.('End:', stepDescription);
@@ -420,7 +430,7 @@ async function recoverMutationsFromPerdagSDD(
   perdag: Store,
   preReadClientMap: ClientMap | undefined,
 ): Promise<void> {
-  const {delegate, lc} = options;
+  const {owner, lc} = options;
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
   try {
@@ -431,7 +441,7 @@ async function recoverMutationsFromPerdagSDD(
     while (clientMap) {
       let newClientMap: ClientMap | undefined;
       for (const [clientID, client] of clientMap) {
-        if (delegate.closed) {
+        if (owner.closed) {
           lc.debug?.('Exiting early due to close:', stepDescription);
           return;
         }
@@ -453,7 +463,7 @@ async function recoverMutationsFromPerdagSDD(
       clientMap = newClientMap;
     }
   } catch (e) {
-    logMutationRecoveryError(e, lc, stepDescription, delegate);
+    logMutationRecoveryError(e, lc, stepDescription, owner.closed);
   }
   lc.debug?.('End:', stepDescription);
 }
@@ -463,7 +473,7 @@ async function recoverMutationsFromPerdagDD31(
   options: MutationRecoveryOptions,
   perdag: Store,
 ): Promise<void> {
-  const {delegate, lc} = options;
+  const {owner, lc} = options;
   const stepDescription = `Recovering mutations from db ${database.name}.`;
   lc.debug?.('Start:', stepDescription);
   try {
@@ -476,7 +486,7 @@ async function recoverMutationsFromPerdagDD31(
     while (clientGroups) {
       let newClientGroups: ClientGroupMap | undefined;
       for (const [clientGroupID, clientGroup] of clientGroups) {
-        if (delegate.closed) {
+        if (owner.closed) {
           lc.debug?.('Exiting early due to close:', stepDescription);
           return;
         }
@@ -498,7 +508,7 @@ async function recoverMutationsFromPerdagDD31(
       clientGroups = newClientGroups;
     }
   } catch (e) {
-    logMutationRecoveryError(e, lc, stepDescription, delegate);
+    logMutationRecoveryError(e, lc, stepDescription, owner.closed);
   }
   lc.debug?.('End:', stepDescription);
 }
@@ -553,6 +563,7 @@ async function recoverMutationsOfClientGroupDD31(
 
   const {
     delegate,
+    owner,
     lc,
     wrapInOnlineCheck,
     wrapInReauthRetries,
@@ -624,7 +635,7 @@ async function recoverMutationsOfClientGroupDD31(
             requestID,
             lazyDagForOtherClientGroup,
             requestLc,
-            await delegate.profileID,
+            await owner.profileID,
             clientGroupID,
             // TODO(DD31): clientID is not needed in DD31. It is currently kept for debugging purpose.
             clientID,
@@ -679,7 +690,7 @@ async function recoverMutationsOfClientGroupDD31(
         async (requestID: string, requestLc: LogContext) => {
           assert(clientID);
           const beginPullResponse = await beginPullV1(
-            await delegate.profileID,
+            await owner.profileID,
             clientID,
             clientGroupID,
             database.schemaVersion,
@@ -773,7 +784,7 @@ async function recoverMutationsOfClientGroupDD31(
       return newClientGroups;
     });
   } catch (e) {
-    logMutationRecoveryError(e, lc, stepDescription, delegate);
+    logMutationRecoveryError(e, lc, stepDescription, owner.closed);
   } finally {
     await lazyDagForOtherClientGroup.close();
     lc.debug?.('End:', stepDescription);

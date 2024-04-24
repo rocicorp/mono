@@ -29,8 +29,8 @@ import type {
   PullerResultV1,
 } from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
+import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import {Replicache} from 'replicache/src/replicache.js';
 import type {
   WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
   WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
@@ -47,6 +47,7 @@ import type {
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
+import {reload} from 'shared/src/reload.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
@@ -184,7 +185,7 @@ export interface ReplicacheInternalAPI {
 export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   readonly version = version;
 
-  readonly #rep: Replicache<MD>;
+  readonly #rep: ReplicacheImpl<MD>;
   readonly #server: HTTPString | null;
   readonly userID: string;
   readonly roomID: string;
@@ -334,6 +335,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
         `ZeroOptions.roomID must match ${ROOM_ID_REGEX.toString()}.`,
       );
     }
+
     const server = getServer(options.server);
     this.#enableAnalytics = shouldEnableAnalytics(
       server,
@@ -359,20 +361,26 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     });
     const logOptions = this.#logOptions;
 
+    const pusher: Pusher = (req, reqID) => this.#pusher(req, reqID);
+    const puller: Puller = (req, reqID) => this.#puller(req, reqID);
+    const pushDelay = 0;
+    const requestOptions = {
+      maxDelayMs: 0,
+      minDelayMs: 0,
+    };
+    const pullInterval = 60_000;
+    const name = `zero-${userID}-${roomID}`;
     const replicacheOptions: ReplicacheOptions<MD> = {
       schemaVersion: options.schemaVersion,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: options.mutators,
-      name: `zero-${userID}-${roomID}`,
-      pusher: (req, reqID) => this.#pusher(req, reqID),
-      puller: (req, reqID) => this.#puller(req, reqID),
+      name,
+      pusher,
+      puller,
       // TODO: Do we need these?
-      pushDelay: 0,
-      requestOptions: {
-        maxDelayMs: 0,
-        minDelayMs: 0,
-      },
+      pushDelay,
+      requestOptions,
       licenseKey: 'zero-client-static-key',
       kvStore,
     };
@@ -380,23 +388,38 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       enableLicensing: false,
     };
 
-    this.#rep = new Replicache({
-      ...replicacheOptions,
-      ...replicacheInternalOptions,
-    });
-    this.#rep.getAuth = this.#getAuthToken;
-    this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
+    const impl = new ReplicacheImpl(
+      {
+        ...replicacheOptions,
+        ...replicacheInternalOptions,
+      },
+      {
+        getAuth: this.#getAuthToken,
+        onClientStateNotFound: reload,
+        onOnlineChange: null,
+        onSync: null,
+        puller,
+        pullInterval,
+        pullURL: '',
+        pushDelay,
+        pusher,
+        pushURL: '',
+        requestOptions,
+      },
+    );
+    this.#rep = impl;
+    this.#onUpdateNeeded = impl.onUpdateNeeded; // defaults to reload.
     this.#server = server;
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
     this.#lc = new LogContext(
       logOptions.logLevel,
-      {roomID, clientID: this.#rep.clientID},
+      {roomID, clientID: impl.clientID},
       logOptions.logSink,
     );
 
-    this.#zqlContext = makeReplicacheContext(this.#rep, {
+    this.#zqlContext = makeReplicacheContext(impl, {
       subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
       subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
     });
@@ -417,9 +440,9 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      pokeDD31 => this.#rep.poke(pokeDD31),
+      pokeDD31 => impl.poke(pokeDD31),
       () => this.#onOutOfOrderPoke(),
-      this.#rep.clientID,
+      impl.clientID,
       this.#lc,
     );
 

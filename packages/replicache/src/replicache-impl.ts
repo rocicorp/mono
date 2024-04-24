@@ -12,6 +12,7 @@ import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
+import {reload} from 'shared/src/reload.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
@@ -142,18 +143,10 @@ const PERSIST_THROTTLE_MS = 500;
 const REFRESH_THROTTLE_MS = 500;
 
 export interface ReplicacheState {
-  auth: string;
-  clientID: ClientID;
-  closed: boolean;
   getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined;
-  idbName: string;
-  name: string;
   onClientStateNotFound: (() => void) | null;
-  online: boolean;
   onOnlineChange: ((online: boolean) => void) | null;
   onSync: ((syncing: boolean) => void) | null;
-  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
-  profileID: Promise<string>;
   puller: Puller;
   pullInterval: number | null;
   pullURL: string;
@@ -161,13 +154,19 @@ export interface ReplicacheState {
   pusher: Pusher;
   pushURL: string;
   requestOptions: Required<RequestOptions>;
-  schemaVersion: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
+
+  /** The authorization token used when doing a push request. */
+  auth: string;
+
+  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = reload;
+
+  readonly schemaVersion: string;
 
   readonly #subscriptions: SubscriptionsManager;
   readonly #mutationRecovery: MutationRecovery;
@@ -188,7 +187,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * stored.
    */
   get idbName(): string {
-    return makeIDBName(this.name, this.#state.schemaVersion);
+    return makeIDBName(this.name, this.schemaVersion);
   }
 
   get #idbDatabase(): IndexedDBDatabase {
@@ -196,7 +195,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       name: this.idbName,
       replicacheName: this.name,
       replicacheFormatVersion: FormatVersion.Latest,
-      schemaVersion: this.#state.schemaVersion,
+      schemaVersion: this.schemaVersion,
     };
   }
   #closed = false;
@@ -269,18 +268,22 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   constructor(options: ReplicacheOptions<MD>, state: ReplicacheState) {
     const {
       name,
+      auth = '',
       logLevel = 'info',
       logSinks = [consoleLogSink],
       mutators = {} as MD,
       requestOptions = {},
       licenseKey,
       indexes = {},
+      schemaVersion = '',
     } = options;
     this.#state = state;
     if (typeof name !== 'string' || !name) {
       throw new TypeError('name is required and must be non-empty');
     }
     this.name = name;
+    this.auth = auth;
+    this.schemaVersion = schemaVersion;
 
     const internalOptions = options as unknown as ReplicacheInternalOptions;
     const enableMutationRecovery =
@@ -388,6 +391,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     this.#mutationRecovery = new MutationRecovery({
       delegate: this.#state,
+      owner: this,
       lc: this.#lc,
       enableMutationRecovery,
       wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
@@ -923,7 +927,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           authFailure: true,
         };
       }
-      this.#state.auth = auth;
+      this.auth = auth;
       reauthAttempts++;
     } while (reauthAttempts < MAX_REAUTH_TRIES);
     lc.info?.('Tried to reauthenticate too many times');
@@ -965,7 +969,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
               clientGroupID,
               clientID,
               this.#state.pusher,
-              this.#state.schemaVersion,
+              this.schemaVersion,
               PUSH_VERSION_DD31,
             );
             return {
@@ -1122,7 +1126,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           profileID,
           clientID,
           clientGroupID,
-          this.#state.schemaVersion,
+          this.schemaVersion,
           this.#state.puller,
           requestID,
           this.#memdag,
@@ -1245,7 +1249,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   #fireOnUpdateNeeded(reason: UpdateNeededReason) {
     this.#lc.debug?.(`Update needed, reason: ${reason}`);
-    this.#state.onUpdateNeeded?.(reason);
+    this.onUpdateNeeded?.(reason);
   }
 
   async #schedulePersist(): Promise<void> {

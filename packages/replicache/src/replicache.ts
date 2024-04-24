@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {must} from 'shared/src/must.js';
+import {reload} from '../../shared/src/reload.js';
 import type {Store} from './dag/store.js';
 import {FormatVersion} from './format-version.js';
 import {getDefaultPuller} from './get-default-puller.js';
@@ -106,7 +107,12 @@ export class Replicache<MD extends MutatorDefs = {}> {
   pushURL: string;
 
   /** The authorization token used when doing a push request. */
-  auth: string;
+  get auth(): string {
+    return this.#impl.auth;
+  }
+  set auth(value: string) {
+    this.#impl.auth = value;
+  }
 
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
@@ -217,7 +223,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
 
   constructor(options: ReplicacheOptions<MD>) {
     const {
-      auth = '',
       name,
       puller = getDefaultPuller(this),
       pullInterval = 60_000,
@@ -228,7 +233,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
       schemaVersion = '',
     } = options;
 
-    this.auth = auth;
     this.name = name;
     this.puller = puller;
     this.pullInterval = pullInterval;
@@ -443,12 +447,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
     return this.#impl.experimentalPendingMutations();
-  }
-}
-
-function reload(): void {
-  if (typeof location !== 'undefined') {
-    location.reload();
   }
 }
 
