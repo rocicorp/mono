@@ -20,6 +20,22 @@ export function union<T>(...sets: Set<T>[]): Set<T> {
   return result;
 }
 
+export function intersection<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): Set<T> {
+  const result = new Set<T>();
+  if (a.size > b.size) {
+    // Optimization: iterate over the smaller Set.
+    const swap = a;
+    a = b;
+    b = swap;
+  }
+  for (const value of a) {
+    if (b.has(value)) {
+      result.add(value);
+    }
+  }
+  return result;
+}
+
 /**
  * Returns the elements in {@link a} that are not in {@link b}.
  */
