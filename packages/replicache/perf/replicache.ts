@@ -10,10 +10,11 @@ import {
   Replicache,
   ReplicacheOptions,
   TEST_LICENSE_KEY,
-  UpdateNeededReason,
   WriteTransaction,
 } from '../out/replicache.js';
+import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
 import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
+import {getImpl} from '../src/replicache.js';
 import {uuid} from '../src/uuid.js';
 import {
   TestDataObject,
@@ -22,7 +23,6 @@ import {
   jsonObjectTestData,
 } from './data.js';
 import type {Bencher, Benchmark} from './perf.js';
-import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
 
 const valSize = 1024;
 
@@ -338,10 +338,9 @@ class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
       enableScheduledPersist: false,
     } as ReplicacheOptions<MD>);
     this.#internalAPI = internalAPI;
-  }
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = () => {};
+    getImpl(this).onUpdateNeeded = () => {};
+  }
 
   persist(): Promise<void> {
     return this.#internalAPI.persist();

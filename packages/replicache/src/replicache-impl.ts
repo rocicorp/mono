@@ -540,8 +540,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     await this.#licenseCheck(resolveLicenseCheck);
 
     if (this.#enablePullAndPushInOpen) {
-      this.pull().catch(noop);
-      this.push().catch(noop);
+      void this.pull().catch(noop);
+      void this.push().catch(noop);
     }
 
     const {signal} = this.#closeAbortController;

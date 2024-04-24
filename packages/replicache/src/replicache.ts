@@ -68,9 +68,9 @@ export function exposeToTesting(
   exposedToTestingMap.set(rep, testingInstance);
 }
 
-const repToImpl = new WeakMap<Replicache, ReplicacheImpl>();
+const repToImpl = new WeakMap<WeakKey, ReplicacheImpl>();
 
-export function getImpl(rep: Replicache): ReplicacheImpl {
+export function getImpl(rep: WeakKey): ReplicacheImpl {
   return must(repToImpl.get(rep));
 }
 
