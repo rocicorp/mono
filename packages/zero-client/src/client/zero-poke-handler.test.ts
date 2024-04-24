@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 import {resolver} from '@rocicorp/resolver';
 
 let rafStub: sinon.SinonStub;
 
-setup(() => {
+beforeEach(() => {
   rafStub = sinon.stub(globalThis, 'requestAnimationFrame');
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 
