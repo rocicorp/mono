@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {must} from 'shared/src/must.js';
-import {reload} from '../../shared/src/reload.js';
+import {reload} from 'shared/src/reload.js';
 import type {Store} from './dag/store.js';
 import {FormatVersion} from './format-version.js';
 import {getDefaultPuller} from './get-default-puller.js';
