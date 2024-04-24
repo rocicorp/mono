@@ -63,31 +63,19 @@ import {
 import {persistDD31} from './persist/persist.js';
 import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
-import {PushError} from './pusher.js';
+import type {Puller} from './puller.js';
+import {Pusher, PushError} from './pusher.js';
 import type {
   ReplicacheInternalOptions,
   ReplicacheOptions,
 } from './replicache-options.js';
 import {
-  closingInstances,
   exposeToTesting,
   getKVStoreProvider,
   getTestInstance,
   httpStatusUnauthorized,
-  LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-  LICENSE_ACTIVE_INTERVAL_MS,
   makeIDBName,
-  MAX_REAUTH_TRIES,
-  noop,
-  PERSIST_IDLE_TIMEOUT_MS,
-  PERSIST_THROTTLE_MS,
-  RECOVER_MUTATIONS_INTERVAL_MS,
-  REFRESH_IDLE_TIMEOUT_MS,
-  REFRESH_THROTTLE_MS,
   ReportError,
-  TEST_LICENSE_KEY_TTL_MS,
-  throwIfError,
-  updateNeededReasonNewClientGroup,
 } from './replicache.js';
 import {setIntervalWithSignal} from './set-interval-with-signal.js';
 import {mustSimpleFetch} from './simple-fetch.js';
@@ -134,6 +122,24 @@ import {
 } from './with-transactions.js';
 
 declare const TESTING: boolean;
+
+const RECOVER_MUTATIONS_INTERVAL_MS = 5 * 60 * 1000; // 5 mins
+const LICENSE_ACTIVE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TEST_LICENSE_KEY_TTL_MS = 5 * 60 * 1000;
+
+const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
+
+/**
+ * The maximum number of time to call out to getAuth before giving up
+ * and throwing an error.
+ */
+const MAX_REAUTH_TRIES = 8;
+
+const PERSIST_IDLE_TIMEOUT_MS = 1000;
+const REFRESH_IDLE_TIMEOUT_MS = 1000;
+
+const PERSIST_THROTTLE_MS = 500;
+const REFRESH_THROTTLE_MS = 500;
 
 export interface ReplicacheState {
   auth: string;
@@ -1520,3 +1526,22 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return withRead(this.#memdag, pendingMutationsForAPI);
   }
 }
+
+async function throwIfError(p: Promise<undefined | {error: unknown}>) {
+  const res = await p;
+  if (res) {
+    throw res.error;
+  }
+}
+
+const updateNeededReasonNewClientGroup: UpdateNeededReason = {
+  type: 'NewClientGroup',
+} as const;
+
+const noop = () => {
+  // noop
+};
+
+// This map is used to keep track of closing instances of Replicache. When an
+// instance is opening we wait for any currently closing instances.
+const closingInstances: Map<string, Promise<unknown>> = new Map();

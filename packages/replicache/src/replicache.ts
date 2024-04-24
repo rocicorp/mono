@@ -33,10 +33,6 @@ import type {
   UpdateNeededReason,
 } from './types.js';
 
-export interface TestingReplicacheWithTesting extends Replicache {
-  memdag: Store;
-}
-
 type TestingInstance = {
   beginPull: () => Promise<BeginPullResult>;
   isClientGroupDisabled: () => boolean;
@@ -78,12 +74,6 @@ export function getImpl(rep: Replicache): ReplicacheImpl {
 
 export const httpStatusUnauthorized = 401;
 
-export const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
-
-export const RECOVER_MUTATIONS_INTERVAL_MS = 5 * 60 * 1000; // 5 mins
-export const LICENSE_ACTIVE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-export const TEST_LICENSE_KEY_TTL_MS = 5 * 60 * 1000;
-
 /**
  * Returns the name of the IDB database that will be used for a particular Replicache instance.
  * @param name The name of the Replicache instance (i.e., the `name` field of `ReplicacheOptions`).
@@ -104,26 +94,6 @@ function makeIDBNameInternal(
 }
 
 export {makeIDBNameInternal as makeIDBNameForTesting};
-
-/**
- * The maximum number of time to call out to getAuth before giving up
- * and throwing an error.
- */
-export const MAX_REAUTH_TRIES = 8;
-
-export const PERSIST_IDLE_TIMEOUT_MS = 1000;
-export const REFRESH_IDLE_TIMEOUT_MS = 1000;
-
-export const PERSIST_THROTTLE_MS = 500;
-export const REFRESH_THROTTLE_MS = 500;
-
-export const noop = () => {
-  // noop
-};
-
-export const updateNeededReasonNewClientGroup: UpdateNeededReason = {
-  type: 'NewClientGroup',
-} as const;
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
@@ -476,11 +446,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 }
 
-// This map is used to keep track of closing instances of Replicache. When an
-// instance is opening we wait for any currently closing instances.
-export const closingInstances: Map<string, Promise<unknown>> = new Map();
-
-export function reload(): void {
+function reload(): void {
   if (typeof location !== 'undefined') {
     location.reload();
   }
@@ -490,13 +456,6 @@ export function reload(): void {
  * Wrapper error class that should be reported as error (logger.error)
  */
 export class ReportError extends Error {}
-
-export async function throwIfError(p: Promise<undefined | {error: unknown}>) {
-  const res = await p;
-  if (res) {
-    throw res.error;
-  }
-}
 
 function createMemStore(name: string): MemStore {
   return new MemStore(name);
