@@ -169,7 +169,11 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
             } as JoinResult<V, VO, AAlias, BAlias>;
           }
           ret.push([value, outerMult * innerMult] as const);
-          sourceRows.push([outerValue, undefined]);
+          if (outerIndex === this.#index) {
+            sourceRows.push([outerValue, innerValue]);
+          } else {
+            sourceRows.push([innerValue, outerValue]);
+          }
         }
       }
     }

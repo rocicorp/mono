@@ -1,7 +1,6 @@
 import {expect, test} from 'vitest';
 import {joinSymbol} from '../ivm/types.js';
 import * as agg from '../query/agg.js';
-import {nanoid} from 'nanoid';
 import {
   Album,
   Artist,
@@ -9,6 +8,10 @@ import {
   Track,
   TrackArtist,
   setup,
+  createRandomTracks,
+  linkTracksToArtists,
+  createRandomAlbums,
+  createRandomArtists,
 } from '../benchmarks/setup.js';
 
 test('direct foreign key join: join a track to an album', async () => {
@@ -210,8 +213,6 @@ test('direct foreign key join: join a track to an album', async () => {
 
   await r.close();
 });
-
-test('junction table join: join a track to its artists', async () => {});
 
 /**
  * A playlist has tracks.
@@ -460,51 +461,3 @@ test('track list composition with lots and lots of data then tracking incrementa
   rows = await stmt.exec();
   expect(rows.length).toBe(10_000);
 });
-
-function createRandomArtists(n: number): Artist[] {
-  return Array.from({length: n}, () => ({
-    id: nanoid(),
-    name: nanoid(),
-  }));
-}
-
-function createRandomAlbums(n: number, artists: Artist[]): Album[] {
-  return Array.from({length: n}, () => ({
-    id: nanoid(),
-    title: nanoid(),
-    artistId: artists[Math.floor(Math.random() * artists.length)].id,
-  }));
-}
-
-function createRandomTracks(n: number, albums: Album[]): Track[] {
-  return Array.from({length: n}, () => ({
-    id: nanoid(),
-    title: nanoid(),
-    length: Math.floor(Math.random() * 300000) + 1000,
-    albumId: albums[Math.floor(Math.random() * albums.length)].id,
-  }));
-}
-
-function linkTracksToArtists(
-  artists: Artist[],
-  tracks: Track[],
-): TrackArtist[] {
-  // assign each track to 1-3 artists
-  return tracks.flatMap(t => {
-    const numArtists = Math.floor(Math.random() * 3) + 1;
-    const artistsForTrack = new Set<string>();
-    while (artistsForTrack.size < numArtists) {
-      artistsForTrack.add(
-        artists[Math.floor(Math.random() * artists.length)].id,
-      );
-    }
-    return [...artistsForTrack].map(a => ({
-      id: `${t.id}-${a}`,
-      trackId: t.id,
-      artistId: a,
-    }));
-  });
-}
-
-// Observations / future things to test:
-// - we should add `HAVING` to the language. It'll let us filter against compeleted aggregations.
