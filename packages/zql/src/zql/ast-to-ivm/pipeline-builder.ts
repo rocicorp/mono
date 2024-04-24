@@ -159,13 +159,9 @@ function applySimpleCondition<T extends Entity>(
 ) {
   const operator = getOperator(condition);
   const {field: selector} = condition;
-  let source: string = selector;
-  let field = selector;
-  if (selector.includes('.')) {
-    [source, field] = selector.split('.');
-  }
-  const qualifiedColumn = [source, field] as [string, string];
-  return stream.filter(x => operator(getValueFromEntity(x, qualifiedColumn)));
+  return stream.filter(x =>
+    operator(getValueFromEntity(x, selectorToQualifiedColumn(selector))),
+  );
 }
 
 function applyGroupBy<T extends Entity>(
