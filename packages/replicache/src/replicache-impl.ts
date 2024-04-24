@@ -30,8 +30,8 @@ import {
 } from './error-responses.js';
 import {FormatVersion} from './format-version.js';
 import {deepFreeze} from './frozen-json.js';
-import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
-import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
+import {isDefaultPuller} from './get-default-puller.js';
+import {isDefaultPusher} from './get-default-pusher.js';
 import {assertHash, emptyHash, Hash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
@@ -85,7 +85,6 @@ import {
   RECOVER_MUTATIONS_INTERVAL_MS,
   REFRESH_IDLE_TIMEOUT_MS,
   REFRESH_THROTTLE_MS,
-  reload,
   ReportError,
   TEST_LICENSE_KEY_TTL_MS,
   throwIfError,
@@ -139,15 +138,6 @@ declare const TESTING: boolean;
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
-  /** The URL to use when doing a pull request. */
-  pullURL: string;
-
-  /** The URL to use when doing a push request. */
-  pushURL: string;
-
-  /** The authorization token used when doing a push request. */
-  auth: string;
-
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
 
@@ -163,24 +153,22 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #kvStoreProvider: StoreProvider;
 
   #lastMutationID: number = 0;
+  readonly #replicacheDelegate: ReplicacheDelegate;
 
   /**
    * This is the name Replicache uses for the IndexedDB database where data is
    * stored.
    */
   get idbName(): string {
-    return makeIDBName(this.name, this.schemaVersion);
+    return makeIDBName(this.name, this.#replicacheDelegate.schemaVersion);
   }
-
-  /** The schema version of the data understood by this application. */
-  readonly schemaVersion: string;
 
   get #idbDatabase(): IndexedDBDatabase {
     return {
       name: this.idbName,
       replicacheName: this.name,
       replicacheFormatVersion: FormatVersion.Latest,
-      schemaVersion: this.schemaVersion,
+      schemaVersion: this.#replicacheDelegate.schemaVersion,
     };
   }
   #closed = false;
@@ -211,30 +199,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #pullConnectionLoop: ConnectionLoop;
   #pushConnectionLoop: ConnectionLoop;
 
-  /**
-   * The duration between each periodic {@link pull}. Setting this to `null`
-   * disables periodic pull completely. Pull will still happen if you call
-   * {@link pull} manually.
-   */
-  pullInterval: number | null;
-
-  /**
-   * The delay between when a change is made to Replicache and when Replicache
-   * attempts to push that change.
-   */
-  pushDelay: number;
-
   readonly #requestOptions: Required<RequestOptions>;
-
-  /**
-   * The function to use to pull data from the server.
-   */
-  puller: Puller;
-
-  /**
-   * The function to use to push data to the server.
-   */
-  pusher: Pusher;
 
   readonly #licenseKey: string | undefined;
 
@@ -273,93 +238,24 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return this.#requestOptions;
   }
 
-  /**
-   * `onSync(true)` is called when Replicache transitions from no push or pull
-   * happening to at least one happening. `onSync(false)` is called in the
-   * opposite case: when Replicache transitions from at least one push or pull
-   * happening to none happening.
-   *
-   * This can be used in a React like app by doing something like the following:
-   *
-   * ```js
-   * const [syncing, setSyncing] = useState(false);
-   * useEffect(() => {
-   *   rep.onSync = setSyncing;
-   * }, [rep]);
-   * ```
-   */
-  onSync: ((syncing: boolean) => void) | null = null;
-
-  /**
-   * `onClientStateNotFound` is called when the persistent client has been
-   * garbage collected. This can happen if the client has no pending mutations
-   * and has not been used for a while.
-   *
-   * The default behavior is to reload the page (using `location.reload()`). Set
-   * this to `null` or provide your own function to prevent the page from
-   * reloading automatically.
-   */
-  onClientStateNotFound: (() => void) | null = reload;
-
-  /**
-   * `onUpdateNeeded` is called when a code update is needed.
-   *
-   * A code update can be needed because:
-   * - the server no longer supports the {@link pushVersion},
-   *   {@link pullVersion} or {@link schemaVersion} of the current code.
-   * - a new Replicache client has created a new client group, because its code
-   *   has different mutators, indexes, schema version and/or format version
-   *   from this Replicache client. This is likely due to the new client having
-   *   newer code. A code update is needed to be able to locally sync with this
-   *   new Replicache client (i.e. to sync while offline, the clients can can
-   *   still sync with each other via the server).
-   *
-   * The default behavior is to reload the page (using `location.reload()`). Set
-   * this to `null` or provide your own function to prevent the page from
-   * reloading automatically. You may want to provide your own function to
-   * display a toast to inform the end user there is a new version of your app
-   * available and prompting them to refresh.
-   */
-  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = reload;
-
-  /**
-   * This gets called when we get an HTTP unauthorized (401) response from the
-   * push or pull endpoint. Set this to a function that will ask your user to
-   * reauthenticate.
-   */
-  getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined =
-    null;
-
-  constructor(options: ReplicacheOptions<MD>) {
+  constructor(
+    options: ReplicacheOptions<MD>,
+    replicacheDelegate: ReplicacheDelegate,
+  ) {
     const {
       name,
       logLevel = 'info',
       logSinks = [consoleLogSink],
-      pullURL = '',
-      auth,
-      pushDelay = 10,
-      pushURL = '',
-      schemaVersion = '',
-      pullInterval = 60000,
       mutators = {} as MD,
       requestOptions = {},
-      puller,
-      pusher,
       licenseKey,
       indexes = {},
     } = options;
-    this.auth = auth ?? '';
-    this.pullURL = pullURL;
-    this.pushURL = pushURL;
+    this.#replicacheDelegate = replicacheDelegate;
     if (typeof name !== 'string' || !name) {
       throw new TypeError('name is required and must be non-empty');
     }
     this.name = name;
-    this.schemaVersion = schemaVersion;
-    this.pullInterval = pullInterval;
-    this.pushDelay = pushDelay;
-    this.puller = puller ?? getDefaultPuller(this);
-    this.pusher = pusher ?? getDefaultPusher(this);
 
     const internalOptions = options as unknown as ReplicacheInternalOptions;
     const enableMutationRecovery =
@@ -449,13 +345,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     this.#pullConnectionLoop = new ConnectionLoop(
       this.#lc.withContext('PULL'),
-      new PullDelegate(this, () => this.#invokePull()),
+      new PullDelegate(this.#replicacheDelegate, () => this.#invokePull()),
       visibilityWatcher,
     );
 
     this.#pushConnectionLoop = new ConnectionLoop(
       this.#lc.withContext('PUSH'),
-      new PushDelegate(this, () => this.#invokePush()),
+      new PushDelegate(this.#replicacheDelegate, () => this.#invokePush()),
     );
 
     this.mutate = this.#registerMutators(mutators);
@@ -466,7 +362,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#clientGroupIDPromise = clientGroupIDResolver.promise;
 
     this.#mutationRecovery = new MutationRecovery({
-      delegate: this,
+      delegate: this.#replicacheDelegate,
       lc: this.#lc,
       enableMutationRecovery,
       wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
@@ -756,12 +652,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * `onOnlineChange` is called when the {@link online} property changes. See
-   * {@link online} for more details.
-   */
-  onOnlineChange: ((online: boolean) => void) | null = null;
-
-  /**
    * A rough heuristic for whether the client is currently online. Note that
    * there is no way to know for certain whether a client is online - the next
    * request can always fail. This property returns true if the last sync attempt succeeded,
@@ -898,7 +788,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #isPullDisabled() {
     return (
       this.#isClientGroupDisabled ||
-      (this.pullURL === '' && isDefaultPuller(this.puller))
+      (this.#replicacheDelegate.pullURL === '' &&
+        isDefaultPuller(this.#replicacheDelegate.puller))
     );
   }
 
@@ -934,7 +825,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     } finally {
       if (this.#online !== online) {
         this.#online = online;
-        this.onOnlineChange?.(online);
+        this.#replicacheDelegate.onOnlineChange?.(online);
         if (online) {
           void this.#recoverMutations();
         }
@@ -989,7 +880,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           authFailure: false,
         };
       }
-      if (!this.getAuth) {
+      if (!this.#replicacheDelegate.getAuth) {
         return {
           result,
           authFailure: true,
@@ -998,7 +889,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       let auth;
       try {
         await preAuth();
-        auth = await this.getAuth();
+        auth = await this.#replicacheDelegate.getAuth();
       } finally {
         await postAuth();
       }
@@ -1008,7 +899,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           authFailure: true,
         };
       }
-      this.auth = auth;
+      this.#replicacheDelegate.auth = auth;
       reauthAttempts++;
     } while (reauthAttempts < MAX_REAUTH_TRIES);
     lc.info?.('Tried to reauthenticate too many times');
@@ -1021,7 +912,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #isPushDisabled() {
     return (
       this.#isClientGroupDisabled ||
-      (this.pushURL === '' && isDefaultPusher(this.pusher))
+      (this.#replicacheDelegate.pushURL === '' &&
+        isDefaultPusher(this.#replicacheDelegate.pusher))
     );
   }
 
@@ -1049,8 +941,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
               profileID,
               clientGroupID,
               clientID,
-              this.pusher,
-              this.schemaVersion,
+              this.#replicacheDelegate.pusher,
+              this.#replicacheDelegate.schemaVersion,
               PUSH_VERSION_DD31,
             );
             return {
@@ -1207,8 +1099,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           profileID,
           clientID,
           clientGroupID,
-          this.schemaVersion,
-          this.puller,
+          this.#replicacheDelegate.schemaVersion,
+          this.#replicacheDelegate.puller,
           requestID,
           this.#memdag,
           FormatVersion.Latest,
@@ -1307,7 +1199,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   #fireOnClientStateNotFound() {
-    this.onClientStateNotFound?.();
+    this.#replicacheDelegate.onClientStateNotFound?.();
   }
 
   #clientStateNotFoundOnClient(clientID: ClientID) {
@@ -1330,7 +1222,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   #fireOnUpdateNeeded(reason: UpdateNeededReason) {
     this.#lc.debug?.(`Update needed, reason: ${reason}`);
-    this.onUpdateNeeded?.(reason);
+    this.#replicacheDelegate.onUpdateNeeded?.(reason);
   }
 
   async #schedulePersist(): Promise<void> {
@@ -1378,7 +1270,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const syncing = counter > 0;
       // Run in a new microtask.
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      Promise.resolve().then(() => this.onSync?.(syncing));
+      Promise.resolve().then(() => this.#replicacheDelegate.onSync?.(syncing));
     }
   }
 
@@ -1610,4 +1502,26 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
     return withRead(this.#memdag, pendingMutationsForAPI);
   }
+}
+export interface ReplicacheDelegate {
+  auth: string;
+  clientID: ClientID;
+  closed: boolean;
+  getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined;
+  idbName: string;
+  name: string;
+  onClientStateNotFound: (() => void) | null;
+  online: boolean;
+  onOnlineChange: ((online: boolean) => void) | null;
+  onSync: ((syncing: boolean) => void) | null;
+  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
+  profileID: Promise<string>;
+  puller: Puller;
+  pullInterval: number | null;
+  pullURL: string;
+  pushDelay: number;
+  pusher: Pusher;
+  pushURL: string;
+  requestOptions: Required<RequestOptions>;
+  schemaVersion: string;
 }

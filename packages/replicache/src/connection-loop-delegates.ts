@@ -1,25 +1,34 @@
 import type {ConnectionLoopDelegate} from './connection-loop.js';
-import type {ReplicacheImpl} from './replicache-impl.js';
+import type {RequestOptions} from './types.js';
+
+export type ConnectionLoopDelegateOptions = {
+  requestOptions: Required<RequestOptions>;
+  pullInterval: number | null;
+  pushDelay: number;
+};
 
 class ConnectionLoopDelegateImpl {
-  readonly rep: ReplicacheImpl;
+  readonly options: ConnectionLoopDelegateOptions;
   readonly invokeSend: () => Promise<boolean>;
 
   // TODO: Remove the ability to have more than one concurrent connection and update tests.
   // Bug: https://github.com/rocicorp/replicache-internal/issues/303
   readonly maxConnections = 1;
 
-  constructor(rep: ReplicacheImpl, invokeSend: () => Promise<boolean>) {
-    this.rep = rep;
+  constructor(
+    rep: ConnectionLoopDelegateOptions,
+    invokeSend: () => Promise<boolean>,
+  ) {
+    this.options = rep;
     this.invokeSend = invokeSend;
   }
 
   get maxDelayMs(): number {
-    return this.rep.requestOptions.maxDelayMs;
+    return this.options.requestOptions.maxDelayMs;
   }
 
   get minDelayMs(): number {
-    return this.rep.requestOptions.minDelayMs;
+    return this.options.requestOptions.minDelayMs;
   }
 }
 
@@ -30,7 +39,7 @@ export class PullDelegate
   readonly debounceDelay = 0;
 
   get watchdogTimer(): number | null {
-    return this.rep.pullInterval;
+    return this.options.pullInterval;
   }
 }
 
@@ -39,7 +48,7 @@ export class PushDelegate
   implements ConnectionLoopDelegate
 {
   get debounceDelay(): number {
-    return this.rep.pushDelay;
+    return this.options.pushDelay;
   }
 
   watchdogTimer = null;

@@ -2,6 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {must} from 'shared/src/must.js';
 import type {Store} from './dag/store.js';
 import {FormatVersion} from './format-version.js';
+import {getDefaultPuller} from './get-default-puller.js';
+import {getDefaultPusher} from './get-default-pusher.js';
 import type {Hash} from './hash.js';
 import {
   dropIDBStoreWithMemFallback,
@@ -128,28 +130,13 @@ export class Replicache<MD extends MutatorDefs = {}> {
   readonly #rep: ReplicacheImpl<MD>;
 
   /** The URL to use when doing a pull request. */
-  get pullURL(): string {
-    return this.#rep.pullURL;
-  }
-  set pullURL(value: string) {
-    this.#rep.pullURL = value;
-  }
+  pullURL: string;
 
   /** The URL to use when doing a push request. */
-  get pushURL(): string {
-    return this.#rep.pushURL;
-  }
-  set pushURL(value: string) {
-    this.#rep.pushURL = value;
-  }
+  pushURL: string;
 
   /** The authorization token used when doing a push request. */
-  get auth(): string {
-    return this.#rep.auth;
-  }
-  set auth(value: string) {
-    this.#rep.auth = value;
-  }
+  auth: string;
 
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
@@ -175,43 +162,23 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * disables periodic pull completely. Pull will still happen if you call
    * {@link pull} manually.
    */
-  get pullInterval(): number | null {
-    return this.#rep.pullInterval;
-  }
-  set pullInterval(value: number | null) {
-    this.#rep.pullInterval = value;
-  }
+  pullInterval: number | null;
 
   /**
    * The delay between when a change is made to Replicache and when Replicache
    * attempts to push that change.
    */
-  get pushDelay(): number {
-    return this.#rep.pushDelay;
-  }
-  set pushDelay(value: number) {
-    this.#rep.pushDelay = value;
-  }
+  pushDelay: number;
 
   /**
    * The function to use to pull data from the server.
    */
-  get puller(): Puller {
-    return this.#rep.puller;
-  }
-  set puller(value: Puller) {
-    this.#rep.puller = value;
-  }
+  puller: Puller;
 
   /**
    * The function to use to push data to the server.
    */
-  get pusher(): Pusher {
-    return this.#rep.pusher;
-  }
-  set pusher(value: Pusher) {
-    this.#rep.pusher = value;
-  }
+  pusher: Pusher;
 
   /**
    * The options used to control the {@link pull} and push request behavior. This
@@ -236,12 +203,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * }, [rep]);
    * ```
    */
-  get onSync(): ((syncing: boolean) => void) | null {
-    return this.#rep.onSync;
-  }
-  set onSync(value: ((syncing: boolean) => void) | null) {
-    this.#rep.onSync = value;
-  }
+  onSync: ((syncing: boolean) => void) | null = null;
 
   /**
    * `onClientStateNotFound` is called when the persistent client has been
@@ -252,12 +214,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * this to `null` or provide your own function to prevent the page from
    * reloading automatically.
    */
-  get onClientStateNotFound(): (() => void) | null {
-    return this.#rep.onClientStateNotFound;
-  }
-  set onClientStateNotFound(value: (() => void) | null) {
-    this.#rep.onClientStateNotFound = value;
-  }
+  onClientStateNotFound: (() => void) | null = reload;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -278,34 +235,40 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * display a toast to inform the end user there is a new version of your app
    * available and prompting them to refresh.
    */
-  get onUpdateNeeded(): ((reason: UpdateNeededReason) => void) | null {
-    return this.#rep.onUpdateNeeded;
-  }
-  set onUpdateNeeded(value: ((reason: UpdateNeededReason) => void) | null) {
-    this.#rep.onUpdateNeeded = value;
-  }
+  onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = reload;
 
   /**
    * This gets called when we get an HTTP unauthorized (401) response from the
    * push or pull endpoint. Set this to a function that will ask your user to
    * reauthenticate.
    */
-  get getAuth():
-    | (() => MaybePromise<string | null | undefined>)
-    | null
-    | undefined {
-    return this.#rep.getAuth;
-  }
-  set getAuth(
-    value: (() => MaybePromise<string | null | undefined>) | null | undefined,
-  ) {
-    this.#rep.getAuth = value;
-  }
+  getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined =
+    null;
 
   constructor(options: ReplicacheOptions<MD>) {
-    this.#rep = new ReplicacheImpl<MD>(options);
-    this.name = this.#rep.name;
-    this.schemaVersion = this.#rep.schemaVersion;
+    const {
+      auth = '',
+      name,
+      puller = getDefaultPuller(this),
+      pullInterval = 60_000,
+      pullURL = '',
+      pushDelay = 10,
+      pusher = getDefaultPusher(this),
+      pushURL = '',
+      schemaVersion = '',
+    } = options;
+
+    this.auth = auth;
+    this.name = name;
+    this.puller = puller;
+    this.pullInterval = pullInterval;
+    this.pullURL = pullURL;
+    this.pushDelay = pushDelay;
+    this.pusher = pusher;
+    this.pushURL = pushURL;
+    this.schemaVersion = schemaVersion;
+
+    this.#rep = new ReplicacheImpl<MD>(options, this);
     this.mutate = this.#rep.mutate;
     repToImpl.set(this, this.#rep);
   }
@@ -340,12 +303,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * `onOnlineChange` is called when the {@link online} property changes. See
    * {@link online} for more details.
    */
-  get onOnlineChange(): ((online: boolean) => void) | null {
-    return this.#rep.onOnlineChange;
-  }
-  set onOnlineChange(value: ((online: boolean) => void) | null) {
-    this.#rep.onOnlineChange = value;
-  }
+  onOnlineChange: ((online: boolean) => void) | null = null;
 
   /**
    * A rough heuristic for whether the client is currently online. Note that
@@ -377,7 +335,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * Push pushes pending changes to the {@link pushURLXXX}.
+   * Push pushes pending changes to the {@link pushURL}.
    *
    * You do not usually need to manually call push. If {@link pushDelay} is
    * non-zero (which it is by default) pushes happen automatically shortly after
@@ -393,8 +351,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * errors the first error will reject the returned promise. Subsequent errors
    * will not be reflected in the promise.
    */
-  push({now = false} = {}): Promise<void> {
-    return this.#rep.push({now});
+  push(options: {now?: boolean | undefined} = {}): Promise<void> {
+    return this.#rep.push(options);
   }
 
   /**
@@ -411,8 +369,8 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * errors the first error will reject the returned promise. Subsequent errors
    * will not be reflected in the promise.
    */
-  pull({now = false} = {}): Promise<void> {
-    return this.#rep.pull({now});
+  pull(options: {now?: boolean | undefined} = {}): Promise<void> {
+    return this.#rep.pull(options);
   }
 
   /**
