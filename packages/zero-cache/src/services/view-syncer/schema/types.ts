@@ -1,3 +1,4 @@
+import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
 
@@ -8,31 +9,51 @@ export const cvrVersionSchema = v.object({
   stateVersion: v.string(), // LexiVersion
 
   /**
-   * `metaVersion` is an initially absent counter that is incremented when
-   * the stateVersion remains the same but the metadata of the CVR changes,
-   * including:
+   * `minorVersion` is subversion of `stateVersion` that is initially absent for each
+   * `stateVersion`, and incremented for configuration changes that affect the contents
+   * of the CVR such as:
+   *
    * * client set changes
    * * query set changes
    * * query transformation changes (which may happen for changes
    *   in server-side logic or authorization policies)
    *
-   * When the `stateVersion` moves forward, the `metaVersion` can be reset to
-   * absent.
+   * Such configuration changes are always correlated a change to one or more
+   * `/meta/...` records in the CVR, often (but necessarily always) with corresponding
+   * patches in `/patches/meta/...`.
+   *
+   * When the `stateVersion` moves forward, the `minorVersion` is reset to absent.
+   * In this manner it behaves like the analogous concept in semantic versioning.
    */
-  metaVersion: v.number().optional(),
+  minorVersion: v.number().optional(),
 });
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
+export function cmpVersions(a: CVRVersion, b: CVRVersion): number {
+  return a.stateVersion < b.stateVersion
+    ? -1
+    : a.stateVersion > b.stateVersion
+    ? 1
+    : (a.minorVersion ?? 0) - (b.minorVersion ?? 0);
+}
+
+// Last Active tracking.
+
+export const lastActiveSchema = v.object({epochMillis: v.number()});
+export type LastActive = v.Infer<typeof lastActiveSchema>;
+
+export const cvrIDSchema = v.object({id: v.string()});
+export type CvrID = v.Infer<typeof cvrIDSchema>;
+
 const cvrRecordSchema = v.object({
   /**
-   * CVR records store the CVRVersion at which record was "put" into the CVR,
+   * CVR records store the CVRVersion at which record was last "put" into the CVR,
    * which corresponds with a patch row that can be cleaned up when the record
    * is deleted (or updated in the case of rows).
    *
-   * Note that this do delete patches are not tracked, as tombstones are
-   * not stored, so logic to expire old patch entries is still needed to
-   * bound storage usage.
+   * Note that delete patches are not tracked, as tombstones are not stored,
+   * so logic to expire old patch entries is still needed to bound storage usage.
    */
   putPatch: cvrVersionSchema,
 });
@@ -64,7 +85,7 @@ export const queryRecordSchema = cvrRecordSchema.extend({
    * Transformations depend on conditions that are independent of the db state version,
    * such as server-side logic and authorization policies. As such, the version of a CVR
    * version may need to be advanced independent of db state changes. This is done
-   * via the `metaVersion` counter of the CVRVersion object, which is used to account
+   * via the `minorVersion` counter of the CVRVersion object, which is used to account
    * for both changes to the query set and changes to query transformations (which are
    * effectively remove-old-query + add-new-query).
    *
@@ -73,8 +94,11 @@ export const queryRecordSchema = cvrRecordSchema.extend({
    * a different hash than that of the transformation used for the last version of the CVR,
    * it is simply handled by invalidating the existing rows, re-executed the query with
    * the new transformation, and advancing the `querySerVersion`.
+   *
+   * The transformationHash is only stored when the query has be "got"ten. If the query is
+   * in the "desired" but not yet "gotten" state, the field should be absent.
    */
-  transformationHash: v.string(),
+  transformationHash: v.string().optional(),
 
   // For queries, the putPatch indicates when query was added to the got set,
   // which can be undefined if not yet gotten.
@@ -94,8 +118,18 @@ export type QueryRecord = v.Infer<typeof queryRecordSchema>;
 export const rowIDSchema = v.object({
   schema: v.string(),
   table: v.string(),
-  rowKeyHash: v.string(),
+  rowKey: v.record(jsonSchema),
 });
+
+export const metaRecordSchema = v.union(
+  cvrVersionSchema,
+  lastActiveSchema,
+  clientRecordSchema,
+  queryRecordSchema,
+);
+
+// Union type of rows under "/meta/..."x" for fetching all rows in a single list() call.
+export type MetaRecord = v.Infer<typeof metaRecordSchema>;
 
 export type RowID = v.Infer<typeof rowIDSchema>;
 
@@ -106,17 +140,10 @@ export type RowID = v.Infer<typeof rowIDSchema>;
  * * `stateVersion`
  * * `schema`
  * * `table`
- * * `rowKeyHash`
+ * * `rowKey` (JSON)
  *
- * From which the `rowKey` and `row` data can be fetched. The `columns` field
+ * From which the `row` data can be fetched. The `columns` field
  * is then used to compute the projection of the `row` visible to the client.
- *
- * Note that the CVR never stores any row data itself---not even the row key.
- * This has the benefit of
- * 1. Resilience to large column values (DO storage has relatively low
- *    size limits)
- * 2. A privacy guarantee of only metadata being stored in Cloudflare.
- *    Database values are only persisted in the Postgres replica.
  */
 export const rowViewSchema = v.object({
   id: rowIDSchema,

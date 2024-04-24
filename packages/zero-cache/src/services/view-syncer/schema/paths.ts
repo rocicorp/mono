@@ -1,4 +1,5 @@
 import {versionToLexi} from '../../../types/lexi-version.js';
+import {rowKeyHash} from '../../../types/row-key.js';
 import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 
 // At a glance
@@ -11,8 +12,8 @@ import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 // -----------------------------------------------------------------------
 // CVR
 // -----------------------------------------------------------------------
-// /vs/cvr/{id}/meta/version: {stateVersion: LexiVersion, metaVersion?: number}
-// /vs/cvr/{id}/meta/lastActive: {day: Date}  // Updated at most once per day
+// /vs/cvr/{id}/meta/version: {stateVersion: LexiVersion, minorVersion?: number}
+// /vs/cvr/{id}/meta/lastActive: {epochMillis: string}  // Can include non-version activity
 //
 // /vs/cvr/{id}/meta/clients/{cid}: ClientRecord (desiredQueries)
 // /vs/cvr/{id}/meta/clients/{cid}: ClientRecord
@@ -22,48 +23,51 @@ import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 // /vs/cvr/{id}/meta/queries/{qid}: QueryRecord
 // /vs/cvr/{id}/meta/queries/{qid}: QueryRecord
 //
-// /vs/cvr/{id}/rows/{schema}/{table}/{row-key-hash}: RowRecord (stateVersion, columns, queries)
-// /vs/cvr/{id}/rows/{schema}/{table}/{row-key-hash}: RowRecord
-// /vs/cvr/{id}/rows/{schema}/{table}/{row-key-hash}: RowRecord
+// /vs/cvr/{id}/data/rows/{schema}/{table}/{row-key-hash}: RowRecord (stateVersion, columns, queries)
+// /vs/cvr/{id}/data/rows/{schema}/{table}/{row-key-hash}: RowRecord
+// /vs/cvr/{id}/data/rows/{schema}/{table}/{row-key-hash}: RowRecord
 //
-// Note: /patches/... rows are ordered by {version-str} and thus types are interleaved.
-// /vs/cvr/{id}/patches/{version-str}/clients/{cid}}: ClientPatch
-// /vs/cvr/{id}/patches/{version-str}/clients/{cid}}: ClientPatch
-// /vs/cvr/{id}/patches/{version-str}/clients/{cid}}: ClientPatch
-// /vs/cvr/{id}/patches/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
-// /vs/cvr/{id}/patches/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
-// /vs/cvr/{id}/patches/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch (got)
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch (got)
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}: QueryPatch (got)
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
-// /vs/cvr/{id}/patches/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+// Patches to data and metadata are indexed under separate prefixes.
+// Although this means that both indexes need to be scanned to perform incremental
+// catchup, it allows only the metadata index to be scanned when performing
+// a re-query catchup (the metadata patch index being generally much smaller than
+// the data patch index).
+//
+// /vs/cvr/{id}/patches/meta/{version-str}/clients/{cid}}: ClientPatch
+// /vs/cvr/{id}/patches/meta/{version-str}/clients/{cid}}: ClientPatch
+// /vs/cvr/{id}/patches/meta/{version-str}/clients/{cid}}: ClientPatch
+// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+//
+// /vs/cvr/{id}/patches/data/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
+// /vs/cvr/{id}/patches/data/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
+// /vs/cvr/{id}/patches/data/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
 //
 // -----------------------------------------------------------------------
 // Last Active Index
 // -----------------------------------------------------------------------
-// /vs/lastActive/{day.toISOString()}/{cvrID}
-// /vs/lastActive/{day.toISOString()}/{cvrID}
-// /vs/lastActive/{day.toISOString()}/{cvrID}
+// /vs/lastActive/{day.toISOString()}/{cvrID}: CvrID
+// /vs/lastActive/{day.toISOString()}/{cvrID}: CvrID
+// /vs/lastActive/{day.toISOString()}/{cvrID}: CvrID
 
 export const schemaRoot = '/vs';
 
-export class LastActiveIndex {
-  entry(cvrID: string, lastActive: Date): string {
+export const lastActiveIndex = {
+  entry(cvrID: string, lastActive: number): string {
     return `${this.dayPrefix(lastActive)}/${cvrID}`;
-  }
+  },
 
   /** dayPrefix is used for index scans to expunge very old CVRs. */
-  dayPrefix(date: Date): string {
-    const day = new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-    );
-    const dateStr = day.toISOString();
+  dayPrefix(epochMillis: number): string {
+    const dateStr = new Date(epochMillis).toISOString();
     const dayStr = dateStr.substring(0, dateStr.indexOf('T'));
     return `/vs/lastActive/${dayStr}`;
-  }
-}
+  },
+};
 
 /** CVR-specific paths. */
 export class CVRPaths {
@@ -71,6 +75,10 @@ export class CVRPaths {
 
   constructor(cvrID: string) {
     this.root = `/vs/cvr/${cvrID}`;
+  }
+
+  metaPrefix(): string {
+    return `${this.root}/meta/`;
   }
 
   version(): string {
@@ -90,9 +98,8 @@ export class CVRPaths {
   }
 
   row(row: RowID): string {
-    const schema = pathEscape(row.schema);
-    const table = pathEscape(row.table);
-    const hash = row.rowKeyHash;
+    const {schema, table, rowKey} = row;
+    const hash = rowKeyHash(rowKey);
     return `${this.root}/rows/${schema}/${table}/${hash}`;
   }
 
@@ -101,15 +108,14 @@ export class CVRPaths {
     client: ClientRecord | {id: string},
   ): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/patches/${v}/clients/${client.id}`;
+    return `${this.root}/patches/meta/${v}/clients/${client.id}`;
   }
 
   rowPatch(cvrVersion: CVRVersion, row: RowID): string {
     const v = versionString(cvrVersion);
-    const schema = pathEscape(row.schema);
-    const table = pathEscape(row.table);
-    const hash = row.rowKeyHash;
-    return `${this.root}/patches/${v}/rows/${schema}/${table}/${hash}`;
+    const {schema, table, rowKey} = row;
+    const hash = rowKeyHash(rowKey);
+    return `${this.root}/patches/data/${v}/rows/${schema}/${table}/${hash}`;
   }
 
   queryPatch(
@@ -117,7 +123,7 @@ export class CVRPaths {
     query: QueryRecord | {id: string},
   ): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/patches/${v}/queries/${query.id}`;
+    return `${this.root}/patches/meta/${v}/queries/${query.id}`;
   }
 
   desiredQueryPatch(
@@ -126,21 +132,12 @@ export class CVRPaths {
     client: ClientRecord | {id: string},
   ): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/patches/${v}/queries/${query.id}/clients/${client.id}`;
+    return `${this.root}/patches/meta/${v}/queries/${query.id}/clients/${client.id}`;
   }
 }
 
-const pathEscapeChars = /[\\/\\"]/;
-
-function pathEscape(part: string) {
-  // In the common case, schema and table appear as-is in the path, but if the
-  // either have slashes or double quotes, JSON escape them to eliminate any
-  // ambiguities.
-  return pathEscapeChars.test(part) ? JSON.stringify(part) : part;
-}
-
 function versionString(v: CVRVersion) {
-  return v.metaVersion === undefined
-    ? v.stateVersion
-    : `${v.stateVersion}-${versionToLexi(v.metaVersion)}`;
+  return v.minorVersion
+    ? `${v.stateVersion}-${versionToLexi(v.minorVersion)}`
+    : v.stateVersion;
 }
