@@ -40,10 +40,10 @@ export {mergeAsyncIterables} from './merge-async-iterables.js';
 export type {PatchOperation} from './patch-operation.js';
 export type {PendingMutation} from './pending-mutations.js';
 export {
-  DropDatabaseOptions,
   deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
+  type DropDatabaseOptions,
 } from './persist/collect-idb-databases.js';
 export type {
   PullResponse,
