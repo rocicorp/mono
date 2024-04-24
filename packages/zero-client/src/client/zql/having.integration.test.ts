@@ -128,8 +128,7 @@ test('having against arrays / sets', async () => {
     .prepare();
 
   // TODO:
-  // aggArray hoists the selected field out
-  // so... we need to update the type to reflect that in TS.
+  // - follow path if the agg array is a row.
 
   const rows = await stmt.exec();
 

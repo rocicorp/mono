@@ -100,27 +100,21 @@ type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
       ? {
           [K in Alias]: From[Table][];
         }
-      : AggregateResult<
-          Selection,
-          From,
-          Alias,
-          ExtractFieldValue<
+      : {
+          [K in Alias]: ExtractFieldValue<
             From,
             Selection extends SimpleSelector<From> ? Selection : never
-          >[]
-        >
+          >[];
+        }
     : K extends
         | Min<infer Selection, infer Alias>
         | Max<infer Selection, infer Alias>
-    ? AggregateResult<
-        Selection,
-        From,
-        Alias,
-        ExtractFieldValue<
+    ? {
+        [K in Alias]: ExtractFieldValue<
           From,
           Selection extends SimpleSelector<From> ? Selection : never
-        >
-      >
+        >;
+      }
     : // all other aggregate functions
     K extends Aggregate<infer Selection, infer Alias>
     ? AggregateResult<Selection, From, Alias, number>
@@ -351,10 +345,21 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   having(expr: WhereCondition<From>): EntityQuery<From, Return>;
-  having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+  having<
+    K extends
+      | SimpleSelector<From>
+      | keyof (Return extends Array<unknown> ? Return[number] : never),
+    Op extends SimpleOperator,
+  >(
     field: K,
     op: Op,
-    value: FieldAsOperatorInput<From, K, Op>,
+    value: K extends SimpleSelector<From>
+      ? FieldAsOperatorInput<From, K, Op>
+      : Return extends Array<unknown>
+      ? K extends keyof Return[number]
+        ? Return[number][K]
+        : never
+      : never,
   ): EntityQuery<From, Return>;
   having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
     exprOrField: K | WhereCondition<From>,
