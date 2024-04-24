@@ -68,6 +68,8 @@ export function exposeToTesting(
   exposedToTestingMap.set(rep, testingInstance);
 }
 
+type WeakKey = object;
+
 const repToImpl = new WeakMap<WeakKey, ReplicacheImpl>();
 
 export function getImpl(rep: WeakKey): ReplicacheImpl {
