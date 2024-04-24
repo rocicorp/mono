@@ -378,16 +378,18 @@ export class EntityQuery<From extends FromSet, Return = []> {
     }
 
     let cond: WhereCondition<From>;
-    const having = this.#ast.having as WhereCondition<From> | undefined;
-    if (!having) {
+    const exitingWhereOrHaving = this.#ast[whereOrHaving] as
+      | WhereCondition<From>
+      | undefined;
+    if (!exitingWhereOrHaving) {
       cond = expr;
-    } else if (having.op === 'AND') {
-      const {conditions} = having;
+    } else if (exitingWhereOrHaving.op === 'AND') {
+      const {conditions} = exitingWhereOrHaving;
       cond = flatten('AND', [...conditions, expr]);
     } else {
       cond = {
         op: 'AND',
-        conditions: [having, expr],
+        conditions: [exitingWhereOrHaving, expr],
       };
     }
 
