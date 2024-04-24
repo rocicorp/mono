@@ -1,8 +1,8 @@
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {Track, setup, Artist, TrackArtist} from '../benchmarks/setup.js';
 import * as agg from '../query/agg.js';
 
-test('having against scalars', async () => {
+describe('having against scalaer', async () => {
   const {r, trackQuery} = setup();
 
   const tracks: Track[] = [
@@ -27,40 +27,26 @@ test('having against scalars', async () => {
   ];
 
   await r.mutate.bulkSet({tracks});
+  test.each([
+    [['>', 50], ['1']],
+    [['>', 300], []],
+    [['<', 300], []],
+    [['<', 500], ['1']],
+    [['=', 0], []],
+    [['=', 300], ['1']],
+  ] as const)('%j', async (input, expected) => {
+    const stmt = trackQuery
+      .select('id', agg.sum('length'))
+      .having('length', input[0], input[1])
+      .prepare();
 
-  const stmt = trackQuery
-    .select(agg.sum('length'))
-    .having('length', '>', 50)
-    .prepare();
-
-  const rows = await stmt.exec();
-  expect(rows).toEqual([
-    {id: '1', title: 'Track 1', length: 300, albumId: '1'},
-  ]);
-  stmt.destroy();
-
-  const stmt2 = trackQuery
-    .select(agg.sum('length'))
-    .having('length', '>', 300)
-    .prepare();
-
-  const rows2 = await stmt2.exec();
-  expect(rows2).toEqual([]);
-  stmt2.destroy();
-
-  const stmt3 = trackQuery
-    .select(agg.sum('length'))
-    .having('length', '>=', 300)
-    .prepare();
-
-  const rows3 = await stmt3.exec();
-  expect(rows3).toEqual([
-    {id: '1', title: 'Track 1', length: 300, albumId: '1'},
-  ]);
-  stmt3.destroy();
+    const rows = await stmt.exec();
+    expect(rows.map(x => x.id)).toEqual(expected);
+    stmt.destroy();
+  });
 });
 
-test('having against arrays / sets', async () => {
+describe('having against arrays / sets', async () => {
   const {r, trackArtistQuery, artistQuery, trackQuery} = setup();
 
   const tracks: Track[] = [
@@ -117,25 +103,41 @@ test('having against arrays / sets', async () => {
 
   await r.mutate.bulkSet({tracks, artists, trackArtists});
 
-  const queryPiece = trackQuery
-    .join(trackArtistQuery, 'trackArtists', 'track.id', 'trackArtist.trackId')
-    .join(artistQuery, 'artists', 'trackArtists.artistId', 'artist.id')
-    .groupBy('track.id');
+  test.each([
+    [['CONGRUENT', ['Artist 1']], ['1']],
+    [
+      ['SUPERSET', []],
+      ['1', '2', '3'],
+    ],
+    [['INTERSECTS', ['Artist 2']], ['2']],
+    [
+      ['INTERSECTS', ['Artist 1', 'Artist 2']],
+      ['1', '2'],
+    ],
+    [['SUBSET', ['Artist 3']], ['3']],
+    [
+      ['DISJOINT', []],
+      ['1', '2', '3'],
+    ],
+    [['DISJOINT', ['Artist 1', 'Artist 2']], ['3']],
+    [
+      ['INCONGRUENT', ['Artist 1', 'Artist 2']],
+      ['1', '2', '3'],
+    ],
+  ] as const)('%j', async (input, expected) => {
+    const stmt = trackQuery
+      .join(trackArtistQuery, 'trackArtists', 'track.id', 'trackArtist.trackId')
+      .join(artistQuery, 'artists', 'trackArtists.artistId', 'artist.id')
+      .groupBy('track.id')
+      .select('track.id', 'track.title', agg.array('artists.*', 'artists'))
+      // TODO: `having` and `where` should mark their args readonly
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .having('artists.name', input[0], input[1] as any)
+      .prepare();
 
-  const stmt = queryPiece
-    .select('track.id', 'track.title', agg.array('artists.*', 'artists'))
-    .having('artists.name', 'CONGRUENT', ['Artist 1'])
-    .prepare();
+    const rows = await stmt.exec();
+    expect(rows.map(r => r.track.id)).toEqual(expected);
 
-  const rows = await stmt.exec();
-
-  console.log(rows);
-
-  // aggArray(artists.name) -> does not seem to create an array of names but rather an array of rows?
-  // or at least the type system has it wrong.
-  // can we count artists in the group?
-  // having against a propery of a thing in an array should lift it to a new array?
-  // what if it is `having(artists.name, =, foo)`? This is a non-set operation.
-  // this is an inspection of 1 element matching foo.
-  // maybe should force set operations
+    stmt.destroy();
+  });
 });
