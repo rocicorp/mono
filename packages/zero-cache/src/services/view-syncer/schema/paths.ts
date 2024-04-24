@@ -138,6 +138,6 @@ export class CVRPaths {
 
 function versionString(v: CVRVersion) {
   return v.minorVersion
-    ? `${v.stateVersion}-${versionToLexi(v.minorVersion)}`
+    ? `${v.stateVersion}.${versionToLexi(v.minorVersion)}`
     : v.stateVersion;
 }
