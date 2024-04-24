@@ -25,6 +25,15 @@ type PokeAccumulator = {
   readonly parts: PokePartBody[];
 };
 
+/**
+ * Handles the multi-part format of zero pokes.
+ * As an optimization it also debounces pokes, only poking Replicache with a
+ * merged poke at most once per frame (as determined by requestAnimationFrame).
+ * The client cannot control how fast the server sends pokes, and it can only
+ * update the UI once per frame. This debouncing avoids wastefully
+ * computing separate diffs and IVM updates for intermediate states that will
+ * never been displayed to the UI.
+ */
 export class PokeHandler {
   readonly #replicachePoke: (poke: ReplicachePoke) => Promise<void>;
   readonly #onPokeError: () => void;
