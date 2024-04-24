@@ -34,7 +34,7 @@ export class PokeHandler {
   readonly #pokeBuffer: PokeAccumulator[] = [];
   #pokePlaybackLoopRunning = false;
   #lastRafPerfTimestamp = 0;
-  // Serializes calls to this._replicachePoke otherwise we can cause out of
+  // Serializes calls to this.#replicachePoke otherwise we can cause out of
   // order poke errors.
   readonly #pokeLock = new Lock();
 
