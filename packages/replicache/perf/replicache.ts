@@ -14,7 +14,6 @@ import {
 } from '../out/replicache.js';
 import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
 import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
-import {getImpl} from '../src/replicache.js';
 import {uuid} from '../src/uuid.js';
 import {
   TestDataObject,
@@ -338,8 +337,10 @@ class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
       enableScheduledPersist: false,
     } as ReplicacheOptions<MD>);
     this.#internalAPI = internalAPI;
+  }
 
-    getImpl(this).onUpdateNeeded = () => {};
+  get onUpdateNeeded() {
+    return () => {};
   }
 
   persist(): Promise<void> {
