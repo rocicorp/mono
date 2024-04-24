@@ -1,22 +1,34 @@
 import {LogContext} from '@rocicorp/logger';
-import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, test, suite} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  test,
+  suite,
+  vi,
+  MockInstance,
+} from 'vitest';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 import {resolver} from '@rocicorp/resolver';
 
-let rafStub: sinon.SinonStub;
+let rafStub: MockInstance<[FrameRequestCallback], number>;
+// The FrameRequestCallback in PokeHandler does not use
+// its time argument, so use an arbitrary constant for it in tests.
+const UNUSED_RAF_ARG = 10;
 
 beforeEach(() => {
-  rafStub = sinon.stub(globalThis, 'requestAnimationFrame');
+  rafStub = vi
+    .spyOn(globalThis, 'requestAnimationFrame')
+    .mockImplementation(() => 0);
 });
 
 afterEach(() => {
-  sinon.restore();
+  vi.restoreAllMocks();
 });
 
 test('completed poke plays on first raf', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -25,7 +37,7 @@ test('completed poke plays on first raf', async () => {
     clientID,
     logContext,
   );
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -51,18 +63,18 @@ test('completed poke plays on first raf', async () => {
     ],
   });
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   pokeHandler.handlePokeEnd({pokeID: 'poke1'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-  const rafCallback0 = rafStub.getCall(0).args[0];
-  await rafCallback0();
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  await rafCallback0(UNUSED_RAF_ARG);
 
-  expect(replicachePokeStub.callCount).to.equal(1);
-  const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
   expect(replicachePoke0).to.deep.equal({
     baseCookie: 1,
     pullResponse: {
@@ -79,17 +91,17 @@ test('completed poke plays on first raf', async () => {
     },
   });
 
-  expect(rafStub.callCount).to.equal(2);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 
-  const rafCallback1 = rafStub.getCall(1).args[0];
-  await rafCallback1();
-  expect(replicachePokeStub.callCount).to.equal(1);
-  expect(rafStub.callCount).to.equal(2);
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 });
 
 test('multiple pokes received before raf callback are merged', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -99,7 +111,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     logContext,
   );
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -125,11 +137,11 @@ test('multiple pokes received before raf callback are merged', async () => {
     ],
   });
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
   pokeHandler.handlePokeEnd({pokeID: 'poke1'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
@@ -151,18 +163,18 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [{op: 'put', key: 'bar', value: 'bar2'}],
   });
 
-  expect(rafStub.callCount).to.equal(1);
+  expect(rafStub).toHaveBeenCalledTimes(1);
 
   pokeHandler.handlePokeEnd({pokeID: 'poke2'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-  const rafCallback0 = rafStub.getCall(0).args[0];
-  await rafCallback0();
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  await rafCallback0(UNUSED_RAF_ARG);
 
-  expect(replicachePokeStub.callCount).to.equal(1);
-  const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
   expect(replicachePoke0).to.deep.equal({
     baseCookie: 1,
     pullResponse: {
@@ -182,17 +194,17 @@ test('multiple pokes received before raf callback are merged', async () => {
     },
   });
 
-  expect(rafStub.callCount).to.equal(2);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 
-  const rafCallback1 = rafStub.getCall(1).args[0];
-  await rafCallback1();
-  expect(replicachePokeStub.callCount).to.equal(1);
-  expect(rafStub.callCount).to.equal(2);
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 });
 
 test('playback over series of rafs', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -202,7 +214,7 @@ test('playback over series of rafs', async () => {
     logContext,
   );
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -228,17 +240,17 @@ test('playback over series of rafs', async () => {
     ],
   });
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
   pokeHandler.handlePokeEnd({pokeID: 'poke1'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-  const rafCallback0 = rafStub.getCall(0).args[0];
-  await rafCallback0();
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  await rafCallback0(UNUSED_RAF_ARG);
 
-  expect(replicachePokeStub.callCount).to.equal(1);
-  const replicachePoke0 = replicachePokeStub.getCall(0).args[0];
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
   expect(replicachePoke0).to.deep.equal({
     baseCookie: 1,
     pullResponse: {
@@ -255,7 +267,7 @@ test('playback over series of rafs', async () => {
     },
   });
 
-  expect(rafStub.callCount).to.equal(2);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
@@ -277,18 +289,18 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [{op: 'put', key: 'bar', value: 'bar2'}],
   });
 
-  expect(rafStub.callCount).to.equal(2);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 
   pokeHandler.handlePokeEnd({pokeID: 'poke2'});
 
-  expect(rafStub.callCount).to.equal(2);
-  expect(replicachePokeStub.callCount).to.equal(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
 
-  const rafCallback1 = rafStub.getCall(1).args[0];
-  await rafCallback1();
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
 
-  expect(replicachePokeStub.callCount).to.equal(2);
-  const replicachePoke1 = replicachePokeStub.getCall(1).args[0];
+  expect(replicachePokeStub).toHaveBeenCalledTimes(2);
+  const replicachePoke1 = replicachePokeStub.mock.calls[1][0];
   expect(replicachePoke1).to.deep.equal({
     baseCookie: 2,
     pullResponse: {
@@ -304,12 +316,12 @@ test('playback over series of rafs', async () => {
     },
   });
 
-  expect(rafStub.callCount).to.equal(3);
+  expect(rafStub).toHaveBeenCalledTimes(3);
 
-  const rafCallback2 = rafStub.getCall(2).args[0];
-  await rafCallback2();
-  expect(replicachePokeStub.callCount).to.equal(2);
-  expect(rafStub.callCount).to.equal(3);
+  const rafCallback2 = rafStub.mock.calls[2][0];
+  await rafCallback2(UNUSED_RAF_ARG);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(2);
+  expect(rafStub).toHaveBeenCalledTimes(3);
 });
 
 suite('onPokeErrors', () => {
@@ -354,8 +366,8 @@ suite('onPokeErrors', () => {
   ];
   for (const c of cases) {
     test(c.name, () => {
-      const onPokeErrorStub = sinon.stub();
-      const replicachePokeStub = sinon.stub();
+      const onPokeErrorStub = vi.fn();
+      const replicachePokeStub = vi.fn();
       const clientID = 'c1';
       const logContext = new LogContext('error');
       const pokeHandler = new PokeHandler(
@@ -365,18 +377,16 @@ suite('onPokeErrors', () => {
         logContext,
       );
 
-      expect(onPokeErrorStub.callCount).to.equal(0);
+      expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
       c.causeError(pokeHandler);
-      expect(onPokeErrorStub.callCount).to.equal(1);
+      expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
     });
   }
 });
 
-test('onPokeError for pokeID issues', () => {});
-
 test('replicachePoke throwing error calls onPokeError and clears', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -385,7 +395,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     clientID,
     logContext,
   );
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -411,21 +421,21 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     ],
   });
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   pokeHandler.handlePokeEnd({pokeID: 'poke1'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
   const {promise, reject} = resolver();
-  replicachePokeStub.returns(promise);
-  expect(onPokeErrorStub.callCount).to.equal(0);
+  replicachePokeStub.mockReturnValue(promise);
+  expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-  const rafCallback0 = rafStub.getCall(0).args[0];
-  const rafCallback0Result = rafCallback0();
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  const rafCallback0Result = rafCallback0(UNUSED_RAF_ARG);
 
-  expect(onPokeErrorStub.callCount).to.equal(0);
+  expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
@@ -446,21 +456,21 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
   reject('error in poke');
   await rafCallback0Result;
 
-  expect(replicachePokeStub.callCount).to.equal(1);
-  expect(rafStub.callCount).to.equal(2);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 
-  expect(onPokeErrorStub.callCount).to.equal(1);
+  expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
 
-  const rafCallback1 = rafStub.getCall(1).args[0];
-  await rafCallback1();
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
   // poke 2 cleared so replicachePokeStub not called
-  expect(replicachePokeStub.callCount).to.equal(1);
-  expect(rafStub.callCount).to.equal(2);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 });
 
 test('cookie gap during mergePoke calls onPokeError and clears', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -469,7 +479,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     clientID,
     logContext,
   );
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -495,12 +505,12 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     ],
   });
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   pokeHandler.handlePokeEnd({pokeID: 'poke1'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
@@ -516,15 +526,15 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
 
   pokeHandler.handlePokeEnd({pokeID: 'poke2'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-  expect(onPokeErrorStub.callCount).to.equal(0);
+  expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-  const rafCallback0 = rafStub.getCall(0).args[0];
-  const rafCallback0Result = rafCallback0();
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  const rafCallback0Result = rafCallback0(UNUSED_RAF_ARG);
 
-  expect(onPokeErrorStub.callCount).to.equal(0);
+  expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke3',
@@ -544,21 +554,21 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
   await rafCallback0Result;
 
   // not called because error is in merge before call
-  expect(replicachePokeStub.callCount).to.equal(0);
-  expect(rafStub.callCount).to.equal(2);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 
-  expect(onPokeErrorStub.callCount).to.equal(1);
+  expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
 
-  const rafCallback1 = rafStub.getCall(1).args[0];
-  await rafCallback1();
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
   // poke 3 cleared so replicachePokeStub not called
-  expect(replicachePokeStub.callCount).to.equal(0);
-  expect(rafStub.callCount).to.equal(2);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+  expect(rafStub).toHaveBeenCalledTimes(2);
 });
 
 test('onDisconnect clears pending pokes', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -567,7 +577,7 @@ test('onDisconnect clears pending pokes', async () => {
     clientID,
     logContext,
   );
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -593,25 +603,25 @@ test('onDisconnect clears pending pokes', async () => {
     ],
   });
 
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   pokeHandler.handlePokeEnd({pokeID: 'poke1'});
 
-  expect(rafStub.callCount).to.equal(1);
-  expect(replicachePokeStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
   pokeHandler.handleDisconnect();
 
-  const rafCallback0 = rafStub.getCall(0).args[0];
-  await rafCallback0();
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  await rafCallback0(UNUSED_RAF_ARG);
 
-  expect(replicachePokeStub.callCount).to.equal(0);
-  expect(rafStub.callCount).to.equal(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+  expect(rafStub).toHaveBeenCalledTimes(1);
 });
 
 test('handlePoke returns the last mutation id change for this client from pokePart or undefined if none or error', async () => {
-  const onPokeErrorStub = sinon.stub();
-  const replicachePokeStub = sinon.stub();
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
   const clientID = 'c1';
   const logContext = new LogContext('error');
   const pokeHandler = new PokeHandler(
@@ -620,7 +630,7 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     clientID,
     logContext,
   );
-  expect(rafStub.callCount).to.equal(0);
+  expect(rafStub).toHaveBeenCalledTimes(0);
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
@@ -787,7 +797,7 @@ test('mergePokes with all optionals defined', () => {
     },
   ]);
 
-  expect(result).to.deep.equals({
+  expect(result).toEqual({
     baseCookie: 3,
     pullResponse: {
       cookie: 5,
@@ -802,18 +812,6 @@ test('mergePokes with all optionals defined', () => {
           op: 'put',
           key: 'c/c2',
           value: true,
-        },
-        {
-          op: 'put',
-          key: 'd/c1/h1',
-          value: {
-            table: 'issues',
-            select: [
-              ['id', 'id'],
-              ['name', 'name'],
-            ],
-            orderBy: [['id'], 'asc'],
-          },
         },
         {
           op: 'put',
@@ -868,18 +866,6 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'put',
-          key: 'd/c1/h2',
-          value: {
-            table: 'labels',
-            select: [
-              ['id', 'id'],
-              ['name', 'name'],
-            ],
-            orderBy: [['id'], 'asc'],
-          },
-        },
-        {
-          op: 'put',
           key: 'g/h2',
           value: {
             table: 'labels',
@@ -903,10 +889,6 @@ test('mergePokes with all optionals defined', () => {
           op: 'put',
           key: 'c/c4',
           value: true,
-        },
-        {
-          op: 'del',
-          key: 'd/c1/h1',
         },
         {
           op: 'del',
@@ -1005,7 +987,7 @@ test('mergePokes sparse', () => {
       ],
     },
   ]);
-  expect(result).to.deep.equals({
+  expect(result).toEqual({
     baseCookie: 3,
     pullResponse: {
       lastMutationIDChanges: {
@@ -1053,18 +1035,6 @@ test('mergePokes sparse', () => {
           },
         },
         {
-          op: 'put',
-          key: 'd/c1/h2',
-          value: {
-            table: 'labels',
-            select: [
-              ['id', 'id'],
-              ['name', 'name'],
-            ],
-            orderBy: [['id'], 'asc'],
-          },
-        },
-        {
           op: 'del',
           key: 'c/c2',
         },
@@ -1072,10 +1042,6 @@ test('mergePokes sparse', () => {
           op: 'put',
           key: 'c/c4',
           value: true,
-        },
-        {
-          op: 'del',
-          key: 'd/c1/h1',
         },
         {
           op: 'del',
