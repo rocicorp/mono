@@ -101,30 +101,30 @@ export {makeIDBNameInternal as makeIDBNameForTesting};
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
-  readonly #rep: ReplicacheImpl<MD>;
+  readonly #impl: ReplicacheImpl<MD>;
 
   /** The URL to use when doing a pull request. */
   get pullURL(): string {
-    return this.#rep.pullURL;
+    return this.#impl.pullURL;
   }
   set pullURL(value: string) {
-    this.#rep.pullURL = value;
+    this.#impl.pullURL = value;
   }
 
   /** The URL to use when doing a push request. */
   get pushURL(): string {
-    return this.#rep.pushURL;
+    return this.#impl.pushURL;
   }
   set pushURL(value: string) {
-    this.#rep.pushURL = value;
+    this.#impl.pushURL = value;
   }
 
   /** The authorization token used when doing a push request. */
   get auth(): string {
-    return this.#rep.auth;
+    return this.#impl.auth;
   }
   set auth(value: string) {
-    this.#rep.auth = value;
+    this.#impl.auth = value;
   }
 
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
@@ -152,10 +152,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * {@link pull} manually.
    */
   get pullInterval(): number | null {
-    return this.#rep.pullInterval;
+    return this.#impl.pullInterval;
   }
   set pullInterval(value: number | null) {
-    this.#rep.pullInterval = value;
+    this.#impl.pullInterval = value;
   }
 
   /**
@@ -163,30 +163,30 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * attempts to push that change.
    */
   get pushDelay(): number {
-    return this.#rep.pushDelay;
+    return this.#impl.pushDelay;
   }
   set pushDelay(value: number) {
-    this.#rep.pushDelay = value;
+    this.#impl.pushDelay = value;
   }
 
   /**
    * The function to use to pull data from the server.
    */
   get puller(): Puller {
-    return this.#rep.puller;
+    return this.#impl.puller;
   }
   set puller(value: Puller) {
-    this.#rep.puller = value;
+    this.#impl.puller = value;
   }
 
   /**
    * The function to use to push data to the server.
    */
   get pusher(): Pusher {
-    return this.#rep.pusher;
+    return this.#impl.pusher;
   }
   set pusher(value: Pusher) {
-    this.#rep.pusher = value;
+    this.#impl.pusher = value;
   }
 
   /**
@@ -194,7 +194,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * object is live so changes to it will affect the next pull or push call.
    */
   get requestOptions(): Required<RequestOptions> {
-    return this.#rep.requestOptions;
+    return this.#impl.requestOptions;
   }
 
   /**
@@ -213,10 +213,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * ```
    */
   get onSync(): ((syncing: boolean) => void) | null {
-    return this.#rep.onSync;
+    return this.#impl.onSync;
   }
   set onSync(value: ((syncing: boolean) => void) | null) {
-    this.#rep.onSync = value;
+    this.#impl.onSync = value;
   }
 
   /**
@@ -229,10 +229,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * reloading automatically.
    */
   get onClientStateNotFound(): (() => void) | null {
-    return this.#rep.onClientStateNotFound;
+    return this.#impl.onClientStateNotFound;
   }
   set onClientStateNotFound(value: (() => void) | null) {
-    this.#rep.onClientStateNotFound = value;
+    this.#impl.onClientStateNotFound = value;
   }
 
   /**
@@ -255,10 +255,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * available and prompting them to refresh.
    */
   get onUpdateNeeded(): ((reason: UpdateNeededReason) => void) | null {
-    return this.#rep.onUpdateNeeded;
+    return this.#impl.onUpdateNeeded;
   }
   set onUpdateNeeded(value: ((reason: UpdateNeededReason) => void) | null) {
-    this.#rep.onUpdateNeeded = value;
+    this.#impl.onUpdateNeeded = value;
   }
 
   /**
@@ -270,20 +270,20 @@ export class Replicache<MD extends MutatorDefs = {}> {
     | (() => MaybePromise<string | null | undefined>)
     | null
     | undefined {
-    return this.#rep.getAuth;
+    return this.#impl.getAuth;
   }
   set getAuth(
     value: (() => MaybePromise<string | null | undefined>) | null | undefined,
   ) {
-    this.#rep.getAuth = value;
+    this.#impl.getAuth = value;
   }
 
   constructor(options: ReplicacheOptions<MD>) {
-    this.#rep = new ReplicacheImpl<MD>(options);
-    this.name = this.#rep.name;
-    this.schemaVersion = this.#rep.schemaVersion;
-    this.mutate = this.#rep.mutate;
-    repToImpl.set(this, this.#rep);
+    this.#impl = new ReplicacheImpl<MD>(options);
+    this.name = this.#impl.name;
+    this.schemaVersion = this.#impl.schemaVersion;
+    this.mutate = this.#impl.mutate;
+    repToImpl.set(this, this.#impl);
   }
 
   /**
@@ -291,7 +291,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * browser-profile-wide shares the same profile ID.
    */
   get profileID(): Promise<string> {
-    return this.#rep.profileID;
+    return this.#impl.profileID;
   }
 
   /**
@@ -299,7 +299,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * gets a unique client ID.
    */
   get clientID(): string {
-    return this.#rep.clientID;
+    return this.#impl.clientID;
   }
 
   /**
@@ -309,7 +309,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * browser profile.
    */
   get clientGroupID(): Promise<string> {
-    return this.#rep.clientGroupID;
+    return this.#impl.clientGroupID;
   }
 
   /**
@@ -317,10 +317,10 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * {@link online} for more details.
    */
   get onOnlineChange(): ((online: boolean) => void) | null {
-    return this.#rep.onOnlineChange;
+    return this.#impl.onOnlineChange;
   }
   set onOnlineChange(value: ((online: boolean) => void) | null) {
-    this.#rep.onOnlineChange = value;
+    this.#impl.onOnlineChange = value;
   }
 
   /**
@@ -330,7 +330,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * and false otherwise.
    */
   get online(): boolean {
-    return this.#rep.online;
+    return this.#impl.online;
   }
 
   /**
@@ -340,7 +340,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * used any more.
    */
   get closed(): boolean {
-    return this.#rep.closed;
+    return this.#impl.closed;
   }
 
   /**
@@ -349,7 +349,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   close(): Promise<void> {
-    return this.#rep.close();
+    return this.#impl.close();
   }
 
   /**
@@ -370,7 +370,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   push({now = false} = {}): Promise<void> {
-    return this.#rep.push({now});
+    return this.#impl.push({now});
   }
 
   /**
@@ -388,7 +388,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * will not be reflected in the promise.
    */
   pull({now = false} = {}): Promise<void> {
-    return this.#rep.pull({now});
+    return this.#impl.pull({now});
   }
 
   /**
@@ -401,7 +401,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * @experimental This method is under development and its semantics will change.
    */
   poke(poke: Poke): Promise<void> {
-    return this.#rep.poke(poke);
+    return this.#impl.poke(poke);
   }
 
   /**
@@ -442,7 +442,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     body: (tx: ReadTransaction) => Promise<R>,
     options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {
-    return this.#rep.subscribe(body, options);
+    return this.#impl.subscribe(body, options);
   }
 
   /**
@@ -469,7 +469,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     callback: WatchCallbackForOptions<Options>,
     options?: Options,
   ): () => void {
-    return this.#rep.experimentalWatch(callback, options);
+    return this.#impl.experimentalWatch(callback, options);
   }
 
   /**
@@ -478,7 +478,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * and `scan`.
    */
   query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
-    return this.#rep.query(body);
+    return this.#impl.query(body);
   }
 
   /**
@@ -490,7 +490,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * @experimental This method is experimental and may change in the future.
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
-    return this.#rep.experimentalPendingMutations();
+    return this.#impl.experimentalPendingMutations();
   }
 }
 
