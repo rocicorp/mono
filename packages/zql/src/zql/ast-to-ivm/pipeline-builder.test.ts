@@ -95,7 +95,7 @@ test('Count', () => {
   expect(effectRunCount).toBe(4);
 });
 
-test.only('Where', () => {
+test('Where', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator);
