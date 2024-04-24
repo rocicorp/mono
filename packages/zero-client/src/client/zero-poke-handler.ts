@@ -22,9 +22,18 @@ import {
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
-  parts: PokePartBody[];
+  readonly parts: PokePartBody[];
 };
 
+/**
+ * Handles the multi-part format of zero pokes.
+ * As an optimization it also debounces pokes, only poking Replicache with a
+ * merged poke at most once per frame (as determined by requestAnimationFrame).
+ * The client cannot control how fast the server sends pokes, and it can only
+ * update the UI once per frame. This debouncing avoids wastefully
+ * computing separate diffs and IVM updates for intermediate states that will
+ * never been displayed to the UI.
+ */
 export class PokeHandler {
   readonly #replicachePoke: (poke: ReplicachePoke) => Promise<void>;
   readonly #onPokeError: () => void;
@@ -123,8 +132,8 @@ export class PokeHandler {
     rafLC.debug?.('processing pokes took', performance.now() - start);
   };
 
-  async #processPokesForFrame(lc: LogContext) {
-    await this.#pokeLock.withLock(async () => {
+  #processPokesForFrame(lc: LogContext): Promise<void> {
+    return this.#pokeLock.withLock(async () => {
       const now = Date.now();
       lc.debug?.('got poke lock at', now);
       lc.debug?.('merging', this.#pokeBuffer.length);
@@ -146,7 +155,7 @@ export class PokeHandler {
   }
 
   #handlePokeError(e: unknown) {
-    if (String(e).indexOf('unexpected base cookie for poke') > -1) {
+    if (String(e).includes('unexpected base cookie for poke')) {
       // This can happen if cookie changes due to refresh from idb due
       // to an update arriving to different tabs in the same
       // client group at very different times.  Unusual but possible.
@@ -208,25 +217,18 @@ export function mergePokes(
         )) {
           mergedPatch.push(
             ...queriesPatch.map(op =>
-              desiredQueriesPatchOpToReplicachePatchOp(clientID, op),
-            ),
-          );
-        }
-      }
-      if (pokePart.desiredQueriesPatches) {
-        for (const [clientID, queriesPatch] of Object.entries(
-          pokePart.desiredQueriesPatches,
-        )) {
-          mergedPatch.push(
-            ...queriesPatch.map(op =>
-              desiredQueriesPatchOpToReplicachePatchOp(clientID, op),
+              queryPatchOpToReplicachePatchOp(op, hash =>
+                toDesiredQueriesKey(clientID, hash),
+              ),
             ),
           );
         }
       }
       if (pokePart.gotQueriesPatch) {
         mergedPatch.push(
-          ...pokePart.gotQueriesPatch.map(gotQueriesPatchOpToReplicachePatchOp),
+          ...pokePart.gotQueriesPatch.map(op =>
+            queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
+          ),
         );
       }
       if (pokePart.entitiesPatch) {
@@ -265,9 +267,9 @@ function clientsPatchOpToReplicachePatchOp(op: ClientsPatchOp): PatchOperation {
   }
 }
 
-function desiredQueriesPatchOpToReplicachePatchOp(
-  clientID: string,
+function queryPatchOpToReplicachePatchOp(
   op: QueriesPatchOp,
+  toKey: (hash: string) => string,
 ): PatchOperation {
   switch (op.op) {
     case 'clear':
@@ -275,34 +277,13 @@ function desiredQueriesPatchOpToReplicachePatchOp(
     case 'del':
       return {
         op: 'del',
-        key: toDesiredQueriesKey(clientID, op.hash),
+        key: toKey(op.hash),
       };
     case 'put':
     default:
       return {
         op: 'put',
-        key: toDesiredQueriesKey(clientID, op.hash),
-        value: op.ast,
-      };
-  }
-}
-
-function gotQueriesPatchOpToReplicachePatchOp(
-  op: QueriesPatchOp,
-): PatchOperation {
-  switch (op.op) {
-    case 'clear':
-      return op;
-    case 'del':
-      return {
-        op: 'del',
-        key: toGotQueriesKey(op.hash),
-      };
-    case 'put':
-    default:
-      return {
-        op: 'put',
-        key: toGotQueriesKey(op.hash),
+        key: toKey(op.hash),
         value: op.ast,
       };
   }

@@ -51,7 +51,7 @@ export const pokePartBodySchema = v.object({
   // Patches to the set of queries for which entities are sync'd in
   // entitiesPatch.
   gotQueriesPatch: queriesPatchSchema.optional(),
-  // Patches tpo the entities set.
+  // Patches to the entities set.
   entitiesPatch: entitiesPatchSchema.optional(),
 });
 
