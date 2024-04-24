@@ -43,15 +43,15 @@ export const pokePartBodySchema = v.object({
   pokeID: v.string(),
   // Changes to last mutation id by client id.
   lastMutationIDChanges: v.record(v.number()).optional(),
-  // Patches to the desired query sets by client id.
-  desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
   // Patches to the set of "alive" clients (according to server) belonging to
   // this client group.
   clientsPatch: clientsPatchSchema.optional(),
+  // Patches to the desired query sets by client id.
+  desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
   // Patches to the set of queries for which entities are sync'd in
   // entitiesPatch.
-  gotQueriesPatch: queriesPatchSchema,
-  // Patches to the entities set.
+  gotQueriesPatch: queriesPatchSchema.optional(),
+  // Patches tpo the entities set.
   entitiesPatch: entitiesPatchSchema.optional(),
 });
 
