@@ -68,12 +68,12 @@ export async function loadCVR(
 
 /**
  * The base CVRUpdater contains logic common to the {@link CVRConfigDrivenUpdater} and
- * {@link CVRDataDrivenUpdater}. The CVRUpdater class itself is exported for updating
- * the `LastActive` time of the CVR in the absence of any changes to the CVR contents.
+ * {@link CVRQueryDrivenUpdater}. The CVRUpdater class itself is exported for updating
+ * the `lastActive` time of the CVR in the absence of any changes to the CVR contents.
  * Although activity is automatically tracked when the CVR contents change, there may be
- * edge cases in which a client actively connects to a CVR that doesn't change.
- * Explicitly calling `new CVRUpdater(...).flush()` will explicitly update the active
- * index and prevent the CVR from being garbage collected.
+ * edge cases in which a client actively connects to a CVR that doesn't itself change.
+ * Calling `new CVRUpdater(...).flush()` will explicitly update the active index and
+ * prevent the CVR from being garbage collected.
  */
 export class CVRUpdater {
   readonly #storage: DurableStorage;
@@ -244,10 +244,10 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 }
 
 /**
- * A {@link CVRDataDrivenUpdater} is used for updating a CVR in response to an
- * invalidation update.
+ * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making
+ * queries.
  */
-export class CVRDataDrivenUpdater extends CVRUpdater {
+export class CVRQueryDrivenUpdater extends CVRUpdater {
   constructor(
     storage: DurableStorage,
     cvr: CVRSnapshot,
