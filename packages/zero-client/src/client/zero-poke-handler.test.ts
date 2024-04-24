@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {afterEach, beforeEach, expect, test, suite} from 'vitest';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 import {resolver} from '@rocicorp/resolver';
 
