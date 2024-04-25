@@ -103,6 +103,13 @@ export {makeIDBNameInternal as makeIDBNameForTesting};
 export class Replicache<MD extends MutatorDefs = {}> {
   readonly #impl: ReplicacheImpl<MD>;
 
+  constructor(options: ReplicacheOptions<MD>) {
+    this.#impl = new ReplicacheImpl<MD>(options);
+    // Store this in a WeakMap so we can get it back if we have access to the
+    // WeakMap (tests, zero, reflect etc).
+    repToImpl.set(this, this.#impl);
+  }
+
   /** The URL to use when doing a pull request. */
   get pullURL(): string {
     return this.#impl.pullURL;
@@ -128,7 +135,9 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
-  readonly name: string;
+  get name(): string {
+    return this.#impl.name;
+  }
 
   /**
    * This is the name Replicache uses for the IndexedDB database where data is
@@ -139,12 +148,16 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /** The schema version of the data understood by this application. */
-  readonly schemaVersion: string;
+  get schemaVersion(): string {
+    return this.#impl.schemaVersion;
+  }
 
   /**
    * The mutators that was registered in the constructor.
    */
-  readonly mutate: MakeMutators<MD>;
+  get mutate(): MakeMutators<MD> {
+    return this.#impl.mutate;
+  }
 
   /**
    * The duration between each periodic {@link pull}. Setting this to `null`
@@ -276,14 +289,6 @@ export class Replicache<MD extends MutatorDefs = {}> {
     value: (() => MaybePromise<string | null | undefined>) | null | undefined,
   ) {
     this.#impl.getAuth = value;
-  }
-
-  constructor(options: ReplicacheOptions<MD>) {
-    this.#impl = new ReplicacheImpl<MD>(options);
-    this.name = this.#impl.name;
-    this.schemaVersion = this.#impl.schemaVersion;
-    this.mutate = this.#impl.mutate;
-    repToImpl.set(this, this.#impl);
   }
 
   /**
