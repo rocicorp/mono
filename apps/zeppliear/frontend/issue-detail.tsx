@@ -19,7 +19,7 @@ import {useZero} from './hooks/useZero';
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onAddComment: (comment: Comment) => void;
-  issues: Issue[];
+  issues: {issue: Issue; labels: string[]}[];
   isLoading: boolean;
 }
 
@@ -72,7 +72,7 @@ export default function IssueDetail({
 
   useEffect(() => {
     if (detailIssueID) {
-      const index = issues.findIndex(issue => issue.id === detailIssueID);
+      const index = issues.findIndex(issue => issue.issue.id === detailIssueID);
       setCurrentIssueIdx(index);
     }
   }, [issues, detailIssueID]);
@@ -136,12 +136,12 @@ export default function IssueDetail({
         if (currentIssueIdx === 0) {
           return;
         }
-        newIss = issues[currentIssueIdx - 1].id;
+        newIss = issues[currentIssueIdx - 1].issue.id;
       } else {
         if (currentIssueIdx === issues.length - 1) {
           return;
         }
-        newIss = issues[currentIssueIdx + 1].id;
+        newIss = issues[currentIssueIdx + 1].issue.id;
       }
 
       await setDetailIssueID(newIss, {

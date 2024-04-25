@@ -20,6 +20,7 @@ import {InnerJoinOperator, JoinArgs} from './operators/join-operator.js';
 import {MapOperator} from './operators/map-operator.js';
 import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
+import {must} from 'shared/src/must.js';
 
 export type Listener<T> = {
   newDifference: (
@@ -65,7 +66,7 @@ export class DifferenceStream<T extends object> {
   /**
    * Downstreams that requested historical data.
    */
-  readonly #requestors = new Set<Listener<T>>();
+  readonly #requestors = new Map<number, Listener<T>>();
 
   addDownstream(listener: Listener<T>) {
     this.#downstreams.add(listener);
@@ -83,9 +84,8 @@ export class DifferenceStream<T extends object> {
     reply?: Reply | undefined,
   ) {
     if (reply) {
-      for (const requestor of this.#requestors) {
-        requestor.newDifference(version, data, reply);
-      }
+      const requestor = this.#requestors.get(reply.replyingTo);
+      must(requestor).newDifference(version, data, reply);
     } else {
       for (const listener of this.#downstreams) {
         listener.newDifference(version, data, reply);
@@ -94,13 +94,13 @@ export class DifferenceStream<T extends object> {
   }
 
   messageUpstream(message: Request, downstream: Listener<T>): void {
-    this.#requestors.add(downstream);
+    this.#requestors.set(message.id, downstream);
     this.#upstream?.messageUpstream(message);
   }
 
   commit(version: Version) {
     if (this.#requestors.size > 0) {
-      for (const requestor of this.#requestors) {
+      for (const requestor of this.#requestors.values()) {
         try {
           requestor.commit(version);
         } catch (e) {
@@ -244,7 +244,11 @@ export class DifferenceStream<T extends object> {
 
   removeDownstream(listener: Listener<T>) {
     this.#downstreams.delete(listener);
-    this.#requestors.delete(listener);
+    for (const entry of this.#requestors) {
+      if (entry[1] === listener) {
+        this.#requestors.delete(entry[0]);
+      }
+    }
     if (this.#downstreams.size === 0) {
       this.destroy();
     }

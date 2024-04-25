@@ -40,8 +40,11 @@ export class Materialite {
     };
   }
 
-  newSetSource<T extends object>(comparator: Comparator<T>) {
-    return new MutableSetSource<T>(this.#internal, comparator);
+  newSetSource<T extends object>(
+    comparator: Comparator<T>,
+    name?: string | undefined,
+  ) {
+    return new MutableSetSource<T>(this.#internal, comparator, name);
   }
 
   /**

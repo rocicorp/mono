@@ -5,12 +5,16 @@ import {useQuery} from './hooks/useZql';
 import {LabelTypeahead} from './label-typeahead';
 import type {M} from './mutators';
 
-export function LabelMenu() {
+export function LabelMenu({
+  onSelectLabel,
+}: {
+  onSelectLabel: (label: string) => void;
+}) {
   const [labelFilter, setLabelFilter] = useState<string | undefined>();
   return (
     <>
       <LabelTypeahead filter={labelFilter} onFilterChange={setLabelFilter} />
-      <LabelsComponent filter={labelFilter} />
+      <LabelsComponent filter={labelFilter} onSelectLabel={onSelectLabel} />
     </>
   );
 }
@@ -31,12 +35,13 @@ function getColor(labelName: string) {
   return colors[charCode % colors.length];
 }
 
-function LabelsComponent({filter}: {filter?: string | undefined}) {
-  // onMouseDown={() => {
-  //   // onSelectStatus(status as Status);
-  //   setFilter(null);
-  //   setFilterDropDownVisible(false);
-  // }}
+function LabelsComponent({
+  filter,
+  onSelectLabel,
+}: {
+  filter?: string | undefined;
+  onSelectLabel: (label: string) => void;
+}) {
   const zero = useZero<M, Collections>();
   const query = filter
     ? zero.query.label.where('name', 'ILIKE', `%${filter}%`)
@@ -48,6 +53,7 @@ function LabelsComponent({filter}: {filter?: string | undefined}) {
         <div
           key={idx}
           className="text-xs flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
+          onMouseDown={() => onSelectLabel(label.name)}
         >
           <LabelDot color={getColor(label.name)} />{' '}
           <span className="truncate">{label.name}</span>

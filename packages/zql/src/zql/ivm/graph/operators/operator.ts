@@ -22,10 +22,12 @@ export class NoOp implements Operator {
 /**
  * A dataflow operator (node) that has many incoming edges (stream) and one outgoing edge (stream).
  */
+let id = 0;
 export abstract class OperatorBase<O extends object> implements Operator {
   // downstream output
   readonly #output: DifferenceStream<O>;
   #lastCommit = -1;
+  #id = id++;
 
   constructor(output: DifferenceStream<O>) {
     this.#output = output;
@@ -41,4 +43,8 @@ export abstract class OperatorBase<O extends object> implements Operator {
 
   abstract messageUpstream(message: Request): void;
   abstract destroy(): void;
+
+  get id() {
+    return this.#id;
+  }
 }

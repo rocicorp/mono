@@ -71,8 +71,10 @@ class ReplicacheSource {
   #receivedFirstDiff = false;
 
   constructor(rep: ReplicacheLike, materialite: Materialite, name: string) {
-    this.#canonicalSource =
-      materialite.newSetSource<Entity>(canonicalComparator);
+    this.#canonicalSource = materialite.newSetSource<Entity>(
+      canonicalComparator,
+      name,
+    );
     this.#materialite = materialite;
     rep.experimentalWatch(this.#onReplicacheDiff, {
       prefix: `${name}/`,

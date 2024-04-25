@@ -5,18 +5,19 @@ import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
 
 interface Props {
-  issue: Issue;
+  row: {issue: Issue; labels: string[]};
   onChangePriority: (issue: Issue, priority: Priority) => void;
   onChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;
 }
 
 function IssueRow({
-  issue,
+  row,
   onChangePriority,
   onChangeStatus,
   onOpenDetail,
 }: Props) {
+  const {issue} = row;
   const handleChangePriority = (p: Priority) => onChangePriority(issue, p);
   const handleChangeStatus = (status: Status) => onChangeStatus(issue, status);
   const handleIssueRowClick = () => onOpenDetail(issue);
@@ -39,6 +40,9 @@ function IssueRow({
       </div>
       <div className="flex-wrap flex-shrink-1 flex-grow ml-2 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
         {issue.title.slice(0, 3000) || ''}
+      </div>
+      <div className="flex-shrink-0 ml-2 font-normal sm:block">
+        {row.labels.join(', ')}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
         {formatDate(new Date(issue.modified))}

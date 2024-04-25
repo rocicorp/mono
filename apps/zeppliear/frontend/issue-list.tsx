@@ -14,18 +14,18 @@ import type {Issue, IssueUpdate, Priority, Status} from './issue';
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
-  issues: Issue[];
+  issues: {issue: Issue; labels: string[]}[];
   view: string | null;
 }
 
 type ListData = {
-  issues: Issue[];
+  issues: {issue: Issue; labels: string[]}[];
   handleChangePriority: (issue: Issue, priority: Priority) => void;
   handleChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;
 };
 
-const itemKey = (index: number, data: ListData) => data.issues[index].id;
+const itemKey = (index: number, data: ListData) => data.issues[index].issue.id;
 
 function RawRow({
   data,
@@ -39,7 +39,7 @@ function RawRow({
   return (
     <div style={style}>
       <IssueRow
-        issue={data.issues[index]}
+        row={data.issues[index]}
         onChangePriority={data.handleChangePriority}
         onChangeStatus={data.handleChangeStatus}
         onOpenDetail={data.onOpenDetail}
@@ -89,7 +89,7 @@ function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
   return (
     <div className="flex flex-col flex-grow overflow-auto">
       <AutoSizer>
-        {({height, width}) => (
+        {({height, width}: {width: number; height: number}) => (
           <FixedSizeList
             ref={fixedSizeListRef}
             height={height}
