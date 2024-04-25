@@ -82,9 +82,7 @@ export class ClientHandler {
     return {
       // eslint-disable-next-line require-await
       addPatch: async (toVersion, patch, ast?: AST) => {
-        lc.debug?.(`comparing versions`, toVersion, this.#baseVersion);
         if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
-          lc.debug?.(`ignoring patch from past version`, toVersion);
           return;
         }
         const body = ensureBody();

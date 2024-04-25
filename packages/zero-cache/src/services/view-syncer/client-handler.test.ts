@@ -14,11 +14,12 @@ describe('view-syncer/client-handler', () => {
     const poke1Version = {stateVersion: '121'};
     const poke2Version = {stateVersion: '123'};
 
-    const msgs: Downstream[][] = [[], [], []];
-    const subscriptions = msgs.map(
-      msg =>
+    const received: Downstream[][] = [[], [], []];
+    // Subscriptions that dump unconsumed pokes to `received`
+    const subscriptions = received.map(
+      bucket =>
         new Subscription<Downstream>({
-          cleanup: unconsumed => msg.push(...unconsumed),
+          cleanup: msgs => bucket.push(...msgs),
         }),
     );
 
@@ -75,7 +76,7 @@ describe('view-syncer/client-handler', () => {
     subscriptions.forEach(sub => sub.cancel());
 
     // Client 1 was already caught up. Only gets the second poke.
-    expect(msgs[0]).toEqual([
+    expect(received[0]).toEqual([
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121', cookie: '123'},
@@ -84,7 +85,7 @@ describe('view-syncer/client-handler', () => {
     ]);
 
     // Client 2 is a bit behind.
-    expect(msgs[1]).toEqual([
+    expect(received[1]).toEqual([
       [
         'pokeStart',
         {pokeID: '121', baseCookie: '120.01', cookie: '121'},
@@ -113,7 +114,7 @@ describe('view-syncer/client-handler', () => {
     ]);
 
     // Client 3 is more behind.
-    expect(msgs[2]).toEqual([
+    expect(received[2]).toEqual([
       [
         'pokeStart',
         {pokeID: '121', baseCookie: '11z', cookie: '121'},
