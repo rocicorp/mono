@@ -2,6 +2,7 @@ import {UndoManager} from '@rocicorp/undo';
 import {useEffect, useRef, useState} from 'react';
 import {Zero} from 'zero-client';
 import App, {Collections} from '../../frontend/app';
+import {ZeroProvider} from '../../frontend/hooks/useZero';
 import type {Comment, Issue} from '../../frontend/issue.js';
 import {M, mutators} from '../../frontend/mutators';
 
@@ -38,7 +39,9 @@ export default function Home() {
   }
   return (
     <div className="repliear">
-      <App zero={zero} undoManager={undoManagerRef.current} />
+      <ZeroProvider zero={zero}>
+        <App undoManager={undoManagerRef.current} />
+      </ZeroProvider>
     </div>
   );
 }

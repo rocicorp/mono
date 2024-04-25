@@ -3,7 +3,6 @@ import {nanoid} from 'nanoid';
 import {useQueryState} from 'next-usequerystate';
 import {useCallback, useEffect, useState} from 'react';
 import {Remark} from 'react-remark';
-import type {Zero} from 'zero-client';
 import {timeAgo} from '../util/date';
 import type {Collections} from './app.jsx';
 import ArrowIcon from './assets/icons/arrow.svg';
@@ -15,13 +14,13 @@ import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
 import {useQuery} from './hooks/useZql';
+import {useZero} from './hooks/useZero';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onAddComment: (comment: Comment) => void;
   issues: Issue[];
   isLoading: boolean;
-  zero: Zero<M, Collections>;
 }
 
 // TODO: join comment.creatorID with members
@@ -54,7 +53,6 @@ function CommentsList(comments: Comment[], isLoading: boolean) {
 }
 
 export default function IssueDetail({
-  zero,
   onUpdateIssues,
   onAddComment,
   issues,
@@ -79,6 +77,7 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
+  const zero = useZero<M, Collections>();
   const issueQuery = zero.query.issue;
   const commentQuery = zero.query.comment;
 

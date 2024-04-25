@@ -25,6 +25,7 @@ import LeftMenu from './left-menu';
 import type {M} from './mutators';
 import TopFilter from './top-filter';
 import {useQuery} from './hooks/useZql';
+import {useZero} from './hooks/useZero';
 
 function getIssueOrder(view: string | null, orderBy: string | null): Order {
   if (view === 'board') {
@@ -53,18 +54,18 @@ export type Collections = {
 };
 
 type AppProps = {
-  zero: Zero<M, Collections>;
   undoManager: UndoManager;
 };
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-const App = ({zero, undoManager}: AppProps) => {
+const App = ({undoManager}: AppProps) => {
   const [view] = useQueryState('view');
   const [priorityFilter] = useQueryState('priorityFilter');
   const [statusFilter] = useQueryState('statusFilter');
   const [orderBy] = useQueryState('orderBy');
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
+  const zero = useZero<M, Collections>();
 
   const issueQuery = zero.query.issue;
 
@@ -209,7 +210,6 @@ function RawLayout({
   viewIssueCount,
   filteredIssues,
   hasNonViewFilters,
-  zero,
   onCloseMenu,
   onToggleMenu,
   onUpdateIssues,
@@ -245,7 +245,6 @@ function RawLayout({
             {detailIssueID && (
               <IssueDetail
                 issues={filteredIssues}
-                zero={zero}
                 onUpdateIssues={onUpdateIssues}
                 onAddComment={onCreateComment}
                 isLoading={isLoading}
