@@ -35,91 +35,6 @@ function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
     }
   });
 
-  const filterBys = [
-    [SignalStrongIcon, Filter.Priority, 'Priority'],
-    [TodoIcon, Filter.Status, 'Status'],
-  ];
-
-  //
-  const options = (filter: Filter | null) => {
-    switch (filter) {
-      case Filter.Priority:
-        return statusOpts.map(
-          (
-            [
-              // eslint-disable-next-line @typescript-eslint/naming-convention
-              Icon,
-              label,
-              priority,
-            ],
-            idx,
-          ) => (
-            <div
-              key={idx}
-              className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
-              onMouseDown={() => {
-                onSelectPriority(priority as Priority);
-                setFilter(null);
-                setFilterDropDownVisible(false);
-              }}
-            >
-              <Icon className="mr-4" />
-              {label}
-            </div>
-          ),
-        );
-
-      case Filter.Status:
-        return statuses.map(
-          (
-            [
-              // eslint-disable-next-line @typescript-eslint/naming-convention
-              Icon,
-              status,
-              label,
-            ],
-            idx,
-          ) => (
-            <div
-              key={idx}
-              className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
-              onMouseDown={() => {
-                onSelectStatus(status as Status);
-                setFilter(null);
-                setFilterDropDownVisible(false);
-              }}
-            >
-              <Icon className="mr-4" />
-              {label}
-            </div>
-          ),
-        );
-      default:
-        return filterBys.map(
-          (
-            [
-              // eslint-disable-next-line @typescript-eslint/naming-convention
-              Icon,
-              filter,
-              label,
-            ],
-            idx,
-          ) => (
-            <div
-              key={idx}
-              className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
-              onMouseDown={() => {
-                setFilter(filter as Filter);
-              }}
-            >
-              <Icon className="mr-4" />
-              {label}
-            </div>
-          ),
-        );
-    }
-  };
-
   return (
     <div ref={ref}>
       <button
@@ -138,10 +53,124 @@ function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
         {...attributes.popper}
         className="cursor-default bg-white rounded shadow-modal z-100 w-34"
       >
-        <div style={styles.offset}>{options(filter)}</div>
+        <div style={styles.offset}>
+          <Options
+            filter={filter}
+            onSelectPriority={onSelectPriority}
+            onSelectStatus={onSelectStatus}
+            setFilter={setFilter}
+            setFilterDropDownVisible={setFilterDropDownVisible}
+          />
+        </div>
       </div>
     </div>
   );
+}
+
+const filterBys = [
+  [SignalStrongIcon, Filter.Priority, 'Priority'],
+  [TodoIcon, Filter.Status, 'Status'],
+];
+
+function Options({
+  filter,
+  onSelectStatus,
+  onSelectPriority,
+  setFilter,
+  setFilterDropDownVisible,
+}: {
+  filter: Filter | null;
+  setFilter: (filter: Filter | null) => void;
+  setFilterDropDownVisible: (visible: boolean) => void;
+} & Props) {
+  switch (filter) {
+    case Filter.Priority:
+      return (
+        <>
+          {statusOpts.map(
+            (
+              [
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                Icon,
+                label,
+                priority,
+              ],
+              idx,
+            ) => (
+              <div
+                key={idx}
+                className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
+                onMouseDown={() => {
+                  onSelectPriority(priority as Priority);
+                  setFilter(null);
+                  setFilterDropDownVisible(false);
+                }}
+              >
+                <Icon className="mr-4" />
+                {label}
+              </div>
+            ),
+          )}
+        </>
+      );
+
+    case Filter.Status:
+      return (
+        <>
+          {statuses.map(
+            (
+              [
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                Icon,
+                status,
+                label,
+              ],
+              idx,
+            ) => (
+              <div
+                key={idx}
+                className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
+                onMouseDown={() => {
+                  onSelectStatus(status as Status);
+                  setFilter(null);
+                  setFilterDropDownVisible(false);
+                }}
+              >
+                <Icon className="mr-4" />
+                {label}
+              </div>
+            ),
+          )}
+        </>
+      );
+    default:
+      return (
+        <>
+          {filterBys.map(
+            (
+              [
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                Icon,
+                filter,
+                label,
+              ],
+              idx,
+            ) => (
+              <div
+                key={idx}
+                className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
+                onMouseDown={() => {
+                  setFilter(filter as Filter);
+                }}
+              >
+                <Icon className="mr-4" />
+                {label}
+              </div>
+            ),
+          )}
+        </>
+      );
+  }
 }
 
 export default FilterMenu;
