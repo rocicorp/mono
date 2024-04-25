@@ -21,8 +21,6 @@ import type {PatchOperation} from './patch-operation.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
 import type {ReplicacheOptions} from './replicache-options.js';
 import {
-  MutatorDefs,
-  Poke,
   Replicache,
   getTestInstance,
   httpStatusUnauthorized,
@@ -47,6 +45,7 @@ import {
 } from './test-util.js';
 import {TransactionClosedError} from './transaction-closed-error.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
+import type {MutatorDefs, Poke} from './types.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

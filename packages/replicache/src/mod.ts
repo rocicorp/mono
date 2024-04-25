@@ -29,11 +29,11 @@ export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
 export type {IterableUnion} from './iterable-union.js';
 export {IDBNotFoundError} from './kv/idb-store.js';
 export type {
-  StoreProvider as KVStoreProvider,
-  DropStore as DropKVStore,
   CreateStore as CreateKVStore,
+  DropStore as DropKVStore,
   Read as KVRead,
   Store as KVStore,
+  StoreProvider as KVStoreProvider,
   Write as KVWrite,
 } from './kv/store.js';
 export {mergeAsyncIterables} from './merge-async-iterables.js';
@@ -43,7 +43,7 @@ export {
   deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
-  DropDatabaseOptions,
+  type DropDatabaseOptions,
 } from './persist/collect-idb-databases.js';
 export type {
   PullResponse,
@@ -59,14 +59,6 @@ export type {
 export type {PushError, PushResponse, Pusher, PusherResult} from './pusher.js';
 export type {ReplicacheOptions} from './replicache-options.js';
 export {Replicache, makeIDBName} from './replicache.js';
-export type {
-  MaybePromise,
-  MutatorDefs,
-  MutatorReturn,
-  Poke,
-  RequestOptions,
-  UpdateNeededReason,
-} from './replicache.js';
 export {makeScanResult} from './scan-iterator.js';
 export type {
   AsyncIterableIteratorToArray,
@@ -112,4 +104,12 @@ export type {
   TransactionReason,
   WriteTransaction,
 } from './transactions.js';
+export type {
+  MaybePromise,
+  MutatorDefs,
+  MutatorReturn,
+  Poke,
+  RequestOptions,
+  UpdateNeededReason,
+} from './types.js';
 export {version} from './version.js';

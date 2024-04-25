@@ -43,10 +43,10 @@ import type {
   Puller,
 } from './puller.js';
 import type {PushResponse, Pusher} from './pusher.js';
-import type {MaybePromise} from './replicache.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {beginPullV0, beginPullV1} from './sync/pull.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD, push} from './sync/push.js';
+import type {MaybePromise} from './types.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB

@@ -15,7 +15,7 @@ import type {WriteTransaction} from './transactions.js';
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {getDefaultPusher} from './get-default-pusher.js';
-import type {UpdateNeededReason} from './replicache.js';
+import type {UpdateNeededReason} from './types.js';
 
 initReplicacheTesting();
 
