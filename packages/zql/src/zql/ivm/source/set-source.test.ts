@@ -1,6 +1,6 @@
+import fc from 'fast-check';
 import {expect, test} from 'vitest';
 import {Materialite} from '../materialite.js';
-import fc from 'fast-check';
 
 type E = {id: number};
 
@@ -21,21 +21,20 @@ test('add', () => {
   );
 });
 
-test('delete', async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
+test('delete', () => {
+  fc.assert(
+    fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
       const source = m.newSetSource(comparator);
 
       arr.forEach(x => source.add({id: x}));
       arr.forEach(x => source.delete({id: x}));
-      await Promise.resolve();
       expect([...source.value]).toEqual([]);
     }),
   );
 });
 
-test('on', async () => {
+test('on', () => {
   const m = new Materialite();
   const source = m.newSetSource(comparator);
 
@@ -51,7 +50,6 @@ test('on', async () => {
     source.add({id: 2});
     source.delete({id: 3});
   });
-  await Promise.resolve();
 
   // only called at the end of a transaction.
   expect(callCount).toBe(1);

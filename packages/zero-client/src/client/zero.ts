@@ -3,7 +3,8 @@ import {Resolver, resolver} from '@rocicorp/resolver';
 import type {Entity} from '@rocicorp/zql/src/entity.js';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
-import {makeReplicacheContext} from '@rocicorp/zql/src/zql/context/replicache-context.js';
+import {ZeroContext} from '@rocicorp/zql/src/zql/context/zero-context.js';
+import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
 import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {EntityQuery} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {
@@ -29,13 +30,11 @@ import type {
   PullerResultV1,
 } from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
+import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import {Replicache} from 'replicache/src/replicache.js';
 import type {
-  WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
-  WatchNoIndexCallback as ExperimentalWatchNoIndexCallback,
-  WatchOptions as ExperimentalWatchOptions,
   SubscribeOptions,
+  WatchCallback,
 } from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
@@ -68,6 +67,10 @@ import {PokeHandler} from './poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
+import {
+  ZQLSubscriptionsManager,
+  ZQLWatchSubscription,
+} from './subscriptions.js';
 import {version} from './version.js';
 
 export type QueryDefs = {
@@ -184,7 +187,7 @@ export interface ReplicacheInternalAPI {
 export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   readonly version = version;
 
-  readonly #rep: Replicache<MD>;
+  readonly #rep: ReplicacheImpl<MD>;
   readonly #server: HTTPString | null;
   readonly userID: string;
   readonly roomID: string;
@@ -225,6 +228,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   };
 
   readonly #zqlContext: ZQLContext;
+  readonly #materialite = new Materialite();
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -380,10 +384,15 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       enableLicensing: false,
     };
 
-    this.#rep = new Replicache({
-      ...replicacheOptions,
-      ...replicacheInternalOptions,
-    });
+    this.#rep = new ReplicacheImpl(
+      {
+        ...replicacheOptions,
+        ...replicacheInternalOptions,
+      },
+      (queryInternal, lc) =>
+        new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
+    );
+
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
@@ -396,10 +405,17 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       logOptions.logSink,
     );
 
-    this.#zqlContext = makeReplicacheContext(this.#rep, {
-      subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
-      subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
-    });
+    this.#zqlContext = new ZeroContext(
+      this.#materialite,
+      (name, cb) =>
+        this.#rep.subscriptions.add(
+          new ZQLWatchSubscription(name, cb as WatchCallback),
+        ),
+      {
+        subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
+        subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
+      },
+    );
 
     this.query = this.#registerQueries(queries);
 
@@ -537,33 +553,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     options: SubscribeOptions<R> | ((result: R) => void),
   ): () => void {
     return this.#rep.subscribe(body, options);
-  }
-
-  /**
-   * Watches Zero for changes.
-   *
-   * The `callback` gets called whenever the underlying data changes and the
-   * `key` changes matches the
-   * [[ExperimentalWatchNoIndexOptions|ExperimentalWatchOptions.prefix]]
-   * if present. If a change occurs to the data but the change does not impact
-   * the key space the callback is not called. In other words, the callback is
-   * never called with an empty diff.
-   *
-   * This gets called after commit (a mutation or a rebase).
-   *
-   * @experimental This method is under development and its semantics will
-   * change.
-   */
-  experimentalWatch(callback: ExperimentalWatchNoIndexCallback): () => void;
-  experimentalWatch<Options extends ExperimentalWatchOptions>(
-    callback: ExperimentalWatchCallbackForOptions<Options>,
-    options?: Options,
-  ): () => void;
-  experimentalWatch<Options extends ExperimentalWatchOptions>(
-    callback: ExperimentalWatchCallbackForOptions<Options>,
-    options?: Options,
-  ): () => void {
-    return this.#rep.experimentalWatch(callback, options);
   }
 
   #onMessage = (e: MessageEvent<string>) => {

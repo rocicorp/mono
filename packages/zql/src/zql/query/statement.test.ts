@@ -10,13 +10,12 @@ const e1 = z.object({
   optStr: z.string().optional(),
 });
 type E1 = z.infer<typeof e1>;
-test('basic materialization', async () => {
+test('basic materialization', () => {
   const context = makeTestContext();
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
   const stmt = q.select('id', 'n').where('n', '>', 100).prepare();
 
-  const expected: E1[] = [];
   const calledWith: (readonly E1[])[] = [];
   stmt.subscribe(data => {
     calledWith.push(data);
@@ -30,14 +29,17 @@ test('basic materialization', async () => {
 
   context.getSource('e1').add(items[0]);
 
-  expected.push(items[1]);
   context.getSource('e1').add(items[1]);
 
-  expected.push(items[2]);
   context.getSource('e1').add(items[2]);
 
-  await Promise.resolve();
-  expect(calledWith).toEqual([[items[1], items[2]]]);
+  expect(calledWith).toEqual([
+    [{id: 'b', n: 101}],
+    [
+      {id: 'b', n: 101},
+      {id: 'c', n: 102},
+    ],
+  ]);
 });
 
 test('sorted materialization', async () => {

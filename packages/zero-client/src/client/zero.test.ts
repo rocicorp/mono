@@ -14,10 +14,9 @@ import type {
   ReadonlyJSONObject,
 } from 'replicache';
 import {assert} from 'shared/src/asserts.js';
-import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, suite, test} from 'vitest';
+import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
 import type {EntityQuery} from '../mod.js';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
@@ -692,81 +691,71 @@ test('smokeTest', async () => {
 
   for (const c of cases) {
     // zeroForTest adds the socket by default.
+    type Issue = {
+      id: string;
+      value: number;
+    };
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
       roomID: 'smokeTestRoom',
       mutators: {
-        addData: async (
-          tx: WriteTransaction,
-          data: {[key: string]: JSONValue},
-        ) => {
-          for (const [key, value] of Object.entries(data)) {
-            await tx.set(key, value);
+        addData: async (tx: WriteTransaction, issues: Issue[]) => {
+          for (const issue of issues) {
+            await tx.set(`issues/${issue.id}`, issue);
           }
         },
-        del: async (tx: WriteTransaction, key: string) => {
-          await tx.del(key);
+        del: async (tx: WriteTransaction, id: string) => {
+          await tx.del(`issues/${id}`);
         },
       },
       ...serverOptions,
+      queries: {
+        issues: v => v as Issue,
+      },
     });
 
-    const spy = sinon.spy();
-    const unwatch = r.experimentalWatch(spy);
+    const spy = vi.fn();
+    const unsubscribe = r.query.issues.select('*').prepare().subscribe(spy);
 
-    await r.mutate.addData({a: 1, b: 2});
-
-    expect(spy.callCount).to.equal(1);
-    expect(spy.lastCall.args).to.deep.equal([
-      [
-        {
-          op: 'add',
-          key: 'a',
-          newValue: 1,
-        },
-        {
-          op: 'add',
-          key: 'b',
-          newValue: 2,
-        },
-      ],
+    await r.mutate.addData([
+      {id: 'a', value: 1},
+      {id: 'b', value: 2},
     ]);
 
-    spy.resetHistory();
-    await r.mutate.addData({a: 1, b: 2});
-    expect(spy.callCount).to.equal(0);
-
-    await r.mutate.addData({a: 11});
-    expect(spy.callCount).to.equal(1);
-    expect(spy.lastCall.args).to.deep.equal([
-      [
-        {
-          op: 'change',
-          key: 'a',
-          newValue: 11,
-          oldValue: 1,
-        },
-      ],
+    // once for initial data, once for the mutation
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls[0][0]).toEqual([]);
+    expect(spy.mock.calls[1][0]).toEqual([
+      {id: 'a', value: 1},
+      {id: 'b', value: 2},
     ]);
 
-    spy.resetHistory();
+    spy.mockReset();
+
+    await r.mutate.addData([
+      {id: 'a', value: 1},
+      {id: 'b', value: 2},
+    ]);
+
+    expect(spy).toHaveBeenCalledTimes(0);
+
+    await r.mutate.addData([{id: 'a', value: 11}]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.lastCall[0]).toEqual([
+      {id: 'a', value: 11},
+      {id: 'b', value: 2},
+    ]);
+
+    spy.mockReset();
     await r.mutate.del('b');
-    expect(spy.callCount).to.equal(1);
-    expect(spy.lastCall.args).to.deep.equal([
-      [
-        {
-          op: 'del',
-          key: 'b',
-          oldValue: 2,
-        },
-      ],
-    ]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.lastCall[0]).toEqual([{id: 'a', value: 11}]);
 
-    unwatch();
+    unsubscribe();
 
-    spy.resetHistory();
-    await r.mutate.addData({c: 6});
-    expect(spy.callCount).to.equal(0);
+    spy.mockReset();
+    await r.mutate.addData([{id: 'c', value: 6}]);
+    expect(spy).toHaveBeenCalledTimes(0);
   }
 });
 

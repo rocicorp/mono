@@ -26,7 +26,7 @@ const enum InvokeKind {
   Regular,
 }
 
-interface Subscription<R> {
+export interface Subscription<R> {
   hasIndexSubscription(indexName: string): boolean;
 
   invoke(
@@ -52,7 +52,7 @@ const emptySet: ReadonlySet<string> = new Set();
 const unitializedLastValue = Symbol();
 type UnitializedLastValue = typeof unitializedLastValue;
 
-class SubscriptionImpl<R> implements Subscription<R> {
+export class SubscriptionImpl<R> implements Subscription<R> {
   readonly #body: (tx: ReadTransaction) => Promise<R>;
   readonly #onData: (result: R) => void;
   #lastValue: R | UnitializedLastValue = unitializedLastValue;
@@ -186,7 +186,7 @@ export type WatchNoIndexOptions = {
 
 export type WatchCallback = (diff: Diff) => void;
 
-class WatchImpl implements Subscription<Diff | undefined> {
+export class WatchSubscription implements Subscription<Diff | undefined> {
   readonly #callback: WatchCallback;
   readonly #prefix: string;
   readonly #indexName: string | undefined;
@@ -195,11 +195,11 @@ class WatchImpl implements Subscription<Diff | undefined> {
   readonly onError: ((error: unknown) => void) | undefined = undefined;
   readonly onDone: (() => void) | undefined = undefined;
 
-  constructor(callback: WatchCallback, options: WatchOptions) {
+  constructor(callback: WatchCallback, options?: WatchOptions) {
     this.#callback = callback;
-    this.#prefix = options.prefix ?? '';
-    this.#indexName = (options as WatchIndexOptions).indexName;
-    this.#initialValuesInFirstDiff = options.initialValuesInFirstDiff ?? false;
+    this.#prefix = options?.prefix ?? '';
+    this.#indexName = (options as WatchIndexOptions)?.indexName;
+    this.#initialValuesInFirstDiff = options?.initialValuesInFirstDiff ?? false;
   }
 
   hasIndexSubscription(indexName: string): boolean {
@@ -361,11 +361,18 @@ export interface SubscribeOptions<R> {
   isEqual?: ((a: R, b: R) => boolean) | undefined;
 }
 
-type UnknownSubscription = Subscription<unknown>;
+export type UnknownSubscription = Subscription<unknown>;
 
 type SubscriptionSet = Set<UnknownSubscription>;
 
-export class SubscriptionsManager implements DiffComputationConfig {
+export interface SubscriptionsManager extends DiffComputationConfig {
+  clear(): void;
+  fire(diffs: DiffsMap): Promise<void>;
+  hasPendingSubscriptionRuns: boolean;
+  add<R>(subscription: Subscription<R>): () => void;
+}
+
+export class SubscriptionsManagerImpl implements SubscriptionsManager {
   readonly #subscriptions: SubscriptionSet = new Set();
   readonly #pendingSubscriptions: SubscriptionSet = new Set();
   readonly #queryInternal: QueryInternal;
@@ -377,33 +384,13 @@ export class SubscriptionsManager implements DiffComputationConfig {
     this.#lc = lc;
   }
 
-  #add(subscription: UnknownSubscription): () => void {
-    this.#subscriptions.add(subscription);
-    void this.#scheduleInitialSubscriptionRun(subscription);
-    return () => this.#subscriptions.delete(subscription);
-  }
-
-  addSubscription<R>(
-    body: (tx: ReadTransaction) => Promise<R>,
-    {onData, onError, onDone, isEqual}: SubscribeOptions<R>,
-  ): () => void {
-    const s = new SubscriptionImpl(
-      body,
-      onData,
-      onError,
-      onDone,
-      isEqual,
-    ) as unknown as UnknownSubscription;
-
-    return this.#add(s);
-  }
-
-  addWatch(
-    callback: WatchCallback,
-    options: WatchOptions | undefined,
-  ): () => void {
-    const w = new WatchImpl(callback, options ?? {}) as UnknownSubscription;
-    return this.#add(w);
+  add<R>(subscription: Subscription<R>): () => void {
+    this.#subscriptions.add(subscription as UnknownSubscription);
+    void this.#scheduleInitialSubscriptionRun(
+      subscription as UnknownSubscription,
+    );
+    return () =>
+      this.#subscriptions.delete(subscription as UnknownSubscription);
   }
 
   clear(): void {
@@ -444,6 +431,15 @@ export class SubscriptionsManager implements DiffComputationConfig {
         }),
       ),
     );
+
+    this.callCallbacks(subs, results);
+  }
+
+  // Public method so that ZQL can wrap it in a transaction.
+  callCallbacks(
+    subs: readonly Subscription<unknown>[],
+    results: PromiseSettledResult<unknown>[],
+  ) {
     for (let i = 0; i < subs.length; i++) {
       const s = subs[i];
       const result = results[i];

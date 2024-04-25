@@ -72,24 +72,14 @@ export class Materialite {
       fn();
       return;
     }
-    let failed = false;
-
     try {
-      // ideally we do not need to queue a micro task
-      // in order to place all experimental watch calls into the same transaction.
-      // arv is working on this.
-      queueMicrotask(() => {
-        if (!failed) {
-          this.#commit();
-        } else {
-          this.#rollback();
-        }
-        this.#dirtySources.clear();
-      });
       fn();
+      this.#commit();
     } catch (e) {
-      failed = true;
+      this.#rollback();
       throw e;
+    } finally {
+      this.#dirtySources.clear();
     }
   }
 
