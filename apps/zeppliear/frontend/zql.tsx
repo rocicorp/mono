@@ -1,5 +1,5 @@
 import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {EntityQuery} from 'zero-client';
 
 export function useQuery<From extends FromSet, Return>(
@@ -7,18 +7,36 @@ export function useQuery<From extends FromSet, Return>(
   dependencies: readonly unknown[] = [],
 ): Return {
   const [snapshot, setSnapshot] = useState([] as Return);
+  const [lastDeps, setLastDeps] = useState<readonly unknown[] | undefined>();
+  const unsubscribeRef = useRef<() => void>();
+  const statementRef = useRef<ReturnType<(typeof q)['prepare']>>();
 
-  useEffect(() => {
+  if (
+    lastDeps === undefined ||
+    lastDeps.length !== dependencies.length ||
+    lastDeps.some((v, i) => v !== dependencies[i])
+  ) {
+    setLastDeps(dependencies);
     const statement = q.prepare();
-    void statement.exec().then(v => setSnapshot(v as Return));
-    const unsubscribe = statement.subscribe(v => setSnapshot(v as Return));
-    return () => {
-      unsubscribe();
-      statement.destroy();
-    };
+    if (unsubscribeRef.current && statementRef.current) {
+      unsubscribeRef.current();
+      statementRef.current.destroy();
+    }
+    statementRef.current = statement;
+    unsubscribeRef.current = statement.subscribe(v => {
+      setSnapshot(v as Return);
+    });
+  }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies);
+  useEffect(
+    () => () => {
+      if (unsubscribeRef.current && statementRef.current) {
+        unsubscribeRef.current();
+        statementRef.current.destroy();
+      }
+    },
+    [],
+  );
 
   return snapshot;
 }
