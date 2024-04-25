@@ -391,7 +391,9 @@ export class EntityQuery<From extends FromSet, Return = []> {
       expr = exprOrField;
     }
 
-    expr = qualify(this.#ast, expr);
+    if (whereOrHaving === 'where') {
+      expr = qualify(this.#ast, expr);
+    }
 
     let cond: WhereCondition<From>;
     const exitingWhereOrHaving = this.#ast[whereOrHaving] as
@@ -480,28 +482,6 @@ export function astForTesting(q: WeakKey): AST {
 }
 
 type ArrayOfAtLeastTwo<T> = [T, T, ...T[]];
-
-export function qualify<F extends FromSet>(
-  ast: AST,
-  expr: WhereCondition<F>,
-): WhereCondition<F> {
-  switch (expr.op) {
-    case 'AND':
-    case 'OR':
-      return {
-        ...expr,
-        conditions: expr.conditions.map(c => qualify(ast, c)),
-      };
-    default:
-      if (ast.joins !== undefined || expr.field.startsWith(ast.table + '.')) {
-        return expr;
-      }
-      return {
-        ...expr,
-        field: `${ast.table}.${expr.field}`,
-      };
-  }
-}
 
 export function or<F extends FromSet>(
   ...conditions: ArrayOfAtLeastTwo<WhereCondition<F>>
@@ -612,5 +592,30 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
       return 'INCONGRUENT';
     case 'INCONGRUENT':
       return 'CONGRUENT';
+  }
+}
+
+export function qualify<F extends FromSet>(
+  ast: AST,
+  expr: WhereCondition<F>,
+): WhereCondition<F> {
+  switch (expr.op) {
+    case 'AND':
+    case 'OR':
+      return {
+        ...expr,
+        conditions: expr.conditions.map(c => qualify(ast, c)),
+      };
+    default:
+      if (
+        (ast.joins !== undefined && ast.joins.length > 0) ||
+        expr.field.startsWith(ast.table + '.')
+      ) {
+        return expr;
+      }
+      return {
+        ...expr,
+        field: `${ast.table}.${expr.field}`,
+      };
   }
 }

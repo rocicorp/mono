@@ -98,6 +98,10 @@ function TopFilter({
       queryTypes.stringEnum<PriorityString>(Object.values(PriorityString)),
     ),
   );
+  const [labelFilters, setLabelFilterByParam] = useQueryState(
+    'labelFilter',
+    queryTypes.array(queryTypes.string),
+  );
 
   const statusFilters = statusStringFilters?.map(statusFromString) ?? null;
   const setStatusFilterByParam = (value: Status[] | null) =>
@@ -149,6 +153,15 @@ function TopFilter({
                 statusSet.add(status);
               }
               await setStatusFilterByParam([...statusSet]);
+            }}
+            onSelectLabel={async label => {
+              const labelSet = new Set(labelFilters);
+              if (labelSet.has(label)) {
+                labelSet.delete(label);
+              } else {
+                labelSet.add(label);
+              }
+              await setLabelFilterByParam([...labelSet]);
             }}
           />
         </div>

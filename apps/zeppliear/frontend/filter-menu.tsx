@@ -12,9 +12,10 @@ import {LabelMenu} from './label-menu';
 interface Props {
   onSelectStatus: (filter: Status) => void;
   onSelectPriority: (filter: Priority) => void;
+  onSelectLabel: (filter: string) => void;
 }
 
-function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
+function FilterMenu({onSelectStatus, onSelectPriority, onSelectLabel}: Props) {
   const [filterRef, setFilterRef] = useState<HTMLButtonElement | null>(null);
   const [popperRef, setPopperRef] = useState<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
@@ -62,6 +63,7 @@ function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
             filter={filter}
             onSelectPriority={onSelectPriority}
             onSelectStatus={onSelectStatus}
+            onSelectLabel={onSelectLabel}
             setFilter={setFilter}
             setFilterDropDownVisible={setFilterDropDownVisible}
           />
@@ -81,6 +83,7 @@ function Options({
   filter,
   onSelectStatus,
   onSelectPriority,
+  onSelectLabel,
   setFilter,
   setFilterDropDownVisible,
 }: {
@@ -149,7 +152,15 @@ function Options({
         </>
       );
     case Filter.Label: {
-      return <LabelMenu />;
+      return (
+        <LabelMenu
+          onSelectLabel={label => {
+            setFilter(null);
+            setFilterDropDownVisible(false);
+            onSelectLabel(label);
+          }}
+        />
+      );
     }
     default:
       return (

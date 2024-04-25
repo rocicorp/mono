@@ -1,5 +1,5 @@
 import {generateNKeysBetween} from 'fractional-indexing';
-import {groupBy, indexOf} from 'lodash';
+import {groupBy, findIndex} from 'lodash';
 import {memo, useCallback} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
@@ -14,8 +14,10 @@ export type IssuesByStatusType = {
   [Status.Canceled]: Issue[];
 };
 
-export const getIssueByType = (allIssues: Issue[]): IssuesByStatusType => {
-  const issuesBySType = groupBy(allIssues, 'status');
+export const getIssueByType = (
+  allIssues: {issue: Issue; labels: string[]}[],
+): IssuesByStatusType => {
+  const issuesBySType = groupBy(allIssues, i => i.issue.status);
   const defaultIssueByType = {
     [Status.Backlog]: [],
     [Status.Todo]: [],
@@ -30,12 +32,15 @@ export const getIssueByType = (allIssues: Issue[]): IssuesByStatusType => {
 export function getKanbanOrderIssueUpdates(
   issueToMove: Issue,
   issueToInsertBefore: Issue,
-  issues: Issue[],
+  issues: {issue: Issue; labels: string[]}[],
 ): {issue: Issue; update: IssueUpdate}[] {
-  const indexInKanbanOrder = indexOf(issues, issueToInsertBefore);
+  const indexInKanbanOrder = findIndex(
+    issues,
+    i => i.issue.id === issueToInsertBefore.id,
+  );
   let beforeKey: string | null = null;
   if (indexInKanbanOrder > 0) {
-    beforeKey = issues[indexInKanbanOrder - 1].kanbanOrder;
+    beforeKey = issues[indexInKanbanOrder - 1].issue.kanbanOrder;
   }
   let afterKey: string | null = null;
   const issuesToReKey: Issue[] = [];
@@ -43,11 +48,11 @@ export function getKanbanOrderIssueUpdates(
   // have identical kanbanOrder values, we need to fix up the
   // collision by re-keying the issues.
   for (let i = indexInKanbanOrder; i < issues.length; i++) {
-    if (issues[i].kanbanOrder !== beforeKey) {
-      afterKey = issues[i].kanbanOrder;
+    if (issues[i].issue.kanbanOrder !== beforeKey) {
+      afterKey = issues[i].issue.kanbanOrder;
       break;
     }
-    issuesToReKey.push(issues[i]);
+    issuesToReKey.push(issues[i].issue);
   }
   const newKanbanOrderKeys = generateNKeysBetween(
     beforeKey,
@@ -71,7 +76,7 @@ export function getKanbanOrderIssueUpdates(
 }
 
 interface Props {
-  issues: Issue[];
+  issues: {issue: Issue; labels: string[]}[];
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
 }

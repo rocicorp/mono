@@ -21,6 +21,18 @@ export type SampleData = {
   issueLabels: IssueLabel[];
 };
 
+const labels = [
+  'Feature',
+  'Bug',
+  'Enhancement',
+  'Help Wanted',
+  'Good First Issue',
+  'Needs Reproduction',
+  'Needs More Info',
+  'Duplicate',
+  'Invalid',
+].map((name, idx) => ({id: `${idx}`, name}));
+
 export function getReactSampleData(): SampleData {
   const sortedIssues = sortBy(
     reactIssues,
@@ -75,79 +87,9 @@ export function getReactSampleData(): SampleData {
   const members: Member[] = Object.entries(memberLoginToID).map(
     ([login, id]) => ({id, name: login}),
   );
-  const labels = [
-    '❤️',
-    'Browser: IE',
-    'Browser: Safari',
-    'CLA Signed',
-    'Component: Build Infrastructure',
-    'Component: Component API',
-    'Component: Concurrent Features',
-    'Component: Core Utilities',
-    'Component: Developer Tools',
-    'Component: DOM',
-    'Component: ESLint Rules',
-    'Component: Fast Refresh',
-    'Component: Flight',
-    'Component: Hooks',
-    'Component: Optimizing Compiler',
-    'Component: ReactIs',
-    'Component: Reconciler',
-    'Component: Scheduler',
-    'Component: Scheduling Profiler',
-    'Component: Server Rendering',
-    'Component: Shallow Renderer',
-    'Component: Suspense',
-    'Component: Test Renderer',
-    'Component: Test Utils',
-    'dependencies',
-    'Difficulty: challenging',
-    'Difficulty: medium',
-    'Difficulty: starter',
-    'fb-exported',
-    'good first issue',
-    'good first issue (taken)',
-    'HTML',
-    'invalid',
-    'Needs Browser Testing',
-    'Partner',
-    'React 18',
-    'React 19',
-    'React Core Team',
-    'Resolution: Backlog',
-    'Resolution: Duplicate',
-    'Resolution: Expected Behavior',
-    'Resolution: Invalid',
-    'Resolution: Needs More Information',
-    'Resolution: Stale',
-    'Resolution: Support Redirect',
-    'Resolution: Unsolved',
-    'Resolution: Wontfix',
-    'Size: Large',
-    'Size: Medium',
-    'Size: Medium-Large',
-    'Size: Small',
-    'Size: Small-Medium',
-    'Status: New',
-    'Status: Reverted',
-    'Status: Unconfirmed',
-    'SVG',
-    'Type: Big Picture',
-    'Type: Breaking Change',
-    'Type: Bug',
-    'Type: Discussion',
-    'Type: Enhancement',
-    'Type: Feature Request',
-    'Type: Needs Investigation',
-    'Type: Question',
-    'Type: Regression',
-    'Type: Release',
-    'Type: Security',
-    'Type: Umbrella',
-  ].map(name => ({id: nanoid(), name}));
 
   const issueLabels = issues.flatMap(issue => {
-    const numLabels = Math.floor(Math.random() * 4);
+    const numLabels = Math.floor(Math.random() * 3);
     const labelIDs = new Set<string>();
     while (labelIDs.size < numLabels) {
       labelIDs.add(labels[Math.floor(Math.random() * labels.length)].id);
@@ -234,3 +176,6 @@ function getPriority({
   }
   return Priority.None;
 }
+
+// cXCY9kvANCumG9onAEqZn
+// ^^ what nanoid is that?

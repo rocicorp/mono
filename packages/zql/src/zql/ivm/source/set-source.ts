@@ -19,25 +19,30 @@ import type {Source, SourceInternal} from './source.js';
  * exists to be able to receive historical data.
  *
  */
+let id = 0;
 export abstract class SetSource<T extends object> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
   protected readonly _materialite: MaterialiteForSourceInternal;
   readonly #listeners = new Set<(data: ITree<T>, v: Version) => void>();
   #pending: Entry<T>[] = [];
-  #historyRequests: Set<PullMsg> = new Set();
+  #historyRequests: Map<number, PullMsg> = new Map();
   #tree: ITree<T>;
   #seeded = false;
   #noChange = false;
   readonly comparator: Comparator<T>;
+  #id = id++;
+  readonly #name: string | undefined;
 
   constructor(
     materialite: MaterialiteForSourceInternal,
     comparator: Comparator<T>,
     treapConstructor: (comparator: Comparator<T>) => ITree<T>,
+    name?: string | undefined,
   ) {
     this._materialite = materialite;
     this.#stream = new DifferenceStream<T>();
+    this.#name = name;
     this.#stream.setUpstream({
       commit: () => {},
       messageUpstream: (message: Request) => {
@@ -61,7 +66,11 @@ export abstract class SetSource<T extends object> implements Source<T> {
         }
 
         if (this.#seeded) {
-          for (const request of this.#historyRequests) {
+          const historyRequests = this.#historyRequests;
+          // we have to reset here since `onCommitted` is called in the next micro task
+          // hopefully https://github.com/rocicorp/mono/pull/1641 reverts that
+          this.#historyRequests = new Map();
+          for (const request of historyRequests.values()) {
             this.#stream.newDifference(
               this._materialite.getVersion(),
               asEntries(this.#tree, request),
@@ -199,11 +208,15 @@ export abstract class SetSource<T extends object> implements Source<T> {
   processMessage(message: Request): void {
     switch (message.type) {
       case 'pull': {
-        this.#historyRequests.add(message);
+        this.#historyRequests.set(message.id, message);
         this._materialite.addDirtySource(this.#internal);
         break;
       }
     }
+  }
+
+  toString(): string {
+    return this.#name ?? `SetSource(${this.#id})`;
   }
 }
 
@@ -211,8 +224,9 @@ export class MutableSetSource<T extends object> extends SetSource<T> {
   constructor(
     materialite: MaterialiteForSourceInternal,
     comparator: Comparator<T>,
+    name?: string | undefined,
   ) {
-    super(materialite, comparator, comparator => new Treap(comparator));
+    super(materialite, comparator, comparator => new Treap(comparator), name);
   }
 
   protected _withNewOrdering(comp: Comparator<T>): this {

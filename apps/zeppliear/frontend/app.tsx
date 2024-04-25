@@ -66,6 +66,7 @@ const App = ({undoManager}: AppProps) => {
   const [view] = useQueryState('view');
   const [priorityFilter] = useQueryState('priorityFilter');
   const [statusFilter] = useQueryState('statusFilter');
+  const [labelFilter] = useQueryState('labelFilter');
   const [orderBy] = useQueryState('orderBy');
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
@@ -74,16 +75,33 @@ const App = ({undoManager}: AppProps) => {
   const issueQuery = zero.query.issue;
 
   const allIssues = useQuery(issueQuery.select('*'));
+  const issueListQuery = issueQuery
+    .leftJoin(
+      zero.query.issueLabel,
+      'issueLabel',
+      'issue.id',
+      'issueLabel.issueID',
+    )
+    .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id')
+    .groupBy('issue.id')
+    .select('issue.*', agg.array('label.name', 'labels'));
 
   const {filteredQuery, hasNonViewFilters, viewCountQuery} = filterQuery(
-    issueQuery,
+    issueListQuery,
     view,
     priorityFilter,
     statusFilter,
+    labelFilter,
   );
   const issueOrder = getIssueOrder(view, orderBy);
   const filteredAndOrderedQuery = orderQuery(filteredQuery, issueOrder);
-  const deps = [view, priorityFilter, statusFilter, issueOrder] as const;
+  const deps = [
+    view,
+    priorityFilter,
+    statusFilter,
+    issueOrder,
+    labelFilter,
+  ] as const;
   const filteredIssues = useQuery(filteredAndOrderedQuery, deps);
   const viewIssueCount = useQuery(viewCountQuery, deps)[0]?.count ?? 0;
 
@@ -195,7 +213,7 @@ interface LayoutProps {
   detailIssueID: string | null;
   isLoading: boolean;
   viewIssueCount: number;
-  filteredIssues: Issue[];
+  filteredIssues: {issue: Issue; labels: string[]}[];
   hasNonViewFilters: boolean;
   zero: Zero<M, Collections>;
   onCloseMenu: () => void;
@@ -287,10 +305,17 @@ function RawLayout({
 const Layout = memo(RawLayout);
 
 function filterQuery(
-  q: EntityQuery<{issue: Issue}, []>,
+  // TODO: having to know the from set and return type of the query to take it in as an arg is...
+  // confusing at best.
+  // TODO: having to know the `FromSet` is dumb.
+  q: EntityQuery<
+    {issue: Issue; label: Label},
+    {issue: Issue; labels: string[]}[]
+  >,
   view: string | null,
   priorityFilter: string | null,
   statusFilter: string | null,
+  labelFilter: string | null,
 ) {
   let viewStatuses: Set<Status> | undefined;
   switch (view?.toLowerCase()) {
@@ -304,6 +329,7 @@ function filterQuery(
 
   let issuesStatuses: Set<Status> | undefined;
   let issuesPriorities: Set<Priority> | undefined;
+  let issueLabels: Set<string> | undefined;
   let hasNonViewFilters = false;
   if (statusFilter) {
     issuesStatuses = new Set<Status>();
@@ -336,34 +362,49 @@ function filterQuery(
     }
   }
 
+  if (labelFilter) {
+    issueLabels = new Set<string>();
+    for (const label of labelFilter.split(',')) {
+      issueLabels.add(label);
+    }
+  }
+
   const viewStatusesQuery = viewStatuses
-    ? q.where('status', 'IN', [...viewStatuses])
+    ? q.where('issue.status', 'IN', [...viewStatuses])
     : q;
   const viewCountQuery = viewStatusesQuery.select(agg.count());
 
   if (issuesStatuses) {
     // Consider allowing Iterable<T> for IN
-    q = q.where('status', 'IN', [...issuesStatuses]);
+    q = q.where('issue.status', 'IN', [...issuesStatuses]);
   }
   if (issuesPriorities) {
-    q = q.where('priority', 'IN', [...issuesPriorities]);
+    q = q.where('issue.priority', 'IN', [...issuesPriorities]);
+  }
+  if (issueLabels) {
+    q = q.having('labels', 'INTERSECTS', [...issueLabels]);
   }
 
   return {filteredQuery: q, hasNonViewFilters, viewCountQuery};
 }
 
-function orderQuery(issueQuery: EntityQuery<{issue: Issue}, []>, order: Order) {
+function orderQuery<R>(
+  // TODO: having to know the return type of the query to take it in as an arg is...
+  // confusing at best.
+  issueQuery: EntityQuery<{issue: Issue; label: Label}, R>,
+  order: Order,
+) {
   switch (order) {
     case Order.Created:
-      return issueQuery.desc('created');
+      return issueQuery.desc('issue.created');
     case Order.Modified:
-      return issueQuery.desc('modified');
+      return issueQuery.desc('issue.modified');
     case Order.Status:
-      return issueQuery.desc('status', 'modified');
+      return issueQuery.desc('issue.status', 'issue.modified');
     case Order.Priority:
-      return issueQuery.desc('priority', 'modified');
+      return issueQuery.desc('issue.priority', 'issue.modified');
     case Order.Kanban:
-      return issueQuery.asc('kanbanOrder');
+      return issueQuery.asc('issue.kanbanOrder');
   }
 }
 
