@@ -23,7 +23,7 @@ test('compact', () => {
   index.add('a', [1, 1]);
   index.add('a', [2, 1]);
   index.add('b', [3, 2]);
-  index.compact(['a', 'b']);
+  index.compact(new Set(['a', 'b']));
 
   expect(index.get('a')).toEqual([
     [1, 2],
@@ -38,14 +38,14 @@ test('compact', () => {
     [1, -1],
   ]);
 
-  index.compact(['b']);
+  index.compact(new Set(['b']));
   expect(index.get('a')).toEqual([
     [1, 2],
     [2, 1],
     [1, -1],
   ]);
 
-  index.compact(['a']);
+  index.compact(new Set(['a']));
   expect(index.get('a')).toEqual([
     [1, 1],
     [2, 1],
@@ -54,12 +54,12 @@ test('compact', () => {
   index.add('a', [1, -1]);
   index.add('a', [2, -1]);
   index.add('a', [1, -1]);
-  index.compact(['a']);
+  index.compact(new Set(['a']));
 
   expect(index.get('a')).toEqual([[1, -1]]);
 
   index.add('a', [1, 1]);
-  index.compact(['a']);
+  index.compact(new Set(['a']));
   expect(index.get('a')).toEqual([]);
 });
 
@@ -110,7 +110,7 @@ test('join', () => {
     [{id: '2_2', a: 2, b: 2, [joinSymbol]: true}, 1],
   ]);
 
-  indexA.compact(['a']);
+  indexA.compact(new Set(['a']));
   result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([
     [{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1],
@@ -125,7 +125,7 @@ test('join', () => {
     [{id: '2_2', a: 2, b: 2, [joinSymbol]: true}, -1],
   ]);
 
-  indexB.compact(['b']);
+  indexB.compact(new Set(['b']));
   result = indexA.join(joinType.inner, 'a', indexB, 'b', identity)[0];
   expect(result).toEqual([[{id: '1_1', a: 1, b: 1, [joinSymbol]: true}, 1]]);
 });
