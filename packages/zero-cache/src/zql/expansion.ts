@@ -2,7 +2,12 @@ import type {AST, Condition} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 
-export type PrimaryKeys = (table: string) => readonly string[];
+/**
+ * Maps a table to the set of columns that must always be selected. For example,
+ * this may be used to ensure that `PRIMARY KEY` columns are included, as well
+ * as the `_0_version` column.
+ */
+export type RequiredColumns = (table: string) => readonly string[];
 
 /**
  * Expands the selection of a query to include all of the rows and column values
@@ -152,8 +157,11 @@ export type PrimaryKeys = (table: string) => readonly string[];
  *   ON parent."issues/id" = issues.parent_id;
  * ```
  */
-export function expandSelection(ast: AST, primaryKeys: PrimaryKeys): AST {
-  const expanded = expandSubqueries(ast, primaryKeys, new Set());
+export function expandSelection(
+  ast: AST,
+  requiredColumns: RequiredColumns,
+): AST {
+  const expanded = expandSubqueries(ast, requiredColumns, new Set());
   const reAliased = reAliasAndBubbleSelections(expanded, new Map());
   return reAliased;
 }
@@ -195,7 +203,7 @@ export function expandSelection(ast: AST, primaryKeys: PrimaryKeys): AST {
 // Exported for testing
 export function expandSubqueries(
   ast: AST,
-  primaryKeys: PrimaryKeys,
+  requiredColumns: RequiredColumns,
   externallyReferencedColumns: Set<string>,
 ): AST {
   const {select, where, joins, groupBy, orderBy, table, alias} = ast;
@@ -218,7 +226,7 @@ export function expandSubqueries(
   orderBy?.[0].forEach(addSelector);
 
   // Add primary keys
-  primaryKeys(table).forEach(addSelector);
+  requiredColumns(table).forEach(addSelector);
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
@@ -238,7 +246,7 @@ export function expandSubqueries(
       ...join,
       other: expandSubqueries(
         join.other,
-        primaryKeys,
+        requiredColumns,
         // Send down references to the JOIN alias as the externallyReferencedColumns.
         selectors.get(join.as) ?? new Set(),
       ),
