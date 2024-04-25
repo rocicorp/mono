@@ -17,6 +17,8 @@ import {
   orderEnumSchema,
   priorityEnumSchema,
   statusStringSchema,
+  IssueLabel,
+  Label,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -51,6 +53,8 @@ function getTitle(view: string | null) {
 export type Collections = {
   issue: Issue;
   comment: Comment;
+  label: Label;
+  issueLabel: IssueLabel;
 };
 
 type AppProps = {

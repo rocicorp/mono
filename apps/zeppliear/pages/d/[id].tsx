@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from 'react';
 import {Zero} from 'zero-client';
 import App, {Collections} from '../../frontend/app';
 import {ZeroProvider} from '../../frontend/hooks/useZero';
-import type {Comment, Issue} from '../../frontend/issue.js';
+import type {Comment, Issue, IssueLabel, Label} from '../../frontend/issue.js';
 import {M, mutators} from '../../frontend/mutators';
 
 export default function Home() {
@@ -27,6 +27,8 @@ export default function Home() {
         queries: {
           issue: v => v as Issue,
           comment: v => v as Comment,
+          label: v => v as Label,
+          issueLabel: v => v as IssueLabel,
         },
       });
 

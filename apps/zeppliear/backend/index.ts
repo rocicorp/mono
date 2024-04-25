@@ -25,6 +25,16 @@ function makeOptions(): ReflectServerOptions<M> {
             updateIssueModifed: false,
           });
         }
+        for (const label of sampleData.labels) {
+          await mutators.putLabel(write, {
+            label,
+          });
+        }
+        for (const issueLabel of sampleData.issueLabels) {
+          await mutators.putIssueLabel(write, {
+            link: issueLabel,
+          });
+        }
         await write.set('inited', true);
       }
     },

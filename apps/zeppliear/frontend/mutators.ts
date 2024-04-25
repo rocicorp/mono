@@ -9,6 +9,9 @@ import {
   Member,
   putMember,
   IssueUpdate,
+  Label,
+  putLabel,
+  putIssueLabel,
 } from './issue';
 
 export type M = typeof mutators;
@@ -72,5 +75,32 @@ export const mutators = {
     },
   ): Promise<void> => {
     await putMember(tx, member);
+  },
+  putLabel: async (
+    tx: WriteTransaction,
+    {
+      label,
+    }: {
+      label: Label;
+    },
+  ): Promise<void> => {
+    await putLabel(tx, label);
+  },
+  putIssueLabel: async (
+    tx: WriteTransaction,
+    {
+      link,
+    }: {
+      link: {
+        issueID: string;
+        labelID: string;
+      };
+    },
+  ): Promise<void> => {
+    await putIssueLabel(tx, {
+      id: `${link.issueID}-${link.labelID}`,
+      issueID: link.issueID,
+      labelID: link.labelID,
+    });
   },
 };
