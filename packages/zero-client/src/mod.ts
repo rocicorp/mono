@@ -61,4 +61,4 @@ export type {
   WriteTransaction,
 } from 'replicache';
 export type {ZeroOptions} from './client/options.js';
-export {Zero} from './client/zero.js';
+export {Zero, QueryDefs} from './client/zero.js';
