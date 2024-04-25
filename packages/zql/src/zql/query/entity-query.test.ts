@@ -16,6 +16,7 @@ import {
   or,
 } from './entity-query.js';
 
+type WeakKey = object;
 function ast(q: WeakKey): AST {
   const {alias: _, ...rest} = astForTesting(q);
   return rest;
@@ -70,9 +71,6 @@ test('query types', () => {
 
   // @ts-expect-error - Argument of type 'unique symbol' is not assignable to parameter of type '"id" | "str" | "optStr"'.ts(2345)
   q.select(sym);
-
-  // @ts-expect-error - Argument of type 'unique symbol' is not assignable to parameter of type 'FieldName<{ fields: E1; }>'.ts(2345)
-  q.where(sym, '==', true);
 
   // @ts-expect-error - 'x' is not a field that we can aggregate on
   q.select(agg.array('x')).groupBy('id');
@@ -568,7 +566,7 @@ describe('ast', () => {
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
-        field: 'id',
+        field: 'e1.id',
         op: '=',
         value: {
           type: 'literal',
@@ -587,7 +585,7 @@ describe('ast', () => {
         op: 'AND',
         conditions: [
           {
-            field: 'id',
+            field: 'e1.id',
             op: '=',
             value: {
               type: 'literal',
@@ -595,7 +593,7 @@ describe('ast', () => {
             },
           },
           {
-            field: 'a',
+            field: 'e1.a',
             op: '>',
             value: {
               type: 'literal',
@@ -615,7 +613,7 @@ describe('ast', () => {
         op: 'AND',
         conditions: [
           {
-            field: 'id',
+            field: 'e1.id',
             op: '=',
             value: {
               type: 'literal',
@@ -623,7 +621,7 @@ describe('ast', () => {
             },
           },
           {
-            field: 'a',
+            field: 'e1.a',
             op: '>',
             value: {
               type: 'literal',
@@ -631,7 +629,7 @@ describe('ast', () => {
             },
           },
           {
-            field: 'c',
+            field: 'e1.c',
             op: '=',
             value: {
               type: 'literal',
@@ -718,8 +716,8 @@ describe('ast', () => {
       where: {
         op: 'OR',
         conditions: [
-          {op: '=', field: 'a', value: {type: 'literal', value: 123}},
-          {op: '=', field: 'c', value: {type: 'literal', value: 'abc'}},
+          {op: '=', field: 'e1.a', value: {type: 'literal', value: 123}},
+          {op: '=', field: 'e1.c', value: {type: 'literal', value: 'abc'}},
         ],
       },
     });
@@ -728,8 +726,8 @@ describe('ast', () => {
       ast(
         q.where(
           and(
-            exp('a', '=', 1),
-            or(exp('d', '=', true), exp('c', '=', 'hello')),
+            exp('e1.a', '=', 1),
+            or(exp('e1.d', '=', true), exp('e1.c', '=', 'hello')),
           ),
         ),
       ),
@@ -739,12 +737,16 @@ describe('ast', () => {
       where: {
         op: 'AND',
         conditions: [
-          {op: '=', field: 'a', value: {type: 'literal', value: 1}},
+          {op: '=', field: 'e1.a', value: {type: 'literal', value: 1}},
           {
             op: 'OR',
             conditions: [
-              {op: '=', field: 'd', value: {type: 'literal', value: true}},
-              {op: '=', field: 'c', value: {type: 'literal', value: 'hello'}},
+              {op: '=', field: 'e1.d', value: {type: 'literal', value: true}},
+              {
+                op: '=',
+                field: 'e1.c',
+                value: {type: 'literal', value: 'hello'},
+              },
             ],
           },
         ],
@@ -847,7 +849,7 @@ describe('ast', () => {
       op: 'AND',
       conditions: [
         {
-          field: 'a',
+          field: 'e1.a',
           op: '=',
           value: {
             type: 'literal',
@@ -855,7 +857,7 @@ describe('ast', () => {
           },
         },
         {
-          field: 'a',
+          field: 'e1.a',
           op: '=',
           value: {
             type: 'literal',
@@ -863,7 +865,7 @@ describe('ast', () => {
           },
         },
         {
-          field: 'c',
+          field: 'e1.c',
           op: '=',
           value: {
             type: 'literal',
@@ -871,7 +873,7 @@ describe('ast', () => {
           },
         },
         {
-          field: 'c',
+          field: 'e1.c',
           op: '=',
           value: {
             type: 'literal',
@@ -892,7 +894,7 @@ describe('ast', () => {
       op: 'AND',
       conditions: [
         {
-          field: 'a',
+          field: 'e1.a',
           op: '=',
           value: {
             type: 'literal',
@@ -900,7 +902,7 @@ describe('ast', () => {
           },
         },
         {
-          field: 'c',
+          field: 'e1.c',
           op: '=',
           value: {
             type: 'literal',
@@ -908,7 +910,7 @@ describe('ast', () => {
           },
         },
         {
-          field: 'd',
+          field: 'e1.d',
           op: '=',
           value: {
             type: 'literal',
@@ -929,7 +931,7 @@ describe('ast', () => {
       op: 'AND',
       conditions: [
         {
-          field: 'a',
+          field: 'e1.a',
           op: '=',
           value: {
             type: 'literal',
@@ -940,7 +942,7 @@ describe('ast', () => {
           op: 'OR',
           conditions: [
             {
-              field: 'c',
+              field: 'e1.c',
               op: '=',
               value: {
                 type: 'literal',
@@ -948,7 +950,7 @@ describe('ast', () => {
               },
             },
             {
-              field: 'c',
+              field: 'e1.c',
               op: '=',
               value: {
                 type: 'literal',
@@ -958,7 +960,7 @@ describe('ast', () => {
           ],
         },
         {
-          field: 'd',
+          field: 'e1.d',
           op: '=',
           value: {
             type: 'literal',
@@ -978,7 +980,7 @@ describe('ast', () => {
       op: 'OR',
       conditions: [
         {
-          field: 'a',
+          field: 'e1.a',
           op: '=',
           value: {
             type: 'literal',
@@ -986,7 +988,7 @@ describe('ast', () => {
           },
         },
         {
-          field: 'a',
+          field: 'e1.a',
           op: '=',
           value: {
             type: 'literal',
@@ -1009,7 +1011,7 @@ describe('ast', () => {
           op: 'OR',
           conditions: [
             {
-              field: 'a',
+              field: 'e1.a',
               op: '=',
               value: {
                 type: 'literal',
@@ -1017,7 +1019,7 @@ describe('ast', () => {
               },
             },
             {
-              field: 'a',
+              field: 'e1.a',
               op: '=',
               value: {
                 type: 'literal',
@@ -1030,7 +1032,7 @@ describe('ast', () => {
           op: 'OR',
           conditions: [
             {
-              field: 'c',
+              field: 'e1.c',
               op: '=',
               value: {
                 type: 'literal',
@@ -1038,7 +1040,7 @@ describe('ast', () => {
               },
             },
             {
-              field: 'c',
+              field: 'e1.c',
               op: '=',
               value: {
                 type: 'literal',
@@ -1077,7 +1079,7 @@ describe('NOT', () => {
         const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
         expect(ast(q.where(not(exp('a', c.in, 1)))).where).toEqual({
           op: c.out,
-          field: 'a',
+          field: 'e1.a',
           value: {type: 'literal', value: 1},
         });
       });
@@ -1157,4 +1159,38 @@ describe("De Morgan's Law", () => {
       },
     );
   }
+});
+
+test('where is always qualified', () => {
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', 'e1');
+  expect(ast(q.where(exp('a', '=', 1))).where).toEqual({
+    field: 'e1.a',
+    op: '=',
+    value: {type: 'literal', value: 1},
+  });
+
+  expect(
+    ast(
+      // TODO: self-join should require qualification, no?
+      q.where('a', '=', 1).join(q, 'e2', 'e1.a', 'a').where('e2.c', '=', 'sdf'),
+    ),
+  ).toEqual({
+    table: 'e1',
+    orderBy: [['id'], 'asc'],
+    where: {
+      op: 'AND',
+      conditions: [
+        {op: '=', field: 'e1.a', value: {type: 'literal', value: 1}},
+        {op: '=', field: 'e2.c', value: {type: 'literal', value: 'sdf'}},
+      ],
+    },
+    joins: [
+      {
+        type: 'inner',
+        other: {table: 'e1', orderBy: [['id'], 'asc']},
+        as: 'e2',
+        on: ['e1.a', 'a'],
+      },
+    ],
+  });
 });
