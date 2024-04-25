@@ -1,6 +1,8 @@
 import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
+import {versionFromLexi} from '../../../types/lexi-version.js';
+import {versionString} from './paths.js';
 
 export const cvrVersionSchema = v.object({
   /**
@@ -30,12 +32,54 @@ export const cvrVersionSchema = v.object({
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
-export function cmpVersions(a: CVRVersion, b: CVRVersion): number {
-  return a.stateVersion < b.stateVersion
+export type NullableCVRVersion = CVRVersion | null;
+
+export function cmpVersions(
+  a: NullableCVRVersion,
+  b: NullableCVRVersion,
+): number {
+  return a === null && b === null
+    ? 0
+    : a === null
+    ? -1
+    : b === null
+    ? 1
+    : a.stateVersion < b.stateVersion
     ? -1
     : a.stateVersion > b.stateVersion
     ? 1
     : (a.minorVersion ?? 0) - (b.minorVersion ?? 0);
+}
+
+export function versionToCookie(v: CVRVersion): string {
+  return versionString(v);
+}
+
+export function versionToNullableCookie(v: NullableCVRVersion): string | null {
+  return v === null ? null : versionToCookie(v);
+}
+
+export function cookieToVersion(cookie: string | null): NullableCVRVersion {
+  if (cookie === null) {
+    return null;
+  }
+  const parts = cookie.split('.');
+  const stateVersion = parts[0];
+  switch (parts.length) {
+    case 1: {
+      versionFromLexi(stateVersion); // Purely for validation.
+      return {stateVersion};
+    }
+    case 2: {
+      const minorVersion = versionFromLexi(parts[1]);
+      if (minorVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error(`minorVersion ${parts[1]} exceeds max safe integer`);
+      }
+      return {stateVersion, minorVersion: Number(minorVersion)};
+    }
+    default:
+      throw new TypeError(`Invalid cookie ${cookie}`);
+  }
 }
 
 // Last Active tracking.
@@ -196,6 +240,9 @@ export const queryPatchSchema = patchSchema.extend({
 });
 
 export type QueryPatch = v.Infer<typeof queryPatchSchema>;
+
+export type PutQueryPatch = QueryPatch & {op: 'put'};
+export type DelQueryPatch = QueryPatch & {op: 'del'};
 
 export const clientPatchSchema = patchSchema.extend({
   type: v.literal('client'),

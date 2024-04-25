@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {
+  MockInstance,
   afterEach,
   beforeEach,
   expect,
-  test,
   suite,
+  test,
   vi,
-  MockInstance,
 } from 'vitest';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
-import {resolver} from '@rocicorp/resolver';
 
 let rafStub: MockInstance<[FrameRequestCallback], number>;
 // The FrameRequestCallback in PokeHandler does not use
@@ -41,8 +41,8 @@ test('completed poke plays on first raf', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -76,9 +76,9 @@ test('completed poke plays on first raf', async () => {
   expect(replicachePokeStub).toHaveBeenCalledTimes(1);
   const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
   expect(replicachePoke0).to.deep.equal({
-    baseCookie: 1,
+    baseCookie: '1',
     pullResponse: {
-      cookie: 2,
+      cookie: '2',
       lastMutationIDChanges: {
         c1: 2,
         c2: 2,
@@ -115,8 +115,8 @@ test('multiple pokes received before raf callback are merged', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -145,8 +145,8 @@ test('multiple pokes received before raf callback are merged', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
-    baseCookie: 2,
-    cookie: 3,
+    baseCookie: '2',
+    cookie: '3',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke2',
@@ -176,9 +176,9 @@ test('multiple pokes received before raf callback are merged', async () => {
   expect(replicachePokeStub).toHaveBeenCalledTimes(1);
   const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
   expect(replicachePoke0).to.deep.equal({
-    baseCookie: 1,
+    baseCookie: '1',
     pullResponse: {
-      cookie: 3,
+      cookie: '3',
       lastMutationIDChanges: {
         c1: 3,
         c2: 2,
@@ -218,8 +218,8 @@ test('playback over series of rafs', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -252,9 +252,9 @@ test('playback over series of rafs', async () => {
   expect(replicachePokeStub).toHaveBeenCalledTimes(1);
   const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
   expect(replicachePoke0).to.deep.equal({
-    baseCookie: 1,
+    baseCookie: '1',
     pullResponse: {
-      cookie: 2,
+      cookie: '2',
       lastMutationIDChanges: {
         c1: 2,
         c2: 2,
@@ -271,8 +271,8 @@ test('playback over series of rafs', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
-    baseCookie: 2,
-    cookie: 3,
+    baseCookie: '2',
+    cookie: '3',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke2',
@@ -302,9 +302,9 @@ test('playback over series of rafs', async () => {
   expect(replicachePokeStub).toHaveBeenCalledTimes(2);
   const replicachePoke1 = replicachePokeStub.mock.calls[1][0];
   expect(replicachePoke1).to.deep.equal({
-    baseCookie: 2,
+    baseCookie: '2',
     pullResponse: {
-      cookie: 3,
+      cookie: '3',
       lastMutationIDChanges: {
         c1: 3,
         c3: 1,
@@ -346,8 +346,8 @@ suite('onPokeErrors', () => {
       causeError: pokeHandler => {
         pokeHandler.handlePokeStart({
           pokeID: 'poke1',
-          baseCookie: 1,
-          cookie: 2,
+          baseCookie: '1',
+          cookie: '2',
         });
         pokeHandler.handlePokePart({pokeID: 'poke2'});
       },
@@ -357,8 +357,8 @@ suite('onPokeErrors', () => {
       causeError: pokeHandler => {
         pokeHandler.handlePokeStart({
           pokeID: 'poke1',
-          baseCookie: 1,
-          cookie: 2,
+          baseCookie: '1',
+          cookie: '2',
         });
         pokeHandler.handlePokeEnd({pokeID: 'poke2'});
       },
@@ -399,8 +399,8 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -439,8 +439,8 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
-    baseCookie: 2,
-    cookie: 3,
+    baseCookie: '2',
+    cookie: '3',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke2',
@@ -483,8 +483,8 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -514,8 +514,8 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke2',
-    baseCookie: 3, // gap, should be 2
-    cookie: 4,
+    baseCookie: '3', // gap, should be 2
+    cookie: '4',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke2',
@@ -538,8 +538,8 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke3',
-    baseCookie: 4,
-    cookie: 5,
+    baseCookie: '4',
+    cookie: '5',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke3',
@@ -581,8 +581,8 @@ test('onDisconnect clears pending pokes', async () => {
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -634,8 +634,8 @@ test('handlePoke returns the last mutation id change for this client from pokePa
 
   await pokeHandler.handlePokeStart({
     pokeID: 'poke1',
-    baseCookie: 1,
-    cookie: 2,
+    baseCookie: '1',
+    cookie: '2',
   });
   const lastMutationIDChangeForSelf0 = pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -681,8 +681,8 @@ test('mergePokes with all optionals defined', () => {
     {
       pokeStart: {
         pokeID: 'poke1',
-        baseCookie: 3,
-        cookie: 4,
+        baseCookie: '3',
+        cookie: '4',
       },
       parts: [
         {
@@ -766,8 +766,8 @@ test('mergePokes with all optionals defined', () => {
     {
       pokeStart: {
         pokeID: 'poke2',
-        baseCookie: 4,
-        cookie: 5,
+        baseCookie: '4',
+        cookie: '5',
       },
       parts: [
         {
@@ -798,9 +798,9 @@ test('mergePokes with all optionals defined', () => {
   ]);
 
   expect(result).toEqual({
-    baseCookie: 3,
+    baseCookie: '3',
     pullResponse: {
-      cookie: 5,
+      cookie: '5',
       lastMutationIDChanges: {
         c1: 1,
         c2: 3,
@@ -912,8 +912,8 @@ test('mergePokes sparse', () => {
     {
       pokeStart: {
         pokeID: 'poke1',
-        baseCookie: 3,
-        cookie: 4,
+        baseCookie: '3',
+        cookie: '4',
       },
       parts: [
         {
@@ -964,8 +964,8 @@ test('mergePokes sparse', () => {
     {
       pokeStart: {
         pokeID: 'poke2',
-        baseCookie: 4,
-        cookie: 5,
+        baseCookie: '4',
+        cookie: '5',
       },
       parts: [
         {
@@ -988,7 +988,7 @@ test('mergePokes sparse', () => {
     },
   ]);
   expect(result).toEqual({
-    baseCookie: 3,
+    baseCookie: '3',
     pullResponse: {
       lastMutationIDChanges: {
         c1: 1,
@@ -1052,7 +1052,7 @@ test('mergePokes sparse', () => {
           key: 'e/baz',
         },
       ],
-      cookie: 5,
+      cookie: '5',
     },
   });
 });
@@ -1063,8 +1063,8 @@ test('mergePokes throws error on cookie gaps', () => {
       {
         pokeStart: {
           pokeID: 'poke1',
-          baseCookie: 3,
-          cookie: 4,
+          baseCookie: '3',
+          cookie: '4',
         },
         parts: [
           {
@@ -1076,8 +1076,8 @@ test('mergePokes throws error on cookie gaps', () => {
       {
         pokeStart: {
           pokeID: 'poke2',
-          baseCookie: 5, // gap, should be 4
-          cookie: 6,
+          baseCookie: '5', // gap, should be 4
+          cookie: '6',
         },
         parts: [
           {
