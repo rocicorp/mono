@@ -24,7 +24,7 @@ import IssueList from './issue-list';
 import LeftMenu from './left-menu';
 import type {M} from './mutators';
 import TopFilter from './top-filter';
-import {useQuery} from './zql.jsx';
+import {useQuery} from './hooks/useZql';
 
 function getIssueOrder(view: string | null, orderBy: string | null): Order {
   if (view === 'board') {

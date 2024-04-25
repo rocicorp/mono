@@ -14,7 +14,7 @@ import {Comment, Issue, IssueUpdate, Priority, Status} from './issue';
 import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
-import {useQuery} from './zql';
+import {useQuery} from './hooks/useZql';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
