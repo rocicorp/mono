@@ -12,6 +12,8 @@ export const ISSUE_ENTITY_NAME = `issue`;
 export const ISSUE_KEY_PREFIX = `${ISSUE_ENTITY_NAME}/`;
 export const issueKey = (id: string) =>
   `${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}${id}`;
+const labelKey = (id: string) => `label/${id}`;
+const issueLabelKey = (id: string) => `issueLabel/${id}`;
 export const issueID = (key: string) => {
   if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}`)) {
     throw new Error(`Invalid issue key: ${key}`);
@@ -151,6 +153,7 @@ export type OrderEnum = z.infer<typeof orderEnumSchema>;
 export enum Filter {
   Priority,
   Status,
+  Label,
 }
 
 const filterEnumSchema = z.nativeEnum(Filter);
@@ -170,6 +173,8 @@ export const issueSchema = z.object({
 
 export type Issue = Immutable<z.TypeOf<typeof issueSchema>>;
 export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
+export type Label = {id: string; name: string};
+export type IssueLabel = {id: string; issueID: string; labelID: string};
 
 export async function getIssue(
   tx: ReadTransaction,
@@ -250,6 +255,20 @@ export async function putMember(
   member: Member,
 ): Promise<void> {
   await tx.set(memberKey(member.id), member);
+}
+
+export async function putLabel(
+  tx: WriteTransaction,
+  label: Label,
+): Promise<void> {
+  await tx.set(labelKey(label.id), label);
+}
+
+export async function putIssueLabel(
+  tx: WriteTransaction,
+  issueLabel: IssueLabel,
+): Promise<void> {
+  await tx.set(issueLabelKey(issueLabel.id), issueLabel);
 }
 
 export const memberSchema = z.object({

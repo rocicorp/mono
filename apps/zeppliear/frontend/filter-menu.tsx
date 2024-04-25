@@ -6,6 +6,9 @@ import SignalStrongIcon from './assets/icons/signal-strong.svg';
 import TodoIcon from './assets/icons/circle.svg';
 import {statusOpts} from './priority-menu';
 import {statuses} from './status-menu';
+import LabelIcon from './assets/icons/label.svg';
+import {LabelMenu} from './label-menu';
+
 interface Props {
   onSelectStatus: (filter: Status) => void;
   onSelectPriority: (filter: Priority) => void;
@@ -25,6 +28,7 @@ function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
 
   const handleDropdownClick = async () => {
     update && (await update());
+    setFilter(null);
     setFilterDropDownVisible(!filterDropDownVisible);
   };
 
@@ -70,6 +74,7 @@ function FilterMenu({onSelectStatus, onSelectPriority}: Props) {
 const filterBys = [
   [SignalStrongIcon, Filter.Priority, 'Priority'],
   [TodoIcon, Filter.Status, 'Status'],
+  [LabelIcon, Filter.Label, 'Label'],
 ];
 
 function Options({
@@ -143,6 +148,9 @@ function Options({
           )}
         </>
       );
+    case Filter.Label: {
+      return <LabelMenu />;
+    }
     default:
       return (
         <>
@@ -159,7 +167,9 @@ function Options({
               <div
                 key={idx}
                 className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
-                onMouseDown={() => {
+                onMouseDown={e => {
+                  e.stopPropagation();
+                  e.preventDefault();
                   setFilter(filter as Filter);
                 }}
               >
