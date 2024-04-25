@@ -51,7 +51,7 @@ class ReplicacheContext implements Context {
  * To save future work, we save the result of that sort and keep it up to date.
  *
  * This helps:
- * 1. When revisting old queries that were sorted or paging through results
+ * 1. When revisiting old queries that were sorted or paging through results
  * 2. When many queries are sorted by the same field
  * 3. When joining sources on a field that we have pre-sorted
  *
