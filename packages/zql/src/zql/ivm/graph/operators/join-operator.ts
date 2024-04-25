@@ -77,8 +77,8 @@ export class InnerJoinOperator<
   ) {
     const {aAs, getAJoinKey, getAPrimaryKey, bAs, getBJoinKey, getBPrimaryKey} =
       this.#joinArgs;
-    const aKeysForCompaction: K[] = [];
-    const bKeysForCompaction: K[] = [];
+    const aKeysForCompaction = new Set<K>();
+    const bKeysForCompaction = new Set<K>();
     const deltaA = new DifferenceIndex<K, AValue>(getAPrimaryKey);
     for (const entry of inputA || []) {
       const aKey = getAJoinKey(entry[0]);
@@ -86,7 +86,7 @@ export class InnerJoinOperator<
         continue;
       }
       deltaA.add(aKey, entry);
-      aKeysForCompaction.push(aKey);
+      aKeysForCompaction.add(aKey);
     }
 
     const deltaB = new DifferenceIndex<K, BValue>(getBPrimaryKey);
@@ -96,7 +96,7 @@ export class InnerJoinOperator<
         continue;
       }
       deltaB.add(bKey, entry);
-      bKeysForCompaction.push(bKey);
+      bKeysForCompaction.add(bKey);
     }
 
     const result: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
