@@ -85,7 +85,7 @@ describe('replicator/initial-sync', () => {
         "lastMutationID" BIGINT
       );
       CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
-      CREATE PUBLICATION zero_data FOR ALL TABLES;;
+      CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA zero, public;
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,

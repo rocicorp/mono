@@ -1,0 +1,27 @@
+name = "test-service-runner"
+main = "src/services/index.ts"
+compatibility_date = "2024-04-03"
+account_id = "<your account id>
+node_compat = true
+logpush = true
+durable_objects.bindings = [
+  { name = "serviceRunnerDO", class_name = "ServiceRunnerDO" },
+]
+
+[vars]
+LOG_LEVEL = "info"
+UPSTREAM_URI = <customers postgres uri>
+SYNC_REPLICA_URI = <replicas postgres uri>
+
+
+[[migrations]]
+tag = "v1"
+new_classes = ["serviceRunnerDO"]
+
+[build]
+# don't watch all resources because we want to run without --persist when
+# possible, so restarts delete data.
+watch_dir = "src/services"
+
+#[triggers]
+#crons = [ "*/5 * * * *" ] # ever 5 mins for AuthDO connection revalidation

@@ -136,6 +136,7 @@ export async function startPostgresReplication(
   await tx.unsafe(stmts.join('\n'));
 
   lc.info?.(`Started initial data synchronization from ${upstreamUri}`);
+  lc.info?.(`!!!!!!Create-Sub-Command ${stmts.join('\n')}`);
 }
 
 type SubscribedTable = {
@@ -145,7 +146,7 @@ type SubscribedTable = {
   state: string;
 };
 
-const MAX_POLLING_INTERVAL = 30000;
+const MAX_POLLING_INTERVAL = 60000;
 
 /**
  * Waits for the initial data synchronization, started by the {@link startPostgresReplication}
@@ -334,7 +335,7 @@ function ensurePublishedTables(
     let dataPublication = '';
     if (published.publications.length === 0) {
       // If there are no custom zero_* publications, set one up to publish all tables.
-      dataPublication = `CREATE PUBLICATION ${ZERO_PUB_PREFIX}data FOR ALL TABLES;`;
+      dataPublication = `CREATE PUBLICATION ${ZERO_PUB_PREFIX}data FOR TABLES IN SCHEMA zero, public;`;
     }
 
     // Send everything as a single batch.

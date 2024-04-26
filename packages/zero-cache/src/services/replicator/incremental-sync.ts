@@ -77,13 +77,14 @@ export class IncrementalSyncer {
   async run(lc: LogContext) {
     assert(!this.#started, `IncrementalSyncer has already been started`);
     this.#started = true;
-
     lc.info?.(`Starting IncrementalSyncer`);
     const replicated = await getPublicationInfo(this.#replica);
     const publicationNames = replicated.publications.map(p => p.pubname);
 
     lc.info?.(`Syncing publications ${publicationNames}`);
     while (!this.#stopped) {
+      lc.info?.(`!!! in while loop`);
+
       const service = new LogicalReplicationService(
         {connectionString: this.#upstreamUri},
         {acknowledge: {auto: false, timeoutSeconds: 0}},
@@ -112,6 +113,7 @@ export class IncrementalSyncer {
         );
       } catch (e) {
         if (!this.#stopped) {
+          await this.#service.stop();
           const delay = this.#retryDelay;
           this.#retryDelay = Math.min(this.#retryDelay * 2, MAX_RETRY_DELAY_MS);
           lc.error?.(`Error in Replication Stream. Retrying in ${delay}ms`, e);
