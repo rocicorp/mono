@@ -2,6 +2,7 @@ import {useState} from 'react';
 import type {Collections} from './app';
 import {useZero} from './hooks/useZero';
 import {useQuery} from './hooks/useZql';
+import {getLabelColor} from './issue';
 import {LabelTypeahead} from './label-typeahead';
 import type {M} from './mutators';
 
@@ -17,22 +18,6 @@ export function LabelMenu({
       <LabelsComponent filter={labelFilter} onSelectLabel={onSelectLabel} />
     </>
   );
-}
-
-const colors = [
-  '#b0b0b0', // Gray
-  '#ff6a6a', // Red
-  '#ffd633', // Yellow
-  '#7bea7b', // Green
-  '#6aa9ff', // Blue
-  '#7c7cff', // Indigo
-  '#c978d8', // Purple
-  '#ff85ad', // Pink
-];
-
-function getColor(labelName: string) {
-  const charCode = labelName.charCodeAt(2) || labelName.charCodeAt(0);
-  return colors[charCode % colors.length];
 }
 
 function LabelsComponent({
@@ -55,7 +40,7 @@ function LabelsComponent({
           className="text-xs flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"
           onMouseDown={() => onSelectLabel(label.name)}
         >
-          <LabelDot color={getColor(label.name)} />{' '}
+          <LabelDot color={getLabelColor(label.name)} />{' '}
           <span className="truncate">{label.name}</span>
         </div>
       ))}
