@@ -21,7 +21,7 @@ import type {
   ReplicacheInternalOptions,
   ReplicacheOptions,
 } from './replicache-options.js';
-import {Replicache, getTestInstance} from './replicache.js';
+import {Replicache, getImpl} from './replicache.js';
 import type {DiffComputationConfig} from './sync/diff.js';
 import type {ClientID} from './sync/ids.js';
 import type {WriteTransaction} from './transactions.js';
@@ -33,12 +33,15 @@ import {uuid} from './uuid.js';
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
+import type {ReplicacheImpl} from './replicache-impl.js';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
   readonly #internalAPI!: ReplicacheInternalAPI;
+  readonly #impl: ReplicacheImpl<MD>;
+  recoverMutationsFake: sinon.SinonSpy<[r: Promise<boolean>], Promise<boolean>>;
 
   constructor(options: ReplicacheOptions<MD>) {
     let internalAPI!: ReplicacheInternalAPI;
@@ -49,6 +52,8 @@ export class ReplicacheTest<
       },
     } as ReplicacheOptions<MD>);
     this.#internalAPI = internalAPI;
+    this.#impl = getImpl(this);
+    this.recoverMutationsFake = this.onRecoverMutations = sinon.fake(r => r);
   }
 
   pullIgnorePromise(opts?: Parameters<Replicache['pull']>[0]): void {
@@ -56,47 +61,64 @@ export class ReplicacheTest<
   }
 
   beginPull(): Promise<BeginPullResult> {
-    return getTestInstance(this).beginPull();
+    return this.#impl.beginPull();
   }
 
   maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
-    return getTestInstance(this).maybeEndPull(syncHead, requestID);
+    return this.#impl.maybeEndPull(syncHead, requestID);
   }
 
   persist() {
     return this.#internalAPI.persist();
   }
 
-  recoverMutationsFake = (getTestInstance(this).onRecoverMutations = sinon.fake(
-    r => r,
-  ));
-
   recoverMutations(): Promise<boolean> {
-    return getTestInstance(this).recoverMutations();
+    return this.#impl.recoverMutations();
   }
 
   licenseActive(): Promise<boolean> {
-    return getTestInstance(this).licenseActivePromise;
+    return this.#impl.licenseActivePromise;
   }
 
   licenseValid(): Promise<boolean> {
-    return getTestInstance(this).licenseCheckPromise;
+    return this.#impl.licenseCheckPromise;
   }
 
   get perdag() {
-    return getTestInstance(this).perdag;
+    return this.#impl.perdag;
   }
 
   get isClientGroupDisabled(): boolean {
-    return getTestInstance(this).isClientGroupDisabled();
+    return this.#impl.isClientGroupDisabled;
   }
 
   get memdag(): Store {
-    return getTestInstance(this).memdag;
+    return this.#impl.memdag;
   }
 
   get lastMutationID(): number {
-    return getTestInstance(this).lastMutationID();
+    return this.#impl.lastMutationID;
+  }
+
+  get onBeginPull() {
+    return this.#impl.onBeginPull;
+  }
+  set onBeginPull(v) {
+    this.#impl.onBeginPull = v;
+  }
+
+  get onPushInvoked() {
+    return this.#impl.onPushInvoked;
+  }
+  set onPushInvoked(v) {
+    this.#impl.onPushInvoked = v;
+  }
+
+  get onRecoverMutations() {
+    return this.#impl.onRecoverMutations;
+  }
+  set onRecoverMutations(v) {
+    this.#impl.onRecoverMutations = v;
   }
 }
 

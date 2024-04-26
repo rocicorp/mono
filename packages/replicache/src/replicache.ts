@@ -1,8 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {must} from 'shared/src/must.js';
-import type {Store} from './dag/store.js';
 import {FormatVersion} from './format-version.js';
-import type {Hash} from './hash.js';
 import {
   dropIDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
@@ -22,7 +20,6 @@ import type {
 } from './subscriptions.js';
 import type {ReadTransaction} from './transactions.js';
 import type {
-  BeginPullResult,
   MakeMutators,
   MaybePromise,
   MutatorDefs,
@@ -31,49 +28,14 @@ import type {
   UpdateNeededReason,
 } from './types.js';
 
-export interface TestingReplicacheWithTesting extends Replicache {
-  memdag: Store;
-}
-
-type TestingInstance = {
-  beginPull: () => Promise<BeginPullResult>;
-  isClientGroupDisabled: () => boolean;
-  licenseActivePromise: Promise<boolean>;
-  licenseCheckPromise: Promise<boolean>;
-  maybeEndPull: (syncHead: Hash, requestID: string) => Promise<void>;
-  memdag: Store;
-  onBeginPull: () => void;
-  onPushInvoked: () => void;
-  onRecoverMutations: <T>(r: T) => T;
-  perdag: Store;
-  recoverMutations: () => Promise<boolean>;
-  lastMutationID: () => number;
-};
-
-const exposedToTestingMap = new WeakMap<ReplicacheImpl, TestingInstance>();
-
-export function getTestInstance(
-  rep: Replicache | ReplicacheImpl,
-): TestingInstance {
-  if (rep instanceof Replicache) {
-    rep = getImpl(rep);
-  }
-  return must(exposedToTestingMap.get(rep));
-}
-
-export function exposeToTesting(
-  rep: ReplicacheImpl,
-  testingInstance: TestingInstance,
-): void {
-  exposedToTestingMap.set(rep, testingInstance);
-}
-
 type WeakKey = object;
 
 const repToImpl = new WeakMap<WeakKey, ReplicacheImpl>();
 
-export function getImpl(rep: WeakKey): ReplicacheImpl {
-  return must(repToImpl.get(rep));
+export function getImpl<MD extends MutatorDefs>(
+  rep: WeakKey,
+): ReplicacheImpl<MD> {
+  return must(repToImpl.get(rep)) as ReplicacheImpl<MD>;
 }
 
 export const httpStatusUnauthorized = 401;
