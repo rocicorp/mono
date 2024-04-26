@@ -64,6 +64,7 @@ export async function runSyncSchemaMigrations(
       `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
     );
 
+    log.info?.('runSyncSchemaMigrations Connecting to: ', upstreamUri);
     let meta = await sql.begin(async tx => {
       const meta = await getSyncSchemaVersions(tx);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
