@@ -81,6 +81,7 @@ import {
   SubscribeOptions,
   SubscriptionImpl,
   SubscriptionsManager,
+  SubscriptionsManagerImpl,
   WatchCallback,
   WatchCallbackForOptions,
   WatchNoIndexCallback,
@@ -152,6 +153,11 @@ const updateNeededReasonNewClientGroup: UpdateNeededReason = {
 export interface MakeSubscriptionsManager {
   (queryInternal: QueryInternal, lc: LogContext): SubscriptionsManager;
 }
+
+const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
+  queryInternal,
+  lc,
+) => new SubscriptionsManagerImpl(queryInternal, lc);
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
@@ -353,7 +359,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   constructor(
     options: ReplicacheOptions<MD> & ReplicacheInternalOptions,
-    makeSubscriptionsManager: MakeSubscriptionsManager,
+    makeSubscriptionsManager: MakeSubscriptionsManager = defaultMakeSubscriptionsManager,
   ) {
     const {
       name,

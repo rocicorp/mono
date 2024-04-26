@@ -39,7 +39,6 @@ import {
   dropDatabase,
 } from 'replicache';
 import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
-import {SubscriptionsManagerImpl} from 'replicache/src/subscriptions.js';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
@@ -364,13 +363,10 @@ export class Reflect<MD extends MutatorDefs> {
       enableLicensing: false,
     };
 
-    this.#rep = new ReplicacheImpl(
-      {
-        ...replicacheOptions,
-        ...replicacheInternalOptions,
-      },
-      (queryInternal, lc) => new SubscriptionsManagerImpl(queryInternal, lc),
-    );
+    this.#rep = new ReplicacheImpl({
+      ...replicacheOptions,
+      ...replicacheInternalOptions,
+    });
 
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.

@@ -13,7 +13,6 @@ import type {Pusher} from './pusher.js';
 import {ReplicacheImpl} from './replicache-impl.js';
 import type {ReplicacheOptions} from './replicache-options.js';
 import {
-  SubscriptionsManagerImpl,
   type SubscribeOptions,
   type WatchCallbackForOptions,
   type WatchNoIndexCallback,
@@ -67,10 +66,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   readonly #impl: ReplicacheImpl<MD>;
 
   constructor(options: ReplicacheOptions<MD>) {
-    this.#impl = new ReplicacheImpl<MD>(
-      options,
-      (queryInternal, lc) => new SubscriptionsManagerImpl(queryInternal, lc),
-    );
+    this.#impl = new ReplicacheImpl<MD>(options);
     // Store this in a WeakMap so we can get it back if we have access to the
     // WeakMap (tests, zero, reflect etc).
     repToImpl.set(this, this.#impl);
