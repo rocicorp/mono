@@ -10,6 +10,12 @@ import {union} from 'shared/src/set-utils.js';
 export type RequiredColumns = (table: string) => readonly string[];
 
 /**
+ * The character used to separate the column aliases created during query expansion
+ * into their component parts.
+ */
+export const ALIAS_COMPONENT_SEPARATOR = '/';
+
+/**
  * Expands the selection of a query to include all of the rows and column values
  * necessary to re-execute the query on the client, and aliases the columns so
  * that the result can be deconstructed into its constituent rows.
@@ -327,7 +333,7 @@ export function reAliasAndBubbleSelections(
     select: [
       ...(select ?? []).map(([selector, alias]) => {
         const newSelector = renameSelector(selector);
-        const newAlias = newSelector.replaceAll('.', '/');
+        const newAlias = newSelector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
         exports.set(alias, newAlias);
         exported.add(newSelector);
         return [newSelector, newAlias] as [string, string];
@@ -335,7 +341,7 @@ export function reAliasAndBubbleSelections(
       ...bubbleUp
         .filter(selector => !exported.has(selector))
         .map(selector => {
-          const alias = selector.replaceAll('.', '/');
+          const alias = selector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
           exports.set(alias, alias);
           return [selector, alias] as [string, string];
         }),

@@ -7,7 +7,10 @@ import type {
   ReadonlyJSONValue,
 } from 'shared/src/json.js';
 import {rowKeyHash} from '../../types/row-key.js';
-import {expandSelection} from '../../zql/expansion.js';
+import {
+  ALIAS_COMPONENT_SEPARATOR,
+  expandSelection,
+} from '../../zql/expansion.js';
 import {
   computeInvalidationInfo,
   type InvalidationInfo,
@@ -129,7 +132,7 @@ class ResultProcessor {
       const rows = new Map<string, JSONObject>();
 
       for (const [alias, value] of Object.entries(result)) {
-        const [rowAlias, columnName] = splitOnLastSlash(alias);
+        const [rowAlias, columnName] = splitLastComponent(alias);
         const row = rows.get(rowAlias);
         row
           ? (row[columnName] = value)
@@ -138,7 +141,7 @@ class ResultProcessor {
 
       // Now, merge each row into its corresponding RowResult by row key.
       for (const [rowAlias, row] of rows.entries()) {
-        const [_, table] = splitOnLastSlash(rowAlias);
+        const [_, table] = splitLastComponent(rowAlias);
         const id = this.#tables.rowID(table, row);
         const key = makeKey(id);
         const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
@@ -211,8 +214,8 @@ function makeKey(row: RowID) {
   return `${schema}/${table}/${hash}`;
 }
 
-function splitOnLastSlash(str: string): [prefix: string, suffix: string] {
-  const lastSlash = str.lastIndexOf('/');
+function splitLastComponent(str: string): [prefix: string, suffix: string] {
+  const lastSlash = str.lastIndexOf(ALIAS_COMPONENT_SEPARATOR);
   return lastSlash < 0
     ? ['', str]
     : [str.substring(0, lastSlash), str.substring(lastSlash + 1)];
