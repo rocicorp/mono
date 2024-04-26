@@ -4,7 +4,7 @@ import {
   expandSelection,
   expandSubqueries,
   reAliasAndBubbleSelections,
-  type PrimaryKeys,
+  type RequiredColumns,
 } from './expansion.js';
 import {Normalized} from './normalize.js';
 import {and, cond, or} from './query-test-util.js';
@@ -18,9 +18,9 @@ describe('zql/expansion', () => {
     afterReAliasAndBubble?: string;
   };
 
-  const PRIMARY_KEYS: PrimaryKeys = (table: string) => [
+  const REQUIRED_COLUMNS: RequiredColumns = (table: string) => [
     `${table}_key`,
-    `${table}_id`,
+    `_0_version`,
   ];
 
   const cases: Case[] = [
@@ -33,11 +33,15 @@ describe('zql/expansion', () => {
       original: `
       SELECT title AS "theTitle" FROM issues`,
       afterSubqueryExpansion: `
-      SELECT issues_id AS issues_id, issues_key AS issues_key, title AS "theTitle" FROM issues
+      SELECT 
+        _0_version AS _0_version,
+        issues_key AS issues_key,
+        title AS "theTitle"
+      FROM issues
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues.issues_id AS "issues/issues_id", 
+        issues._0_version AS "issues/_0_version", 
         issues.issues_key AS "issues/issues_key", 
         issues.title AS "issues/title" 
       FROM issues
@@ -60,10 +64,10 @@ describe('zql/expansion', () => {
       ORDER BY date, priority asc
       `,
       afterSubqueryExpansion: `
-      SELECT 
+      SELECT
+        _0_version AS _0_version,
         component_id AS component_id,
         date AS date,
-        issues_id AS issues_id,
         issues_key AS issues_key,
         owner_id AS owner_id,
         priority AS priority,
@@ -72,10 +76,10 @@ describe('zql/expansion', () => {
       ORDER BY date, priority asc
       `,
       afterReAliasAndBubble: `
-      SELECT 
+      SELECT
+        issues._0_version AS "issues/_0_version",
         issues.component_id AS "issues/component_id",
         issues.date AS "issues/date",
-        issues.issues_id AS "issues/issues_id",
         issues.issues_key AS "issues/issues_key",
         issues.owner_id AS "issues/owner_id",
         issues.priority AS "issues/priority", 
@@ -106,43 +110,43 @@ describe('zql/expansion', () => {
       SELECT 
          owner.name AS owner_name,
          title AS title
-      FROM issues INNER JOIN (users) AS owner ON owner.id = owner_id
+      FROM issues INNER JOIN users AS owner ON owner.id = owner_id
       ORDER BY owner.level asc
       `,
       afterSubqueryExpansion: `
       SELECT 
-        issues_id AS issues_id,     -- Added as PRIMARY_KEY
-        issues_key AS issues_key,   -- Added as PRIMARY_KEY
-        owner.name AS owner_name,   -- Original SELECT
-        owner_id AS owner_id,       -- AS owner ON owner.id = owner_id
-        title AS title              -- Original SELECT
+        _0_version AS _0_version,     -- Added by REQUIRED_COLUMNS
+        issues_key AS issues_key,     -- Added by REQUIRED_COLUMNS
+        owner.name AS owner_name,     -- Original SELECT
+        owner_id AS owner_id,         -- AS owner ON owner.id = owner_id
+        title AS title                -- Original SELECT
       FROM issues INNER JOIN
         (SELECT
-           id AS id,                -- AS owner ON owner.id = owner_id
-           level AS level,          -- ORDER BY owner.level
-           name AS name,            -- SELECT owner.name
-           users_id AS users_id,    -- Added as PRIMARY_KEY
-           users_key AS users_key   -- Added as PRIMARY_KEY
+           _0_version AS _0_version,  -- Added by REQUIRED_COLUMNS
+           id AS id,                  -- AS owner ON owner.id = owner_id
+           level AS level,            -- ORDER BY owner.level
+           name AS name,              -- SELECT owner.name
+           users_key AS users_key     -- Added by REQUIRED_COLUMNS
          FROM users) 
       AS owner ON owner.id = owner_id
       ORDER BY owner.level asc
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues.issues_id AS "issues/issues_id",
+        issues._0_version AS "issues/_0_version",
         issues.issues_key AS "issues/issues_key",
         issues.owner_id AS "issues/owner_id",
         issues.title AS "issues/title",
+        owner."users/_0_version" AS "owner/users/_0_version",
         owner."users/id" AS "owner/users/id",
         owner."users/level" AS "owner/users/level",
         owner."users/name" AS "owner/users/name",
-        owner."users/users_id" AS "owner/users/users_id",
         owner."users/users_key" AS "owner/users/users_key"
       FROM issues INNER JOIN (SELECT 
+        users._0_version AS "users/_0_version",
         users.id AS "users/id",
         users.level AS "users/level",
         users.name AS "users/name",
-        users.users_id AS "users/users_id",
         users.users_key AS "users/users_key"
       FROM users) AS owner ON owner."users/id" = issues.owner_id
       ORDER BY owner."users/level" asc
@@ -180,36 +184,36 @@ describe('zql/expansion', () => {
       `,
       afterSubqueryExpansion: `
       SELECT 
-        issues_id AS issues_id, 
+        _0_version AS _0_version, 
         issues_key AS issues_key, 
         owner.name AS owner_name, 
         owner_id AS owner_id, 
         title AS title 
       FROM issues INNER JOIN (SELECT 
+          _0_version AS _0_version,
           id AS id, 
           level AS level, 
           name AS name, 
-          users_id AS users_id, 
           users_key AS users_key
         FROM users WHERE level > $1) 
       AS owner ON owner.id = owner_id
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues.issues_id AS "issues/issues_id",
+        issues._0_version AS "issues/_0_version",
         issues.issues_key AS "issues/issues_key",
         issues.owner_id AS "issues/owner_id",
         issues.title AS "issues/title",
+        owner."users/_0_version" AS "owner/users/_0_version",
         owner."users/id" AS "owner/users/id",
         owner."users/level" AS "owner/users/level",
         owner."users/name" AS "owner/users/name",
-        owner."users/users_id" AS "owner/users/users_id",
         owner."users/users_key" AS "owner/users/users_key"
-      FROM issues INNER JOIN (SELECT 
+      FROM issues INNER JOIN (SELECT
+          users._0_version AS "users/_0_version", 
           users.id AS "users/id",
           users.level AS "users/level",
           users.name AS "users/name",
-          users.users_id AS "users/users_id",
           users.users_key AS "users/users_key"
         FROM users WHERE level > $1)
       AS owner ON owner."users/id" = issues.owner_id
@@ -258,35 +262,35 @@ describe('zql/expansion', () => {
          issue.title AS title, 
          owner.name AS name 
       FROM issue 
-      INNER JOIN (users) AS owner ON issue.user_id = owner.id 
-      INNER JOIN (issue INNER JOIN (users) AS owner ON issue.user_id = owner.id) AS parent
+      INNER JOIN users AS owner ON issue.user_id = owner.id 
+      INNER JOIN issue INNER JOIN users AS owner ON issue.user_id = owner.id AS parent
       ON issue.parent_id = parent.id
       ORDER BY owner.awesomeness desc
       `,
       afterSubqueryExpansion: `
       SELECT 
+        _0_version AS _0_version,    -- Added by REQUIRED_COLUMNS
         issue.title AS title,        -- Original SELECT
-        issue_id AS issue_id,        -- Added as PRIMARY_KEY
-        issue_key AS issue_key,      -- Added as PRIMARY_KEY
+        issue_key AS issue_key,      -- Added by REQUIRED_COLUMNS
         owner.name AS name,          -- Original SELECT
         parent_id AS parent_id,      -- AS parent ON issue.parent_id = parent.id
         user_id AS user_id           -- AS owner ON issue.user_id = owner.id
       FROM issue INNER JOIN (SELECT 
+        _0_version AS _0_version,    -- Added by REQUIRED_COLUMNS
         awesomeness AS awesomeness,  -- ORDER BY owner.awesomeness
         id AS id,                    -- AS owner ON issue.user_id = owner.id
         name AS name,                -- SELECT owner.name
-        users_id AS users_id,        -- Added as PRIMARY_KEY
-        users_key AS users_key       -- Added as PRIMARY_KEY
+        users_key AS users_key       -- Added by REQUIRED_COLUMNS
       FROM users) AS owner ON issue.user_id = owner.id 
       INNER JOIN (SELECT 
+        _0_version AS _0_version,    -- Added by REQUIRED_COLUMNS
         id AS id,                    -- AS parent ON issue.parent_id = parent.id
-        issue_id AS issue_id,        -- Added as PRIMARY_KEY
-        issue_key AS issue_key,      -- Added as PRIMARY_KEY
+        issue_key AS issue_key,      -- Added by REQUIRED_COLUMNS
         user_id AS user_id           -- AS owner ON issue.user_id = owner.id) 
       FROM issue INNER JOIN (SELECT 
+          _0_version AS _0_version,  -- Added by REQUIRED_COLUMNS
           id AS id,                  -- AS owner ON issue.user_id = owner.id) 
-          users_id AS users_id,      -- Added as PRIMARY_KEY
-          users_key AS users_key     -- Added as PRIMARY_KEY
+          users_key AS users_key     -- Added by REQUIRED_COLUMNS
         FROM users) 
         AS owner ON issue.user_id = owner.id) 
       AS parent ON issue.parent_id = parent.id
@@ -294,46 +298,179 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT
-        issue.issue_id                 AS "issue/issue_id",
-        issue.issue_key                AS "issue/issue_key",
-        issue.parent_id                AS "issue/parent_id",
-        issue.title                    AS "issue/title",
-        issue.user_id                  AS "issue/user_id",
-        owner."users/awesomeness"      AS "owner/users/awesomeness",
-        owner."users/id"               AS "owner/users/id",
-        owner."users/name"             AS "owner/users/name",
-        owner."users/users_id"         AS "owner/users/users_id",
-        owner."users/users_key"        AS "owner/users/users_key",
-        parent."issue/id"              AS "parent/issue/id",
-        parent."issue/issue_id"        AS "parent/issue/issue_id",
-        parent."issue/issue_key"       AS "parent/issue/issue_key",
-        parent."issue/user_id"         AS "parent/issue/user_id",
-        parent."owner/users/id"        AS "parent/owner/users/id",
-        parent."owner/users/users_id"  AS "parent/owner/users/users_id",
-        parent."owner/users/users_key" AS "parent/owner/users/users_key"
+        issue._0_version                 AS "issue/_0_version",
+        issue.issue_key                  AS "issue/issue_key",
+        issue.parent_id                  AS "issue/parent_id",
+        issue.title                      AS "issue/title",
+        issue.user_id                    AS "issue/user_id",
+        owner."users/_0_version"         AS "owner/users/_0_version",
+        owner."users/awesomeness"        AS "owner/users/awesomeness",
+        owner."users/id"                 AS "owner/users/id",
+        owner."users/name"               AS "owner/users/name",
+        owner."users/users_key"          AS "owner/users/users_key",
+        parent."issue/_0_version"        AS "parent/issue/_0_version",
+        parent."issue/id"                AS "parent/issue/id",
+        parent."issue/issue_key"         AS "parent/issue/issue_key",
+        parent."issue/user_id"           AS "parent/issue/user_id",
+        parent."owner/users/_0_version"  AS "parent/owner/users/_0_version",
+        parent."owner/users/id"          AS "parent/owner/users/id",
+        parent."owner/users/users_key"   AS "parent/owner/users/users_key"
       FROM issue INNER JOIN (SELECT 
-        users.awesomeness              AS "users/awesomeness",
-        users.id                       AS "users/id",
-        users.name                     AS "users/name",
-        users.users_id                 AS "users/users_id",
-        users.users_key                AS "users/users_key"
+        users._0_version                 AS "users/_0_version",
+        users.awesomeness                AS "users/awesomeness",
+        users.id                         AS "users/id",
+        users.name                       AS "users/name",
+        users.users_key                  AS "users/users_key"
       FROM users) AS owner ON issue.user_id = owner."users/id"
       INNER JOIN (SELECT 
-        issue.id                       AS "issue/id",
-        issue.issue_id                 AS "issue/issue_id",
-        issue.issue_key                AS "issue/issue_key",
-        issue.user_id                  AS "issue/user_id",
-        owner."users/id"               AS "owner/users/id",
-        owner."users/users_id"         AS "owner/users/users_id",
-        owner."users/users_key"        AS "owner/users/users_key"
+        issue._0_version                 AS "issue/_0_version",
+        issue.id                         AS "issue/id",
+        issue.issue_key                  AS "issue/issue_key",
+        issue.user_id                    AS "issue/user_id",
+        owner."users/_0_version"         AS "owner/users/_0_version",
+        owner."users/id"                 AS "owner/users/id",
+        owner."users/users_key"          AS "owner/users/users_key"
       FROM issue INNER JOIN (SELECT
-          users.id                     AS "users/id",
-          users.users_id               AS "users/users_id",
-          users.users_key              AS "users/users_key"
+          users._0_version               AS "users/_0_version",
+          users.id                       AS "users/id",
+          users.users_key                AS "users/users_key"
         FROM users)
         AS owner ON issue.user_id = owner."users/id")
       AS parent ON issue.parent_id = parent."issue/id"
       ORDER BY owner."users/awesomeness" desc
+      `,
+    },
+    {
+      name: 'self join with aliased selects',
+      ast: {
+        select: [
+          ['issues.id', 'id'],
+          ['issues.title', 'title'],
+          ['owner.name', 'owner_name'],
+          ['parent.title', 'parent_title'],
+          ['parent.owner_name', 'parent_owner'],
+        ],
+        table: 'issues',
+        joins: [
+          {
+            type: 'inner',
+            other: {table: 'users'},
+            as: 'owner',
+            on: ['issues.owner_id', 'owner.id'],
+          },
+          {
+            type: 'inner',
+            other: {
+              select: [
+                ['issues.id', 'issues_id'],
+                ['title', 'title'],
+                ['owner.name', 'owner_name'],
+              ],
+              table: 'issues',
+              joins: [
+                {
+                  type: 'inner',
+                  other: {table: 'users'},
+                  as: 'owner',
+                  on: ['issues.owner_id', 'owner.id'],
+                },
+              ],
+            },
+            as: 'parent',
+            on: ['issues.parent_id', 'parent.issues_id'],
+          },
+        ],
+      },
+      original: `
+      SELECT 
+        issues.id AS id,
+        issues.title AS title,
+        owner.name AS owner_name,
+        parent.owner_name AS parent_owner,
+        parent.title AS parent_title
+      FROM issues 
+      INNER JOIN users AS owner ON issues.owner_id = owner.id 
+      INNER JOIN (SELECT 
+          issues.id AS issues_id,
+          owner.name AS owner_name,
+          title AS title
+        FROM issues
+        INNER JOIN users AS owner ON issues.owner_id = owner.id) 
+      AS parent ON issues.parent_id = parent.issues_id`,
+      afterSubqueryExpansion: `
+      SELECT 
+        _0_version AS _0_version,
+        issues.id AS id,
+        issues.title AS title,
+        issues_key AS issues_key,
+        owner.name AS owner_name,
+        owner_id AS owner_id,
+        parent.owner_name AS parent_owner,
+        parent.title AS parent_title,
+        parent_id AS parent_id FROM issues
+      INNER JOIN (SELECT 
+        _0_version AS _0_version,
+        id AS id,
+        name AS name,
+        users_key AS users_key FROM users) AS owner ON issues.owner_id = owner.id
+      INNER JOIN (SELECT 
+        _0_version AS _0_version,
+        issues.id AS issues_id,
+        issues_key AS issues_key,
+        owner.name AS owner_name,
+        owner_id AS owner_id,
+        title AS title FROM issues INNER JOIN (SELECT 
+          _0_version AS _0_version, 
+          id AS id, 
+          name AS name, 
+          users_key AS users_key FROM users)
+        AS owner ON issues.owner_id = owner.id)
+      AS parent ON issues.parent_id = parent.issues_id
+      `,
+      afterReAliasAndBubble: `
+      SELECT 
+        issues._0_version                AS "issues/_0_version",
+        issues.id                        AS "issues/id",
+        issues.issues_key                AS "issues/issues_key",
+        issues.owner_id                  AS "issues/owner_id",
+        issues.parent_id                 AS "issues/parent_id",
+        issues.title                     AS "issues/title",
+        owner."users/_0_version"         AS "owner/users/_0_version",
+        owner."users/id"                 AS "owner/users/id",
+        owner."users/name"               AS "owner/users/name",
+        owner."users/users_key"          AS "owner/users/users_key",
+        parent."issues/_0_version"       AS "parent/issues/_0_version",
+        parent."issues/id"               AS "parent/issues/id",
+        parent."issues/issues_key"       AS "parent/issues/issues_key",
+        parent."issues/owner_id"         AS "parent/issues/owner_id",
+        parent."issues/title"            AS "parent/issues/title",
+        parent."owner/users/_0_version"  AS "parent/owner/users/_0_version",
+        parent."owner/users/id"          AS "parent/owner/users/id",
+        parent."owner/users/name"        AS "parent/owner/users/name",
+        parent."owner/users/users_key"   AS "parent/owner/users/users_key"
+      FROM issues INNER JOIN (SELECT 
+        users._0_version                 AS "users/_0_version",
+        users.id                         AS "users/id",
+        users.name                       AS "users/name",
+        users.users_key                  AS "users/users_key"
+      FROM users) AS owner ON issues.owner_id = owner."users/id" 
+      INNER JOIN (SELECT 
+        issues._0_version                AS "issues/_0_version",
+        issues.id                        AS "issues/id",
+        issues.issues_key                AS "issues/issues_key",
+        issues.owner_id                  AS "issues/owner_id",
+        issues.title                     AS "issues/title",
+        owner."users/_0_version"         AS "owner/users/_0_version",
+        owner."users/id"                 AS "owner/users/id",
+        owner."users/name"               AS "owner/users/name",
+        owner."users/users_key"          AS "owner/users/users_key"
+      FROM issues INNER JOIN (SELECT 
+          users._0_version               AS "users/_0_version",
+          users.id                       AS "users/id",
+          users.name                     AS "users/name",
+          users.users_key                AS "users/users_key"
+        FROM users) AS owner ON issues.owner_id = owner."users/id") 
+      AS parent ON issues.parent_id = parent."issues/id"
       `,
     },
   ];
@@ -343,7 +480,7 @@ describe('zql/expansion', () => {
       expect(new Normalized(c.ast).query().query).toBe(
         stripCommentsAndWhitespace(c.original),
       );
-      const expanded = expandSubqueries(c.ast, PRIMARY_KEYS, new Set());
+      const expanded = expandSubqueries(c.ast, REQUIRED_COLUMNS, new Set());
       expect(new Normalized(expanded).query().query).toBe(
         stripCommentsAndWhitespace(c.afterSubqueryExpansion),
       );
@@ -353,7 +490,7 @@ describe('zql/expansion', () => {
       );
 
       // Run the whole function.
-      const expandedAndReAliased = expandSelection(c.ast, PRIMARY_KEYS);
+      const expandedAndReAliased = expandSelection(c.ast, REQUIRED_COLUMNS);
       expect(new Normalized(expandedAndReAliased).query().query).toBe(
         stripCommentsAndWhitespace(c.afterReAliasAndBubble),
       );

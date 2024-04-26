@@ -1,6 +1,7 @@
 // This test file is loaded by worker.test.ts
 
-import {expect} from 'chai';
+import {assert} from 'shared/src/asserts.js';
+import {JSONValue, deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import {reflectForTest} from './test-utils.js';
 
@@ -28,26 +29,30 @@ async function testBasics(userID: string) {
   });
   await r.triggerConnected();
 
-  const log: (number | undefined)[] = [];
+  const log: JSONValue[] = [];
   const cancelSubscribe = r.subscribe(
     tx => tx.get<number>('foo'),
-    v => log.push(v),
+    v => log.push(v ?? '<NOT FOUND>'),
   );
 
+  function assertLog(expected: JSONValue) {
+    assert(deepEqual(log, expected));
+  }
+
   await sleep(1);
-  expect(log).deep.equal([undefined]);
+  assertLog(['<NOT FOUND>']);
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([undefined, 1]);
-  expect(await r.query(tx => tx.get('foo'))).equal(1);
+  assertLog(['<NOT FOUND>', 1]);
+  assert((await r.query(tx => tx.get('foo'))) === 1);
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([undefined, 1, 2]);
-  expect(await r.query(tx => tx.get('foo'))).equal(2);
+  assertLog(['<NOT FOUND>', 1, 2]);
+  assert((await r.query(tx => tx.get('foo'))) === 2);
 
   cancelSubscribe();
 
   await r.mutate.inc('foo');
-  expect(log).deep.equal([undefined, 1, 2]);
-  expect(await r.query(tx => tx.get('foo'))).equal(3);
+  assertLog(['<NOT FOUND>', 1, 2]);
+  assert((await r.query(tx => tx.get('foo'))) === 3);
 }

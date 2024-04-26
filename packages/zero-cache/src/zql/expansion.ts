@@ -2,7 +2,18 @@ import type {AST, Condition} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 
-export type PrimaryKeys = (table: string) => readonly string[];
+/**
+ * Maps a table to the set of columns that must always be selected. For example,
+ * this may be used to ensure that `PRIMARY KEY` columns are included, as well
+ * as the `_0_version` column.
+ */
+export type RequiredColumns = (table: string) => readonly string[];
+
+/**
+ * The character used to separate the column aliases created during query expansion
+ * into their component parts.
+ */
+export const ALIAS_COMPONENT_SEPARATOR = '/';
 
 /**
  * Expands the selection of a query to include all of the rows and column values
@@ -152,8 +163,11 @@ export type PrimaryKeys = (table: string) => readonly string[];
  *   ON parent."issues/id" = issues.parent_id;
  * ```
  */
-export function expandSelection(ast: AST, primaryKeys: PrimaryKeys): AST {
-  const expanded = expandSubqueries(ast, primaryKeys, new Set());
+export function expandSelection(
+  ast: AST,
+  requiredColumns: RequiredColumns,
+): AST {
+  const expanded = expandSubqueries(ast, requiredColumns, new Set());
   const reAliased = reAliasAndBubbleSelections(expanded, new Map());
   return reAliased;
 }
@@ -195,7 +209,7 @@ export function expandSelection(ast: AST, primaryKeys: PrimaryKeys): AST {
 // Exported for testing
 export function expandSubqueries(
   ast: AST,
-  primaryKeys: PrimaryKeys,
+  requiredColumns: RequiredColumns,
   externallyReferencedColumns: Set<string>,
 ): AST {
   const {select, where, joins, groupBy, orderBy, table, alias} = ast;
@@ -208,9 +222,13 @@ export function expandSubqueries(
     const [from, col] = parts.length === 2 ? parts : [defaultFrom, selector];
     selectors.get(from)?.add(col) ?? selectors.set(from, new Set([col]));
   };
+  const selected = new Set<string>();
   // Add all referenced fields / selectors.
-  select?.forEach(([selector]) => addSelector(selector));
-  const selected = new Set(selectors.get(defaultFrom) ?? new Set()); // Remember what is SELECT'ed.
+  select?.forEach(([selector, alias]) => {
+    addSelector(selector);
+    selected.add(alias);
+  });
+  selectors.get(defaultFrom)?.forEach(col => selected.add(col));
 
   getWhereColumns(where, new Set<string>()).forEach(addSelector);
   joins?.forEach(({on}) => on.forEach(addSelector));
@@ -218,7 +236,7 @@ export function expandSubqueries(
   orderBy?.[0].forEach(addSelector);
 
   // Add primary keys
-  primaryKeys(table).forEach(addSelector);
+  requiredColumns(table).forEach(addSelector);
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
@@ -238,7 +256,7 @@ export function expandSubqueries(
       ...join,
       other: expandSubqueries(
         join.other,
-        primaryKeys,
+        requiredColumns,
         // Send down references to the JOIN alias as the externallyReferencedColumns.
         selectors.get(join.as) ?? new Set(),
       ),
@@ -293,7 +311,10 @@ export function reAliasAndBubbleSelections(
   select?.forEach(([selector, alias]) => {
     const parts = selector.split('.'); // "issues.id" or just "id"
     reAliasMap.set(alias, parts.length === 2 ? parts[1] : selector); // Use the original column name.
-    reAliasMap.set(parts.length === 2 ? parts[0] : selector, selector);
+
+    // Also map the column name to itself.
+    const column = parts.length === 2 ? parts[1] : selector;
+    reAliasMap.set(column, column);
   });
 
   const renameSelector = (selector: string) => {
@@ -312,7 +333,7 @@ export function reAliasAndBubbleSelections(
     select: [
       ...(select ?? []).map(([selector, alias]) => {
         const newSelector = renameSelector(selector);
-        const newAlias = newSelector.replaceAll('.', '/');
+        const newAlias = newSelector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
         exports.set(alias, newAlias);
         exported.add(newSelector);
         return [newSelector, newAlias] as [string, string];
@@ -320,7 +341,7 @@ export function reAliasAndBubbleSelections(
       ...bubbleUp
         .filter(selector => !exported.has(selector))
         .map(selector => {
-          const alias = selector.replaceAll('.', '/');
+          const alias = selector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
           exports.set(alias, alias);
           return [selector, alias] as [string, string];
         }),

@@ -1,5 +1,5 @@
-import {expect} from 'chai';
 import {sleep} from 'shared/src/sleep.js';
+import {expect, test} from 'vitest';
 
 test('worker test', async () => {
   const url = new URL('./worker-test.ts', import.meta.url);

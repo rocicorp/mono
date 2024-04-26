@@ -20,11 +20,7 @@ import {TestMemStore} from './kv/test-mem-store.js';
 import type {PatchOperation} from './patch-operation.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
 import type {ReplicacheOptions} from './replicache-options.js';
-import {
-  Replicache,
-  getTestInstance,
-  httpStatusUnauthorized,
-} from './replicache.js';
+import {Replicache, httpStatusUnauthorized} from './replicache.js';
 import type {ScanOptions} from './scan-options.js';
 import type {ClientID} from './sync/ids.js';
 import {
@@ -1362,7 +1358,7 @@ test('push timing', async () => {
     mutators: {addData},
   });
 
-  const onInvokePush = (getTestInstance(rep).onPushInvoked = sinon.fake());
+  const onInvokePush = (rep.onPushInvoked = sinon.fake());
 
   const add = rep.mutate.addData;
 
@@ -1419,9 +1415,9 @@ test('push and pull concurrently', async () => {
     enablePullAndPushInOpen: false,
   });
 
-  const onBeginPull = (getTestInstance(rep).onBeginPull = sinon.fake());
+  const onBeginPull = (rep.onBeginPull = sinon.fake());
   const commitSpy = sinon.spy(Write.prototype, 'commitWithDiffs');
-  const onPushInvoked = (getTestInstance(rep).onPushInvoked = sinon.fake());
+  const onPushInvoked = (rep.onPushInvoked = sinon.fake());
 
   function resetSpies() {
     onBeginPull.resetHistory();
