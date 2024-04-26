@@ -212,7 +212,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS id FROM issues INNER JOIN (users) AS owner' +
+        'SELECT id AS id FROM issues INNER JOIN users AS owner' +
         ' ON issues."ownerID" = users.id ORDER BY owner.id asc',
     },
     {

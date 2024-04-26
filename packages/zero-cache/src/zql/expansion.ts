@@ -216,9 +216,13 @@ export function expandSubqueries(
     const [from, col] = parts.length === 2 ? parts : [defaultFrom, selector];
     selectors.get(from)?.add(col) ?? selectors.set(from, new Set([col]));
   };
+  const selected = new Set<string>();
   // Add all referenced fields / selectors.
-  select?.forEach(([selector]) => addSelector(selector));
-  const selected = new Set(selectors.get(defaultFrom) ?? new Set()); // Remember what is SELECT'ed.
+  select?.forEach(([selector, alias]) => {
+    addSelector(selector);
+    selected.add(alias);
+  });
+  selectors.get(defaultFrom)?.forEach(col => selected.add(col));
 
   getWhereColumns(where, new Set<string>()).forEach(addSelector);
   joins?.forEach(({on}) => on.forEach(addSelector));
@@ -301,7 +305,10 @@ export function reAliasAndBubbleSelections(
   select?.forEach(([selector, alias]) => {
     const parts = selector.split('.'); // "issues.id" or just "id"
     reAliasMap.set(alias, parts.length === 2 ? parts[1] : selector); // Use the original column name.
-    reAliasMap.set(parts.length === 2 ? parts[0] : selector, selector);
+
+    // Also map the column name to itself.
+    const column = parts.length === 2 ? parts[1] : selector;
+    reAliasMap.set(column, column);
   });
 
   const renameSelector = (selector: string) => {
