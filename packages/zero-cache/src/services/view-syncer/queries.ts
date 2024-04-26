@@ -1,11 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import type {
-  JSONObject,
-  JSONValue,
-  ReadonlyJSONValue,
-} from 'shared/src/json.js';
+import type {JSONObject, ReadonlyJSONObject} from 'shared/src/json.js';
 import {rowKeyHash} from '../../types/row-key.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
@@ -84,7 +80,7 @@ export class QueryHandler {
 
 export type RowResult = {
   record: Omit<RowRecord, 'putPatch'>;
-  contents: Record<string, ReadonlyJSONValue>;
+  contents: ReadonlyJSONObject;
 };
 
 class ResultProcessor {
@@ -103,11 +99,11 @@ class ResultProcessor {
    * Multiple views of rows from different queries are merged, with the query to column
    * mapping tracked in the `record` field of the returned {@link RowResult}.
    */
+  // TODO: The more correct type for `results` is the BigInt.JSONObject, as the sync replica
+  //       supports bigints. That type should be used instead, with proper conversion / error
+  //       checking when serializing to the current wire protocol that does not support bigint.
   // eslint-disable-next-line require-await
-  async processResults(
-    queryID: string,
-    results: Record<string, JSONValue>[],
-  ): Promise<void> {
+  async processResults(queryID: string, results: JSONObject[]): Promise<void> {
     for (const result of results) {
       // Partitions the values of the full result into individual "subquery/table" keys.
       // For example, a result:
@@ -163,10 +159,7 @@ class ResultProcessor {
         for (const col of Object.keys(row)) {
           (rowResult.record.queriedColumns[col] ??= []).push(queryID);
         }
-        rowResult.contents = {
-          ...rowResult.contents,
-          ...(row as Record<string, Exclude<ReadonlyJSONValue, undefined>>), // TODO: Switch to a JSONObject definition that doesn't include undefined.
-        };
+        rowResult.contents = {...rowResult.contents, ...row};
       }
     }
     this.#lc
