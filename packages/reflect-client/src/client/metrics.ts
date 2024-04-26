@@ -79,7 +79,7 @@ export class MetricManager {
   #host: string;
   #reporter: MetricsReporter;
   #lc: LogContext;
-  #timerID: number | null;
+  #timerID: ReturnType<typeof setInterval> | null;
 
   constructor(opts: MetricManagerOptions) {
     this.#reportIntervalMs = opts.reportIntervalMs;
