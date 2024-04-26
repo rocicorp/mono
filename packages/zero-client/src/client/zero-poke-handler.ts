@@ -298,13 +298,13 @@ function entitiesPatchOpToReplicachePatchOp(
     case 'del':
       return {
         op: 'del',
-        key: toEntitiesKey(op.key),
+        key: toEntitiesKey(op.entityType, op.entityID),
       };
     case 'put':
     default:
       return {
         op: 'put',
-        key: toEntitiesKey(op.key),
+        key: toEntitiesKey(op.entityType, op.entityID),
         value: op.value,
       };
   }
