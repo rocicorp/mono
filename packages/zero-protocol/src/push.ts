@@ -1,36 +1,36 @@
+import {entityIDSchema} from './entity.js';
 import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 
-const insertOpSchema = v.object({
-  op: v.literal('insert'),
+const createOpSchema = v.object({
+  op: v.literal('create'),
   entityType: v.string(),
-  id: v.record(v.string()),
+  id: entityIDSchema,
   value: jsonSchema,
 });
 
-const upsertOpSchema = v.object({
-  op: v.literal('upsert'),
+const setOpSchema = v.object({
+  op: v.literal('set'),
   entityType: v.string(),
-  id: v.record(v.string()),
+  id: entityIDSchema,
   value: jsonSchema,
 });
 
 const updateOpSchema = v.object({
   op: v.literal('update'),
   entityType: v.string(),
-  id: v.record(v.string()),
+  id: entityIDSchema,
   partialValue: jsonSchema,
 });
 
 const deleteOpSchema = v.object({
   op: v.literal('delete'),
-  /* attributeName => value */
-  id: v.record(v.string()),
+  id: entityIDSchema,
 });
 
 const crudOpSchema = v.union(
-  insertOpSchema,
-  upsertOpSchema,
+  createOpSchema,
+  setOpSchema,
   updateOpSchema,
   deleteOpSchema,
 );
@@ -66,8 +66,8 @@ export const pushBodySchema = v.object({
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
 
-export type InsertOp = v.Infer<typeof insertOpSchema>;
-export type UpsertOp = v.Infer<typeof upsertOpSchema>;
+export type CreateOp = v.Infer<typeof createOpSchema>;
+export type SetOp = v.Infer<typeof setOpSchema>;
 export type UpdateOp = v.Infer<typeof updateOpSchema>;
 export type DeleteOp = v.Infer<typeof deleteOpSchema>;
 export type CRUDOp = v.Infer<typeof crudOpSchema>;
