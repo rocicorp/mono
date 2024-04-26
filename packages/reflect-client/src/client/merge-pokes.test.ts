@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {mergePokes} from './merge-pokes.js';
 
 test('mergePokes with empty array returns undefined', () => {

@@ -21,7 +21,8 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "prettier": "^3.0.3",
     "syncpack": "^9.8.4",
-    "turbo": "^1.13.2"
+    "turbo": "^1.13.2",
+    "vitest": "^1.5.2"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {CloseBeaconManager} from './close-beacon.js';
 import {TestLogSink} from './test-utils.js';
 
-setup(() => {
+beforeEach(() => {
   setConfig('closeBeacon', true);
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
   resetAllConfig();
 });

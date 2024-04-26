@@ -1,7 +1,7 @@
 import {Context, LogContext, LogLevel} from '@rocicorp/logger';
-import {expect} from 'chai';
 import {BufferSizer} from 'shared/src/buffer-sizer.js';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
 import {
   PokeHandler,
   RESET_PLAYBACK_OFFSET_THRESHOLD_MS,
@@ -22,13 +22,13 @@ const TEST_BUFFER_SIZER_OPTIONS = {
   adjustBufferSizeIntervalMs: 10_000,
 } as const;
 
-setup(() => {
+beforeEach(() => {
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
   rafStub = sinon.stub(globalThis, 'requestAnimationFrame');
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 

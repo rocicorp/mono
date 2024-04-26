@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
-import {PresenceManager} from './presence-manager.js';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import type {ClientID} from 'replicache';
 import {sleep} from 'shared/src/sleep.js';
+import {expect, test} from 'vitest';
+import {PresenceManager} from './presence-manager.js';
 
 test('initial only this client present', async () => {
   const clientID = 'c1';

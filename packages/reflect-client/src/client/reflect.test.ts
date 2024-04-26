@@ -1,7 +1,6 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
 import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
 import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import type {
@@ -14,6 +13,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import type {WSString} from './http-string.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ReflectOptions} from './options.js';
@@ -47,7 +47,7 @@ let fetchStub: sinon.SinonStub<
   ReturnType<typeof fetch>
 >;
 
-setup(() => {
+beforeEach(() => {
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
   sinon.replace(
@@ -60,7 +60,7 @@ setup(() => {
     .returns(Promise.resolve(new Response()));
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
   resetAllConfig();
 });
