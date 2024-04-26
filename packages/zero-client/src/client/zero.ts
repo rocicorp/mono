@@ -46,6 +46,7 @@ import type {
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
+import {must} from 'shared/src/must.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
@@ -182,6 +183,15 @@ const enum PingResult {
 // Keep in sync with packages/replicache/src/replicache-options.ts
 export interface ReplicacheInternalAPI {
   lastMutationID(): number;
+}
+
+const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
+
+export function getInternalReplicacheImplForTesting<
+  MD extends MutatorDefs,
+  QD extends QueryDefs,
+>(z: Zero<MD, QD>): ReplicacheImpl<MD> {
+  return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
 export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
@@ -384,7 +394,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       enableLicensing: false,
     };
 
-    this.#rep = new ReplicacheImpl(
+    const rep = new ReplicacheImpl(
       {
         ...replicacheOptions,
         ...replicacheInternalOptions,
@@ -392,23 +402,28 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       (queryInternal, lc) =>
         new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
     );
+    this.#rep = rep;
 
-    this.#rep.getAuth = this.#getAuthToken;
-    this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
+    if (TESTING) {
+      internalReplicacheImplMap.set(this, rep);
+    }
+
+    rep.getAuth = this.#getAuthToken;
+    this.#onUpdateNeeded = rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
     this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
     this.#lc = new LogContext(
       logOptions.logLevel,
-      {roomID, clientID: this.#rep.clientID},
+      {roomID, clientID: rep.clientID},
       logOptions.logSink,
     );
 
     this.#zqlContext = new ZeroContext(
       this.#materialite,
       (name, cb) =>
-        this.#rep.subscriptions.add(
+        rep.subscriptions.add(
           new ZQLWatchSubscription(name, cb as WatchCallback),
         ),
       {
@@ -435,7 +450,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#pokeHandler = new PokeHandler(
       pokeDD31 => this.#rep.poke(pokeDD31),
       () => this.#onOutOfOrderPoke(),
-      this.#rep.clientID,
+      rep.clientID,
       this.#lc,
     );
 
