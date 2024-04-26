@@ -47,7 +47,11 @@ const crudOpSchema = v.union(
   deleteOpSchema,
 );
 
-const crudArgsSchema = v.array(crudOpSchema);
+const crudArgsSchema = v.tuple([
+  v.object({
+    ops: v.array(crudOpSchema),
+  }),
+]);
 
 export const crudMutationSchema = v.object({
   id: v.number(),
