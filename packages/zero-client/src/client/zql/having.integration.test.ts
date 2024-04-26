@@ -1,9 +1,9 @@
 import {describe, expect, test} from 'vitest';
-import {Track, setup, Artist, TrackArtist} from '../benchmarks/setup.js';
-import * as agg from '../query/agg.js';
+import {Artist, newZero, Track, TrackArtist} from './integration-test-util.js';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
 describe('having against scalaer', async () => {
-  const {r, trackQuery} = setup();
+  const z = newZero();
 
   const tracks: Track[] = [
     {
@@ -26,7 +26,7 @@ describe('having against scalaer', async () => {
     },
   ];
 
-  await r.mutate.bulkSet({tracks});
+  await z.mutate.bulkSet({tracks});
   test.each([
     [['>', 50], ['1']],
     [['>', 300], []],
@@ -35,7 +35,7 @@ describe('having against scalaer', async () => {
     [['=', 0], []],
     [['=', 300], ['1']],
   ] as const)('%j', async (input, expected) => {
-    const stmt = trackQuery
+    const stmt = z.query.track
       .select('id', agg.sum('length'))
       .having('length', input[0], input[1])
       .prepare();
@@ -47,7 +47,7 @@ describe('having against scalaer', async () => {
 });
 
 describe('having against arrays / sets', async () => {
-  const {r, trackArtistQuery, artistQuery, trackQuery} = setup();
+  const z = newZero();
 
   const tracks: Track[] = [
     {
@@ -101,7 +101,7 @@ describe('having against arrays / sets', async () => {
     },
   ];
 
-  await r.mutate.bulkSet({tracks, artists, trackArtists});
+  await z.mutate.bulkSet({tracks, artists, trackArtists});
 
   test.each([
     [['CONGRUENT', ['Artist 1']], ['1']],
@@ -125,9 +125,14 @@ describe('having against arrays / sets', async () => {
       ['1', '2', '3'],
     ],
   ] as const)('%j', async (input, expected) => {
-    const stmt = trackQuery
-      .join(trackArtistQuery, 'trackArtists', 'track.id', 'trackArtist.trackId')
-      .join(artistQuery, 'artists', 'trackArtists.artistId', 'artist.id')
+    const stmt = z.query.track
+      .join(
+        z.query.trackArtist,
+        'trackArtists',
+        'track.id',
+        'trackArtist.trackId',
+      )
+      .join(z.query.artist, 'artists', 'trackArtists.artistId', 'artist.id')
       .groupBy('track.id')
       .select('track.id', 'track.title', agg.array('artists.*', 'artists'))
       // TODO: `having` and `where` should mark their args readonly

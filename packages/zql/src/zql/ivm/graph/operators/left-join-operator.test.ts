@@ -1,13 +1,43 @@
 import {expect, test} from 'vitest';
-import type {
-  Album,
-  Artist,
-  Track,
-  TrackArtist,
-} from '../../../benchmarks/setup.js';
 import {normalize} from '../../multiset.js';
 import {JoinResult, joinSymbol} from '../../types.js';
 import {DifferenceStream} from '../difference-stream.js';
+
+export type Track = {
+  id: string;
+  title: string;
+  length: number;
+  albumId: string;
+};
+
+export type Album = {
+  id: string;
+  title: string;
+  artistId: string;
+};
+
+export type Artist = {
+  id: string;
+  name: string;
+};
+
+export type Playlist = {
+  id: string;
+  name: string;
+};
+
+export type TrackArtist = {
+  id: `${TrackArtist['trackId']}-${TrackArtist['artistId']}`;
+  trackId: string;
+  artistId: string;
+};
+
+export type PlaylistTrack = {
+  id: `${PlaylistTrack['playlistId']}-${PlaylistTrack['trackId']}`;
+  playlistId: string;
+  trackId: string;
+  position: number;
+};
 
 test('left join', () => {
   const trackInput = new DifferenceStream<Track>();
