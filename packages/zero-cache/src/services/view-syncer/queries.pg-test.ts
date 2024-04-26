@@ -127,7 +127,7 @@ describe('view-syncer/queries', () => {
       .unsafe(expanded.query, expanded.values)
       .cursor(100, r => resultProcessor.processResults('queryHash', r));
 
-    // This is what gets synced to the client.
+    // This is what gets synced to the client (contents) and stored in the CVR (record).
     expect([...resultProcessor.getResults()]).toEqual([
       {
         contents: {id: '3', owner_id: '102', parent_id: '1', title: 'foo'},
