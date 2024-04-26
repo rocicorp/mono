@@ -19,12 +19,14 @@ export function toGotQueriesKey(hash: string): string {
 }
 
 export function toEntitiesKey(entityType: string, entityID: EntityID): string {
-  const entries = Object.entries(entityID);
-  assert(entries.length > 0);
-  entries.sort(([keyA], [keyB]) => (keyA < keyB ? -1 : 1));
-  let idSegment = entries[0][1];
-  for (let i = 1; i < entries.length; i++) {
-    idSegment += '_' + entries[i][1];
-  }
+  const idKeys = Object.keys(entityID);
+  assert(idKeys.length > 0);
+  // The common case of a non-composite primary key (i.e.
+  // single entry entityID) is optimized to just use the single
+  // id value.
+  const idSegment =
+    idKeys.length === 1
+      ? entityID[idKeys[0]]
+      : JSON.stringify(entityID, idKeys.sort());
   return ENTITIES_KEY_PREFIX + entityType + '/' + idSegment;
 }

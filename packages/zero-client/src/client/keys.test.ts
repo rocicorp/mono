@@ -13,13 +13,13 @@ suite('toEntitiesKey', () => {
       {
         entityType: 'issue_label',
         entityID: {issueID: 'issue1', labelID: 'label1'},
-        expectedKey: 'e/issue_label/issue1_label1',
+        expectedKey: 'e/issue_label/{"issueID":"issue1","labelID":"label1"}',
       },
       // demonstrate sort on attribute name
       {
         entityType: 'issue_label',
         entityID: {labelID: 'label1', issueID: 'issue1'},
-        expectedKey: 'e/issue_label/issue1_label1',
+        expectedKey: 'e/issue_label/{"issueID":"issue1","labelID":"label1"}',
       },
     ];
   for (const {entityType, entityID, expectedKey} of cases) {
