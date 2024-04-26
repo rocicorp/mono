@@ -44,6 +44,7 @@ describe('view-syncer/queries', () => {
     await testDBs.drop(db);
   });
 
+  /* eslint-disable @typescript-eslint/naming-convention */
   test('query transformation and result processing', async () => {
     const published = await getPublicationInfo(db);
     const queryHandler = new QueryHandler(published.tables);
@@ -88,35 +89,45 @@ describe('view-syncer/queries', () => {
       ],
     };
 
-    // Explanatory: These are the results for the original query.
+    // Explanatory:
+    //   This is the original query and what the results need to be when
+    //   executing on the client.
     const original = new Normalized(ast).query();
+    expect(original.query).toBe(
+      'SELECT ' +
+        'issues.id AS id, issues.title AS title, owner.name AS owner, ' +
+        'parent.owner AS parent_owner, parent.title AS parent_title FROM issues ' +
+        'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
+        'INNER JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
+        'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
+        'AS parent ON issues.parent_id = parent.issues_id',
+    );
     const results = await db.unsafe(original.query, original.values);
     expect(results).toEqual([
       {
         id: '3',
         title: 'foo',
         owner: 'Candice',
-        ['parent_title']: 'parent issue foo',
-        ['parent_owner']: 'Alice',
+        parent_title: 'parent issue foo',
+        parent_owner: 'Alice',
       },
       {
         id: '4',
         title: 'bar',
         owner: 'Bob',
-        ['parent_title']: 'parent issue bar',
-        ['parent_owner']: 'Bob',
+        parent_title: 'parent issue bar',
+        parent_owner: 'Bob',
       },
     ]);
 
     const transformed = queryHandler.transform([{id: 'queryHash', ast}]);
     const expanded = transformed.queryHash.transformedAST.query();
-
     const resultProcessor = queryHandler.resultProcessor(lc);
     await db
       .unsafe(expanded.query, expanded.values)
       .cursor(100, r => resultProcessor.processResults('queryHash', r));
 
-    /* eslint-disable @typescript-eslint/naming-convention */
+    // This is what gets synced to the client.
     expect([...resultProcessor.getResults()]).toEqual([
       {
         contents: {id: '3', owner_id: '102', parent_id: '1', title: 'foo'},
@@ -202,6 +213,6 @@ describe('view-syncer/queries', () => {
         },
       },
     ]);
-    /* eslint-enable @typescript-eslint/naming-convention */
   });
+  /* eslint-enable @typescript-eslint/naming-convention */
 });
