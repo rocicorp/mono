@@ -3,9 +3,9 @@ import {joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {exp, not, or} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import fc from 'fast-check';
-import {nanoid} from 'nanoid';
 import * as v from 'shared/src/valita.js';
 import {expect, test} from 'vitest';
+import {nanoid} from '../../util/nanoid.js';
 import {Zero, getInternalReplicacheImplForTesting} from '../zero.js';
 
 export async function tickAFewTimes(n = 10, time = 0) {
@@ -34,7 +34,7 @@ const {
   set: setIssue,
   update: updateIssue,
   delete: deleteIssue,
-} = generate<Issue>('issue', issueSchema.parse);
+} = generate<Issue>('issue', v => issueSchema.parse(v));
 const {
   init: initLabel,
   set: setLabel,
@@ -139,7 +139,7 @@ function sampleTenUniqueIssues() {
   return fc.sample(tenUniqueIssues, 1)[0];
 }
 
-function setup() {
+function newZero() {
   const z = new Zero({
     roomID: 'room-' + nanoid(),
     userID: 'user-' + nanoid(),
@@ -151,7 +151,7 @@ function setup() {
     },
   });
 
-  return {z, context};
+  return z;
 }
 
 const compareIds = (a: {id: string}, b: {id: string}) =>
@@ -178,14 +178,14 @@ function makeComparator(...fields: (keyof Issue)[]) {
 }
 
 test('1-shot against an empty collection', async () => {
-  const {z} = setup();
+  const z = newZero();
   const rows = z.query.issue.select('id').prepare().exec();
   expect(await rows).toEqual([]);
 });
 
 test('prepare a query before the collection has writes then run it', async () => {
   const issues = sampleTenUniqueIssues();
-  const {z} = setup();
+  const z = newZero();
   const stmt = z.query.issue.select('id').prepare();
   await Promise.all(issues.map(z.mutate.initIssue));
 
@@ -197,7 +197,7 @@ test('prepare a query before the collection has writes then run it', async () =>
 
 test('prepare a query then run it once `experimentalWatch` has completed', async () => {
   const issues = sampleTenUniqueIssues();
-  const {z} = setup();
+  const z = newZero();
   await Promise.all(issues.map(z.mutate.initIssue));
 
   const stmt = z.query.issue.select('id').prepare();
@@ -212,7 +212,7 @@ test('prepare a query then run it once `experimentalWatch` has completed', async
 
 test('exec a query before the source has been filled by anything', async () => {
   const issues = sampleTenUniqueIssues();
-  const {z} = setup();
+  const z = newZero();
   await Promise.all(issues.map(z.mutate.initIssue));
 
   // it should wait until the source has been seeded
@@ -226,7 +226,7 @@ test('exec a query before the source has been filled by anything', async () => {
 
 test('subscribing to a query calls us with the complete query results on change', async () => {
   const issues = sampleTenUniqueIssues();
-  const {z} = setup();
+  const z = newZero();
   await Promise.all(issues.map(z.mutate.initIssue));
 
   let resolve: (v: unknown) => void;
@@ -306,7 +306,7 @@ test('each where operator', async () => {
     },
   ];
 
-  const {z: z} = setup();
+  const z = newZero();
   await Promise.all(issues.map(z.mutate.initIssue));
 
   let stmt = z.query.issue.select('id').where('id', '=', 'a').prepare();
@@ -371,7 +371,7 @@ test('each where operator', async () => {
 test('order by single field', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {z} = setup();
+      const z = newZero();
       await Promise.all(issues.map(z.mutate.initIssue));
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -394,7 +394,7 @@ test('order by single field', async () => {
 test('order by id', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {z} = setup();
+      const z = newZero();
       await Promise.all(issues.map(z.mutate.initIssue));
 
       const stmt = z.query.issue.select('id').asc('id').prepare();
@@ -410,7 +410,7 @@ test('order by id', async () => {
 test('order by compound fields', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {z} = setup();
+      const z = newZero();
       await Promise.all(issues.map(z.mutate.initIssue));
 
       const compareExpected = makeComparator('assignee', 'created', 'id');
@@ -430,7 +430,7 @@ test('order by compound fields', async () => {
 test('order by optional field', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
-      const {z} = setup();
+      const z = newZero();
       await Promise.all(issues.map(z.mutate.initIssue));
 
       const compareExpected = makeComparator('closed', 'id');
@@ -445,7 +445,7 @@ test('order by optional field', async () => {
 });
 
 test('qualified selectors in where', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues = defaultIssues;
   await Promise.all(issues.map(z.mutate.initIssue));
 
@@ -462,7 +462,7 @@ test('qualified selectors in where', async () => {
 });
 
 test('qualified selectors in group-by', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues = defaultIssues;
   await Promise.all(issues.map(z.mutate.initIssue));
 
@@ -481,7 +481,7 @@ test('qualified selectors in group-by', async () => {
 });
 
 test('qualified selectors in order-by', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues = defaultIssues;
   await Promise.all(issues.map(z.mutate.initIssue));
 
@@ -493,7 +493,7 @@ test('qualified selectors in order-by', async () => {
 });
 
 test('join', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues = defaultIssues;
   const labels = defaultLabels;
   const issueLabels = defaultIssueLabels;
@@ -565,7 +565,7 @@ test('join', async () => {
 test('having', () => {});
 
 test('group by', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues: readonly Issue[] = [
     {
       id: 'a',
@@ -725,7 +725,7 @@ test('group by', async () => {
 test('sorted groupings', () => {});
 
 test('compound where', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues = defaultIssues;
   await Promise.all(issues.map(z.mutate.initIssue));
 
@@ -742,7 +742,7 @@ test('compound where', async () => {
 
 test('0 copy', async () => {
   const issues = sampleTenUniqueIssues();
-  const {z} = setup();
+  const z = newZero();
   const rep = getInternalReplicacheImplForTesting(z);
   await Promise.all(issues.map(z.mutate.initIssue));
   const replicacheIssues = (await rep.query(tx =>
@@ -802,7 +802,7 @@ test('asc/desc difference does not create new sources', () => {});
 test('we do not do a full scan when the source order matches the view order', () => {});
 
 test('or where', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues: readonly Issue[] = [
     {
       id: 'a',
@@ -849,7 +849,7 @@ test('or where', async () => {
 });
 
 test('not', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues: readonly Issue[] = [
     {
       id: 'a',
@@ -896,7 +896,7 @@ test('not', async () => {
 });
 
 test('count', async () => {
-  const {z} = setup();
+  const z = newZero();
   const issues: Issue[] = [
     {
       id: 'a',

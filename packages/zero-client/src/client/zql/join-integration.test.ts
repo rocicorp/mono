@@ -1,21 +1,21 @@
+import {joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {expect, test} from 'vitest';
-import {joinSymbol} from '../ivm/types.js';
-import * as agg from '../query/agg.js';
 import {
   Album,
   Artist,
   Playlist,
   Track,
   TrackArtist,
-  setup,
-  createRandomTracks,
-  linkTracksToArtists,
   createRandomAlbums,
   createRandomArtists,
-} from '../benchmarks/setup.js';
+  createRandomTracks,
+  linkTracksToArtists,
+  newZero,
+} from './integration-test-util.js';
 
 test('direct foreign key join: join a track to an album', async () => {
-  const {r, trackQuery, albumQuery} = setup();
+  const z = newZero();
 
   const track: Track = {
     id: '1',
@@ -29,11 +29,11 @@ test('direct foreign key join: join a track to an album', async () => {
     artistId: '1',
   };
 
-  await Promise.all([r.mutate.initTrack(track), r.mutate.initAlbum(album)]);
+  await Promise.all([z.mutate.initTrack(track), z.mutate.initAlbum(album)]);
   await Promise.resolve();
 
-  const stmt = await trackQuery
-    .join(albumQuery, 'album', 'albumId', 'id')
+  const stmt = z.query.track
+    .join(z.query.album, 'album', 'albumId', 'id')
     .select('*')
     .prepare();
 
@@ -49,13 +49,13 @@ test('direct foreign key join: join a track to an album', async () => {
   ]);
 
   // delete the track
-  await r.mutate.deleteTrack(track.id);
+  await z.mutate.deleteTrack(track.id);
 
   rows = await stmt.exec();
   expect(rows).toEqual([]);
 
   // re-add a track for that album
-  await r.mutate.initTrack({
+  await z.mutate.initTrack({
     id: '2',
     title: 'Track 1',
     length: 100,
@@ -81,7 +81,7 @@ test('direct foreign key join: join a track to an album', async () => {
   expect(rows).toEqual([track2Album1]);
 
   // add an unrelated album
-  await r.mutate.initAlbum({
+  await z.mutate.initAlbum({
     id: '2',
     title: 'Album 2',
     artistId: '1',
@@ -91,7 +91,7 @@ test('direct foreign key join: join a track to an album', async () => {
   expect(rows).toEqual([track2Album1]);
 
   // add an unrelated track
-  await r.mutate.initTrack({
+  await z.mutate.initTrack({
     id: '3',
     title: 'Track 3',
     length: 100,
@@ -102,7 +102,7 @@ test('direct foreign key join: join a track to an album', async () => {
   expect(rows).toEqual([track2Album1]);
 
   // add an album related to track3
-  await r.mutate.initAlbum({
+  await z.mutate.initAlbum({
     id: '3',
     title: 'Album 3',
     artistId: '1',
@@ -127,7 +127,7 @@ test('direct foreign key join: join a track to an album', async () => {
   expect(rows).toEqual([track2Album1, track3Album3]);
 
   // add a track related to album2
-  await r.mutate.initTrack({
+  await z.mutate.initTrack({
     id: '4',
     title: 'Track 4',
     length: 100,
@@ -153,7 +153,7 @@ test('direct foreign key join: join a track to an album', async () => {
   expect(rows).toEqual([track2Album1, track4Album2, track3Album3]);
 
   // add a second track to album 1
-  await r.mutate.initTrack({
+  await z.mutate.initTrack({
     id: '5',
     title: 'Track 5',
     length: 100,
@@ -184,8 +184,8 @@ test('direct foreign key join: join a track to an album', async () => {
   ]);
 
   // sort by track id
-  const stmt2 = await trackQuery
-    .join(albumQuery, 'album', 'albumId', 'id')
+  const stmt2 = await z.query.track
+    .join(z.query.album, 'album', 'albumId', 'id')
     .select('*')
     .asc('track.id')
     .prepare();
@@ -200,18 +200,18 @@ test('direct foreign key join: join a track to an album', async () => {
 
   // delete all the things
   await Promise.all([
-    r.mutate.deleteTrack('2'),
-    r.mutate.deleteTrack('3'),
-    r.mutate.deleteTrack('4'),
-    r.mutate.deleteAlbum('1'),
-    r.mutate.deleteAlbum('2'),
-    r.mutate.deleteAlbum('3'),
+    z.mutate.deleteTrack('2'),
+    z.mutate.deleteTrack('3'),
+    z.mutate.deleteTrack('4'),
+    z.mutate.deleteAlbum('1'),
+    z.mutate.deleteAlbum('2'),
+    z.mutate.deleteAlbum('3'),
   ]);
 
   rows = await stmt.exec();
   expect(rows).toEqual([]);
 
-  await r.close();
+  await z.close();
 });
 
 /**
@@ -221,15 +221,7 @@ test('direct foreign key join: join a track to an album', async () => {
  * row per track.
  */
 test('junction and foreign key join, followed by aggregation: compose a playlist via a join and group by', async () => {
-  const {
-    r,
-    trackQuery,
-    albumQuery,
-    artistQuery,
-    trackArtistQuery,
-    playlistTrackQuery,
-  } = setup();
-
+  const z = newZero();
   const track1: Track = {
     id: '1',
     title: 'Track 1',
@@ -343,19 +335,19 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
   });
 
   await Promise.all([
-    ...tracks.map(r.mutate.initTrack),
-    ...albums.map(r.mutate.initAlbum),
-    ...artists.map(r.mutate.initArtist),
-    ...playlists.map(r.mutate.initPlaylist),
-    ...tracksArtists.map(r.mutate.initTrackArtist),
-    ...playlistTracks.map(r.mutate.initPlaylistTrack),
+    ...tracks.map(z.mutate.initTrack),
+    ...albums.map(z.mutate.initAlbum),
+    ...artists.map(z.mutate.initArtist),
+    ...playlists.map(z.mutate.initPlaylist),
+    ...tracksArtists.map(z.mutate.initTrackArtist),
+    ...playlistTracks.map(z.mutate.initPlaylistTrack),
   ]);
 
-  const stmt = playlistTrackQuery
-    .join(trackQuery, 'track', 'trackId', 'id')
-    .join(albumQuery, 'album', 'track.albumId', 'id')
-    .join(trackArtistQuery, 'trackArtist', 'track.id', 'trackArtist.trackId')
-    .join(artistQuery, 'artists', 'trackArtist.artistId', 'id')
+  const stmt = z.query.playlistTrack
+    .join(z.query.track, 'track', 'trackId', 'id')
+    .join(z.query.album, 'album', 'track.albumId', 'id')
+    .join(z.query.trackArtist, 'trackArtist', 'track.id', 'trackArtist.trackId')
+    .join(z.query.artist, 'artists', 'trackArtist.artistId', 'id')
     .where('playlistTrack.playlistId', '=', '1')
     .groupBy('track.id')
     .select('track.*', agg.array('artists.*', 'artists'))
@@ -411,28 +403,28 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
     },
   ]);
 
-  await r.close();
+  await z.close();
 });
 
 test('track list composition with lots and lots of data then tracking incremental changes', async () => {
-  const {r, trackQuery, albumQuery, artistQuery, trackArtistQuery} = setup();
+  const z = newZero();
 
   const artists = createRandomArtists(100);
   const albums = createRandomAlbums(100, artists);
   const tracks = createRandomTracks(10_000, albums);
   const trackArtists = linkTracksToArtists(artists, tracks);
 
-  await r.mutate.bulkSet({
+  await z.mutate.bulkSet({
     tracks,
     albums,
     artists,
     trackArtists,
   });
 
-  const stmt = trackQuery
-    .join(albumQuery, 'album', 'track.albumId', 'id')
-    .join(trackArtistQuery, 'trackArtist', 'track.id', 'trackArtist.trackId')
-    .join(artistQuery, 'artists', 'trackArtist.artistId', 'id')
+  const stmt = z.query.track
+    .join(z.query.album, 'album', 'track.albumId', 'id')
+    .join(z.query.trackArtist, 'trackArtist', 'track.id', 'trackArtist.trackId')
+    .join(z.query.artist, 'artists', 'trackArtist.artistId', 'id')
     .groupBy('track.id')
     .select('track.*', agg.array('artists.*', 'artists'))
     .asc('track.id')
@@ -444,7 +436,7 @@ test('track list composition with lots and lots of data then tracking incrementa
   const newTracks = createRandomTracks(100, albums);
   const newTrackArtists = linkTracksToArtists(artists, newTracks);
 
-  await r.mutate.bulkSet({
+  await z.mutate.bulkSet({
     tracks: newTracks,
     trackArtists: newTrackArtists,
   });
@@ -456,7 +448,7 @@ test('track list composition with lots and lots of data then tracking incrementa
 
   // remove 100 tracks
   const tracksToRemove = newTracks.slice(0, 100);
-  await r.mutate.bulkRemove({tracks: tracksToRemove});
+  await z.mutate.bulkRemove({tracks: tracksToRemove});
 
   rows = await stmt.exec();
   expect(rows.length).toBe(10_000);

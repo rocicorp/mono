@@ -13,6 +13,7 @@ import {
   WriteTransaction,
 } from '../src/mod.js';
 import {ReplicacheImpl as Replicache} from '../src/replicache-impl.js';
+import {SubscriptionsManagerImpl} from '../src/subscriptions.js';
 import {uuid} from '../src/uuid.js';
 import {
   TestDataObject,
@@ -322,15 +323,18 @@ export function benchmarkRebase(opts: {
 
 class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
-    super({
-      ...options,
-      licenseKey: TEST_LICENSE_KEY,
+    super(
+      {
+        ...options,
+        licenseKey: TEST_LICENSE_KEY,
 
-      enableLicensing: false,
-      enableMutationRecovery: false,
-      enableScheduledRefresh: false,
-      enableScheduledPersist: false,
-    });
+        enableLicensing: false,
+        enableMutationRecovery: false,
+        enableScheduledRefresh: false,
+        enableScheduledPersist: false,
+      },
+      (queryInternal, lc) => new SubscriptionsManagerImpl(queryInternal, lc),
+    );
   }
 }
 

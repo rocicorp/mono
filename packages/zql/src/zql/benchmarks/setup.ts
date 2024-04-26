@@ -82,7 +82,7 @@ const {
   delete: deletePlaylistTrack,
 } = generate<PlaylistTrack>('playlistTrack');
 
-const mutators = {
+export const mutators = {
   initTrack,
   setTrack,
   updateTrack,
@@ -167,6 +167,8 @@ const mutators = {
   },
 };
 
+export type Mutators = typeof mutators;
+
 function newRep() {
   return new Replicache({
     licenseKey: TEST_LICENSE_KEY,
@@ -175,7 +177,7 @@ function newRep() {
   });
 }
 
-export function setup() {
+export function setupUsingReplicache() {
   const r = newRep();
   const c = makeReplicacheContext(r, {
     subscriptionAdded(_ast) {},

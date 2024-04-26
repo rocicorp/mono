@@ -99,18 +99,18 @@ export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
 interface TestZero {
-  [exposedToTestingSymbol]: TestingContext;
-  [onSetConnectionStateSymbol]: (state: ConnectionState) => void;
-  [createLogOptionsSymbol]: (options: {
+  [exposedToTestingSymbol]?: TestingContext;
+  [onSetConnectionStateSymbol]?: (state: ConnectionState) => void;
+  [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
   }) => LogOptions;
 }
 
-function forTesting<MD extends MutatorDefs, QD extends QueryDefs>(
-  r: Zero<MD, QD>,
+function asTestZero<MD extends MutatorDefs, QD extends QueryDefs>(
+  z: Zero<MD, QD>,
 ): TestZero {
-  return r as unknown as TestZero;
+  return z as TestZero;
 }
 
 export const enum ConnectionState {
@@ -304,7 +304,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#connectionStateChangeResolver = resolver();
 
     if (TESTING) {
-      forTesting(this)[onSetConnectionStateSymbol](state);
+      asTestZero(this)[onSetConnectionStateSymbol]?.(state);
     }
   }
 
@@ -463,7 +463,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     void this.#runLoop();
 
     if (TESTING) {
-      forTesting(this)[exposedToTestingSymbol] = {
+      asTestZero(this)[exposedToTestingSymbol] = {
         puller: this.#puller,
         pusher: this.#pusher,
         setReload: (r: () => void) => {
@@ -483,7 +483,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
-      return forTesting(this)[createLogOptionsSymbol](options);
+      const testZero = asTestZero(this);
+      if (testZero[createLogOptionsSymbol]) {
+        return testZero[createLogOptionsSymbol](options);
+      }
     }
     return createLogOptions(options);
   }

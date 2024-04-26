@@ -1,19 +1,19 @@
+import {joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {expect, test} from 'vitest';
-import {joinSymbol} from '../ivm/types.js';
 import {
   Album,
+  Artist,
   Track,
-  setup,
-  createRandomArtists,
   createRandomAlbums,
+  createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
-  Artist,
-} from '../benchmarks/setup.js';
-import * as agg from '../query/agg.js';
+  newZero,
+} from './integration-test-util.js';
 
 test('left-join and aggregation to gather artists for a track', async () => {
-  const {r, trackQuery, artistQuery, albumQuery, trackArtistQuery} = setup();
+  const z = newZero();
 
   const artists = createRandomArtists(5, true);
   const albums = createRandomAlbums(2, artists, true);
@@ -21,22 +21,22 @@ test('left-join and aggregation to gather artists for a track', async () => {
   // only link the first 2 tracks to artists
   const trackArtists = linkTracksToArtists(artists, tracks.slice(0, 2), true);
 
-  await r.mutate.bulkSet({
+  await z.mutate.bulkSet({
     tracks,
     albums,
     artists,
     trackArtists,
   });
 
-  const stmt = trackQuery
+  const stmt = z.query.track
     .leftJoin(
-      trackArtistQuery,
+      z.query.trackArtist,
       'trackArtist',
       'track.id',
       'trackArtist.trackId',
     )
-    .leftJoin(artistQuery, 'artists', 'trackArtist.artistId', 'id')
-    .leftJoin(albumQuery, 'album', 'track.albumId', 'id')
+    .leftJoin(z.query.artist, 'artists', 'trackArtist.artistId', 'id')
+    .leftJoin(z.query.album, 'album', 'track.albumId', 'id')
     .groupBy('track.id')
     .select('track.*', 'album.*', agg.array('artists.*', 'artists'))
     .asc('track.id')
@@ -97,7 +97,7 @@ test('left-join and aggregation to gather artists for a track', async () => {
 });
 
 test('left-join through single table', async () => {
-  const {r, trackQuery, albumQuery} = setup();
+  const z = newZero();
 
   const album: Album = {
     id: '1',
@@ -112,13 +112,13 @@ test('left-join through single table', async () => {
     length: 1,
   };
 
-  await r.mutate.bulkSet({
+  await z.mutate.bulkSet({
     albums: [album],
     tracks: [track],
   });
 
-  const stmt = trackQuery
-    .leftJoin(albumQuery, 'album', 'albumId', 'id')
+  const stmt = z.query.track
+    .leftJoin(z.query.album, 'album', 'albumId', 'id')
     .prepare();
   let rows = await stmt.exec();
 
@@ -131,7 +131,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await r.mutate.setTrack({
+  await z.mutate.setTrack({
     id: '2',
     albumId: '2',
     title: 'track 2',
@@ -154,7 +154,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await r.mutate.setAlbum({
+  await z.mutate.setAlbum({
     id: '2',
     artistId: '',
     title: 'album 2',
@@ -177,7 +177,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await r.mutate.deleteTrack('1');
+  await z.mutate.deleteTrack('1');
 
   rows = await stmt.exec();
 
@@ -190,7 +190,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await r.mutate.deleteAlbum('2');
+  await z.mutate.deleteAlbum('2');
 
   rows = await stmt.exec();
 
@@ -204,7 +204,7 @@ test('left-join through single table', async () => {
 });
 
 test('left-join through junction edge', async () => {
-  const {r, trackQuery, artistQuery, trackArtistQuery} = setup();
+  const z = newZero();
 
   const album: Album = {
     id: '1',
@@ -251,21 +251,21 @@ test('left-join through junction edge', async () => {
     } as const,
   ];
 
-  await r.mutate.bulkSet({
+  await z.mutate.bulkSet({
     albums: [album],
     tracks,
     trackArtists,
     artists,
   });
 
-  const stmt = trackQuery
+  const stmt = z.query.track
     .leftJoin(
-      trackArtistQuery,
+      z.query.trackArtist,
       'trackArtist',
       'track.id',
       'trackArtist.trackId',
     )
-    .leftJoin(artistQuery, 'artists', 'trackArtist.artistId', 'id')
+    .leftJoin(z.query.artist, 'artists', 'trackArtist.artistId', 'id')
     .select('track.*')
     .asc('track.id')
     .prepare();

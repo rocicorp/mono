@@ -3,15 +3,15 @@ import SQLiteAsyncESMFactory from 'wa-sqlite/dist/wa-sqlite-async.mjs';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import {IDBBatchAtomicVFS} from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js';
+import type {EntityQuery} from '../query/entity-query.js';
+import type {Statement} from '../query/statement.js';
 import {
-  setup,
+  setupUsingReplicache,
   type Album,
   type Artist,
   type Track,
   type TrackArtist,
 } from './setup.js';
-import type {EntityQuery} from '../query/entity-query.js';
-import type {Statement} from '../query/statement.js';
 
 const wasmModule = await SQLiteAsyncESMFactory();
 const sqlite3 = SQLite.Factory(wasmModule);
@@ -44,7 +44,8 @@ export async function benchZQL(
   [(queries: Queries) => EntityQuery<any, any>, times: number][],
   mutations: readonly (readonly [Mutator, times: number])[],
 ): Promise<number> {
-  const {r, trackQuery, albumQuery, artistQuery, trackArtistQuery} = setup();
+  const {r, trackQuery, albumQuery, artistQuery, trackArtistQuery} =
+    setupUsingReplicache();
 
   async function upsertMany(data: BulkItems) {
     await r.mutate.bulkSet(data);
