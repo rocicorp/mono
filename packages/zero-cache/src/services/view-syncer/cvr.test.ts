@@ -232,17 +232,21 @@ describe('view-syncer/cvr', () => {
 
       // This removes and adds desired queries to the existing fooClient.
       updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']);
-      updater.putDesiredQueries('fooClient', {
-        fourHash: {table: 'users'},
-        threeHash: {table: 'comments'},
-      });
+      expect(
+        updater.putDesiredQueries('fooClient', {
+          fourHash: {table: 'users'},
+          threeHash: {table: 'comments'},
+        }),
+      ).toEqual([{table: 'users'}, {table: 'comments'}]);
       // This adds a new barClient with desired queries.
-      updater.putDesiredQueries('barClient', {
-        oneHash: {table: 'issues'}, // oneHash is already "got", formerly desired by foo.
-        threeHash: {table: 'comments'},
-      });
+      expect(
+        updater.putDesiredQueries('barClient', {
+          oneHash: {table: 'issues'}, // oneHash is already "got", formerly desired by foo.
+          threeHash: {table: 'comments'},
+        }),
+      ).toEqual([{table: 'issues'}, {table: 'comments'}]);
       // Adds a new client with no desired queries.
-      updater.putDesiredQueries('bonkClient', {});
+      expect(updater.putDesiredQueries('bonkClient', {})).toEqual([]);
       updater.clearDesiredQueries('dooClient');
 
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 24)));
@@ -441,7 +445,9 @@ describe('view-syncer/cvr', () => {
       );
 
       // Same desired query set. Nothing should change except last active time.
-      updater.putDesiredQueries('fooClient', {oneHash: {table: 'issues'}});
+      expect(
+        updater.putDesiredQueries('fooClient', {oneHash: {table: 'issues'}}),
+      ).toEqual([]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));

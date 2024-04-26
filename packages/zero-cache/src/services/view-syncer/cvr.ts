@@ -171,26 +171,25 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return client;
   }
 
-  putDesiredQueries(clientID: string, queries: {[id: string]: AST}) {
+  putDesiredQueries(clientID: string, queries: {[id: string]: AST}): AST[] {
     const client = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const additional = new Set(Object.keys(queries));
     const needed = difference(additional, current);
     if (needed.size === 0) {
-      return;
+      return [];
     }
     const newVersion = this._ensureMinorVersionBump();
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
     void this._writes.put(this._paths.client(client), client);
 
+    const added: AST[] = [];
     for (const id of needed) {
-      const query = this._cvr.queries[id] ?? {
-        id,
-        ast: queries[id],
-        desiredBy: {},
-      };
+      const ast = queries[id];
+      const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
       query.desiredBy[clientID] = newVersion;
       this._cvr.queries[id] = query;
+      added.push(ast);
 
       void this._writes.put(this._paths.query(query), query);
       void this._writes.put(
@@ -198,6 +197,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         {type: 'query', op: 'put', id, clientID} satisfies QueryPatch,
       );
     }
+    return added;
   }
 
   deleteDesiredQueries(clientID: string, queries: string[]) {
