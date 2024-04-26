@@ -1,6 +1,6 @@
-import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
+import {jsonObjectSchema} from '../../../types/bigint-json.js';
 import {versionFromLexi} from '../../../types/lexi-version.js';
 import {versionString} from './paths.js';
 
@@ -162,7 +162,7 @@ export type QueryRecord = v.Infer<typeof queryRecordSchema>;
 export const rowIDSchema = v.object({
   schema: v.string(),
   table: v.string(),
-  rowKey: v.record(jsonSchema),
+  rowKey: jsonObjectSchema,
 });
 
 export const metaRecordSchema = v.union(

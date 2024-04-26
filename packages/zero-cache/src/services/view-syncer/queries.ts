@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import type {JSONObject, ReadonlyJSONObject} from 'shared/src/json.js';
+import type {JSONObject} from '../../types/bigint-json.js';
 import {rowKeyHash} from '../../types/row-key.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
@@ -80,7 +80,7 @@ export class QueryHandler {
 
 export type RowResult = {
   record: Omit<RowRecord, 'putPatch'>;
-  contents: ReadonlyJSONObject;
+  contents: JSONObject;
 };
 
 class ResultProcessor {
@@ -129,24 +129,24 @@ class ResultProcessor {
 
       for (const [alias, value] of Object.entries(result)) {
         const [rowAlias, columnName] = splitLastComponent(alias);
-        const row = rows.get(rowAlias);
-        row
-          ? (row[columnName] = value)
-          : rows.set(rowAlias, {[columnName]: value});
+        rows.set(rowAlias, {
+          ...rows.get(rowAlias),
+          [columnName]: value,
+        });
       }
 
       // Now, merge each row into its corresponding RowResult by row key.
-      for (const [rowAlias, row] of rows.entries()) {
+      for (const [rowAlias, rowWithVersion] of rows.entries()) {
+        // Exclude the _0_version column from what is sent to the client.
+        const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
+        assert(
+          typeof rowVersion === 'string',
+          `Invalid _0_version in ${JSON.stringify(rowWithVersion)}`,
+        );
+
         const [_, table] = splitLastComponent(rowAlias);
         const id = this.#tables.rowID(table, row);
         const key = makeKey(id);
-        const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
-        assert(
-          typeof rowVersion === 'string',
-          `Invalid _0_version in ${JSON.stringify(row)}`,
-        );
-        // Exclude the _0_version column from what is sent to the client.
-        delete row['_0_version'];
 
         let rowResult = this.#results.get(key);
         if (!rowResult) {
