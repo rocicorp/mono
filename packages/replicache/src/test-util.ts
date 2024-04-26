@@ -17,7 +17,6 @@ import {
 } from './persist/idb-databases-store-db-name.js';
 import type {PullResponseV1} from './puller.js';
 import type {
-  ReplicacheInternalAPI,
   ReplicacheInternalOptions,
   ReplicacheOptions,
 } from './replicache-options.js';
@@ -39,19 +38,11 @@ export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
-  readonly #internalAPI!: ReplicacheInternalAPI;
   readonly #impl: ReplicacheImpl<MD>;
   recoverMutationsFake: sinon.SinonSpy<[r: Promise<boolean>], Promise<boolean>>;
 
   constructor(options: ReplicacheOptions<MD>) {
-    let internalAPI!: ReplicacheInternalAPI;
-    super({
-      ...options,
-      exposeInternalAPI: (api: ReplicacheInternalAPI) => {
-        internalAPI = api;
-      },
-    } as ReplicacheOptions<MD>);
-    this.#internalAPI = internalAPI;
+    super(options);
     this.#impl = getImpl(this);
     this.recoverMutationsFake = this.onRecoverMutations = sinon.fake(r => r);
   }
@@ -69,7 +60,7 @@ export class ReplicacheTest<
   }
 
   persist() {
-    return this.#internalAPI.persist();
+    return this.#impl.persist();
   }
 
   recoverMutations(): Promise<boolean> {

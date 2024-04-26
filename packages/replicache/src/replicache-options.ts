@@ -244,16 +244,4 @@ export type ReplicacheInternalOptions = {
    * Defaults to true.
    */
   enablePullAndPushInOpen?: boolean | undefined;
-
-  /**
-   * Allows exposing parts of the internal API to a subclass. This works when
-   * thing have been minified and with the npm package.
-   */
-  exposeInternalAPI?: (api: ReplicacheInternalAPI) => void;
 };
-
-export interface ReplicacheInternalAPI {
-  persist(): Promise<void>;
-  refresh(): Promise<void>;
-  lastMutationID(): number;
-}

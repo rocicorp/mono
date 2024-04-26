@@ -260,14 +260,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #enableScheduledRefresh: boolean;
   readonly #enablePullAndPushInOpen: boolean;
   #persistScheduler = new ProcessScheduler(
-    () => this.#persist(),
+    () => this.persist(),
     PERSIST_IDLE_TIMEOUT_MS,
     PERSIST_THROTTLE_MS,
     this.#closeAbortController.signal,
   );
   readonly #onPersist: OnPersist;
   #refreshScheduler = new ProcessScheduler(
-    () => this.#refresh(),
+    () => this.refresh(),
     REFRESH_IDLE_TIMEOUT_MS,
     REFRESH_THROTTLE_MS,
     this.#closeAbortController.signal,
@@ -345,7 +345,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onBeginPull = () => undefined;
   onRecoverMutations = (r: Promise<boolean>) => r;
 
-  constructor(options: ReplicacheOptions<MD>) {
+  constructor(options: ReplicacheOptions<MD> & ReplicacheInternalOptions) {
     const {
       name,
       logLevel = 'info',
@@ -362,6 +362,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       pusher,
       licenseKey,
       indexes = {},
+      enableMutationRecovery = true,
+      enableLicensing = true,
+      enableScheduledPersist = true,
+
+      enableScheduledRefresh = true,
+
+      enablePullAndPushInOpen = true,
     } = options;
     this.auth = auth ?? '';
     this.pullURL = pullURL;
@@ -376,27 +383,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.puller = puller ?? getDefaultPuller(this);
     this.pusher = pusher ?? getDefaultPusher(this);
 
-    const internalOptions = options as unknown as ReplicacheInternalOptions;
-    const enableMutationRecovery =
-      internalOptions.enableMutationRecovery ?? true;
-    this.#enableLicensing = internalOptions.enableLicensing ?? true;
-    this.#enableScheduledPersist =
-      internalOptions.enableScheduledPersist ?? true;
-    this.#enableScheduledRefresh =
-      internalOptions.enableScheduledRefresh ?? true;
-    this.#enablePullAndPushInOpen =
-      internalOptions.enablePullAndPushInOpen ?? true;
-
-    if (internalOptions.exposeInternalAPI) {
-      internalOptions.exposeInternalAPI({
-        // Needed by perf test
-        persist: () => this.#persist(),
-        // Needed by perf test
-        refresh: () => this.#refresh(),
-        // Needed by reflect
-        lastMutationID: () => this.lastMutationID,
-      });
-    }
+    this.#enableLicensing = enableLicensing;
+    this.#enableScheduledPersist = enableScheduledPersist;
+    this.#enableScheduledRefresh = enableScheduledRefresh;
+    this.#enablePullAndPushInOpen = enablePullAndPushInOpen;
 
     this.#lc = createLogContext(logLevel, logSinks, {name});
     this.#lc.debug?.('Constructing Replicache', {
@@ -1233,7 +1223,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return {requestID, syncHead, ok: httpRequestInfo.httpStatusCode === 200};
   }
 
-  async #persist(): Promise<void> {
+  async persist(): Promise<void> {
     assert(!this.#persistIsRunning);
     this.#persistIsRunning = true;
     try {
@@ -1271,7 +1261,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#onPersist({clientID, clientGroupID});
   }
 
-  async #refresh(): Promise<void> {
+  async refresh(): Promise<void> {
     await this.#ready;
     const {clientID} = this;
     if (this.#closed) {

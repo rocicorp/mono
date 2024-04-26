@@ -33,12 +33,12 @@ import {
   PushRequestV1,
   Pusher,
   PusherResult,
-  Replicache,
   ReplicacheOptions,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
   SubscribeOptions,
   dropDatabase,
 } from 'replicache';
+import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
@@ -166,15 +166,10 @@ const enum PingResult {
   Success = 1,
 }
 
-// Keep in sync with packages/replicache/src/replicache-options.ts
-export interface ReplicacheInternalAPI {
-  lastMutationID(): number;
-}
-
 export class Reflect<MD extends MutatorDefs> {
   readonly version = version;
 
-  readonly #rep: Replicache<MD>;
+  readonly #rep: ReplicacheImpl<MD>;
   readonly #server: HTTPString | null;
   readonly userID: string;
   readonly roomID: string;
@@ -215,7 +210,6 @@ export class Reflect<MD extends MutatorDefs> {
     // intentionally empty
   };
 
-  #internalAPI: ReplicacheInternalAPI;
   readonly #closeBeaconManager: CloseBeaconManager;
 
   /**
@@ -365,19 +359,15 @@ export class Reflect<MD extends MutatorDefs> {
       licenseKey: 'reflect-client-static-key',
       kvStore,
     };
-    let internalAPI: ReplicacheInternalAPI;
     const replicacheInternalOptions = {
       enableLicensing: false,
-      exposeInternalAPI: (api: ReplicacheInternalAPI) => {
-        internalAPI = api;
-      },
     };
 
-    this.#rep = new Replicache({
+    this.#rep = new ReplicacheImpl({
       ...replicacheOptions,
       ...replicacheInternalOptions,
     });
-    this.#internalAPI = internalAPI!;
+
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
@@ -424,7 +414,7 @@ export class Reflect<MD extends MutatorDefs> {
       this.#lc,
       server,
       () => this.#rep.auth,
-      () => this.#internalAPI.lastMutationID(),
+      () => this.#rep.lastMutationID,
       this.#closeAbortController.signal,
       getWindow(),
     );

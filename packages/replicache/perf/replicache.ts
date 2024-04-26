@@ -1,19 +1,18 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
+import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
 import {
   IndexDefinitions,
   JSONValue,
   MutatorDefs,
   PatchOperation,
   ReadTransaction,
-  Replicache,
   ReplicacheOptions,
   TEST_LICENSE_KEY,
   WriteTransaction,
-} from '../out/replicache.js';
-import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
-import type {ReplicacheInternalAPI} from '../src/replicache-options.js';
+} from '../src/mod.js';
+import {ReplicacheImpl as Replicache} from '../src/replicache-impl.js';
 import {uuid} from '../src/uuid.js';
 import {
   TestDataObject,
@@ -322,33 +321,16 @@ export function benchmarkRebase(opts: {
 }
 
 class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
-  readonly #internalAPI: ReplicacheInternalAPI;
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
-    let internalAPI!: ReplicacheInternalAPI;
     super({
       ...options,
       licenseKey: TEST_LICENSE_KEY,
-      exposeInternalAPI: (api: ReplicacheInternalAPI) => {
-        internalAPI = api;
-      },
+
       enableLicensing: false,
       enableMutationRecovery: false,
       enableScheduledRefresh: false,
       enableScheduledPersist: false,
-    } as ReplicacheOptions<MD>);
-    this.#internalAPI = internalAPI;
-  }
-
-  get onUpdateNeeded() {
-    return () => {};
-  }
-
-  persist(): Promise<void> {
-    return this.#internalAPI.persist();
-  }
-
-  refresh(): Promise<void> {
-    return this.#internalAPI.refresh();
+    });
   }
 }
 
