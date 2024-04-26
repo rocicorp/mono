@@ -13,7 +13,8 @@ const createOpSchema = v.object({
 });
 
 /**
- * Upsert semantics, creates or updates if entity with id already exists.
+ * Upsert semantics. Inserts if entity with id does not already exist,
+ * otherwise updates existing entity with id.
  */
 const setOpSchema = v.object({
   op: v.literal('set'),
@@ -23,7 +24,7 @@ const setOpSchema = v.object({
 });
 
 /**
- * Update if entity with id exists, otherwise does nothing.
+ * Updates if entity with id exists, otherwise does nothing.
  */
 const updateOpSchema = v.object({
   op: v.literal('update'),
