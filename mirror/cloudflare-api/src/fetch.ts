@@ -129,7 +129,7 @@ export interface FetchResult<ResponseType = unknown> {
 }
 
 export enum Errors {
-  TooManyRequests = 429,
+  TooManyRequests = 971,
   CouldNotRouteToScript = 7003,
   CustomHostnameNotFound = 1436,
   DispatchNamespaceNotFound = 100119,
