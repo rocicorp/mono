@@ -1,6 +1,6 @@
 import React from 'react';
 import {formatDate} from '../util/date';
-import type {Issue, Priority, Status} from './issue';
+import {getLabelColor, Issue, Priority, Status} from './issue';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
 
@@ -42,7 +42,15 @@ function IssueRow({
         {issue.title.slice(0, 3000) || ''}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
-        {row.labels.join(', ')}
+        {row.labels.map(label => (
+          <span
+            key={label}
+            className="rounded-full p-1 px-3 mx-1"
+            style={{background: getLabelColor(label)}}
+          >
+            {label}
+          </span>
+        ))}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
         {formatDate(new Date(issue.modified))}

@@ -27,7 +27,8 @@ interface Props {
 
 interface FilterStatusProps<Enum extends number | string> {
   filter: Enum[] | null;
-  displayStrings: Record<Enum, string>;
+  displayStrings?: Record<Enum, string> | undefined;
+  operator?: string | undefined;
   onDelete: () => void;
   label: string;
 }
@@ -53,15 +54,18 @@ function FilterStatus<Enum extends number | string>({
   onDelete,
   label,
   displayStrings,
+  operator,
 }: FilterStatusProps<Enum>) {
   if (!filter || filter.length === 0) return null;
   return (
     <div className="flex items-center pr-4 space-x-[1px]">
       <span className="px-1 text-gray-50 bg-gray-850 rounded-l">
-        {label} is
+        {label} {operator ?? 'is'}
       </span>
       <span className="px-1 text-gray-50 bg-gray-850 ">
-        {filter.map(f => displayStrings[f]).join(', ')}
+        {displayStrings !== undefined
+          ? filter.map(f => displayStrings[f]).join(', ')
+          : filter.join(', ')}
       </span>
       <span
         className="px-1 text-gray-50 bg-gray-850 rounded-r cursor-pointer"
@@ -177,7 +181,8 @@ function TopFilter({
         </div>
       </div>
       {(statusFilters && statusFilters.length) ||
-      (priorityFilters && priorityFilters.length) ? (
+      (priorityFilters && priorityFilters.length) ||
+      (labelFilters && labelFilters.length) ? (
         <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
           <FilterStatus
             filter={statusFilters}
@@ -190,6 +195,12 @@ function TopFilter({
             displayStrings={priorityDisplayStrings}
             onDelete={() => setPriorityStringFilterByParam(null)}
             label="Priority"
+          />
+          <FilterStatus
+            filter={labelFilters}
+            onDelete={() => setLabelFilterByParam(null)}
+            label="Label"
+            operator="is any of"
           />
         </div>
       ) : null}

@@ -45,6 +45,22 @@ export enum PriorityString {
   Urgent = 'URGENT',
 }
 
+const labelColors = [
+  '#483D8B', // Dark Slate Blue
+  '#191970', // Midnight Blue
+  '#36454F', // Charcoal
+  '#556B2F', // Dark Olive Green
+  '#4B0082', // Indigo
+  '#333333', // Dark Charcoal
+  '#2F4F4F', // Dark Slate Gray
+  '#0C1021', // Onyx
+];
+
+export function getLabelColor(labelName: string) {
+  const charCode = labelName.charCodeAt(2) || labelName.charCodeAt(0);
+  return labelColors[charCode % labelColors.length];
+}
+
 export const priorityEnumSchema = z
   .nativeEnum(PriorityString)
   .transform(priorityFromString);
