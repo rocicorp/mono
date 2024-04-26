@@ -87,15 +87,15 @@ export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
 interface TestReflect {
-  [exposedToTestingSymbol]: TestingContext;
-  [onSetConnectionStateSymbol]: (state: ConnectionState) => void;
-  [createLogOptionsSymbol]: (options: {
+  [exposedToTestingSymbol]?: TestingContext;
+  [onSetConnectionStateSymbol]?: (state: ConnectionState) => void;
+  [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
   }) => LogOptions;
 }
 
-function forTesting<MD extends MutatorDefs>(r: Reflect<MD>): TestReflect {
+function asTestReflect<MD extends MutatorDefs>(r: Reflect<MD>): TestReflect {
   return r as unknown as TestReflect;
 }
 
@@ -276,7 +276,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#connectionStateChangeResolver = resolver();
 
     if (TESTING) {
-      forTesting(this)[onSetConnectionStateSymbol](state);
+      asTestReflect(this)[onSetConnectionStateSymbol]?.(state);
     }
   }
 
@@ -422,7 +422,7 @@ export class Reflect<MD extends MutatorDefs> {
     void this.#runLoop();
 
     if (TESTING) {
-      forTesting(this)[exposedToTestingSymbol] = {
+      asTestReflect(this)[exposedToTestingSymbol] = {
         puller: this.#puller,
         pusher: this.#pusher,
         setReload: (r: () => void) => {
@@ -442,7 +442,10 @@ export class Reflect<MD extends MutatorDefs> {
     enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
-      return forTesting(this)[createLogOptionsSymbol](options);
+      const testReflect = asTestReflect(this);
+      if (testReflect[createLogOptionsSymbol]) {
+        return testReflect[createLogOptionsSymbol](options);
+      }
     }
     return createLogOptions(options);
   }

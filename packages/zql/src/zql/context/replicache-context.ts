@@ -41,21 +41,8 @@ class ReplicacheContext implements Context {
 }
 
 /**
- * Forwards Replicache changes to ZQL sources so they
- * can be fed into any queries that may exist.
- *
- * Maintains derived orderings of sources as well.
- *
- * If someone runs a query that has an order-by we need to scan the entire collection
- * in order to sort it.
- * To save future work, we save the result of that sort and keep it up to date.
- *
- * This helps:
- * 1. When revisting old queries that were sorted or paging through results
- * 2. When many queries are sorted by the same field
- * 3. When joining sources on a field that we have pre-sorted
- *
- * And shares the work between queries.
+ * Forwards Replicache changes to ZQL sources so they can be fed into any
+ * queries that may exist.
  */
 class ReplicacheSourceStore {
   readonly #rep: ReplicacheLike;

@@ -28,6 +28,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/rails": "^0.10.0",
     "@types/sinon": "^10.0.11",
     "datadog": "0.0.0",
     "esbuild": "^0.20.2",

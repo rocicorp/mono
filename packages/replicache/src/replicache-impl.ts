@@ -79,11 +79,14 @@ import {setIntervalWithSignal} from './set-interval-with-signal.js';
 import {mustSimpleFetch} from './simple-fetch.js';
 import {
   SubscribeOptions,
+  SubscriptionImpl,
   SubscriptionsManager,
+  SubscriptionsManagerImpl,
   WatchCallback,
   WatchCallbackForOptions,
   WatchNoIndexCallback,
   WatchOptions,
+  WatchSubscription,
 } from './subscriptions.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {PullError} from './sync/pull-error.js';
@@ -147,6 +150,15 @@ const updateNeededReasonNewClientGroup: UpdateNeededReason = {
   type: 'NewClientGroup',
 } as const;
 
+export interface MakeSubscriptionsManager {
+  (queryInternal: QueryInternal, lc: LogContext): SubscriptionsManager;
+}
+
+const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
+  queryInternal,
+  lc,
+) => new SubscriptionsManagerImpl(queryInternal, lc);
+
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The URL to use when doing a pull request. */
@@ -161,7 +173,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
 
-  readonly #subscriptions: SubscriptionsManager;
+  readonly subscriptions: SubscriptionsManager;
   readonly #mutationRecovery: MutationRecovery;
 
   /**
@@ -345,7 +357,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onBeginPull = () => undefined;
   onRecoverMutations = (r: Promise<boolean>) => r;
 
-  constructor(options: ReplicacheOptions<MD> & ReplicacheInternalOptions) {
+  constructor(
+    options: ReplicacheOptions<MD> & ReplicacheInternalOptions,
+    makeSubscriptionsManager: MakeSubscriptionsManager = defaultMakeSubscriptionsManager,
+  ) {
     const {
       name,
       logLevel = 'info',
@@ -394,7 +409,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       'replicache version': version,
     });
 
-    this.#subscriptions = new SubscriptionsManager(
+    this.subscriptions = makeSubscriptionsManager(
       this.#queryInternal,
       this.#lc,
     );
@@ -795,7 +810,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#pullConnectionLoop.close();
     this.#pushConnectionLoop.close();
 
-    this.#subscriptions.clear();
+    this.subscriptions.clear();
 
     if (this.#testLicenseKeyTimeout) {
       clearTimeout(this.#testLicenseKeyTimeout);
@@ -822,13 +837,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         lc,
         syncHead,
         clientID,
-        this.#subscriptions,
+        this.subscriptions,
         FormatVersion.Latest,
       );
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        await this.#subscriptions.fire(diffs);
+        await this.subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
@@ -838,7 +853,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
         // write transaction.
-        if (this.#subscriptions.hasPendingSubscriptionRuns) {
+        if (this.subscriptions.hasPendingSubscriptionRuns) {
           await Promise.resolve();
         }
         const {meta} = mutation;
@@ -1275,7 +1290,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.perdag,
         clientID,
         this.#mutatorRegistry,
-        this.#subscriptions,
+        this.subscriptions,
         () => this.closed,
         FormatVersion.Latest,
       );
@@ -1289,7 +1304,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
     }
     if (diffs !== undefined) {
-      await this.#subscriptions.fire(diffs);
+      await this.subscriptions.fire(diffs);
     }
   }
 
@@ -1410,7 +1425,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (typeof options === 'function') {
       options = {onData: options};
     }
-    return this.#subscriptions.addSubscription(body, options);
+
+    const {onData, onError, onDone, isEqual} = options;
+    return this.subscriptions.add(
+      new SubscriptionImpl(body, onData, onError, onDone, isEqual),
+    );
   }
 
   /**
@@ -1437,7 +1456,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     callback: WatchCallbackForOptions<Options>,
     options?: Options,
   ): () => void {
-    return this.#subscriptions.addWatch(callback as WatchCallback, options);
+    return this.subscriptions.add(
+      new WatchSubscription(callback as WatchCallback, options),
+    );
   }
 
   /**
@@ -1505,7 +1526,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     // Ensure that we run initial pending subscribe functions before starting a
     // write transaction.
-    if (this.#subscriptions.hasPendingSubscriptionRuns) {
+    if (this.subscriptions.hasPendingSubscriptionRuns) {
       await Promise.resolve();
     }
 
@@ -1539,7 +1560,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         const lastMutationID = await dbWrite.getMutationID();
         const diffs = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
-          this.#subscriptions,
+          this.subscriptions,
         );
 
         // Update this after the commit in case the commit fails.
@@ -1547,7 +1568,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        await this.#subscriptions.fire(diffs);
+        await this.subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;
       } catch (ex) {

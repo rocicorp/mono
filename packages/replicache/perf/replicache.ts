@@ -325,7 +325,6 @@ class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
     super({
       ...options,
       licenseKey: TEST_LICENSE_KEY,
-
       enableLicensing: false,
       enableMutationRecovery: false,
       enableScheduledRefresh: false,
