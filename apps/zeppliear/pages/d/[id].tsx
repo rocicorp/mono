@@ -17,11 +17,9 @@ export default function Home() {
         return;
       }
 
-      const [, , spaceID] = location.pathname.split('/');
       const z = new Zero({
         server: process.env.NEXT_PUBLIC_SERVER,
         userID: 'anon',
-        roomID: spaceID,
         mutators,
         kvStore: 'idb',
         queries: {

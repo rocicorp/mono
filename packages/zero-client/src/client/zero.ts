@@ -12,23 +12,17 @@ import {
   Downstream,
   NullableVersion,
   PingMessage,
-  PokeMessage,
-  PullRequestMessage,
-  PullResponseBody,
-  PullResponseMessage,
+  PokeEndMessage,
+  PokePartMessage,
+  PokeStartMessage,
   PushMessage,
   downstreamSchema,
   nullableVersionSchema,
   type ErrorMessage,
-} from 'reflect-protocol';
-import {ROOM_ID_REGEX, isValidRoomID} from 'reflect-shared/src/room-id.js';
-import type {MutatorDefs, ReadTransaction} from 'reflect-shared/src/types.js';
+} from 'zero-protocol';
+import type {MutatorDefs, ReadTransaction} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
-import type {
-  Puller,
-  PullerResultV0,
-  PullerResultV1,
-} from 'replicache/src/puller.js';
+import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
 import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
@@ -71,7 +65,7 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import type {QueryParseDefs, ZeroOptions} from './options.js';
-import {PokeHandler} from './poke-handler.js';
+import {PokeHandler} from './zero-poke-handler.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
@@ -80,6 +74,11 @@ import {
   ZQLWatchSubscription,
 } from './subscriptions.js';
 import {version} from './version.js';
+import type {
+  PullRequestMessage,
+  PullResponseBody,
+  PullResponseMessage,
+} from 'zero-protocol/src/pull.js';
 
 export type QueryDefs = {
   readonly [name: string]: Entity;
@@ -207,7 +206,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   readonly #rep: ReplicacheImpl<WithCRUD<MD>>;
   readonly #server: HTTPString | null;
   readonly userID: string;
-  readonly roomID: string;
 
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
@@ -230,7 +228,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
 
   #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   readonly #jurisdiction: 'eu' | undefined;
-  #baseCookie: number | null = null;
+  #baseCookie: string | null = null;
   // Total number of sockets successfully connected by this client
   #connectedCount = 0;
   // Number of messages received over currently connected socket.  Reset
@@ -340,7 +338,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   constructor(options: ZeroOptions<MD, QD>) {
     const {
       userID,
-      roomID,
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
@@ -349,11 +346,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
-    }
-    if (!isValidRoomID(roomID)) {
-      throw new Error(
-        `ZeroOptions.roomID must match ${ROOM_ID_REGEX.toString()}.`,
-      );
     }
     const server = getServer(options.server);
     this.#enableAnalytics = shouldEnableAnalytics(
@@ -390,7 +382,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
-      name: `zero-${userID}-${roomID}`,
+      name: `zero-${userID}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
       // TODO: Do we need these?
@@ -423,12 +415,11 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
-    this.roomID = roomID;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
     this.#lc = new LogContext(
       logOptions.logLevel,
-      {roomID, clientID: rep.clientID},
+      {clientID: rep.clientID},
       logOptions.logSink,
     );
 
@@ -466,7 +457,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
 
     this.#pokeHandler = new PokeHandler(
       poke => this.#rep.poke(poke),
-      () => this.#onOutOfOrderPoke(),
+      () => this.#onPokeError(),
       rep.clientID,
       this.#lc,
     );
@@ -626,8 +617,14 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       case 'pong':
         return this.#onPong();
 
-      case 'poke':
-        return this.#handlePoke(lc, downMessage);
+      case 'pokeStart':
+        return this.#handlePokeStart(lc, downMessage);
+
+      case 'pokePart':
+        return this.#handlePokePart(lc, downMessage);
+
+      case 'pokeEnd':
+        return this.#handlePokeEnd(lc, downMessage);
 
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
@@ -817,7 +814,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       baseCookie,
       this.clientID,
       await this.clientGroupID,
-      this.roomID,
       this.userID,
       this.#rep.auth,
       this.#jurisdiction,
@@ -916,19 +912,32 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#pokeHandler.handleDisconnect();
   }
 
-  async #handlePoke(_lc: LogContext, pokeMessage: PokeMessage) {
+  async #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage) {
     this.#abortPingTimeout();
-    const pokeBody = pokeMessage[1];
-    const lastMutationIDChangeForSelf =
-      await this.#pokeHandler.handlePoke(pokeBody);
+    await this.#pokeHandler.handlePokeStart(pokeMessage[1]);
+  }
+
+  async #handlePokePart(_lc: LogContext, pokeMessage: PokePartMessage) {
+    this.#abortPingTimeout();
+    const lastMutationIDChangeForSelf = await this.#pokeHandler.handlePokePart(
+      pokeMessage[1],
+    );
     if (lastMutationIDChangeForSelf !== undefined) {
       this.#lastMutationIDReceived = lastMutationIDChangeForSelf;
     }
   }
 
-  #onOutOfOrderPoke() {
+  async #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage) {
+    this.#abortPingTimeout();
+    await this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
+  }
+
+  #onPokeError() {
     const lc = this.#lc;
-    lc.info?.('out of order poke, disconnecting');
+    lc.info?.(
+      'poke error, disconnecting?',
+      this.#connectionState !== ConnectionState.Disconnected,
+    );
 
     // It is theoretically possible that we get disconnected during the
     // async poke above. Only disconnect if we are not already
@@ -962,22 +971,12 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     req: PushRequestV0 | PushRequestV1,
     requestID: string,
   ): Promise<PusherResult> {
+    // The deprecation of pushVersion 0 predates zero-client
+    assert(req.pushVersion === 1);
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
-
-    // If pushVersion is 0 this is a mutation recovery push for a pre dd31
-    // client.  Zero didn't support mutation recovery pre dd31, so don't
-    // try to recover these, just return no-op response.
-    if (req.pushVersion === 0) {
-      return {
-        httpRequestInfo: {
-          errorMessage: '',
-          httpStatusCode: 200,
-        },
-      };
-    }
     const socket = this.#socket;
     assert(socket);
 
@@ -1011,7 +1010,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
               id: m.id,
               clientID: m.clientID,
               name: m.name,
-              args: m.args,
+              args: [m.args],
             },
           ],
           pushVersion: req.pushVersion,
@@ -1244,20 +1243,11 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   async #puller(
     req: PullRequestV0 | PullRequestV1,
     requestID: string,
-  ): Promise<PullerResultV0 | PullerResultV1> {
+  ): Promise<PullerResultV1> {
+    // The deprecation of pushVersion 0 predates zero-client
+    assert(req.pullVersion === 1);
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.('Pull', req);
-    // If pullVersion === 0 this is a mutation recovery pull for a pre dd31
-    // client.  Zero didn't support mutation recovery pre dd31, so don't
-    // try to recover these, just return no-op response.
-    if (req.pullVersion === 0) {
-      return {
-        httpRequestInfo: {
-          errorMessage: '',
-          httpStatusCode: 200,
-        },
-      };
-    }
     // Pull request for this instance's client group.  The base cookie is
     // intercepted here (in a complete hack), and a no-op response is returned
     // as pulls for this client group are handled via poke over the socket.
@@ -1278,7 +1268,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     await this.#connectResolver.promise;
     const socket = this.#socket;
     assert(socket);
-
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
     const cookie = valita.parse(req.cookie, nullableVersionSchema);
@@ -1302,7 +1291,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
         sleep(PULL_TIMEOUT_MS),
         pullResponseResolver.promise,
       ]);
-
       switch (raceResult) {
         case RaceCases.Timeout:
           lc.debug?.('Mutation recovery pull timed out');
@@ -1397,7 +1385,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     const url = new URL('/api/metrics/v0/report', this.#server);
     url.searchParams.set('clientID', this.clientID);
     url.searchParams.set('clientGroupID', await this.clientGroupID);
-    url.searchParams.set('roomID', this.roomID);
     url.searchParams.set('userID', this.userID);
     url.searchParams.set('requestID', nanoid());
     const res = await fetch(url.toString(), {
@@ -1469,7 +1456,6 @@ export function createSocket(
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,
-  roomID: string,
   userID: string,
   auth: string | undefined,
   jurisdiction: 'eu' | undefined,
@@ -1484,7 +1470,6 @@ export function createSocket(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('roomID', roomID);
   searchParams.set('userID', userID);
   if (jurisdiction !== undefined) {
     searchParams.set('jurisdiction', jurisdiction);

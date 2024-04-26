@@ -1,7 +1,7 @@
-import type {Context, LogLevel} from '@rocicorp/logger';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {Mutation, NullableVersion, pushMessageSchema} from 'reflect-protocol';
+import {Mutation, pushMessageSchema} from 'zero-protocol/src/push.js';
+import type {NullableVersion} from 'zero-protocol/src/version.js';
 import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {
   MutatorDefs,
@@ -257,116 +257,116 @@ test('disconnects if ping fails', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
-test('createSocket', () => {
-  const nowStub = sinon.stub(performance, 'now').returns(0);
-
+suite('createSocket', () => {
   const t = (
     socketURL: WSString,
     baseCookie: NullableVersion,
     clientID: string,
-    roomID: string,
     userID: string,
     auth: string | undefined,
     jurisdiction: 'eu' | undefined,
     lmid: number,
     debugPerf: boolean,
+    now: number,
     expectedURL: string,
     expectedProtocol = '',
   ) => {
-    const mockSocket = createSocket(
-      socketURL,
-      baseCookie,
-      clientID,
-      'testClientGroupID',
-      roomID,
-      userID,
-      auth,
-      jurisdiction,
-      lmid,
-      'wsidx',
-      debugPerf,
-      new LogContext('error', undefined, new TestLogSink()),
-    ) as unknown as MockSocket;
-    expect(`${mockSocket.url}`).equal(expectedURL);
-    expect(mockSocket.protocol).equal(expectedProtocol);
+    test(expectedURL, () => {
+      sinon.stub(performance, 'now').returns(now);
+      const mockSocket = createSocket(
+        socketURL,
+        baseCookie,
+        clientID,
+        'testClientGroupID',
+        userID,
+        auth,
+        jurisdiction,
+        lmid,
+        'wsidx',
+        debugPerf,
+        new LogContext('error', undefined, new TestLogSink()),
+      ) as unknown as MockSocket;
+      expect(`${mockSocket.url}`).equal(expectedURL);
+      expect(mockSocket.protocol).equal(expectedProtocol);
+    });
   };
 
   t(
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     '',
     undefined,
     0,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
     'ws://example.com/',
-    1234,
+    '1234',
     'clientID',
-    'roomID',
     'userID',
     '',
     undefined,
     0,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
     'ws://example.com/',
-    1234,
+    '1234',
     'clientID',
-    'a/b',
     'userID',
     '',
     undefined,
     0,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=a%2Fb&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     '',
     undefined,
     123,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     undefined,
     undefined,
     123,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     'auth with []',
     undefined,
     0,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -374,13 +374,13 @@ test('createSocket', () => {
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     'auth with []',
     'eu',
     0,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -388,28 +388,27 @@ test('createSocket', () => {
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     'auth with []',
     'eu',
     0,
     true,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
+    0,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
     'auth%20with%20%5B%5D',
   );
 
-  nowStub.returns(456);
   t(
     'ws://example.com/',
     null,
     'clientID',
-    'roomID',
     'userID',
     '',
     undefined,
     0,
     false,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&roomID=roomID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    456,
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 
@@ -464,7 +463,7 @@ test('pusher sends one mutation per push message', async () => {
   await t([
     {
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: {d: 1}, timestamp: 1},
+        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
       ],
       expectedMessages: 1,
     },
@@ -472,9 +471,9 @@ test('pusher sends one mutation per push message', async () => {
   await t([
     {
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: {d: 1}, timestamp: 1},
-        {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
+        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
+        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
+        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
       ],
       expectedMessages: 3,
     },
@@ -484,17 +483,17 @@ test('pusher sends one mutation per push message', async () => {
   await t([
     {
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: {d: 1}, timestamp: 1},
-        {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
+        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
+        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
+        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
       ],
       expectedMessages: 3,
     },
     {
       mutations: [
-        {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
-        {clientID: 'c2', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
+        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
+        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {clientID: 'c2', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
       ],
       expectedMessages: 1,
     },
@@ -506,18 +505,18 @@ test('pusher sends one mutation per push message', async () => {
     {
       clientGroupID: 'c1',
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: {d: 1}, timestamp: 1},
-        {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
+        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
+        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
+        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
       ],
       expectedMessages: 3,
     },
     {
       clientGroupID: 'c1',
       mutations: [
-        {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
-        {clientID: 'c2', id: 2, name: 'mut1', args: {d: 3}, timestamp: 3},
+        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
+        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {clientID: 'c2', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
       ],
       expectedMessages: 3,
     },
@@ -533,8 +532,8 @@ test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
   clock.tick(300); // performance.now is 500, system time is startTime + 300
 
   const mutations = [
-    {clientID: 'c1', id: 1, name: 'mut1', args: {d: 1}, timestamp: 100},
-    {clientID: 'c2', id: 1, name: 'mut1', args: {d: 2}, timestamp: 200},
+    {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 100},
+    {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 200},
   ];
   const requestID = 'test-request-id';
 
@@ -573,7 +572,7 @@ test('puller with mutation recovery pull, success response', async () => {
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
     clientGroupID: 'test-client-group-id',
-    cookie: 1,
+    cookie: '1',
     pullVersion: 1,
     schemaVersion: r.schemaVersion,
   };
@@ -587,13 +586,13 @@ test('puller with mutation recovery pull, success response', async () => {
     'pull',
     {
       clientGroupID: 'test-client-group-id',
-      cookie: 1,
+      cookie: '1',
       requestID: 'test-request-id',
     },
   ]);
 
   await r.triggerPullResponse({
-    cookie: 2,
+    cookie: '2',
     requestID: 'test-request-id',
     lastMutationIDChanges: {cid1: 1},
   });
@@ -602,7 +601,7 @@ test('puller with mutation recovery pull, success response', async () => {
 
   expect(result).to.deep.equal({
     response: {
-      cookie: 2,
+      cookie: '2',
       lastMutationIDChanges: {cid1: 1},
       patch: [],
     },
@@ -622,7 +621,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
     clientGroupID: 'test-client-group-id',
-    cookie: 1,
+    cookie: '1',
     pullVersion: 1,
     schemaVersion: r.schemaVersion,
   };
@@ -636,7 +635,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
     'pull',
     {
       clientGroupID: 'test-client-group-id',
-      cookie: 1,
+      cookie: '1',
       requestID: 'test-request-id',
     },
   ]);
@@ -657,7 +656,7 @@ test('puller with normal non-mutation recovery pull', async () => {
   const pullReq: PullRequestV1 = {
     profileID: 'test-profile-id',
     clientGroupID: await r.clientGroupID,
-    cookie: 1,
+    cookie: '1',
     pullVersion: 1,
     schemaVersion: r.schemaVersion,
   };
@@ -695,7 +694,6 @@ test('smokeTest', async () => {
     };
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
-      roomID: 'smokeTestRoom',
       mutators: {
         addData: async (tx: WriteTransaction, issues: Issue[]) => {
           for (const issue of issues) {
@@ -755,47 +753,6 @@ test('smokeTest', async () => {
     await r.mutate.addData([{id: 'c', value: 6}]);
     expect(spy).toHaveBeenCalledTimes(0);
   }
-});
-
-test('poke log context includes requestID', async () => {
-  const url = 'http://example.com/';
-
-  const {promise: foundRequestIDFromLogPromise, resolve} = resolver<string>();
-
-  const r = new TestZero({
-    server: url,
-    auth: '',
-    userID: 'user-id',
-    roomID: 'room-id',
-    logLevel: 'debug',
-  });
-
-  sinon
-    .stub(r.testLogSink, 'log')
-    .callsFake(
-      (_level: LogLevel, context: Context | undefined, ..._args: unknown[]) => {
-        if (context?.requestID === 'test-request-id-poke') {
-          resolve(context?.requestID);
-        }
-      },
-    );
-
-  await r.triggerPoke({
-    pokes: [
-      {
-        baseCookie: null,
-        cookie: 1,
-        lastMutationIDChanges: {c1: 1},
-        presence: [],
-        patch: [],
-        timestamp: 123456,
-      },
-    ],
-    requestID: 'test-request-id-poke',
-  });
-
-  const foundRequestID = await foundRequestIDFromLogPromise;
-  expect(foundRequestID).to.equal('test-request-id-poke');
 });
 
 test('Metrics', async () => {
@@ -1260,18 +1217,6 @@ test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws a
     );
 });
 
-test('Constructing Zero with an invalid roomID option throws an error', () => {
-  let expected;
-  try {
-    zeroForTest({roomID: 'invalid^RoomID'});
-  } catch (e) {
-    expected = e;
-  }
-  expect(expected)
-    .instanceOf(Error)
-    .property('message', 'ZeroOptions.roomID must match /^[A-Za-z0-9_/-]+$/.');
-});
-
 suite('Disconnect on hide', () => {
   type Case = {
     name: string;
@@ -1518,18 +1463,12 @@ suite('Invalid Downstream message', () => {
         await waitForUpstreamMessage(r, 'ping', clock);
       }
 
-      await r.triggerPoke({
-        pokes: [
-          {
-            baseCookie: null,
-            cookie: 1,
-            lastMutationIDChanges: {c1: 1},
-            // @ts-expect-error - invalid field
-            patch: [{op: 'put', key: 'k1', valueXXX: 'v1'}],
-            timestamp: 123456,
-          },
-        ],
-        requestID: 'test-request-id-poke',
+      await r.triggerPokeStart({
+        // @ts-expect-error - invalid field
+        pokeIDXX: '1',
+        baseCookie: null,
+        cookie: '1',
+        timestamp: 123456,
       });
       await clock.tickAsync(0);
 
