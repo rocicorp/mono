@@ -3,15 +3,15 @@ import SQLiteAsyncESMFactory from 'wa-sqlite/dist/wa-sqlite-async.mjs';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import {IDBBatchAtomicVFS} from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js';
-import type {EntityQuery} from '../query/entity-query.js';
-import type {Statement} from '../query/statement.js';
+import type {EntityQuery} from '../../../../../zql/src/zql/query/entity-query.js';
+import type {Statement} from '../../../../../zql/src/zql/query/statement.js';
 import {
-  setupUsingReplicache,
-  type Album,
-  type Artist,
-  type Track,
-  type TrackArtist,
-} from './setup.js';
+  Album,
+  Artist,
+  newZero,
+  Track,
+  TrackArtist,
+} from '../integration-test-util.js';
 
 const wasmModule = await SQLiteAsyncESMFactory();
 const sqlite3 = SQLite.Factory(wasmModule);
@@ -41,17 +41,16 @@ export type Mutator = (
 export async function benchZQL(
   preRun: Mutator | undefined,
   queries: readonly // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [(queries: Queries) => EntityQuery<any, any>, times: number][],
-  mutations: readonly (readonly [Mutator, times: number])[],
+  [query: (queries: Queries) => EntityQuery<any, any>, times: number][],
+  mutations: readonly (readonly [mutation: Mutator, times: number])[],
 ): Promise<number> {
-  const {r, trackQuery, albumQuery, artistQuery, trackArtistQuery} =
-    setupUsingReplicache();
+  const z = newZero();
 
   async function upsertMany(data: BulkItems) {
-    await r.mutate.bulkSet(data);
+    await z.mutate.bulkSet(data);
   }
   async function deleteMany(data: BulkItems) {
-    await r.mutate.bulkRemove(data);
+    await z.mutate.bulkRemove(data);
   }
 
   const queryRunners = queries.map(zql => {
@@ -67,10 +66,10 @@ export async function benchZQL(
           // hence the `stmt === undefined` check and not eagerly
           // preparing.
           stmt = zql[0]({
-            trackQuery,
-            albumQuery,
-            artistQuery,
-            trackArtistQuery,
+            trackQuery: z.query.track,
+            albumQuery: z.query.album,
+            artistQuery: z.query.artist,
+            trackArtistQuery: z.query.trackArtist,
           }).prepare();
         }
 
@@ -95,7 +94,7 @@ export async function benchZQL(
     () => Promise.resolve(),
   );
 
-  await r.close();
+  await z.close();
   // await removeAllIDbDbs();
   return ret;
 }
@@ -105,7 +104,7 @@ export async function benchZQL(
 export async function benchSQLite(
   preRun: Mutator | undefined,
   queries: readonly (readonly [string, number])[],
-  mutations: readonly (readonly [Mutator, times: number])[],
+  mutations: readonly (readonly [mutation: Mutator, times: number])[],
 ): Promise<number> {
   const db = await sqlite3.open_v2('test-db');
 
@@ -276,10 +275,10 @@ export async function benchSQLite(
     return rows;
   }
 
-  const preparedQueries: [
-    () => Promise<SQLiteCompatibleType[][]>,
+  const preparedQueries: (readonly [
+    query: () => Promise<SQLiteCompatibleType[][]>,
     times: number,
-  ][] = [];
+  ])[] = [];
   for (const sql of queries) {
     const stmt = await prepare(db, sql[0]);
     preparedQueries.push([() => getRows(stmt), sql[1]] as const);
@@ -308,8 +307,11 @@ export async function benchSQLite(
 }
 
 async function runBenchmark(
-  queries: (readonly [() => Promise<readonly unknown[]>, times: number])[],
-  mutations: (readonly [() => Promise<void>, times: number])[],
+  queries: (readonly [
+    query: () => Promise<readonly unknown[]>,
+    times: number,
+  ])[],
+  mutations: (readonly [mutation: () => Promise<void>, times: number])[],
   txStart: () => Promise<void>,
   txEnd: () => Promise<void>,
 ) {

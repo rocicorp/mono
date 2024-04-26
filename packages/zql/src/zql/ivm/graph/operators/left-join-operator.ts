@@ -41,14 +41,14 @@ export class LeftJoinOperator<
   ) {
     const {aAs, getAJoinKey, getAPrimaryKey, bAs, getBJoinKey, getBPrimaryKey} =
       this.#joinArgs;
-    const aKeysForCompaction: (K | undefined)[] = [];
-    const bKeysForCompaction: K[] = [];
+    const aKeysForCompaction = new Set<K | undefined>();
+    const bKeysForCompaction = new Set<K>();
     const deltaA = new DifferenceIndex<K | undefined, AValue>(getAPrimaryKey);
 
     for (const entry of inputA || []) {
       const aKey = getAJoinKey(entry[0]);
       deltaA.add(aKey, entry);
-      aKeysForCompaction.push(aKey);
+      aKeysForCompaction.add(aKey);
     }
 
     const deltaB = new DifferenceIndex<K, BValue>(getBPrimaryKey);
@@ -58,7 +58,7 @@ export class LeftJoinOperator<
         continue;
       }
       deltaB.add(bKey, entry);
-      bKeysForCompaction.push(bKey);
+      bKeysForCompaction.add(bKey);
     }
 
     const result: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
@@ -114,10 +114,6 @@ export class LeftJoinOperator<
         ? aRow.id
         : getAPrimaryKey(aRow as AValue);
 
-      // if we're adding a thing
-      //  if we go from 0, retract unmatches aRow mult?
-      // if we're removing a thing
-      //  if we go to 0, send unmatches aRow mult?
       const existing = this.#aMatches.get(aPrimaryKey);
       if (joinEntry[1] > 0 && existing && existing[1] === 0) {
         // row `a` now has matches. Remove the un-match.

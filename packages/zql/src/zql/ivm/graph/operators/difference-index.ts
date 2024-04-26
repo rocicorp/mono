@@ -200,7 +200,7 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
    *
    * `JOIN` will compact its index at the end of each run.
    */
-  compact(keys: Key[]) {
+  compact(keys: Set<Key>) {
     // Go through all the keys that were requested to be compacted.
     for (const key of keys) {
       const values = this.#index.get(key);
@@ -216,11 +216,15 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
     }
   }
 
-  #consolidateValues(value: Entry<V>[]) {
+  #consolidateValues(values: Entry<V>[]) {
+    if (values.length === 1) {
+      return values;
+    }
+
     // Map to consolidate entries with the same identity
     const consolidated = new Map<string | number, Entry<V>>();
 
-    for (const entry of value) {
+    for (const entry of values) {
       const identity = this.#getValueIdentity(entry[0]);
       const existing = consolidated.get(identity);
       if (existing !== undefined) {

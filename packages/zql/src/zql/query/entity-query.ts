@@ -8,6 +8,7 @@ import type {
   LikeOps,
   OrderOps,
   SimpleOperator,
+  SetOps,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -32,6 +33,8 @@ export type ValueAsOperatorInput<
     : NotUndefined<V>
   : Op extends EqualityOps
   ? NotUndefined<V>
+  : Op extends SetOps
+  ? NotUndefined<V>[]
   : never;
 
 export type FieldAsOperatorInput<
@@ -54,10 +57,12 @@ type ObjectHasSingleProperty<T> = {
   [K in keyof T]: Exclude<keyof Omit<T, K>, K>;
 }[keyof T];
 
+type QualifiedSelector<F extends FromSet> = {
+  [K in keyof F]: `${string & K}.${string & keyof NotUndefined<F[K]>}`;
+}[keyof F];
+
 type SimpleSelector<F extends FromSet> =
-  | {
-      [K in keyof F]: `${string & K}.${string & keyof NotUndefined<F[K]>}`;
-    }[keyof F]
+  | QualifiedSelector<F>
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
 type Selector<F extends FromSet> =
@@ -95,27 +100,21 @@ type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
       ? {
           [K in Alias]: From[Table][];
         }
-      : AggregateResult<
-          Selection,
-          From,
-          Alias,
-          ExtractFieldValue<
+      : {
+          [K in Alias]: ExtractFieldValue<
             From,
             Selection extends SimpleSelector<From> ? Selection : never
-          >[]
-        >
+          >[];
+        }
     : K extends
         | Min<infer Selection, infer Alias>
         | Max<infer Selection, infer Alias>
-    ? AggregateResult<
-        Selection,
-        From,
-        Alias,
-        ExtractFieldValue<
+    ? {
+        [K in Alias]: ExtractFieldValue<
           From,
           Selection extends SimpleSelector<From> ? Selection : never
-        >
-      >
+        >;
+      }
     : // all other aggregate functions
     K extends Aggregate<infer Selection, infer Alias>
     ? AggregateResult<Selection, From, Alias, number>
@@ -342,6 +341,40 @@ export class EntityQuery<From extends FromSet, Return = []> {
     op?: Op,
     value?: FieldAsOperatorInput<From, K, Op>,
   ): EntityQuery<From, Return> {
+    return this.#whereOrHaving('where', exprOrField, op, value);
+  }
+
+  having(expr: WhereCondition<From>): EntityQuery<From, Return>;
+  having<
+    K extends
+      | SimpleSelector<From>
+      | keyof (Return extends Array<unknown> ? Return[number] : never),
+    Op extends SimpleOperator,
+  >(
+    field: K,
+    op: Op,
+    value: K extends SimpleSelector<From>
+      ? FieldAsOperatorInput<From, K, Op>
+      : Return extends Array<unknown>
+      ? K extends keyof Return[number]
+        ? Return[number][K]
+        : never
+      : never,
+  ): EntityQuery<From, Return>;
+  having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ): EntityQuery<From, Return> {
+    return this.#whereOrHaving('having', exprOrField, op, value);
+  }
+
+  #whereOrHaving<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    whereOrHaving: 'where' | 'having',
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ) {
     let expr: WhereCondition<From>;
     if (typeof exprOrField === 'string') {
       expr = exp(exprOrField, op!, value!);
@@ -350,22 +383,24 @@ export class EntityQuery<From extends FromSet, Return = []> {
     }
 
     let cond: WhereCondition<From>;
-    const where = this.#ast.where as WhereCondition<From> | undefined;
-    if (!where) {
+    const exitingWhereOrHaving = this.#ast[whereOrHaving] as
+      | WhereCondition<From>
+      | undefined;
+    if (!exitingWhereOrHaving) {
       cond = expr;
-    } else if (where.op === 'AND') {
-      const {conditions} = where;
+    } else if (exitingWhereOrHaving.op === 'AND') {
+      const {conditions} = exitingWhereOrHaving;
       cond = flatten('AND', [...conditions, expr]);
     } else {
       cond = {
         op: 'AND',
-        conditions: [where, expr],
+        conditions: [exitingWhereOrHaving, expr],
       };
     }
 
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      where: cond as Condition,
+      [whereOrHaving]: cond as Condition,
     });
   }
 
@@ -512,5 +547,17 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
       return 'NOT ILIKE';
     case 'NOT ILIKE':
       return 'ILIKE';
+    case 'INTERSECTS':
+      return 'DISJOINT';
+    case 'DISJOINT':
+      return 'INTERSECTS';
+    case 'SUPERSET':
+      return 'SUBSET';
+    case 'SUBSET':
+      return 'SUPERSET';
+    case 'CONGRUENT':
+      return 'INCONGRUENT';
+    case 'INCONGRUENT':
+      return 'CONGRUENT';
   }
 }

@@ -6,7 +6,7 @@ import {
   type PlaylistTrack,
   type Track,
   type TrackArtist,
-} from '@rocicorp/zql/src/zql/benchmarks/setup.js';
+} from './benchmarks/setup.js';
 import {nanoid} from '../../util/nanoid.js';
 import {Zero} from '../zero.js';
 export {
@@ -14,7 +14,7 @@ export {
   createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
-} from '@rocicorp/zql/src/zql/benchmarks/setup.js';
+} from './benchmarks/setup.js';
 export type {Album, Artist, Playlist, PlaylistTrack, Track, TrackArtist};
 
 export function newZero() {

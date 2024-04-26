@@ -50,6 +50,10 @@ export function buildPipeline(
     );
   }
 
+  if (ast.having) {
+    ret = applyWhere(ret, ast.having);
+  }
+
   // Note: the stream is technically attached at this point.
   // We could detach it until the user actually runs (or subscribes to) the statement as a tiny optimization.
   return ret;
@@ -155,13 +159,9 @@ function applySimpleCondition<T extends Entity>(
 ) {
   const operator = getOperator(condition);
   const {field: selector} = condition;
-  let source: string = selector;
-  let field = selector;
-  if (selector.includes('.')) {
-    [source, field] = selector.split('.');
-  }
-  const qualifiedColumn = [source, field] as [string, string];
-  return stream.filter(x => operator(getValueFromEntity(x, qualifiedColumn)));
+  return stream.filter(x =>
+    operator(getValueFromEntity(x, selectorToQualifiedColumn(selector))),
+  );
 }
 
 function applyGroupBy<T extends Entity>(
@@ -346,9 +346,66 @@ export function getOperator(condition: SimpleCondition): (lhs: any) => boolean {
       return getLikeOp(rhs, 'i');
     case 'NOT ILIKE':
       return not(getLikeOp(rhs, 'i'));
-    default:
-      throw new Error(`Operator ${op} not supported`);
+    case 'INTERSECTS': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return lhs.some(x => rhSet.has(x));
+        }
+        return rhSet.has(lhs);
+      };
+    }
+    case 'DISJOINT': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return lhs.every(x => !rhSet.has(x));
+        }
+        return !rhSet.has(lhs);
+      };
+    }
+    case 'SUPERSET': {
+      return lhs => {
+        if (rhs.length === 0) {
+          return true;
+        }
+        if (Array.isArray(lhs)) {
+          const lhSet = new Set(lhs);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return rhs.every((x: any) => lhSet.has(x));
+        }
+        return rhs.length === 1 && lhs === rhs[0];
+      };
+    }
+    case 'CONGRUENT': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return rhSet.size === lhs.length && lhs.every(x => rhSet.has(x));
+        }
+        return rhs.length === 1 && lhs === rhs[0];
+      };
+    }
+    case 'INCONGRUENT': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return rhSet.size !== lhs.length || !lhs.every(x => rhSet.has(x));
+        }
+        return rhs.length !== 1 || lhs !== rhs[0];
+      };
+    }
+    case 'SUBSET': {
+      const rhSet = new Set(rhs);
+      return lhs => {
+        if (Array.isArray(lhs)) {
+          return lhs.every(x => rhSet.has(x));
+        }
+        return rhSet.has(lhs);
+      };
+    }
   }
+  throw new Error(`unexpected op: ${op}`);
 }
 
 function not<T>(f: (lhs: T) => boolean) {
@@ -436,12 +493,26 @@ export function getValueFromEntity(
     if (qualifiedColumn[1] === '*') {
       return (entity as Record<string, unknown>)[qualifiedColumn[0]];
     }
-    return (
+    return getOrLiftValue(
       (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
         string,
         unknown
-      >
-    )?.[qualifiedColumn[1]];
+      >,
+      qualifiedColumn[1],
+    );
   }
-  return entity[qualifiedColumn[1]];
+  return getOrLiftValue(entity, qualifiedColumn[1]);
+}
+
+export function getOrLiftValue(
+  containerOrValue:
+    | Record<string, unknown>
+    | Array<Record<string, unknown>>
+    | undefined,
+  field: string,
+) {
+  if (Array.isArray(containerOrValue)) {
+    return containerOrValue.map(x => x?.[field]);
+  }
+  return containerOrValue?.[field];
 }
