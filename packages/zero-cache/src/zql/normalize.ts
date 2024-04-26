@@ -79,7 +79,9 @@ export class Normalized {
         on: [left, right],
         as,
       } = join;
-      query += ` ${type.toUpperCase()} JOIN (${this.#constructQuery(other)})`;
+      query += ` ${type.toUpperCase()} JOIN `;
+      const joinFrom = this.#constructQuery(other);
+      query += other.select ? `(${joinFrom})` : joinFrom;
       query += ` AS ${ident(as)} ON ${selector(left)} = ${selector(right)}`;
     });
     if (where) {

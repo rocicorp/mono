@@ -177,29 +177,10 @@ export type MetaRecord = v.Infer<typeof metaRecordSchema>;
 
 export type RowID = v.Infer<typeof rowIDSchema>;
 
-/**
- * The RowView contains exactly the information needed to look up and project
- * the view of the row sent to and cached by the client. Specifically, the
- * primary key of the `ChangeLog` table consists of the columns:
- * * `stateVersion`
- * * `schema`
- * * `table`
- * * `rowKey` (JSON)
- *
- * From which the `row` data can be fetched. The `columns` field
- * is then used to compute the projection of the `row` visible to the client.
- */
-export const rowViewSchema = v.object({
-  id: rowIDSchema,
-  stateVersion: v.string(),
-  columns: v.array(v.string()),
-});
-
-export type RowView = v.Infer<typeof rowViewSchema>;
-
 export const rowRecordSchema = cvrRecordSchema.extend({
-  row: rowViewSchema,
-  queryIDs: v.array(v.string()),
+  id: rowIDSchema,
+  rowVersion: v.string(), // '_0_version' of the row
+  queriedColumns: v.record(v.array(v.string())), // column => query IDs
 });
 
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
@@ -211,24 +192,9 @@ export const patchSchema = v.object({
 
 export const rowPatchSchema = patchSchema.extend({
   type: v.literal('row'),
-  // Note that the row key needs to be looked up from the ChangeLog even for
-  // deletes, since only row key hashes are stored in the CVR.
-  //
-  // TODO: Figure out how to handle TRUNCATE, in which case there will not be a ChangeLog
-  //       entry for the (deleted) row at the version in which TRUNCATE happens.
-  //
-  //       We can't use rely on the row's pre-TRUNCATE `stateVersion` because there is
-  //       no guarantee that there is a ChangeLog entry at that version, since the row
-  //       may pre-date all mutations in the ChangeLog).
-  //
-  //       Some options are to:
-  //       1. Add a truncate (i.e. clear table) patch operation to the poke protocol.
-  //       2. Not support TRUNCATE.
-  //       3. Have the clients remember the rowKeyHash for each row. This seems a bit
-  //          wasteful and requires exporting an otherwise server-internal identifier.
-  //       4. Store the actual row key in the delete patch. This would counter the
-  //          benefits of not storing database values in the CVR.
-  row: rowViewSchema,
+  id: rowIDSchema,
+  rowVersion: v.string(), // '_0_version' of the row
+  columns: v.array(v.string()),
 });
 
 export type RowPatch = v.Infer<typeof rowPatchSchema>;

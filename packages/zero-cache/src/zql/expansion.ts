@@ -10,6 +10,12 @@ import {union} from 'shared/src/set-utils.js';
 export type RequiredColumns = (table: string) => readonly string[];
 
 /**
+ * The character used to separate the column aliases created during query expansion
+ * into their component parts.
+ */
+export const ALIAS_COMPONENT_SEPARATOR = '/';
+
+/**
  * Expands the selection of a query to include all of the rows and column values
  * necessary to re-execute the query on the client, and aliases the columns so
  * that the result can be deconstructed into its constituent rows.
@@ -216,9 +222,13 @@ export function expandSubqueries(
     const [from, col] = parts.length === 2 ? parts : [defaultFrom, selector];
     selectors.get(from)?.add(col) ?? selectors.set(from, new Set([col]));
   };
+  const selected = new Set<string>();
   // Add all referenced fields / selectors.
-  select?.forEach(([selector]) => addSelector(selector));
-  const selected = new Set(selectors.get(defaultFrom) ?? new Set()); // Remember what is SELECT'ed.
+  select?.forEach(([selector, alias]) => {
+    addSelector(selector);
+    selected.add(alias);
+  });
+  selectors.get(defaultFrom)?.forEach(col => selected.add(col));
 
   getWhereColumns(where, new Set<string>()).forEach(addSelector);
   joins?.forEach(({on}) => on.forEach(addSelector));
@@ -301,7 +311,10 @@ export function reAliasAndBubbleSelections(
   select?.forEach(([selector, alias]) => {
     const parts = selector.split('.'); // "issues.id" or just "id"
     reAliasMap.set(alias, parts.length === 2 ? parts[1] : selector); // Use the original column name.
-    reAliasMap.set(parts.length === 2 ? parts[0] : selector, selector);
+
+    // Also map the column name to itself.
+    const column = parts.length === 2 ? parts[1] : selector;
+    reAliasMap.set(column, column);
   });
 
   const renameSelector = (selector: string) => {
@@ -320,7 +333,7 @@ export function reAliasAndBubbleSelections(
     select: [
       ...(select ?? []).map(([selector, alias]) => {
         const newSelector = renameSelector(selector);
-        const newAlias = newSelector.replaceAll('.', '/');
+        const newAlias = newSelector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
         exports.set(alias, newAlias);
         exported.add(newSelector);
         return [newSelector, newAlias] as [string, string];
@@ -328,7 +341,7 @@ export function reAliasAndBubbleSelections(
       ...bubbleUp
         .filter(selector => !exported.has(selector))
         .map(selector => {
-          const alias = selector.replaceAll('.', '/');
+          const alias = selector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
           exports.set(alias, alias);
           return [selector, alias] as [string, string];
         }),
