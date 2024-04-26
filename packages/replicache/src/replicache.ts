@@ -12,11 +12,11 @@ import type {Puller} from './puller.js';
 import type {Pusher} from './pusher.js';
 import {ReplicacheImpl} from './replicache-impl.js';
 import type {ReplicacheOptions} from './replicache-options.js';
-import {
-  type SubscribeOptions,
-  type WatchCallbackForOptions,
-  type WatchNoIndexCallback,
-  type WatchOptions,
+import type {
+  SubscribeOptions,
+  WatchCallbackForOptions,
+  WatchNoIndexCallback,
+  WatchOptions,
 } from './subscriptions.js';
 import type {ReadTransaction} from './transactions.js';
 import type {
