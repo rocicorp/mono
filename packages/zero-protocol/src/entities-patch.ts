@@ -1,15 +1,18 @@
 import {jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
+import {entityIDSchema} from './entity.js';
 
 const putOpSchema = v.object({
   op: v.literal('put'),
-  key: v.string(),
+  entityType: v.string(),
+  entityID: entityIDSchema,
   value: jsonSchema,
 });
 
 const delOpSchema = v.object({
   op: v.literal('del'),
-  key: v.string(),
+  entityType: v.string(),
+  entityID: entityIDSchema,
 });
 
 const clearOpSchema = v.object({

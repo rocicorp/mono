@@ -50,7 +50,14 @@ test('completed poke plays on first raf', async () => {
       c1: 1,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -58,8 +65,18 @@ test('completed poke plays on first raf', async () => {
       c1: 2,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
 
@@ -84,9 +101,21 @@ test('completed poke plays on first raf', async () => {
         c2: 2,
       },
       patch: [
-        {op: 'put', key: 'e/foo', value: 'foo1'},
-        {op: 'put', key: 'e/foo', value: 'foo2'},
-        {op: 'put', key: 'e/bar', value: 'bar1'},
+        {
+          op: 'put',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo2'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar1'},
+        },
       ],
     },
   });
@@ -124,7 +153,14 @@ test('multiple pokes received before raf callback are merged', async () => {
       c1: 1,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -132,8 +168,18 @@ test('multiple pokes received before raf callback are merged', async () => {
       c1: 2,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
 
@@ -153,14 +199,28 @@ test('multiple pokes received before raf callback are merged', async () => {
     lastMutationIDChanges: {
       c1: 3,
     },
-    entitiesPatch: [{op: 'put', key: 'baz', value: 'baz1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue3'},
+        value: {id: 'issue3', title: 'baz1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke2',
     lastMutationIDChanges: {
       c3: 1,
     },
-    entitiesPatch: [{op: 'put', key: 'bar', value: 'bar2'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar2'},
+      },
+    ],
   });
 
   expect(rafStub).toHaveBeenCalledTimes(1);
@@ -185,11 +245,31 @@ test('multiple pokes received before raf callback are merged', async () => {
         c3: 1,
       },
       patch: [
-        {op: 'put', key: 'e/foo', value: 'foo1'},
-        {op: 'put', key: 'e/foo', value: 'foo2'},
-        {op: 'put', key: 'e/bar', value: 'bar1'},
-        {op: 'put', key: 'e/baz', value: 'baz1'},
-        {op: 'put', key: 'e/bar', value: 'bar2'},
+        {
+          op: 'put',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo2'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue3',
+          value: {id: 'issue3', title: 'baz1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar2'},
+        },
       ],
     },
   });
@@ -227,7 +307,14 @@ test('playback over series of rafs', async () => {
       c1: 1,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -235,8 +322,18 @@ test('playback over series of rafs', async () => {
       c1: 2,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
 
@@ -260,9 +357,21 @@ test('playback over series of rafs', async () => {
         c2: 2,
       },
       patch: [
-        {op: 'put', key: 'e/foo', value: 'foo1'},
-        {op: 'put', key: 'e/foo', value: 'foo2'},
-        {op: 'put', key: 'e/bar', value: 'bar1'},
+        {
+          op: 'put',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo2'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar1'},
+        },
       ],
     },
   });
@@ -279,14 +388,28 @@ test('playback over series of rafs', async () => {
     lastMutationIDChanges: {
       c1: 3,
     },
-    entitiesPatch: [{op: 'put', key: 'baz', value: 'baz1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue3'},
+        value: {id: 'issue3', title: 'baz1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke2',
     lastMutationIDChanges: {
       c3: 1,
     },
-    entitiesPatch: [{op: 'put', key: 'bar', value: 'bar2'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar2'},
+      },
+    ],
   });
 
   expect(rafStub).toHaveBeenCalledTimes(2);
@@ -310,8 +433,16 @@ test('playback over series of rafs', async () => {
         c3: 1,
       },
       patch: [
-        {op: 'put', key: 'e/baz', value: 'baz1'},
-        {op: 'put', key: 'e/bar', value: 'bar2'},
+        {
+          op: 'put',
+          key: 'e/issue/issue3',
+          value: {id: 'issue3', title: 'baz1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar2'},
+        },
       ],
     },
   });
@@ -408,7 +539,14 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
       c1: 1,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -416,8 +554,18 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
       c1: 2,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
 
@@ -447,7 +595,14 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     lastMutationIDChanges: {
       c1: 3,
     },
-    entitiesPatch: [{op: 'put', key: 'baz', value: 'baz1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue3'},
+        value: {id: 'issue3', title: 'baz1'},
+      },
+    ],
   });
   pokeHandler.handlePokeEnd({
     pokeID: 'poke2',
@@ -492,7 +647,14 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
       c1: 1,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -500,8 +662,18 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
       c1: 2,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
 
@@ -546,7 +718,14 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     lastMutationIDChanges: {
       c1: 3,
     },
-    entitiesPatch: [{op: 'put', key: 'baz', value: 'baz1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue3'},
+        value: {id: 'issue3', title: 'baz1'},
+      },
+    ],
   });
   pokeHandler.handlePokeEnd({
     pokeID: 'poke3',
@@ -590,7 +769,14 @@ test('onDisconnect clears pending pokes', async () => {
       c1: 1,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   pokeHandler.handlePokePart({
     pokeID: 'poke1',
@@ -598,8 +784,18 @@ test('onDisconnect clears pending pokes', async () => {
       c1: 2,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
 
@@ -643,7 +839,14 @@ test('handlePoke returns the last mutation id change for this client from pokePa
       c1: 4,
       c2: 2,
     },
-    entitiesPatch: [{op: 'put', key: 'foo', value: 'foo1'}],
+    entitiesPatch: [
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
   });
   expect(lastMutationIDChangeForSelf0).equals(4);
   const lastMutationIDChangeForSelf1 = pokeHandler.handlePokePart({
@@ -652,8 +855,18 @@ test('handlePoke returns the last mutation id change for this client from pokePa
       c2: 3,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
   expect(lastMutationIDChangeForSelf1).to.be.undefined;
@@ -664,8 +877,18 @@ test('handlePoke returns the last mutation id change for this client from pokePa
       c1: 5,
     },
     entitiesPatch: [
-      {op: 'put', key: 'foo', value: 'foo2'},
-      {op: 'put', key: 'bar', value: 'bar1'},
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue1'},
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        entityType: 'issue',
+        entityID: {id: 'issue2'},
+        value: {id: 'issue2', title: 'bar1'},
+      },
     ],
   });
   expect(lastMutationIDChangeForSelf2).to.be.undefined;
@@ -720,8 +943,18 @@ test('mergePokes with all optionals defined', () => {
             },
           ],
           entitiesPatch: [
-            {op: 'put', key: 'foo', value: 'foo1'},
-            {op: 'put', key: 'bar', value: 'bar1'},
+            {
+              op: 'put',
+              entityType: 'issue',
+              entityID: {id: 'issue1'},
+              value: {id: 'issue1', title: 'foo1'},
+            },
+            {
+              op: 'put',
+              entityType: 'issue',
+              entityID: {id: 'issue2'},
+              value: {id: 'issue2', title: 'bar1'},
+            },
           ],
         },
 
@@ -759,7 +992,14 @@ test('mergePokes with all optionals defined', () => {
               },
             },
           ],
-          entitiesPatch: [{op: 'put', key: 'baz', value: 'baz1'}],
+          entitiesPatch: [
+            {
+              op: 'put',
+              entityType: 'issue',
+              entityID: {id: 'issue3'},
+              value: {id: 'issue3', title: 'baz1'},
+            },
+          ],
         },
       ],
     },
@@ -791,7 +1031,9 @@ test('mergePokes with all optionals defined', () => {
               hash: 'h1',
             },
           ],
-          entitiesPatch: [{op: 'del', key: 'baz'}],
+          entitiesPatch: [
+            {op: 'del', entityType: 'issue', entityID: {id: 'issue3'}},
+          ],
         },
       ],
     },
@@ -839,13 +1081,13 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'put',
-          key: 'e/foo',
-          value: 'foo1',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'put',
-          key: 'e/bar',
-          value: 'bar1',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar1'},
         },
         {
           op: 'put',
@@ -878,8 +1120,8 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'put',
-          key: 'e/baz',
-          value: 'baz1',
+          key: 'e/issue/issue3',
+          value: {id: 'issue3', title: 'baz1'},
         },
         {
           op: 'del',
@@ -900,7 +1142,7 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'del',
-          key: 'e/baz',
+          key: 'e/issue/issue3',
         },
       ],
     },
@@ -934,8 +1176,18 @@ test('mergePokes sparse', () => {
             },
           ],
           entitiesPatch: [
-            {op: 'put', key: 'foo', value: 'foo1'},
-            {op: 'put', key: 'bar', value: 'bar1'},
+            {
+              op: 'put',
+              entityType: 'issue',
+              entityID: {id: 'issue1'},
+              value: {id: 'issue1', title: 'foo1'},
+            },
+            {
+              op: 'put',
+              entityType: 'issue',
+              entityID: {id: 'issue2'},
+              value: {id: 'issue2', title: 'bar1'},
+            },
           ],
         },
 
@@ -982,7 +1234,9 @@ test('mergePokes sparse', () => {
               },
             ],
           },
-          entitiesPatch: [{op: 'del', key: 'baz'}],
+          entitiesPatch: [
+            {op: 'del', entityType: 'issue', entityID: {id: 'issue3'}},
+          ],
         },
       ],
     },
@@ -1009,13 +1263,13 @@ test('mergePokes sparse', () => {
         },
         {
           op: 'put',
-          key: 'e/foo',
-          value: 'foo1',
+          key: 'e/issue/issue1',
+          value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'put',
-          key: 'e/bar',
-          value: 'bar1',
+          key: 'e/issue/issue2',
+          value: {id: 'issue2', title: 'bar1'},
         },
         {
           op: 'put',
@@ -1049,7 +1303,7 @@ test('mergePokes sparse', () => {
         },
         {
           op: 'del',
-          key: 'e/baz',
+          key: 'e/issue/issue3',
         },
       ],
       cookie: '5',
