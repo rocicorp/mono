@@ -248,6 +248,11 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
  * queries.
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
+  /**
+   * @param stateVersion The `stateVersion` at which the queries were executed.
+   * @param generatePatchesAfter The CVRVersion after which patches should be generated,
+   *                             i.e. corresponding to the `baseCookie` of the oldest client.
+   */
   constructor(
     storage: DurableStorage,
     cvr: CVRSnapshot,
@@ -261,5 +266,30 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     }
   }
 
-  // TODO: Add business logic here.
+  /**
+   * Ensures that the query with the given `queryID` is marked at "gotten",
+   * updating the CVR and creating put patches if necessary.
+   *
+   * This should be called for all executed queries.
+   */
+  ensureGotten(queryID: string, transformationHash: string) {
+    const query = this._cvr.queries[queryID];
+    if (query.transformationHash !== transformationHash) {
+      this._ensureMinorVersionBump();
+      const transformationVersion = this._cvr.version;
+
+      if (query.putPatch === undefined) {
+        // desired -> gotten
+        query.putPatch = transformationVersion;
+        void this._writes.put(
+          this._paths.queryPatch(transformationVersion, {id: query.id}),
+          {type: 'query', op: 'put', id: query.id} satisfies QueryPatch,
+        );
+      }
+
+      query.transformationHash = transformationHash;
+      query.transformationVersion = transformationVersion;
+      void this._writes.put(this._paths.query(query), query);
+    }
+  }
 }

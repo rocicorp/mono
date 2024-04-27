@@ -7,6 +7,7 @@ import {
 } from '../../test/do.js';
 import {
   CVRConfigDrivenUpdater,
+  CVRQueryDrivenUpdater,
   CVRSnapshot,
   CVRUpdater,
   loadCVR,
@@ -462,6 +463,136 @@ describe('view-syncer/cvr', () => {
 
       await expectStorage(storage, {
         ...initialState,
+        ['/vs/cvr/abc123/meta/lastActive']: {
+          epochMillis: Date.UTC(2024, 3, 23, 1),
+        } satisfies LastActive,
+      });
+    });
+  });
+
+  test('desired to got', async () => {
+    const initialState = {
+      ['/vs/cvr/abc123/meta/version']: {
+        stateVersion: '1aa',
+      } satisfies CVRVersion,
+      ['/vs/cvr/abc123/meta/lastActive']: {
+        epochMillis: Date.UTC(2024, 3, 23),
+      } satisfies LastActive,
+      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        id: 'oneHash',
+        ast: {table: 'issues'},
+        desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+      } satisfies QueryRecord,
+      ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
+    };
+
+    await runWithDurableObjectStorage(async storage => {
+      await initStorage(storage, initialState);
+
+      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const updater = new CVRQueryDrivenUpdater(
+        new DurableStorage(storage),
+        cvr,
+        '1aa',
+      );
+
+      updater.ensureGotten('oneHash', 'serverOneHash');
+
+      // Same last active day (no index change), but different hour.
+      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      expect(updated).toEqual({
+        ...cvr,
+        version: {stateVersion: '1aa', minorVersion: 1},
+        queries: {
+          oneHash: {
+            id: 'oneHash',
+            ast: {table: 'issues'},
+            desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+            transformationHash: 'serverOneHash',
+            transformationVersion: {stateVersion: '1aa', minorVersion: 1},
+            putPatch: {stateVersion: '1aa', minorVersion: 1},
+          },
+        },
+        lastActive: {epochMillis: 1713834000000},
+      } satisfies CVRSnapshot);
+
+      // Verify round tripping.
+      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      expect(reloaded).toEqual(updated);
+
+      await expectStorage(storage, {
+        ...initialState,
+        ['/vs/cvr/abc123/meta/version']: updated.version,
+        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: {
+          type: 'query',
+          op: 'put',
+          id: 'oneHash',
+        } satisfies QueryPatch,
+        ['/vs/cvr/abc123/meta/lastActive']: {
+          epochMillis: Date.UTC(2024, 3, 23, 1),
+        } satisfies LastActive,
+      });
+    });
+  });
+
+  test('new transformation hash', async () => {
+    const initialState = {
+      ['/vs/cvr/abc123/meta/version']: {
+        stateVersion: '1ba',
+      } satisfies CVRVersion,
+      ['/vs/cvr/abc123/meta/lastActive']: {
+        epochMillis: Date.UTC(2024, 3, 23),
+      } satisfies LastActive,
+      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        id: 'oneHash',
+        ast: {table: 'issues'},
+        desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+        transformationHash: 'oneServerHash',
+        transformationVersion: {stateVersion: '1aa'},
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+      } satisfies QueryRecord,
+      ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
+    };
+
+    await runWithDurableObjectStorage(async storage => {
+      await initStorage(storage, initialState);
+
+      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const updater = new CVRQueryDrivenUpdater(
+        new DurableStorage(storage),
+        cvr,
+        '1ba',
+      );
+
+      updater.ensureGotten('oneHash', 'serverTwoHash');
+
+      // Same last active day (no index change), but different hour.
+      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      expect(updated).toEqual({
+        ...cvr,
+        version: {stateVersion: '1ba', minorVersion: 1},
+        queries: {
+          oneHash: {
+            id: 'oneHash',
+            ast: {table: 'issues'},
+            desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+            transformationHash: 'serverTwoHash',
+            transformationVersion: {stateVersion: '1ba', minorVersion: 1},
+            putPatch: {stateVersion: '1aa', minorVersion: 1},
+          },
+        },
+        lastActive: {epochMillis: 1713834000000},
+      } satisfies CVRSnapshot);
+
+      // Verify round tripping.
+      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      expect(reloaded).toEqual(updated);
+
+      await expectStorage(storage, {
+        ...initialState,
+        ['/vs/cvr/abc123/meta/version']: updated.version,
+        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
         ['/vs/cvr/abc123/meta/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,

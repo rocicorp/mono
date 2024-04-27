@@ -20,8 +20,8 @@ export const cvrVersionSchema = v.object({
    * * query transformation changes (which may happen for changes
    *   in server-side logic or authorization policies)
    *
-   * Such configuration changes are always correlated a change to one or more
-   * `/meta/...` records in the CVR, often (but necessarily always) with corresponding
+   * Such configuration changes are always correlated with a change to one or more
+   * `/meta/...` records in the CVR, often (but not always) with corresponding
    * patches in `/patches/meta/...`.
    *
    * When the `stateVersion` moves forward, the `minorVersion` is reset to absent.
@@ -123,7 +123,7 @@ export const queryRecordSchema = cvrRecordSchema.extend({
    * The hash of the query after server-side transformations, which include:
    *
    * * Normalization (which may differ from what the client does)
-   * * Query "explosion" to fetch primary keys of rows for JOINed tables
+   * * Query "expansion" to include primary keys and query-execution-related columns
    * * Authorization transforms
    *
    * Transformations depend on conditions that are independent of the db state version,
@@ -137,15 +137,25 @@ export const queryRecordSchema = cvrRecordSchema.extend({
    * transformation is not useful in and of itself. If the current transformation results in
    * a different hash than that of the transformation used for the last version of the CVR,
    * it is simply handled by invalidating the existing rows, re-executed the query with
-   * the new transformation, and advancing the `querySerVersion`.
+   * the new transformation, and advancing the CVR's `minorVersion` and this query's
+   * `transformationVersion`.
    *
-   * The transformationHash is only stored when the query has be "got"ten. If the query is
-   * in the "desired" but not yet "gotten" state, the field should be absent.
+   * Note that the transformationHash is only stored when the query has reached the "gotten"
+   * state. If the query is in the "desired" but not yet "gotten" state, the field is absent.
    */
   transformationHash: v.string().optional(),
 
+  /**
+   * The CVR version corresponding to the `transformationHash`. This essentially tracks when
+   * this version of the query was effectively added to the CVR (as opposed to the `putPatch`,
+   * which is simply when the client was notified that its query was added to the gotten set).
+   * Catchup of clients from old CVR versions require executing all queries with newer
+   * `transformationVersion`.
+   */
+  transformationVersion: cvrVersionSchema.optional(),
+
   // For queries, the putPatch indicates when query was added to the got set,
-  // which can be undefined if not yet gotten.
+  // and is absent if not yet gotten.
   putPatch: cvrVersionSchema.optional(),
 
   // Maps each of the desiring client's IDs to the version at which
