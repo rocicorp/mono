@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
+import type {JSONValue} from '../types/bigint-json.js';
 import {batchScan, scan} from './scan-storage.js';
 import type {ListOptions, Storage} from './storage.js';
 
@@ -16,23 +16,23 @@ import type {ListOptions, Storage} from './storage.js';
  */
 export class WriteCache implements Storage {
   #storage: Storage;
-  #cache: Map<string, {value: ReadonlyJSONValue | undefined}> = new Map();
+  #cache: Map<string, {value: JSONValue | undefined}> = new Map();
 
   constructor(storage: Storage) {
     this.#storage = storage;
   }
 
-  #put<T extends ReadonlyJSONValue>(key: string, value: T) {
+  #put<T extends JSONValue>(key: string, value: T) {
     this.#cache.set(key, {value});
   }
 
   // eslint-disable-next-line require-await
-  async put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
+  async put<T extends JSONValue>(key: string, value: T): Promise<void> {
     this.#put(key, value);
   }
 
   // eslint-disable-next-line require-await
-  async putEntries<T extends ReadonlyJSONValue>(
+  async putEntries<T extends JSONValue>(
     entries: Record<string, T>,
   ): Promise<void> {
     for (const [key, value] of Object.entries(entries)) {
@@ -57,7 +57,7 @@ export class WriteCache implements Storage {
   }
 
   // eslint-disable-next-line require-await
-  async get<T extends ReadonlyJSONValue>(
+  async get<T extends JSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
@@ -70,7 +70,7 @@ export class WriteCache implements Storage {
       : this.#storage.get(key, schema);
   }
 
-  async getEntries<T extends ReadonlyJSONValue>(
+  async getEntries<T extends JSONValue>(
     keys: string[],
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
@@ -155,14 +155,14 @@ export class WriteCache implements Storage {
     this.#cache.clear();
   }
 
-  scan<T extends ReadonlyJSONValue>(
+  scan<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): AsyncIterable<[key: string, value: T]> {
     return scan(this, options, schema);
   }
 
-  batchScan<T extends ReadonlyJSONValue>(
+  batchScan<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
     batchSize: number,
@@ -170,7 +170,7 @@ export class WriteCache implements Storage {
     return batchScan(this, options, schema, batchSize);
   }
 
-  async list<T extends ReadonlyJSONValue>(
+  async list<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
@@ -274,7 +274,7 @@ export class WriteCache implements Storage {
 export type PutOp = {
   op: 'put';
   key: string;
-  value: ReadonlyJSONValue;
+  value: JSONValue;
 };
 
 export type DelOp = {

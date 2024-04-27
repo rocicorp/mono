@@ -1,6 +1,6 @@
 import type {ScanNoIndexOptions} from 'replicache';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type * as valita from 'shared/src/valita.js';
+import type {JSONValue} from '../types/bigint-json.js';
 
 export type ListOptions = ScanNoIndexOptions;
 
@@ -9,21 +9,19 @@ export type ListOptions = ScanNoIndexOptions;
  * and system data.
  */
 export interface Storage {
-  put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void>;
+  put<T extends JSONValue>(key: string, value: T): Promise<void>;
   /**
    * Supports up to 128 key-value pairs at a time.
    */
-  putEntries<T extends ReadonlyJSONValue>(
-    entries: Record<string, T>,
-  ): Promise<void>;
+  putEntries<T extends JSONValue>(entries: Record<string, T>): Promise<void>;
   del(key: string): Promise<void>;
   /** Supports up to 128 keys at a time. */
   delEntries(key: string[]): Promise<void>;
-  get<T extends ReadonlyJSONValue>(
+  get<T extends JSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined>;
-  getEntries<T extends ReadonlyJSONValue>(
+  getEntries<T extends JSONValue>(
     keys: string[],
     schema: valita.Type<T>,
   ): Promise<Map<string, T>>;
@@ -38,7 +36,7 @@ export interface Storage {
    *
    * @returns A map of key-value results, sorted by (UTF-8) key
    */
-  list<T extends ReadonlyJSONValue>(
+  list<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>>;
@@ -56,7 +54,7 @@ export interface Storage {
    *
    * Also see {@link batchScan} for processing batches of objects efficiently.
    */
-  scan<T extends ReadonlyJSONValue>(
+  scan<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): AsyncIterable<[key: string, value: T]>;
@@ -74,7 +72,7 @@ export interface Storage {
    * across a scan is required, the application must guarantee this with its
    * own locking scheme.
    */
-  batchScan<T extends ReadonlyJSONValue>(
+  batchScan<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
     batchSize: number,

@@ -9,6 +9,10 @@ const numberToString = valita.union(
   valita.number().chain(n => valita.ok(String(n))),
 );
 
+const bigintJSON = valita.object({
+  bigint: valita.bigint(),
+});
+
 test('getEntry', async () => {
   type Case = {
     name: string;
@@ -72,6 +76,13 @@ test('getEntry RoundTrip types', async () => {
     await putEntry(storage, 'string', 'foo', {});
     await putEntry(storage, 'array', [1, 2, 3], {});
     await putEntry(storage, 'object', {a: 1, b: 2}, {});
+    await putEntry(storage, 'bigint', 987654321234567898765432123456789n, {});
+    await putEntry(
+      storage,
+      'bigintJSON',
+      {bigint: 987654321234567898765432123456789n},
+      {},
+    );
 
     expect(await getEntry(storage, 'boolean', valita.boolean(), {})).toEqual(
       true,
@@ -92,6 +103,12 @@ test('getEntry RoundTrip types', async () => {
         {},
       ),
     ).toEqual({a: 1, b: 2});
+    expect(await getEntry(storage, 'bigint', valita.bigint(), {})).toEqual(
+      987654321234567898765432123456789n,
+    );
+    expect(await getEntry(storage, 'bigintJSON', bigintJSON, {})).toEqual({
+      bigint: 987654321234567898765432123456789n,
+    });
   });
 });
 
