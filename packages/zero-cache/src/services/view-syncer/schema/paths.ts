@@ -100,7 +100,7 @@ export class CVRPaths {
   row(row: RowID): string {
     const {schema, table, rowKey} = row;
     const hash = rowKeyHash(rowKey);
-    return `${this.root}/rows/${schema}/${table}/${hash}`;
+    return `${this.root}/data/rows/${schema}/${table}/${hash}`;
   }
 
   clientPatch(

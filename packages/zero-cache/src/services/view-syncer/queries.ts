@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONObject} from '../../types/bigint-json.js';
-import {rowKeyHash} from '../../types/row-key.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
   expandSelection,
@@ -14,12 +13,29 @@ import {
 import {Normalized} from '../../zql/normalize.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/tables/replication.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
+import {CVRPaths} from './schema/paths.js';
 import type {QueryRecord, RowID, RowRecord} from './schema/types.js';
 
 export class InvalidQueryError extends Error {}
 
 export type TransformedQuery = {
-  readonly queryID: string;
+  /**
+   * Note that multiple client queries can be normalized into the same transformed
+   * query. For example, all of the following statements:
+   *
+   * ```sql
+   * SELECT id FROM foo WHERE bar = 1;
+   * SELECT id AS whatever FROM foo WHERE bar = 1;
+   * SELECT id, bar FROM foo WHERE bar = 1;
+   * ```
+   *
+   * are transformed to the equivalent server-side query; the server ignores the
+   * final aliases and fetches all of the columns necessary for the client
+   * (re-)compute the results.
+   *
+   * This, a transformed query may be associated with multiple (client) `queryIDs`.
+   */
+  readonly queryIDs: readonly string[];
   readonly transformedAST: Normalized;
   readonly transformationHash: string;
   readonly invalidationInfo: InvalidationInfo;
@@ -36,74 +52,88 @@ export class QueryHandler {
    * Transforms the client-desired queries into normalized, expanded versions that
    * includes primary key columns, the row version column, and all columns required
    * to compute the query.
+   *
+   * Returns a mapping from `transformationHash` to {@link TransformedQuery}.
    */
   transform(
-    queries: (QueryRecord | {id: string; ast: AST})[],
-  ): Record<string, TransformedQuery> {
-    return Object.fromEntries(
-      queries.map(q => {
-        const requiredColumns = (tableRef: string) => {
-          const table = this.#tables.spec(tableRef);
-          if (!table) {
-            throw new InvalidQueryError(
-              `Unknown table "${tableRef}" in ${JSON.stringify(q.ast)}`,
-            );
-          }
-          return [...table.primaryKey, ZERO_VERSION_COLUMN_NAME];
-        };
+    queries: readonly (QueryRecord | {id: string; ast: AST})[],
+  ): Map<string, TransformedQuery> {
+    // Mutable version for constructing the object.
+    type TransformedQueryBuilder = TransformedQuery & {queryIDs: string[]};
+    const transformed = new Map<string, TransformedQueryBuilder>();
 
-        const expanded = expandSelection(q.ast, requiredColumns);
-        const transformedAST = new Normalized(expanded);
-        const transformationHash = transformedAST.hash();
+    for (const q of queries) {
+      const requiredColumns = (tableRef: string) => {
+        const table = this.#tables.spec(tableRef);
+        if (!table) {
+          throw new InvalidQueryError(
+            `Unknown table "${tableRef}" in ${JSON.stringify(q.ast)}`,
+          );
+        }
+        return [...table.primaryKey, ZERO_VERSION_COLUMN_NAME];
+      };
+
+      const expanded = expandSelection(q.ast, requiredColumns);
+      const transformedAST = new Normalized(expanded);
+      const transformationHash = transformedAST.hash();
+
+      const exists = transformed.get(transformationHash);
+      if (exists) {
+        exists.queryIDs = union(exists.queryIDs, [q.id]);
+      } else {
         const invalidationInfo = computeInvalidationInfo(transformedAST);
-        return [
-          q.id,
-          {
-            queryID: q.id,
-            transformedAST,
-            transformationHash,
-            invalidationInfo,
-          },
-        ];
-      }),
-    );
+        transformed.set(transformationHash, {
+          queryIDs: [q.id],
+          transformedAST,
+          transformationHash,
+          invalidationInfo,
+        });
+      }
+    }
+    return transformed;
   }
 
   /**
    * Returns an object for deconstructing each result from executed queries
    * into its constituent tables and rows.
    */
-  resultProcessor(lc: LogContext) {
-    return new ResultProcessor(lc, this.#tables);
+  resultParser(lc: LogContext, cvrID: string) {
+    return new ResultParser(lc, this.#tables, cvrID);
   }
 }
 
-export type RowResult = {
+export type ParsedRow = {
   record: Omit<RowRecord, 'putPatch'>;
   contents: JSONObject;
 };
 
-class ResultProcessor {
+class ResultParser {
   readonly #lc: LogContext;
   readonly #tables: TableSchemas;
-  readonly #results = new Map<string, RowResult>();
+  readonly #paths: CVRPaths;
 
-  constructor(lc: LogContext, tables: TableSchemas) {
+  constructor(lc: LogContext, tables: TableSchemas, cvrID: string) {
     this.#lc = lc;
     this.#tables = tables;
+    this.#paths = new CVRPaths(cvrID);
   }
 
   /**
-   * Processes the query results by decomposing each result into its constituent
+   * Parses the query results by decomposing each result into its constituent
    * rows, according to the column naming schema defined by {@link expandSelection}.
    * Multiple views of rows from different queries are merged, with the query to column
-   * mapping tracked in the `record` field of the returned {@link RowResult}.
+   * mapping tracked in the `record` field of the returned {@link ParsedRow}.
+   *
+   * Returns a mapping from the CVR row record path to {@link ParsedRow}.
+   *
+   * @param queryIDs The query ID(s) with which the query is associated. See
+   *        {@link TransformedQuery.queryIDs} for why there may be more than one.
    */
-  // TODO: The more correct type for `results` is the BigInt.JSONObject, as the sync replica
-  //       supports bigints. That type should be used instead, with proper conversion / error
-  //       checking when serializing to the current wire protocol that does not support bigint.
-  // eslint-disable-next-line require-await
-  async processResults(queryID: string, results: JSONObject[]): Promise<void> {
+  parseResults(
+    queryIDs: readonly string[],
+    results: readonly JSONObject[],
+  ): Map<string, ParsedRow> {
+    const parsed = new Map<string, ParsedRow>(); // Maps CVRPath.row() => RowResult
     for (const result of results) {
       // Partitions the values of the full result into individual "subquery/table" keys.
       // For example, a result:
@@ -146,30 +176,29 @@ class ResultProcessor {
 
         const [_, table] = splitLastComponent(rowAlias);
         const id = this.#tables.rowID(table, row);
-        const key = makeKey(id);
+        const key = this.#paths.row(id);
 
-        let rowResult = this.#results.get(key);
+        let rowResult = parsed.get(key);
         if (!rowResult) {
           rowResult = {
             record: {id, rowVersion, queriedColumns: {}},
             contents: {},
           };
-          this.#results.set(key, rowResult);
+          parsed.set(key, rowResult);
         }
         for (const col of Object.keys(row)) {
-          (rowResult.record.queriedColumns[col] ??= []).push(queryID);
+          rowResult.record.queriedColumns[col] = union(
+            rowResult.record.queriedColumns[col],
+            queryIDs,
+          );
         }
         rowResult.contents = {...rowResult.contents, ...row};
       }
     }
     this.#lc
-      .withContext('queryID', queryID)
+      .withContext('queryIDs', queryIDs)
       .debug?.(`processed ${results.length} results`);
-  }
-
-  getResults(): IterableIterator<RowResult> {
-    this.#lc.info?.(`deconstructed results into ${this.#results.size} rows`);
-    return this.#results.values();
+    return parsed;
   }
 }
 
@@ -201,10 +230,9 @@ class TableSchemas {
   }
 }
 
-function makeKey(row: RowID) {
-  const {schema, table, rowKey} = row;
-  const hash = rowKeyHash(rowKey);
-  return `${schema}/${table}/${hash}`;
+function union<T>(...arrs: (readonly T[] | undefined)[]): T[] {
+  const set = new Set(arrs.flatMap(a => a ?? []));
+  return [...set];
 }
 
 function splitLastComponent(str: string): [prefix: string, suffix: string] {
