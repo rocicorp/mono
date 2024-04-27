@@ -46,14 +46,14 @@ describe('view-syncer/schema/paths', () => {
         table: 'issues',
         rowKey: {id: 123},
       }),
-    ).toBe('/vs/cvr/fbr/rows/public/issues/qse5G7quj_el4_x5CbWzQg');
+    ).toBe('/vs/cvr/fbr/data/rows/public/issues/qse5G7quj_el4_x5CbWzQg');
     expect(
       paths.row({
         schema: 'public',
         table: 'issues',
         rowKey: {id: 124},
       }),
-    ).toBe('/vs/cvr/fbr/rows/public/issues/u1Ny9isI-KQXSET6KchNbw');
+    ).toBe('/vs/cvr/fbr/data/rows/public/issues/u1Ny9isI-KQXSET6KchNbw');
     expect(
       paths.row({
         schema: 'public',
@@ -62,7 +62,7 @@ describe('view-syncer/schema/paths', () => {
           this: `could be a really a big row k${'e'.repeat(1000)}y`,
         },
       }),
-    ).toBe('/vs/cvr/fbr/rows/public/issues/4XQuBMS98x-1M2Gg-VMrlA');
+    ).toBe('/vs/cvr/fbr/data/rows/public/issues/4XQuBMS98x-1M2Gg-VMrlA');
 
     expect(
       paths.rowPatch(
