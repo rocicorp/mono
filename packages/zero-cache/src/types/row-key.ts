@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import xxh from 'xxhashjs'; // TODO: Use xxhash-wasm
-import {JSONObject, stringify} from './bigint-json.js';
+import {stringify, type JSONObject} from './bigint-json.js';
 
 export type ColumnType = {typeOid: number};
 export type RowKeyType = Record<string, ColumnType>;

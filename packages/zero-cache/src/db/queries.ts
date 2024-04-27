@@ -37,7 +37,7 @@ export function lookupRowsWithKeys(
   const colType = (col: string) =>
     db.unsafe(typeNameByOID[rowKeyType[col].typeOid]);
   // RowKey = JSONObject includes `undefined` for convenience of use in DO storage
-  // APIs, but `undefiend` is not accepted/ in the Postgres API. In practice, we
+  // APIs, but `undefiend` is not accepted in the Postgres API. In practice, we
   // never set any value to `undefined`. This check guarantees it.
   const keys = rowKeys.map(rowKey => {
     for (const v of Object.values(rowKey)) {
