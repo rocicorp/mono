@@ -5,10 +5,10 @@ import type {
   DurableObjectStorage,
 } from '@cloudflare/workers-types';
 import {assert} from 'shared/src/asserts.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
+import type {JSONValue} from '../types/bigint-json.js';
 
-export async function getEntry<T extends ReadonlyJSONValue>(
+export async function getEntry<T extends JSONValue>(
   durable: DurableObjectStorage,
   key: string,
   schema: valita.Type<T>,
@@ -24,7 +24,7 @@ export async function getEntry<T extends ReadonlyJSONValue>(
 // https://developers.cloudflare.com/workers/runtime-apis/durable-objects/#transactional-storage-api
 export const MAX_ENTRIES_TO_GET = 128;
 
-export async function getEntries<T extends ReadonlyJSONValue>(
+export async function getEntries<T extends JSONValue>(
   durable: DurableObjectStorage,
   keys: string[],
   schema: valita.Type<T>,
@@ -38,7 +38,7 @@ export async function getEntries<T extends ReadonlyJSONValue>(
   return validateOrNormalize(values, schema);
 }
 
-export async function listEntries<T extends ReadonlyJSONValue>(
+export async function listEntries<T extends JSONValue>(
   durable: DurableObjectStorage,
   schema: valita.Type<T>,
   options: DurableObjectListOptions,
@@ -82,7 +82,7 @@ function validateOrNormalize<T>(
   return normalized;
 }
 
-export function putEntry<T extends ReadonlyJSONValue>(
+export function putEntry<T extends JSONValue>(
   durable: DurableObjectStorage,
   key: string,
   value: T,

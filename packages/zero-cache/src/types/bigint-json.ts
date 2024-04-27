@@ -28,7 +28,7 @@ export type JSONValue =
   | readonly JSONValue[]
   | JSONObject;
 
-export type JSONObject = {readonly [prop: string]: JSONValue};
+export type JSONObject = {readonly [prop: string]: JSONValue | undefined};
 
 export const jsonObjectSchema: v.Type<JSONObject> = v.lazy(() => {
   const jsonValueSchema: v.Type<JSONValue> = v.lazy(() =>

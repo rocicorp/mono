@@ -3,8 +3,8 @@ import type {
   DurableObjectStorage,
 } from '@cloudflare/workers-types';
 import {compareUTF8} from 'compare-utf8';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import type * as valita from 'shared/src/valita.js';
+import type {JSONValue} from '../types/bigint-json.js';
 import {
   MAX_ENTRIES_TO_GET,
   delEntry,
@@ -47,13 +47,11 @@ export class DurableStorage implements Storage {
     this.#durable = durable;
   }
 
-  put<T extends ReadonlyJSONValue>(key: string, value: T): Promise<void> {
+  put<T extends JSONValue>(key: string, value: T): Promise<void> {
     return putEntry(this.#durable, key, value, ioOptions);
   }
 
-  putEntries<T extends ReadonlyJSONValue>(
-    entries: Record<string, T>,
-  ): Promise<void> {
+  putEntries<T extends JSONValue>(entries: Record<string, T>): Promise<void> {
     return this.#durable.put(entries, ioOptions);
   }
 
@@ -65,7 +63,7 @@ export class DurableStorage implements Storage {
     return this.#durable.delete(keys, ioOptions).then(() => undefined);
   }
 
-  get<T extends ReadonlyJSONValue>(
+  get<T extends JSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
@@ -80,7 +78,7 @@ export class DurableStorage implements Storage {
    * other. If consistency is required, the application must guarantee this
    * with its own locking scheme.
    */
-  async getEntries<T extends ReadonlyJSONValue>(
+  async getEntries<T extends JSONValue>(
     keys: string[],
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
@@ -110,14 +108,14 @@ export class DurableStorage implements Storage {
     return new Map(entries);
   }
 
-  scan<T extends ReadonlyJSONValue>(
+  scan<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): AsyncIterable<[key: string, value: T]> {
     return scan(this, options, schema);
   }
 
-  batchScan<T extends ReadonlyJSONValue>(
+  batchScan<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
     batchSize: number,
@@ -125,7 +123,7 @@ export class DurableStorage implements Storage {
     return batchScan(this, options, schema, batchSize);
   }
 
-  list<T extends ReadonlyJSONValue>(
+  list<T extends JSONValue>(
     options: ListOptions,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {

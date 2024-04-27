@@ -1,11 +1,10 @@
 import {compareUTF8} from 'compare-utf8';
-import type postgres from 'postgres';
 import xxh from 'xxhashjs'; // TODO: Use xxhash-wasm
-import {stringify, type JSONValue} from './bigint-json.js';
+import {stringify, type JSONObject} from './bigint-json.js';
 
 export type ColumnType = {typeOid: number};
 export type RowKeyType = Record<string, ColumnType>;
-export type RowKey = Record<string, postgres.SerializableParameter<JSONValue>>;
+export type RowKey = JSONObject;
 
 // Aliased for documentation purposes when dealing with full rows vs row keys.
 // The actual structure of the objects is the same.
