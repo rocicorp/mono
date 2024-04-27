@@ -30,20 +30,21 @@ export type JSONValue =
 
 export type JSONObject = {readonly [prop: string]: JSONValue | undefined};
 
-export const jsonObjectSchema: v.Type<JSONObject> = v.lazy(() => {
-  const jsonValueSchema: v.Type<JSONValue> = v.lazy(() =>
-    v.union(
-      v.null(),
-      v.string(),
-      v.number(),
-      v.bigint(),
-      v.boolean(),
-      v.readonly(v.array(jsonValueSchema)),
-      jsonObjectSchema,
-    ),
+export const jsonValueSchema: v.Type<JSONValue> = v.lazy(() => {
+  const jsonObjectSchema = v.readonly(v.record(jsonValueSchema));
+
+  return v.union(
+    v.null(),
+    v.string(),
+    v.number(),
+    v.bigint(),
+    v.boolean(),
+    v.readonly(v.array(jsonValueSchema)),
+    jsonObjectSchema,
   );
-  return v.readonly(v.record(jsonValueSchema));
 });
+
+export const jsonObjectSchema = v.readonly(v.record(jsonValueSchema));
 
 /**
  * Parses JSON strings that may contain arbitrarily large integers. Integers

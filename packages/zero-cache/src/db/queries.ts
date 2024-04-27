@@ -1,7 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
-import {assertNotUndefined} from 'shared/src/asserts.js';
-import type {JSONValue} from '../types/bigint-json.js';
 import {PostgresDB, typeNameByOID} from '../types/pg.js';
 import type {RowKey, RowKeyType} from '../types/row-key.js';
 
@@ -36,16 +34,7 @@ export function lookupRowsWithKeys(
   // See https://github.com/porsager/postgres/issues/842
   const colType = (col: string) =>
     db.unsafe(typeNameByOID[rowKeyType[col].typeOid]);
-  // RowKey = JSONObject includes `undefined` for convenience of use in DO storage
-  // APIs, but `undefiend` is not accepted in the Postgres API. In practice, we
-  // never set any value to `undefined`. This check guarantees it.
-  const keys = rowKeys.map(rowKey => {
-    for (const v of Object.values(rowKey)) {
-      assertNotUndefined(v);
-    }
-    return rowKey as Record<string, postgres.SerializableParameter<JSONValue>>;
-  });
-  const values = keys
+  const values = rowKeys
     .map(row =>
       colNames
         .map(col => db`${row[col]}::${colType(col)}`)
