@@ -200,12 +200,21 @@ export const patchSchema = v.object({
   op: v.union(v.literal('put'), v.literal('del')),
 });
 
-export const rowPatchSchema = patchSchema.extend({
+export const putRowPatchSchema = patchSchema.extend({
   type: v.literal('row'),
+  op: v.literal('put'),
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
   columns: v.array(v.string()),
 });
+
+export const delRowPatchSchema = patchSchema.extend({
+  type: v.literal('row'),
+  op: v.literal('del'),
+  id: rowIDSchema,
+});
+
+export const rowPatchSchema = v.union(putRowPatchSchema, delRowPatchSchema);
 
 export type RowPatch = v.Infer<typeof rowPatchSchema>;
 

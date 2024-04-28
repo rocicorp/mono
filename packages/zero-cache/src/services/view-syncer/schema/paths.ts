@@ -103,6 +103,10 @@ export class CVRPaths {
     return `${this.root}/data/rows/${schema}/${table}/${hash}`;
   }
 
+  rowPrefix(): string {
+    return `${this.root}/data/rows/`;
+  }
+
   clientPatch(
     cvrVersion: CVRVersion,
     client: ClientRecord | {id: string},

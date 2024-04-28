@@ -1,7 +1,7 @@
 import type {DurableObjectStorage} from '@cloudflare/workers-types';
 import {env, runInDurableObject} from 'cloudflare:test';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {expect} from 'vitest';
+import type {JSONObject} from '../types/bigint-json.js';
 
 export function runWithDurableObjectStorage<R>(
   fn: (storage: DurableObjectStorage) => R | Promise<R>,
@@ -14,7 +14,7 @@ export function runWithDurableObjectStorage<R>(
 
 export async function initStorage(
   storage: DurableObjectStorage,
-  entries: Record<string, ReadonlyJSONValue>,
+  entries: Record<string, JSONObject>,
 ) {
   await storage.deleteAll();
   await storage.put(entries);
@@ -22,7 +22,7 @@ export async function initStorage(
 
 export async function expectStorage(
   storage: DurableObjectStorage,
-  entries: Record<string, ReadonlyJSONValue>,
+  entries: Record<string, JSONObject>,
   prefix = '',
 ) {
   const actual = await storage.list({prefix});
