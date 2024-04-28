@@ -5,14 +5,14 @@ describe('view-syncer/schema/paths', () => {
   test('patch path versioning', () => {
     const paths1 = new CVRPaths('123');
     expect(paths1.queryPatch({stateVersion: '1zb'}, {id: 'foo-query'})).toBe(
-      '/vs/cvr/123/patches/meta/1zb/queries/foo-query',
+      '/vs/cvr/123/p/m/1zb/q/foo-query',
     );
     expect(
       paths1.queryPatch(
         {stateVersion: '1zb', minorVersion: 0},
         {id: 'foo-query'},
       ),
-    ).toBe('/vs/cvr/123/patches/meta/1zb/queries/foo-query');
+    ).toBe('/vs/cvr/123/p/m/1zb/q/foo-query');
 
     const paths2 = new CVRPaths('456');
     expect(
@@ -20,21 +20,21 @@ describe('view-syncer/schema/paths', () => {
         {stateVersion: '2abc', minorVersion: 35},
         {id: 'boo-query'},
       ),
-    ).toBe('/vs/cvr/456/patches/meta/2abc.0z/queries/boo-query');
+    ).toBe('/vs/cvr/456/p/m/2abc.0z/q/boo-query');
     expect(
       paths2.queryPatch(
         {stateVersion: '2abc', minorVersion: 36},
         {id: 'boo-query'},
       ),
-    ).toBe('/vs/cvr/456/patches/meta/2abc.110/queries/boo-query');
+    ).toBe('/vs/cvr/456/p/m/2abc.110/q/boo-query');
   });
 
   test('client paths', () => {
     const paths = new CVRPaths('abc');
 
-    expect(paths.client({id: 'foo'})).toBe('/vs/cvr/abc/meta/clients/foo');
+    expect(paths.client({id: 'foo'})).toBe('/vs/cvr/abc/m/c/foo');
     expect(paths.clientPatch({stateVersion: '2321'}, {id: 'foo'})).toBe(
-      '/vs/cvr/abc/patches/meta/2321/clients/foo',
+      '/vs/cvr/abc/p/m/2321/c/foo',
     );
   });
 
@@ -46,14 +46,14 @@ describe('view-syncer/schema/paths', () => {
         table: 'issues',
         rowKey: {id: 123},
       }),
-    ).toBe('/vs/cvr/fbr/data/rows/public/issues/qse5G7quj_el4_x5CbWzQg');
+    ).toBe('/vs/cvr/fbr/d/r/hmiZ0jkPKW203clzP4Mg6w');
     expect(
       paths.row({
         schema: 'public',
         table: 'issues',
         rowKey: {id: 124},
       }),
-    ).toBe('/vs/cvr/fbr/data/rows/public/issues/u1Ny9isI-KQXSET6KchNbw');
+    ).toBe('/vs/cvr/fbr/d/r/Z1Lzg3qVqQAbTf_PsUvlCg');
     expect(
       paths.row({
         schema: 'public',
@@ -62,7 +62,7 @@ describe('view-syncer/schema/paths', () => {
           this: `could be a really a big row k${'e'.repeat(1000)}y`,
         },
       }),
-    ).toBe('/vs/cvr/fbr/data/rows/public/issues/4XQuBMS98x-1M2Gg-VMrlA');
+    ).toBe('/vs/cvr/fbr/d/r/PNJVDvpmnF-qcv1Mw8AfiQ');
 
     expect(
       paths.rowPatch(
@@ -75,9 +75,7 @@ describe('view-syncer/schema/paths', () => {
           },
         },
       ),
-    ).toBe(
-      '/vs/cvr/fbr/patches/data/28c8.12s/rows/public/issues/4XQuBMS98x-1M2Gg-VMrlA',
-    );
+    ).toBe('/vs/cvr/fbr/p/d/28c8.12s/r/PNJVDvpmnF-qcv1Mw8AfiQ');
   });
 
   test('last active paths', () => {

@@ -1,5 +1,5 @@
 import {versionToLexi} from '../../../types/lexi-version.js';
-import {rowKeyHash} from '../../../types/row-key.js';
+import {rowIDHash} from '../../../types/row-key.js';
 import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 
 // At a glance
@@ -12,20 +12,29 @@ import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 // -----------------------------------------------------------------------
 // CVR
 // -----------------------------------------------------------------------
-// /vs/cvr/{id}/meta/version: {stateVersion: LexiVersion, minorVersion?: number}
-// /vs/cvr/{id}/meta/lastActive: {epochMillis: string}  // Can include non-version activity
 //
-// /vs/cvr/{id}/meta/clients/{cid}: ClientRecord (desiredQueries)
-// /vs/cvr/{id}/meta/clients/{cid}: ClientRecord
-// /vs/cvr/{id}/meta/clients/{cid}: ClientRecord
+// Abbreviations:
+// m: metadata
+// d: data
+// p: patches
+// r: rows
+// q: queries
+// c: clients
 //
-// /vs/cvr/{id}/meta/queries/{qid}: QueryRecord (ast, transformationHash)
-// /vs/cvr/{id}/meta/queries/{qid}: QueryRecord
-// /vs/cvr/{id}/meta/queries/{qid}: QueryRecord
+// /vs/cvr/{id}/m/version: {stateVersion: LexiVersion, minorVersion?: number}
+// /vs/cvr/{id}/m/lastActive: {epochMillis: string}  // Can include non-version activity
 //
-// /vs/cvr/{id}/data/rows/{schema}/{table}/{row-key-hash}: RowRecord (stateVersion, columns, queries)
-// /vs/cvr/{id}/data/rows/{schema}/{table}/{row-key-hash}: RowRecord
-// /vs/cvr/{id}/data/rows/{schema}/{table}/{row-key-hash}: RowRecord
+// /vs/cvr/{id}/m/c/{cid}: ClientRecord (desiredQueries)
+// /vs/cvr/{id}/m/c/{cid}: ClientRecord
+// /vs/cvr/{id}/m/c/{cid}: ClientRecord
+//
+// /vs/cvr/{id}/m/q/{qid}: QueryRecord (ast, transformationHash)
+// /vs/cvr/{id}/m/q/{qid}: QueryRecord
+// /vs/cvr/{id}/m/q/{qid}: QueryRecord
+//
+// /vs/cvr/{id}/d/r/{row-id-hash}: RowRecord (stateVersion, columns, queries)
+// /vs/cvr/{id}/d/r/{row-id-hash}: RowRecord
+// /vs/cvr/{id}/d/r/{row-id-hash}: RowRecord
 //
 // Patches to data and metadata are indexed under separate prefixes.
 // Although this means that both indexes need to be scanned to perform incremental
@@ -33,19 +42,19 @@ import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 // a re-query catchup (the metadata patch index being generally much smaller than
 // the data patch index).
 //
-// /vs/cvr/{id}/patches/meta/{version-str}/clients/{cid}}: ClientPatch
-// /vs/cvr/{id}/patches/meta/{version-str}/clients/{cid}}: ClientPatch
-// /vs/cvr/{id}/patches/meta/{version-str}/clients/{cid}}: ClientPatch
-// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}: QueryPatch (got)
-// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}: QueryPatch (got)
-// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}: QueryPatch (got)
-// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
-// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
-// /vs/cvr/{id}/patches/meta/{version-str}/queries/{qid}/clients/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/p/m/{version-str}/c/{cid}}: ClientPatch
+// /vs/cvr/{id}/p/m/{version-str}/c/{cid}}: ClientPatch
+// /vs/cvr/{id}/p/m/{version-str}/c/{cid}}: ClientPatch
+// /vs/cvr/{id}/p/m/{version-str}/q/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/p/m/{version-str}/q/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/p/m/{version-str}/q/{qid}: QueryPatch (got)
+// /vs/cvr/{id}/p/m/{version-str}/q/{qid}/c/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/p/m/{version-str}/q/{qid}/c/{cid}: QueryPatch (desired)
+// /vs/cvr/{id}/p/m/{version-str}/q/{qid}/c/{cid}: QueryPatch (desired)
 //
-// /vs/cvr/{id}/patches/data/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
-// /vs/cvr/{id}/patches/data/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
-// /vs/cvr/{id}/patches/data/{version-str}/rows/{schema}/{table}/{row-key-hash}: RowPatch
+// /vs/cvr/{id}/p/d/{version-str}/r/{row-id-hash}: RowPatch
+// /vs/cvr/{id}/p/d/{version-str}/r/{row-id-hash}: RowPatch
+// /vs/cvr/{id}/p/d/{version-str}/r/{row-id-hash}: RowPatch
 //
 // -----------------------------------------------------------------------
 // Last Active Index
@@ -78,33 +87,31 @@ export class CVRPaths {
   }
 
   metaPrefix(): string {
-    return `${this.root}/meta/`;
+    return `${this.root}/m/`;
   }
 
   version(): string {
-    return `${this.root}/meta/version`;
+    return `${this.root}/m/version`;
   }
 
   lastActive(): string {
-    return `${this.root}/meta/lastActive`;
+    return `${this.root}/m/lastActive`;
   }
 
   client(client: ClientRecord | {id: string}): string {
-    return `${this.root}/meta/clients/${client.id}`;
+    return `${this.root}/m/c/${client.id}`;
   }
 
   query(query: QueryRecord | {id: string}): string {
-    return `${this.root}/meta/queries/${query.id}`;
+    return `${this.root}/m/q/${query.id}`;
   }
 
   row(row: RowID): string {
-    const {schema, table, rowKey} = row;
-    const hash = rowKeyHash(rowKey);
-    return `${this.root}/data/rows/${schema}/${table}/${hash}`;
+    return `${this.root}/d/r/${rowIDHash(row)}`;
   }
 
   rowPrefix(): string {
-    return `${this.root}/data/rows/`;
+    return `${this.root}/d/r/`;
   }
 
   clientPatch(
@@ -112,14 +119,12 @@ export class CVRPaths {
     client: ClientRecord | {id: string},
   ): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/patches/meta/${v}/clients/${client.id}`;
+    return `${this.root}/p/m/${v}/c/${client.id}`;
   }
 
   rowPatch(cvrVersion: CVRVersion, row: RowID): string {
     const v = versionString(cvrVersion);
-    const {schema, table, rowKey} = row;
-    const hash = rowKeyHash(rowKey);
-    return `${this.root}/patches/data/${v}/rows/${schema}/${table}/${hash}`;
+    return `${this.root}/p/d/${v}/r/${rowIDHash(row)}`;
   }
 
   queryPatch(
@@ -127,7 +132,7 @@ export class CVRPaths {
     query: QueryRecord | {id: string},
   ): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/patches/meta/${v}/queries/${query.id}`;
+    return `${this.root}/p/m/${v}/q/${query.id}`;
   }
 
   desiredQueryPatch(
@@ -136,7 +141,7 @@ export class CVRPaths {
     client: ClientRecord | {id: string},
   ): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/patches/meta/${v}/queries/${query.id}/clients/${client.id}`;
+    return `${this.root}/p/m/${v}/q/${query.id}/c/${client.id}`;
   }
 }
 

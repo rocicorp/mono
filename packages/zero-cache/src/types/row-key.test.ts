@@ -1,33 +1,55 @@
 import {describe, expect, test} from 'vitest';
-import {RowKey, rowKeyHash, rowKeyString} from './row-key.js';
+import {RowKey, rowIDHash, rowKeyString} from './row-key.js';
 
 describe('types/row-key', () => {
   type Case = {
+    schema?: string;
+    table?: string;
     keys: RowKey[];
     rowKeyString: string;
-    rowKeyHash: string;
+    rowIDHash: string;
   };
 
   const cases: Case[] = [
     {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
-      rowKeyHash: 'obTrSkxiG_NZGYmdhk5cCQ',
+      rowIDHash: '8LLAJ0I02S3NY0zq-OEDjg',
+    },
+    {
+      table: 'clients',
+      keys: [{foo: 'bar'}, {foo: 'bar'}],
+      rowKeyString: '["foo","bar"]',
+      rowIDHash: '5dx4yFSW4NH-U00OUN6nBA',
+    },
+    {
+      schema: 'zero',
+      table: 'clients',
+      keys: [{foo: 'bar'}, {foo: 'bar'}],
+      rowKeyString: '["foo","bar"]',
+      rowIDHash: 'TP0l9Jbd9d4Jppi30gCF7A',
+    },
+    {
+      schema: 'clients',
+      table: 'zero',
+      keys: [{foo: 'bar'}, {foo: 'bar'}],
+      rowKeyString: '["foo","bar"]',
+      rowIDHash: 'iakA7CJFm2Yxz2vcRy-tgw',
     },
     {
       keys: [{foo: ['bar']}, {foo: ['bar']}],
       rowKeyString: '["foo",["bar"]]',
-      rowKeyHash: 'EXSpge3fqVTerIyk9DfobA',
+      rowIDHash: '-sQXIlhIMvuh7cZ_2j_VUQ',
     },
     {
       keys: [{foo: 1}, {foo: 1}],
       rowKeyString: '["foo",1]',
-      rowKeyHash: 'xI2eLW2t4cDhxaoLThCOBg',
+      rowIDHash: 'e23vaKv1dD1BiLBAsIi8Pw',
     },
     {
       keys: [{foo: '1'}, {foo: '1'}],
       rowKeyString: '["foo","1"]',
-      rowKeyHash: 'uj8XlgCYqo0xZ-ptdN-X0A',
+      rowIDHash: 'atxG-Vt9iV7gGF5k-EwCgA',
     },
     {
       // Two-column keys
@@ -36,7 +58,7 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar'},
       ],
       rowKeyString: '["bar",["foo"],"foo","bar"]',
-      rowKeyHash: 'tjWbs643-85yVQmnKG7yyA',
+      rowIDHash: 'scSYaMl2QedjzT5GN3ALOw',
     },
     {
       // Three-column keys
@@ -46,15 +68,16 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar', baz: 2},
       ],
       rowKeyString: '["bar",["foo"],"baz",2,"foo","bar"]',
-      rowKeyHash: 'RgvjgWwor4UuJ-huLJUHIA',
+      rowIDHash: 'kdzO406COLXC4UbkVNUZdQ',
     },
   ];
 
   for (const c of cases) {
-    test(`RowKey: ${c.keys.join(',')}`, () => {
+    const {schema = 'public', table = 'issues'} = c;
+    test(`RowKey: ${schema}.${table}: ${JSON.stringify(c.keys)}`, () => {
       for (const keys of c.keys) {
         expect(rowKeyString(keys)).toBe(c.rowKeyString);
-        expect(rowKeyHash(keys)).toBe(c.rowKeyHash);
+        expect(rowIDHash({schema, table, rowKey: keys})).toBe(c.rowIDHash);
       }
     });
   }

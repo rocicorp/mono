@@ -7,6 +7,8 @@ export type ColumnType = {typeOid: number};
 export type RowKeyType = Record<string, ColumnType>;
 export type RowKey = Record<string, postgres.SerializableParameter<JSONValue>>;
 
+export type RowID = {schema: string; table: string; rowKey: RowKey};
+
 // Aliased for documentation purposes when dealing with full rows vs row keys.
 // The actual structure of the objects is the same.
 export type RowType = RowKeyType;
@@ -21,25 +23,23 @@ export function rowKeyString(key: RowKey): string {
     .sort(([col1], [col2]) => compareUTF8(col1, col2))
     .flat();
 
-  // xxhash only computes 64-bit values. Run it on the forward and reverse string
-  // to get better collision resistance.
   return stringify(tuples);
 }
 
 /**
- * A RowKeyHash is a 128-bit order-agnostic hash of the column name / value tuples of a
- * row key. It serves as a compact representation of the primary key of a row that:
+ * A RowIDHash is a 128-bit column-order-agnostic hash of the schema, table name, and
+ * column name / value tuples of a row key. It serves as a compact identifier for
+ * a row in the database that:
  *
  * * is guaranteed to fit within the constraints of the CVR store (Durable Object
  *   storage keys cannot exceed 2KiB)
- *
- * * can be used for efficient multiple-key-column OR queries using
- *   `WHERE (col1, col2, ...) IN ((...), (...))` queries.
+ * * can be used to compactly encode (and lookup) the rows of query results for CVR
+ *   bookkeeping.
  *
  * The hash is encoded in `base64url`, with the maximum 128-bit value being 22 characters long.
  */
-export function rowKeyHash(key: RowKey): string {
-  const str = rowKeyString(key);
+export function rowIDHash(id: RowID): string {
+  const str = JSON.stringify([id.schema, id.table]) + rowKeyString(id.rowKey);
 
   // xxhash only computes 64-bit values. Run it on the forward and reverse string
   // to get better collision resistance.

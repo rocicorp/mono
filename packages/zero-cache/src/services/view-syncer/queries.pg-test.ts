@@ -148,7 +148,7 @@ describe('view-syncer/queries', () => {
     expect(resultParser.parseResults(queryIDs, results)).toEqual(
       new Map([
         [
-          '/vs/cvr/foo-cvr/data/rows/public/issues/VTN6PoW_uOFH6A7zJitQWA',
+          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
           {
             contents: {id: '3', owner_id: '102', parent_id: '1', title: 'foo'},
             record: {
@@ -164,7 +164,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/data/rows/public/users/oQ3wdcfDaeMjpd_c_UT41A',
+          '/vs/cvr/foo-cvr/d/r/dygxK_hEWhfHvQ8eowTfCQ',
           {
             contents: {id: '102', name: 'Candice'},
             record: {
@@ -178,7 +178,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/data/rows/public/issues/SWxRd_XHoK8Ng6sjmBYXTA',
+          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
           {
             contents: {id: '1', owner_id: '100', title: 'parent issue foo'},
             record: {
@@ -193,7 +193,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/data/rows/public/users/4ItLBN7a0LgsOIlQRdI3NA',
+          '/vs/cvr/foo-cvr/d/r/1G9hXQhMWdq9f737TmE6rg',
           {
             contents: {id: '100', name: 'Alice'},
             record: {
@@ -207,7 +207,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/data/rows/public/issues/aq6aYz_LHtaIY45d6IWooA',
+          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
           {
             contents: {id: '4', owner_id: '101', parent_id: '2', title: 'bar'},
             record: {
@@ -223,7 +223,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/data/rows/public/users/bw7Vm-uyPdCUJfhnKYRzSw',
+          '/vs/cvr/foo-cvr/d/r/Z3BOpMPd4QMKJ8IeYx1QvQ',
           {
             contents: {id: '101', name: 'Bob'},
             record: {
@@ -237,7 +237,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/data/rows/public/issues/GJhC675wREgz8IQVopmy9w',
+          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
           {
             contents: {id: '2', owner_id: '101', title: 'parent issue bar'},
             record: {

@@ -5,7 +5,7 @@ import {
   initStorage,
   runWithDurableObjectStorage,
 } from '../../test/do.js';
-import {rowKeyHash} from '../../types/row-key.js';
+import {rowIDHash} from '../../types/row-key.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
@@ -53,7 +53,7 @@ describe('view-syncer/cvr', () => {
       expect(reloaded).toEqual(flushed);
 
       await expectStorage(doStorage, {
-        ['/vs/cvr/abc123/meta/lastActive']: flushed.lastActive,
+        ['/vs/cvr/abc123/m/lastActive']: flushed.lastActive,
         ['/vs/lastActive/2024-04-20/abc123']: {id: 'abc123'} satisfies CvrID,
       });
     });
@@ -62,19 +62,19 @@ describe('view-syncer/cvr', () => {
   test('load existing cvr', async () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, {
-        ['/vs/cvr/abc123/meta/version']: {
+        ['/vs/cvr/abc123/m/version']: {
           stateVersion: '1a9',
           minorVersion: 2,
         } satisfies CVRVersion,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23),
         } satisfies LastActive,
-        ['/vs/cvr/abc123/meta/clients/fooClient']: {
+        ['/vs/cvr/abc123/m/c/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
           putPatch: {stateVersion: '1a9', minorVersion: 1},
         } satisfies ClientRecord,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        ['/vs/cvr/abc123/m/q/oneHash']: {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
@@ -113,19 +113,19 @@ describe('view-syncer/cvr', () => {
   test('update active time', async () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, {
-        ['/vs/cvr/abc123/meta/version']: {
+        ['/vs/cvr/abc123/m/version']: {
           stateVersion: '1a9',
           minorVersion: 2,
         } satisfies CVRVersion,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23),
         } satisfies LastActive,
-        ['/vs/cvr/abc123/meta/clients/fooClient']: {
+        ['/vs/cvr/abc123/m/c/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
           putPatch: {stateVersion: '1a9', minorVersion: 1},
         } satisfies ClientRecord,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        ['/vs/cvr/abc123/m/q/oneHash']: {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
@@ -174,10 +174,10 @@ describe('view-syncer/cvr', () => {
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
-        ['/vs/cvr/abc123/meta/version']: updated.version,
-        ['/vs/cvr/abc123/meta/lastActive']: updated.lastActive,
-        ['/vs/cvr/abc123/meta/clients/fooClient']: updated.clients.fooClient,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/m/version']: updated.version,
+        ['/vs/cvr/abc123/m/lastActive']: updated.lastActive,
+        ['/vs/cvr/abc123/m/c/fooClient']: updated.clients.fooClient,
+        ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
         // LastActive index
         ['/vs/lastActive/2024-04-24/abc123']: {id: 'abc123'} satisfies CvrID,
       });
@@ -187,23 +187,23 @@ describe('view-syncer/cvr', () => {
   test('update desired query set', async () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, {
-        ['/vs/cvr/abc123/meta/version']: {
+        ['/vs/cvr/abc123/m/version']: {
           stateVersion: '1aa',
         } satisfies CVRVersion,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23),
         } satisfies LastActive,
-        ['/vs/cvr/abc123/meta/clients/dooClient']: {
+        ['/vs/cvr/abc123/m/c/dooClient']: {
           id: 'dooClient',
           desiredQueryIDs: ['oneHash', 'nonExistentQuery'],
           putPatch: {stateVersion: '1a8'},
         } satisfies ClientRecord,
-        ['/vs/cvr/abc123/meta/clients/fooClient']: {
+        ['/vs/cvr/abc123/m/c/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
           putPatch: {stateVersion: '1a9', minorVersion: 1},
         } satisfies ClientRecord,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        ['/vs/cvr/abc123/m/q/oneHash']: {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
@@ -213,19 +213,18 @@ describe('view-syncer/cvr', () => {
           },
           putPatch: {stateVersion: '1a9', minorVersion: 2},
         } satisfies QueryRecord,
-        ['/vs/cvr/abc123/patches/meta/1a8/queries/oneHash/clients/dooClient']: {
+        ['/vs/cvr/abc123/p/m/1a8/q/oneHash/c/dooClient']: {
           type: 'query',
           op: 'put',
           id: 'oneHash',
           clientID: 'dooClient,',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/patches/meta/1a9.01/queries/oneHash/clients/fooClient']:
-          {
-            type: 'query',
-            op: 'put',
-            id: 'oneHash',
-            clientID: 'fooClient,',
-          } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1a9.01/q/oneHash/c/fooClient']: {
+          type: 'query',
+          op: 'put',
+          id: 'oneHash',
+          clientID: 'fooClient,',
+        } satisfies QueryPatch,
         ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       });
 
@@ -341,68 +340,62 @@ describe('view-syncer/cvr', () => {
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
-        ['/vs/cvr/abc123/meta/version']: updated.version,
-        ['/vs/cvr/abc123/meta/lastActive']: updated.lastActive,
-        ['/vs/cvr/abc123/meta/clients/barClient']: updated.clients.barClient,
-        ['/vs/cvr/abc123/meta/clients/bonkClient']: updated.clients.bonkClient,
-        ['/vs/cvr/abc123/meta/clients/dooClient']: updated.clients.dooClient,
-        ['/vs/cvr/abc123/meta/clients/fooClient']: updated.clients.fooClient,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
-        ['/vs/cvr/abc123/meta/queries/threeHash']: updated.queries.threeHash,
-        ['/vs/cvr/abc123/meta/queries/fourHash']: updated.queries.fourHash,
+        ['/vs/cvr/abc123/m/version']: updated.version,
+        ['/vs/cvr/abc123/m/lastActive']: updated.lastActive,
+        ['/vs/cvr/abc123/m/c/barClient']: updated.clients.barClient,
+        ['/vs/cvr/abc123/m/c/bonkClient']: updated.clients.bonkClient,
+        ['/vs/cvr/abc123/m/c/dooClient']: updated.clients.dooClient,
+        ['/vs/cvr/abc123/m/c/fooClient']: updated.clients.fooClient,
+        ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/m/q/threeHash']: updated.queries.threeHash,
+        ['/vs/cvr/abc123/m/q/fourHash']: updated.queries.fourHash,
         // Patches!
-        ['/vs/cvr/abc123/patches/meta/1aa.01/clients/barClient']: {
+        ['/vs/cvr/abc123/p/m/1aa.01/c/barClient']: {
           type: 'client',
           op: 'put',
           id: 'barClient',
         } satisfies ClientPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/clients/bonkClient']: {
+        ['/vs/cvr/abc123/p/m/1aa.01/c/bonkClient']: {
           type: 'client',
           op: 'put',
           id: 'bonkClient',
         } satisfies ClientPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/threeHash/clients/barClient']:
-          {
-            type: 'query',
-            op: 'put',
-            id: 'threeHash',
-            clientID: 'barClient',
-          } satisfies QueryPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/threeHash/clients/fooClient']:
-          {
-            type: 'query',
-            op: 'put',
-            id: 'threeHash',
-            clientID: 'fooClient',
-          } satisfies QueryPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash/clients/barClient']:
-          {
-            type: 'query',
-            op: 'put',
-            id: 'oneHash',
-            clientID: 'barClient',
-          } satisfies QueryPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash/clients/dooClient']:
-          {
-            type: 'query',
-            op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
-            id: 'oneHash',
-            clientID: 'dooClient',
-          } satisfies QueryPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash/clients/fooClient']:
-          {
-            type: 'query',
-            op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
-            id: 'oneHash',
-            clientID: 'fooClient',
-          } satisfies QueryPatch,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/fourHash/clients/fooClient']:
-          {
-            type: 'query',
-            op: 'put',
-            id: 'fourHash',
-            clientID: 'fooClient',
-          } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/threeHash/c/barClient']: {
+          type: 'query',
+          op: 'put',
+          id: 'threeHash',
+          clientID: 'barClient',
+        } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/threeHash/c/fooClient']: {
+          type: 'query',
+          op: 'put',
+          id: 'threeHash',
+          clientID: 'fooClient',
+        } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash/c/barClient']: {
+          type: 'query',
+          op: 'put',
+          id: 'oneHash',
+          clientID: 'barClient',
+        } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash/c/dooClient']: {
+          type: 'query',
+          op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
+          id: 'oneHash',
+          clientID: 'dooClient',
+        } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash/c/fooClient']: {
+          type: 'query',
+          op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
+          id: 'oneHash',
+          clientID: 'fooClient',
+        } satisfies QueryPatch,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/fourHash/c/fooClient']: {
+          type: 'query',
+          op: 'put',
+          id: 'fourHash',
+          clientID: 'fooClient',
+        } satisfies QueryPatch,
         ['/vs/lastActive/2024-04-24/abc123']: {id: 'abc123'} satisfies CvrID,
       });
     });
@@ -410,18 +403,18 @@ describe('view-syncer/cvr', () => {
 
   test('no-op change to desired query set', async () => {
     const initialState = {
-      ['/vs/cvr/abc123/meta/version']: {
+      ['/vs/cvr/abc123/m/version']: {
         stateVersion: '1aa',
       } satisfies CVRVersion,
-      ['/vs/cvr/abc123/meta/lastActive']: {
+      ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
-      ['/vs/cvr/abc123/meta/clients/fooClient']: {
+      ['/vs/cvr/abc123/m/c/fooClient']: {
         id: 'fooClient',
         desiredQueryIDs: ['oneHash'],
         putPatch: {stateVersion: '1a9', minorVersion: 1},
       } satisfies ClientRecord,
-      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+      ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
         transformationHash: 'twoHash',
@@ -430,13 +423,12 @@ describe('view-syncer/cvr', () => {
         },
         putPatch: {stateVersion: '1a9', minorVersion: 2},
       } satisfies QueryRecord,
-      ['/vs/cvr/abc123/patches/meta/1a9.01/queries/oneHash/clients/fooClient']:
-        {
-          type: 'query',
-          op: 'put',
-          id: 'oneHash',
-          clientID: 'fooClient,',
-        } satisfies QueryPatch,
+      ['/vs/cvr/abc123/p/m/1a9.01/q/oneHash/c/fooClient']: {
+        type: 'query',
+        op: 'put',
+        id: 'oneHash',
+        clientID: 'fooClient,',
+      } satisfies QueryPatch,
       ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
     };
 
@@ -467,7 +459,7 @@ describe('view-syncer/cvr', () => {
 
       await expectStorage(storage, {
         ...initialState,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
       });
@@ -479,53 +471,53 @@ describe('view-syncer/cvr', () => {
     table: 'issues',
     rowKey: {id: '123'},
   };
-  const ROW_HASH1 = rowKeyHash(ROW_ID1.rowKey);
+  const ROW_HASH1 = rowIDHash(ROW_ID1);
   const ROW_ID2: RowID = {
     schema: 'public',
     table: 'issues',
     rowKey: {id: '321'},
   };
-  const ROW_HASH2 = rowKeyHash(ROW_ID2.rowKey);
+  const ROW_HASH2 = rowIDHash(ROW_ID2);
   const ROW_ID3: RowID = {
     schema: 'public',
     table: 'issues',
     rowKey: {id: '888'},
   };
-  const ROW_HASH3 = rowKeyHash(ROW_ID3.rowKey);
+  const ROW_HASH3 = rowIDHash(ROW_ID3);
 
   test('desired to got', async () => {
     const initialState = {
-      ['/vs/cvr/abc123/meta/version']: {
+      ['/vs/cvr/abc123/m/version']: {
         stateVersion: '1aa',
       } satisfies CVRVersion,
-      ['/vs/cvr/abc123/meta/lastActive']: {
+      ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
-      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+      ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
       } satisfies QueryRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         putPatch: {stateVersion: '1a0'},
         id: ROW_ID1,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
         putPatch: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID2,
@@ -550,7 +542,7 @@ describe('view-syncer/cvr', () => {
       updater.received(
         new Map([
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
             {
               record: {
                 id: ROW_ID1,
@@ -567,7 +559,7 @@ describe('view-syncer/cvr', () => {
       updater.received(
         new Map([
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
             {
               record: {
                 id: ROW_ID1,
@@ -580,7 +572,7 @@ describe('view-syncer/cvr', () => {
             },
           ],
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
             {
               record: {
                 id: ROW_ID3,
@@ -623,64 +615,61 @@ describe('view-syncer/cvr', () => {
       expect(reloaded).toEqual(updated);
 
       const {
-        [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH1}`]:
-          _removed,
+        [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH1}`]: _removed,
         ...remainingState
       } = initialState;
 
       await expectStorage(storage, {
         ...remainingState,
-        ['/vs/cvr/abc123/meta/version']: updated.version,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: {
+        ['/vs/cvr/abc123/m/version']: updated.version,
+        ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash']: {
           type: 'query',
           op: 'put',
           id: 'oneHash',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
           queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
           putPatch: updated.version,
           queriedColumns: {id: ['oneHash']},
           rowVersion: '09',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID1,
-            rowVersion: '03',
-            columns: ['id', 'name'],
-          } satisfies RowPatch,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID3,
-            rowVersion: '09',
-            columns: ['id'],
-          } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          rowVersion: '03',
+          columns: ['id', 'name'],
+        } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID3,
+          rowVersion: '09',
+          columns: ['id'],
+        } satisfies RowPatch,
       });
     });
   });
 
   test('new transformation hash', async () => {
     const initialState = {
-      ['/vs/cvr/abc123/meta/version']: {
+      ['/vs/cvr/abc123/m/version']: {
         stateVersion: '1ba',
       } satisfies CVRVersion,
-      ['/vs/cvr/abc123/meta/lastActive']: {
+      ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
-      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+      ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
@@ -688,39 +677,39 @@ describe('view-syncer/cvr', () => {
         transformationVersion: {stateVersion: '1aa'},
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
         putPatch: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
         id: ROW_ID3,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
         rowVersion: '03',
         columns: ['id', 'name'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID2,
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID3,
@@ -744,7 +733,7 @@ describe('view-syncer/cvr', () => {
       updater.received(
         new Map([
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
             {
               record: {
                 id: ROW_ID1,
@@ -762,7 +751,7 @@ describe('view-syncer/cvr', () => {
         new Map([
           [
             // Now referencing ROW_ID2 instead of ROW_ID3
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
             {
               record: {
                 id: ROW_ID2,
@@ -806,70 +795,64 @@ describe('view-syncer/cvr', () => {
 
       const {
         // Deleted keys
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: _row3,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
-          _row1Put,
-        [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]:
-          _row2Put,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
-          _row3Put,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: _row3,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: _row1Put,
+        [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: _row2Put,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: _row3Put,
         ...remainingState
       } = initialState;
 
       await expectStorage(storage, {
         ...remainingState,
-        ['/vs/cvr/abc123/meta/version']: updated.version,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/version']: updated.version,
+        ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
           queriedColumns: {id: ['twoHash', 'oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           putPatch: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
           queriedColumns: {id: ['twoHash', 'oneHash']},
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH1}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID1,
-            rowVersion: '03',
-            columns: ['id'],
-          } satisfies RowPatch,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH2}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID2,
-            rowVersion: '09',
-            columns: ['id'],
-          } satisfies RowPatch,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH3}`]:
-          {
-            type: 'row',
-            op: 'del',
-            id: ROW_ID3,
-          } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          rowVersion: '03',
+          columns: ['id'],
+        } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH2}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID2,
+          rowVersion: '09',
+          columns: ['id'],
+        } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH3}`]: {
+          type: 'row',
+          op: 'del',
+          id: ROW_ID3,
+        } satisfies RowPatch,
       });
     });
   });
 
   test('multiple executed queries', async () => {
     const initialState = {
-      ['/vs/cvr/abc123/meta/version']: {
+      ['/vs/cvr/abc123/m/version']: {
         stateVersion: '1ba',
       } satisfies CVRVersion,
-      ['/vs/cvr/abc123/meta/lastActive']: {
+      ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
-      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+      ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
@@ -877,7 +860,7 @@ describe('view-syncer/cvr', () => {
         transformationVersion: {stateVersion: '1aa'},
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
-      ['/vs/cvr/abc123/meta/queries/twoHash']: {
+      ['/vs/cvr/abc123/m/q/twoHash']: {
         id: 'twoHash',
         ast: {table: 'issues'},
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
@@ -885,39 +868,39 @@ describe('view-syncer/cvr', () => {
         transformationVersion: {stateVersion: '1aa'},
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
         putPatch: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
         id: ROW_ID3,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
         rowVersion: '03',
         columns: ['id', 'name'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID2,
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID3,
@@ -942,7 +925,7 @@ describe('view-syncer/cvr', () => {
       updater.received(
         new Map([
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
             {
               record: {
                 id: ROW_ID1,
@@ -959,7 +942,7 @@ describe('view-syncer/cvr', () => {
       updater.received(
         new Map([
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
             {
               record: {
                 id: ROW_ID1,
@@ -977,7 +960,7 @@ describe('view-syncer/cvr', () => {
         new Map([
           [
             // Now referencing ROW_ID2 instead of ROW_ID3
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
             {
               record: {
                 id: ROW_ID2,
@@ -994,7 +977,7 @@ describe('view-syncer/cvr', () => {
       updater.received(
         new Map([
           [
-            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`,
+            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
             {
               record: {
                 id: ROW_ID2,
@@ -1028,70 +1011,64 @@ describe('view-syncer/cvr', () => {
 
       const {
         // Deleted keys
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: _row3,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
-          _row1Put,
-        [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]:
-          _row2Put,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
-          _row3Put,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: _row3,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: _row1Put,
+        [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: _row2Put,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: _row3Put,
         ...remainingState
       } = initialState;
 
       await expectStorage(storage, {
         ...remainingState,
-        ['/vs/cvr/abc123/meta/version']: updated.version,
-        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/version']: updated.version,
+        ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
           queriedColumns: {id: ['twoHash', 'oneHash'], desc: ['twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           putPatch: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
           queriedColumns: {id: ['oneHash', 'twoHash']},
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH1}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID1,
-            rowVersion: '03',
-            columns: ['id', 'desc'],
-          } satisfies RowPatch,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH2}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID2,
-            rowVersion: '09',
-            columns: ['id'],
-          } satisfies RowPatch,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH3}`]:
-          {
-            type: 'row',
-            op: 'del',
-            id: ROW_ID3,
-          } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          rowVersion: '03',
+          columns: ['id', 'desc'],
+        } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH2}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID2,
+          rowVersion: '09',
+          columns: ['id'],
+        } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH3}`]: {
+          type: 'row',
+          op: 'del',
+          id: ROW_ID3,
+        } satisfies RowPatch,
       });
     });
   });
 
   test('removed query', async () => {
     const initialState = {
-      ['/vs/cvr/abc123/meta/version']: {
+      ['/vs/cvr/abc123/m/version']: {
         stateVersion: '1ba',
       } satisfies CVRVersion,
-      ['/vs/cvr/abc123/meta/lastActive']: {
+      ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
-      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+      ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
         desiredBy: {},
@@ -1100,44 +1077,44 @@ describe('view-syncer/cvr', () => {
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
       ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
-      ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: {
+      ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash']: {
         type: 'query',
         op: 'put',
         id: 'oneHash',
       } satisfies QueryPatch,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
         putPatch: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
         id: ROW_ID3,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
         rowVersion: '03',
         columns: ['id', 'name'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID2,
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID3,
@@ -1177,43 +1154,39 @@ describe('view-syncer/cvr', () => {
 
       const {
         // Deleted keys
-        ['/vs/cvr/abc123/meta/queries/oneHash']: _removed,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: _row3,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
-          _row1Put,
-        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
-          _row3Put,
-        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: _removedToo,
+        ['/vs/cvr/abc123/m/q/oneHash']: _removed,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: _row3,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: _row1Put,
+        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: _row3Put,
+        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash']: _removedToo,
         ...remainingState
       } = initialState;
 
       await expectStorage(storage, {
         ...remainingState,
-        ['/vs/cvr/abc123/meta/version']: updated.version,
-        ['/vs/cvr/abc123/meta/lastActive']: {
+        ['/vs/cvr/abc123/m/version']: updated.version,
+        ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
-        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
           queriedColumns: {id: ['twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH1}`]:
-          {
-            type: 'row',
-            op: 'put',
-            id: ROW_ID1,
-            rowVersion: '03',
-            columns: ['id'],
-          } satisfies RowPatch,
-        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH3}`]:
-          {
-            type: 'row',
-            op: 'del',
-            id: ROW_ID3,
-          } satisfies RowPatch,
-        ['/vs/cvr/abc123/patches/meta/1ba.01/queries/oneHash']: {
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          rowVersion: '03',
+          columns: ['id'],
+        } satisfies RowPatch,
+        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH3}`]: {
+          type: 'row',
+          op: 'del',
+          id: ROW_ID3,
+        } satisfies RowPatch,
+        ['/vs/cvr/abc123/p/m/1ba.01/q/oneHash']: {
           type: 'query',
           op: 'del',
           id: 'oneHash',
