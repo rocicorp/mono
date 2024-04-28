@@ -324,9 +324,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     delete this._cvr.queries[queryID];
 
     const newVersion = this._ensureNewVersion();
-    this._writes.del(this._paths.query({id: queryID}));
-    this._writes.del(this._paths.queryPatch(putPatch, {id: queryID}));
-    this._writes.put(this._paths.queryPatch(newVersion, {id: queryID}), {
+    void this._writes.del(this._paths.query({id: queryID}));
+    void this._writes.del(this._paths.queryPatch(putPatch, {id: queryID}));
+    void this._writes.put(this._paths.queryPatch(newVersion, {id: queryID}), {
       type: 'query',
       op: 'del',
       id: queryID,
@@ -415,8 +415,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       const putPatch = this._ensureNewVersion();
       const rowRecord: RowRecord = {...received, putPatch};
 
-      this._writes.put(rowRecordPath, rowRecord);
-      this._writes.put(this._paths.rowPatch(putPatch, id), {
+      void this._writes.put(rowRecordPath, rowRecord);
+      void this._writes.put(this._paths.rowPatch(putPatch, id), {
         type: 'row',
         op: 'put',
         id,
@@ -472,9 +472,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     if (Object.keys(queriedColumns).length === 0) {
       // No columns are referenced by any query. Delete the row.
-      this._writes.del(rowRecordPath);
-      this._writes.del(this._paths.rowPatch(existing.putPatch, existing.id));
-      this._writes.put(this._paths.rowPatch(newVersion, existing.id), {
+      void this._writes.del(rowRecordPath);
+      void this._writes.del(
+        this._paths.rowPatch(existing.putPatch, existing.id),
+      );
+      void this._writes.put(this._paths.rowPatch(newVersion, existing.id), {
         type: 'row',
         op: 'del',
         id: existing.id,
@@ -486,9 +488,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const putPatch = newVersion;
     const {id, rowVersion} = received ?? existing;
     const rowRecord: RowRecord = {id, rowVersion, putPatch, queriedColumns};
-    this._writes.put(rowRecordPath, rowRecord);
-    this._writes.del(this._paths.rowPatch(existing.putPatch, id));
-    this._writes.put(this._paths.rowPatch(putPatch, id), {
+    void this._writes.put(rowRecordPath, rowRecord);
+    void this._writes.del(this._paths.rowPatch(existing.putPatch, id));
+    void this._writes.put(this._paths.rowPatch(putPatch, id), {
       type: 'row',
       op: 'put',
       id,
