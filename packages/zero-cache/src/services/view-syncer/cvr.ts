@@ -1,7 +1,6 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
-import type {DeepReadonly} from 'shared/src/json.js';
 import {difference, equals, intersection, union} from 'shared/src/set-utils.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import type {Storage} from '../../storage/storage.js';
@@ -35,7 +34,13 @@ type CVR = {
 };
 
 /** Exported immutable CVR type. */
-export type CVRSnapshot = DeepReadonly<CVR>;
+export type CVRSnapshot = {
+  readonly id: string;
+  readonly version: CVRVersion;
+  readonly lastActive: LastActive;
+  readonly clients: Readonly<Record<string, ClientRecord>>;
+  readonly queries: Readonly<Record<string, QueryRecord>>;
+};
 
 /** Loads the CVR metadata from storage. */
 export async function loadCVR(
@@ -60,10 +65,10 @@ export async function loadCVR(
       cvr.version = value as CVRVersion;
     } else if (key.endsWith('/lastActive')) {
       cvr.lastActive = value as LastActive;
-    } else if (key.includes('/clients/')) {
+    } else if (key.includes('/c/')) {
       const client = value as ClientRecord;
       cvr.clients[client.id] = client;
-    } else if (key.includes('/queries/')) {
+    } else if (key.includes('/q/')) {
       const query = value as QueryRecord;
       cvr.queries[query.id] = query;
     }
