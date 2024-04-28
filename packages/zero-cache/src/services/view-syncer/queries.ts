@@ -230,7 +230,7 @@ class TableSchemas {
   }
 }
 
-function union<T>(...arrs: (readonly T[] | undefined)[]): T[] {
+export function union<T>(...arrs: (readonly T[] | undefined)[]): T[] {
   const set = new Set(arrs.flatMap(a => a ?? []));
   return [...set];
 }

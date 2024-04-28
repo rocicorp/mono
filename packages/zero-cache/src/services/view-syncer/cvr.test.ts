@@ -5,6 +5,7 @@ import {
   initStorage,
   runWithDurableObjectStorage,
 } from '../../test/do.js';
+import {rowKeyHash} from '../../types/row-key.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
@@ -20,6 +21,9 @@ import type {
   LastActive,
   QueryPatch,
   QueryRecord,
+  RowID,
+  RowPatch,
+  RowRecord,
 } from './schema/types.js';
 
 describe('view-syncer/cvr', () => {
@@ -470,6 +474,25 @@ describe('view-syncer/cvr', () => {
     });
   });
 
+  const ROW_ID1: RowID = {
+    schema: 'public',
+    table: 'issues',
+    rowKey: {id: '123'},
+  };
+  const ROW_HASH1 = rowKeyHash(ROW_ID1.rowKey);
+  const ROW_ID2: RowID = {
+    schema: 'public',
+    table: 'issues',
+    rowKey: {id: '321'},
+  };
+  const ROW_HASH2 = rowKeyHash(ROW_ID2.rowKey);
+  const ROW_ID3: RowID = {
+    schema: 'public',
+    table: 'issues',
+    rowKey: {id: '888'},
+  };
+  const ROW_HASH3 = rowKeyHash(ROW_ID3.rowKey);
+
   test('desired to got', async () => {
     const initialState = {
       ['/vs/cvr/abc123/meta/version']: {
@@ -483,6 +506,32 @@ describe('view-syncer/cvr', () => {
         ast: {table: 'issues'},
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
       } satisfies QueryRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        putPatch: {stateVersion: '1a0'},
+        id: ROW_ID1,
+        rowVersion: '03',
+        queriedColumns: {id: ['twoHash']},
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+        putPatch: {stateVersion: '1a0'},
+        id: ROW_ID2,
+        rowVersion: '03',
+        queriedColumns: {id: ['twoHash']},
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        rowVersion: '03',
+        columns: ['id'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID2,
+        rowVersion: '03',
+        columns: ['id'],
+      } satisfies RowPatch,
       ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
     };
 
@@ -496,7 +545,60 @@ describe('view-syncer/cvr', () => {
         '1aa',
       );
 
-      updater.ensureGotten('oneHash', 'serverOneHash');
+      updater.executed('oneHash', 'serverOneHash');
+      // Simulate receiving different views rows at different time times.
+      updater.received(
+        new Map([
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            {
+              record: {
+                id: ROW_ID1,
+                rowVersion: '03',
+                queriedColumns: {id: ['oneHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+      updater.received(
+        new Map([
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            {
+              record: {
+                id: ROW_ID1,
+                rowVersion: '03',
+                queriedColumns: {id: ['oneHash'], name: ['oneHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`,
+            {
+              record: {
+                id: ROW_ID3,
+                rowVersion: '09',
+                queriedColumns: {id: ['oneHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+
+      expect(await updater.updateRowRecords()).toEqual({
+        patchRows: [],
+        deleteRows: [],
+      });
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
@@ -520,8 +622,14 @@ describe('view-syncer/cvr', () => {
       const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
+      const {
+        [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH1}`]:
+          _removed,
+        ...remainingState
+      } = initialState;
+
       await expectStorage(storage, {
-        ...initialState,
+        ...remainingState,
         ['/vs/cvr/abc123/meta/version']: updated.version,
         ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
         ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: {
@@ -532,6 +640,34 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/meta/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+          id: ROW_ID1,
+          putPatch: updated.version,
+          queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+          rowVersion: '03',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+          id: ROW_ID3,
+          putPatch: updated.version,
+          queriedColumns: {id: ['oneHash']},
+          rowVersion: '09',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID1,
+            rowVersion: '03',
+            columns: ['id', 'name'],
+          } satisfies RowPatch,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID3,
+            rowVersion: '09',
+            columns: ['id'],
+          } satisfies RowPatch,
       });
     });
   });
@@ -552,6 +688,45 @@ describe('view-syncer/cvr', () => {
         transformationVersion: {stateVersion: '1aa'},
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        id: ROW_ID1,
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+        rowVersion: '03',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+        putPatch: {stateVersion: '1a0'},
+        id: ROW_ID2,
+        rowVersion: '03',
+        queriedColumns: {id: ['twoHash']},
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+        id: ROW_ID3,
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['oneHash']},
+        rowVersion: '09',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        rowVersion: '03',
+        columns: ['id', 'name'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID2,
+        rowVersion: '03',
+        columns: ['id'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID3,
+        rowVersion: '09',
+        columns: ['id'],
+      } satisfies RowPatch,
       ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
     };
 
@@ -565,7 +740,47 @@ describe('view-syncer/cvr', () => {
         '1ba',
       );
 
-      updater.ensureGotten('oneHash', 'serverTwoHash');
+      updater.executed('oneHash', 'serverTwoHash');
+      updater.received(
+        new Map([
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            {
+              record: {
+                id: ROW_ID1,
+                rowVersion: '03',
+                queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+      updater.received(
+        new Map([
+          [
+            // Now referencing ROW_ID2 instead of ROW_ID3
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`,
+            {
+              record: {
+                id: ROW_ID2,
+                rowVersion: '09',
+                queriedColumns: {id: ['oneHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+
+      expect(await updater.updateRowRecords()).toEqual({
+        patchRows: [[ROW_ID1, ['name']]],
+        deleteRows: [ROW_ID3],
+      });
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
@@ -589,13 +804,420 @@ describe('view-syncer/cvr', () => {
       const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
+      const {
+        // Deleted keys
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: _row3,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
+          _row1Put,
+        [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]:
+          _row2Put,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
+          _row3Put,
+        ...remainingState
+      } = initialState;
+
       await expectStorage(storage, {
-        ...initialState,
+        ...remainingState,
         ['/vs/cvr/abc123/meta/version']: updated.version,
         ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
         ['/vs/cvr/abc123/meta/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+          id: ROW_ID1,
+          putPatch: updated.version,
+          queriedColumns: {id: ['twoHash', 'oneHash']},
+          rowVersion: '03',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+          putPatch: updated.version,
+          id: ROW_ID2,
+          rowVersion: '09',
+          queriedColumns: {id: ['twoHash', 'oneHash']},
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH1}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID1,
+            rowVersion: '03',
+            columns: ['id'],
+          } satisfies RowPatch,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH2}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID2,
+            rowVersion: '09',
+            columns: ['id'],
+          } satisfies RowPatch,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH3}`]:
+          {
+            type: 'row',
+            op: 'del',
+            id: ROW_ID3,
+          } satisfies RowPatch,
+      });
+    });
+  });
+
+  test('multiple executed queries', async () => {
+    const initialState = {
+      ['/vs/cvr/abc123/meta/version']: {
+        stateVersion: '1ba',
+      } satisfies CVRVersion,
+      ['/vs/cvr/abc123/meta/lastActive']: {
+        epochMillis: Date.UTC(2024, 3, 23),
+      } satisfies LastActive,
+      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        id: 'oneHash',
+        ast: {table: 'issues'},
+        desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+        transformationHash: 'oneServerHash',
+        transformationVersion: {stateVersion: '1aa'},
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+      } satisfies QueryRecord,
+      ['/vs/cvr/abc123/meta/queries/twoHash']: {
+        id: 'twoHash',
+        ast: {table: 'issues'},
+        desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+        transformationHash: 'twoServerHash',
+        transformationVersion: {stateVersion: '1aa'},
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+      } satisfies QueryRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        id: ROW_ID1,
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+        rowVersion: '03',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+        putPatch: {stateVersion: '1a0'},
+        id: ROW_ID2,
+        rowVersion: '03',
+        queriedColumns: {id: ['twoHash']},
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+        id: ROW_ID3,
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['oneHash']},
+        rowVersion: '09',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        rowVersion: '03',
+        columns: ['id', 'name'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID2,
+        rowVersion: '03',
+        columns: ['id'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID3,
+        rowVersion: '09',
+        columns: ['id'],
+      } satisfies RowPatch,
+      ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
+    };
+
+    await runWithDurableObjectStorage(async storage => {
+      await initStorage(storage, initialState);
+
+      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const updater = new CVRQueryDrivenUpdater(
+        new DurableStorage(storage),
+        cvr,
+        '1ba',
+      );
+
+      updater.executed('oneHash', 'oneServerHash');
+      updater.executed('twoHash', 'twoServerHash');
+      updater.received(
+        new Map([
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            {
+              record: {
+                id: ROW_ID1,
+                rowVersion: '03',
+                queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+      updater.received(
+        new Map([
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`,
+            {
+              record: {
+                id: ROW_ID1,
+                rowVersion: '03',
+                queriedColumns: {id: ['twoHash'], desc: ['twoHash']}, // Now referencing "desc"
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+      updater.received(
+        new Map([
+          [
+            // Now referencing ROW_ID2 instead of ROW_ID3
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`,
+            {
+              record: {
+                id: ROW_ID2,
+                rowVersion: '09',
+                queriedColumns: {id: ['oneHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+      updater.received(
+        new Map([
+          [
+            `/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`,
+            {
+              record: {
+                id: ROW_ID2,
+                rowVersion: '09',
+                queriedColumns: {id: ['twoHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+
+      expect(await updater.updateRowRecords()).toEqual({
+        patchRows: [[ROW_ID1, ['name']]],
+        deleteRows: [ROW_ID3],
+      });
+
+      // Same last active day (no index change), but different hour.
+      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      expect(updated).toEqual({
+        ...cvr,
+        version: {stateVersion: '1ba', minorVersion: 1},
+        lastActive: {epochMillis: 1713834000000},
+      } satisfies CVRSnapshot);
+
+      // Verify round tripping.
+      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      expect(reloaded).toEqual(updated);
+
+      const {
+        // Deleted keys
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: _row3,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
+          _row1Put,
+        [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]:
+          _row2Put,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
+          _row3Put,
+        ...remainingState
+      } = initialState;
+
+      await expectStorage(storage, {
+        ...remainingState,
+        ['/vs/cvr/abc123/meta/version']: updated.version,
+        ['/vs/cvr/abc123/meta/queries/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/meta/lastActive']: {
+          epochMillis: Date.UTC(2024, 3, 23, 1),
+        } satisfies LastActive,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+          id: ROW_ID1,
+          putPatch: updated.version,
+          queriedColumns: {id: ['twoHash', 'oneHash'], desc: ['twoHash']},
+          rowVersion: '03',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+          putPatch: updated.version,
+          id: ROW_ID2,
+          rowVersion: '09',
+          queriedColumns: {id: ['oneHash', 'twoHash']},
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH1}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID1,
+            rowVersion: '03',
+            columns: ['id', 'desc'],
+          } satisfies RowPatch,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH2}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID2,
+            rowVersion: '09',
+            columns: ['id'],
+          } satisfies RowPatch,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH3}`]:
+          {
+            type: 'row',
+            op: 'del',
+            id: ROW_ID3,
+          } satisfies RowPatch,
+      });
+    });
+  });
+
+  test('removed query', async () => {
+    const initialState = {
+      ['/vs/cvr/abc123/meta/version']: {
+        stateVersion: '1ba',
+      } satisfies CVRVersion,
+      ['/vs/cvr/abc123/meta/lastActive']: {
+        epochMillis: Date.UTC(2024, 3, 23),
+      } satisfies LastActive,
+      ['/vs/cvr/abc123/meta/queries/oneHash']: {
+        id: 'oneHash',
+        ast: {table: 'issues'},
+        desiredBy: {},
+        transformationHash: 'oneServerHash',
+        transformationVersion: {stateVersion: '1aa'},
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+      } satisfies QueryRecord,
+      ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
+      ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: {
+        type: 'query',
+        op: 'put',
+        id: 'oneHash',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+        id: ROW_ID1,
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+        rowVersion: '03',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH2}`]: {
+        putPatch: {stateVersion: '1a0'},
+        id: ROW_ID2,
+        rowVersion: '03',
+        queriedColumns: {id: ['twoHash']},
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: {
+        id: ROW_ID3,
+        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['oneHash']},
+        rowVersion: '09',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        rowVersion: '03',
+        columns: ['id', 'name'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1a0/rows/public/issues/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID2,
+        rowVersion: '03',
+        columns: ['id'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID3,
+        rowVersion: '09',
+        columns: ['id'],
+      } satisfies RowPatch,
+    };
+
+    await runWithDurableObjectStorage(async storage => {
+      await initStorage(storage, initialState);
+
+      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const updater = new CVRQueryDrivenUpdater(
+        new DurableStorage(storage),
+        cvr,
+        '1ba',
+      );
+
+      updater.removed('oneHash');
+      expect(await updater.updateRowRecords()).toEqual({
+        patchRows: [[ROW_ID1, ['name']]],
+        deleteRows: [ROW_ID3],
+      });
+
+      // Same last active day (no index change), but different hour.
+      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      expect(updated).toEqual({
+        ...cvr,
+        version: {stateVersion: '1ba', minorVersion: 1},
+        queries: {},
+        lastActive: {epochMillis: 1713834000000},
+      } satisfies CVRSnapshot);
+
+      // Verify round tripping.
+      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      expect(reloaded).toEqual(updated);
+
+      const {
+        // Deleted keys
+        ['/vs/cvr/abc123/meta/queries/oneHash']: _removed,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH3}`]: _row3,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH1}`]:
+          _row1Put,
+        [`/vs/cvr/abc123/patches/data/1aa.01/rows/public/issues/${ROW_HASH3}`]:
+          _row3Put,
+        ['/vs/cvr/abc123/patches/meta/1aa.01/queries/oneHash']: _removedToo,
+        ...remainingState
+      } = initialState;
+
+      await expectStorage(storage, {
+        ...remainingState,
+        ['/vs/cvr/abc123/meta/version']: updated.version,
+        ['/vs/cvr/abc123/meta/lastActive']: {
+          epochMillis: Date.UTC(2024, 3, 23, 1),
+        } satisfies LastActive,
+        [`/vs/cvr/abc123/data/rows/public/issues/${ROW_HASH1}`]: {
+          id: ROW_ID1,
+          putPatch: updated.version,
+          queriedColumns: {id: ['twoHash']},
+          rowVersion: '03',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH1}`]:
+          {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID1,
+            rowVersion: '03',
+            columns: ['id'],
+          } satisfies RowPatch,
+        [`/vs/cvr/abc123/patches/data/1ba.01/rows/public/issues/${ROW_HASH3}`]:
+          {
+            type: 'row',
+            op: 'del',
+            id: ROW_ID3,
+          } satisfies RowPatch,
+        ['/vs/cvr/abc123/patches/meta/1ba.01/queries/oneHash']: {
+          type: 'query',
+          op: 'del',
+          id: 'oneHash',
+        } satisfies QueryPatch,
       });
     });
   });
