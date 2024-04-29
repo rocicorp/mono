@@ -1,5 +1,5 @@
 import * as v from 'shared/src/valita.js';
-import {cfCall} from './fetch.js';
+import {FetchResultError, cfCall} from './fetch.js';
 import type {AccountAccess} from './resources.js';
 import type {SelectSchema, SelectStatement} from './sql.js';
 
@@ -32,9 +32,12 @@ export class Analytics {
       body: statement,
     });
     if (!resp.ok) {
-      throw new Error(
-        `${this.#resource}: ${resp.status}: ${await resp.text()}`,
-      );
+      const body = await resp.text();
+      try {
+        throw new FetchResultError(JSON.parse(body), this.#resource);
+      } catch (e) {
+        throw new Error(`${this.#resource}: ${resp.status}: ${body}`);
+      }
     }
     return resp;
   }
