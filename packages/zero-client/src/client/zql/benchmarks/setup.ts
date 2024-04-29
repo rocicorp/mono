@@ -3,6 +3,7 @@ import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
 import {makeReplicacheContext} from '../../../../../zql/src/zql/context/replicache-context.js';
 import {EntityQuery} from '../../../../../zql/src/zql/query/entity-query.js';
+import {ENTITIES_KEY_PREFIX} from '../../keys.js';
 
 export type Track = {
   id: string;
@@ -183,17 +184,35 @@ export function setupUsingReplicache() {
     subscriptionAdded(_ast) {},
     subscriptionRemoved(_ast) {},
   });
-  const trackQuery = new EntityQuery<{track: Track}>(c, 'track');
-  const albumQuery = new EntityQuery<{album: Album}>(c, 'album');
-  const artistQuery = new EntityQuery<{artist: Artist}>(c, 'artist');
-  const playlistQuery = new EntityQuery<{playlist: Playlist}>(c, 'playlist');
+  const trackQuery = new EntityQuery<{track: Track}>(
+    c,
+    'track',
+    ENTITIES_KEY_PREFIX,
+  );
+  const albumQuery = new EntityQuery<{album: Album}>(
+    c,
+    'album',
+    ENTITIES_KEY_PREFIX,
+  );
+  const artistQuery = new EntityQuery<{artist: Artist}>(
+    c,
+    'artist',
+    ENTITIES_KEY_PREFIX,
+  );
+  const playlistQuery = new EntityQuery<{playlist: Playlist}>(
+    c,
+    'playlist',
+    ENTITIES_KEY_PREFIX,
+  );
   const trackArtistQuery = new EntityQuery<{trackArtist: TrackArtist}>(
     c,
     'trackArtist',
+    ENTITIES_KEY_PREFIX,
   );
   const playlistTrackQuery = new EntityQuery<{playlistTrack: PlaylistTrack}>(
     c,
     'playlistTrack',
+    ENTITIES_KEY_PREFIX,
   );
 
   return {

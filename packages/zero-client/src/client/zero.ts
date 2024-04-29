@@ -54,6 +54,7 @@ import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
+import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {LogOptions, createLogOptions} from './log-options.js';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -1432,7 +1433,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     const context = this.#zqlContext;
     // Not using parse yet
     for (const name of Object.keys(queryDefs)) {
-      rv[name] = new EntityQuery(context, name);
+      rv[name] = new EntityQuery(context, name, ENTITIES_KEY_PREFIX);
     }
 
     return rv as MakeEntityQueriesFromQueryDefs<QD>;
