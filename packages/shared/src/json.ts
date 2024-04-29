@@ -1,6 +1,6 @@
-import {assertObject, throwInvalidType} from './asserts.js';
-import {skipAssertJSONValue} from './config.js';
-import {hasOwn} from './has-own.js';
+import { assertObject, throwInvalidType } from './asserts.js';
+import { skipAssertJSONValue } from './config.js';
+import { hasOwn } from './has-own.js';
 
 /** The values that can be represented in JSON */
 export type JSONValue =
@@ -197,6 +197,13 @@ export function isJSONValue(v: unknown, path: Path): v is JSONValue {
       return objectIsJSONObject(v as Record<string, unknown>, path);
   }
   return false;
+}
+
+export function isJSONObject(v: unknown, path: Path): v is JSONObject {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  return objectIsJSONObject(v as Record<string, unknown>, path);
 }
 
 function objectIsJSONObject(

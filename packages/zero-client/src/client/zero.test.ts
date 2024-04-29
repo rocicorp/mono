@@ -8,16 +8,13 @@ import type {
   ReadonlyJSONValue,
   WriteTransaction,
 } from 'reflect-shared/src/mod.js';
-import type {
-  PullRequestV1,
-  PushRequestV1,
-  ReadonlyJSONObject,
-} from 'replicache';
+import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
 import type {EntityQuery} from '../mod.js';
+import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
@@ -1710,8 +1707,8 @@ test('ensure we get the same query object back', () => {
   };
   const r = zeroForTest({
     queries: {
-      issue: (v: ReadonlyJSONObject) => v as Issue,
-      comment: (v: ReadonlyJSONObject) => v as Comment,
+      issue: v => v as Issue,
+      comment: v => v as Comment,
     },
   });
   const issueQuery1 = r.query.issue;
@@ -1737,8 +1734,8 @@ test('the type of collection should be inferred from options with parse', () => 
   };
   const r = zeroForTest({
     queries: {
-      issue: (v: ReadonlyJSONObject) => v as Issue,
-      comment: (v: ReadonlyJSONObject) => v as Comment,
+      issue: v => v as Issue,
+      comment: v => v as Comment,
     },
   });
 
@@ -1752,4 +1749,109 @@ test('the type of collection should be inferred from options with parse', () => 
   const commentQ: EntityQuery<{comment: Comment}> = r.query.comment;
   expect(issueQ).not.undefined;
   expect(commentQ).not.undefined;
+});
+
+suite('CRUD', () => {
+  type Issue = {
+    id: string;
+    title: string;
+  };
+  type Comment = {
+    id: string;
+    issueID: string;
+    text: string;
+  };
+  const makeZero = () =>
+    zeroForTest({
+      queries: {
+        issue: v => v as Issue,
+        comment: v => v as Comment,
+      },
+      mutators: {
+        async customSet(tx, x: {id: string; value: number}) {
+          await tx.set(x.id, x.value);
+        },
+      },
+    });
+
+  test('create', async () => {
+    const z = makeZero();
+
+    const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
+    await createIssue({id: 'a', title: 'A'});
+    expect(await z.query.issue.select('*').prepare().exec()).toEqual([
+      {id: 'a', title: 'A'},
+    ]);
+
+    // create again should not change anything
+    await createIssue({id: 'a', title: 'Again'});
+    expect(await z.query.issue.select('*').prepare().exec()).toEqual([
+      {id: 'a', title: 'A'},
+    ]);
+  });
+
+  test('set', async () => {
+    const z = makeZero();
+
+    await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '1', text: 'A text'},
+    ]);
+
+    const setComment: (comment: Comment) => Promise<void> =
+      z.mutate.comment.set;
+    await setComment({id: 'b', issueID: '2', text: 'B text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '1', text: 'A text'},
+      {id: 'b', issueID: '2', text: 'B text'},
+    ]);
+
+    // set allows updating
+    await setComment({id: 'a', issueID: '11', text: 'AA text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '11', text: 'AA text'},
+      {id: 'b', issueID: '2', text: 'B text'},
+    ]);
+  });
+
+  test('update', async () => {
+    const z = makeZero();
+
+    await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '1', text: 'A text'},
+    ]);
+
+    const updateComment: (comment: Update<Comment>) => Promise<void> =
+      z.mutate.comment.update;
+    await updateComment({id: 'a', issueID: '11', text: 'AA text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '11', text: 'AA text'},
+    ]);
+
+    await updateComment({id: 'a', text: 'AAA text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '11', text: 'AAA text'},
+    ]);
+
+    // update is a noop if not existing
+    await updateComment({id: 'b', issueID: '2', text: 'B text'});
+    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+      {id: 'a', issueID: '11', text: 'AAA text'},
+    ]);
+  });
+
+  test('do not expose _zero_crud', () => {
+    const z = zeroForTest({
+      queries: {
+        issue: v => v as {id: string; title: string},
+      },
+      mutators: {
+        m: () => Promise.resolve(1),
+      },
+    });
+
+    // @ts-expect-error Should not expose _zero_crud through mutate.
+    expect(z.mutate._zero_crud).toBeUndefined();
+  });
 });
