@@ -23,7 +23,7 @@ test('basic materialization', () => {
   const calledWith: (readonly E1[])[] = [];
   stmt.subscribe(data => {
     calledWith.push(data);
-  });
+  }, false);
 
   const items = [
     {id: 'a', n: 1},
@@ -156,7 +156,7 @@ test('destroying the statement stops updating the view', async () => {
   let callCount = 0;
   stmt.subscribe(_ => {
     ++callCount;
-  });
+  }, false);
 
   const items = [
     {id: 'a', n: 1},

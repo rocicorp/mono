@@ -39,6 +39,7 @@ export default function Home() {
   if (!zero) {
     return null;
   }
+
   return (
     <div className="repliear">
       <ZeroProvider zero={zero}>

@@ -12,8 +12,8 @@ export const ISSUE_ENTITY_NAME = `issue`;
 export const ISSUE_KEY_PREFIX = `${ISSUE_ENTITY_NAME}/`;
 export const issueKey = (id: string) =>
   `${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}${id}`;
-const labelKey = (id: string) => `label/${id}`;
-const issueLabelKey = (id: string) => `issueLabel/${id}`;
+const labelKey = (id: string) => `${ENTITIES_KEY_PREFIX}label/${id}`;
+const issueLabelKey = (id: string) => `${ENTITIES_KEY_PREFIX}issueLabel/${id}`;
 export const issueID = (key: string) => {
   if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}`)) {
     throw new Error(`Invalid issue key: ${key}`);

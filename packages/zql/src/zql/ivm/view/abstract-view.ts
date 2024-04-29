@@ -78,9 +78,12 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
     }
   }
 
-  on(listener: (s: CT, v: Version) => void) {
+  on(listener: (s: CT, v: Version) => void, initialData = true) {
     this.#listeners.add(listener);
     this.#context.subscriptionAdded(this.#ast);
+    if (this.#hydrated && initialData) {
+      listener(this.value, this.#lastSeenVersion);
+    }
     return () => {
       this.off(listener);
     };

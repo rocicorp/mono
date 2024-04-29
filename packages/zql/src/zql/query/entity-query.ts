@@ -473,6 +473,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
   prepare(): Statement<Return> {
     return new Statement<Return>(this.#context, this.#ast);
   }
+
+  toString() {
+    return JSON.stringify(this.#ast, null, 2);
+  }
 }
 
 const astWeakMap = new WeakMap<WeakKey, AST>();
