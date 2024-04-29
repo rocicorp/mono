@@ -66,7 +66,7 @@ export class DifferenceStream<T extends object> {
   /**
    * Downstreams that requested historical data.
    */
-  readonly #requestors = new Map<number, Listener<T>>();
+  readonly #requestors = new Map<number, Set<Listener<T>>>();
 
   addDownstream(listener: Listener<T>) {
     this.#downstreams.add(listener);
@@ -84,8 +84,10 @@ export class DifferenceStream<T extends object> {
     reply?: Reply | undefined,
   ) {
     if (reply) {
-      const requestor = this.#requestors.get(reply.replyingTo);
-      must(requestor).newDifference(version, data, reply);
+      const requestors = this.#requestors.get(reply.replyingTo);
+      for (const requestor of must(requestors)) {
+        requestor.newDifference(version, data, reply);
+      }
     } else {
       for (const listener of this.#downstreams) {
         listener.newDifference(version, data, reply);
@@ -94,21 +96,28 @@ export class DifferenceStream<T extends object> {
   }
 
   messageUpstream(message: Request, downstream: Listener<T>): void {
-    this.#requestors.set(message.id, downstream);
+    let existing = this.#requestors.get(message.id);
+    if (!existing) {
+      existing = new Set();
+      this.#requestors.set(message.id, existing);
+    }
+    existing.add(downstream);
     this.#upstream?.messageUpstream(message);
   }
 
   commit(version: Version) {
     if (this.#requestors.size > 0) {
-      for (const requestor of this.#requestors.values()) {
-        try {
-          requestor.commit(version);
-        } catch (e) {
-          // `commit` notifies client code
-          // If client code throws we'll put IVM back into a consistent state
-          // by clearing the requestors.
-          this.#requestors.clear();
-          throw e;
+      for (const requestors of this.#requestors.values()) {
+        for (const requestor of requestors) {
+          try {
+            requestor.commit(version);
+          } catch (e) {
+            // `commit` notifies client code
+            // If client code throws we'll put IVM back into a consistent state
+            // by clearing the requestors.
+            this.#requestors.clear();
+            throw e;
+          }
         }
       }
       this.#requestors.clear();
@@ -244,9 +253,14 @@ export class DifferenceStream<T extends object> {
 
   removeDownstream(listener: Listener<T>) {
     this.#downstreams.delete(listener);
-    for (const entry of this.#requestors) {
-      if (entry[1] === listener) {
-        this.#requestors.delete(entry[0]);
+    for (const [id, requestors] of this.#requestors) {
+      for (const entry of requestors) {
+        if (entry === listener) {
+          requestors.delete(entry);
+          if (requestors.size === 0) {
+            this.#requestors.delete(id);
+          }
+        }
       }
     }
     if (this.#downstreams.size === 0) {
