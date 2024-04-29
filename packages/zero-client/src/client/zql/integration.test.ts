@@ -1,12 +1,18 @@
-import {generate} from '@rocicorp/rails';
+import {generate as generateRails} from '@rocicorp/rails';
 import {joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {exp, not, or} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import fc from 'fast-check';
 import * as v from 'shared/src/valita.js';
 import {expect, test} from 'vitest';
+import type {Entity} from '../../mod.js';
 import {nanoid} from '../../util/nanoid.js';
+import {ENTITIES_KEY_PREFIX} from '../keys.js';
 import {Zero, getInternalReplicacheImplForTesting} from '../zero.js';
+
+function generate<E extends Entity>(name: string, parse?: (v: unknown) => E) {
+  return generateRails<E>(`${ENTITIES_KEY_PREFIX}${name}`, parse);
+}
 
 export async function tickAFewTimes(n = 10, time = 0) {
   for (let i = 0; i < n; i++) {
@@ -748,7 +754,7 @@ test('0 copy', async () => {
   const replicacheIssues = (await rep.query(tx =>
     tx
       .scan({
-        prefix: 'issue',
+        prefix: `${ENTITIES_KEY_PREFIX}issue`,
       })
       .toArray(),
   )) as Issue[];

@@ -199,6 +199,13 @@ export function isJSONValue(v: unknown, path: Path): v is JSONValue {
   return false;
 }
 
+export function isJSONObject(v: unknown, path: Path): v is JSONObject {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  return objectIsJSONObject(v as Record<string, unknown>, path);
+}
+
 function objectIsJSONObject(
   v: Record<string, unknown>,
   path: Path,

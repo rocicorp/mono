@@ -17,6 +17,7 @@ import {AggArray, Aggregate, Max, Min, isAggregate} from './agg.js';
 import {Statement} from './statement.js';
 
 type NotUndefined<T> = Exclude<T, undefined>;
+type WeakKey = object;
 
 export type ValueAsOperatorInput<
   V,
@@ -390,6 +391,8 @@ export class EntityQuery<From extends FromSet, Return = []> {
       expr = exprOrField;
     }
 
+    expr = qualify(this.#ast, expr);
+
     let cond: WhereCondition<From>;
     const exitingWhereOrHaving = this.#ast[whereOrHaving] as
       | WhereCondition<From>
@@ -477,6 +480,28 @@ export function astForTesting(q: WeakKey): AST {
 }
 
 type ArrayOfAtLeastTwo<T> = [T, T, ...T[]];
+
+export function qualify<F extends FromSet>(
+  ast: AST,
+  expr: WhereCondition<F>,
+): WhereCondition<F> {
+  switch (expr.op) {
+    case 'AND':
+    case 'OR':
+      return {
+        ...expr,
+        conditions: expr.conditions.map(c => qualify(ast, c)),
+      };
+    default:
+      if (ast.joins !== undefined || expr.field.startsWith(ast.table + '.')) {
+        return expr;
+      }
+      return {
+        ...expr,
+        field: `${ast.table}.${expr.field}`,
+      };
+  }
+}
 
 export function or<F extends FromSet>(
   ...conditions: ArrayOfAtLeastTwo<WhereCondition<F>>

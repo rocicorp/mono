@@ -3,6 +3,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
+import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {zeroForTest} from './test-utils.js';
 import {version} from './version.js';
 
@@ -30,7 +31,7 @@ async function testBasics(userID: string) {
       async inc(tx, id: string) {
         const rows = await q.exec();
         const value = rows[0]?.value ?? 0;
-        await tx.set(`e/${id}`, {id, value: value + 1});
+        await tx.set(`${ENTITIES_KEY_PREFIX}e/${id}`, {id, value: value + 1});
       },
     },
     queries: {
