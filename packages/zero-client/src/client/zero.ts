@@ -425,7 +425,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       this.#materialite,
       (name, cb) =>
         rep.subscriptions.add(
-          new ZQLWatchSubscription(name, cb as WatchCallback),
+          new ZQLWatchSubscription(
+            `${ENTITIES_KEY_PREFIX}${name}`,
+            cb as WatchCallback,
+          ),
         ),
       {
         subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),

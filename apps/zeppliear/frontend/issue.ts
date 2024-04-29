@@ -6,14 +6,17 @@ import type {
 import {z} from 'zod';
 import type {Immutable} from './immutable';
 
+const ENTITIES_KEY_PREFIX = 'e/';
+
 export const ISSUE_ENTITY_NAME = `issue`;
 export const ISSUE_KEY_PREFIX = `${ISSUE_ENTITY_NAME}/`;
-export const issueKey = (id: string) => `${ISSUE_KEY_PREFIX}${id}`;
+export const issueKey = (id: string) =>
+  `${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}${id}`;
 export const issueID = (key: string) => {
-  if (!key.startsWith(ISSUE_KEY_PREFIX)) {
+  if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}`)) {
     throw new Error(`Invalid issue key: ${key}`);
   }
-  return key.substring(ISSUE_KEY_PREFIX.length);
+  return key.substring(`${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}`.length);
 };
 
 export const enum Priority {
@@ -196,12 +199,12 @@ export function issueFromKeyAndValue(
 export const COMMENT_ENTITY_NAME = `comment`;
 export const COMMENT_KEY_PREFIX = `${COMMENT_ENTITY_NAME}/`;
 export const commentKey = (commentID: string) =>
-  `${COMMENT_KEY_PREFIX}${commentID}`;
+  `${ENTITIES_KEY_PREFIX}${COMMENT_KEY_PREFIX}${commentID}`;
 export const commentID = (key: string) => {
-  if (!key.startsWith(COMMENT_KEY_PREFIX)) {
+  if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${COMMENT_KEY_PREFIX}`)) {
     throw new Error(`Invalid comment key: ${key}`);
   }
-  return key.substring(COMMENT_KEY_PREFIX.length);
+  return key.substring(`${ENTITIES_KEY_PREFIX}${COMMENT_KEY_PREFIX}`.length);
 };
 
 export const commentSchema = z.object({
@@ -223,12 +226,12 @@ export async function putIssueComment(
 
 export const MEMBER_KEY_PREFIX = `member/`;
 export const memberKey = (memberId: string) =>
-  `${MEMBER_KEY_PREFIX}${memberId}`;
+  `${ENTITIES_KEY_PREFIX}${MEMBER_KEY_PREFIX}${memberId}`;
 export const memberID = (key: string) => {
-  if (!key.startsWith(MEMBER_KEY_PREFIX)) {
+  if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${MEMBER_KEY_PREFIX}`)) {
     throw new Error(`Invalid member key: ${key}`);
   }
-  return key.substring(MEMBER_KEY_PREFIX.length);
+  return key.substring(`${ENTITIES_KEY_PREFIX}${MEMBER_KEY_PREFIX}`.length);
 };
 
 export async function getMember(
