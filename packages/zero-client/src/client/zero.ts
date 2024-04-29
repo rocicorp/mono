@@ -52,6 +52,12 @@ import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
+import {
+  MakeMutateObject,
+  WithCRUD,
+  makeCRUDMutate,
+  makeCRUDMutator,
+} from './crud.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
 import {toWSString, type HTTPString, type WSString} from './http-string.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
@@ -198,7 +204,7 @@ export function getInternalReplicacheImplForTesting<
 export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   readonly version = version;
 
-  readonly #rep: ReplicacheImpl<MD>;
+  readonly #rep: ReplicacheImpl<WithCRUD<MD>>;
   readonly #server: HTTPString | null;
   readonly userID: string;
   readonly roomID: string;
@@ -374,11 +380,16 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     });
     const logOptions = this.#logOptions;
 
-    const replicacheOptions: ReplicacheOptions<MD> = {
+    const replicacheMutators = {
+      ...((options.mutators ?? {}) as MD),
+      ['_zero_crud']: makeCRUDMutator(queries),
+    };
+
+    const replicacheOptions: ReplicacheOptions<WithCRUD<MD>> = {
       schemaVersion: options.schemaVersion,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
-      mutators: options.mutators,
+      mutators: replicacheMutators,
       name: `zero-${userID}-${roomID}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
@@ -420,6 +431,8 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       {roomID, clientID: rep.clientID},
       logOptions.logSink,
     );
+
+    this.mutate = makeCRUDMutate<MD, QD>(queries, rep.mutate);
 
     this.#zqlContext = new ZeroContext(
       this.#materialite,
@@ -524,11 +537,11 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   }
 
   /**
-   * The registered mutators (see [[ZeroOptions.mutators]]).
+   * This consists of the custom mutators passed into the options as mutators
+   * (see [[ZeroOptions.mutators]]) and the CRUD mutators for the entities
+   * passed into the options as queries.
    */
-  get mutate() {
-    return this.#rep.mutate;
-  }
+  readonly mutate: MakeMutateObject<MD, QD>;
 
   /**
    * Whether this Zero instance has been closed. Once a Zero instance has

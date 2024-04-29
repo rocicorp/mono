@@ -1,6 +1,6 @@
-import {entityIDSchema} from './entity.js';
-import {jsonSchema} from 'shared/src/json-schema.js';
+import {jsonObjectSchema, jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
+import {entityIDSchema} from './entity.js';
 
 /**
  * Inserts if entity with id does not already exist.
@@ -9,7 +9,7 @@ const createOpSchema = v.object({
   op: v.literal('create'),
   entityType: v.string(),
   id: entityIDSchema,
-  value: jsonSchema,
+  value: jsonObjectSchema,
 });
 
 /**
@@ -20,7 +20,7 @@ const setOpSchema = v.object({
   op: v.literal('set'),
   entityType: v.string(),
   id: entityIDSchema,
-  value: jsonSchema,
+  value: jsonObjectSchema,
 });
 
 /**
@@ -30,7 +30,7 @@ const updateOpSchema = v.object({
   op: v.literal('update'),
   entityType: v.string(),
   id: entityIDSchema,
-  partialValue: jsonSchema,
+  partialValue: jsonObjectSchema,
 });
 
 /**
@@ -38,6 +38,7 @@ const updateOpSchema = v.object({
  */
 const deleteOpSchema = v.object({
   op: v.literal('delete'),
+  entityType: v.string(),
   id: entityIDSchema,
 });
 
