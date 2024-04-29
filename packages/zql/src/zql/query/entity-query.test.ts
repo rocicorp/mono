@@ -21,6 +21,8 @@ function ast(q: WeakKey): AST {
   return rest;
 }
 
+const entitiesPrefix = 'e/';
+
 const context = makeTestContext();
 test('query types', () => {
   const sym = Symbol('sym');
@@ -33,7 +35,7 @@ test('query types', () => {
     [sym]: boolean;
   };
 
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
   // @ts-expect-error - selecting fields that do not exist in the schema is a type error
   q.select('does-not-exist');
@@ -160,8 +162,16 @@ test('join types', () => {
     name: string;
   };
 
-  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
-  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+  const issueQuery = new EntityQuery<{issue: Issue}>(
+    context,
+    'issue',
+    entitiesPrefix,
+  );
+  const userQuery = new EntityQuery<{user: User}>(
+    context,
+    'user',
+    entitiesPrefix,
+  );
 
   expectTypeOf(
     issueQuery
@@ -244,8 +254,16 @@ test('left join types', () => {
     name: string;
   };
 
-  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
-  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+  const issueQuery = new EntityQuery<{issue: Issue}>(
+    context,
+    'issue',
+    entitiesPrefix,
+  );
+  const userQuery = new EntityQuery<{user: User}>(
+    context,
+    'user',
+    entitiesPrefix,
+  );
 
   const r1 = issueQuery
     .leftJoin(userQuery, 'owner', 'ownerId', 'id')
@@ -455,7 +473,7 @@ test('FieldValue type', () => {
     FieldAsOperatorInput<E, 'optB', 'NOT LIKE'>
   >().toEqualTypeOf<never>();
 
-  const q = new EntityQuery<E>(context, 'e');
+  const q = new EntityQuery<E>(context, 'e', entitiesPrefix);
   q.where('n', '<', 1);
   q.where('s', '>', 'a');
   q.where('b', '=', true);
@@ -510,7 +528,7 @@ const dummyObject: E1 = {
 };
 describe('ast', () => {
   test('select', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     // each individual field is selectable on its own
     Object.keys(dummyObject).forEach(k => {
@@ -541,7 +559,7 @@ describe('ast', () => {
   });
 
   test('where', () => {
-    let q = new EntityQuery<{e1: E1}>(context, 'e1');
+    let q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     // where is applied
     q = q.where('id', '=', 'a');
@@ -626,7 +644,7 @@ describe('ast', () => {
   });
 
   test('limit', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
     expect(ast(q.limit(10))).toEqual({
       orderBy: [['id'], 'asc'],
       table: 'e1',
@@ -635,7 +653,7 @@ describe('ast', () => {
   });
 
   test('asc/desc', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     // order methods update the ast
     expect(ast(q.asc('id'))).toEqual({
@@ -653,7 +671,7 @@ describe('ast', () => {
   });
 
   test('independent of method call order', () => {
-    const base = new EntityQuery<{e1: E1}>(context, 'e1');
+    const base = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     const calls = {
       select(q: typeof base) {
@@ -692,7 +710,7 @@ describe('ast', () => {
   });
 
   test('or', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     expect(ast(q.where(or(exp('a', '=', 123), exp('c', '=', 'abc'))))).toEqual({
       table: 'e1',
@@ -817,7 +835,7 @@ describe('ast', () => {
   });
 
   test('consecutive wheres/ands should be merged', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     expect(
       ast(
@@ -952,7 +970,7 @@ describe('ast', () => {
   });
 
   test('consecutive ors', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
     expect(
       ast(q.where(or(exp('a', '=', 123), exp('a', '=', 456)))).where,
@@ -1056,7 +1074,7 @@ describe('NOT', () => {
 
     for (const c of cases) {
       test(`${c.in} -> ${c.out}`, () => {
-        const q = new EntityQuery<{e1: E1}>(context, 'e1');
+        const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
         expect(ast(q.where(not(exp('a', c.in, 1)))).where).toEqual({
           op: c.out,
           field: 'a',

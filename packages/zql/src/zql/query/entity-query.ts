@@ -7,8 +7,8 @@ import type {
   InOps,
   LikeOps,
   OrderOps,
-  SimpleOperator,
   SetOps,
+  SimpleOperator,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -226,14 +226,16 @@ type SimpleCondition<
 
 export class EntityQuery<From extends FromSet, Return = []> {
   readonly #ast: AST;
+  readonly #prefix: string;
   readonly #name: string;
   readonly #context: Context;
 
-  constructor(context: Context, tableName: string, ast?: AST) {
+  constructor(context: Context, tableName: string, prefix: string, ast?: AST) {
     this.#ast = ast ?? {
       table: tableName,
       orderBy: [['id'], 'asc'],
     };
+    this.#prefix = prefix;
     this.#name = tableName;
     this.#context = context;
 
@@ -263,6 +265,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     return new EntityQuery<From, CombineSelections<From, Fields>[]>(
       this.#context,
       this.#name,
+      this.#prefix,
       {
         ...this.#ast,
         select: [...select],
@@ -284,7 +287,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     },
     Return
   > {
-    return new EntityQuery(this.#context, this.#name, {
+    return new EntityQuery(this.#context, this.#name, this.#prefix, {
       ...this.#ast,
       joins: [
         ...(this.#ast.joins ?? []),
@@ -309,7 +312,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     },
     Return
   > {
-    return new EntityQuery(this.#context, this.#name, {
+    return new EntityQuery(this.#context, this.#name, this.#prefix, {
       ...this.#ast,
       joins: [
         ...(this.#ast.joins ?? []),
@@ -324,10 +327,15 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
-      ...this.#ast,
-      groupBy: x as string[],
-    });
+    return new EntityQuery<From, Return>(
+      this.#context,
+      this.#name,
+      this.#prefix,
+      {
+        ...this.#ast,
+        groupBy: x as string[],
+      },
+    );
   }
 
   where(expr: WhereCondition<From>): EntityQuery<From, Return>;
@@ -398,10 +406,15 @@ export class EntityQuery<From extends FromSet, Return = []> {
       };
     }
 
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
-      ...this.#ast,
-      [whereOrHaving]: cond as Condition,
-    });
+    return new EntityQuery<From, Return>(
+      this.#context,
+      this.#name,
+      this.#prefix,
+      {
+        ...this.#ast,
+        [whereOrHaving]: cond as Condition,
+      },
+    );
   }
 
   limit(n: number) {
@@ -409,10 +422,15 @@ export class EntityQuery<From extends FromSet, Return = []> {
       throw new Misuse('Limit already set');
     }
 
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
-      ...this.#ast,
-      limit: n,
-    });
+    return new EntityQuery<From, Return>(
+      this.#context,
+      this.#name,
+      this.#prefix,
+      {
+        ...this.#ast,
+        limit: n,
+      },
+    );
   }
 
   asc(...x: SimpleSelector<From>[]) {
@@ -420,10 +438,15 @@ export class EntityQuery<From extends FromSet, Return = []> {
       x.push('id');
     }
 
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
-      ...this.#ast,
-      orderBy: [x, 'asc'],
-    });
+    return new EntityQuery<From, Return>(
+      this.#context,
+      this.#name,
+      this.#prefix,
+      {
+        ...this.#ast,
+        orderBy: [x, 'asc'],
+      },
+    );
   }
 
   desc(...x: SimpleSelector<From>[]) {
@@ -431,10 +454,15 @@ export class EntityQuery<From extends FromSet, Return = []> {
       x.push('id');
     }
 
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
-      ...this.#ast,
-      orderBy: [x, 'desc'],
-    });
+    return new EntityQuery<From, Return>(
+      this.#context,
+      this.#name,
+      this.#prefix,
+      {
+        ...this.#ast,
+        orderBy: [x, 'desc'],
+      },
+    );
   }
 
   prepare(): Statement<Return> {

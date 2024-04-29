@@ -9,10 +9,14 @@ const e1 = z.object({
   n: z.number(),
   optStr: z.string().optional(),
 });
+
 type E1 = z.infer<typeof e1>;
+
+const entitiesPrefix = 'e/';
+
 test('basic materialization', () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
   const stmt = q.select('id', 'n').where('n', '>', 100).prepare();
 
@@ -45,7 +49,7 @@ test('basic materialization', () => {
 test('sorted materialization', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
   const ascStatement = q.select('id').asc('n').prepare();
   const descStatement = q.select('id').desc('n').prepare();
 
@@ -78,7 +82,7 @@ test('sorted materialization', async () => {
 test('sorting is stable via suffixing the primary key to the order', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
   const ascStatement = q.select('id').asc('n').prepare();
   const descStatement = q.select('id').desc('n').prepare();
@@ -145,7 +149,7 @@ test('makeComparator', () => {
 
 test('destroying the statement stops updating the view', async () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
 
   const stmt = q.select('id', 'n').prepare();
 
@@ -173,7 +177,10 @@ test('destroying the statement stops updating the view', async () => {
 
 test('ensure we get callbacks when subscribing and unsubscribing', () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix).select(
+    'id',
+    'n',
+  );
 
   const statement = q.prepare();
   const unsubscribe = statement.subscribe(_ => {

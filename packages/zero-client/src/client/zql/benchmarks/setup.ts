@@ -178,22 +178,41 @@ function newRep() {
 }
 
 export function setupUsingReplicache() {
+  const entitiesPrefix = 'e/';
   const r = newRep();
   const c = makeReplicacheContext(r, {
     subscriptionAdded(_ast) {},
     subscriptionRemoved(_ast) {},
   });
-  const trackQuery = new EntityQuery<{track: Track}>(c, 'track');
-  const albumQuery = new EntityQuery<{album: Album}>(c, 'album');
-  const artistQuery = new EntityQuery<{artist: Artist}>(c, 'artist');
-  const playlistQuery = new EntityQuery<{playlist: Playlist}>(c, 'playlist');
+  const trackQuery = new EntityQuery<{track: Track}>(
+    c,
+    'track',
+    entitiesPrefix,
+  );
+  const albumQuery = new EntityQuery<{album: Album}>(
+    c,
+    'album',
+    entitiesPrefix,
+  );
+  const artistQuery = new EntityQuery<{artist: Artist}>(
+    c,
+    'artist',
+    entitiesPrefix,
+  );
+  const playlistQuery = new EntityQuery<{playlist: Playlist}>(
+    c,
+    'playlist',
+    entitiesPrefix,
+  );
   const trackArtistQuery = new EntityQuery<{trackArtist: TrackArtist}>(
     c,
     'trackArtist',
+    entitiesPrefix,
   );
   const playlistTrackQuery = new EntityQuery<{playlistTrack: PlaylistTrack}>(
     c,
     'playlistTrack',
+    entitiesPrefix,
   );
 
   return {
