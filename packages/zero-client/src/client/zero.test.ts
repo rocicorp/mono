@@ -19,6 +19,7 @@ import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
 import type {EntityQuery} from '../mod.js';
 import type {WSString} from './http-string.js';
+import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
@@ -701,11 +702,11 @@ test('smokeTest', async () => {
       mutators: {
         addData: async (tx: WriteTransaction, issues: Issue[]) => {
           for (const issue of issues) {
-            await tx.set(`issues/${issue.id}`, issue);
+            await tx.set(`${ENTITIES_KEY_PREFIX}issues/${issue.id}`, issue);
           }
         },
         del: async (tx: WriteTransaction, id: string) => {
-          await tx.del(`issues/${id}`);
+          await tx.del(`${ENTITIES_KEY_PREFIX}issues/${id}`);
         },
       },
       ...serverOptions,
@@ -1575,7 +1576,7 @@ test('kvStore option', async () => {
       kvStore,
       mutators: {
         putE: async (tx, val: E) => {
-          await tx.set(`e/${val.id}`, val);
+          await tx.set(`${ENTITIES_KEY_PREFIX}e/${val.id}`, val);
         },
       },
       queries: {

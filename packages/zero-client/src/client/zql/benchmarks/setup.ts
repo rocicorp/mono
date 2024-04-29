@@ -1,8 +1,9 @@
-import {generate} from '@rocicorp/rails';
+import {generate as generateRails} from '@rocicorp/rails';
 import {nanoid} from 'nanoid';
 import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
 import {makeReplicacheContext} from '../../../../../zql/src/zql/context/replicache-context.js';
 import {EntityQuery} from '../../../../../zql/src/zql/query/entity-query.js';
+import type {Entity} from '../../../mod.js';
 import {ENTITIES_KEY_PREFIX} from '../../keys.js';
 
 export type Track = {
@@ -40,6 +41,10 @@ export type PlaylistTrack = {
   trackId: string;
   position: number;
 };
+
+function generate<E extends Entity>(name: string, parse?: (v: unknown) => E) {
+  return generateRails<E>(`${ENTITIES_KEY_PREFIX}${name}`, parse);
+}
 
 const {
   init: initTrack,
@@ -119,20 +124,22 @@ export const mutators = {
     },
   ) => {
     const promises: Promise<void>[] = [];
+    const set = (name: string, entity: Entity) =>
+      tx.set(`${ENTITIES_KEY_PREFIX}${name}/${entity.id}`, entity);
     for (const track of items.tracks ?? []) {
-      promises.push(tx.set(`track/${track.id}`, track));
+      promises.push(set('track', track));
     }
     for (const album of items.albums ?? []) {
-      promises.push(tx.set(`album/${album.id}`, album));
+      promises.push(set('album', album));
     }
     for (const artist of items.artists ?? []) {
-      promises.push(tx.set(`artist/${artist.id}`, artist));
+      promises.push(set('artist', artist));
     }
     for (const playlist of items.playlists ?? []) {
-      promises.push(tx.set(`playlist/${playlist.id}`, playlist));
+      promises.push(set('playlist', playlist));
     }
     for (const trackArtist of items.trackArtists ?? []) {
-      promises.push(tx.set(`trackArtist/${trackArtist.id}`, trackArtist));
+      promises.push(set('trackArtist', trackArtist));
     }
 
     await Promise.all(promises);
@@ -148,20 +155,22 @@ export const mutators = {
     },
   ) => {
     const promises: Promise<boolean>[] = [];
+    const del = (name: string, id: string) =>
+      tx.del(`${ENTITIES_KEY_PREFIX}${name}/${id}`);
     for (const track of items.tracks ?? []) {
-      promises.push(tx.del(`track/${track.id}`));
+      promises.push(del('track', track.id));
     }
     for (const album of items.albums ?? []) {
-      promises.push(tx.del(`album/${album.id}`));
+      promises.push(del('album', album.id));
     }
     for (const artist of items.artists ?? []) {
-      promises.push(tx.del(`artist/${artist.id}`));
+      promises.push(del('artist', artist.id));
     }
     for (const playlist of items.playlists ?? []) {
-      promises.push(tx.del(`playlist/${playlist.id}`));
+      promises.push(del('playlist', playlist.id));
     }
     for (const trackArtist of items.trackArtists ?? []) {
-      promises.push(tx.del(`trackArtist/${trackArtist.id}`));
+      promises.push(del('trackArtist', trackArtist.id));
     }
 
     await Promise.all(promises);
