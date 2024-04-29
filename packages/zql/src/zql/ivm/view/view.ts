@@ -1,5 +1,5 @@
 export interface View<T> {
-  on(fn: (value: T, version: number) => void): () => void;
+  on(fn: (value: T, version: number) => void, initialData: boolean): () => void;
   /**
    * If there are 0 listeners left after removing the given listener,
    * the signal is destroyed.

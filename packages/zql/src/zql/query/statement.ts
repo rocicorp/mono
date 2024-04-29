@@ -60,9 +60,12 @@ export class Statement<Return> implements IStatement<Return> {
     return this.#materialization as View<Return>;
   }
 
-  subscribe(cb: (value: MakeHumanReadable<Return>) => void) {
+  subscribe(
+    cb: (value: MakeHumanReadable<Return>) => void,
+    initialData = true,
+  ) {
     const materialization = this.#getMaterialization();
-    return materialization.on(cb);
+    return materialization.on(cb, initialData);
   }
 
   // Note: should we provide a version that takes a callback?
@@ -81,7 +84,7 @@ export class Statement<Return> implements IStatement<Return> {
       const cleanup = materialization.on(value => {
         resolve(value as MakeHumanReadable<Return>);
         cleanup();
-      });
+      }, true);
     }) as Promise<MakeHumanReadable<Return>>;
   }
 
