@@ -19,6 +19,8 @@ import {
   RowRecord,
   cmpVersions,
   metaRecordSchema,
+  oneAfter,
+  rowPatchSchema,
   rowRecordSchema,
   type CVRVersion,
   type ClientRecord,
@@ -115,8 +117,7 @@ export class CVRUpdater {
    */
   protected _ensureNewVersion(): CVRVersion {
     if (cmpVersions(this._orig.version, this._cvr.version) === 0) {
-      const {stateVersion, minorVersion = 0} = this._cvr.version;
-      this._setVersion({stateVersion, minorVersion: minorVersion + 1});
+      this._setVersion(oneAfter(this._cvr.version));
     }
     return this._cvr.version;
   }
@@ -417,11 +418,18 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *
    * This is Step [5] of the
    * [CVR Sync Algorithm](https://www.notion.so/replicache/Sync-and-Client-View-Records-CVR-a18e02ec3ec543449ea22070855ff33d?pvs=4#7874f9b80a514be2b8cd5cf538b88d37).
+   *
+   * @param generatePatchesAfter Generates delete and constrain patches from the
+   *        version after `generatePatchesAfter`.
    */
-  async deleteUnreferencedColumnsAndRows() {
+  async deleteUnreferencedColumnsAndRows(generatePatchesAfter: CVRVersion) {
     // patchOps to send to the client.
-    const patchRows: [row: RowID, constrain: string[]][] = [];
-    const deleteRows: RowID[] = [];
+    const patchRows: [
+      patchVersion: CVRVersion,
+      row: RowID,
+      constrain: string[],
+    ][] = [];
+    const deleteRows: [patchVersion: CVRVersion, row: RowID][] = [];
 
     const removedOrExecutedQueryIDs = union(
       this.#removedQueryIDs,
@@ -444,6 +452,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       rowRecordSchema,
       2000, // Arbitrary batch size. Determines how many row records are in memory at a time.
     );
+    const newlyPatched = new Set<string>();
     for await (const existingRows of allRowRecords) {
       for (const [path, existing] of existingRows) {
         const clientOp = this.#deleteUnreferencedColumnsOrRow(
@@ -451,14 +460,61 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           existing,
           removedOrExecutedQueryIDs,
         );
+        if (clientOp === null) {
+          continue;
+        }
+        newlyPatched.add(path);
         if (Array.isArray(clientOp)) {
-          patchRows.push(clientOp);
-        } else if (clientOp) {
-          deleteRows.push(clientOp);
+          patchRows.push([this._cvr.version, ...clientOp]);
         } else {
-          assert(clientOp === null); // Mostly code documentation here.
+          deleteRows.push([this._cvr.version, clientOp]);
         }
       }
+    }
+
+    if (cmpVersions(generatePatchesAfter, this._orig.version) < 0) {
+      // Scan the CVR patch log to generate patchRows and deleteRows to catch clients up to
+      // the original CVR version.
+      const catchupRowPatches = this._writes.batchScan(
+        {
+          // Include all row patches starting from the version after `generatePatchesAfter`.
+          start: {
+            key: this._paths.rowPatchVersionPrefix(
+              oneAfter(generatePatchesAfter),
+            ),
+          },
+          // `end` is exclusive but we want to include patches in the `_orig.version`.
+          end: this._paths.rowPatchVersionPrefix(oneAfter(this._orig.version)),
+        },
+        rowPatchSchema,
+        2000,
+      );
+      // Note: Order of patches matter; although a delete-patch clears the put-patch that it
+      // replaces, a put-patch does not clear a previous delete-patch (because tombstones are
+      // not tracked). Therefore, delete patches are only sent if they are not overridden by
+      // a later put. This is determined from:
+      // - The `puts` encountered in this scan in the range (fromCVRVersion, this._orig.version)
+      // - The `#receivedRows` and `newlyPatched` rows.
+      const deletes = new Map<string, [CVRVersion, RowID]>();
+      for await (const batch of catchupRowPatches) {
+        for (const [path, rowPatch] of batch) {
+          const patchVersion = this._paths.versionFromPatchPath(path);
+          const rowPath = this._paths.row(rowPatch.id);
+          if (rowPatch.op === 'put') {
+            patchRows.push([patchVersion, rowPatch.id, rowPatch.columns]);
+            deletes.delete(rowPath); // Overrides a previously seen delete patch.
+          } else if (
+            !this.#receivedRows.has(rowPath) &&
+            !newlyPatched.has(rowPath)
+          ) {
+            // Tentatively add the delete patch if it was not received. It may be removed
+            // by a later put patch.
+            deletes.set(rowPath, [patchVersion, rowPatch.id]);
+          }
+        }
+      }
+      // Any remaining deletes do not conflict with any puts.
+      deleteRows.push(...[...deletes.values()]);
     }
 
     // Note: This only includes deletes and "constrain" patches from the previous CVR version to the new one.
