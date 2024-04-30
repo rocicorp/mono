@@ -11,6 +11,8 @@ export interface Source<T extends object> {
 
   // We could remove `seed` and implicitly deduce it from the `add` method
   seed(values: Iterable<T>): this;
+  isSeeded(): boolean;
+  awaitSeeding(): PromiseLike<void>;
 }
 
 export interface SourceInternal {

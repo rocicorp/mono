@@ -56,27 +56,27 @@ export abstract class SetSource<T extends object> implements Source<T> {
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
         if (
-          !(
-            this.#pending.length > 0 ||
-            (this.#seeded && this.#historyRequests.size > 0)
-          )
+          this.#seeded &&
+          !(this.#pending.length > 0 || this.#historyRequests.size > 0)
         ) {
           this.#noChange = true;
           return;
         }
 
-        if (this.#seeded) {
-          const historyRequests = this.#historyRequests;
-          // we have to reset here since `onCommitted` is called in the next micro task
-          // hopefully https://github.com/rocicorp/mono/pull/1641 reverts that
+        // We know that the first diff to a source is the seed
+        this.#seeded = true;
+
+        const historyRequests = this.#historyRequests;
+        if (historyRequests.size > 0) {
           this.#historyRequests = new Map();
-          for (const request of historyRequests.values()) {
-            this.#stream.newDifference(
-              this._materialite.getVersion(),
-              asEntries(this.#tree, request),
-              createPullResponseMessage(request),
-            );
-          }
+        }
+
+        for (const request of historyRequests.values()) {
+          this.#stream.newDifference(
+            this._materialite.getVersion(),
+            asEntries(this.#tree, request),
+            createPullResponseMessage(request),
+          );
         }
 
         for (let i = 0; i < this.#pending.length; i++) {
@@ -192,9 +192,25 @@ export abstract class SetSource<T extends object> implements Source<T> {
     for (const v of values) {
       this.#tree = this.#tree.add(v);
     }
-    this.#seeded = true;
     this._materialite.addDirtySource(this.#internal);
     return this;
+  }
+
+  awaitSeeding(): PromiseLike<void> {
+    if (this.#seeded) {
+      return Promise.resolve();
+    }
+    return new Promise(resolve => {
+      const listener = () => {
+        this.off(listener);
+        resolve();
+      };
+      this.on(listener);
+    });
+  }
+
+  isSeeded(): boolean {
+    return this.#seeded;
   }
 
   get(key: T): T | undefined {
