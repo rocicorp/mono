@@ -111,6 +111,10 @@ export class ReplicacheTest<
   set onRecoverMutations(v) {
     this.#impl.onRecoverMutations = v;
   }
+
+  get impl() {
+    return this.#impl;
+  }
 }
 
 export const reps: Set<ReplicacheTest> = new Set();

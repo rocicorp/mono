@@ -68,6 +68,28 @@ test('name cannot be empty', () => {
   ).to.throw(/name.*must be non-empty/);
 });
 
+test('cookie', async () => {
+  const pullURL = 'https://pull.com/rep';
+  const rep = await replicacheForTesting('test2', {
+    pullURL,
+  });
+  expect(await rep.impl.cookie).to.equal(null);
+
+  let pullDone = false;
+  fetchMock.post(pullURL, () => {
+    pullDone = true;
+    return makePullResponseV1(rep.clientID, 0, [], 'newCookie');
+  });
+
+  await rep.pull();
+
+  await tickUntil(() => pullDone);
+  await tickAFewTimes();
+
+  expect(await rep.impl.cookie).to.equal('newCookie');
+  fetchMock.reset();
+});
+
 test('get, has, scan on empty db', async () => {
   const rep = await replicacheForTesting('test2');
   async function t(tx: ReadTransaction) {
