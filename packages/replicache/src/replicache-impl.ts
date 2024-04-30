@@ -19,7 +19,12 @@ import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
-import {DEFAULT_HEAD_NAME, isLocalMetaDD31, LocalMeta} from './db/commit.js';
+import {
+  baseSnapshotFromHash,
+  DEFAULT_HEAD_NAME,
+  isLocalMetaDD31,
+  LocalMeta,
+} from './db/commit.js';
 import {readFromDefaultHead} from './db/read.js';
 import {rebaseMutationAndCommit} from './db/rebase.js';
 import {newWriteLocal} from './db/write.js';
@@ -121,6 +126,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
+import {assertCookie, type Cookie} from './cookies.js';
 
 declare const TESTING: boolean;
 
@@ -1468,6 +1474,20 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   query<R>(body: (tx: ReadTransaction) => Promise<R> | R): Promise<R> {
     return this.#queryInternal(body);
+  }
+
+  get cookie(): Promise<Cookie> {
+    return withRead(this.memdag, async dagRead => {
+      const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
+      if (!mainHeadHash) {
+        throw new Error('Internal no main head found');
+      }
+      const baseSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
+      const baseSnapshotMeta = baseSnapshot.meta;
+      const cookie = baseSnapshotMeta.cookieJSON;
+      assertCookie(cookie);
+      return cookie;
+    });
   }
 
   #queryInternal: QueryInternal = async body => {
