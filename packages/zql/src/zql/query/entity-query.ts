@@ -349,6 +349,18 @@ export class EntityQuery<From extends FromSet, Return = []> {
     );
   }
 
+  distinct<Field extends SimpleSelector<From>>(field: Field) {
+    return new EntityQuery<From, Return>(
+      this.#context,
+      this.#name,
+      this.#prefix,
+      {
+        ...this.#ast,
+        distinct: field,
+      },
+    );
+  }
+
   where(expr: WhereCondition<From>): EntityQuery<From, Return>;
   where<K extends SimpleSelector<From>, Op extends SimpleOperator>(
     field: K,

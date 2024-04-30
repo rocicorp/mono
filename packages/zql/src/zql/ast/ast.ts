@@ -39,6 +39,7 @@ export type AST = {
   readonly table: string;
   readonly alias?: string | undefined;
   readonly select?: [selector: string, alias: string][] | undefined;
+  readonly distinct?: string | undefined;
   readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {
   //   readonly alias: string;
