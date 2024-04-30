@@ -28,7 +28,7 @@ describe('view-syncer/client-handler', () => {
       // Client 1 is already caught up.
       new ClientHandler(lc, 'id1', '121', subscriptions[0]),
       // Client 2 is a bit behind.
-      new ClientHandler(lc, 'id2', '120.01', subscriptions[1]),
+      new ClientHandler(lc, 'id2', '120:01', subscriptions[1]),
       // Client 3 is more behind.
       new ClientHandler(lc, 'id3', '11z', subscriptions[2]),
     ];
@@ -88,7 +88,7 @@ describe('view-syncer/client-handler', () => {
     expect(received[1]).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '120.01', cookie: '121'},
+        {pokeID: '121', baseCookie: '120:01', cookie: '121'},
       ] satisfies PokeStartMessage,
       [
         'pokePart',

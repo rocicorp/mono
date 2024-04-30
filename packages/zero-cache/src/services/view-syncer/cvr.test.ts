@@ -219,7 +219,7 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           clientID: 'dooClient,',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/p/m/1a9.01/q/oneHash/c/fooClient']: {
+        ['/vs/cvr/abc123/p/m/1a9:01/q/oneHash/c/fooClient']: {
           type: 'query',
           op: 'put',
           id: 'oneHash',
@@ -380,13 +380,13 @@ describe('view-syncer/cvr', () => {
         } satisfies QueryPatch,
         ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash/c/dooClient']: {
           type: 'query',
-          op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
+          op: 'del', // The obsoleted 'put' patch at 1a9:01 is deleted too.
           id: 'oneHash',
           clientID: 'dooClient',
         } satisfies QueryPatch,
         ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash/c/fooClient']: {
           type: 'query',
-          op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
+          op: 'del', // The obsoleted 'put' patch at 1a9:01 is deleted too.
           id: 'oneHash',
           clientID: 'fooClient',
         } satisfies QueryPatch,
@@ -423,7 +423,7 @@ describe('view-syncer/cvr', () => {
         },
         putPatch: {stateVersion: '1a9', minorVersion: 2},
       } satisfies QueryRecord,
-      ['/vs/cvr/abc123/p/m/1a9.01/q/oneHash/c/fooClient']: {
+      ['/vs/cvr/abc123/p/m/1a9:01/q/oneHash/c/fooClient']: {
         type: 'query',
         op: 'put',
         id: 'oneHash',
@@ -867,21 +867,21 @@ describe('view-syncer/cvr', () => {
           rowVersion: '09',
           queriedColumns: {id: ['oneHash', 'twoHash']},
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH1}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID1,
           rowVersion: '03',
           columns: ['id'],
         } satisfies RowPatch,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH2}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH2}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID2,
           rowVersion: '09',
           columns: ['id'],
         } satisfies RowPatch,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH3}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH3}`]: {
           type: 'row',
           op: 'del',
           id: ROW_ID3,
@@ -1095,21 +1095,21 @@ describe('view-syncer/cvr', () => {
           rowVersion: '09',
           queriedColumns: {id: ['oneHash', 'twoHash']},
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH1}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID1,
           rowVersion: '03',
           columns: ['id', 'desc'],
         } satisfies RowPatch,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH2}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH2}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID2,
           rowVersion: '09',
           columns: ['id'],
         } satisfies RowPatch,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH3}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH3}`]: {
           type: 'row',
           op: 'del',
           id: ROW_ID3,
@@ -1232,19 +1232,19 @@ describe('view-syncer/cvr', () => {
           queriedColumns: {id: ['twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH1}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID1,
           rowVersion: '03',
           columns: ['id'],
         } satisfies RowPatch,
-        [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH3}`]: {
+        [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH3}`]: {
           type: 'row',
           op: 'del',
           id: ROW_ID3,
         } satisfies RowPatch,
-        ['/vs/cvr/abc123/p/m/1ba.01/q/oneHash']: {
+        ['/vs/cvr/abc123/p/m/1ba:01/q/oneHash']: {
           type: 'query',
           op: 'del',
           id: 'oneHash',
