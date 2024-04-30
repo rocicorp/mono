@@ -1,10 +1,10 @@
+import type {Immutable} from 'shared/src/immutable';
 import type {
   ReadonlyJSONValue,
   ReadTransaction,
   WriteTransaction,
 } from 'zero-client';
 import {z} from 'zod';
-import type {Immutable} from './immutable';
 
 const ENTITIES_KEY_PREFIX = 'e/';
 

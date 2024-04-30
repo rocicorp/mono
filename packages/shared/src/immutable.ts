@@ -11,4 +11,5 @@ export type Immutable<T> = T extends Primitive
 // This does not deal with Maps or Sets (or Date or RegExp or ...).
 
 export type ImmutableArray<T> = ReadonlyArray<Immutable<T>>;
+
 export type ImmutableObject<T> = {readonly [K in keyof T]: Immutable<T[K]>};

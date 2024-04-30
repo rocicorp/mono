@@ -1,6 +1,7 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
+import type {Immutable} from 'shared/src/immutable.js';
 import {difference, equals, intersection, union} from 'shared/src/set-utils.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import type {Storage} from '../../storage/storage.js';
@@ -34,13 +35,7 @@ type CVR = {
 };
 
 /** Exported immutable CVR type. */
-export type CVRSnapshot = {
-  readonly id: string;
-  readonly version: CVRVersion;
-  readonly lastActive: LastActive;
-  readonly clients: Readonly<Record<string, ClientRecord>>;
-  readonly queries: Readonly<Record<string, QueryRecord>>;
-};
+export type CVRSnapshot = Immutable<CVR>;
 
 /** Loads the CVR metadata from storage. */
 export async function loadCVR(
