@@ -61,7 +61,7 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
   readonly #messages: M[] = [];
   // Sentinel value signaling that the subscription is "done" and no more
   // messages can be added.
-  #sentinel: 'canceled' | Error | undefined;
+  #sentinel: 'canceled' | Error | undefined = undefined;
 
   #coalesce: ((curr: M, prev: M) => M) | undefined;
   #consumed: (prev: M) => void;

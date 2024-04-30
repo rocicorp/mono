@@ -11,5 +11,5 @@ export function id(name: string): string {
  * Escapes and comma-separates a list of identifiers.
  */
 export function idList(names: Iterable<string>): string {
-  return [...names].map(name => id(name)).join(',');
+  return Array.from(names, name => id(name)).join(',');
 }
