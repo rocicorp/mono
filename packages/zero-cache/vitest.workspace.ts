@@ -4,6 +4,7 @@ import {defineWorkspace} from 'vitest/config';
 export default defineWorkspace([
   defineWorkersConfig({
     test: {
+      name: 'miniflare',
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
       poolOptions: {
         workers: {
@@ -15,20 +16,19 @@ export default defineWorkspace([
           },
         },
       },
-      name: 'zero-cache',
     },
   }),
   {
     test: {
-      include: ['tool/*.test.ts'],
       name: 'node',
+      include: ['tool/*.test.ts'],
       environment: 'node',
     },
   },
   {
     test: {
-      include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
       name: 'pg',
+      include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
     },
   },
 ]);
