@@ -1,4 +1,5 @@
 export * from './ast.js';
+export * from './change-desired-queries.js';
 export * from './clients-patch.js';
 export * from './connect.js';
 export * from './down.js';

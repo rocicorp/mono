@@ -4,16 +4,24 @@ import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {zeroForTest} from './test-utils.js';
+import {MockSocket, zeroForTest} from './test-utils.js';
 import {version} from './version.js';
+import sinon from 'sinon';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
   try {
+    sinon.replace(
+      globalThis,
+      'WebSocket',
+      MockSocket as unknown as typeof WebSocket,
+    );
     await testBasics(userID);
     postMessage(undefined);
   } catch (ex) {
     postMessage(ex);
+  } finally {
+    sinon.restore();
   }
 };
 

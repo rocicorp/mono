@@ -136,9 +136,10 @@ export class TestZero<
     );
   }
 
-  triggerConnected(): Promise<void> {
+  async triggerConnected(): Promise<void> {
     const msg: ConnectedMessage = ['connected', {wsid: 'wsidx'}];
-    return this.triggerMessage(msg);
+    await this.triggerMessage(msg);
+    await this.waitForConnectionState(ConnectionState.Connected);
   }
 
   triggerPong(): Promise<void> {

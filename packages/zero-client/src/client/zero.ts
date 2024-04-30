@@ -1,7 +1,6 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
 import type {Entity} from '@rocicorp/zql/src/entity.js';
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
 import {ZeroContext} from '@rocicorp/zql/src/zql/context/zero-context.js';
 import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
@@ -79,6 +78,8 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from 'zero-protocol/src/pull.js';
+import {QueryManager} from './query-manager.js';
+import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.js';
 
 export type QueryDefs = {
   readonly [name: string]: Entity;
@@ -212,6 +213,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   readonly #enableAnalytics: boolean;
 
   readonly #pokeHandler: PokeHandler;
+  readonly #queryManager: QueryManager;
 
   #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -228,7 +230,8 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
 
   #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
   readonly #jurisdiction: 'eu' | undefined;
-  #baseCookie: string | null = null;
+  // Last cookie used to initiate a connection
+  #connectCookie: NullableVersion = null;
   // Total number of sockets successfully connected by this client
   #connectedCount = 0;
   // Number of messages received over currently connected socket.  Reset
@@ -276,7 +279,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   }
 
   #connectResolver = resolver<void>();
-  #baseCookieResolver: Resolver<NullableVersion> | null = null;
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
 
@@ -425,6 +427,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
 
     this.mutate = makeCRUDMutate<MD, QD>(queries, rep.mutate);
 
+    this.#queryManager = new QueryManager(rep.clientID, msg =>
+      this.#sendChangeDesiredQueries(msg),
+    );
+
     this.#zqlContext = new ZeroContext(
       this.#materialite,
       (name, cb) =>
@@ -435,8 +441,16 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
           ),
         ),
       {
-        subscriptionAdded: ast => this.#zqlSubscriptionAdded(ast),
-        subscriptionRemoved: ast => this.#zqlSubscriptionRemoved(ast),
+        subscriptionAdded: ast => this.#queryManager.add(ast),
+        subscriptionRemoved: ast => {
+          const removed = this.#queryManager.remove(ast);
+          if (!removed) {
+            this.#lc.error?.(
+              'Unexpected failure to remove ast from query manager',
+              JSON.stringify(ast),
+            );
+          }
+        },
       },
     );
 
@@ -482,6 +496,12 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
         socketResolver: () => this.#socketResolver,
         connectionState: () => this.#connectionState,
       };
+    }
+  }
+
+  #sendChangeDesiredQueries(msg: ChangeDesiredQueriesMessage): void {
+    if (this.#socket && this.#connectionState === ConnectionState.Connected) {
+      send(this.#socket, msg);
     }
   }
 
@@ -695,7 +715,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#disconnect(lc, {server: kind});
   }
 
-  #handleConnectedMessage(lc: LogContext, connectedMessage: ConnectedMessage) {
+  async #handleConnectedMessage(
+    lc: LogContext,
+    connectedMessage: ConnectedMessage,
+  ) {
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
@@ -749,6 +772,16 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
+    const queriesPatch = await this.#rep.query(tx =>
+      this.#queryManager.getQueriesPatch(tx),
+    );
+    assert(this.#socket);
+    send(this.#socket, [
+      'initConnection',
+      {
+        desiredQueriesPatch: queriesPatch,
+      },
+    ]);
     this.#setConnectionState(ConnectionState.Connected);
     this.#connectResolver.resolve();
   }
@@ -791,12 +824,16 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       this.#totalToConnectStart = now;
     }
 
-    const baseCookie = await this.#getBaseCookie();
     if (this.closed) {
       return;
     }
-    this.#baseCookie = baseCookie;
-
+    this.#connectCookie = valita.parse(
+      await this.#rep.cookie,
+      nullableVersionSchema,
+    );
+    if (this.closed) {
+      return;
+    }
     // Reject connect after a timeout.
     const timeoutID = setTimeout(() => {
       l.debug?.('Rejecting connect resolver due to timeout');
@@ -805,13 +842,14 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
         client: 'ConnectTimeout',
       });
     }, CONNECT_TIMEOUT_MS);
-    this.#closeAbortController.signal.addEventListener('abort', () => {
+    const abortHandler = () => {
       clearTimeout(timeoutID);
-    });
+    };
+    this.#closeAbortController.signal.addEventListener('abort', abortHandler);
 
     const ws = createSocket(
       toWSString(this.#server),
-      baseCookie,
+      this.#connectCookie,
       this.clientID,
       await this.clientGroupID,
       this.userID,
@@ -838,6 +876,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       await this.#connectResolver.promise;
     } finally {
       clearTimeout(timeoutID);
+      this.#closeAbortController.signal.removeEventListener(
+        'abort',
+        abortHandler,
+      );
     }
   }
 
@@ -1172,7 +1214,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
         if (this.#connectionState !== ConnectionState.Connected) {
           lc.error?.('Failed to connect', ex, {
             lmid: this.#lastMutationIDReceived,
-            baseCookie: this.#baseCookie,
+            baseCookie: this.#connectCookie,
           });
         }
 
@@ -1248,14 +1290,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     assert(req.pullVersion === 1);
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.('Pull', req);
-    // Pull request for this instance's client group.  The base cookie is
-    // intercepted here (in a complete hack), and a no-op response is returned
-    // as pulls for this client group are handled via poke over the socket.
+    // Pull request for this instance's client group.  A no-op response is
+    // returned as pulls for this client group are handled via poke over the
+    // socket.
     if (req.clientGroupID === (await this.clientGroupID)) {
-      const cookie = valita.parse(req.cookie, nullableVersionSchema);
-      const resolver = this.#baseCookieResolver;
-      this.#baseCookieResolver = null;
-      resolver?.resolve(cookie);
       return {
         httpRequestInfo: {
           errorMessage: '',
@@ -1422,13 +1460,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     }
   }
 
-  // Total hack to get base cookie, see #puller for how the promise is resolved.
-  #getBaseCookie(): Promise<NullableVersion> {
-    this.#baseCookieResolver ??= resolver();
-    void this.#rep.pull().catch(() => {});
-    return this.#baseCookieResolver.promise;
-  }
-
   #registerQueries(
     queryDefs: QueryParseDefs<QD>,
   ): MakeEntityQueriesFromQueryDefs<QD> {
@@ -1440,14 +1471,6 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     }
 
     return rv as MakeEntityQueriesFromQueryDefs<QD>;
-  }
-
-  #zqlSubscriptionRemoved(ast: AST) {
-    console.log('TODO: removeZQLSubscription', JSON.stringify(ast));
-  }
-
-  #zqlSubscriptionAdded(ast: AST) {
-    console.log('TODO: addZQLSubscription', JSON.stringify(ast));
   }
 }
 
