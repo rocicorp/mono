@@ -160,5 +160,9 @@ function doListOptions(opts: ListOptions): DurableObjectListOptions {
       doOpts.start = key;
     }
   }
+
+  if (opts.end) {
+    doOpts.end = opts.end;
+  }
   return doOpts;
 }

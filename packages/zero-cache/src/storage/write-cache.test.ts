@@ -110,6 +110,26 @@ describe('write-cache', () => {
       expectedPending: [],
     },
     {
+      name: 'end',
+      pendingKeys: [],
+      pendingKeysBatch: [],
+      deletedKeys: [],
+      deletedKeysBatch: [],
+      listAndScanOpts: {
+        opts: {end: 'foo-1'},
+        expected: [
+          ['bar-1', 'orig-bar-1'],
+          ['baz-1', 'orig-baz-1'],
+        ],
+      },
+      expected: [
+        ['bar-1', 'orig-bar-1'],
+        ['baz-1', 'orig-baz-1'],
+        ['foo-1', 'orig-foo-1'],
+      ],
+      expectedPending: [],
+    },
+    {
       name: 'start, exclusive',
       pendingKeys: [],
       pendingKeysBatch: [],
@@ -296,6 +316,35 @@ describe('write-cache', () => {
           ['baz-3', 'new-baz-3'],
           ['baz-4', 'new-baz-4'],
           ['foo-1', 'orig-foo-1'],
+        ],
+      },
+      expected: [
+        ['bar-1', 'orig-bar-1'],
+        ['baz-1', 'orig-baz-1'],
+        ['baz-2', 'new-baz-2'],
+        ['baz-3', 'new-baz-3'],
+        ['baz-4', 'new-baz-4'],
+        ['foo-1', 'orig-foo-1'],
+      ],
+      expectedPending: [
+        {op: 'put', key: 'baz-2', value: 'new-baz-2'},
+        {op: 'put', key: 'baz-3', value: 'new-baz-3'},
+        {op: 'put', key: 'baz-4', value: 'new-baz-4'},
+      ],
+    },
+    {
+      name: 'end (with pending puts)',
+      pendingKeys: ['baz-2'],
+      pendingKeysBatch: ['baz-3', 'baz-4'],
+      deletedKeys: [],
+      deletedKeysBatch: [],
+      listAndScanOpts: {
+        opts: {end: 'baz-4'},
+        expected: [
+          ['bar-1', 'orig-bar-1'],
+          ['baz-1', 'orig-baz-1'],
+          ['baz-2', 'new-baz-2'],
+          ['baz-3', 'new-baz-3'],
         ],
       },
       expected: [

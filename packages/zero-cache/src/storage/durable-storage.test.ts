@@ -20,6 +20,7 @@ describe('list and scan', () => {
     'product/5': 5,
     'product/4': 4,
     'product/6': 6,
+    'product/7': 7,
   };
 
   const cases: Case[] = [
@@ -30,11 +31,38 @@ describe('list and scan', () => {
         ['product/4', 4],
         ['product/5', 5],
         ['product/6', 6],
+        ['product/7', 7],
+      ],
+    },
+    {
+      name: 'prefix option with start',
+      opts: {prefix: 'product/', start: {key: 'product/5'}},
+      expected: [
+        ['product/5', 5],
+        ['product/6', 6],
+        ['product/7', 7],
+      ],
+    },
+    {
+      name: 'prefix option with end',
+      opts: {prefix: 'product/', end: 'product/6'},
+      expected: [
+        ['product/4', 4],
+        ['product/5', 5],
       ],
     },
     {
       name: 'start option inclusive',
       opts: {prefix: 'product/', start: {key: 'product/5'}},
+      expected: [
+        ['product/5', 5],
+        ['product/6', 6],
+        ['product/7', 7],
+      ],
+    },
+    {
+      name: 'start option inclusive with end',
+      opts: {prefix: 'product/', start: {key: 'product/5'}, end: 'product/7'},
       expected: [
         ['product/5', 5],
         ['product/6', 6],
@@ -45,6 +73,18 @@ describe('list and scan', () => {
       opts: {
         prefix: 'product/',
         start: {key: 'product/5', exclusive: true},
+      },
+      expected: [
+        ['product/6', 6],
+        ['product/7', 7],
+      ],
+    },
+    {
+      name: 'start option exclusive with end',
+      opts: {
+        prefix: 'product/',
+        start: {key: 'product/5', exclusive: true},
+        end: 'product/7',
       },
       expected: [['product/6', 6]],
     },
@@ -57,8 +97,8 @@ describe('list and scan', () => {
       expected: [
         ['product/5', 5],
         ['product/6', 6],
+        ['product/7', 7],
         ['user/1', 1],
-        ['user/2', 2],
       ],
     },
     {
@@ -69,9 +109,9 @@ describe('list and scan', () => {
       },
       expected: [
         ['product/6', 6],
+        ['product/7', 7],
         ['user/1', 1],
         ['user/2', 2],
-        ['user/3', 3],
       ],
     },
   ];
