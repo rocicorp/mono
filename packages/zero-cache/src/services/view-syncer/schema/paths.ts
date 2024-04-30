@@ -122,6 +122,11 @@ export class CVRPaths {
     return `${this.root}/p/m/${v}/c/${client.id}`;
   }
 
+  rowPatchVersionPrefix(cvrVersion: CVRVersion): string {
+    const v = versionString(cvrVersion);
+    return `${this.root}/p/d/${v}/`;
+  }
+
   rowPatch(cvrVersion: CVRVersion, row: RowID): string {
     const v = versionString(cvrVersion);
     return `${this.root}/p/d/${v}/r/${rowIDHash(row)}`;
@@ -146,7 +151,11 @@ export class CVRPaths {
 }
 
 export function versionString(v: CVRVersion) {
+  // The separator (e.g. ":") needs to be lexicographically greater than the
+  // storage key path separator (e.g. "/") so that "01/row-hash" is less than "01:01/row-hash".
+  // In particular, the traditional separator for major.minor versions (".") does not
+  // satisfy this quality.
   return v.minorVersion
-    ? `${v.stateVersion}.${versionToLexi(v.minorVersion)}`
+    ? `${v.stateVersion}:${versionToLexi(v.minorVersion)}`
     : v.stateVersion;
 }

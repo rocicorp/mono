@@ -63,7 +63,7 @@ export function cookieToVersion(cookie: string | null): NullableCVRVersion {
   if (cookie === null) {
     return null;
   }
-  const parts = cookie.split('.');
+  const parts = cookie.split(':');
   const stateVersion = parts[0];
   switch (parts.length) {
     case 1: {
