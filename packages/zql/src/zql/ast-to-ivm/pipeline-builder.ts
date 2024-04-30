@@ -9,7 +9,7 @@ import type {
   SimpleCondition,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
-import {isJoinResult} from '../ivm/types.js';
+import {isJoinResult, StringOrNumber} from '../ivm/types.js';
 
 function getId(e: Entity) {
   return e.id;
@@ -52,6 +52,10 @@ export function buildPipeline(
 
   if (ast.having) {
     ret = applyWhere(ret, ast.having);
+  }
+
+  if (ast.distinct) {
+    ret = applyDistinct(ret, ast.distinct);
   }
 
   // Note: the stream is technically attached at this point.
@@ -159,8 +163,17 @@ function applySimpleCondition<T extends Entity>(
 ) {
   const operator = getOperator(condition);
   const {field: selector} = condition;
-  return stream.filter(x =>
-    operator(getValueFromEntity(x, selectorToQualifiedColumn(selector))),
+  const column = selectorToQualifiedColumn(selector);
+  return stream.filter(x => operator(getValueFromEntity(x, column)));
+}
+
+function applyDistinct<T extends Entity>(
+  stream: DifferenceStream<T>,
+  distinct: string,
+) {
+  const column = selectorToQualifiedColumn(distinct);
+  return stream.distinctAll(
+    x => getValueFromEntity(x, column) as StringOrNumber,
   );
 }
 
