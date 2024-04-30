@@ -1,3 +1,7 @@
+import {
+  getValueFromEntity,
+  selectorToQualifiedColumn,
+} from '../../../ast-to-ivm/pipeline-builder.js';
 import type {Multiset} from '../../multiset.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {LinearUnaryOperator} from './linear-unary-operator.js';
@@ -89,7 +93,6 @@ export class FullCountOperator<
 
 export class FullAvgOperator<
   V extends object,
-  Field extends keyof V,
   Alias extends string,
 > extends FullAggregateOperator<V, [[Alias, number]]> {
   #numElements = 0;
@@ -98,9 +101,10 @@ export class FullAvgOperator<
   constructor(
     input: DifferenceStream<V>,
     output: DifferenceStream<AggregateOut<V, [[Alias, number]]>>,
-    field: Field,
+    selector: string,
     alias: Alias,
   ) {
+    const qualifiedColumn = selectorToQualifiedColumn(selector);
     super(
       input,
       output,
@@ -112,7 +116,11 @@ export class FullAvgOperator<
         let sum = 0;
         for (const entry of collection) {
           numElements += entry[1];
-          sum += (entry[0][field] as number) * entry[1];
+          sum +=
+            (getValueFromEntity(
+              entry[0] as Record<string, unknown>,
+              qualifiedColumn,
+            ) as number) * entry[1];
         }
 
         if (this.#numElements + numElements === 0) {
@@ -135,7 +143,6 @@ export class FullAvgOperator<
 
 export class FullSumOperator<
   V extends object,
-  Field extends keyof V,
   Alias extends string,
 > extends FullAggregateOperator<V, [[Alias, number]]> {
   #sum = 0;
@@ -143,9 +150,10 @@ export class FullSumOperator<
   constructor(
     input: DifferenceStream<V>,
     output: DifferenceStream<AggregateOut<V, [[Alias, number]]>>,
-    field: Field,
+    selector: string,
     alias: Alias,
   ) {
+    const qualifiedColumn = selectorToQualifiedColumn(selector);
     super(
       input,
       output,
@@ -154,7 +162,11 @@ export class FullSumOperator<
         last: AggregateOut<V, [[Alias, number]]> | V,
       ): AggregateOut<V, [[Alias, number]]> => {
         for (const entry of collection) {
-          this.#sum += (entry[0][field] as number) * entry[1];
+          this.#sum +=
+            (getValueFromEntity(
+              entry[0] as Record<string, unknown>,
+              qualifiedColumn,
+            ) as number) * entry[1];
         }
 
         return {

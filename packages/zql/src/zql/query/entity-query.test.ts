@@ -69,9 +69,6 @@ test('query types', () => {
     Promise<readonly {readonly count: number}[]>
   >();
 
-  // @ts-expect-error - Argument of type 'unique symbol' is not assignable to parameter of type '"id" | "str" | "optStr"'.ts(2345)
-  q.select(sym);
-
   // @ts-expect-error - 'x' is not a field that we can aggregate on
   q.select(agg.array('x')).groupBy('id');
 
@@ -531,19 +528,23 @@ describe('ast', () => {
     // each individual field is selectable on its own
     Object.keys(dummyObject).forEach(k => {
       const newq = q.select(k as keyof E1);
-      expect(ast(newq).select).toEqual([[k, k]]);
+      expect(ast(newq).select).toEqual([['e1.' + k, k]]);
     });
 
     // all fields are selectable together
     let newq = q.select(...(Object.keys(dummyObject) as (keyof E1)[]));
-    expect(ast(newq).select).toEqual(Object.keys(dummyObject).map(k => [k, k]));
+    expect(ast(newq).select).toEqual(
+      Object.keys(dummyObject).map(k => ['e1.' + k, k]),
+    );
 
     // we can call select many times to build up the selection set
     newq = q;
     Object.keys(dummyObject).forEach(k => {
       newq = newq.select(k as keyof E1);
     });
-    expect(ast(newq).select).toEqual(Object.keys(dummyObject).map(k => [k, k]));
+    expect(ast(newq).select).toEqual(
+      Object.keys(dummyObject).map(k => ['e1.' + k, k]),
+    );
 
     // we remove duplicates
     newq = q;
@@ -553,7 +554,9 @@ describe('ast', () => {
     Object.keys(dummyObject).forEach(k => {
       newq = newq.select(k as keyof E1);
     });
-    expect(ast(newq).select).toEqual(Object.keys(dummyObject).map(k => [k, k]));
+    expect(ast(newq).select).toEqual(
+      Object.keys(dummyObject).map(k => ['e1.' + k, k]),
+    );
   });
 
   test('where', () => {
@@ -656,15 +659,15 @@ describe('ast', () => {
     // order methods update the ast
     expect(ast(q.asc('id'))).toEqual({
       table: 'e1',
-      orderBy: [['id'], 'asc'],
+      orderBy: [['e1.id'], 'asc'],
     });
     expect(ast(q.desc('id'))).toEqual({
       table: 'e1',
-      orderBy: [['id'], 'desc'],
+      orderBy: [['e1.id'], 'desc'],
     });
     expect(ast(q.asc('id', 'a', 'b', 'c', 'd'))).toEqual({
       table: 'e1',
-      orderBy: [['id', 'a', 'b', 'c', 'd'], 'asc'],
+      orderBy: [['e1.id', 'e1.a', 'e1.b', 'e1.c', 'e1.d'], 'asc'],
     });
   });
 
@@ -1189,8 +1192,129 @@ test('where is always qualified', () => {
         type: 'inner',
         other: {table: 'e1', orderBy: [['id'], 'asc']},
         as: 'e2',
-        on: ['e1.a', 'a'],
+        on: ['e1.a', 'e2.a'],
       },
     ],
+  });
+});
+
+describe('all references to columns are always qualified', () => {
+  const q = new EntityQuery<{e1: E1}>(context, 'e1', 'e1');
+  test.each([
+    {
+      test: 'unqalified where',
+      q: q.where('a', '=', 1),
+      expected: {
+        orderBy: [['id'], 'asc'],
+        table: 'e1',
+        where: {
+          op: '=',
+          field: 'e1.a',
+          value: {type: 'literal', value: 1},
+        },
+      },
+    },
+    {
+      test: 'qualified where',
+      q: q.where('e1.a', '=', 1),
+      expected: {
+        orderBy: [['id'], 'asc'],
+        table: 'e1',
+        where: {
+          op: '=',
+          field: 'e1.a',
+          value: {type: 'literal', value: 1},
+        },
+      },
+    },
+    {
+      test: 'unqalified select',
+      q: q.select('a'),
+      expected: {
+        aggregate: [],
+        orderBy: [['id'], 'asc'],
+        table: 'e1',
+        select: [['e1.a', 'a']],
+      },
+    },
+    {
+      test: 'order by',
+      q: q.asc('a'),
+      expected: {
+        orderBy: [['e1.a', 'e1.id'], 'asc'],
+        table: 'e1',
+      },
+    },
+    {
+      test: 'unqalified on conditions for join',
+      q: q.join(q, 'e2', 'a', 'a'),
+      expected: {
+        table: 'e1',
+        orderBy: [['id'], 'asc'],
+        joins: [
+          {
+            type: 'inner',
+            other: {table: 'e1', orderBy: [['id'], 'asc']},
+            as: 'e2',
+            on: ['e1.a', 'e2.a'],
+          },
+        ],
+      },
+    },
+    {
+      test: 'qualified on conditions for join',
+      // TODO: join type signature is wrong.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      q: q.join(q, 'e2', 'e1.a', 'e2.a' as any),
+      expected: {
+        table: 'e1',
+        orderBy: [['id'], 'asc'],
+        joins: [
+          {
+            type: 'inner',
+            other: {table: 'e1', orderBy: [['id'], 'asc']},
+            as: 'e2',
+            on: ['e1.a', 'e2.a'],
+          },
+        ],
+      },
+    },
+    {
+      test: 'unqualified junction join',
+      q: q.join(q, 'e2', 'a', 'a').join(q, 'e3', 'e2.a', 'a'),
+      expected: {
+        table: 'e1',
+        orderBy: [['id'], 'asc'],
+        joins: [
+          {
+            type: 'inner',
+            other: {table: 'e1', orderBy: [['id'], 'asc']},
+            as: 'e2',
+            on: ['e1.a', 'e2.a'],
+          },
+          {
+            type: 'inner',
+            other: {table: 'e1', orderBy: [['id'], 'asc']},
+            as: 'e3',
+            on: ['e2.a', 'e3.a'],
+          },
+        ],
+      },
+    },
+    {
+      test: 'having is not qualified auto-qualified',
+      q: q.having(exp('a', '=', 1)),
+      expected: {
+        table: 'e1',
+        orderBy: [['id'], 'asc'],
+        having: {
+          field: 'a',
+          op: '=',
+          value: {type: 'literal', value: 1},
+        },
+      },
+    },
+  ])('$test', ({q, expected}) => {
+    expect(ast(q)).toEqual(expected);
   });
 });

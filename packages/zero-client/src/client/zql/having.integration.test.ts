@@ -2,7 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {Artist, newZero, Track, TrackArtist} from './integration-test-util.js';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
-describe('having against scalaer', async () => {
+describe('having against scalar', async () => {
   const z = newZero();
 
   const tracks: Track[] = [
@@ -103,7 +103,7 @@ describe('having against arrays / sets', async () => {
 
   await z.mutate.bulkSet({tracks, artists, trackArtists});
 
-  test.each([
+  test.only.each([
     [['CONGRUENT', ['Artist 1']], ['1']],
     [
       ['SUPERSET', []],

@@ -173,10 +173,13 @@ function applyGroupBy<T extends Entity>(
   const qualifiedColumns = aggregations.map(q =>
     q.field === undefined ? undefined : selectorToQualifiedColumn(q.field),
   );
+  console.log('APPLY GROUP BY!');
+
   return stream.reduce(
     keyFunction,
     value => value.id as string,
     values => {
+      console.log('REDUCE STREAM!');
       const first = values[Symbol.iterator]().next().value;
       const ret: Record<string, unknown> = {...first};
 
