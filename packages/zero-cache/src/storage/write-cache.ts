@@ -174,7 +174,7 @@ export class WriteCache implements Storage {
     options: ListOptions,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
-    const {prefix, start, limit} = options;
+    const {prefix, start, end, limit} = options;
     const startKey = start?.key;
     const exclusive = start?.exclusive;
 
@@ -205,7 +205,8 @@ export class WriteCache implements Storage {
         (!startKey ||
           (exclusive
             ? compareUTF8(k, startKey) > 0
-            : compareUTF8(k, startKey) >= 0))
+            : compareUTF8(k, startKey) >= 0)) &&
+        (!end || compareUTF8(k, end) < 0)
       ) {
         if (v.value === undefined) {
           pending.push([k, undefined]);

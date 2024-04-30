@@ -1,8 +1,23 @@
-import type {ScanNoIndexOptions} from 'replicache';
 import type * as valita from 'shared/src/valita.js';
 import type {JSONValue} from '../types/bigint-json.js';
 
-export type ListOptions = ScanNoIndexOptions;
+export type ListOptions = {
+  /** Only include keys starting with `prefix`. */
+  prefix?: string | undefined;
+  /** Only include up to `limit` results. */
+  limit?: number | undefined;
+  /** When provided the scan starts at this key. */
+  start?:
+    | {
+        key: string;
+        /** Whether the `key` is exclusive or inclusive. */
+        exclusive?: boolean | undefined;
+      }
+    | undefined;
+
+  /** Exclusive end */
+  end?: string | undefined;
+};
 
 /**
  * Abstract storage interface used throughout the server for storing both user
