@@ -6,7 +6,7 @@ export default defineWorkersConfig({
     include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     poolOptions: {
       workers: {
-        main: './test/miniflare-environment.js',
+        main: './out/test/miniflare-environment.js',
         miniflare: {
           compatibilityDate: '2024-04-05',
           compatibilityFlags: ['nodejs_compat'],
