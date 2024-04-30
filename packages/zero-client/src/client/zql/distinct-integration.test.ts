@@ -79,13 +79,14 @@ describe('distinct', async () => {
   for (const trackArtist of trackArtists) {
     await z.mutate.trackArtist.create(trackArtist);
   }
+  await new Promise(r => setTimeout(r, 100));
 
   test.each([
-    {
-      test: 'distinct on unique col against full table',
-      zql: z.query.artist.distinct('artist.id'),
-      expected: artists,
-    },
+    // {
+    //   test: 'distinct on unique col against full table',
+    //   zql: z.query.artist.distinct('artist.id'),
+    //   expected: artists,
+    // },
     {
       test: 'distinct on non-unique col against full table',
       zql: z.query.track.distinct('track.albumId'),

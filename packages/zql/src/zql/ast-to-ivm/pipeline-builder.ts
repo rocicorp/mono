@@ -80,7 +80,8 @@ export function applyJoins<T extends Entity, O extends Entity>(
       aAs: sourceTableOrAlias,
       getAJoinKey(e: Entity) {
         // TODO: runtime validation?
-        return getValueFromEntity(e, aQualifiedColumn) as Primitive;
+        const ret = getValueFromEntity(e, aQualifiedColumn) as Primitive;
+        return ret;
       },
       getAPrimaryKey: getId,
 
@@ -88,7 +89,8 @@ export function applyJoins<T extends Entity, O extends Entity>(
       bAs: join.as,
       getBJoinKey(e: Entity) {
         // TODO: runtime validation?
-        return getValueFromEntity(e, bQualifiedColumn) as Primitive;
+        const ret = getValueFromEntity(e, bQualifiedColumn) as Primitive;
+        return ret;
       },
       getBPrimaryKey: getId,
     } as const;
