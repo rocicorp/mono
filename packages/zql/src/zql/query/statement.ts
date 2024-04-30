@@ -23,7 +23,7 @@ export class Statement<Return> implements IStatement<Return> {
   readonly #ast;
   readonly #context;
   #materialization?:
-    | View<Return extends [] ? Return[number] : Return>
+    | Promise<View<Return extends [] ? Return[number] : Return>>
     | undefined = undefined;
 
   constructor(context: Context, ast: AST) {
@@ -31,36 +31,34 @@ export class Statement<Return> implements IStatement<Return> {
     this.#context = context;
   }
 
-  #getMaterialization(): View<Return> {
+  #getMaterialization(): Promise<View<Return>> {
     // TODO: invariants to throw if the statement is not completely bound before materialization.
     if (this.#materialization === undefined) {
-      this.#context.materialite.tx(() => {
-        const pipeline = buildPipeline(
-          <T extends Entity>(sourceName: string) =>
-            this.#context.getSource(sourceName)
-              .stream as unknown as DifferenceStream<T>,
-          this.#ast,
-        );
-        this.#materialization = new MutableTreeView<
+      const pipeline = buildPipeline(
+        <T extends Entity>(sourceName: string) =>
+          this.#context.getSource(sourceName)
+            .stream as unknown as DifferenceStream<T>,
+        this.#ast,
+      );
+      const view = new MutableTreeView<
+        Return extends [] ? Return[number] : never
+      >(
+        this.#context,
+        this.#ast,
+        pipeline as unknown as DifferenceStream<
           Return extends [] ? Return[number] : never
-        >(
-          this.#context,
-          this.#ast,
-          pipeline as unknown as DifferenceStream<
-            Return extends [] ? Return[number] : never
-          >,
-          makeComparator<readonly string[], Record<string, unknown>>(
-            must(this.#ast.orderBy)[0],
-            must(this.#ast.orderBy)[1],
-          ),
-          this.#ast.orderBy,
-          this.#ast.limit,
-        ) as unknown as View<Return extends [] ? Return[number] : Return>;
-
-        this.#materialization.pullHistoricalData();
-      });
+        >,
+        makeComparator<readonly string[], Record<string, unknown>>(
+          must(this.#ast.orderBy)[0],
+          must(this.#ast.orderBy)[1],
+        ),
+        this.#ast.orderBy,
+        this.#ast.limit,
+      ) as unknown as View<Return extends [] ? Return[number] : Return>;
+      this.#materialization = Promise.resolve(view);
+      view.pullHistoricalData();
     }
-    return this.#materialization as View<Return>;
+    return this.#materialization as Promise<View<Return>>;
   }
 
   subscribe(
@@ -68,14 +66,21 @@ export class Statement<Return> implements IStatement<Return> {
     initialData = true,
   ) {
     const materialization = this.#getMaterialization();
-    return materialization.on(cb, initialData);
+    const cleanupPromise = materialization.then(view =>
+      view.on(cb, initialData),
+    );
+    const cleanup = () => {
+      cleanupPromise.then(p => p()).catch(console.error);
+    };
+
+    return cleanup;
   }
 
   // Note: should we provide a version that takes a callback?
   // So it can resolve in the same micro task?
   // since, in the common case, the data will always be available.
-  exec() {
-    const materialization = this.#getMaterialization();
+  async exec() {
+    const materialization = await this.#getMaterialization();
 
     if (materialization.hydrated) {
       return Promise.resolve(materialization.value) as Promise<
@@ -95,7 +100,7 @@ export class Statement<Return> implements IStatement<Return> {
   // onDifference();
 
   destroy() {
-    this.#materialization?.destroy();
+    void this.#materialization?.then(v => v.destroy());
   }
 }
 
