@@ -19,7 +19,6 @@ async function compile(contents: string) {
 }
 
 test('Should remove dead code', async () => {
-  // Ensure
   expect(
     await compile(`import {TextEncoder} from 'util';`),
   ).toMatchInlineSnapshot(`""`);
