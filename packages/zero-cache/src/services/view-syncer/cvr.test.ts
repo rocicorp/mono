@@ -539,55 +539,89 @@ describe('view-syncer/cvr', () => {
 
       updater.executed('oneHash', 'serverOneHash');
       // Simulate receiving different views rows at different time times.
-      updater.received(
-        new Map([
-          [
-            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
-            {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                queriedColumns: {id: ['oneHash']},
+      expect(
+        await updater.received(
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash']},
+                },
+                contents: {id: 'should-show-up-in-patch'},
               },
-              contents: {
-                /* ignored */
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [{stateVersion: '1a0'}, ROW_ID1, {id: 'should-show-up-in-patch'}],
+      ]);
+      expect(
+        await updater.received(
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash'], name: ['oneHash']},
+                },
+                contents: {id: 'new version patch with new field'},
               },
-            },
-          ],
-        ]),
-      );
-      updater.received(
-        new Map([
-          [
-            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
-            {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                queriedColumns: {id: ['oneHash'], name: ['oneHash']},
+            ],
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
+              {
+                record: {
+                  id: ROW_ID3,
+                  rowVersion: '09',
+                  queriedColumns: {id: ['oneHash']},
+                },
+                contents: {id: 'new version patch'},
               },
-              contents: {
-                /* ignored */
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [
+          {stateVersion: '1aa', minorVersion: 1},
+          ROW_ID1,
+          {id: 'new version patch with new field'},
+        ],
+        [
+          {stateVersion: '1aa', minorVersion: 1},
+          ROW_ID3,
+          {id: 'new version patch'},
+        ],
+      ]);
+      expect(
+        await updater.received(
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash']},
+                },
+                contents: {id: 'patch stays at new version'},
               },
-            },
-          ],
-          [
-            `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
-            {
-              record: {
-                id: ROW_ID3,
-                rowVersion: '09',
-                queriedColumns: {id: ['oneHash']},
-              },
-              contents: {
-                /* ignored */
-              },
-            },
-          ],
-        ]),
-      );
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [
+          {stateVersion: '1aa', minorVersion: 1},
+          ROW_ID1,
+          {id: 'patch stays at new version'},
+        ],
+      ]);
 
-      expect(await updater.updateRowRecords()).toEqual({
+      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
         patchRows: [],
         deleteRows: [],
       });
@@ -634,7 +668,7 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
-          queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
@@ -730,44 +764,56 @@ describe('view-syncer/cvr', () => {
       );
 
       updater.executed('oneHash', 'serverTwoHash');
-      updater.received(
-        new Map([
-          [
-            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
-            {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+      expect(
+        await updater.received(
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+                },
+                contents: {id: 'existing patch'},
               },
-              contents: {
-                /* ignored */
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [
+          {stateVersion: '1aa', minorVersion: 1},
+          ROW_ID1,
+          {id: 'existing patch'},
+        ],
+      ]);
+      expect(
+        await updater.received(
+          new Map([
+            [
+              // Now referencing ROW_ID2 instead of ROW_ID3
+              `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+              {
+                record: {
+                  id: ROW_ID2,
+                  rowVersion: '09',
+                  queriedColumns: {id: ['oneHash']},
+                },
+                contents: {id: 'new-row-version-should-bump-cvr-version'},
               },
-            },
-          ],
-        ]),
-      );
-      updater.received(
-        new Map([
-          [
-            // Now referencing ROW_ID2 instead of ROW_ID3
-            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
-            {
-              record: {
-                id: ROW_ID2,
-                rowVersion: '09',
-                queriedColumns: {id: ['oneHash']},
-              },
-              contents: {
-                /* ignored */
-              },
-            },
-          ],
-        ]),
-      );
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [
+          {stateVersion: '1ba', minorVersion: 1},
+          ROW_ID2,
+          {id: 'new-row-version-should-bump-cvr-version'},
+        ],
+      ]);
 
-      expect(await updater.updateRowRecords()).toEqual({
-        patchRows: [[ROW_ID1, ['name']]],
+      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
+        patchRows: [[ROW_ID1, ['id']]],
         deleteRows: [ROW_ID3],
       });
 
@@ -812,14 +858,14 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
-          queriedColumns: {id: ['twoHash', 'oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           putPatch: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['twoHash', 'oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/p/d/1ba.01/r/${ROW_HASH1}`]: {
           type: 'row',
@@ -871,7 +917,7 @@ describe('view-syncer/cvr', () => {
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
-        queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+        queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
@@ -922,41 +968,53 @@ describe('view-syncer/cvr', () => {
 
       updater.executed('oneHash', 'oneServerHash');
       updater.executed('twoHash', 'twoServerHash');
-      updater.received(
-        new Map([
-          [
-            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
-            {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+      expect(
+        await updater.received(
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+                },
+                contents: {id: 'existing-patch'},
               },
-              contents: {
-                /* ignored */
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [
+          {stateVersion: '1aa', minorVersion: 1},
+          ROW_ID1,
+          {id: 'existing-patch'},
+        ],
+      ]);
+      expect(
+        await updater.received(
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['twoHash'], desc: ['twoHash']}, // Now referencing "desc"
+                },
+                contents: {id: 'new-column-bumps-cvr-version'},
               },
-            },
-          ],
-        ]),
-      );
-      updater.received(
-        new Map([
-          [
-            `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
-            {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                queriedColumns: {id: ['twoHash'], desc: ['twoHash']}, // Now referencing "desc"
-              },
-              contents: {
-                /* ignored */
-              },
-            },
-          ],
-        ]),
-      );
-      updater.received(
+            ],
+          ]),
+        ),
+      ).toEqual([
+        [
+          {stateVersion: '1ba', minorVersion: 1},
+          ROW_ID1,
+          {id: 'new-column-bumps-cvr-version'},
+        ],
+      ]);
+      await updater.received(
         new Map([
           [
             // Now referencing ROW_ID2 instead of ROW_ID3
@@ -974,7 +1032,7 @@ describe('view-syncer/cvr', () => {
           ],
         ]),
       );
-      updater.received(
+      await updater.received(
         new Map([
           [
             `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
@@ -992,8 +1050,8 @@ describe('view-syncer/cvr', () => {
         ]),
       );
 
-      expect(await updater.updateRowRecords()).toEqual({
-        patchRows: [[ROW_ID1, ['name']]],
+      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
+        patchRows: [[ROW_ID1, ['id', 'desc']]],
         deleteRows: [ROW_ID3],
       });
 
@@ -1028,7 +1086,7 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           putPatch: updated.version,
-          queriedColumns: {id: ['twoHash', 'oneHash'], desc: ['twoHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash'], desc: ['twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
@@ -1134,8 +1192,8 @@ describe('view-syncer/cvr', () => {
       );
 
       updater.removed('oneHash');
-      expect(await updater.updateRowRecords()).toEqual({
-        patchRows: [[ROW_ID1, ['name']]],
+      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
+        patchRows: [[ROW_ID1, ['id']]],
         deleteRows: [ROW_ID3],
       });
 
