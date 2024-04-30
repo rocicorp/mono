@@ -61,10 +61,10 @@ describe('view-syncer/schema/types', () => {
       {cookie: null, version: null},
       {cookie: '00', version: {stateVersion: '00'}},
       {cookie: '2abc', version: {stateVersion: '2abc'}},
-      {cookie: '00.01', version: {stateVersion: '00', minorVersion: 1}},
-      {cookie: '100.0a', version: {stateVersion: '100', minorVersion: 10}},
+      {cookie: '00:01', version: {stateVersion: '00', minorVersion: 1}},
+      {cookie: '100:0a', version: {stateVersion: '100', minorVersion: 10}},
       {
-        cookie: 'a128adk2f9s.110',
+        cookie: 'a128adk2f9s:110',
         version: {stateVersion: 'a128adk2f9s', minorVersion: 36},
       },
     ] satisfies {
@@ -80,8 +80,8 @@ describe('view-syncer/schema/types', () => {
     (
       [
         {reason: 'not a lexiversion', cookie: 'foo-bar'},
-        {reason: 'too many dots', cookie: '1.2.3'},
-        {reason: 'minor version too big', cookie: '110.93jlxpt2ps'},
+        {reason: 'too many colons', cookie: '1:2:3'},
+        {reason: 'minor version too big', cookie: '110:93jlxpt2ps'},
       ] satisfies {
         reason: string;
         cookie: string;

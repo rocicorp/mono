@@ -350,47 +350,47 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/m/q/threeHash']: updated.queries.threeHash,
         ['/vs/cvr/abc123/m/q/fourHash']: updated.queries.fourHash,
         // Patches!
-        ['/vs/cvr/abc123/p/m/1aa.01/c/barClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/c/barClient']: {
           type: 'client',
           op: 'put',
           id: 'barClient',
         } satisfies ClientPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/c/bonkClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/c/bonkClient']: {
           type: 'client',
           op: 'put',
           id: 'bonkClient',
         } satisfies ClientPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/threeHash/c/barClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/threeHash/c/barClient']: {
           type: 'query',
           op: 'put',
           id: 'threeHash',
           clientID: 'barClient',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/threeHash/c/fooClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/threeHash/c/fooClient']: {
           type: 'query',
           op: 'put',
           id: 'threeHash',
           clientID: 'fooClient',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash/c/barClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash/c/barClient']: {
           type: 'query',
           op: 'put',
           id: 'oneHash',
           clientID: 'barClient',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash/c/dooClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash/c/dooClient']: {
           type: 'query',
           op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
           id: 'oneHash',
           clientID: 'dooClient',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash/c/fooClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash/c/fooClient']: {
           type: 'query',
           op: 'del', // The obsoleted 'put' patch at 1a9.01 is deleted too.
           id: 'oneHash',
           clientID: 'fooClient',
         } satisfies QueryPatch,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/fourHash/c/fooClient']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/fourHash/c/fooClient']: {
           type: 'query',
           op: 'put',
           id: 'fourHash',
@@ -657,7 +657,7 @@ describe('view-syncer/cvr', () => {
         ...remainingState,
         ['/vs/cvr/abc123/m/version']: updated.version,
         ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash']: {
+        ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash']: {
           type: 'query',
           op: 'put',
           id: 'oneHash',
@@ -677,14 +677,14 @@ describe('view-syncer/cvr', () => {
           queriedColumns: {id: ['oneHash']},
           rowVersion: '09',
         } satisfies RowRecord,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID1,
           rowVersion: '03',
           columns: ['id', 'name'],
         } satisfies RowPatch,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
           type: 'row',
           op: 'put',
           id: ROW_ID3,
@@ -729,7 +729,7 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
@@ -743,7 +743,7 @@ describe('view-syncer/cvr', () => {
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID3,
@@ -842,9 +842,9 @@ describe('view-syncer/cvr', () => {
       const {
         // Deleted keys
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: _row3,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: _row1Put,
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: _row1Put,
         [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: _row2Put,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: _row3Put,
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: _row3Put,
         ...remainingState
       } = initialState;
 
@@ -932,7 +932,7 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
@@ -946,7 +946,7 @@ describe('view-syncer/cvr', () => {
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID3,
@@ -1070,9 +1070,9 @@ describe('view-syncer/cvr', () => {
       const {
         // Deleted keys
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: _row3,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: _row1Put,
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: _row1Put,
         [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: _row2Put,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: _row3Put,
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: _row3Put,
         ...remainingState
       } = initialState;
 
@@ -1135,7 +1135,7 @@ describe('view-syncer/cvr', () => {
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
       ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
-      ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash']: {
+      ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash']: {
         type: 'query',
         op: 'put',
         id: 'oneHash',
@@ -1158,7 +1158,7 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID1,
@@ -1172,7 +1172,7 @@ describe('view-syncer/cvr', () => {
         rowVersion: '03',
         columns: ['id'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: {
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID3,
@@ -1214,9 +1214,9 @@ describe('view-syncer/cvr', () => {
         // Deleted keys
         ['/vs/cvr/abc123/m/q/oneHash']: _removed,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: _row3,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH1}`]: _row1Put,
-        [`/vs/cvr/abc123/p/d/1aa.01/r/${ROW_HASH3}`]: _row3Put,
-        ['/vs/cvr/abc123/p/m/1aa.01/q/oneHash']: _removedToo,
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: _row1Put,
+        [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: _row3Put,
+        ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash']: _removedToo,
         ...remainingState
       } = initialState;
 

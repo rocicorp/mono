@@ -1,5 +1,7 @@
+import {compareUTF8} from 'compare-utf8';
 import {describe, expect, test} from 'vitest';
 import {CVRPaths, lastActiveIndex} from './paths.js';
+import type {CVRVersion, RowID} from './types.js';
 
 describe('view-syncer/schema/paths', () => {
   test('patch path versioning', () => {
@@ -20,13 +22,13 @@ describe('view-syncer/schema/paths', () => {
         {stateVersion: '2abc', minorVersion: 35},
         {id: 'boo-query'},
       ),
-    ).toBe('/vs/cvr/456/p/m/2abc.0z/q/boo-query');
+    ).toBe('/vs/cvr/456/p/m/2abc:0z/q/boo-query');
     expect(
       paths2.queryPatch(
         {stateVersion: '2abc', minorVersion: 36},
         {id: 'boo-query'},
       ),
-    ).toBe('/vs/cvr/456/p/m/2abc.110/q/boo-query');
+    ).toBe('/vs/cvr/456/p/m/2abc:110/q/boo-query');
   });
 
   test('client paths', () => {
@@ -75,7 +77,39 @@ describe('view-syncer/schema/paths', () => {
           },
         },
       ),
-    ).toBe('/vs/cvr/fbr/p/d/28c8.12s/r/PNJVDvpmnF-qcv1Mw8AfiQ');
+    ).toBe('/vs/cvr/fbr/p/d/28c8:12s/r/PNJVDvpmnF-qcv1Mw8AfiQ');
+  });
+
+  test('row patch prefixes', () => {
+    const paths = new CVRPaths('fbr');
+
+    const v1: CVRVersion = {stateVersion: '1ab'};
+    const v2: CVRVersion = {stateVersion: '1ab', minorVersion: 1};
+    const v3: CVRVersion = {stateVersion: '1ac'};
+    const row: RowID = {
+      schema: 'public',
+      table: 'issues',
+      rowKey: {id: 123},
+    };
+
+    expect(paths.rowPatchVersionPrefix(v1)).toBe('/vs/cvr/fbr/p/d/1ab/');
+    expect(paths.rowPatchVersionPrefix(v2)).toBe('/vs/cvr/fbr/p/d/1ab:01/');
+    expect(paths.rowPatchVersionPrefix(v3)).toBe('/vs/cvr/fbr/p/d/1ac/');
+
+    const ordered = [
+      paths.rowPatchVersionPrefix(v1),
+      paths.rowPatch(v1, row),
+      paths.rowPatchVersionPrefix(v2),
+      paths.rowPatch(v2, row),
+      paths.rowPatchVersionPrefix(v3),
+      paths.rowPatch(v3, row),
+    ];
+    for (let i = 0; i < ordered.length; i++) {
+      for (let j = i + 1; j < ordered.length; j++) {
+        expect(compareUTF8(ordered[i], ordered[j])).toBeLessThan(0);
+        expect(compareUTF8(ordered[j], ordered[i])).toBeGreaterThan(0);
+      }
+    }
   });
 
   test('last active paths', () => {
