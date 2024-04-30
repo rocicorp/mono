@@ -484,6 +484,18 @@ describe('view-syncer/cvr', () => {
     rowKey: {id: '888'},
   };
   const ROW_HASH3 = rowIDHash(ROW_ID3);
+  const DELETED_ROW_ID: RowID = {
+    schema: 'public',
+    table: 'issues',
+    rowKey: {id: '456'},
+  };
+  const DELETED_ROW_HASH = rowIDHash(DELETED_ROW_ID);
+  const IN_OLD_PATCH_ROW_ID: RowID = {
+    schema: 'public',
+    table: 'issues',
+    rowKey: {id: '777'},
+  };
+  const IN_OLD_PATCH_ROW_HASH = rowIDHash(IN_OLD_PATCH_ROW_ID);
 
   test('desired to got', async () => {
     const initialState = {
@@ -510,6 +522,31 @@ describe('view-syncer/cvr', () => {
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Already in CVRs from "189"
+        id: IN_OLD_PATCH_ROW_ID,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID1,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID2,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'del', // Overridden by received row.
+        id: ROW_ID3,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1aa/r/${DELETED_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Needs to be picked up by catchup.
+        id: DELETED_ROW_ID,
+      } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
@@ -621,9 +658,12 @@ describe('view-syncer/cvr', () => {
         ],
       ]);
 
-      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
-        patchRows: [],
-        deleteRows: [],
+      expect(
+        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+      ).toEqual({
+        // Catchup from v: "189" needs constrain / delete patches in ("189", "1aa"].
+        patchRows: [[{stateVersion: '1a0'}, ROW_ID2, ['id']]],
+        deleteRows: [[{stateVersion: '1aa'}, DELETED_ROW_ID]],
       });
 
       // Same last active day (no index change), but different hour.
@@ -729,6 +769,31 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Already in CVRs from "189"
+        id: IN_OLD_PATCH_ROW_ID,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID1,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID2,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID3,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Needs to be picked up by catchup.
+        id: DELETED_ROW_ID,
+      } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
@@ -812,16 +877,23 @@ describe('view-syncer/cvr', () => {
         ],
       ]);
 
-      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
-        patchRows: [[ROW_ID1, ['id']]],
-        deleteRows: [ROW_ID3],
+      const newVersion = {stateVersion: '1ba', minorVersion: 1};
+
+      expect(
+        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+      ).toEqual({
+        patchRows: [[newVersion, ROW_ID1, ['id']]],
+        deleteRows: [
+          [newVersion, ROW_ID3],
+          [{stateVersion: '1ba'}, DELETED_ROW_ID],
+        ],
       });
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
       expect(updated).toEqual({
         ...cvr,
-        version: {stateVersion: '1ba', minorVersion: 1},
+        version: newVersion,
         queries: {
           oneHash: {
             id: 'oneHash',
@@ -932,6 +1004,31 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Already in CVRs from "189"
+        id: IN_OLD_PATCH_ROW_ID,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID1,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID2,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID3,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Needs to be picked up by catchup.
+        id: DELETED_ROW_ID,
+      } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
@@ -1050,16 +1147,23 @@ describe('view-syncer/cvr', () => {
         ]),
       );
 
-      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
-        patchRows: [[ROW_ID1, ['id', 'desc']]],
-        deleteRows: [ROW_ID3],
+      const newVersion = {stateVersion: '1ba', minorVersion: 1};
+
+      expect(
+        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+      ).toEqual({
+        patchRows: [[newVersion, ROW_ID1, ['id', 'desc']]],
+        deleteRows: [
+          [newVersion, ROW_ID3],
+          [{stateVersion: '1ba'}, DELETED_ROW_ID],
+        ],
       });
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
       expect(updated).toEqual({
         ...cvr,
-        version: {stateVersion: '1ba', minorVersion: 1},
+        version: newVersion,
         lastActive: {epochMillis: 1713834000000},
       } satisfies CVRSnapshot);
 
@@ -1147,7 +1251,7 @@ describe('view-syncer/cvr', () => {
         rowVersion: '03',
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-        putPatch: {stateVersion: '1a0'},
+        putPatch: {stateVersion: '1ba'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
@@ -1158,6 +1262,31 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Already in CVRs from "189"
+        id: IN_OLD_PATCH_ROW_ID,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID1,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later put.
+        id: ROW_ID2,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'del', // Overridden by the later delete.
+        id: ROW_ID3,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/19z/r/${DELETED_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Needs to be picked up by catchup.
+        id: DELETED_ROW_ID,
+      } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'put',
@@ -1165,7 +1294,7 @@ describe('view-syncer/cvr', () => {
         rowVersion: '03',
         columns: ['id', 'name'],
       } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
+      [`/vs/cvr/abc123/p/d/1ba/r/${ROW_HASH2}`]: {
         type: 'row',
         op: 'put',
         id: ROW_ID2,
@@ -1192,16 +1321,26 @@ describe('view-syncer/cvr', () => {
       );
 
       updater.removed('oneHash');
-      expect(await updater.deleteUnreferencedColumnsAndRows()).toEqual({
-        patchRows: [[ROW_ID1, ['id']]],
-        deleteRows: [ROW_ID3],
+
+      const newVersion = {stateVersion: '1ba', minorVersion: 1};
+      expect(
+        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+      ).toEqual({
+        patchRows: [
+          [newVersion, ROW_ID1, ['id']],
+          [{stateVersion: '1ba'}, ROW_ID2, ['id']],
+        ],
+        deleteRows: [
+          [newVersion, ROW_ID3],
+          [{stateVersion: '19z'}, DELETED_ROW_ID],
+        ],
       });
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
       expect(updated).toEqual({
         ...cvr,
-        version: {stateVersion: '1ba', minorVersion: 1},
+        version: newVersion,
         queries: {},
         lastActive: {epochMillis: 1713834000000},
       } satisfies CVRSnapshot);

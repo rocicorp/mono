@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import {describe, expect, test} from 'vitest';
 import {CVRPaths, lastActiveIndex} from './paths.js';
-import type {CVRVersion, RowID} from './types.js';
+import {oneAfter, type CVRVersion, type RowID} from './types.js';
 
 describe('view-syncer/schema/paths', () => {
   test('patch path versioning', () => {
@@ -29,6 +29,26 @@ describe('view-syncer/schema/paths', () => {
         {id: 'boo-query'},
       ),
     ).toBe('/vs/cvr/456/p/m/2abc:110/q/boo-query');
+  });
+
+  test('version from patch path', () => {
+    const paths = new CVRPaths('fbr');
+    (
+      [
+        [
+          '/vs/cvr/fbr/p/d/28c8:12s/r/PNJVDvpmnF-qcv1Mw8AfiQ',
+          {stateVersion: '28c8', minorVersion: 100},
+        ],
+        [
+          '/vs/cvr/fbr/p/d/28c8/r/PNJVDvpmnF-qcv1Mw8AfiQ',
+          {stateVersion: '28c8'},
+        ],
+        ['/vs/cvr/fbr/p/m/01/c/foo', {stateVersion: '01'}],
+        ['/vs/cvr/fbr/p/m/01:02/c/foo', {stateVersion: '01', minorVersion: 2}],
+      ] satisfies [path: string, ver: CVRVersion][]
+    ).forEach(c => {
+      expect(paths.versionFromPatchPath(c[0])).toEqual(c[1]);
+    });
   });
 
   test('client paths', () => {
@@ -101,8 +121,10 @@ describe('view-syncer/schema/paths', () => {
       paths.rowPatch(v1, row),
       paths.rowPatchVersionPrefix(v2),
       paths.rowPatch(v2, row),
+      paths.rowPatchVersionPrefix(oneAfter(v2)),
       paths.rowPatchVersionPrefix(v3),
       paths.rowPatch(v3, row),
+      paths.rowPatchVersionPrefix(oneAfter(v3)),
     ];
     for (let i = 0; i < ordered.length; i++) {
       for (let j = i + 1; j < ordered.length; j++) {

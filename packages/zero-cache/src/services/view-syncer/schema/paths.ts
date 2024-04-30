@@ -1,4 +1,4 @@
-import {versionToLexi} from '../../../types/lexi-version.js';
+import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
 import {rowIDHash} from '../../../types/row-key.js';
 import type {CVRVersion, ClientRecord, QueryRecord, RowID} from './types.js';
 
@@ -132,6 +132,13 @@ export class CVRPaths {
     return `${this.root}/p/d/${v}/r/${rowIDHash(row)}`;
   }
 
+  versionFromPatchPath(path: string): CVRVersion {
+    const start = this.root.length + '/p/d/'.length;
+    const end = path.indexOf('/', start);
+    const version = path.substring(start, end);
+    return versionFromString(version);
+  }
+
   queryPatch(
     cvrVersion: CVRVersion,
     query: QueryRecord | {id: string},
@@ -158,4 +165,24 @@ export function versionString(v: CVRVersion) {
   return v.minorVersion
     ? `${v.stateVersion}:${versionToLexi(v.minorVersion)}`
     : v.stateVersion;
+}
+
+export function versionFromString(str: string): CVRVersion {
+  const parts = str.split(':');
+  const stateVersion = parts[0];
+  switch (parts.length) {
+    case 1: {
+      versionFromLexi(stateVersion); // Purely for validation.
+      return {stateVersion};
+    }
+    case 2: {
+      const minorVersion = versionFromLexi(parts[1]);
+      if (minorVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error(`minorVersion ${parts[1]} exceeds max safe integer`);
+      }
+      return {stateVersion, minorVersion: Number(minorVersion)};
+    }
+    default:
+      throw new TypeError(`Invalid version string ${str}`);
+  }
 }

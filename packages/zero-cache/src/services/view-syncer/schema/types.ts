@@ -1,8 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
-import {versionFromLexi} from '../../../types/lexi-version.js';
-import {versionString} from './paths.js';
+import {versionFromString, versionString} from './paths.js';
 
 export const cvrVersionSchema = v.object({
   /**
@@ -31,6 +30,13 @@ export const cvrVersionSchema = v.object({
 });
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
+
+export function oneAfter(v: CVRVersion): CVRVersion {
+  return {
+    stateVersion: v.stateVersion,
+    minorVersion: (v.minorVersion ?? 0) + 1,
+  };
+}
 
 export type NullableCVRVersion = CVRVersion | null;
 
@@ -63,23 +69,7 @@ export function cookieToVersion(cookie: string | null): NullableCVRVersion {
   if (cookie === null) {
     return null;
   }
-  const parts = cookie.split(':');
-  const stateVersion = parts[0];
-  switch (parts.length) {
-    case 1: {
-      versionFromLexi(stateVersion); // Purely for validation.
-      return {stateVersion};
-    }
-    case 2: {
-      const minorVersion = versionFromLexi(parts[1]);
-      if (minorVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error(`minorVersion ${parts[1]} exceeds max safe integer`);
-      }
-      return {stateVersion, minorVersion: Number(minorVersion)};
-    }
-    default:
-      throw new TypeError(`Invalid cookie ${cookie}`);
-  }
+  return versionFromString(cookie);
 }
 
 // Last Active tracking.

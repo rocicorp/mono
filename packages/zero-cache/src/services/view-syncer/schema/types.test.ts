@@ -3,6 +3,7 @@ import {
   CVRVersion,
   cmpVersions,
   cookieToVersion,
+  oneAfter,
   versionToNullableCookie,
 } from './types.js';
 
@@ -90,6 +91,38 @@ describe('view-syncer/schema/types', () => {
       test(`invalid cookie: ${c.reason}`, () => {
         expect(() => cookieToVersion(c.cookie)).toThrowError();
       });
+    });
+  });
+
+  (
+    [
+      {
+        version: {stateVersion: '00'},
+        plusOne: {stateVersion: '00', minorVersion: 1},
+      },
+      {
+        version: {stateVersion: '2abc'},
+        plusOne: {stateVersion: '2abc', minorVersion: 1},
+      },
+      {
+        version: {stateVersion: '00', minorVersion: 1},
+        plusOne: {stateVersion: '00', minorVersion: 2},
+      },
+      {
+        version: {stateVersion: '100', minorVersion: 10},
+        plusOne: {stateVersion: '100', minorVersion: 11},
+      },
+      {
+        version: {stateVersion: 'a128adk2f9s', minorVersion: 36},
+        plusOne: {stateVersion: 'a128adk2f9s', minorVersion: 37},
+      },
+    ] satisfies {
+      version: CVRVersion;
+      plusOne: CVRVersion;
+    }[]
+  ).forEach(c => {
+    test(`oneAfter version ${JSON.stringify(c.version)}`, () => {
+      expect(oneAfter(c.version)).toEqual(c.plusOne);
     });
   });
 });
