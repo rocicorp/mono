@@ -30,6 +30,7 @@ type Avg<Field extends string, Alias extends string> = {
 export type Count<Alias extends string> = {
   aggregate: 'count';
 } & {
+  field: undefined;
   alias: Alias;
 };
 
@@ -91,6 +92,7 @@ export function count<Alias extends string>(
   alias?: Alias | undefined,
 ): Count<Alias> {
   return {
+    field: undefined,
     aggregate: 'count',
     alias: alias ?? ('count' as Alias),
   };

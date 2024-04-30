@@ -256,11 +256,18 @@ export class EntityQuery<From extends FromSet, Return = []> {
           continue;
         }
         seen.add(more);
-        select.push([more, more]);
+        select.push([qualifySelector(this.#ast, more), more]);
 
         continue;
       }
-      aggregate.push(more);
+      aggregate.push({
+        field:
+          more.field !== undefined
+            ? qualifySelector(this.#ast, more.field)
+            : undefined,
+        alias: more.alias,
+        aggregate: more.aggregate,
+      });
     }
 
     return new EntityQuery<From, CombineSelections<From, Fields>[]>(
@@ -296,7 +303,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
           type: 'inner',
           other: other.#ast,
           as: alias,
-          on: [thisField, otherField],
+          on: [
+            qualifySelector(this.#ast, thisField),
+            qualifySelector(other.#ast, otherField, alias),
+          ],
         },
       ],
     });
@@ -392,6 +402,8 @@ export class EntityQuery<From extends FromSet, Return = []> {
     }
 
     if (whereOrHaving === 'where') {
+      // HAVING operates on the result of the query
+      // so it does not qualify its accessors.
       expr = qualify(this.#ast, expr);
     }
 
@@ -449,7 +461,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       this.#prefix,
       {
         ...this.#ast,
-        orderBy: [x, 'asc'],
+        orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'asc'],
       },
     );
   }
@@ -465,7 +477,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       this.#prefix,
       {
         ...this.#ast,
-        orderBy: [x, 'desc'],
+        orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'desc'],
       },
     );
   }
@@ -611,15 +623,27 @@ export function qualify<F extends FromSet>(
         conditions: expr.conditions.map(c => qualify(ast, c)),
       };
     default:
-      if (
-        (ast.joins !== undefined && ast.joins.length > 0) ||
-        expr.field.startsWith(ast.table + '.')
-      ) {
-        return expr;
-      }
       return {
         ...expr,
-        field: `${ast.table}.${expr.field}`,
+        field: qualifySelector(ast, expr.field),
       };
   }
+}
+
+function qualifySelector(
+  ast: AST,
+  selector: string,
+  alias?: string | undefined,
+): string {
+  // if there are joins then the type system
+  // will have ensured that the selector is already qualified
+  if (
+    (ast.joins !== undefined && ast.joins.length > 0) ||
+    (alias && selector.startsWith(alias + '.')) ||
+    (alias === undefined && selector.startsWith(ast.table + '.'))
+  ) {
+    return selector;
+  }
+
+  return `${alias ?? ast.table}.${selector}`;
 }
