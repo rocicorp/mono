@@ -83,8 +83,6 @@ const App = ({undoManager}: AppProps) => {
       'issueLabel.issueID',
     )
     .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
-  // .groupBy('issue.id')
-  // .select('issue.*', agg.array('label.name', 'labels'));
 
   const {filteredQuery, hasNonViewFilters, viewCountQuery} = filterQuery(
     issueListQuery,
@@ -370,8 +368,9 @@ function filterQuery(
     ? q.where('issue.status', 'IN', [...viewStatuses])
     : q;
 
-  // TODO: update `viewCountQuery` to `select(countDistinct(issueId))`
-  const viewCountQuery = viewStatusesQuery.select(agg.count());
+  const viewCountQuery = viewStatusesQuery
+    .distinct('issue.id')
+    .select(agg.count());
 
   if (issuesStatuses) {
     // Consider allowing Iterable<T> for IN
