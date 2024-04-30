@@ -5,7 +5,7 @@ export default defineWorkspace([
   defineWorkersConfig({
     test: {
       name: 'miniflare',
-      include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
+      include: ['src/**/*.*test.?(c|m)[jt]s?(x)'],
       poolOptions: {
         workers: {
           main: './test/miniflare-environment.js',

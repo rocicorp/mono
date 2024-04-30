@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --project miniflare #excludes pg tests",
+    "test": "vitest run --project miniflare '.test.ts' # excludes pg tests",
     "node-test": "vitest run --project node",
     "pg-test": "vitest run --project pg",
-    "all-test": "vitest run",
+    "all-test": "vitest run --project miniflare",
     "test:watch": "vitest watch",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
