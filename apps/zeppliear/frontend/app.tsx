@@ -82,9 +82,9 @@ const App = ({undoManager}: AppProps) => {
       'issue.id',
       'issueLabel.issueID',
     )
-    .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id')
-    .groupBy('issue.id')
-    .select('issue.*', agg.array('label.name', 'labels'));
+    .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
+  // .groupBy('issue.id')
+  // .select('issue.*', agg.array('label.name', 'labels'));
 
   const {filteredQuery, hasNonViewFilters, viewCountQuery} = filterQuery(
     issueListQuery,
@@ -308,10 +308,7 @@ function filterQuery(
   // TODO: having to know the from set and return type of the query to take it in as an arg is...
   // confusing at best.
   // TODO: having to know the `FromSet` is dumb.
-  q: EntityQuery<
-    {issue: Issue; label: Label},
-    {issue: Issue; labels: string[]}[]
-  >,
+  q: EntityQuery<{issue: Issue; label: Label}, []>,
   view: string | null,
   priorityFilter: string | null,
   statusFilter: string | null,
@@ -372,6 +369,8 @@ function filterQuery(
   const viewStatusesQuery = viewStatuses
     ? q.where('issue.status', 'IN', [...viewStatuses])
     : q;
+
+  // TODO: update `viewCountQuery` to `select(countDistinct(issueId))`
   const viewCountQuery = viewStatusesQuery.select(agg.count());
 
   if (issuesStatuses) {
@@ -381,11 +380,19 @@ function filterQuery(
   if (issuesPriorities) {
     q = q.where('issue.priority', 'IN', [...issuesPriorities]);
   }
+
+  let filteredQuery = q
+    .groupBy('issue.id')
+    .select('issue.*', agg.array('label.name', 'labels'));
   if (issueLabels) {
-    q = q.having('labels', 'INTERSECTS', [...issueLabels]);
+    // TODO: if `having` has been applied then selection
+    // set should not be updated to remove what `having` operates against.
+    filteredQuery = filteredQuery.having('labels', 'INTERSECTS', [
+      ...issueLabels,
+    ]);
   }
 
-  return {filteredQuery: q, hasNonViewFilters, viewCountQuery};
+  return {filteredQuery, hasNonViewFilters, viewCountQuery};
 }
 
 function orderQuery<R>(
