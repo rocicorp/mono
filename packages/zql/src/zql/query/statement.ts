@@ -20,42 +20,45 @@ export interface IStatement<TReturn> {
 }
 
 export class Statement<Return> implements IStatement<Return> {
-  readonly #pipeline;
   readonly #ast;
   readonly #context;
-  #materialization: View<Return extends [] ? Return[number] : Return> | null =
-    null;
+  #materialization?:
+    | View<Return extends [] ? Return[number] : Return>
+    | undefined = undefined;
 
   constructor(context: Context, ast: AST) {
     this.#ast = ast;
-    this.#pipeline = buildPipeline(
-      <T extends Entity>(sourceName: string) =>
-        context.getSource(sourceName).stream as unknown as DifferenceStream<T>,
-      ast,
-    );
     this.#context = context;
   }
 
   #getMaterialization(): View<Return> {
     // TODO: invariants to throw if the statement is not completely bound before materialization.
-    if (this.#materialization === null) {
-      this.#materialization = new MutableTreeView<
-        Return extends [] ? Return[number] : never
-      >(
-        this.#context,
-        this.#ast,
-        this.#pipeline as unknown as DifferenceStream<
+    if (this.#materialization === undefined) {
+      this.#context.materialite.tx(() => {
+        const pipeline = buildPipeline(
+          <T extends Entity>(sourceName: string) =>
+            this.#context.getSource(sourceName)
+              .stream as unknown as DifferenceStream<T>,
+          this.#ast,
+        );
+        this.#materialization = new MutableTreeView<
           Return extends [] ? Return[number] : never
-        >,
-        makeComparator<readonly string[], Record<string, unknown>>(
-          must(this.#ast.orderBy)[0],
-          must(this.#ast.orderBy)[1],
-        ),
-        this.#ast.orderBy,
-        this.#ast.limit,
-      ) as unknown as View<Return extends [] ? Return[number] : Return>;
+        >(
+          this.#context,
+          this.#ast,
+          pipeline as unknown as DifferenceStream<
+            Return extends [] ? Return[number] : never
+          >,
+          makeComparator<readonly string[], Record<string, unknown>>(
+            must(this.#ast.orderBy)[0],
+            must(this.#ast.orderBy)[1],
+          ),
+          this.#ast.orderBy,
+          this.#ast.limit,
+        ) as unknown as View<Return extends [] ? Return[number] : Return>;
 
-      this.#materialization.pullHistoricalData();
+        this.#materialization.pullHistoricalData();
+      });
     }
     return this.#materialization as View<Return>;
   }
@@ -89,10 +92,10 @@ export class Statement<Return> implements IStatement<Return> {
   }
 
   // For savvy users that want to subscribe directly to diffs.
-  // onDifference() {}
+  // onDifference();
 
   destroy() {
-    this.#pipeline.destroy();
+    this.#materialization?.destroy();
   }
 }
 

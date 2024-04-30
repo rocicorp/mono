@@ -13,4 +13,5 @@ export interface View<T> {
   get value(): T;
   get hydrated(): boolean;
   pullHistoricalData(): void;
+  destroy(): void;
 }
