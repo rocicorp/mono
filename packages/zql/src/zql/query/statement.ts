@@ -1,3 +1,4 @@
+import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import {
@@ -10,12 +11,13 @@ import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {MutableTreeView} from '../ivm/view/tree-view.js';
+import type {Source} from '../ivm/source/source.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
 
 export interface IStatement<TReturn> {
   subscribe(cb: (value: MakeHumanReadable<TReturn>) => void): () => void;
-  exec(): Promise<MakeHumanReadable<TReturn>>;
+  exec(): PromiseLike<MakeHumanReadable<TReturn>>;
   destroy(): void;
 }
 
@@ -23,7 +25,7 @@ export class Statement<Return> implements IStatement<Return> {
   readonly #ast;
   readonly #context;
   #materialization?:
-    | Promise<View<Return extends [] ? Return[number] : Return>>
+    | PromiseLike<View<Return extends [] ? Return[number] : Return>>
     | undefined = undefined;
 
   constructor(context: Context, ast: AST) {
@@ -31,15 +33,35 @@ export class Statement<Return> implements IStatement<Return> {
     this.#context = context;
   }
 
-  #getMaterialization(): Promise<View<Return>> {
-    // TODO: invariants to throw if the statement is not completely bound before materialization.
+  #getMaterialization(): PromiseLike<View<Return>> {
     if (this.#materialization === undefined) {
-      const pipeline = buildPipeline(
-        <T extends Entity>(sourceName: string) =>
-          this.#context.getSource(sourceName)
-            .stream as unknown as DifferenceStream<T>,
-        this.#ast,
-      );
+      this.#createMaterilization();
+    }
+    return this.#materialization as PromiseLike<View<Return>>;
+  }
+
+  #createMaterilization() {
+    assert(this.#materialization === undefined);
+
+    const usedSources: Source<Entity>[] = [];
+    const pipeline = buildPipeline(<T extends Entity>(sourceName: string) => {
+      const source = this.#context.getSource(sourceName);
+      const ret = source.stream as unknown as DifferenceStream<T>;
+      usedSources.push(source);
+      return ret;
+    }, this.#ast);
+
+    // We need to await seeding since sources can be ready at different times.
+    // If someone queries for Table A in one query then
+    // queries for Table A join Table B, Table A will be immediately ready.
+    // Since we optimisitcally run joins, we'll return an incomplete result
+    // as Table B hasn't returned from `watch` yet.
+    //
+    // This waits for all sources to have been loaded into memory
+    // before creating the view.
+    this.#materialization = Promise.all(
+      usedSources.filter(s => !s.isSeeded()).map(s => s.awaitSeeding()),
+    ).then(() => {
       const view = new MutableTreeView<
         Return extends [] ? Return[number] : never
       >(
@@ -55,10 +77,9 @@ export class Statement<Return> implements IStatement<Return> {
         this.#ast.orderBy,
         this.#ast.limit,
       ) as unknown as View<Return extends [] ? Return[number] : Return>;
-      this.#materialization = Promise.resolve(view);
       view.pullHistoricalData();
-    }
-    return this.#materialization as Promise<View<Return>>;
+      return view;
+    });
   }
 
   subscribe(
@@ -70,7 +91,7 @@ export class Statement<Return> implements IStatement<Return> {
       view.on(cb, initialData),
     );
     const cleanup = () => {
-      cleanupPromise.then(p => p()).catch(console.error);
+      void cleanupPromise.then(p => p());
     };
 
     return cleanup;
