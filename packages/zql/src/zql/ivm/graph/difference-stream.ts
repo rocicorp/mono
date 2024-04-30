@@ -2,12 +2,15 @@ import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
 import type {Primitive} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
-import type {JoinResult, Version} from '../types.js';
+import type {JoinResult, StringOrNumber, Version} from '../types.js';
 import type {Reply, Request} from './message.js';
 import {ConcatOperator} from './operators/concat-operator.js';
 import {DebugOperator} from './operators/debug-operator.js';
 import {DifferenceEffectOperator} from './operators/difference-effect-operator.js';
-import {DistinctOperator} from './operators/distinct-operator.js';
+import {
+  DistinctAllOperator,
+  DistinctOperator,
+} from './operators/distinct-operator.js';
 import {FilterOperator} from './operators/filter-operator.js';
 import {
   AggregateOut,
@@ -150,6 +153,11 @@ export class DifferenceStream<T extends object> {
         stream as unknown as DifferenceStream<Entity>,
       ),
     );
+  }
+
+  distinctAll(keyFn: (e: T) => StringOrNumber): DifferenceStream<T> {
+    const stream = new DifferenceStream<T>();
+    return stream.setUpstream(new DistinctAllOperator<T>(this, stream, keyFn));
   }
 
   reduce<K extends Primitive, O extends object>(
