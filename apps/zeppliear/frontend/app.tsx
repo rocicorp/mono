@@ -3,7 +3,7 @@ import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {generateKeyBetween} from 'fractional-indexing';
 import {minBy, pickBy} from 'lodash';
-import {useQueryState} from 'next-usequerystate';
+import {queryTypes, useQueryState} from 'next-usequerystate';
 import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
@@ -67,6 +67,10 @@ const App = ({undoManager}: AppProps) => {
   const [priorityFilter] = useQueryState('priorityFilter');
   const [statusFilter] = useQueryState('statusFilter');
   const [labelFilter] = useQueryState('labelFilter');
+  const [labelFilterDecoded] = useQueryState(
+    'labelFilter',
+    queryTypes.array(queryTypes.string),
+  );
   const [orderBy] = useQueryState('orderBy');
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
@@ -89,7 +93,7 @@ const App = ({undoManager}: AppProps) => {
     view,
     priorityFilter,
     statusFilter,
-    labelFilter,
+    labelFilterDecoded,
   );
   const issueOrder = getIssueOrder(view, orderBy);
   const filteredAndOrderedQuery = orderQuery(filteredQuery, issueOrder);
@@ -310,7 +314,7 @@ function filterQuery(
   view: string | null,
   priorityFilter: string | null,
   statusFilter: string | null,
-  labelFilter: string | null,
+  labelFilter: string[] | null,
 ) {
   let viewStatuses: Set<Status> | undefined;
   switch (view?.toLowerCase()) {
@@ -359,7 +363,7 @@ function filterQuery(
 
   if (labelFilter) {
     issueLabels = new Set<string>();
-    for (const label of labelFilter.split(',')) {
+    for (const label of labelFilter) {
       issueLabels.add(label);
     }
   }
