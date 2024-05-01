@@ -2,9 +2,9 @@ import type {
   ExecutionContext,
   ExportedHandler,
 } from '@cloudflare/workers-types';
-import type {ServiceRunnerEnv} from './runner.js';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {timed} from 'shared/src/timed.js';
+import type {ServiceRunnerEnv} from './service-runner.js';
 
 export interface WorkerOptions {
   logSink: LogSink;

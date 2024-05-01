@@ -14,6 +14,7 @@ function buildMiniflareEnvironment() {
     entryPoints: [path.join(dirname, 'test', 'miniflare-environment.ts')],
     outdir: path.join(dirname, 'out', 'test'),
     external: [],
+    platform: 'node',
   });
 }
 

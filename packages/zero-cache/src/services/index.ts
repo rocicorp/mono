@@ -1,7 +1,8 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
-import {ServiceRunnerDO, ServiceRunnerEnv} from './runner.js';
+import {ServiceRunnerDO} from './runner-do.js';
 import {createWorker} from './worker.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import type {ServiceRunnerEnv} from './service-runner.js';
 
 const DEFAULT_LOG_LEVEL = 'info';
 
