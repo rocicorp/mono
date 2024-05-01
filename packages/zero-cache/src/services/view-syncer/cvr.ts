@@ -1,13 +1,13 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
-import {assert} from 'shared/src/asserts.js';
-import type {Immutable} from 'shared/src/immutable.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import type {Storage} from '../../storage/storage.js';
 import {WriteCache} from '../../storage/write-cache.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {LexiVersion, versionToLexi} from '../../types/lexi-version.js';
+import type {Patch, PatchToVersion} from './client-handler.js';
 import type {ParsedRow} from './queries.js';
 import {CVRPaths, lastActiveIndex} from './schema/paths.js';
 import {
@@ -19,6 +19,7 @@ import {
   RowRecord,
   cmpVersions,
   metaRecordSchema,
+  metadataPatchSchema,
   oneAfter,
   rowPatchSchema,
   rowRecordSchema,
@@ -38,7 +39,14 @@ type CVR = {
 };
 
 /** Exported immutable CVR type. */
-export type CVRSnapshot = Immutable<CVR>;
+// TODO: Use Immutable<CVR> when the AST is immutable.
+export type CVRSnapshot = {
+  readonly id: string;
+  readonly version: CVRVersion;
+  readonly lastActive: LastActive;
+  readonly clients: Readonly<Record<string, ClientRecord>>;
+  readonly queries: Readonly<Record<string, QueryRecord>>;
+};
 
 /** Loads the CVR metadata from storage. */
 export async function loadCVR(
@@ -138,6 +146,42 @@ export class CVRUpdater {
 
     this._cvr.lastActive = {epochMillis: newMillis};
     void this._writes.put(this._paths.lastActive(), this._cvr.lastActive);
+  }
+
+  async generateConfigPatches(after: CVRVersion) {
+    const patches: PatchToVersion[] = [];
+    const configPatches = this._writes.batchScan(
+      {
+        prefix: this._paths.metadataPatchPrefix(),
+        start: {key: this._paths.metadataPatchVersionPrefix(oneAfter(after))},
+      },
+      metadataPatchSchema,
+      2000, // Arbitrary batch size. Determines how many row records are in memory at a time.
+    );
+    for await (const batch of configPatches) {
+      for (const [path, patchRecord] of batch) {
+        const toVersion = this._paths.versionFromPatchPath(path);
+        let patch: Patch;
+        switch (patchRecord.type) {
+          case 'client':
+            patch = patchRecord;
+            break;
+          case 'query': {
+            const {id, op} = patchRecord;
+            if (op === 'put') {
+              patch = {...patchRecord, op, ast: this._cvr.queries[id].ast};
+            } else {
+              patch = {...patchRecord, op};
+            }
+            break;
+          }
+          default:
+            unreachable();
+        }
+        patches.push({patch, toVersion});
+      }
+    }
+    return patches;
   }
 
   async flush(lastActive = new Date()): Promise<CVRSnapshot> {
@@ -260,8 +304,10 @@ type QueriedColumns = Record<string, string[]>;
  * * {@link executed} for all queries that were executed (i.e. because of invalidation,
  *                    or because they are new)
  * * {@link received} for all rows received from the executed queries
- * * {@link deleteUnreferencedColumnsAndRows} as a final step to remove any columns or
+ * * {@link deleteUnreferencedColumnsAndRows} to remove any columns or
  *                    rows that have fallen out of the query result view.
+ * * {@link generateConfigPatches} to send any config changes
+ * * {@link flush}
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #executedQueryIDs = new Set<string>();
@@ -346,6 +392,19 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
+   * Asserts that a new version has already been set.
+   *
+   * After {@link executed} and {@link removed} are called, we must have properly
+   * decided on the final CVR version because the poke-start message declares the
+   * final cookie (i.e. version), and that must be sent before any poke parts
+   * generated from {@link received} are sent.
+   */
+  #assertNewVersion(): CVRVersion {
+    assert(cmpVersions(this._orig.version, this._cvr.version) < 0);
+    return this._cvr.version;
+  }
+
+  /**
    * Tracks rows received from executing queries. This will update row records and
    * row patches if the received rows have a new version or contain columns that
    * are not currently in the view. The method also returns (merge) patches to be
@@ -381,7 +440,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         // (i.e. that are catching up), if any.
         putPatch = existing.putPatch;
       } else {
-        putPatch = this._ensureNewVersion();
+        putPatch = this.#assertNewVersion();
         if (existing) {
           void this._writes.del(this._paths.rowPatch(existing.putPatch, id));
         }
@@ -517,8 +576,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       deleteRows.push(...[...deletes.values()]);
     }
 
-    // Note: This only includes deletes and "constrain" patches from the previous CVR version to the new one.
-    // TODO: Add catchup of deletes and constrains clients with older CVRs.
     return {patchRows, deleteRows};
   }
 
@@ -538,7 +595,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     if (!delColumns.length) {
       return null; // No columns deleted.
     }
-    const putPatch = this._ensureNewVersion();
+    const putPatch = this.#assertNewVersion();
     const {id, rowVersion} = existing;
     const columns = Object.keys(newQueriedColumns);
     if (columns.length === 0) {

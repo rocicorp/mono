@@ -225,3 +225,7 @@ export const clientPatchSchema = patchSchema.extend({
 });
 
 export type ClientPatch = v.Infer<typeof clientPatchSchema>;
+
+export const metadataPatchSchema = v.union(clientPatchSchema, queryPatchSchema);
+
+export type MetadataPatch = v.Infer<typeof metadataPatchSchema>;

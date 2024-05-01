@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
-import {assert, unreachable} from 'shared/src/asserts.js';
+import {unreachable} from 'shared/src/asserts.js';
 import type {Downstream, PokePartBody} from 'zero-protocol';
 import type {Subscription} from '../../types/subscription.js';
 import {
@@ -15,25 +15,21 @@ import {
   type CVRVersion,
 } from './schema/types.js';
 
+export type Patch = ClientPatch | DelQueryPatch | (PutQueryPatch & {ast: AST});
+
+export type PatchToVersion = {
+  patch: Patch;
+  toVersion: CVRVersion;
+};
+
 export interface PokeHandler {
-  // TODO: RowPatch w/contents
-  addPatch(
-    toVersion: CVRVersion,
-    patch: DelQueryPatch | ClientPatch,
-  ): Promise<void>;
-
-  addPatch(
-    toVersion: CVRVersion,
-    patch: PutQueryPatch,
-    ast: AST,
-  ): Promise<void>;
-
-  end(): Promise<void>;
+  addPatch(patch: PatchToVersion): void;
+  end(): void;
 }
 
 const NOOP: PokeHandler = {
-  addPatch: () => Promise.resolve(),
-  end: () => Promise.resolve(),
+  addPatch: () => {},
+  end: () => {},
 };
 
 /**
@@ -53,6 +49,14 @@ export class ClientHandler {
     this.#lc = lc.withContext('clientID', clientID);
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);
+  }
+
+  version(): NullableCVRVersion {
+    return this.#baseVersion;
+  }
+
+  close() {
+    this.#pokes.cancel();
   }
 
   startPoke(finalVersion: CVRVersion): PokeHandler {
@@ -80,8 +84,8 @@ export class ClientHandler {
     };
 
     return {
-      // eslint-disable-next-line require-await
-      addPatch: async (toVersion, patch, ast?: AST) => {
+      addPatch: (patchToVersion: PatchToVersion) => {
+        const {patch, toVersion} = patchToVersion;
         if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
           return;
         }
@@ -96,7 +100,7 @@ export class ClientHandler {
               ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
               : (body.gotQueriesPatch ??= []);
             if (patch.op === 'put') {
-              assert(ast);
+              const {ast} = patch;
               patches.push({op: 'put', hash: patch.id, ast});
             } else {
               patches.push({op: 'del', hash: patch.id});
@@ -110,8 +114,7 @@ export class ClientHandler {
         // TODO: Add logic to flush body at certain simple thresholds.
       },
 
-      // eslint-disable-next-line require-await
-      end: async () => {
+      end: () => {
         flushBody();
         this.#pokes.push(['pokeEnd', {pokeID}]);
         this.#baseVersion = finalVersion;
