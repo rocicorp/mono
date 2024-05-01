@@ -9,23 +9,27 @@ import {
   readIndexesForWrite,
 } from '../db/write.js';
 import {FormatVersion} from '../format-version.js';
-import {assertPatchOperations} from '../patch-operation.js';
+import {
+  PatchOperationInternal,
+  assertPatchOperations,
+} from '../patch-operation.js';
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
+import {deepFreeze} from '../frozen-json.js';
 
 suite('patch', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const lc = new LogContext();
 
     type Case = {
       name: string;
-      patch: JSONValue;
+      // defaults to new Map([["key", "value"]]);
+      existing?: Map<string, JSONValue> | undefined;
+      patch: PatchOperationInternal[];
       expErr?: string | undefined;
-      // Note: the test inserts "key" => "value" into the map prior to
-      // calling apply() so we can check if top-level removes work.
-      expMap?: Map<string, string> | undefined;
+      expMap?: Map<string, JSONValue> | undefined;
     };
     const cases: Case[] = [
       {
@@ -127,35 +131,168 @@ suite('patch', () => {
         ]),
       },
       {
+        name: 'update no merge no constrain no existing',
+        patch: [{op: 'update', key: 'foo'}],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {}],
+        ]),
+      },
+      {
+        name: 'update no merge with constrain no existing',
+        patch: [{op: 'update', key: 'foo', constrain: ['bar']}],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {}],
+        ]),
+      },
+      {
+        name: 'update with merge no constrain no existing',
+        patch: [
+          {op: 'update', key: 'foo', merge: {bar: 'baz', fuzzy: 'wuzzy'}},
+        ],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bar: 'baz', fuzzy: 'wuzzy'}],
+        ]),
+      },
+      {
+        name: 'update with merge with constrain no existing',
+        patch: [
+          {
+            op: 'update',
+            key: 'foo',
+            merge: {bar: 'baz', fuzzy: 'wuzzy'},
+            constrain: ['bar'],
+          },
+        ],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bar: 'baz'}],
+        ]),
+      },
+      ////
+      {
+        name: 'update no merge no constrain with existing',
+        existing: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz'}],
+        ]),
+        patch: [{op: 'update', key: 'foo'}],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz'}],
+        ]),
+      },
+      {
+        name: 'update no merge with constrain with existing',
+        existing: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz'}],
+        ]),
+        patch: [{op: 'update', key: 'foo', constrain: ['bar']}],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bar: 'baz'}],
+        ]),
+      },
+      {
+        name: 'update with merge no constrain with existing',
+        existing: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz'}],
+        ]),
+        patch: [
+          {op: 'update', key: 'foo', merge: {bar: 'baz2', fuzzy: 'wuzzy'}},
+        ],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz2', fuzzy: 'wuzzy'}],
+        ]),
+      },
+      {
+        name: 'update with merge with constrain with existing',
+        existing: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz'}],
+        ]),
+        patch: [
+          {
+            op: 'update',
+            key: 'foo',
+            merge: {bar: 'baz2', fuzzy: 'wuzzy'},
+            constrain: ['bar', 'bing'],
+          },
+        ],
+        expErr: undefined,
+        expMap: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', {bing: 'bong', bar: 'baz2'}],
+        ]),
+      },
+      {
+        name: 'update existing is not an object',
+        existing: new Map<string, JSONValue>([
+          ['key', 'value'],
+          ['foo', 'bar'],
+        ]),
+        patch: [
+          {
+            op: 'update',
+            key: 'foo',
+            merge: {bar: 'baz2', fuzzy: 'wuzzy'},
+            constrain: ['bar', 'bing'],
+          },
+        ],
+        expErr: 'Invalid type: string `bar`, expected object',
+        expMap: undefined,
+      },
+      {
         name: 'invalid op',
-        patch: [{op: 'BOOM', key: 'key'}],
+        patch: [{op: 'BOOM', key: 'key'} as unknown as PatchOperationInternal],
         expErr:
           'unknown patch op `BOOM`, expected one of `put`, `del`, `clear`',
         expMap: undefined,
       },
       {
         name: 'invalid key',
-        patch: [{op: 'put', key: 42, value: true}],
+        patch: [
+          {
+            op: 'put',
+            key: 42,
+            value: true,
+          } as unknown as PatchOperationInternal,
+        ],
         expErr: 'Invalid type: number `42`, expected string',
         expMap: undefined,
       },
       {
         name: 'missing value',
-        patch: [{op: 'put', key: 'k'}],
+        patch: [{op: 'put', key: 'k'} as unknown as PatchOperationInternal],
         // expErr: 'missing field `value`',
         expErr: 'Invalid type: undefined, expected JSON value',
         expMap: undefined,
       },
       {
         name: 'missing key for del',
-        patch: [{op: 'del'}],
+        patch: [{op: 'del'} as unknown as PatchOperationInternal],
         // expErr: 'missing field `key`',
         expErr: 'Invalid type: undefined, expected string',
         expMap: undefined,
       },
       {
         name: 'make sure we do not apply parts of the patch',
-        patch: [{op: 'put', key: 'k', value: 42}, {op: 'del'}],
+        patch: [
+          {op: 'put', key: 'k', value: 42},
+          {op: 'del'} as unknown as PatchOperationInternal,
+        ],
         // expErr: 'missing field `key`',
         expErr: 'Invalid type: undefined, expected string',
         expMap: new Map([['key', 'value']]),
@@ -163,58 +300,66 @@ suite('patch', () => {
     ];
 
     for (const c of cases) {
-      const b = new ChainBuilder(store, undefined, formatVersion);
-      await b.addGenesis(clientID);
-      await withWriteNoImplicitCommit(store, async dagWrite => {
-        let dbWrite;
-        if (formatVersion >= FormatVersion.DD31) {
-          dbWrite = await newWriteSnapshotDD31(
-            b.chain[0].chunk.hash,
-            {[clientID]: 1},
-            'cookie',
-            dagWrite,
-            clientID,
-            formatVersion,
-          );
-        } else {
-          dbWrite = await newWriteSnapshotSDD(
-            b.chain[0].chunk.hash,
-            1,
-            'cookie',
-            dagWrite,
-            readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
-            clientID,
-            formatVersion,
-          );
-        }
-        await dbWrite.put(lc, 'key', 'value');
-
-        const ops = c.patch;
-
-        let err;
-        try {
-          assertPatchOperations(ops);
-          await apply(lc, dbWrite, ops);
-        } catch (e) {
-          err = e;
-        }
-        if (c.expErr) {
-          expect(err).to.be.instanceOf(Error);
-          expect((err as Error).message).to.equal(c.expErr);
-        }
-
-        if (c.expMap !== undefined) {
-          for (const [k, v] of c.expMap) {
-            expect(v).to.deep.equal(await dbWrite.get(k));
+      test(c.name, async () => {
+        const b = new ChainBuilder(store, undefined, formatVersion);
+        await b.addGenesis(clientID);
+        await withWriteNoImplicitCommit(store, async dagWrite => {
+          let dbWrite;
+          if (formatVersion >= FormatVersion.DD31) {
+            dbWrite = await newWriteSnapshotDD31(
+              b.chain[0].chunk.hash,
+              {[clientID]: 1},
+              'cookie',
+              dagWrite,
+              clientID,
+              formatVersion,
+            );
+          } else {
+            dbWrite = await newWriteSnapshotSDD(
+              b.chain[0].chunk.hash,
+              1,
+              'cookie',
+              dagWrite,
+              readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
+              clientID,
+              formatVersion,
+            );
           }
-          if (c.expMap.size === 0) {
-            expect(await dbWrite.has('key')).to.be.false;
+          for (const [key, value] of c.existing ??
+            new Map([['key', 'value']])) {
+            await dbWrite.put(lc, key, deepFreeze(value));
           }
-        }
+
+          const ops = c.patch;
+
+          let err;
+          try {
+            assertPatchOperations(ops);
+            await apply(lc, dbWrite, ops);
+          } catch (e) {
+            err = e;
+          }
+          if (c.expErr === undefined && err !== undefined) {
+            throw err;
+          }
+          if (c.expErr !== undefined) {
+            expect(err).to.be.instanceOf(Error);
+            expect((err as Error).message).to.equal(c.expErr);
+          }
+
+          if (c.expMap !== undefined) {
+            for (const [k, v] of c.expMap) {
+              expect(v).to.deep.equal(await dbWrite.get(k));
+            }
+            if (c.expMap.size === 0) {
+              expect(await dbWrite.isEmpty()).to.be.true;
+            }
+          }
+        });
       });
     }
   };
 
-  test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
+  suite('dd31', () => t(FormatVersion.Latest));
+  suite('sdd', () => t(FormatVersion.SDD));
 });

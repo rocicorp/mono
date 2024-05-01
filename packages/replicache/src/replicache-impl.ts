@@ -114,7 +114,7 @@ import type {
   MaybePromise,
   MutatorDefs,
   MutatorReturn,
-  Poke,
+  PokeInternal,
   QueryInternal,
   RequestOptions,
   UpdateNeededReason,
@@ -1150,7 +1150,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(poke: Poke): Promise<void> {
+  async poke(poke: PokeInternal): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server

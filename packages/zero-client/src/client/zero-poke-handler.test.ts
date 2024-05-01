@@ -950,10 +950,11 @@ test('mergePokes with all optionals defined', () => {
               value: {id: 'issue1', title: 'foo1'},
             },
             {
-              op: 'put',
+              op: 'update',
               entityType: 'issue',
               entityID: {id: 'issue2'},
-              value: {id: 'issue2', title: 'bar1'},
+              merge: {id: 'issue2', title: 'bar1'},
+              constrain: ['id', 'title'],
             },
           ],
         },
@@ -1085,9 +1086,10 @@ test('mergePokes with all optionals defined', () => {
           value: {id: 'issue1', title: 'foo1'},
         },
         {
-          op: 'put',
+          op: 'update',
           key: 'e/issue/issue2',
-          value: {id: 'issue2', title: 'bar1'},
+          merge: {id: 'issue2', title: 'bar1'},
+          constrain: ['id', 'title'],
         },
         {
           op: 'put',
@@ -1183,10 +1185,11 @@ test('mergePokes sparse', () => {
               value: {id: 'issue1', title: 'foo1'},
             },
             {
-              op: 'put',
+              op: 'update',
               entityType: 'issue',
               entityID: {id: 'issue2'},
-              value: {id: 'issue2', title: 'bar1'},
+              merge: {id: 'issue2', title: 'bar1'},
+              constrain: ['id', 'title'],
             },
           ],
         },
@@ -1267,9 +1270,10 @@ test('mergePokes sparse', () => {
           value: {id: 'issue1', title: 'foo1'},
         },
         {
-          op: 'put',
+          op: 'update',
           key: 'e/issue/issue2',
-          value: {id: 'issue2', title: 'bar1'},
+          merge: {id: 'issue2', title: 'bar1'},
+          constrain: ['id', 'title'],
         },
         {
           op: 'put',

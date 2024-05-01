@@ -5,7 +5,10 @@ import type {
   VersionNotSupportedResponse,
 } from './error-responses.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
-import type {PatchOperation} from './patch-operation.js';
+import type {
+  PatchOperation,
+  PatchOperationInternal,
+} from './patch-operation.js';
 import type {ClientID} from './sync/ids.js';
 import type {PullRequest} from './sync/pull.js';
 
@@ -59,6 +62,14 @@ export type PullResponseOKV1 = {
   patch: PatchOperation[];
 };
 
+export type PullResponseOKV1Internal = {
+  cookie: Cookie;
+  // All last mutation IDs from clients in clientGroupID that changed
+  // between PullRequest.cookie and PullResponseOK.cookie.
+  lastMutationIDChanges: Record<ClientID, number>;
+  patch: PatchOperationInternal[];
+};
+
 /**
  * PullResponse defines the shape and type of the response of a pull. This is
  * the JSON you should return from your pull server endpoint.
@@ -74,6 +85,11 @@ export type PullResponseV0 =
  */
 export type PullResponseV1 =
   | PullResponseOKV1
+  | ClientStateNotFoundResponse
+  | VersionNotSupportedResponse;
+
+export type PullResponseV1Internal =
+  | PullResponseOKV1Internal
   | ClientStateNotFoundResponse
   | VersionNotSupportedResponse;
 
