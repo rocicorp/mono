@@ -114,46 +114,45 @@ export class CVRPaths {
     return `${this.root}/d/r/`;
   }
 
-  clientPatch(
-    cvrVersion: CVRVersion,
-    client: ClientRecord | {id: string},
-  ): string {
-    const v = versionString(cvrVersion);
-    return `${this.root}/p/m/${v}/c/${client.id}`;
-  }
-
   rowPatchVersionPrefix(cvrVersion: CVRVersion): string {
     const v = versionString(cvrVersion);
     return `${this.root}/p/d/${v}/`;
   }
 
-  rowPatch(cvrVersion: CVRVersion, row: RowID): string {
-    const v = versionString(cvrVersion);
-    return `${this.root}/p/d/${v}/r/${rowIDHash(row)}`;
+  rowPatch(v: CVRVersion, row: RowID): string {
+    return `${this.rowPatchVersionPrefix(v)}r/${rowIDHash(row)}`;
   }
 
   versionFromPatchPath(path: string): CVRVersion {
-    const start = this.root.length + '/p/d/'.length;
+    const start = this.root.length + '/p/d/'.length; // Also works for '/p/m/' for metadata patches.
     const end = path.indexOf('/', start);
     const version = path.substring(start, end);
     return versionFromString(version);
   }
 
-  queryPatch(
-    cvrVersion: CVRVersion,
-    query: QueryRecord | {id: string},
-  ): string {
+  metadataPatchPrefix(): string {
+    return `${this.root}/p/m/`;
+  }
+
+  metadataPatchVersionPrefix(cvrVersion: CVRVersion): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/p/m/${v}/q/${query.id}`;
+    return `${this.root}/p/m/${v}/`;
+  }
+
+  clientPatch(v: CVRVersion, client: ClientRecord | {id: string}): string {
+    return `${this.metadataPatchVersionPrefix(v)}c/${client.id}`;
+  }
+
+  queryPatch(v: CVRVersion, query: QueryRecord | {id: string}): string {
+    return `${this.metadataPatchVersionPrefix(v)}q/${query.id}`;
   }
 
   desiredQueryPatch(
-    cvrVersion: CVRVersion,
+    v: CVRVersion,
     query: QueryRecord | {id: string},
     client: ClientRecord | {id: string},
   ): string {
-    const v = versionString(cvrVersion);
-    return `${this.root}/p/m/${v}/q/${query.id}/c/${client.id}`;
+    return `${this.metadataPatchVersionPrefix(v)}q/${query.id}/c/${client.id}`;
   }
 }
 

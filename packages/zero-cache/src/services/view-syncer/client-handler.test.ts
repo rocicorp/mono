@@ -10,7 +10,7 @@ import {Subscription} from '../../types/subscription.js';
 import {ClientHandler} from './client-handler.js';
 
 describe('view-syncer/client-handler', () => {
-  test('poke handler', async () => {
+  test('poke handler', () => {
     const poke1Version = {stateVersion: '121'};
     const poke2Version = {stateVersion: '123'};
 
@@ -35,41 +35,50 @@ describe('view-syncer/client-handler', () => {
 
     let pokers = handlers.map(client => client.startPoke(poke1Version));
     for (const poker of pokers) {
-      await poker.addPatch(
-        {stateVersion: '11z', minorVersion: 1},
-        {type: 'client', op: 'put', id: 'foo'},
-      );
-      await poker.addPatch(
-        {stateVersion: '120', minorVersion: 1},
-        {type: 'client', op: 'put', id: 'bar'},
-      );
-      await poker.addPatch(
-        {stateVersion: '121'},
-        {type: 'client', op: 'put', id: 'baz'},
-      );
+      poker.addPatch({
+        toVersion: {stateVersion: '11z', minorVersion: 1},
+        patch: {type: 'client', op: 'put', id: 'foo'},
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '120', minorVersion: 1},
+        patch: {type: 'client', op: 'put', id: 'bar'},
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '121'},
+        patch: {type: 'client', op: 'put', id: 'baz'},
+      });
 
-      await poker.addPatch(
-        {stateVersion: '11z', minorVersion: 1},
-        {type: 'query', op: 'put', id: 'foohash', clientID: 'foo'},
-        {table: 'issues'},
-      );
-      await poker.addPatch(
-        {stateVersion: '120', minorVersion: 2},
-        {type: 'query', op: 'del', id: 'barhash', clientID: 'foo'},
-      );
-      await poker.addPatch(
-        {stateVersion: '121'},
-        {type: 'query', op: 'put', id: 'bazhash'},
-        {table: 'labels'},
-      );
+      poker.addPatch({
+        toVersion: {stateVersion: '11z', minorVersion: 1},
+        patch: {
+          type: 'query',
+          op: 'put',
+          id: 'foohash',
+          clientID: 'foo',
+          ast: {table: 'issues'},
+        },
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '120', minorVersion: 2},
+        patch: {type: 'query', op: 'del', id: 'barhash', clientID: 'foo'},
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '121'},
+        patch: {
+          type: 'query',
+          op: 'put',
+          id: 'bazhash',
+          ast: {table: 'labels'},
+        },
+      });
 
-      await poker.end();
+      poker.end();
     }
 
     // Now send another (empty) poke with everyone at the same baseCookie.
     pokers = handlers.map(client => client.startPoke(poke2Version));
     for (const poker of pokers) {
-      await poker.end();
+      poker.end();
     }
 
     // Cancel the subscriptions to collect the unconsumed messages.

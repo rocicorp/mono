@@ -527,6 +527,16 @@ describe('view-syncer/cvr', () => {
         op: 'del', // Already in CVRs from "189"
         id: IN_OLD_PATCH_ROW_ID,
       } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
+        type: 'query',
+        op: 'del', // Already in CVRs from "189"
+        id: 'already-deleted',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
+        type: 'query',
+        op: 'del',
+        id: 'catchup-delete',
+      } satisfies QueryPatch,
       [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
         type: 'row',
         op: 'del', // Overridden by the later put.
@@ -666,11 +676,30 @@ describe('view-syncer/cvr', () => {
         deleteRows: [[{stateVersion: '1aa'}, DELETED_ROW_ID]],
       });
 
+      const newVersion = {stateVersion: '1aa', minorVersion: 1};
+      expect(
+        await updater.generateConfigPatches({stateVersion: '189'}),
+      ).toEqual([
+        {
+          patch: {type: 'query', op: 'del', id: 'catchup-delete'},
+          toVersion: {stateVersion: '19z'},
+        },
+        {
+          patch: {
+            type: 'query',
+            op: 'put',
+            id: 'oneHash',
+            ast: {table: 'issues'},
+          },
+          toVersion: newVersion,
+        },
+      ]);
+
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
       expect(updated).toEqual({
         ...cvr,
-        version: {stateVersion: '1aa', minorVersion: 1},
+        version: newVersion,
         queries: {
           oneHash: {
             id: 'oneHash',
@@ -769,6 +798,16 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
+        type: 'query',
+        op: 'del', // Already in CVRs from "189"
+        id: 'already-deleted',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
+        type: 'query',
+        op: 'del',
+        id: 'catchup-delete',
+      } satisfies QueryPatch,
       [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
         type: 'row',
         op: 'del', // Already in CVRs from "189"
@@ -888,6 +927,14 @@ describe('view-syncer/cvr', () => {
           [{stateVersion: '1ba'}, DELETED_ROW_ID],
         ],
       });
+      expect(
+        await updater.generateConfigPatches({stateVersion: '189'}),
+      ).toEqual([
+        {
+          patch: {type: 'query', op: 'del', id: 'catchup-delete'},
+          toVersion: {stateVersion: '19z'},
+        },
+      ]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
@@ -986,6 +1033,16 @@ describe('view-syncer/cvr', () => {
         transformationVersion: {stateVersion: '1aa'},
         putPatch: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
+      [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
+        type: 'query',
+        op: 'del', // Already in CVRs from "189"
+        id: 'already-deleted',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
+        type: 'query',
+        op: 'del',
+        id: 'catchup-delete',
+      } satisfies QueryPatch,
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
         putPatch: {stateVersion: '1aa', minorVersion: 1},
@@ -1063,8 +1120,8 @@ describe('view-syncer/cvr', () => {
         '1ba',
       );
 
-      updater.executed('oneHash', 'oneServerHash');
-      updater.executed('twoHash', 'twoServerHash');
+      updater.executed('oneHash', 'updatedOneServerHash');
+      updater.executed('twoHash', 'updatedTwoServerHash');
       expect(
         await updater.received(
           new Map([
@@ -1158,6 +1215,14 @@ describe('view-syncer/cvr', () => {
           [{stateVersion: '1ba'}, DELETED_ROW_ID],
         ],
       });
+      expect(
+        await updater.generateConfigPatches({stateVersion: '189'}),
+      ).toEqual([
+        {
+          patch: {type: 'query', op: 'del', id: 'catchup-delete'},
+          toVersion: {stateVersion: '19z'},
+        },
+      ]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
@@ -1165,6 +1230,24 @@ describe('view-syncer/cvr', () => {
         ...cvr,
         version: newVersion,
         lastActive: {epochMillis: 1713834000000},
+        queries: {
+          oneHash: {
+            id: 'oneHash',
+            ast: {table: 'issues'},
+            desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+            transformationHash: 'updatedOneServerHash',
+            transformationVersion: newVersion,
+            putPatch: {stateVersion: '1aa', minorVersion: 1},
+          },
+          twoHash: {
+            id: 'twoHash',
+            ast: {table: 'issues'},
+            desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+            transformationHash: 'updatedTwoServerHash',
+            transformationVersion: newVersion,
+            putPatch: {stateVersion: '1aa', minorVersion: 1},
+          },
+        },
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
@@ -1184,6 +1267,7 @@ describe('view-syncer/cvr', () => {
         ...remainingState,
         ['/vs/cvr/abc123/m/version']: updated.version,
         ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
+        ['/vs/cvr/abc123/m/q/twoHash']: updated.queries.twoHash,
         ['/vs/cvr/abc123/m/lastActive']: {
           epochMillis: Date.UTC(2024, 3, 23, 1),
         } satisfies LastActive,
@@ -1262,6 +1346,16 @@ describe('view-syncer/cvr', () => {
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
+        type: 'query',
+        op: 'del', // Already in CVRs from "189"
+        id: 'already-deleted',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
+        type: 'query',
+        op: 'del',
+        id: 'catchup-delete',
+      } satisfies QueryPatch,
       [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
         type: 'row',
         op: 'del', // Already in CVRs from "189"
@@ -1335,6 +1429,18 @@ describe('view-syncer/cvr', () => {
           [{stateVersion: '19z'}, DELETED_ROW_ID],
         ],
       });
+      expect(
+        await updater.generateConfigPatches({stateVersion: '189'}),
+      ).toEqual([
+        {
+          patch: {type: 'query', op: 'del', id: 'catchup-delete'},
+          toVersion: {stateVersion: '19z'},
+        },
+        {
+          patch: {type: 'query', op: 'del', id: 'oneHash'},
+          toVersion: newVersion,
+        },
+      ]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));

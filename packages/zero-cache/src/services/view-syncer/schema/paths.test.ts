@@ -134,6 +134,38 @@ describe('view-syncer/schema/paths', () => {
     }
   });
 
+  test('metadata patch prefixes', () => {
+    const paths = new CVRPaths('fbr');
+
+    const v1: CVRVersion = {stateVersion: '1ab'};
+    const v2: CVRVersion = {stateVersion: '1ab', minorVersion: 1};
+    const v3: CVRVersion = {stateVersion: '1ac'};
+
+    expect(paths.metadataPatchPrefix()).toBe('/vs/cvr/fbr/p/m/');
+    expect(paths.metadataPatchVersionPrefix(v1)).toBe('/vs/cvr/fbr/p/m/1ab/');
+    expect(paths.metadataPatchVersionPrefix(v2)).toBe(
+      '/vs/cvr/fbr/p/m/1ab:01/',
+    );
+    expect(paths.metadataPatchVersionPrefix(v3)).toBe('/vs/cvr/fbr/p/m/1ac/');
+
+    const ordered = [
+      paths.metadataPatchVersionPrefix(v1),
+      paths.clientPatch(v1, {id: 'foo'}),
+      paths.metadataPatchVersionPrefix(v2),
+      paths.clientPatch(v2, {id: 'foo'}),
+      paths.metadataPatchVersionPrefix(oneAfter(v2)),
+      paths.metadataPatchVersionPrefix(v3),
+      paths.queryPatch(v3, {id: 'foo'}),
+      paths.metadataPatchVersionPrefix(oneAfter(v3)),
+    ];
+    for (let i = 0; i < ordered.length; i++) {
+      for (let j = i + 1; j < ordered.length; j++) {
+        expect(compareUTF8(ordered[i], ordered[j])).toBeLessThan(0);
+        expect(compareUTF8(ordered[j], ordered[i])).toBeGreaterThan(0);
+      }
+    }
+  });
+
   test('last active paths', () => {
     expect(lastActiveIndex.dayPrefix(Date.UTC(2024, 3, 19, 1, 2, 3))).toBe(
       '/vs/lastActive/2024-04-19',
