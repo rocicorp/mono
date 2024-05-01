@@ -3,14 +3,7 @@ import {groupBy, findIndex} from 'lodash';
 import {memo, useCallback} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
-import {
-  Issue,
-  IssueUpdate,
-  IssueWithLabels,
-  Priority,
-  Status,
-  statusFromString,
-} from './issue';
+import {Issue, IssueUpdate, IssueWithLabels, Priority, Status} from './issue';
 import IssueCol from './issue-col';
 
 export type IssuesByStatusType = {
@@ -96,12 +89,12 @@ function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
       if (!destination) {
         return;
       }
-      const sourceStatus = statusFromString(source.droppableId);
+      const sourceStatus = parseInt(source.droppableId) as Status;
       const draggedIssue = issuesByType[sourceStatus][source.index]?.issue;
       if (!draggedIssue) {
         return;
       }
-      const newStatus = statusFromString(destination.droppableId);
+      const newStatus = parseInt(destination.droppableId) as Status;
       const newIndex =
         sourceStatus === newStatus && source.index < destination.index
           ? destination.index + 1
