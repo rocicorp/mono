@@ -173,13 +173,11 @@ function applyGroupBy<T extends Entity>(
   const qualifiedColumns = aggregations.map(q =>
     q.field === undefined ? undefined : selectorToQualifiedColumn(q.field),
   );
-  console.log('APPLY GROUP BY!');
 
   return stream.reduce(
     keyFunction,
     value => value.id as string,
     values => {
-      console.log('REDUCE STREAM!');
       const first = values[Symbol.iterator]().next().value;
       const ret: Record<string, unknown> = {...first};
 
@@ -290,13 +288,13 @@ function applyFullTableAggregation<T extends Entity>(
           `${agg.aggregate} not yet supported outside of group-by`,
         );
       case 'avg':
-        ret = ret.average(agg.field as keyof T, agg.alias);
+        ret = ret.average(agg.field as string, agg.alias);
         break;
       case 'count':
         ret = ret.count(agg.alias);
         break;
       case 'sum':
-        ret = ret.sum(agg.field as keyof T, agg.alias);
+        ret = ret.sum(agg.field as string, agg.alias);
         break;
     }
   }

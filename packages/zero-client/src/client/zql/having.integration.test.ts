@@ -103,7 +103,7 @@ describe('having against arrays / sets', async () => {
 
   await z.mutate.bulkSet({tracks, artists, trackArtists});
 
-  test.only.each([
+  test.each([
     [['CONGRUENT', ['Artist 1']], ['1']],
     [
       ['SUPERSET', []],
@@ -128,16 +128,16 @@ describe('having against arrays / sets', async () => {
     const stmt = z.query.track
       .join(
         z.query.trackArtist,
-        'trackArtists',
+        'trackArtist',
         'track.id',
         'trackArtist.trackId',
       )
-      .join(z.query.artist, 'artists', 'trackArtists.artistId', 'artist.id')
+      .join(z.query.artist, 'artist', 'trackArtist.artistId', 'artist.id')
       .groupBy('track.id')
-      .select('track.id', 'track.title', agg.array('artists.*', 'artists'))
+      .select('track.id', 'track.title', agg.array('artist.*', 'artist'))
       // TODO: `having` and `where` should mark their args readonly
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .having('artists.name', input[0], input[1] as any)
+      .having('artist.name', input[0], input[1] as any)
       .prepare();
 
     const rows = await stmt.exec();
