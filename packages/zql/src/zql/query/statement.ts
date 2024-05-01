@@ -66,7 +66,6 @@ export class Statement<Return> implements IStatement<Return> {
         Return extends [] ? Return[number] : never
       >(
         this.#context,
-        this.#ast,
         pipeline as unknown as DifferenceStream<
           Return extends [] ? Return[number] : never
         >,
@@ -87,10 +86,12 @@ export class Statement<Return> implements IStatement<Return> {
     initialData = true,
   ) {
     const materialization = this.#getMaterialization();
+    this.#context.subscriptionAdded(this.#ast);
     const cleanupPromise = materialization.then(view =>
       view.on(cb, initialData),
     );
     const cleanup = () => {
+      this.#context.subscriptionRemoved(this.#ast);
       void cleanupPromise.then(p => p());
     };
 
