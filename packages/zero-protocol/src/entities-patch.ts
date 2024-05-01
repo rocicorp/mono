@@ -9,8 +9,8 @@ const putOpSchema = v.object({
   value: jsonSchema,
 });
 
-const patchOpSchema = v.object({
-  op: v.literal('patch'),
+const updateOpSchema = v.object({
+  op: v.literal('update'),
   entityType: v.string(),
   entityID: entityIDSchema,
   merge: jsonSchema.optional(),
@@ -29,13 +29,14 @@ const clearOpSchema = v.object({
 
 const entityPatchOpSchema = v.union(
   putOpSchema,
-  patchOpSchema,
+  updateOpSchema,
   delOpSchema,
   clearOpSchema,
 );
 
 export const entitiesPatchSchema = v.array(entityPatchOpSchema);
 export type EntitiesPutOp = v.Infer<typeof putOpSchema>;
+export type EntitiesUpdateOp = v.Infer<typeof updateOpSchema>;
 export type EntitiesDelOp = v.Infer<typeof delOpSchema>;
 export type EntitiesClearOp = v.Infer<typeof clearOpSchema>;
 export type EntitiesPatchOp = v.Infer<typeof entityPatchOpSchema>;

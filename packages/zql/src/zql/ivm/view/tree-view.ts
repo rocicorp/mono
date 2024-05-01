@@ -4,7 +4,7 @@ import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore next.js is having issues finding the .d.ts
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
-import type {AST, Ordering} from '../../ast/ast.js';
+import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage} from '../graph/message.js';
@@ -35,14 +35,13 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
   constructor(
     context: Context,
-    ast: AST,
     stream: DifferenceStream<T>,
     comparator: Comparator<T>,
     order: Ordering | undefined,
     limit?: number | undefined,
     name: string = '',
   ) {
-    super(context, ast, stream, name);
+    super(context, stream, name);
     this.#limit = limit;
     this.#data = new Treap(comparator);
     this.#comparator = comparator;
