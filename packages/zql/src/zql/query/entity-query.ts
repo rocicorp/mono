@@ -207,6 +207,7 @@ export type MakeHumanReadable<T> = {} & {
 
 export type WhereCondition<From extends FromSet> =
   | {
+      type: 'conjunction';
       op: 'AND' | 'OR';
       conditions: WhereCondition<From>[];
     }
@@ -217,6 +218,7 @@ type SimpleCondition<
   Selector extends SimpleSelector<From>,
   Op extends SimpleOperator,
 > = {
+  type: 'simple';
   op: SimpleOperator;
   field: SimpleSelector<From>;
   value: {
@@ -430,6 +432,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       cond = flatten('AND', [...conditions, expr]);
     } else {
       cond = {
+        type: 'conjunction',
         op: 'AND',
         conditions: [exitingWhereOrHaving, expr],
       };
@@ -441,6 +444,9 @@ export class EntityQuery<From extends FromSet, Return = []> {
       this.#prefix,
       {
         ...this.#ast,
+        // Can't use satisfies here because WhereCondition is recursive.
+        // Tests ensure that the expected AST output satisfies the Condition
+        // type.
         [whereOrHaving]: cond as Condition,
       },
     );
@@ -536,7 +542,7 @@ function flatten<F extends FromSet>(
     }
   }
 
-  return {op, conditions: flattened};
+  return {type: 'conjunction', op, conditions: flattened};
 }
 
 export function exp<
@@ -549,6 +555,7 @@ export function exp<
   value: FieldAsOperatorInput<From, Selector, Op>,
 ): WhereCondition<From> {
   return {
+    type: 'simple',
     op,
     field,
     value: {
@@ -565,16 +572,19 @@ export function not<From extends FromSet>(
   switch (expr.op) {
     case 'AND':
       return {
+        type: 'conjunction',
         op: 'OR',
         conditions: expr.conditions.map(not),
       };
     case 'OR':
       return {
+        type: 'conjunction',
         op: 'AND',
         conditions: expr.conditions.map(not),
       };
     default:
       return {
+        type: 'simple',
         op: negateOperator(expr.op),
         field: expr.field,
         value: expr.value,

@@ -1,6 +1,6 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import {z} from 'zod';
-import type {AST, SimpleOperator} from '../ast/ast.js';
+import type {AST, Condition, SimpleOperator} from '../ast/ast.js';
 import {makeTestContext} from '../context/context.js';
 import * as agg from './agg.js';
 import {conditionToString} from './condition-to-string.js';
@@ -569,6 +569,7 @@ describe('ast', () => {
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
+        type: 'simple',
         field: 'e1.id',
         op: '=',
         value: {
@@ -576,7 +577,7 @@ describe('ast', () => {
           value: 'a',
         },
       },
-    });
+    } satisfies AST);
 
     // additional wheres are anded
     q = q.where('a', '>', 0);
@@ -585,9 +586,11 @@ describe('ast', () => {
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
+        type: 'conjunction',
         op: 'AND',
         conditions: [
           {
+            type: 'simple',
             field: 'e1.id',
             op: '=',
             value: {
@@ -596,6 +599,7 @@ describe('ast', () => {
             },
           },
           {
+            type: 'simple',
             field: 'e1.a',
             op: '>',
             value: {
@@ -605,7 +609,7 @@ describe('ast', () => {
           },
         ],
       },
-    });
+    } satisfies AST);
 
     q = q.where('c', '=', 'foo');
     // multiple ANDs are flattened
@@ -613,9 +617,11 @@ describe('ast', () => {
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
+        type: 'conjunction',
         op: 'AND',
         conditions: [
           {
+            type: 'simple',
             field: 'e1.id',
             op: '=',
             value: {
@@ -624,6 +630,7 @@ describe('ast', () => {
             },
           },
           {
+            type: 'simple',
             field: 'e1.a',
             op: '>',
             value: {
@@ -632,6 +639,7 @@ describe('ast', () => {
             },
           },
           {
+            type: 'simple',
             field: 'e1.c',
             op: '=',
             value: {
@@ -641,7 +649,7 @@ describe('ast', () => {
           },
         ],
       },
-    });
+    } satisfies AST);
   });
 
   test('limit', () => {
@@ -650,7 +658,7 @@ describe('ast', () => {
       orderBy: [['id'], 'asc'],
       table: 'e1',
       limit: 10,
-    });
+    } satisfies AST);
   });
 
   test('asc/desc', () => {
@@ -660,15 +668,15 @@ describe('ast', () => {
     expect(ast(q.asc('id'))).toEqual({
       table: 'e1',
       orderBy: [['e1.id'], 'asc'],
-    });
+    } satisfies AST);
     expect(ast(q.desc('id'))).toEqual({
       table: 'e1',
       orderBy: [['e1.id'], 'desc'],
-    });
+    } satisfies AST);
     expect(ast(q.asc('id', 'a', 'b', 'c', 'd'))).toEqual({
       table: 'e1',
       orderBy: [['e1.id', 'e1.a', 'e1.b', 'e1.c', 'e1.d'], 'asc'],
-    });
+    } satisfies AST);
   });
 
   test('independent of method call order', () => {
@@ -717,13 +725,24 @@ describe('ast', () => {
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
+        type: 'conjunction',
         op: 'OR',
         conditions: [
-          {op: '=', field: 'e1.a', value: {type: 'literal', value: 123}},
-          {op: '=', field: 'e1.c', value: {type: 'literal', value: 'abc'}},
+          {
+            type: 'simple',
+            op: '=',
+            field: 'e1.a',
+            value: {type: 'literal', value: 123},
+          },
+          {
+            type: 'simple',
+            op: '=',
+            field: 'e1.c',
+            value: {type: 'literal', value: 'abc'},
+          },
         ],
       },
-    });
+    } satisfies AST);
 
     expect(
       ast(
@@ -738,14 +757,27 @@ describe('ast', () => {
       table: 'e1',
       orderBy: [['id'], 'asc'],
       where: {
+        type: 'conjunction',
         op: 'AND',
         conditions: [
-          {op: '=', field: 'e1.a', value: {type: 'literal', value: 1}},
           {
+            type: 'simple',
+            op: '=',
+            field: 'e1.a',
+            value: {type: 'literal', value: 1},
+          },
+          {
+            type: 'conjunction',
             op: 'OR',
             conditions: [
-              {op: '=', field: 'e1.d', value: {type: 'literal', value: true}},
               {
+                type: 'simple',
+                op: '=',
+                field: 'e1.d',
+                value: {type: 'literal', value: true},
+              },
+              {
+                type: 'simple',
                 op: '=',
                 field: 'e1.c',
                 value: {type: 'literal', value: 'hello'},
@@ -754,7 +786,7 @@ describe('ast', () => {
           },
         ],
       },
-    });
+    } satisfies AST);
   });
 
   test('flatten ands', () => {
@@ -849,9 +881,11 @@ describe('ast', () => {
           .where(and(exp('c', '=', 'a'), exp('c', '=', 'b'))),
       ).where,
     ).toEqual({
+      type: 'conjunction',
       op: 'AND',
       conditions: [
         {
+          type: 'simple',
           field: 'e1.a',
           op: '=',
           value: {
@@ -860,6 +894,7 @@ describe('ast', () => {
           },
         },
         {
+          type: 'simple',
           field: 'e1.a',
           op: '=',
           value: {
@@ -868,6 +903,7 @@ describe('ast', () => {
           },
         },
         {
+          type: 'simple',
           field: 'e1.c',
           op: '=',
           value: {
@@ -876,6 +912,7 @@ describe('ast', () => {
           },
         },
         {
+          type: 'simple',
           field: 'e1.c',
           op: '=',
           value: {
@@ -884,7 +921,7 @@ describe('ast', () => {
           },
         },
       ],
-    });
+    } satisfies Condition);
 
     expect(
       ast(
@@ -894,9 +931,11 @@ describe('ast', () => {
           .where(exp('d', '=', true)),
       ).where,
     ).toEqual({
+      type: 'conjunction',
       op: 'AND',
       conditions: [
         {
+          type: 'simple',
           field: 'e1.a',
           op: '=',
           value: {
@@ -905,6 +944,7 @@ describe('ast', () => {
           },
         },
         {
+          type: 'simple',
           field: 'e1.c',
           op: '=',
           value: {
@@ -913,6 +953,7 @@ describe('ast', () => {
           },
         },
         {
+          type: 'simple',
           field: 'e1.d',
           op: '=',
           value: {
@@ -921,7 +962,7 @@ describe('ast', () => {
           },
         },
       ],
-    });
+    } satisfies Condition);
 
     expect(
       ast(
@@ -931,9 +972,11 @@ describe('ast', () => {
           .where(exp('d', '=', true)),
       ).where,
     ).toEqual({
+      type: 'conjunction',
       op: 'AND',
       conditions: [
         {
+          type: 'simple',
           field: 'e1.a',
           op: '=',
           value: {
@@ -942,9 +985,11 @@ describe('ast', () => {
           },
         },
         {
+          type: 'conjunction',
           op: 'OR',
           conditions: [
             {
+              type: 'simple',
               field: 'e1.c',
               op: '=',
               value: {
@@ -953,6 +998,7 @@ describe('ast', () => {
               },
             },
             {
+              type: 'simple',
               field: 'e1.c',
               op: '=',
               value: {
@@ -963,6 +1009,7 @@ describe('ast', () => {
           ],
         },
         {
+          type: 'simple',
           field: 'e1.d',
           op: '=',
           value: {
@@ -971,7 +1018,7 @@ describe('ast', () => {
           },
         },
       ],
-    });
+    } satisfies Condition);
   });
 
   test('consecutive ors', () => {
@@ -980,9 +1027,11 @@ describe('ast', () => {
     expect(
       ast(q.where(or(exp('a', '=', 123), exp('a', '=', 456)))).where,
     ).toEqual({
+      type: 'conjunction',
       op: 'OR',
       conditions: [
         {
+          type: 'simple',
           field: 'e1.a',
           op: '=',
           value: {
@@ -991,6 +1040,7 @@ describe('ast', () => {
           },
         },
         {
+          type: 'simple',
           field: 'e1.a',
           op: '=',
           value: {
@@ -999,7 +1049,7 @@ describe('ast', () => {
           },
         },
       ],
-    });
+    } satisfies Condition);
 
     expect(
       ast(
@@ -1008,12 +1058,15 @@ describe('ast', () => {
           .where(or(exp('c', '=', 'abc'), exp('c', '=', 'def'))),
       ).where,
     ).toEqual({
+      type: 'conjunction',
       op: 'AND',
       conditions: [
         {
+          type: 'conjunction',
           op: 'OR',
           conditions: [
             {
+              type: 'simple',
               field: 'e1.a',
               op: '=',
               value: {
@@ -1022,6 +1075,7 @@ describe('ast', () => {
               },
             },
             {
+              type: 'simple',
               field: 'e1.a',
               op: '=',
               value: {
@@ -1032,9 +1086,11 @@ describe('ast', () => {
           ],
         },
         {
+          type: 'conjunction',
           op: 'OR',
           conditions: [
             {
+              type: 'simple',
               field: 'e1.c',
               op: '=',
               value: {
@@ -1043,6 +1099,7 @@ describe('ast', () => {
               },
             },
             {
+              type: 'simple',
               field: 'e1.c',
               op: '=',
               value: {
@@ -1053,7 +1110,7 @@ describe('ast', () => {
           ],
         },
       ],
-    });
+    } satisfies Condition);
   });
 });
 
@@ -1081,10 +1138,11 @@ describe('NOT', () => {
       test(`${c.in} -> ${c.out}`, () => {
         const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
         expect(ast(q.where(not(exp('a', c.in, 1)))).where).toEqual({
+          type: 'simple',
           op: c.out,
           field: 'e1.a',
           value: {type: 'literal', value: 1},
-        });
+        } satisfies Condition);
       });
     }
   });
@@ -1167,10 +1225,11 @@ describe("De Morgan's Law", () => {
 test('where is always qualified', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1', 'e1');
   expect(ast(q.where(exp('a', '=', 1))).where).toEqual({
+    type: 'simple',
     field: 'e1.a',
     op: '=',
     value: {type: 'literal', value: 1},
-  });
+  } satisfies Condition);
 
   expect(
     ast(
@@ -1181,10 +1240,21 @@ test('where is always qualified', () => {
     table: 'e1',
     orderBy: [['id'], 'asc'],
     where: {
+      type: 'conjunction',
       op: 'AND',
       conditions: [
-        {op: '=', field: 'e1.a', value: {type: 'literal', value: 1}},
-        {op: '=', field: 'e2.c', value: {type: 'literal', value: 'sdf'}},
+        {
+          type: 'simple',
+          op: '=',
+          field: 'e1.a',
+          value: {type: 'literal', value: 1},
+        },
+        {
+          type: 'simple',
+          op: '=',
+          field: 'e2.c',
+          value: {type: 'literal', value: 'sdf'},
+        },
       ],
     },
     joins: [
@@ -1195,7 +1265,7 @@ test('where is always qualified', () => {
         on: ['e1.a', 'e2.a'],
       },
     ],
-  });
+  } satisfies AST);
 });
 
 describe('all references to columns are always qualified', () => {
@@ -1208,6 +1278,7 @@ describe('all references to columns are always qualified', () => {
         orderBy: [['id'], 'asc'],
         table: 'e1',
         where: {
+          type: 'simple',
           op: '=',
           field: 'e1.a',
           value: {type: 'literal', value: 1},
@@ -1221,6 +1292,7 @@ describe('all references to columns are always qualified', () => {
         orderBy: [['id'], 'asc'],
         table: 'e1',
         where: {
+          type: 'simple',
           op: '=',
           field: 'e1.a',
           value: {type: 'literal', value: 1},
@@ -1308,13 +1380,18 @@ describe('all references to columns are always qualified', () => {
         table: 'e1',
         orderBy: [['id'], 'asc'],
         having: {
+          type: 'simple',
           field: 'a',
           op: '=',
           value: {type: 'literal', value: 1},
         },
       },
     },
-  ])('$test', ({q, expected}) => {
-    expect(ast(q)).toEqual(expected);
-  });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ] satisfies {test: string; q: EntityQuery<any, any>; expected: AST}[])(
+    '$test',
+    ({q, expected}) => {
+      expect(ast(q)).toEqual(expected);
+    },
+  );
 });
