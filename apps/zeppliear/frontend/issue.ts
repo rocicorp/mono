@@ -191,6 +191,7 @@ export type Issue = Immutable<z.TypeOf<typeof issueSchema>>;
 export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
 export type Label = {id: string; name: string};
 export type IssueLabel = {id: string; issueID: string; labelID: string};
+export type IssueWithLabels = {issue: Issue; labels: string[]};
 
 export async function getIssue(
   tx: ReadTransaction,
