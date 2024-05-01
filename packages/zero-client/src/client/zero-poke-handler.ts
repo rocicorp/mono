@@ -306,7 +306,7 @@ function entitiesPatchOpToReplicachePatchOp(
         key: toEntitiesKey(op.entityType, op.entityID),
         value: op.value,
       };
-    case 'patch':
+    case 'update':
     default:
       throw new Error('to be implemented');
   }
