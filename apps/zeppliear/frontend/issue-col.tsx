@@ -7,7 +7,7 @@ import {
   DroppableProvided,
   DroppableStateSnapshot,
 } from 'react-beautiful-dnd';
-import type {Issue, Priority, Status} from './issue';
+import type {Issue, IssueWithLabels, Priority, Status} from './issue';
 import IssueItem from './issue-item';
 import {FixedSizeList} from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -15,7 +15,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 interface Props {
   status: Status;
   title: string;
-  issues: Array<Issue>;
+  issues: Array<IssueWithLabels>;
   onChangePriority: (issue: Issue, priority: Priority) => void;
   onOpenDetail: (issue: Issue) => void;
 }
@@ -23,7 +23,7 @@ interface Props {
 interface RowProps {
   index: number;
   data: {
-    issues: Array<Issue>;
+    issues: Array<IssueWithLabels>;
     onChangePriority: (issue: Issue, priority: Priority) => void;
     onOpenDetail: (issue: Issue) => void;
   };
@@ -39,7 +39,7 @@ function RowPreMemo({data, index, style}: RowProps) {
   }
 
   return (
-    <Draggable draggableId={issue.id} index={index} key={issue.id}>
+    <Draggable draggableId={issue.issue.id} index={index} key={issue.issue.id}>
       {(provided: DraggableProvided) => (
         <div
           {...provided.draggableProps}
@@ -51,7 +51,7 @@ function RowPreMemo({data, index, style}: RowProps) {
           ref={provided.innerRef}
         >
           <IssueItem
-            issue={issue}
+            issue={issue.issue}
             key={index}
             onChangePriority={data.onChangePriority}
             onOpenDetail={data.onOpenDetail}
@@ -107,7 +107,7 @@ function IssueCol({
                 {...provided.draggableProps}
                 {...provided.dragHandleProps}
               >
-                <IssueItem issue={issue} />
+                <IssueItem issue={issue.issue} />
               </div>
             );
           }}

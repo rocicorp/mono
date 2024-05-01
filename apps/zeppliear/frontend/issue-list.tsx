@@ -9,17 +9,23 @@ import React, {
 import IssueRow from './issue-row';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
-import type {Issue, IssueUpdate, Priority, Status} from './issue';
+import type {
+  Issue,
+  IssueUpdate,
+  IssueWithLabels,
+  Priority,
+  Status,
+} from './issue';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
-  issues: {issue: Issue; labels: string[]}[];
+  issues: IssueWithLabels[];
   view: string | null;
 }
 
 type ListData = {
-  issues: {issue: Issue; labels: string[]}[];
+  issues: IssueWithLabels[];
   handleChangePriority: (issue: Issue, priority: Priority) => void;
   handleChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;
