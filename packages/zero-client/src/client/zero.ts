@@ -465,7 +465,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      pokeDD31 => this.#rep.poke(pokeDD31),
+      poke => this.#rep.poke(poke),
       () => this.#onOutOfOrderPoke(),
       rep.clientID,
       this.#lc,

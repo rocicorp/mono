@@ -1,10 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {
-  ClientID,
-  PatchOperation,
-  Poke as ReplicachePoke,
-} from 'replicache';
+import type {ClientID} from 'replicache';
 import type {
   ClientsPatchOp,
   EntitiesPatchOp,
@@ -19,6 +15,11 @@ import {
   toEntitiesKey,
   toGotQueriesKey,
 } from './keys.js';
+import type {
+  PatchOperation,
+  PatchOperationInternal,
+} from 'replicache/src/patch-operation.js';
+import type {PokeInternal} from 'replicache/src/types.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -35,7 +36,7 @@ type PokeAccumulator = {
  * never been displayed to the UI.
  */
 export class PokeHandler {
-  readonly #replicachePoke: (poke: ReplicachePoke) => Promise<void>;
+  readonly #replicachePoke: (poke: PokeInternal) => Promise<void>;
   readonly #onPokeError: () => void;
   readonly #clientID: ClientID;
   readonly #lc: LogContext;
@@ -48,7 +49,7 @@ export class PokeHandler {
   readonly #pokeLock = new Lock();
 
   constructor(
-    replicachePoke: (poke: ReplicachePoke) => Promise<void>,
+    replicachePoke: (poke: PokeInternal) => Promise<void>,
     onPokeError: () => void,
     clientID: ClientID,
     lc: LogContext,
@@ -175,13 +176,13 @@ export class PokeHandler {
 
 export function mergePokes(
   pokeBuffer: PokeAccumulator[],
-): ReplicachePoke | undefined {
+): PokeInternal | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
   }
   const {baseCookie} = pokeBuffer[0].pokeStart;
   const {cookie} = pokeBuffer[pokeBuffer.length - 1].pokeStart;
-  const mergedPatch: PatchOperation[] = [];
+  const mergedPatch: PatchOperationInternal[] = [];
   const mergedLastMutationIDChanges: Record<string, number> = {};
 
   let prevPokeStart = undefined;
@@ -291,7 +292,7 @@ function queryPatchOpToReplicachePatchOp(
 
 function entitiesPatchOpToReplicachePatchOp(
   op: EntitiesPatchOp,
-): PatchOperation {
+): PatchOperationInternal {
   switch (op.op) {
     case 'clear':
       return op;
@@ -307,6 +308,12 @@ function entitiesPatchOpToReplicachePatchOp(
         value: op.value,
       };
     case 'update':
+      return {
+        op: 'update',
+        key: toEntitiesKey(op.entityType, op.entityID),
+        merge: op.merge,
+        constrain: op.constrain,
+      };
     default:
       throw new Error('to be implemented');
   }
