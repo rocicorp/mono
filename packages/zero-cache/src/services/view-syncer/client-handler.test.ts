@@ -235,4 +235,30 @@ describe('view-syncer/client-handler', () => {
       ['pokeEnd', {pokeID: '123'}] as PokeEndMessage,
     ]);
   });
+
+  test('error on unsafe integer', () => {
+    const handler = new ClientHandler(
+      createSilentLogContext(),
+      'id1',
+      '121',
+      new Subscription(),
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    let err;
+    try {
+      poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'merge',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+          contents: {id: 'boo', name: 'world', big: 12345n},
+        },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
+  });
 });
