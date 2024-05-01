@@ -17,7 +17,6 @@ test('asc and descComparator on Entities', () => {
   const orderBy = [['n', 'id'], 'asc'] as const;
   const view = new MutableTreeView<Selected>(
     context,
-    {table: 'issue', orderBy},
     s.stream,
     // eh... the comparator operates on the base type rather than the mapped
     // type. So there's a disconnect between the type of the comparator and the
@@ -30,7 +29,6 @@ test('asc and descComparator on Entities', () => {
   const orderBy2 = [['n', 'id'], 'desc'] as const;
   const descView = new MutableTreeView<Selected>(
     context,
-    {table: 'issue', orderBy: orderBy2},
     s.stream,
     // see above for why this is any
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,7 +66,6 @@ test('add & remove', async () => {
       const source = materialite.newSetSource<{x: number}>((l, r) => l.x - r.x);
       const view = new MutableTreeView(
         context,
-        {table: 'issue', orderBy: [['x'], 'asc']},
         source.stream,
         (l, r) => l.x - r.x,
         undefined,
@@ -98,7 +95,6 @@ test('replace', async () => {
       const orderBy = [['id'], 'asc'] as const;
       const view = new MutableTreeView(
         context,
-        {table: 'issue', orderBy},
         source.stream,
         (l, r) => l.x - r.x,
         orderBy,
