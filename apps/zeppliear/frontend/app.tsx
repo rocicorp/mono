@@ -19,12 +19,15 @@ import {
   statusStringSchema,
   IssueLabel,
   Label,
+  putIssueComment,
+  deleteIssueComment,
+  updateIssues,
+  M,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
 import IssueList from './issue-list';
 import LeftMenu from './left-menu';
-import type {M} from './mutators';
 import TopFilter from './top-filter';
 import {useQuery} from './hooks/use-zql';
 import {useZero} from './hooks/use-zero';
@@ -74,7 +77,7 @@ const App = ({undoManager}: AppProps) => {
   const [orderBy] = useQueryState('orderBy');
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
-  const zero = useZero<M, Collections>();
+  const zero = useZero<Collections>();
 
   const issueQuery = zero.query.issue;
 
@@ -116,11 +119,11 @@ const App = ({undoManager}: AppProps) => {
         ? minKanbanOrderIssue.kanbanOrder
         : null;
 
-      await zero.mutate.putIssue({
-        issue: {
-          ...issue,
-          kanbanOrder: generateKeyBetween(null, minKanbanOrder),
-        },
+      // TODO: UndoManager? - audit every other place we're doing mutations,
+      // or remove undo for now.
+      await zero.mutate.issue.create({
+        ...issue,
+        kanbanOrder: generateKeyBetween(null, minKanbanOrder),
       });
     },
     [zero.mutate, allIssues],
@@ -128,11 +131,11 @@ const App = ({undoManager}: AppProps) => {
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
       await undoManager.add({
-        execute: () => zero.mutate.putIssueComment({comment}),
-        undo: () => zero.mutate.deleteIssueComment({comment}),
+        execute: () => putIssueComment(zero, comment),
+        undo: () => deleteIssueComment(zero, comment),
       });
     },
-    [zero.mutate, undoManager],
+    [zero, undoManager],
   );
 
   const handleUpdateIssues = useCallback(
@@ -148,13 +151,13 @@ const App = ({undoManager}: AppProps) => {
       );
       await undoManager.add({
         execute: () =>
-          zero.mutate.updateIssues({
+          updateIssues(zero, {
             issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
           }),
-        undo: () => zero.mutate.updateIssues({issueUpdates: uChanges}),
+        undo: () => updateIssues(zero, {issueUpdates: uChanges}),
       });
     },
-    [zero.mutate, undoManager],
+    [zero, undoManager],
   );
 
   const handleOpenDetail = useCallback(

@@ -4,7 +4,6 @@ import {useZero} from './hooks/use-zero';
 import {useQuery} from './hooks/use-zql';
 import {getLabelColor} from './issue';
 import {LabelTypeahead} from './label-typeahead';
-import type {M} from './mutators';
 
 export function LabelMenu({
   onSelectLabel,
@@ -27,7 +26,7 @@ function LabelsComponent({
   filter?: string | undefined;
   onSelectLabel: (label: string) => void;
 }) {
-  const zero = useZero<M, Collections>();
+  const zero = useZero<Collections>();
   const query = filter
     ? zero.query.label.where('name', 'ILIKE', `%${filter}%`)
     : zero.query.label;

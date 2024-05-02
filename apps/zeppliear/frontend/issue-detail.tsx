@@ -17,7 +17,6 @@ import {
   Priority,
   Status,
 } from './issue';
-import type {M} from './mutators';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
 import {useQuery} from './hooks/use-zql';
@@ -84,7 +83,7 @@ export default function IssueDetail({
     }
   }, [issues, detailIssueID]);
 
-  const zero = useZero<M, Collections>();
+  const zero = useZero<Collections>();
   const issueQuery = zero.query.issue;
   const commentQuery = zero.query.comment;
 
