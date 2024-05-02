@@ -30,7 +30,7 @@
     "eventemitter3": "^5.0.1",
     "json-custom-numbers": "^3.1.1",
     "pg": "^8.11.3",
-    "pg-format": "^1.0.4",
+    "pg-format": "npm:pg-format-fix@^1.0.5",
     "pg-logical-replication": "^2.0.4",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
