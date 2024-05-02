@@ -101,7 +101,7 @@ export class IncrementalSyncer {
           if (!lastLSN || toLexiVersion(lastLSN) < toLexiVersion(lsn)) {
             lastLSN = lsn;
           }
-          service.acknowledge(lsn);
+          void service.acknowledge(lsn);
         },
         (v: VersionChange) => this.#eventEmitter.emit('version', v),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
@@ -117,7 +117,7 @@ export class IncrementalSyncer {
             `heartbeat (lastLSN: ${lastLSN}): ${lsn}, ${time}, ${shouldRespond}`,
           );
           if (shouldRespond) {
-            service.acknowledge(lastLSN ?? '0/0');
+            void service.acknowledge(lastLSN ?? '0/0');
           }
         },
       );
