@@ -50,6 +50,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
   #cvr: CVRSnapshot | undefined;
 
   #started = false;
+  #stopped = false;
   readonly #shouldRun = resolver<false>();
   #hasSyncRequests = resolver<true>();
 
@@ -99,7 +100,11 @@ export class ViewSyncerService implements ViewSyncer, Service {
       const {subscription, handleInvalidations} = await this.#lock.withLock(
         () => this.#watchInvalidations(),
       );
-
+      if (this.#stopped) {
+        // Cancel the subscription that started concurrently with stop().
+        await this.stop();
+        break;
+      }
       for await (const update of subscription) {
         await this.#lock.withLock(async () => {
           if (!this.#invalidationSubscription) {
@@ -307,6 +312,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
   // eslint-disable-next-line require-await
   async stop(): Promise<void> {
+    this.#stopped = true;
     this.#shouldRun.resolve(false);
     this.#invalidationSubscription?.cancel();
     this.#invalidationSubscription = undefined;

@@ -1,12 +1,11 @@
 import {LogContext, consoleLogSink} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {Queue} from 'shared/src/queue.js';
-import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Upstream} from 'zero-protocol';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
-import {runWithDurableObjectStorage} from '../../test/do.js';
+import {runWithFakeDurableObjectStorage} from '../../test/fake-do.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
@@ -26,8 +25,6 @@ describe('view-syncer/service', () => {
   let db: PostgresDB;
   const lc = new LogContext('debug', {}, consoleLogSink);
   createSilentLogContext();
-
-  let tables: TableSpec[];
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_service_test');
@@ -56,8 +53,6 @@ describe('view-syncer/service', () => {
 
     CREATE PUBLICATION zero_all FOR ALL TABLES;
     `.simple();
-
-    tables = (await getPublicationInfo(db)).tables;
   });
 
   afterEach(async () => {
@@ -81,7 +76,7 @@ describe('view-syncer/service', () => {
   };
 
   test('initializes schema', async () => {
-    await runWithDurableObjectStorage(async storage => {
+    await runWithFakeDurableObjectStorage(async storage => {
       const watcher = new MockInvalidationWatcher();
       const vs = new ViewSyncerService(
         lc,
@@ -91,7 +86,21 @@ describe('view-syncer/service', () => {
       );
 
       const done = vs.run();
-      await sleep(5);
+      await vs.sync(
+        {clientID: 'foo', baseCookie: null},
+        clientUpstream([
+          'initConnection',
+          {
+            desiredQueriesPatch: [
+              {
+                op: 'put',
+                hash: 'query-hash1',
+                ast: ISSUES_TITLE_QUERY,
+              },
+            ],
+          },
+        ]),
+      );
 
       expect(await storage.get('/vs/storage_schema_meta')).toEqual({
         // Update versions as necessary
@@ -106,7 +115,7 @@ describe('view-syncer/service', () => {
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    await runWithDurableObjectStorage(async storage => {
+    await runWithFakeDurableObjectStorage(async storage => {
       const watcher = new MockInvalidationWatcher();
       const vs = new ViewSyncerService(
         lc,
@@ -178,8 +187,9 @@ describe('view-syncer/service', () => {
       return Promise.resolve(sub);
     }
 
-    getTableSchemas(): Promise<readonly TableSpec[]> {
-      return Promise.resolve(tables);
+    async getTableSchemas(): Promise<readonly TableSpec[]> {
+      const published = await getPublicationInfo(db);
+      return published.tables;
     }
 
     getInvalidationWatcher(): Promise<InvalidationWatcher> {
