@@ -72,6 +72,42 @@ describe('view-syncer/client-handler', () => {
         },
       });
 
+      poker.addPatch({
+        toVersion: {stateVersion: '120', minorVersion: 2},
+        patch: {
+          type: 'row',
+          op: 'merge',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
+          contents: {id: 'bar', name: 'hello', num: 123},
+        },
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '11z', minorVersion: 1},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
+        },
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '121'},
+        patch: {
+          type: 'row',
+          op: 'merge',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+          contents: {id: 'boo', name: 'world', num: 123456},
+        },
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '121'},
+        patch: {
+          type: 'row',
+          op: 'constrain',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+          columns: ['id', 'name', 'num'],
+        },
+      });
+
       poker.end();
     }
 
@@ -110,6 +146,26 @@ describe('view-syncer/client-handler', () => {
           gotQueriesPatch: [
             {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
           ],
+          entitiesPatch: [
+            {
+              op: 'update',
+              entityType: 'issues',
+              entityID: {id: 'bar'},
+              merge: {id: 'bar', name: 'hello', num: 123},
+            },
+            {
+              op: 'update',
+              entityType: 'issues',
+              entityID: {id: 'boo'},
+              merge: {id: 'boo', name: 'world', num: 123456},
+            },
+            {
+              op: 'update',
+              entityType: 'issues',
+              entityID: {id: 'boo'},
+              constrain: ['id', 'name', 'num'],
+            },
+          ],
         },
       ] satisfies PokePartMessage,
       ['pokeEnd', {pokeID: '121'}] satisfies PokeEndMessage,
@@ -146,6 +202,27 @@ describe('view-syncer/client-handler', () => {
           gotQueriesPatch: [
             {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
           ],
+          entitiesPatch: [
+            {
+              op: 'update',
+              entityType: 'issues',
+              entityID: {id: 'bar'},
+              merge: {id: 'bar', name: 'hello', num: 123},
+            },
+            {op: 'del', entityType: 'issues', entityID: {id: 'foo'}},
+            {
+              op: 'update',
+              entityType: 'issues',
+              entityID: {id: 'boo'},
+              merge: {id: 'boo', name: 'world', num: 123456},
+            },
+            {
+              op: 'update',
+              entityType: 'issues',
+              entityID: {id: 'boo'},
+              constrain: ['id', 'name', 'num'],
+            },
+          ],
         },
       ] satisfies PokePartMessage,
       ['pokeEnd', {pokeID: '121'}] satisfies PokeEndMessage,
@@ -157,5 +234,31 @@ describe('view-syncer/client-handler', () => {
       ] as PokeStartMessage,
       ['pokeEnd', {pokeID: '123'}] as PokeEndMessage,
     ]);
+  });
+
+  test('error on unsafe integer', () => {
+    const handler = new ClientHandler(
+      createSilentLogContext(),
+      'id1',
+      '121',
+      new Subscription(),
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    let err;
+    try {
+      poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'merge',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+          contents: {id: 'boo', name: 'world', big: 12345n},
+        },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
   });
 });

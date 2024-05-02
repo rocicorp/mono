@@ -2,16 +2,15 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
-import * as v from 'shared/src/valita.js';
 import {
   TransactionPool,
   sharedReadOnlySnapshot,
 } from '../../db/transaction-pool.js';
-import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import {max, min, type LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
+import type {InvalidationInfo} from '../../zql/invalidation.js';
 import {queryStateVersion} from '../replicator/queries.js';
 import type {ReplicatorRegistry} from '../replicator/registry.js';
 import type {VersionChange} from '../replicator/replicator.js';
@@ -20,33 +19,29 @@ import type {TableSpec} from '../replicator/tables/specs.js';
 import type {Service} from '../service.js';
 import {HashSubscriptions} from './hash-subscriptions.js';
 
-// Note: Same as zql/invalidation.ts:InvalidationInfo
-const queryInvalidationSchema = v.object({
-  filters: v.array(normalizedFilterSpecSchema),
-  hashes: v.array(v.string()),
-});
-
-export const watchRequestSchema = v.object({
+export type WatchRequest = {
   /**
    * Maps caller-defined query IDs to corresponding invalidation filters and hashes.
    */
-  queries: v.record(queryInvalidationSchema),
+  queries: Record<string, InvalidationInfo>;
 
   /**
    * The starting version from which to watch for query invalidation (i.e. the CVR version),
    * absent if the caller is starting from scratch and has no queries (rows) to invalidate.
    */
-  fromVersion: v.string().optional(),
-});
-
-export type WatchRequest = v.Infer<typeof watchRequestSchema>;
+  fromVersion?: string | undefined;
+};
 
 export type QueryInvalidationUpdate = {
   /** The version of the database at the time the invalidations were processed. */
   newVersion: LexiVersion;
 
-  /** The starting point (exclusive) from which invalidations were computed. */
-  fromVersion: LexiVersion;
+  /**
+   * The starting point (exclusive) from which invalidations were computed. This will be
+   * `null` in the initial update for a {@link WatchRequest} with no `fromVersion`, in which
+   * case invalidations are not computed (because all queries must be executed anyway).
+   */
+  fromVersion: LexiVersion | null;
 
   /** Set of caller-defined query IDs which were within the version range. */
   invalidatedQueries: Set<string>;
@@ -260,7 +255,10 @@ export class InvalidationWatcherService
 
           return {
             newVersion: max(prev.newVersion, curr.newVersion),
-            fromVersion: min(prev.fromVersion, curr.fromVersion),
+            fromVersion:
+              prev.fromVersion === null || curr.fromVersion === null
+                ? null
+                : min(prev.fromVersion, curr.fromVersion),
             invalidatedQueries: union(
               prev.invalidatedQueries,
               curr.invalidatedQueries,
@@ -418,7 +416,7 @@ export class InvalidationWatcherService
 
     const snapshotQuery = await reader.processReadTask(queryStateVersion);
     const newVersion = snapshotQuery[0].max ?? '00';
-    const update = {newVersion, fromVersion: fromVersion ?? newVersion, reader};
+    const update = {newVersion, fromVersion: fromVersion ?? null, reader};
 
     if (!fromVersion) {
       // Brand new CVR. Invalidations are irrelevant and need not be looked up.

@@ -1,4 +1,3 @@
-import type {AST} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
 import type {DifferenceStream, Listener} from '../graph/difference-stream.js';
 import type {Materialite} from '../materialite.js';
@@ -8,7 +7,6 @@ import type {View} from './view.js';
 
 export abstract class AbstractView<T extends object, CT> implements View<CT> {
   readonly #context: Context;
-  readonly #ast: AST;
   readonly #stream;
   protected readonly _listener: Listener<T>;
   readonly #listeners: Set<(s: CT, v: Version) => void> = new Set();
@@ -28,12 +26,10 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
    */
   constructor(
     context: Context,
-    ast: AST,
     stream: DifferenceStream<T>,
     name: string = '',
   ) {
     this.#context = context;
-    this.#ast = ast;
     this.name = name;
     this.#stream = stream;
     this._listener = {
@@ -80,7 +76,6 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
 
   on(listener: (s: CT, v: Version) => void, initialData = true) {
     this.#listeners.add(listener);
-    this.#context.subscriptionAdded(this.#ast);
     if (this.#hydrated && initialData) {
       listener(this.value, this.#lastSeenVersion);
     }
@@ -97,7 +92,6 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
    */
   off(listener: (s: CT, v: Version) => void) {
     this.#listeners.delete(listener);
-    this.#context.subscriptionRemoved(this.#ast);
   }
 
   destroy() {

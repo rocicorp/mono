@@ -1,6 +1,6 @@
 import type {Hash} from './hash.js';
 import type {ReadonlyJSONValue, WriteTransaction} from './mod.js';
-import type {PullResponseV1} from './puller.js';
+import type {PullResponseV1, PullResponseV1Internal} from './puller.js';
 import type {ReadTransactionImpl} from './transactions.js';
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -13,6 +13,12 @@ export type Poke = {
   baseCookie: ReadonlyJSONValue;
   pullResponse: PullResponseV1;
 };
+
+export type PokeInternal = {
+  baseCookie: ReadonlyJSONValue;
+  pullResponse: PullResponseV1Internal;
+};
+
 export type MutatorReturn<T extends ReadonlyJSONValue = ReadonlyJSONValue> =
   MaybePromise<T | void>; /**
  * The type used to describe the mutator definitions passed into [Replicache](classes/Replicache)

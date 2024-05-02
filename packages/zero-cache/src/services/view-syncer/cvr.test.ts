@@ -6,6 +6,7 @@ import {
   runWithDurableObjectStorage,
 } from '../../test/do.js';
 import {rowIDHash} from '../../types/row-key.js';
+import type {PatchToVersion} from './client-handler.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
@@ -603,8 +604,16 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [{stateVersion: '1a0'}, ROW_ID1, {id: 'should-show-up-in-patch'}],
-      ]);
+        {
+          toVersion: {stateVersion: '1a0'},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'should-show-up-in-patch'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
           new Map([
@@ -633,17 +642,25 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [
-          {stateVersion: '1aa', minorVersion: 1},
-          ROW_ID1,
-          {id: 'new version patch with new field'},
-        ],
-        [
-          {stateVersion: '1aa', minorVersion: 1},
-          ROW_ID3,
-          {id: 'new version patch'},
-        ],
-      ]);
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'new version patch with new field'},
+          },
+        },
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID3,
+            contents: {id: 'new version patch'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
           new Map([
@@ -661,20 +678,34 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [
-          {stateVersion: '1aa', minorVersion: 1},
-          ROW_ID1,
-          {id: 'patch stays at new version'},
-        ],
-      ]);
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'patch stays at new version'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
 
       expect(
         await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
-      ).toEqual({
-        // Catchup from v: "189" needs constrain / delete patches in ("189", "1aa"].
-        patchRows: [[{stateVersion: '1a0'}, ROW_ID2, ['id']]],
-        deleteRows: [[{stateVersion: '1aa'}, DELETED_ROW_ID]],
-      });
+      ).toEqual([
+        {
+          patch: {id: ROW_ID2, op: 'constrain', type: 'row', columns: ['id']},
+          toVersion: {stateVersion: '1a0'},
+        },
+        {
+          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
+          toVersion: {stateVersion: '1aa'},
+        },
+      ] satisfies PatchToVersion[]);
+      //  {
+      // Catchup from v: "189" needs constrain / delete patches in ("189", "1aa"].
+      // patchRows: [[{stateVersion: '1a0'}, ROW_ID2, ['id']]],
+      // deleteRows: [[{stateVersion: '1aa'}, DELETED_ROW_ID]],
+      // });
 
       const newVersion = {stateVersion: '1aa', minorVersion: 1};
       expect(
@@ -885,12 +916,16 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [
-          {stateVersion: '1aa', minorVersion: 1},
-          ROW_ID1,
-          {id: 'existing patch'},
-        ],
-      ]);
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'existing patch'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
           new Map([
@@ -909,24 +944,36 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [
-          {stateVersion: '1ba', minorVersion: 1},
-          ROW_ID2,
-          {id: 'new-row-version-should-bump-cvr-version'},
-        ],
+        {
+          toVersion: {stateVersion: '1ba', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID2,
+            contents: {id: 'new-row-version-should-bump-cvr-version'},
+          },
+        },
       ]);
 
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
       expect(
         await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
-      ).toEqual({
-        patchRows: [[newVersion, ROW_ID1, ['id']]],
-        deleteRows: [
-          [newVersion, ROW_ID3],
-          [{stateVersion: '1ba'}, DELETED_ROW_ID],
-        ],
-      });
+      ).toEqual([
+        {
+          patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
+          toVersion: newVersion,
+        },
+        {
+          patch: {type: 'row', op: 'del', id: ROW_ID3},
+          toVersion: newVersion,
+        },
+        {
+          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
+          toVersion: {stateVersion: '1ba'},
+        },
+      ] satisfies PatchToVersion[]);
+
       expect(
         await updater.generateConfigPatches({stateVersion: '189'}),
       ).toEqual([
@@ -934,7 +981,7 @@ describe('view-syncer/cvr', () => {
           patch: {type: 'query', op: 'del', id: 'catchup-delete'},
           toVersion: {stateVersion: '19z'},
         },
-      ]);
+      ] satisfies PatchToVersion[]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
@@ -1139,12 +1186,16 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [
-          {stateVersion: '1aa', minorVersion: 1},
-          ROW_ID1,
-          {id: 'existing-patch'},
-        ],
-      ]);
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'existing-patch'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
           new Map([
@@ -1162,12 +1213,16 @@ describe('view-syncer/cvr', () => {
           ]),
         ),
       ).toEqual([
-        [
-          {stateVersion: '1ba', minorVersion: 1},
-          ROW_ID1,
-          {id: 'new-column-bumps-cvr-version'},
-        ],
-      ]);
+        {
+          toVersion: {stateVersion: '1ba', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'new-column-bumps-cvr-version'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
       await updater.received(
         new Map([
           [
@@ -1208,13 +1263,25 @@ describe('view-syncer/cvr', () => {
 
       expect(
         await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
-      ).toEqual({
-        patchRows: [[newVersion, ROW_ID1, ['id', 'desc']]],
-        deleteRows: [
-          [newVersion, ROW_ID3],
-          [{stateVersion: '1ba'}, DELETED_ROW_ID],
-        ],
-      });
+      ).toEqual([
+        {
+          patch: {
+            type: 'row',
+            op: 'constrain',
+            id: ROW_ID1,
+            columns: ['id', 'desc'],
+          },
+          toVersion: newVersion,
+        },
+        {
+          patch: {type: 'row', op: 'del', id: ROW_ID3},
+          toVersion: newVersion,
+        },
+        {
+          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
+          toVersion: {stateVersion: '1ba'},
+        },
+      ] satisfies PatchToVersion[]);
       expect(
         await updater.generateConfigPatches({stateVersion: '189'}),
       ).toEqual([
@@ -1222,7 +1289,7 @@ describe('view-syncer/cvr', () => {
           patch: {type: 'query', op: 'del', id: 'catchup-delete'},
           toVersion: {stateVersion: '19z'},
         },
-      ]);
+      ] satisfies PatchToVersion[]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
@@ -1419,16 +1486,25 @@ describe('view-syncer/cvr', () => {
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
       expect(
         await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
-      ).toEqual({
-        patchRows: [
-          [newVersion, ROW_ID1, ['id']],
-          [{stateVersion: '1ba'}, ROW_ID2, ['id']],
-        ],
-        deleteRows: [
-          [newVersion, ROW_ID3],
-          [{stateVersion: '19z'}, DELETED_ROW_ID],
-        ],
-      });
+      ).toEqual([
+        {
+          patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
+          toVersion: newVersion,
+        },
+        {
+          patch: {type: 'row', op: 'del', id: ROW_ID3},
+          toVersion: newVersion,
+        },
+        {
+          patch: {type: 'row', op: 'constrain', id: ROW_ID2, columns: ['id']},
+          toVersion: {stateVersion: '1ba'},
+        },
+        {
+          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
+          toVersion: {stateVersion: '19z'},
+        },
+      ] satisfies PatchToVersion[]);
+
       expect(
         await updater.generateConfigPatches({stateVersion: '189'}),
       ).toEqual([
@@ -1440,7 +1516,7 @@ describe('view-syncer/cvr', () => {
           patch: {type: 'query', op: 'del', id: 'oneHash'},
           toVersion: newVersion,
         },
-      ]);
+      ] satisfies PatchToVersion[]);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));

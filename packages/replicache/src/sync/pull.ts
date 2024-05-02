@@ -40,7 +40,7 @@ import type {
   PullerResultV0,
   PullerResultV1,
   PullResponseOKV0,
-  PullResponseOKV1,
+  PullResponseOKV1Internal,
   PullResponseV0,
   PullResponseV1,
 } from '../puller.js';
@@ -461,7 +461,7 @@ export function handlePullResponseV1(
   lc: LogContext,
   store: Store,
   expectedBaseCookie: FrozenJSONValue,
-  response: PullResponseOKV1,
+  response: PullResponseOKV1Internal,
   clientID: ClientID,
   formatVersion: FormatVersion,
 ): Promise<HandlePullResponseResult> {

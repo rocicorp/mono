@@ -131,8 +131,8 @@ describe('invalidation-watcher', () => {
       ],
       expectedIncrementalUpdates: [
         {
-          newVersion: '0a', // Initial update
-          fromVersion: '0a',
+          newVersion: '0a',
+          fromVersion: null, // Initial update
           invalidatedQueries: new Set(),
         },
         {
@@ -144,7 +144,7 @@ describe('invalidation-watcher', () => {
       expectedCoalescedUpdates: [
         {
           newVersion: '101',
-          fromVersion: '0a',
+          fromVersion: null,
           invalidatedQueries: new Set(['q2']),
         },
       ],
@@ -175,7 +175,7 @@ describe('invalidation-watcher', () => {
       expectedIncrementalUpdates: [
         {
           newVersion: '0a',
-          fromVersion: '0a',
+          fromVersion: null,
           invalidatedQueries: new Set(),
         },
         {
@@ -187,7 +187,7 @@ describe('invalidation-watcher', () => {
       expectedCoalescedUpdates: [
         {
           newVersion: '101',
-          fromVersion: '0a',
+          fromVersion: null,
           invalidatedQueries: new Set(['q2']),
         },
       ],
@@ -224,7 +224,7 @@ describe('invalidation-watcher', () => {
       expectedIncrementalUpdates: [
         {
           newVersion: '01',
-          fromVersion: '01',
+          fromVersion: null,
           invalidatedQueries: new Set(),
         },
         {
@@ -236,7 +236,7 @@ describe('invalidation-watcher', () => {
       expectedCoalescedUpdates: [
         {
           newVersion: '101',
-          fromVersion: '01',
+          fromVersion: null,
           invalidatedQueries: new Set(['q1', 'q2']),
         },
       ],
@@ -279,7 +279,7 @@ describe('invalidation-watcher', () => {
       expectedIncrementalUpdates: [
         {
           newVersion: '00',
-          fromVersion: '00',
+          fromVersion: null,
           invalidatedQueries: new Set(),
         },
         {
@@ -301,7 +301,7 @@ describe('invalidation-watcher', () => {
       expectedCoalescedUpdates: [
         {
           newVersion: '101',
-          fromVersion: '00',
+          fromVersion: null,
           invalidatedQueries: new Set(['q1', 'q2']),
         },
       ],

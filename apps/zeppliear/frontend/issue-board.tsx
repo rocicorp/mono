@@ -3,19 +3,19 @@ import {groupBy, findIndex} from 'lodash';
 import {memo, useCallback} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
-import {Issue, IssueUpdate, Priority, Status, statusFromString} from './issue';
+import {Issue, IssueUpdate, IssueWithLabels, Priority, Status} from './issue';
 import IssueCol from './issue-col';
 
 export type IssuesByStatusType = {
-  [Status.Backlog]: Issue[];
-  [Status.Todo]: Issue[];
-  [Status.InProgress]: Issue[];
-  [Status.Done]: Issue[];
-  [Status.Canceled]: Issue[];
+  [Status.Backlog]: IssueWithLabels[];
+  [Status.Todo]: IssueWithLabels[];
+  [Status.InProgress]: IssueWithLabels[];
+  [Status.Done]: IssueWithLabels[];
+  [Status.Canceled]: IssueWithLabels[];
 };
 
 export const getIssueByType = (
-  allIssues: {issue: Issue; labels: string[]}[],
+  allIssues: IssueWithLabels[],
 ): IssuesByStatusType => {
   const issuesBySType = groupBy(allIssues, i => i.issue.status);
   const defaultIssueByType = {
@@ -32,7 +32,7 @@ export const getIssueByType = (
 export function getKanbanOrderIssueUpdates(
   issueToMove: Issue,
   issueToInsertBefore: Issue,
-  issues: {issue: Issue; labels: string[]}[],
+  issues: IssueWithLabels[],
 ): {issue: Issue; update: IssueUpdate}[] {
   const indexInKanbanOrder = findIndex(
     issues,
@@ -76,7 +76,7 @@ export function getKanbanOrderIssueUpdates(
 }
 
 interface Props {
-  issues: {issue: Issue; labels: string[]}[];
+  issues: IssueWithLabels[];
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
 }
@@ -89,17 +89,17 @@ function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
       if (!destination) {
         return;
       }
-      const sourceStatus = statusFromString(source.droppableId);
-      const draggedIssue = issuesByType[sourceStatus][source.index];
+      const sourceStatus = parseInt(source.droppableId) as Status;
+      const draggedIssue = issuesByType[sourceStatus][source.index]?.issue;
       if (!draggedIssue) {
         return;
       }
-      const newStatus = statusFromString(destination.droppableId);
+      const newStatus = parseInt(destination.droppableId) as Status;
       const newIndex =
         sourceStatus === newStatus && source.index < destination.index
           ? destination.index + 1
           : destination.index;
-      const issueToInsertBefore = issuesByType[newStatus][newIndex];
+      const issueToInsertBefore = issuesByType[newStatus][newIndex]?.issue;
       if (draggedIssue === issueToInsertBefore) {
         return;
       }
