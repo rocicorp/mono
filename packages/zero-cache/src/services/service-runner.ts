@@ -1,8 +1,9 @@
-import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
+import {ViewSyncerService} from './view-syncer/view-syncer.js';
 import {Replicator, ReplicatorService} from './replicator/replicator.js';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import {MutagenService} from './mutagen/mutagen-service.js';
 
 export interface ServiceRunnerEnv {
   runnerDO: DurableObjectNamespace;
@@ -15,8 +16,10 @@ export interface ServiceRunnerEnv {
 }
 
 export class ServiceRunner {
-  #viewSyncers: Map<string, ViewSyncerService>;
-  #replicator: Map<string, ReplicatorService>;
+  readonly #viewSyncers: Map<string, ViewSyncerService>;
+  readonly #replicator: Map<string, ReplicatorService>;
+  readonly #mutagens: Map<string, MutagenService>;
+
   #storage: DurableStorage;
   #env: ServiceRunnerEnv;
   #registry: InvalidationWatcherRegistry;
@@ -37,6 +40,7 @@ export class ServiceRunner {
     );
     this.#viewSyncers = new Map();
     this.#replicator = new Map();
+    this.#mutagens = new Map();
     this.#storage = new DurableStorage(state.storage);
     this.#registry = registry;
     this.#env = env;
@@ -62,7 +66,7 @@ export class ServiceRunner {
     return Promise.resolve(rep);
   }
 
-  getViewSyncer(clientGroupID: string): ViewSyncer {
+  getViewSyncer(clientGroupID: string): ViewSyncerService {
     const v = this.#viewSyncers.get(clientGroupID);
     if (v) {
       return v;
@@ -78,5 +82,19 @@ export class ServiceRunner {
       this.#viewSyncers.delete(clientGroupID);
     });
     return vsync;
+  }
+
+  getMutagen(clientGroupID: string): MutagenService {
+    const m = this.#mutagens.get(clientGroupID);
+    if (m) {
+      return m;
+    }
+    const mut = new MutagenService(
+      this.#lc,
+      clientGroupID,
+      this.#env.UPSTREAM_URI,
+    );
+    this.#mutagens.set(clientGroupID, mut);
+    return mut;
   }
 }

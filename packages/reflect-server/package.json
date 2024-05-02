@@ -44,7 +44,8 @@
     "./router": "./src/server/router.ts",
     "./http-util": "./src/server/http-util.ts",
     "./connect": "./src/server/connect.ts",
-    "./socket": "./src/util/socket.ts"
+    "./socket": "./src/util/socket.ts",
+    "./ping": "./src/server/ping.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

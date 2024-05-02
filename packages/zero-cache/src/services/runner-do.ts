@@ -7,14 +7,17 @@ import {
   requireUpgradeHeader,
   upgradeWebsocketResponse,
 } from 'reflect-server/http-util';
-import {getConnectRequest} from 'reflect-server/connect';
 import type {ErrorKind} from 'zero-protocol/src/error.js';
 import {closeWithError} from 'reflect-server/socket';
+import {getConnectRequest} from '../connect.js';
+import {Connection, send} from './connection.js';
+import type {ConnectedMessage} from 'zero-protocol';
 
 export class ServiceRunnerDO {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
   readonly #router = new Router();
+  readonly #clients = new Map<string, Connection>();
 
   constructor(
     registry: InvalidationWatcherRegistry,
@@ -52,37 +55,57 @@ export class ServiceRunnerDO {
     const url = new URL(request.url);
     serverWS.accept();
 
-    await this.#handleConnection(serverWS, url, request.headers);
+    await this.#handleConnection(serverWS, url);
 
     return upgradeWebsocketResponse(clientWS, request.headers);
   };
 
   // eslint-disable-next-line require-await
-  #handleConnection = async (
-    serverWS: WebSocket,
-    url: URL,
-    headers: Headers,
-  ) => {
+  #handleConnection = async (serverWS: WebSocket, url: URL) => {
     const closeWithErrorLocal = (ek: ErrorKind, msg: string) => {
       closeWithError(this.#lc, serverWS, ek, msg);
     };
 
-    const {result, error} = getConnectRequest(url, headers);
+    const {result, error} = getConnectRequest(url);
     if (error !== null) {
       closeWithErrorLocal('InvalidConnectionRequest', error);
       return;
     }
-    const {clientGroupID} = result;
+    const {clientGroupID, clientID, baseCookie, wsid} = result;
 
-    // ensure that the viewSyncer is up and running
-    this.#serviceRunner.getViewSyncer(clientGroupID);
+    const existing = this.#clients.get(clientID);
+    if (existing) {
+      this.#lc.info?.('closing old socket');
+      existing.close();
+      return;
+    }
 
-    serverWS.addEventListener('message', event => {
-      dispatchMessage(this.#serviceRunner, event.data.toString(), serverWS);
+    const connection = new Connection(
+      this.#lc,
+      this.#serviceRunner,
+      clientGroupID,
+      clientID,
+      baseCookie,
+      serverWS,
+    );
+    this.#clients.set(clientID, connection);
+
+    serverWS.addEventListener('close', () => {
+      // spin down services if we have
+      // no more client connections for the client group?
+      this.#lc.info?.('Connection closed', {clientID, wsid});
     });
+    serverWS.addEventListener('error', e => {
+      this.#lc.error?.('Unhandled error in ws connection', e);
+    });
+
+    const connectedMessage: ConnectedMessage = [
+      'connected',
+      {wsid, timestamp: Date.now()},
+    ];
+    send(serverWS, connectedMessage);
   };
 
-  // eslint-disable-next-line require-await
   async fetch(request: Request): Promise<Response> {
     const lc = this.#lc.withContext('url', request.url);
     lc.info?.('Handling request:', request.url);
@@ -96,12 +119,4 @@ export class ServiceRunnerDO {
       });
     }
   }
-}
-
-function dispatchMessage(
-  _serviceRunner: ServiceRunner,
-  _data: string,
-  _ws: WebSocket,
-) {
-  // decodes the message and dispatches to the appropriate service
 }
