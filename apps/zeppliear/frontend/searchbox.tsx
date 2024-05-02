@@ -2,7 +2,7 @@ import React, {ChangeEventHandler, useState, RefObject, useRef} from 'react';
 import SearchIcon from './assets/icons/search.svg';
 import classnames from 'classnames';
 import {usePopper} from 'react-popper';
-import {useClickOutside} from './hooks/useClickOutside';
+import {useClickOutside} from './hooks/use-click-outside';
 import {noop} from 'lodash';
 
 interface Props {

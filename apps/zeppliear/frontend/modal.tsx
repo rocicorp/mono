@@ -1,7 +1,7 @@
 import React, {RefObject, useCallback, useRef} from 'react';
 import ReactDOM from 'react-dom';
 import classnames from 'classnames';
-import useLockBodyScroll from './hooks/useLockBodyScroll';
+import useLockBodyScroll from './hooks/use-lock-body-scroll';
 
 interface Props {
   title?: string;

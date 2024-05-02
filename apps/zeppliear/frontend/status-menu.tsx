@@ -5,7 +5,7 @@ import BacklogIcon from './assets/icons/circle-dot.svg';
 import TodoIcon from './assets/icons/circle.svg';
 import DoneIcon from './assets/icons/done.svg';
 import InProgressIcon from './assets/icons/half-circle.svg';
-import {useClickOutside} from './hooks/useClickOutside';
+import {useClickOutside} from './hooks/use-click-outside';
 import {Status} from './issue';
 import StatusIcon from './status-icon';
 
