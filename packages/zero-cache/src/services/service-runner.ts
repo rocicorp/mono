@@ -60,6 +60,7 @@ export class ServiceRunner {
       this.#env.UPSTREAM_URI,
       this.#env.SYNC_REPLICA_URI,
     );
+    this.#replicator.set(this.#REPLICATOR_ID, rep);
     void rep.run().then(() => {
       this.#replicator.delete(this.#REPLICATOR_ID);
     });
