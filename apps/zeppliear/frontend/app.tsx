@@ -390,7 +390,18 @@ function filterQuery(
 
   let filteredQuery = q
     .groupBy('issue.id')
-    .select('issue.*', agg.array('label.name', 'labels'));
+    .select(
+      'issue.created',
+      'issue.creatorID',
+      'issue.description',
+      'issue.id',
+      'issue.kanbanOrder',
+      'issue.priority',
+      'issue.modified',
+      'issue.status',
+      'issue.title',
+      agg.array('label.name', 'labels'),
+    );
   if (issueLabels) {
     // TODO: if `having` has been applied then selection
     // set should not be updated to remove what `having` operates against.
