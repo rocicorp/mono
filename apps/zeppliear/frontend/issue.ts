@@ -1,25 +1,9 @@
 import type {Immutable} from 'shared/src/immutable';
-import type {
-  ReadonlyJSONValue,
-  ReadTransaction,
-  WriteTransaction,
-} from 'zero-client';
+import type {Zero} from 'zero-client';
 import {z} from 'zod';
+import type {Collections} from './app';
 
-const ENTITIES_KEY_PREFIX = 'e/';
-
-export const ISSUE_ENTITY_NAME = `issue`;
-export const ISSUE_KEY_PREFIX = `${ISSUE_ENTITY_NAME}/`;
-export const issueKey = (id: string) =>
-  `${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}${id}`;
-const labelKey = (id: string) => `${ENTITIES_KEY_PREFIX}label/${id}`;
-const issueLabelKey = (id: string) => `${ENTITIES_KEY_PREFIX}issueLabel/${id}`;
-export const issueID = (key: string) => {
-  if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}`)) {
-    throw new Error(`Invalid issue key: ${key}`);
-  }
-  return key.substring(`${ENTITIES_KEY_PREFIX}${ISSUE_KEY_PREFIX}`.length);
-};
+export type M = Record<string, never>;
 
 export const enum Priority {
   None = 1,
@@ -193,42 +177,6 @@ export type Label = {id: string; name: string};
 export type IssueLabel = {id: string; issueID: string; labelID: string};
 export type IssueWithLabels = {issue: Issue; labels: string[]};
 
-export async function getIssue(
-  tx: ReadTransaction,
-  id: string,
-): Promise<Issue | undefined> {
-  const val = await tx.get(issueKey(id));
-  if (val === undefined) {
-    return undefined;
-  }
-  return issueSchema.parse(val);
-}
-
-export async function putIssue(
-  tx: WriteTransaction,
-  issue: Issue,
-): Promise<void> {
-  await tx.set(issueKey(issue.id), issue);
-}
-
-export function issueFromKeyAndValue(
-  _key: string,
-  value: ReadonlyJSONValue,
-): Issue {
-  return issueSchema.parse(value);
-}
-
-export const COMMENT_ENTITY_NAME = `comment`;
-export const COMMENT_KEY_PREFIX = `${COMMENT_ENTITY_NAME}/`;
-export const commentKey = (commentID: string) =>
-  `${ENTITIES_KEY_PREFIX}${COMMENT_KEY_PREFIX}${commentID}`;
-export const commentID = (key: string) => {
-  if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${COMMENT_KEY_PREFIX}`)) {
-    throw new Error(`Invalid comment key: ${key}`);
-  }
-  return key.substring(`${ENTITIES_KEY_PREFIX}${COMMENT_KEY_PREFIX}`.length);
-};
-
 export const commentSchema = z.object({
   id: z.string(),
   issueID: z.string(),
@@ -240,60 +188,58 @@ export const commentSchema = z.object({
 export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
 
 export async function putIssueComment(
-  tx: WriteTransaction,
+  zero: Zero<M, Collections>,
   comment: Comment,
 ): Promise<void> {
-  await tx.set(commentKey(comment.id), comment);
+  // TODO: All the mutators should be synchronous. We don't have
+  // transactions now.
+  await zero.mutate.comment.set(comment);
+
+  // TODO: I think it would be more "real" to not have this denormalized
+  // lastModified date. Instead, if the UI wants to show when the issue was
+  // last modified it should select max() of comment last-modified.
+  //
+  // TODO: How would server-authoritative last-modifies work? It would be cool
+  // to have some notion of "touch" in the CRUD API. Or maybe it would be
+  // possible to setup the pg schema to ignore the incoming writes?
+  await zero.mutate.issue.update({
+    id: comment.issueID,
+    modified: Date.now(),
+  });
 }
 
-export const MEMBER_KEY_PREFIX = `member/`;
-export const memberKey = (memberId: string) =>
-  `${ENTITIES_KEY_PREFIX}${MEMBER_KEY_PREFIX}${memberId}`;
-export const memberID = (key: string) => {
-  if (!key.startsWith(`${ENTITIES_KEY_PREFIX}${MEMBER_KEY_PREFIX}`)) {
-    throw new Error(`Invalid member key: ${key}`);
+export async function deleteIssueComment(
+  zero: Zero<M, Collections>,
+  comment: Comment,
+): Promise<void> {
+  // TODO: We need a batch API in the client so that these two happen
+  // synchronously.
+
+  // TODO: Why is the delete param "any" not "string"?
+  await zero.mutate.comment.delete(comment.id);
+  await zero.mutate.issue.update({
+    id: comment.issueID,
+    modified: Date.now(),
+  });
+}
+
+export async function updateIssues(
+  zero: Zero<M, Collections>,
+  {issueUpdates}: {issueUpdates: IssueUpdate[]},
+) {
+  const modified = Date.now();
+  for (const issueUpdate of issueUpdates) {
+    await zero.mutate.issue.update({
+      ...issueUpdate,
+      modified,
+    });
   }
-  return key.substring(`${ENTITIES_KEY_PREFIX}${MEMBER_KEY_PREFIX}`.length);
-};
-
-export async function getMember(
-  tx: ReadTransaction,
-  id: string,
-): Promise<Member | undefined> {
-  const val = await tx.get(memberKey(id));
-  if (val === undefined) {
-    return undefined;
-  }
-  return memberSchema.parse(val);
-}
-
-export async function putMember(
-  tx: WriteTransaction,
-  member: Member,
-): Promise<void> {
-  await tx.set(memberKey(member.id), member);
-}
-
-export async function putLabel(
-  tx: WriteTransaction,
-  label: Label,
-): Promise<void> {
-  await tx.set(labelKey(label.id), label);
-}
-
-export async function putIssueLabel(
-  tx: WriteTransaction,
-  issueLabel: IssueLabel,
-): Promise<void> {
-  await tx.set(issueLabelKey(issueLabel.id), issueLabel);
 }
 
 export const memberSchema = z.object({
   id: z.string(),
   name: z.string(),
 });
-
-export type Member = Immutable<z.TypeOf<typeof memberSchema>>;
 
 const REVERSE_TIMESTAMP_LENGTH = Number.MAX_SAFE_INTEGER.toString().length;
 

@@ -4,7 +4,7 @@ import {Zero} from 'zero-client';
 import App, {Collections} from '../../frontend/app';
 import {ZeroProvider} from '../../frontend/hooks/use-zero';
 import type {Comment, Issue, IssueLabel, Label} from '../../frontend/issue.js';
-import {M, mutators} from '../../frontend/mutators';
+import type {M} from '../../frontend/issue';
 
 export default function Home() {
   const [zero, setZero] = useState<Zero<M, Collections> | null>(null);
@@ -20,7 +20,8 @@ export default function Home() {
       const z = new Zero({
         server: process.env.NEXT_PUBLIC_SERVER,
         userID: 'anon',
-        mutators,
+        // TODO: Remove mutators from Zero.
+        mutators: {} as M,
         kvStore: 'idb',
         queries: {
           issue: v => v as Issue,
