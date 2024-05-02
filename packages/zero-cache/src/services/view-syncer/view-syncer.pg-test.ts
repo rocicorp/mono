@@ -140,18 +140,18 @@ describe('view-syncer/service', () => {
           foo: {
             desiredQueryIDs: ['query-hash1'],
             id: 'foo',
-            putPatch: {minorVersion: 1, stateVersion: '00'},
+            putPatch: {stateVersion: '00', minorVersion: 1},
           },
         },
         id: '9876',
         queries: {
           'query-hash1': {
             ast: ISSUES_TITLE_QUERY,
-            desiredBy: {foo: {minorVersion: 1, stateVersion: '00'}},
+            desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
             id: 'query-hash1',
           },
         },
-        version: {minorVersion: 1, stateVersion: '00'},
+        version: {stateVersion: '00', minorVersion: 1},
       });
 
       await vs.stop();
@@ -250,6 +250,108 @@ describe('view-syncer/service', () => {
           break;
         }
       }
+
+      const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+      expect(cvr).toMatchObject({
+        clients: {
+          foo: {
+            desiredQueryIDs: ['query-hash1'],
+            id: 'foo',
+            putPatch: {stateVersion: '00', minorVersion: 1},
+          },
+        },
+        id: '9876',
+        queries: {
+          'query-hash1': {
+            ast: ISSUES_TITLE_QUERY,
+            desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+            id: 'query-hash1',
+            putPatch: {stateVersion: '1xz'},
+            transformationVersion: {stateVersion: '1xz'},
+          },
+        },
+        version: {stateVersion: '1xz'},
+      });
+
+      const rowRecords = await storage.list({
+        prefix: `/vs/cvr/${serviceID}/d/`,
+      });
+      expect(new Set(rowRecords.values())).toEqual(
+        new Set([
+          {
+            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+            putPatch: {stateVersion: '1xz'},
+            queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
+            rowVersion: '1a0',
+          },
+          {
+            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+            putPatch: {stateVersion: '1xz'},
+            queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
+            rowVersion: '1ab',
+          },
+          {
+            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+            putPatch: {stateVersion: '1xz'},
+            queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
+            rowVersion: '1ca',
+          },
+          {
+            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+            putPatch: {stateVersion: '1xz'},
+            queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
+            rowVersion: '1cd',
+          },
+        ]),
+      );
+
+      const rowPatches = await storage.list({
+        prefix: `/vs/cvr/${serviceID}/p/d/`,
+      });
+      expect(rowPatches).toEqual(
+        new Map([
+          [
+            '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
+            {
+              columns: ['id', 'title'],
+              id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+              op: 'put',
+              rowVersion: '1cd',
+              type: 'row',
+            },
+          ],
+          [
+            '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
+            {
+              columns: ['id', 'title'],
+              id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+              op: 'put',
+              rowVersion: '1ab',
+              type: 'row',
+            },
+          ],
+          [
+            '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
+            {
+              columns: ['id', 'title'],
+              id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+              op: 'put',
+              rowVersion: '1a0',
+              type: 'row',
+            },
+          ],
+          [
+            '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
+            {
+              columns: ['id', 'title'],
+              id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+              op: 'put',
+              rowVersion: '1ca',
+              type: 'row',
+            },
+          ],
+        ]),
+      );
 
       await vs.stop();
       return Promise.all([done, readerDone]);
