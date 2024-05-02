@@ -2,12 +2,15 @@ import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {CONNECT_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
+// TODO(mlaw): break dependency on reflect-server
 import {Router, BaseContext} from 'reflect-server/router';
+// TODO(mlaw): break dependency on reflect-server
 import {
   requireUpgradeHeader,
   upgradeWebsocketResponse,
 } from 'reflect-server/http-util';
 import type {ErrorKind} from 'zero-protocol/src/error.js';
+// TODO(mlaw): break dependency on reflect-server
 import {closeWithError} from 'reflect-server/socket';
 import {getConnectRequest} from '../connect.js';
 import {Connection, send} from './connection.js';
