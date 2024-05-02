@@ -3,7 +3,7 @@ import AddIcon from './assets/icons/add.svg';
 import HelpIcon from './assets/icons/help.svg';
 import MenuIcon from './assets/icons/menu.svg';
 import ItemGroup from './item-group';
-import {useClickOutside} from './hooks/useClickOutside';
+import {useClickOutside} from './hooks/use-click-outside';
 import classnames from 'classnames';
 import SearchBox from './searchbox';
 import IssueModal from './issue-modal';

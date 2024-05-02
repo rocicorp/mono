@@ -5,7 +5,7 @@ import UrgentPriorityIcon from './assets/icons/rounded-claim.svg';
 import MediumPriorityIcon from './assets/icons/signal-medium.svg';
 import HighPriorityIcon from './assets/icons/signal-strong.svg';
 import LowPriorityIcon from './assets/icons/signal-weak.svg';
-import {useClickOutside} from './hooks/useClickOutside';
+import {useClickOutside} from './hooks/use-click-outside';
 import {Priority} from './issue';
 import PriorityIcon from './priority-icon';
 

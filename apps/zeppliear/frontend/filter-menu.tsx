@@ -1,7 +1,7 @@
 import React, {RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
 import {Filter, Priority, Status} from './issue';
-import {useClickOutside} from './hooks/useClickOutside';
+import {useClickOutside} from './hooks/use-click-outside';
 import SignalStrongIcon from './assets/icons/signal-strong.svg';
 import TodoIcon from './assets/icons/circle.svg';
 import {statusOpts} from './priority-menu';

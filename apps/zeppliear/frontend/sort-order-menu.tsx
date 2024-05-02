@@ -1,7 +1,7 @@
 import React, {RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
 import {Order} from './issue';
-import {useClickOutside} from './hooks/useClickOutside';
+import {useClickOutside} from './hooks/use-click-outside';
 import SortOutlinedIcon from '@mui/icons-material/SortOutlined';
 import classNames from 'classnames';
 
