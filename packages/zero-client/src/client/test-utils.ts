@@ -25,7 +25,6 @@ import {
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
 } from './zero.js';
-import type {MutatorDefs} from 'replicache';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
@@ -59,10 +58,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestZero<
-  MD extends MutatorDefs,
-  QD extends QueryDefs,
-> extends Zero<MD, QD> {
+export class TestZero<QD extends QueryDefs> extends Zero<QD> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -187,13 +183,13 @@ export class TestZero<
 
 declare const TESTING: boolean;
 
-const testZeroInstances = new Set<TestZero<MutatorDefs, QueryDefs>>();
+const testZeroInstances = new Set<TestZero<QueryDefs>>();
 
 let testZeroCounter = 0;
 
-export function zeroForTest<MD extends MutatorDefs, QD extends QueryDefs>(
-  options: Partial<ZeroOptions<MD, QD>> = {},
-): TestZero<MD, QD> {
+export function zeroForTest<QD extends QueryDefs>(
+  options: Partial<ZeroOptions<QD>> = {},
+): TestZero<QD> {
   const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
@@ -208,7 +204,7 @@ export function zeroForTest<MD extends MutatorDefs, QD extends QueryDefs>(
   };
 
   // Keep track of all instances so we can close them in teardown.
-  testZeroInstances.add(r as TestZero<MutatorDefs, QueryDefs>);
+  testZeroInstances.add(r as TestZero<QueryDefs>);
   return r;
 }
 
@@ -227,7 +223,7 @@ export class TestLogSink implements LogSink {
 }
 
 export async function waitForUpstreamMessage(
-  r: TestZero<MutatorDefs, QueryDefs>,
+  r: TestZero<QueryDefs>,
   name: string,
   clock: SinonFakeTimers,
 ) {

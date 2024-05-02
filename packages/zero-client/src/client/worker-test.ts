@@ -3,7 +3,6 @@
 import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
-import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {MockSocket, zeroForTest} from './test-utils.js';
 import {version} from './version.js';
 import sinon from 'sinon';
@@ -35,13 +34,6 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    mutators: {
-      async inc(tx, id: string) {
-        const rows = await q.exec();
-        const value = rows[0]?.value ?? 0;
-        await tx.set(`${ENTITIES_KEY_PREFIX}e/${id}`, {id, value: value + 1});
-      },
-    },
     queries: {
       e: v => v as E,
     },
@@ -59,17 +51,17 @@ async function testBasics(userID: string) {
   await sleep(1);
   assert(deepEqual(log, [[]]));
 
-  await r.mutate.inc('foo');
+  await r.mutate.e.set({id: 'foo', value: 1});
   assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
-  await r.mutate.inc('foo');
+  await r.mutate.e.set({id: 'foo', value: 2});
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   cancelSubscribe();
 
-  await r.mutate.inc('foo');
+  await r.mutate.e.set({id: 'foo', value: 3});
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );

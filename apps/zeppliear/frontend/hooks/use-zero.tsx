@@ -1,29 +1,26 @@
 import {createContext, useContext} from 'react';
-import type {MutatorDefs, QueryDefs, Zero} from 'zero-client';
-import type {M} from '../issue';
+import type {QueryDefs, Zero} from 'zero-client';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-const ZeroContext = createContext<Zero<MutatorDefs, QueryDefs> | undefined>(
-  undefined,
-);
+const ZeroContext = createContext<Zero<QueryDefs> | undefined>(undefined);
 
-export function useZero<Q extends QueryDefs>(): Zero<M, Q> {
+export function useZero<Q extends QueryDefs>(): Zero<Q> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
     throw new Error('useZero must be used within a ZeroProvider');
   }
-  return zero as Zero<M, Q>;
+  return zero as Zero<Q>;
 }
 
-export function ZeroProvider<M extends MutatorDefs, Q extends QueryDefs>({
+export function ZeroProvider<Q extends QueryDefs>({
   children,
   zero,
 }: {
   children: React.ReactNode;
-  zero: Zero<M, Q>;
+  zero: Zero<Q>;
 }) {
   return (
-    <ZeroContext.Provider value={zero as Zero<MutatorDefs, QueryDefs>}>
+    <ZeroContext.Provider value={zero as Zero<QueryDefs>}>
       {children}
     </ZeroContext.Provider>
   );

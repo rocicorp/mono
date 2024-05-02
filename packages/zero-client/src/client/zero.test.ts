@@ -3,11 +3,6 @@ import {resolver} from '@rocicorp/resolver';
 import {Mutation, pushMessageSchema} from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
 import {resetAllConfig} from 'reflect-shared/src/config.js';
-import type {
-  MutatorDefs,
-  ReadonlyJSONValue,
-  WriteTransaction,
-} from 'reflect-shared/src/mod.js';
 import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
@@ -16,7 +11,6 @@ import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
-import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
@@ -75,6 +69,9 @@ test('onOnlineChange callback', async () => {
 
   const r = zeroForTest({
     logLevel: 'debug',
+    queries: {
+      foo: () => ({id: 'a', val: 'a'}),
+    },
     onOnlineChange: online => {
       if (online) {
         onlineCount++;
@@ -755,16 +752,6 @@ test('smokeTest', async () => {
     };
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
-      mutators: {
-        addData: async (tx: WriteTransaction, issues: Issue[]) => {
-          for (const issue of issues) {
-            await tx.set(`${ENTITIES_KEY_PREFIX}issues/${issue.id}`, issue);
-          }
-        },
-        del: async (tx: WriteTransaction, id: string) => {
-          await tx.del(`${ENTITIES_KEY_PREFIX}issues/${id}`);
-        },
-      },
       ...serverOptions,
       queries: {
         issues: v => v as Issue,
@@ -774,29 +761,28 @@ test('smokeTest', async () => {
     const spy = vi.fn();
     const unsubscribe = r.query.issues.select('*').prepare().subscribe(spy);
 
-    await r.mutate.addData([
-      {id: 'a', value: 1},
-      {id: 'b', value: 2},
-    ]);
+    await r.mutate.issues.create({id: 'a', value: 1});
+    await r.mutate.issues.create({id: 'b', value: 2});
 
-    // once for initial data, once for the mutation
-    expect(spy).toHaveBeenCalledTimes(2);
+    // once for initial data, once for each mutation
+    // once we have batch mutations this can go back to 2
+    expect(spy).toHaveBeenCalledTimes(3);
     expect(spy.mock.calls[0][0]).toEqual([]);
-    expect(spy.mock.calls[1][0]).toEqual([
+    expect(spy.mock.calls[1][0]).toEqual([{id: 'a', value: 1}]);
+    expect(spy.mock.calls[2][0]).toEqual([
       {id: 'a', value: 1},
       {id: 'b', value: 2},
     ]);
 
     spy.mockReset();
 
-    await r.mutate.addData([
-      {id: 'a', value: 1},
-      {id: 'b', value: 2},
-    ]);
+    await r.mutate.issues.create({id: 'a', value: 1});
+    await r.mutate.issues.create({id: 'b', value: 2});
 
     expect(spy).toHaveBeenCalledTimes(0);
 
-    await r.mutate.addData([{id: 'a', value: 11}]);
+    await r.mutate.issues.set({id: 'a', value: 11});
+
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.lastCall[0]).toEqual([
       {id: 'a', value: 11},
@@ -804,14 +790,14 @@ test('smokeTest', async () => {
     ]);
 
     spy.mockReset();
-    await r.mutate.del('b');
+    await r.mutate.issues.delete({id: 'b'});
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.lastCall[0]).toEqual([{id: 'a', value: 11}]);
 
     unsubscribe();
 
     spy.mockReset();
-    await r.mutate.addData([{id: 'c', value: 6}]);
+    await r.mutate.issues.create({id: 'c', value: 6});
     expect(spy).toHaveBeenCalledTimes(0);
   }
 });
@@ -1054,7 +1040,7 @@ function expectInitConnectionMessage(message: string) {
   ).not.toBeUndefined();
 }
 
-function expectLogMessages(r: TestZero<MutatorDefs, QueryDefs>) {
+function expectLogMessages(r: TestZero<QueryDefs>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1183,7 +1169,7 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<MutatorDefs, QueryDefs>) => Promise<unknown>,
+  fn: (r: TestZero<QueryDefs>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
@@ -1291,7 +1277,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<MutatorDefs, QueryDefs>,
+      r: TestZero<QueryDefs>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1567,10 +1553,7 @@ test('kvStore option', async () => {
   };
 
   const t = async (
-    kvStore: ZeroOptions<
-      Record<string, never>,
-      Record<string, never>
-    >['kvStore'],
+    kvStore: ZeroOptions<Record<string, never>>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: E[],
@@ -1579,11 +1562,6 @@ test('kvStore option', async () => {
       server: null,
       userID,
       kvStore,
-      mutators: {
-        putE: async (tx, val: E) => {
-          await tx.set(`${ENTITIES_KEY_PREFIX}e/${val.id}`, val);
-        },
-      },
       queries: {
         e: v => v as E,
       },
@@ -1591,7 +1569,7 @@ test('kvStore option', async () => {
     expect(await r.query.e.select('*').prepare().exec()).deep.equal(
       expectedValue,
     );
-    await r.mutate.putE({id: 'a', value: 1});
+    await r.mutate.e.create({id: 'a', value: 1});
     expect(
       await r.query.e.select('*').where('id', '=', 'a').prepare().exec(),
     ).deep.equal([{id: 'a', value: 1}]);
@@ -1667,54 +1645,6 @@ test('Zero close should stop timeout, close delayed', async () => {
   expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
 
-test('subscribe where body returns non json', async () => {
-  const log: unknown[] = [];
-
-  const reflect = zeroForTest({
-    logLevel: 'debug',
-    mutators: {
-      async addData(tx, x: Record<string, ReadonlyJSONValue>) {
-        for (const [key, value] of Object.entries(x)) {
-          await tx.set(key, value);
-        }
-      },
-    },
-  });
-  const cancel = reflect.subscribe(
-    async tx => {
-      const entries = await tx.scan().entries().toArray();
-      return new Map(entries.map(([k, v]) => [k, BigInt(v as number)]));
-    },
-    {
-      onData(values) {
-        expect(values).instanceof(Map);
-        for (const entry of values) {
-          log.push(entry);
-        }
-      },
-      isEqual(a, b) {
-        if (!(a instanceof Map) || !(b instanceof Map) || a.size !== b.size) {
-          return false;
-        }
-        for (const [k, v] of a) {
-          if (b.get(k) !== v) {
-            return false;
-          }
-        }
-        return true;
-      },
-    },
-  );
-
-  await reflect.mutate.addData({a: 0, b: 1});
-  expect(log).to.deep.equal([
-    ['a', 0n],
-    ['b', 1n],
-  ]);
-
-  cancel();
-});
-
 test('ensure we get the same query object back', () => {
   type Issue = {
     id: string;
@@ -1725,18 +1655,18 @@ test('ensure we get the same query object back', () => {
     issueID: string;
     text: string;
   };
-  const r = zeroForTest({
+  const z = zeroForTest({
     queries: {
       issue: v => v as Issue,
       comment: v => v as Comment,
     },
   });
-  const issueQuery1 = r.query.issue;
-  const issueQuery2 = r.query.issue;
+  const issueQuery1 = z.query.issue;
+  const issueQuery2 = z.query.issue;
   expect(issueQuery1).to.equal(issueQuery2);
 
-  const commentQuery1 = r.query.comment;
-  const commentQuery2 = r.query.comment;
+  const commentQuery1 = z.query.comment;
+  const commentQuery2 = z.query.comment;
   expect(commentQuery1).to.equal(commentQuery2);
 
   expect(issueQuery1).to.not.equal(commentQuery1);
@@ -1786,11 +1716,6 @@ suite('CRUD', () => {
       queries: {
         issue: v => v as Issue,
         comment: v => v as Comment,
-      },
-      mutators: {
-        async customSet(tx, x: {id: string; value: number}) {
-          await tx.set(x.id, x.value);
-        },
       },
     });
 
@@ -1866,12 +1791,8 @@ suite('CRUD', () => {
       queries: {
         issue: v => v as {id: string; title: string},
       },
-      mutators: {
-        m: () => Promise.resolve(1),
-      },
     });
 
-    // @ts-expect-error Should not expose _zero_crud through mutate.
-    expect(z.mutate._zero_crud).toBeUndefined();
+    expect((z.mutate as Record<string, unknown>)._zero_crud).toBeUndefined();
   });
 });

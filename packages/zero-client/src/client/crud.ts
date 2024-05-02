@@ -1,6 +1,5 @@
 import type {Entity} from '@rocicorp/zql/src/entity.js';
 import type {MutatorDefs, WriteTransaction} from 'reflect-shared/src/types.js';
-import type {MakeMutators as MakeCustomMutators} from 'replicache/src/types.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {EntityID} from 'zero-protocol/src/entity.js';
 import type {
@@ -35,11 +34,6 @@ export type MakeCRUDMutate<QD extends QueryDefs> = {
   [K in keyof QD]: EntityCRUDMutate<QD[K]>;
 };
 
-export type MakeMutateObject<
-  MD extends MutatorDefs,
-  QD extends QueryDefs,
-> = MakeCustomMutators<Omit<MD, '_zero_crud'>> & MakeCRUDMutate<QD>;
-
 type ZeroCRUDMutate = {
   ['_zero_crud']: CRUDMutate;
 };
@@ -49,16 +43,16 @@ type ZeroCRUDMutate = {
  * queries are `issue` and `label`, then this object will have `issue` and
  * `label` properties.
  */
-export function makeCRUDMutate<MD extends MutatorDefs, QD extends QueryDefs>(
+export function makeCRUDMutate<QD extends QueryDefs>(
   queries: QueryParseDefs<QD>,
   repMutate: ZeroCRUDMutate,
-): MakeMutateObject<MD, QD> {
+): MakeCRUDMutate<QD> {
   const {_zero_crud: zeroCRUD, ...mutate} = repMutate;
   for (const name of Object.keys(queries)) {
     (mutate as Record<string, EntityCRUDMutate<Entity>>)[name] =
       makeEntityCRUDMutate(name, zeroCRUD);
   }
-  return mutate as MakeMutateObject<MD, QD>;
+  return mutate as MakeCRUDMutate<QD>;
 }
 
 function makeEntityCRUDMutate<E extends Entity>(
