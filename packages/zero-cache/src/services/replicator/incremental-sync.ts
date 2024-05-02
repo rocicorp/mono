@@ -91,12 +91,18 @@ export class IncrementalSyncer {
       );
       this.#service = service;
 
+      let lastLSN: string | undefined;
       const processor = new MessageProcessor(
         this.#replica,
         replicated,
         this.#txSerializer,
         this.#invalidationFilters,
-        (lsn: string) => service.acknowledge(lsn),
+        (lsn: string) => {
+          if (!lastLSN || toLexiVersion(lastLSN) < toLexiVersion(lsn)) {
+            lastLSN = lsn;
+          }
+          void service.acknowledge(lsn);
+        },
         (v: VersionChange) => this.#eventEmitter.emit('version', v),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
@@ -104,6 +110,17 @@ export class IncrementalSyncer {
         this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
         processor.processMessage(lc, lsn, message);
       });
+      this.#service.on(
+        'heartbeat',
+        (lsn: string, time: number, shouldRespond: boolean) => {
+          lc.debug?.(
+            `heartbeat (lastLSN: ${lastLSN}): ${lsn}, ${time}, ${shouldRespond}`,
+          );
+          if (shouldRespond) {
+            void service.acknowledge(lastLSN ?? '0/0');
+          }
+        },
+      );
 
       try {
         // TODO: Start from the last acknowledged LSN.
