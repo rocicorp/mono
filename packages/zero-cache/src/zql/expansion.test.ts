@@ -7,7 +7,7 @@ import {
   type RequiredColumns,
 } from './expansion.js';
 import {Normalized} from './normalize.js';
-import {and, cond, or} from './query-test-util.js';
+import {and, cond, or, stripCommentsAndWhitespace} from './query-test-util.js';
 
 describe('zql/expansion', () => {
   type Case = {
@@ -497,10 +497,3 @@ describe('zql/expansion', () => {
     });
   }
 });
-
-function stripCommentsAndWhitespace(query: string = '') {
-  return query
-    .trim()
-    .replaceAll(/--.*\n/g, '')
-    .replaceAll(/\s+/g, ' ');
-}

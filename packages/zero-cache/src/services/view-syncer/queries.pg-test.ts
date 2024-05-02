@@ -254,5 +254,109 @@ describe('view-syncer/queries', () => {
       ]),
     );
   });
+
+  test('deaggregation', async () => {
+    const published = await getPublicationInfo(db);
+    const queryHandler = new QueryHandler(published.tables);
+
+    const ast: AST = {
+      select: [['issues.id', 'id']],
+      aggregate: [{aggregate: 'array', field: 'title', alias: 'ignored'}],
+      groupBy: ['id'],
+      table: 'issues',
+    };
+
+    // Explanatory:
+    //   This is the original query and what the results need to be when
+    //   executing on the client.
+    const original = new Normalized(ast).query();
+    expect(original.query).toBe(
+      'SELECT issues.id AS id, array_agg(title) AS "array_agg(title)" FROM issues GROUP BY id',
+    );
+    expect(await db.unsafe(original.query, original.values)).toEqual([
+      {
+        id: '2',
+        ['array_agg(title)']: ['parent issue bar'],
+      },
+      {
+        id: '4',
+        ['array_agg(title)']: ['bar'],
+      },
+      {
+        id: '3',
+        ['array_agg(title)']: ['foo'],
+      },
+      {
+        id: '1',
+        ['array_agg(title)']: ['parent issue foo'],
+      },
+    ]);
+
+    const transformed = queryHandler.transform([{id: 'queryHash', ast}]);
+    const first = transformed.values().next();
+    assert(!first.done);
+
+    const {queryIDs, transformedAST} = first.value;
+    // expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
+    expect(queryIDs).toEqual(['queryHash']);
+    const expanded = transformedAST.query();
+    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    expect(expanded.query).toBe(
+      'SELECT issues._0_version AS "issues/_0_version", ' +
+        'issues.id AS "issues/id", issues.title AS "issues/title" ' +
+        'FROM issues',
+    );
+    const results = await db.unsafe(expanded.query, expanded.values);
+
+    // This is what gets synced to the client (contents) and stored in the CVR (record).
+    expect(resultParser.parseResults(queryIDs, results)).toEqual(
+      new Map([
+        [
+          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          {
+            contents: {id: '4', title: 'bar'},
+            record: {
+              id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1cd',
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          {
+            contents: {id: '2', title: 'parent issue bar'},
+            record: {
+              id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1ab',
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          {
+            contents: {id: '1', title: 'parent issue foo'},
+            record: {
+              id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1a0',
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          {
+            contents: {id: '3', title: 'foo'},
+            record: {
+              id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1ca',
+            },
+          },
+        ],
+      ]),
+    );
+  });
   /* eslint-enable @typescript-eslint/naming-convention */
 });
