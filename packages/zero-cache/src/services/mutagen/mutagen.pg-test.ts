@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {processMutation, readLastMutationIDForUpdate} from './mutagen.js';
+import {processMutation, readLastMutationID} from './mutagen.js';
 
 async function createTables(db: PostgresDB) {
   await db.unsafe(`
@@ -36,7 +36,7 @@ describe('processMutation', () => {
 
   test('new client with no last mutation id', async () => {
     await db.begin(async tx => {
-      const mid = await readLastMutationIDForUpdate(tx, '1');
+      const mid = await readLastMutationID(tx, '1');
       expect(mid).toBe(0n);
     });
 
@@ -60,7 +60,7 @@ describe('processMutation', () => {
     });
 
     await db.begin(async tx => {
-      const mid = await readLastMutationIDForUpdate(tx, '1');
+      const mid = await readLastMutationID(tx, '1');
       expect(mid).toBe(1n);
     });
 
@@ -93,7 +93,7 @@ describe('processMutation', () => {
     });
 
     await db.begin(async tx => {
-      const mid = await readLastMutationIDForUpdate(tx, '1');
+      const mid = await readLastMutationID(tx, '1');
       expect(mid).toBe(2n);
     });
 
@@ -126,7 +126,7 @@ describe('processMutation', () => {
     });
 
     await db.begin(async tx => {
-      const mid = await readLastMutationIDForUpdate(tx, '1');
+      const mid = await readLastMutationID(tx, '1');
       expect(mid).toBe(2n);
     });
 

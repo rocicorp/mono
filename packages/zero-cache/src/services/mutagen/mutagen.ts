@@ -28,10 +28,7 @@ async function processMutationWithTx(
   tx: PostgresTransaction,
   mutation: CRUDMutation,
 ) {
-  const lastMutationID = await readLastMutationIDForUpdate(
-    tx,
-    mutation.clientID,
-  );
+  const lastMutationID = await readLastMutationID(tx, mutation.clientID);
   const expectedMutationID = lastMutationID + 1n;
 
   if (mutation.id < expectedMutationID) {
@@ -129,12 +126,12 @@ function getDeleteSQL(
   return tx`DELETE FROM ${tx(table)} WHERE ${conditions}`;
 }
 
-export async function readLastMutationIDForUpdate(
+export async function readLastMutationID(
   tx: postgres.TransactionSql,
   clientID: string,
 ): Promise<bigint> {
   const rows =
-    await tx`SELECT "lastMutationID" FROM zero.clients WHERE "clientID" = ${clientID} FOR UPDATE`;
+    await tx`SELECT "lastMutationID" FROM zero.clients WHERE "clientID" = ${clientID}`;
   if (rows.length === 0) {
     return 0n;
   }
