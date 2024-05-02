@@ -37,9 +37,10 @@ describe('types/row-key', () => {
       rowIDHash: 'iakA7CJFm2Yxz2vcRy-tgw',
     },
     {
+      table: 'issues',
       keys: [{foo: ['bar']}, {foo: ['bar']}],
       rowKeyString: '["foo",["bar"]]',
-      rowIDHash: '4c9-53JYvlNcIweSAzj89Q',
+      rowIDHash: '-sQXIlhIMvuh7cZ_2j_VUQ',
     },
     {
       keys: [{foo: 1}, {foo: 1}],
