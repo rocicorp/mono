@@ -40,7 +40,11 @@
     "typescript": "^5.4.2"
   },
   "exports": {
-    ".": "./src/mod.ts"
+    ".": "./src/mod.ts",
+    "./router": "./src/server/router.ts",
+    "./http-util": "./src/server/http-util.ts",
+    "./connect": "./src/server/connect.ts",
+    "./socket": "./src/util/socket.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
