@@ -4,6 +4,7 @@ import type {MutagenService} from './mutagen/mutagen-service.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {ViewSyncerService} from './view-syncer/view-syncer.js';
 import * as valita from 'shared/src/valita.js';
+// TODO(mlaw): break dependency on reflect-server
 import {handlePing} from 'reflect-server/ping';
 import {sendError} from 'reflect-server/socket';
 import {Subscription} from '../types/subscription.js';
