@@ -88,7 +88,7 @@ const App = ({undoManager}: AppProps) => {
     )
     .join(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
 
-  const {filteredQuery, hasNonViewFilters, viewCountQuery} = filterQuery(
+  const {filteredQuery, hasNonViewFilters} = filterQuery(
     issueListQuery,
     view,
     priorityFilter,
@@ -105,7 +105,8 @@ const App = ({undoManager}: AppProps) => {
     labelFilter,
   ] as const;
   const filteredIssues = useQuery(filteredAndOrderedQuery, deps);
-  const viewIssueCount = useQuery(viewCountQuery, deps)[0]?.count ?? 0;
+  // const viewIssueCount = useQuery(viewCountQuery, deps)[0]?.count ?? 0;
+  const viewIssueCount = 0;
 
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {
