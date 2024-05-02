@@ -1,10 +1,15 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {Router} from '../router.js';
-import {requireUpgradeHeader, upgradeWebsocketResponse} from './http-util.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {CONNECT_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-import type {BaseContext} from '../router.js';
+import {Router, BaseContext} from 'reflect-server/router';
+import {
+  requireUpgradeHeader,
+  upgradeWebsocketResponse,
+} from 'reflect-server/http-util';
+import {getConnectRequest} from 'reflect-server/connect';
+import type {ErrorKind} from 'zero-protocol/src/error.js';
+import {closeWithError} from 'reflect-server/socket';
 
 export class ServiceRunnerDO {
   readonly #lc: LogContext;
@@ -38,7 +43,6 @@ export class ServiceRunnerDO {
   }
 
   #connect = async (_ctx: BaseContext, request: Request): Promise<Response> => {
-    // upgrade to websocket
     const error = requireUpgradeHeader(request, this.#lc);
     if (error) {
       return error;
@@ -56,15 +60,22 @@ export class ServiceRunnerDO {
   // eslint-disable-next-line require-await
   #handleConnection = async (
     serverWS: WebSocket,
-    _url: URL,
-    _headers: Headers,
+    url: URL,
+    headers: Headers,
   ) => {
-    // const {result, error} = getConnectRequest(url, headers);
+    const closeWithErrorLocal = (ek: ErrorKind, msg: string) => {
+      closeWithError(this.#lc, serverWS, ek, msg);
+    };
 
-    /**
-     * initialize from data in `result`
-     * e.g., client group, client id, etc.
-     */
+    const {result, error} = getConnectRequest(url, headers);
+    if (error !== null) {
+      closeWithErrorLocal('InvalidConnectionRequest', error);
+      return;
+    }
+    const {clientGroupID} = result;
+
+    // ensure that the viewSyncer is up and running
+    this.#serviceRunner.getViewSyncer(clientGroupID);
 
     serverWS.addEventListener('message', event => {
       dispatchMessage(this.#serviceRunner, event.data.toString(), serverWS);
