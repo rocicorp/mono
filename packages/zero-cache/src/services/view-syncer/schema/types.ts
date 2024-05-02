@@ -1,6 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
+import {versionToLexi} from '../../../types/lexi-version.js';
 import {versionFromString, versionString} from './paths.js';
 
 export const cvrVersionSchema = v.object({
@@ -31,11 +32,13 @@ export const cvrVersionSchema = v.object({
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
-export function oneAfter(v: CVRVersion): CVRVersion {
-  return {
-    stateVersion: v.stateVersion,
-    minorVersion: (v.minorVersion ?? 0) + 1,
-  };
+export function oneAfter(v: NullableCVRVersion): CVRVersion {
+  return v === null
+    ? {stateVersion: versionToLexi(0)}
+    : {
+        stateVersion: v.stateVersion,
+        minorVersion: (v.minorVersion ?? 0) + 1,
+      };
 }
 
 export type NullableCVRVersion = CVRVersion | null;
