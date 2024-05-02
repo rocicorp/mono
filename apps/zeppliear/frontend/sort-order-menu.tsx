@@ -16,7 +16,7 @@ function SortOrderMenu({onSelect, order}: Props) {
   const [orderByDropDownVisible, setOrderByDropDownVisible] = useState(false);
 
   const {styles, attributes, update} = usePopper(orderRef, popperRef, {
-    placement: 'bottom-start',
+    placement: 'bottom-end',
   });
 
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
