@@ -12,6 +12,7 @@ import {CVRPaths, lastActiveIndex} from './schema/paths.js';
 import {
   ClientPatch,
   CvrID,
+  NullableCVRVersion,
   QueryPatch,
   RowID,
   RowPatch,
@@ -147,7 +148,7 @@ export class CVRUpdater {
     void this._writes.put(this._paths.lastActive(), this._cvr.lastActive);
   }
 
-  async generateConfigPatches(after: CVRVersion) {
+  async generateConfigPatches(after: NullableCVRVersion) {
     const patches: PatchToVersion[] = [];
     const configPatches = this._writes.batchScan(
       {
@@ -403,6 +404,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._cvr.version;
   }
 
+  updatedVersion(): CVRVersion {
+    return this._cvr.version;
+  }
+
   /**
    * Tracks rows received from executing queries. This will update row records and
    * row patches if the received rows have a new version or contain columns that
@@ -480,7 +485,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *        version after `generatePatchesAfter`.
    */
   async deleteUnreferencedColumnsAndRows(
-    generatePatchesAfter: CVRVersion,
+    generatePatchesAfter: NullableCVRVersion,
   ): Promise<PatchToVersion[]> {
     const removedOrExecutedQueryIDs = union(
       this.#removedQueryIDs,
