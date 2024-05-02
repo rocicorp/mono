@@ -178,8 +178,8 @@ describe('view-syncer/service', () => {
       return Promise.resolve(sub);
     }
 
-    async getTableSchemas(): Promise<readonly TableSpec[]> {
-      return tables;
+    getTableSchemas(): Promise<readonly TableSpec[]> {
+      return Promise.resolve(tables);
     }
 
     getInvalidationWatcher(): Promise<InvalidationWatcher> {
