@@ -21,7 +21,6 @@ export function useQuery<From extends FromSet, Return>(
     if (unsubscribeRef.current && statementRef.current) {
       unsubscribeRef.current();
       statementRef.current.destroy();
-      setSnapshot([] as Return);
     }
     statementRef.current = statement;
     unsubscribeRef.current = statement.subscribe(v => {
