@@ -3,6 +3,7 @@ import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Upstream} from 'zero-protocol';
+import {TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
 import {runWithFakeDurableObjectStorage} from '../../test/fake-do.js';
@@ -92,11 +93,7 @@ describe('view-syncer/service', () => {
           'initConnection',
           {
             desiredQueriesPatch: [
-              {
-                op: 'put',
-                hash: 'query-hash1',
-                ast: ISSUES_TITLE_QUERY,
-              },
+              {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
             ],
           },
         ]),
@@ -131,11 +128,7 @@ describe('view-syncer/service', () => {
           'initConnection',
           {
             desiredQueriesPatch: [
-              {
-                op: 'put',
-                hash: 'query-hash1',
-                ast: ISSUES_TITLE_QUERY,
-              },
+              {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
             ],
           },
         ]),
@@ -153,13 +146,7 @@ describe('view-syncer/service', () => {
         id: '9876',
         queries: {
           'query-hash1': {
-            ast: {
-              select: [
-                ['id', 'id'],
-                ['title', 'title'],
-              ],
-              table: 'issues',
-            },
+            ast: ISSUES_TITLE_QUERY,
             desiredBy: {foo: {minorVersion: 1, stateVersion: '00'}},
             id: 'query-hash1',
           },
@@ -172,18 +159,120 @@ describe('view-syncer/service', () => {
     });
   });
 
+  test('subscribes and responds to initial invalidation', async () => {
+    await runWithFakeDurableObjectStorage(async storage => {
+      const watcher = new MockInvalidationWatcher();
+      const vs = new ViewSyncerService(
+        lc,
+        serviceID,
+        new DurableStorage(storage),
+        watcher,
+      );
+
+      const done = vs.run();
+      const downstream = await vs.sync(
+        {clientID: 'foo', baseCookie: null},
+        clientUpstream([
+          'initConnection',
+          {
+            desiredQueriesPatch: [
+              {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
+            ],
+          },
+        ]),
+      );
+
+      const request = await watcher.requests.dequeue();
+      expect(request.fromVersion).toBeUndefined();
+      expect(Object.keys(request.queries).length).toBe(1);
+
+      const reader = new TransactionPool(lc);
+      const readerDone = reader.run(db);
+
+      watcher.subscriptions[0].push({
+        fromVersion: null,
+        newVersion: '1xz',
+        invalidatedQueries: new Set(),
+        reader,
+      });
+
+      await watcher.consumed[0].dequeue();
+      reader.setDone();
+
+      const expectedPokes = [
+        ['pokeStart', {pokeID: '1xz', baseCookie: null, cookie: '1xz'}],
+        [
+          'pokePart',
+          {
+            pokeID: '1xz',
+            clientsPatch: [{clientID: 'foo', op: 'put'}],
+            desiredQueriesPatches: {
+              foo: [{ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'}],
+            },
+            entitiesPatch: [
+              {
+                op: 'update',
+                entityID: {id: '1'},
+                entityType: 'issues',
+                merge: {id: '1', title: 'parent issue foo'},
+              },
+              {
+                op: 'update',
+                entityID: {id: '2'},
+                entityType: 'issues',
+                merge: {id: '2', title: 'parent issue bar'},
+              },
+              {
+                op: 'update',
+                entityID: {id: '3'},
+                entityType: 'issues',
+                merge: {id: '3', title: 'foo'},
+              },
+              {
+                op: 'update',
+                entityID: {id: '4'},
+                entityType: 'issues',
+                merge: {id: '4', title: 'bar'},
+              },
+            ],
+            gotQueriesPatch: [
+              {ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'},
+            ],
+          },
+        ],
+        ['pokeEnd', {pokeID: '1xz'}],
+      ];
+
+      let i = 0;
+      for await (const poke of downstream) {
+        expect(poke).toEqual(expectedPokes[i]);
+        if (++i >= expectedPokes.length) {
+          break;
+        }
+      }
+
+      await vs.stop();
+      return Promise.all([done, readerDone]);
+    });
+  });
+
   class MockInvalidationWatcher
     implements InvalidationWatcher, InvalidationWatcherRegistry
   {
     readonly requests = new Queue<WatchRequest>();
     readonly subscriptions: Subscription<QueryInvalidationUpdate>[] = [];
+    readonly consumed: Queue<true>[] = [];
 
     watch(
       request: WatchRequest,
     ): Promise<CancelableAsyncIterable<QueryInvalidationUpdate>> {
       void this.requests.enqueue(request);
-      const sub = new Subscription<QueryInvalidationUpdate>();
+      const consumed = new Queue<true>();
+      const sub = new Subscription<QueryInvalidationUpdate>({
+        consumed: () => void consumed.enqueue(true),
+      });
       this.subscriptions.push(sub);
+      this.consumed.push(consumed);
       return Promise.resolve(sub);
     }
 
