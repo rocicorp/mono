@@ -1,4 +1,5 @@
 import {
+  Aggregate,
   normalizeAST,
   type AST,
   type Condition,
@@ -19,6 +20,10 @@ export type ParameterizedQuery = {
  */
 export function getNormalized(ast: AST): Normalized {
   return new Normalized(ast);
+}
+
+function aggFn(agg: Aggregate) {
+  return agg === 'array' ? 'array_agg' : agg;
 }
 
 export class Normalized {
@@ -60,7 +65,7 @@ export class Normalized {
         // Aggregation aliases are ignored for normalization, and instead aliased
         // to the string representation of the aggregation, e.g.
         // 'SELECT COUNT(foo) AS "COUNT(foo)" WHERE ...'
-        const agg = `${a.aggregate}(${a.field ? ident(a.field) : '*'})`;
+        const agg = `${aggFn(a.aggregate)}(${a.field ? ident(a.field) : '*'})`;
         return `${agg} AS ${ident(agg)}`;
       }),
     ].join(', ');

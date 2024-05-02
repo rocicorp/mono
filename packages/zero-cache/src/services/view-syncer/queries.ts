@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONObject} from '../../types/bigint-json.js';
+import {deaggregate} from '../../zql/deaggregation.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
   expandSelection,
@@ -73,7 +74,8 @@ export class QueryHandler {
         return [...table.primaryKey, ZERO_VERSION_COLUMN_NAME];
       };
 
-      const expanded = expandSelection(q.ast, requiredColumns);
+      const deaggregated = deaggregate(q.ast);
+      const expanded = expandSelection(deaggregated, requiredColumns);
       const transformedAST = new Normalized(expanded);
       const transformationHash = transformedAST.hash();
 
