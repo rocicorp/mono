@@ -60,6 +60,10 @@ const NOOP: PokeHandler = {
   end: () => {},
 };
 
+// Semi-arbitrary threshold at which poke body parts are flushed.
+// When row size is being computed, that should be used as a threshold instead.
+const PART_COUNT_FLUSH_THRESHOLD = 100;
+
 /**
  * Handles a single {@link ViewSyncer.sync()} connection.
  */
@@ -103,11 +107,13 @@ export class ClientHandler {
     this.#pokes.push(['pokeStart', {pokeID, baseCookie, cookie}]);
 
     let body: PokePartBody | undefined;
+    let partCount = 0;
     const ensureBody = () => (body ??= {pokeID});
     const flushBody = () => {
       if (body) {
         this.#pokes.push(['pokePart', body]);
         body = undefined;
+        partCount = 0;
       }
     };
 
@@ -143,7 +149,9 @@ export class ClientHandler {
             patch satisfies never;
         }
 
-        // TODO: Add logic to flush body at certain simple thresholds.
+        if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
+          flushBody();
+        }
       },
 
       end: () => {
