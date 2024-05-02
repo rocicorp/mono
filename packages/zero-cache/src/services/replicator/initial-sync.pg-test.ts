@@ -311,6 +311,7 @@ describe('replicator/initial-sync', () => {
           "issueID" INTEGER PRIMARY KEY, 
           "orgID" INTEGER
         );
+        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA _zero;
         `,
       },
       {
@@ -318,6 +319,7 @@ describe('replicator/initial-sync', () => {
         setupUpstreamQuery: `
         CREATE SCHEMA unsupported;
         CREATE TABLE unsupported.issues ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
+        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA unsupported;
       `,
       },
       {
