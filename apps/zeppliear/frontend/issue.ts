@@ -188,7 +188,7 @@ export const commentSchema = z.object({
 export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
 
 export async function putIssueComment(
-  zero: Zero<M, Collections>,
+  zero: Zero<Collections>,
   comment: Comment,
 ): Promise<void> {
   // TODO: All the mutators should be synchronous. We don't have
@@ -209,7 +209,7 @@ export async function putIssueComment(
 }
 
 export async function deleteIssueComment(
-  zero: Zero<M, Collections>,
+  zero: Zero<Collections>,
   comment: Comment,
 ): Promise<void> {
   // TODO: We need a batch API in the client so that these two happen
@@ -224,7 +224,7 @@ export async function deleteIssueComment(
 }
 
 export async function updateIssues(
-  zero: Zero<M, Collections>,
+  zero: Zero<Collections>,
   {issueUpdates}: {issueUpdates: IssueUpdate[]},
 ) {
   const modified = Date.now();

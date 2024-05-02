@@ -8,6 +8,8 @@ import type {Statement} from '../../../../../zql/src/zql/query/statement.js';
 import {
   Album,
   Artist,
+  bulkRemove,
+  bulkSet,
   newZero,
   Track,
   TrackArtist,
@@ -47,10 +49,10 @@ export async function benchZQL(
   const z = newZero();
 
   async function upsertMany(data: BulkItems) {
-    await z.mutate.bulkSet(data);
+    await bulkSet(z, data);
   }
   async function deleteMany(data: BulkItems) {
-    await z.mutate.bulkRemove(data);
+    await bulkRemove(z, data);
   }
 
   const queryRunners = queries.map(zql => {

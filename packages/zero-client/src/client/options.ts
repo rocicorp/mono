@@ -1,5 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {KVStoreProvider, MaybePromise, MutatorDefs} from 'replicache';
+import type {KVStoreProvider, MaybePromise} from 'replicache';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {QueryDefs} from './zero.js';
 
@@ -10,7 +10,7 @@ export type QueryParseDefs<QD extends QueryDefs> = {
 /**
  * Configuration for [[Zero]].
  */
-export interface ZeroOptions<MD extends MutatorDefs, QD extends QueryDefs> {
+export interface ZeroOptions<QD extends QueryDefs> {
   /**
    * Server to connect to, for example "https://myapp-myteam.zero.ms/".
    */
@@ -66,72 +66,6 @@ export interface ZeroOptions<MD extends MutatorDefs, QD extends QueryDefs> {
    * Default is `'error'`.
    */
   logLevel?: LogLevel | undefined;
-
-  /**
-   * An object used as a map to define the *mutators* for this application.
-   *
-   * *Mutators* are used to make changes to the Zero data.
-   *
-   * The registered *mutations* are reflected on the
-   * [[Zero.mutate|mutate]] property of the [[Zero]] instance.
-   *
-   * #### Example
-   *
-   * ```ts
-   * const zero = new Zero({
-   *   server: 'https://example.com/',
-   *   userID: 'user-id',
-   *   roomID: 'room-id',
-   *   mutators: {
-   *     async createTodo(tx: WriteTransaction, args: JSONValue) {
-   *       const key = `/todo/${args.id}`;
-   *       if (await tx.has(key)) {
-   *         throw new Error('Todo already exists');
-   *       }
-   *       await tx.set(key, args);
-   *     },
-   *     async deleteTodo(tx: WriteTransaction, id: number) {
-   *       ...
-   *     },
-   *   },
-   * });
-   * ```
-   *
-   * This will create the function to later use:
-   *
-   * ```ts
-   * await zero.mutate.createTodo({
-   *   id: 1234,
-   *   title: 'Make things realtime',
-   *   complete: true,
-   * });
-   * ```
-   *
-   * #### Replays
-   *
-   * *Mutators* run once when they are initially invoked, but they might also be
-   * *replayed* multiple times during sync. As such *mutators* should not modify
-   * application state directly. Also, it is important that the set of
-   * registered mutator names only grows over time. If Zero syncs and a
-   * needed *mutator* is not registered, it will substitute a no-op mutator, but
-   * this might be a poor user experience.
-   *
-   * #### Server application
-   *
-   * During sync, a description of each mutation is sent to the server where it
-   * is applied. Once the *mutation* has been applied successfully, the local
-   * version of the *mutation* is removed. See the [design
-   * doc](https://doc.replicache.dev/design#commits) for additional details on
-   * the sync protocol.
-   *
-   * #### Transactionality
-   *
-   * *Mutators* are atomic: all their changes are applied together, or none are.
-   * Throwing an exception aborts the transaction. Otherwise, it is committed.
-   * As with [[query]] and [[subscribe]] all reads will see a consistent view of
-   * the cache while they run.
-   */
-  mutators?: MD | undefined;
 
   /**
    * This defines the names and types of the queries that Zero manages. The

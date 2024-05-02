@@ -1,18 +1,12 @@
-import {generate as generateRails} from '@rocicorp/rails';
 import {joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {exp, not, or} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import fc from 'fast-check';
 import * as v from 'shared/src/valita.js';
 import {expect, test} from 'vitest';
-import type {Entity} from '../../mod.js';
 import {nanoid} from '../../util/nanoid.js';
 import {ENTITIES_KEY_PREFIX} from '../keys.js';
 import {Zero, getInternalReplicacheImplForTesting} from '../zero.js';
-
-function generate<E extends Entity>(name: string, parse?: (v: unknown) => E) {
-  return generateRails<E>(`${ENTITIES_KEY_PREFIX}${name}`, parse);
-}
 
 export async function tickAFewTimes(n = 10, time = 0) {
   for (let i = 0; i < n; i++) {
@@ -34,40 +28,6 @@ const issueSchema = v.object({
 type Issue = v.Infer<typeof issueSchema>;
 type Label = {id: string; name: string};
 type IssueLabel = {id: string; issueID: string; labelID: string};
-
-const {
-  init: initIssue,
-  set: setIssue,
-  update: updateIssue,
-  delete: deleteIssue,
-} = generate<Issue>('issue', v => issueSchema.parse(v));
-const {
-  init: initLabel,
-  set: setLabel,
-  update: updateLabel,
-  delete: deleteLabel,
-} = generate<Label>('label');
-const {
-  init: initIssueLabel,
-  set: setIssueLabel,
-  update: updateIssueLabel,
-  delete: deleteIssueLabel,
-} = generate<IssueLabel>('issueLabel');
-
-const mutators = {
-  initIssue,
-  setIssue,
-  updateIssue,
-  deleteIssue,
-  initLabel,
-  setLabel,
-  updateLabel,
-  deleteLabel,
-  initIssueLabel,
-  setIssueLabel,
-  updateIssueLabel,
-  deleteIssueLabel,
-};
 
 const defaultIssues: readonly Issue[] = [
   {
@@ -148,7 +108,6 @@ function sampleTenUniqueIssues() {
 function newZero() {
   const z = new Zero({
     userID: 'user-' + nanoid(),
-    mutators,
     queries: {
       issue: v => v as Issue,
       label: v => v as Label,
@@ -192,7 +151,7 @@ test('prepare a query before the collection has writes then run it', async () =>
   const issues = sampleTenUniqueIssues();
   const z = newZero();
   const stmt = z.query.issue.select('id').prepare();
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const rows = await stmt.exec();
   expect(rows).toEqual(issues.sort(compareIds));
@@ -203,7 +162,7 @@ test('prepare a query before the collection has writes then run it', async () =>
 test('prepare a query then run it once `experimentalWatch` has completed', async () => {
   const issues = sampleTenUniqueIssues();
   const z = newZero();
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue.select('id').prepare();
   // This is a hacky way to wait for the watch to complete.
@@ -218,7 +177,7 @@ test('prepare a query then run it once `experimentalWatch` has completed', async
 test('exec a query before the source has been filled by anything', async () => {
   const issues = sampleTenUniqueIssues();
   const z = newZero();
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   // it should wait until the source has been seeded
   // before returning.
@@ -232,7 +191,7 @@ test('exec a query before the source has been filled by anything', async () => {
 test('subscribing to a query calls us with the complete query results on change', async () => {
   const issues = sampleTenUniqueIssues();
   const z = newZero();
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   let resolve: (v: unknown) => void;
   const calledPromise = new Promise(res => {
@@ -260,7 +219,7 @@ test('subscribing to a query calls us with the complete query results on change'
   let lastCallCount = callCount;
   for (const issue of deletedIssues) {
     issues.shift();
-    await z.mutate.deleteIssue(issue.id);
+    await z.mutate.issue.delete({id: issue.id});
     // check that our observer was called after each deletion.
     // TODO: if a mutator deletes many things in a single
     // transaction, we need to tie that to the lifetime of
@@ -312,7 +271,7 @@ test('each where operator', async () => {
   ];
 
   const z = newZero();
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   let stmt = z.query.issue.select('id').where('id', '=', 'a').prepare();
   const rows = await stmt.exec();
@@ -377,7 +336,7 @@ test('order by single field', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
       const z = newZero();
-      await Promise.all(issues.map(z.mutate.initIssue));
+      await Promise.all(issues.map(z.mutate.issue.create));
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const compareAssignees = makeComparator('assignee', 'id');
@@ -400,7 +359,7 @@ test('order by id', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
       const z = newZero();
-      await Promise.all(issues.map(z.mutate.initIssue));
+      await Promise.all(issues.map(z.mutate.issue.create));
 
       const stmt = z.query.issue.select('id').asc('id').prepare();
       const rows = await stmt.exec();
@@ -416,7 +375,7 @@ test('order by compound fields', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
       const z = newZero();
-      await Promise.all(issues.map(z.mutate.initIssue));
+      await Promise.all(issues.map(z.mutate.issue.create));
 
       const compareExpected = makeComparator('assignee', 'created', 'id');
       const stmt = z.query.issue
@@ -436,7 +395,7 @@ test('order by optional field', async () => {
   await fc.assert(
     fc.asyncProperty(uniqueNonEmptyIssuesArbitrary, async issues => {
       const z = newZero();
-      await Promise.all(issues.map(z.mutate.initIssue));
+      await Promise.all(issues.map(z.mutate.issue.create));
 
       const compareExpected = makeComparator('closed', 'id');
       const stmt = z.query.issue.select('id', 'closed').asc('closed').prepare();
@@ -452,7 +411,7 @@ test('order by optional field', async () => {
 test('qualified selectors in where', async () => {
   const z = newZero();
   const issues = defaultIssues;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue
     .select('id')
@@ -469,7 +428,7 @@ test('qualified selectors in where', async () => {
 test('qualified selectors in group-by', async () => {
   const z = newZero();
   const issues = defaultIssues;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue
     .select(agg.count())
@@ -488,7 +447,7 @@ test('qualified selectors in group-by', async () => {
 test('qualified selectors in order-by', async () => {
   const z = newZero();
   const issues = defaultIssues;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue.select('id').asc('issue.priority').prepare();
   const rows = await stmt.exec();
@@ -504,9 +463,9 @@ test('join', async () => {
   const issueLabels = defaultIssueLabels;
 
   await Promise.all([
-    ...issues.map(z.mutate.initIssue),
-    ...labels.map(z.mutate.initLabel),
-    ...issueLabels.map(z.mutate.initIssueLabel),
+    ...issues.map(z.mutate.issue.create),
+    ...labels.map(z.mutate.label.create),
+    ...issueLabels.map(z.mutate.issueLabel.create),
   ]);
 
   const stmt = z.query.issue
@@ -600,7 +559,7 @@ test('group by', async () => {
       updated: Date.now(),
     },
   ] as const;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
   const stmt = z.query.issue
     .select('status', agg.count())
     .groupBy('status')
@@ -732,7 +691,7 @@ test('sorted groupings', () => {});
 test('compound where', async () => {
   const z = newZero();
   const issues = defaultIssues;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue
     .select('id')
@@ -749,7 +708,7 @@ test('0 copy', async () => {
   const issues = sampleTenUniqueIssues();
   const z = newZero();
   const rep = getInternalReplicacheImplForTesting(z);
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
   const replicacheIssues = (await rep.query(tx =>
     tx
       .scan({
@@ -810,7 +769,7 @@ test('or where', async () => {
       updated: Date.now(),
     },
   ] as const;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue
     .select('id')
@@ -819,7 +778,7 @@ test('or where', async () => {
   const rows = await stmt.exec();
   expect(rows).toEqual([issues[0], issues[1]]);
 
-  await z.mutate.deleteIssue('a');
+  await z.mutate.issue.delete({id: 'a'});
   const rows2 = await stmt.exec();
   expect(rows2).toEqual([issues[1]]);
 
@@ -857,7 +816,7 @@ test('not', async () => {
       updated: Date.now(),
     },
   ] as const;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue
     .select('id')
@@ -866,7 +825,7 @@ test('not', async () => {
   const rows = await stmt.exec();
   expect(rows).toEqual([issues[0], issues[1]]);
 
-  await z.mutate.deleteIssue('a');
+  await z.mutate.issue.delete({id: 'a'});
   const rows2 = await stmt.exec();
   expect(rows2).toEqual([issues[1]]);
 
@@ -904,14 +863,14 @@ test('count', async () => {
       updated: Date.now(),
     },
   ] as const;
-  await Promise.all(issues.map(z.mutate.initIssue));
+  await Promise.all(issues.map(z.mutate.issue.create));
 
   const stmt = z.query.issue.select(agg.count()).prepare();
   const rows = await stmt.exec();
   let {count} = rows[0];
   expect(count).toBe(3);
 
-  await z.mutate.deleteIssue('a');
+  await z.mutate.issue.delete({id: 'a'});
   const rows2 = await stmt.exec();
   ({count} = rows2[0]);
   expect(count).toBe(2);

@@ -22,7 +22,6 @@ import {
   putIssueComment,
   deleteIssueComment,
   updateIssues,
-  M,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -221,7 +220,7 @@ interface LayoutProps {
   viewIssueCount: number;
   filteredIssues: {issue: Issue; labels: string[]}[];
   hasNonViewFilters: boolean;
-  zero: Zero<M, Collections>;
+  zero: Zero<Collections>;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;

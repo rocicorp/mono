@@ -5,6 +5,7 @@ import {
   Album,
   Artist,
   Track,
+  bulkSet,
   createRandomAlbums,
   createRandomArtists,
   createRandomTracks,
@@ -21,7 +22,7 @@ test('left-join and aggregation to gather artists for a track', async () => {
   // only link the first 2 tracks to artists
   const trackArtists = linkTracksToArtists(artists, tracks.slice(0, 2), true);
 
-  await z.mutate.bulkSet({
+  await bulkSet(z, {
     tracks,
     albums,
     artists,
@@ -112,7 +113,7 @@ test('left-join through single table', async () => {
     length: 1,
   };
 
-  await z.mutate.bulkSet({
+  await bulkSet(z, {
     albums: [album],
     tracks: [track],
   });
@@ -131,7 +132,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await z.mutate.setTrack({
+  await z.mutate.track.set({
     id: '2',
     albumId: '2',
     title: 'track 2',
@@ -154,7 +155,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await z.mutate.setAlbum({
+  await z.mutate.album.create({
     id: '2',
     artistId: '',
     title: 'album 2',
@@ -177,7 +178,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await z.mutate.deleteTrack('1');
+  await z.mutate.track.delete({id: '1'});
 
   rows = await stmt.exec();
 
@@ -190,7 +191,7 @@ test('left-join through single table', async () => {
     },
   ]);
 
-  await z.mutate.deleteAlbum('2');
+  await z.mutate.album.delete({id: '2'});
 
   rows = await stmt.exec();
 
@@ -251,7 +252,7 @@ test('left-join through junction edge', async () => {
     } as const,
   ];
 
-  await z.mutate.bulkSet({
+  await bulkSet(z, {
     albums: [album],
     tracks,
     trackArtists,

@@ -46,7 +46,7 @@ import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
 import {
-  MakeMutateObject,
+  MakeCRUDMutate,
   WithCRUD,
   makeCRUDMutate,
   makeCRUDMutator,
@@ -114,9 +114,7 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<MD extends MutatorDefs, QD extends QueryDefs>(
-  z: Zero<MD, QD>,
-): TestZero {
+function asTestZero<QD extends QueryDefs>(z: Zero<QD>): TestZero {
   return z as TestZero;
 }
 
@@ -197,14 +195,14 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 export function getInternalReplicacheImplForTesting<
   MD extends MutatorDefs,
   QD extends QueryDefs,
->(z: Zero<MD, QD>): ReplicacheImpl<MD> {
+>(z: Zero<QD>): ReplicacheImpl<MD> {
   return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
-export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
+export class Zero<QD extends QueryDefs> {
   readonly version = version;
 
-  readonly #rep: ReplicacheImpl<WithCRUD<MD>>;
+  readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
   readonly #server: HTTPString | null;
   readonly userID: string;
 
@@ -324,7 +322,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<MD, QD>;
+  readonly #options: ZeroOptions<QD>;
 
   readonly query: MakeEntityQueriesFromQueryDefs<QD>;
 
@@ -337,7 +335,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<MD, QD>) {
+  constructor(options: ZeroOptions<QD>) {
     const {
       userID,
       onOnlineChange,
@@ -375,11 +373,10 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
     const logOptions = this.#logOptions;
 
     const replicacheMutators = {
-      ...((options.mutators ?? {}) as MD),
       ['_zero_crud']: makeCRUDMutator(queries),
     };
 
-    const replicacheOptions: ReplicacheOptions<WithCRUD<MD>> = {
+    const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       schemaVersion: options.schemaVersion,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
@@ -425,7 +422,7 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
       logOptions.logSink,
     );
 
-    this.mutate = makeCRUDMutate<MD, QD>(queries, rep.mutate);
+    this.mutate = makeCRUDMutate<QD>(queries, rep.mutate);
 
     this.#queryManager = new QueryManager(rep.clientID, msg =>
       this.#sendChangeDesiredQueries(msg),
@@ -548,11 +545,9 @@ export class Zero<MD extends MutatorDefs, QD extends QueryDefs> {
   }
 
   /**
-   * This consists of the custom mutators passed into the options as mutators
-   * (see [[ZeroOptions.mutators]]) and the CRUD mutators for the entities
-   * passed into the options as queries.
+   * Provides facilities to write data to Zero.
    */
-  readonly mutate: MakeMutateObject<MD, QD>;
+  readonly mutate: MakeCRUDMutate<QD>;
 
   /**
    * Whether this Zero instance has been closed. Once a Zero instance has
