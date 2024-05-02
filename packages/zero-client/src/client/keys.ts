@@ -14,6 +14,10 @@ export function toDesiredQueriesKey(clientID: string, hash: string): string {
   return DESIRED_QUERIES_KEY_PREFIX + clientID + '/' + hash;
 }
 
+export function desiredQueriesPrefixForClient(clientID: string): string {
+  return DESIRED_QUERIES_KEY_PREFIX + clientID + '/';
+}
+
 export function toGotQueriesKey(hash: string): string {
   return GOT_QUERIES_KEY_PREFIX + hash;
 }

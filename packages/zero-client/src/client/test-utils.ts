@@ -5,14 +5,13 @@ import {
   Downstream,
   ErrorKind,
   ErrorMessage,
-  PokeBody,
-  PokeMessage,
   PongMessage,
-  PullResponseBody,
   PullResponseMessage,
+  PullResponseBody,
   upstreamSchema,
-} from 'reflect-protocol';
-import type {MutatorDefs} from 'reflect-shared/src/types.js';
+  PokeStartBody,
+  PokeStartMessage,
+} from 'zero-protocol';
 import {assert} from 'shared/src/asserts.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {LogOptions} from './log-options.js';
@@ -26,6 +25,7 @@ import {
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
 } from './zero.js';
+import type {MutatorDefs} from 'replicache';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
@@ -136,9 +136,10 @@ export class TestZero<
     );
   }
 
-  triggerConnected(): Promise<void> {
+  async triggerConnected(): Promise<void> {
     const msg: ConnectedMessage = ['connected', {wsid: 'wsidx'}];
-    return this.triggerMessage(msg);
+    await this.triggerMessage(msg);
+    await this.waitForConnectionState(ConnectionState.Connected);
   }
 
   triggerPong(): Promise<void> {
@@ -146,8 +147,8 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
-  triggerPoke(pokeBody: PokeBody): Promise<void> {
-    const msg: PokeMessage = ['poke', pokeBody];
+  triggerPokeStart(pokeStartBody: PokeStartBody): Promise<void> {
+    const msg: PokeStartMessage = ['pokeStart', pokeStartBody];
     return this.triggerMessage(msg);
   }
 
@@ -197,7 +198,6 @@ export function zeroForTest<MD extends MutatorDefs, QD extends QueryDefs>(
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testZeroCounter++,
-    roomID: 'test-room-id',
     auth: 'test-auth',
     ...options,
   });

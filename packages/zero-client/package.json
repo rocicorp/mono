@@ -37,6 +37,7 @@
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "typescript": "^5.4.2",
+    "xxhashjs": "^0.2.2",
     "zero-protocol": "0.0.0"
   },
   "files": [

@@ -1477,17 +1477,19 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   get cookie(): Promise<Cookie> {
-    return withRead(this.memdag, async dagRead => {
-      const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
-      if (!mainHeadHash) {
-        throw new Error('Internal no main head found');
-      }
-      const baseSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
-      const baseSnapshotMeta = baseSnapshot.meta;
-      const cookie = baseSnapshotMeta.cookieJSON;
-      assertCookie(cookie);
-      return cookie;
-    });
+    return this.#ready.then(() =>
+      withRead(this.memdag, async dagRead => {
+        const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
+        if (!mainHeadHash) {
+          throw new Error('Internal no main head found');
+        }
+        const baseSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
+        const baseSnapshotMeta = baseSnapshot.meta;
+        const cookie = baseSnapshotMeta.cookieJSON;
+        assertCookie(cookie);
+        return cookie;
+      }),
+    );
   }
 
   #queryInternal: QueryInternal = async body => {

@@ -20,7 +20,6 @@ export type {Album, Artist, Playlist, PlaylistTrack, Track, TrackArtist};
 export function newZero() {
   const z = new Zero({
     userID: 'user-' + nanoid(),
-    roomID: 'room-' + nanoid(),
     mutators,
     queries: {
       track: v => v as Track,

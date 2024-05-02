@@ -147,7 +147,6 @@ function sampleTenUniqueIssues() {
 
 function newZero() {
   const z = new Zero({
-    roomID: 'room-' + nanoid(),
     userID: 'user-' + nanoid(),
     mutators,
     queries: {

@@ -1,6 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {MutatorDefs} from 'reflect-shared/src/types.js';
-import type {KVStoreProvider, MaybePromise} from 'replicache';
+import type {KVStoreProvider, MaybePromise, MutatorDefs} from 'replicache';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {QueryDefs} from './zero.js';
 
@@ -42,22 +41,6 @@ export interface ZeroOptions<MD extends MutatorDefs, QD extends QueryDefs> {
    * `userID`, `roomID`, domain and browser profile.
    */
   userID: string;
-
-  /**
-   * A unique identifier for the room.
-   *
-   * Must be non-empty and must only contain characters from the character set
-   * `[A-Za-z0-9_/-]`.
-   *
-   * For efficiency, a new Zero instance will initialize its state from
-   * the persisted state of an existing Zero instance with the same
-   * `userID`, `roomID`, domain and browser profile.
-   *
-   * Mutations from one Zero instance may be pushed using the
-   * [[Zero.auth]] of another Zero instance with the same
-   * `userID`, `roomID`, domain and browser profile.
-   */
-  roomID: string;
 
   /**
    * The server side data can be restricted to a jurisdiction. This is
