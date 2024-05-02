@@ -46,7 +46,20 @@ export function rowIDHash(id: RowID): string {
   const forward = BigInt(xxh.h64().update(str).digest().toString());
   const backward = BigInt(xxh.h64().update(reverse(str)).digest().toString());
   const full = (forward << 64n) + backward;
-  return Buffer.from(full.toString(16), 'hex').toString('base64url');
+  let fullHex = full.toString(16);
+  if (fullHex.length % 2) {
+    fullHex = '0' + fullHex;
+  }
+  return (
+    Buffer.from(fullHex, 'hex')
+      .toString('base64')
+      // Emulate "base64url" (which Cloudflare does not support), to eliminate
+      // problematic "/" characters in the hashes as they are used in slash-delimited
+      // keys when stored in the CVR.
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '')
+  );
 }
 
 function reverse(str: string): string {

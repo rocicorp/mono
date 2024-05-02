@@ -14,7 +14,7 @@ describe('types/row-key', () => {
     {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
-      rowIDHash: '8LLAJ0I02S3NY0zq-OEDjg',
+      rowIDHash: 'LzYCyoprbpgVX1OvowtR0w',
     },
     {
       table: 'clients',
@@ -39,17 +39,17 @@ describe('types/row-key', () => {
     {
       keys: [{foo: ['bar']}, {foo: ['bar']}],
       rowKeyString: '["foo",["bar"]]',
-      rowIDHash: '-sQXIlhIMvuh7cZ_2j_VUQ',
+      rowIDHash: '4c9-53JYvlNcIweSAzj89Q',
     },
     {
       keys: [{foo: 1}, {foo: 1}],
       rowKeyString: '["foo",1]',
-      rowIDHash: 'e23vaKv1dD1BiLBAsIi8Pw',
+      rowIDHash: '7P8yzu686tZglB9sTe-EUQ',
     },
     {
       keys: [{foo: '1'}, {foo: '1'}],
       rowKeyString: '["foo","1"]',
-      rowIDHash: 'atxG-Vt9iV7gGF5k-EwCgA',
+      rowIDHash: 'PzXFZK-F8o5nIMOJa0TQ6g',
     },
     {
       // Two-column keys
@@ -58,7 +58,7 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar'},
       ],
       rowKeyString: '["bar",["foo"],"foo","bar"]',
-      rowIDHash: 'scSYaMl2QedjzT5GN3ALOw',
+      rowIDHash: 'BPPyZXf9D3XzztvswmthYA',
     },
     {
       // Three-column keys
@@ -68,12 +68,17 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar', baz: 2},
       ],
       rowKeyString: '["bar",["foo"],"baz",2,"foo","bar"]',
-      rowIDHash: 'kdzO406COLXC4UbkVNUZdQ',
+      rowIDHash: '6aqwQTpouYQb9ST-v53efw',
+    },
+    {
+      keys: [{id: 'HhCx1Vi3js'}],
+      rowKeyString: '["id","HhCx1Vi3js"]',
+      rowIDHash: 'DRduv2GfSDYjdImfnsw1Aw',
     },
   ];
 
   for (const c of cases) {
-    const {schema = 'public', table = 'issues'} = c;
+    const {schema = 'public', table = 'issue'} = c;
     test(`RowKey: ${schema}.${table}: ${JSON.stringify(c.keys)}`, () => {
       for (const keys of c.keys) {
         expect(rowKeyString(keys)).toBe(c.rowKeyString);
