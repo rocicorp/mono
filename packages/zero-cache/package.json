@@ -31,7 +31,7 @@
     "json-custom-numbers": "^3.1.1",
     "pg": "^8.11.3",
     "pg-format": "^1.0.4",
-    "pg-logical-replication": "^2.0.3",
+    "pg-logical-replication": "^2.0.4",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
     "xxhashjs": "^0.2.2",
