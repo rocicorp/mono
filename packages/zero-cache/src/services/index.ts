@@ -1,7 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import {ServiceRunnerDO} from './runner-do.js';
 import {createWorker} from './worker.js';
-import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import type {ServiceRunnerEnv} from './service-runner.js';
 
 const DEFAULT_LOG_LEVEL = 'info';
@@ -30,7 +29,7 @@ function createServiceRunnerDO<Env extends ServiceRunnerEnv>(
   return class extends ServiceRunnerDO {
     constructor(state: DurableObjectState, env: Env) {
       const {logSink, logLevel} = getOptions(env);
-      super({} as InvalidationWatcherRegistry, logSink, logLevel, state, env);
+      super(logSink, logLevel, state, env);
     }
   };
 }
