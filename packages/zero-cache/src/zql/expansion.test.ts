@@ -61,7 +61,7 @@ describe('zql/expansion', () => {
       original: `
       SELECT title AS title 
       FROM issues WHERE (priority > $1 OR (component_id = $2 AND owner_id = $3))
-      ORDER BY date, priority asc
+      ORDER BY date asc, priority asc
       `,
       afterSubqueryExpansion: `
       SELECT
@@ -73,7 +73,7 @@ describe('zql/expansion', () => {
         priority AS priority,
         title AS title
       FROM issues WHERE (priority > $1 OR (component_id = $2 AND owner_id = $3))
-      ORDER BY date, priority asc
+      ORDER BY date asc, priority asc
       `,
       afterReAliasAndBubble: `
       SELECT
@@ -85,7 +85,7 @@ describe('zql/expansion', () => {
         issues.priority AS "issues/priority", 
         issues.title AS "issues/title"
       FROM issues WHERE (priority > $1 OR (component_id = $2 AND owner_id = $3))
-      ORDER BY issues.date, issues.priority asc
+      ORDER BY issues.date asc, issues.priority asc
       `,
     },
     {
