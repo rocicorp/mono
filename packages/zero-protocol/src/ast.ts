@@ -76,7 +76,6 @@ export const astSchema: v.Type<AST> = v.lazy(() =>
     limit: v.number().optional(),
     groupBy: v.array(v.string()).optional(),
     orderBy: orderingSchema.optional(),
-    limit: v.number().optional(),
   }),
 );
 
