@@ -26,10 +26,10 @@ export const CREATE_REPLICATION_TABLES =
   );
 ` +
   // The change log contains row changes. Only the latest version of each row is
-  // recorded, which each new version replacing the previous (via the UNIQUE constraint).
-  // This is based on the pattern that catchup / IVM is always executed up to the
-  // current state of the database snapshot (i.g. never to a past version), and thus
-  // incremental row state is unnecessary. This also constrains the size of the ChangeLog
+  // recorded, with each new version replacing the previous (via the UNIQUE constraint).
+  // This is optimal because catchup / IVM is always executed up to the current state of
+  // the database snapshot (i.g. never to a past version), and thus incremental row state
+  // is unnecessary (and in fact, unwanted). This also constrains the size of the ChangeLog
   // to `O(database-size)` as opposed to `O(history-size)`.
   //
   // * `op`        : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
