@@ -25,7 +25,12 @@ export const CREATE_REPLICATION_TABLES =
     PRIMARY KEY("stateVersion")
   );
 ` +
-  // The change log contains row changes.
+  // The change log contains row changes. Only the latest version of each row is
+  // recorded, with each new version replacing the previous (via the UNIQUE constraint).
+  // This is optimal because catchup / IVM is always executed up to the current state of
+  // the database snapshot (i.g. never to a past version), and thus incremental row state
+  // is unnecessary (and in fact, unwanted). This also constrains the size of the ChangeLog
+  // to `O(database-size)` as opposed to `O(history-size)`.
   //
   // * `op`        : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
   // * `rowKey`    : JSONB row key, as `{[$columnName]: $columnValue}`, or '{}' for TRUNCATE
@@ -42,9 +47,12 @@ export const CREATE_REPLICATION_TABLES =
     "op"           CHAR         NOT NULL,
     "rowKey"       JSONB        NOT NULL,
     "row"          JSON,
-    CONSTRAINT PK_change_log PRIMARY KEY("stateVersion", "schema", "table", "rowKey")
+    CONSTRAINT "PK_change_log" PRIMARY KEY("stateVersion", "schema", "table", "rowKey"),
+    CONSTRAINT "RK_change_log" UNIQUE("schema", "table", "rowKey")
   );
-`; /**
+`;
+
+/**
  * Migration step that sets up the initialized Sync Replica for incremental replication.
  * This includes:
  *
