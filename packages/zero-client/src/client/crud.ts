@@ -3,7 +3,7 @@ import type {MutatorDefs, WriteTransaction} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {EntityID} from 'zero-protocol/src/entity.js';
 import type {
-  CRUDMutationArgs,
+  CRUDMutationArg,
   CreateOp,
   DeleteOp,
   SetOp,
@@ -68,12 +68,12 @@ function makeEntityCRUDMutate<E extends Entity>(
         id: {id},
         value,
       };
-      return zeroCRUD([{ops: [op]}]);
+      return zeroCRUD({ops: [op]});
     },
     set: (value: E) => {
       const {id} = value;
       const op: SetOp = {op: 'set', entityType, id: {id}, value};
-      return zeroCRUD([{ops: [op]}]);
+      return zeroCRUD({ops: [op]});
     },
     update: (value: Update<E>) => {
       const {id} = value;
@@ -83,11 +83,11 @@ function makeEntityCRUDMutate<E extends Entity>(
         id: {id},
         partialValue: value,
       };
-      return zeroCRUD([{ops: [op]}]);
+      return zeroCRUD({ops: [op]});
     },
     delete: (id: EntityID) => {
       const op: DeleteOp = {op: 'delete', entityType, id};
-      return zeroCRUD([{ops: [op]}]);
+      return zeroCRUD({ops: [op]});
     },
   };
 }
@@ -96,11 +96,11 @@ export type WithCRUD<MD extends MutatorDefs> = MD & {
   ['_zero_crud']: CRUDMutator;
 };
 
-export type CRUDMutate = (crudArgs: CRUDMutationArgs) => Promise<void>;
+export type CRUDMutate = (crudArg: CRUDMutationArg) => Promise<void>;
 
 export type CRUDMutator = (
   tx: WriteTransaction,
-  crudArgs: CRUDMutationArgs,
+  crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
 export function makeCRUDMutator<QD extends QueryDefs>(
@@ -108,9 +108,9 @@ export function makeCRUDMutator<QD extends QueryDefs>(
 ): CRUDMutator {
   return function zeroCRUDMutator(
     tx: WriteTransaction,
-    crudArgs: CRUDMutationArgs,
+    crudArg: CRUDMutationArg,
   ): Promise<void> {
-    for (const op of crudArgs[0].ops) {
+    for (const op of crudArg.ops) {
       switch (op.op) {
         case 'create':
           return createImpl(tx, op, queries[op.entityType]);
