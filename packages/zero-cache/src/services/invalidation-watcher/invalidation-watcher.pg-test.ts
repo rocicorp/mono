@@ -11,8 +11,8 @@ import type {
   Replicator,
   VersionChange,
 } from '../replicator/replicator.js';
-import {CREATE_INVALIDATION_TABLES} from '../replicator/tables/invalidation.js';
-import {CREATE_REPLICATION_TABLES} from '../replicator/tables/replication.js';
+import {CREATE_INVALIDATION_TABLES} from '../replicator/schema/invalidation.js';
+import {CREATE_REPLICATION_TABLES} from '../replicator/schema/replication.js';
 import {
   InvalidationWatcherService,
   WatchRequest,

@@ -27,8 +27,8 @@ import {replicationSlot} from './initial-sync.js';
 import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
 import {queryStateVersion} from './queries.js';
 import type {VersionChange} from './replicator.js';
+import {ZERO_VERSION_COLUMN_NAME} from './schema/replication.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
-import {ZERO_VERSION_COLUMN_NAME} from './tables/replication.js';
 import {toLexiVersion} from './types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
 

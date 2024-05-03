@@ -7,8 +7,8 @@
 
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {getPublicationInfo} from '../tables/published.js';
 import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
-import {getPublicationInfo} from './published.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
