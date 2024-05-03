@@ -76,7 +76,7 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/m/c/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
-          putPatch: {stateVersion: '1a9', minorVersion: 1},
+          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         } satisfies ClientRecord,
         ['/vs/cvr/abc123/m/q/oneHash']: {
           id: 'oneHash',
@@ -85,7 +85,7 @@ describe('view-syncer/cvr', () => {
           desiredBy: {
             fooClient: {stateVersion: '1a9', minorVersion: 1},
           },
-          putPatch: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', minorVersion: 2},
         } satisfies QueryRecord,
       });
 
@@ -98,7 +98,7 @@ describe('view-syncer/cvr', () => {
           fooClient: {
             id: 'fooClient',
             desiredQueryIDs: ['oneHash'],
-            putPatch: {stateVersion: '1a9', minorVersion: 1},
+            patchVersion: {stateVersion: '1a9', minorVersion: 1},
           },
         },
         queries: {
@@ -107,7 +107,7 @@ describe('view-syncer/cvr', () => {
             ast: {table: 'issues'},
             transformationHash: 'twoHash',
             desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
-            putPatch: {stateVersion: '1a9', minorVersion: 2},
+            patchVersion: {stateVersion: '1a9', minorVersion: 2},
           },
         },
       } satisfies CVRSnapshot);
@@ -127,7 +127,7 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/m/c/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
-          putPatch: {stateVersion: '1a9', minorVersion: 1},
+          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         } satisfies ClientRecord,
         ['/vs/cvr/abc123/m/q/oneHash']: {
           id: 'oneHash',
@@ -136,7 +136,7 @@ describe('view-syncer/cvr', () => {
           desiredBy: {
             fooClient: {stateVersion: '1a9', minorVersion: 1},
           },
-          putPatch: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', minorVersion: 2},
         } satisfies QueryRecord,
         ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       });
@@ -154,7 +154,7 @@ describe('view-syncer/cvr', () => {
           fooClient: {
             id: 'fooClient',
             desiredQueryIDs: ['oneHash'],
-            putPatch: {stateVersion: '1a9', minorVersion: 1},
+            patchVersion: {stateVersion: '1a9', minorVersion: 1},
           },
         },
         queries: {
@@ -163,7 +163,7 @@ describe('view-syncer/cvr', () => {
             ast: {table: 'issues'},
             transformationHash: 'twoHash',
             desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
-            putPatch: {stateVersion: '1a9', minorVersion: 2},
+            patchVersion: {stateVersion: '1a9', minorVersion: 2},
           },
         },
       } satisfies CVRSnapshot);
@@ -200,12 +200,12 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/m/c/dooClient']: {
           id: 'dooClient',
           desiredQueryIDs: ['oneHash', 'nonExistentQuery'],
-          putPatch: {stateVersion: '1a8'},
+          patchVersion: {stateVersion: '1a8'},
         } satisfies ClientRecord,
         ['/vs/cvr/abc123/m/c/fooClient']: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
-          putPatch: {stateVersion: '1a9', minorVersion: 1},
+          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         } satisfies ClientRecord,
         ['/vs/cvr/abc123/m/q/oneHash']: {
           id: 'oneHash',
@@ -215,7 +215,7 @@ describe('view-syncer/cvr', () => {
             dooClient: {stateVersion: '1a8'},
             fooClient: {stateVersion: '1a9', minorVersion: 1},
           },
-          putPatch: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', minorVersion: 2},
         } satisfies QueryRecord,
         ['/vs/cvr/abc123/p/m/1a8/q/oneHash/c/dooClient']: {
           type: 'query',
@@ -267,12 +267,12 @@ describe('view-syncer/cvr', () => {
           dooClient: {
             id: 'dooClient',
             desiredQueryIDs: ['oneHash', 'nonExistentQuery'],
-            putPatch: {stateVersion: '1a8'},
+            patchVersion: {stateVersion: '1a8'},
           },
           fooClient: {
             id: 'fooClient',
             desiredQueryIDs: ['oneHash'],
-            putPatch: {stateVersion: '1a9', minorVersion: 1},
+            patchVersion: {stateVersion: '1a9', minorVersion: 1},
           },
         },
         queries: {
@@ -284,7 +284,7 @@ describe('view-syncer/cvr', () => {
               dooClient: {stateVersion: '1a8'},
               fooClient: {stateVersion: '1a9', minorVersion: 1},
             },
-            putPatch: {stateVersion: '1a9', minorVersion: 2},
+            patchVersion: {stateVersion: '1a9', minorVersion: 2},
           },
         },
       } satisfies CVRSnapshot);
@@ -297,22 +297,22 @@ describe('view-syncer/cvr', () => {
           barClient: {
             id: 'barClient',
             desiredQueryIDs: ['oneHash', 'threeHash'],
-            putPatch: {stateVersion: '1aa', minorVersion: 1},
+            patchVersion: {stateVersion: '1aa', minorVersion: 1},
           },
           bonkClient: {
             id: 'bonkClient',
             desiredQueryIDs: [],
-            putPatch: {stateVersion: '1aa', minorVersion: 1},
+            patchVersion: {stateVersion: '1aa', minorVersion: 1},
           },
           dooClient: {
             id: 'dooClient',
             desiredQueryIDs: [],
-            putPatch: {stateVersion: '1a8'},
+            patchVersion: {stateVersion: '1a8'},
           },
           fooClient: {
             id: 'fooClient',
             desiredQueryIDs: ['fourHash', 'threeHash'],
-            putPatch: {stateVersion: '1a9', minorVersion: 1},
+            patchVersion: {stateVersion: '1a9', minorVersion: 1},
           },
         },
         queries: {
@@ -321,7 +321,7 @@ describe('view-syncer/cvr', () => {
             ast: {table: 'issues'},
             transformationHash: 'twoHash',
             desiredBy: {barClient: {stateVersion: '1aa', minorVersion: 1}},
-            putPatch: {stateVersion: '1a9', minorVersion: 2},
+            patchVersion: {stateVersion: '1a9', minorVersion: 2},
           },
           threeHash: {
             id: 'threeHash',
@@ -416,7 +416,7 @@ describe('view-syncer/cvr', () => {
       ['/vs/cvr/abc123/m/c/fooClient']: {
         id: 'fooClient',
         desiredQueryIDs: ['oneHash'],
-        putPatch: {stateVersion: '1a9', minorVersion: 1},
+        patchVersion: {stateVersion: '1a9', minorVersion: 1},
       } satisfies ClientRecord,
       ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
@@ -425,7 +425,7 @@ describe('view-syncer/cvr', () => {
         desiredBy: {
           fooClient: {stateVersion: '1a9', minorVersion: 1},
         },
-        putPatch: {stateVersion: '1a9', minorVersion: 2},
+        patchVersion: {stateVersion: '1a9', minorVersion: 2},
       } satisfies QueryRecord,
       ['/vs/cvr/abc123/p/m/1a9:01/q/oneHash/c/fooClient']: {
         type: 'query',
@@ -515,22 +515,35 @@ describe('view-syncer/cvr', () => {
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
       } satisfies QueryRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
-        putPatch: {stateVersion: '1a0'},
+        patchVersion: {stateVersion: '1a0'},
         id: ROW_ID1,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-        putPatch: {stateVersion: '1a0'},
+        patchVersion: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
-      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-        type: 'row',
-        op: 'del', // Already in CVRs from "189"
+      [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
+        patchVersion: {stateVersion: '19z'},
+        id: ROW_ID3,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '189'},
         id: IN_OLD_PATCH_ROW_ID,
-      } satisfies RowPatch,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '1aa'},
+        id: DELETED_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
       [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
         type: 'query',
         op: 'del', // Already in CVRs from "189"
@@ -541,19 +554,14 @@ describe('view-syncer/cvr', () => {
         op: 'del',
         id: 'catchup-delete',
       } satisfies QueryPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
+      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
         type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID1,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID2,
+        op: 'del', // Already in CVRs from "189"
+        id: IN_OLD_PATCH_ROW_ID,
       } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
         type: 'row',
-        op: 'del', // Overridden by received row.
+        op: 'del', // Will be replaced by received row.
         id: ROW_ID3,
       } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1aa/r/${DELETED_ROW_HASH}`]: {
@@ -746,7 +754,7 @@ describe('view-syncer/cvr', () => {
             desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
             transformationHash: 'serverOneHash',
             transformationVersion: {stateVersion: '1aa', minorVersion: 1},
-            putPatch: {stateVersion: '1aa', minorVersion: 1},
+            patchVersion: {stateVersion: '1aa', minorVersion: 1},
           },
         },
         lastActive: {epochMillis: 1713834000000},
@@ -758,6 +766,7 @@ describe('view-syncer/cvr', () => {
 
       const {
         [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH1}`]: _removed,
+        [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: _replaced,
         ...remainingState
       } = initialState;
 
@@ -775,13 +784,13 @@ describe('view-syncer/cvr', () => {
         } satisfies LastActive,
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
-          putPatch: updated.version,
+          patchVersion: updated.version,
           queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
-          putPatch: updated.version,
+          patchVersion: updated.version,
           queriedColumns: {id: ['oneHash']},
           rowVersion: '09',
         } satisfies RowRecord,
@@ -817,25 +826,37 @@ describe('view-syncer/cvr', () => {
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
         transformationHash: 'oneServerHash',
         transformationVersion: {stateVersion: '1aa'},
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-        putPatch: {stateVersion: '1a0'},
+        patchVersion: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
         id: ROW_ID3,
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '189'},
+        id: IN_OLD_PATCH_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '1ba'},
+        id: DELETED_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
       } satisfies RowRecord,
       [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
         type: 'query',
@@ -851,21 +872,6 @@ describe('view-syncer/cvr', () => {
         type: 'row',
         op: 'del', // Already in CVRs from "189"
         id: IN_OLD_PATCH_ROW_ID,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID1,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID2,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID3,
       } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
         type: 'row',
@@ -1007,7 +1013,7 @@ describe('view-syncer/cvr', () => {
             desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
             transformationHash: 'serverTwoHash',
             transformationVersion: {stateVersion: '1ba', minorVersion: 1},
-            putPatch: {stateVersion: '1aa', minorVersion: 1},
+            patchVersion: {stateVersion: '1aa', minorVersion: 1},
           },
         },
         lastActive: {epochMillis: 1713834000000},
@@ -1035,15 +1041,21 @@ describe('view-syncer/cvr', () => {
         } satisfies LastActive,
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
-          putPatch: updated.version,
+          patchVersion: updated.version,
           queriedColumns: {id: ['oneHash', 'twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-          putPatch: updated.version,
+          patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
           queriedColumns: {id: ['oneHash', 'twoHash']},
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
+          id: ROW_ID3,
+          patchVersion: {stateVersion: '1ba', minorVersion: 1},
+          rowVersion: '09',
+          queriedColumns: null,
         } satisfies RowRecord,
         [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH1}`]: {
           type: 'row',
@@ -1082,7 +1094,7 @@ describe('view-syncer/cvr', () => {
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
         transformationHash: 'oneServerHash',
         transformationVersion: {stateVersion: '1aa'},
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
       ['/vs/cvr/abc123/m/q/twoHash']: {
         id: 'twoHash',
@@ -1090,7 +1102,7 @@ describe('view-syncer/cvr', () => {
         desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
         transformationHash: 'twoServerHash',
         transformationVersion: {stateVersion: '1aa'},
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
       [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
         type: 'query',
@@ -1102,21 +1114,33 @@ describe('view-syncer/cvr', () => {
         op: 'del',
         id: 'catchup-delete',
       } satisfies QueryPatch,
+      [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '189'},
+        id: IN_OLD_PATCH_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '1ba'},
+        id: DELETED_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-        putPatch: {stateVersion: '1a0'},
+        patchVersion: {stateVersion: '1a0'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
         id: ROW_ID3,
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
@@ -1124,21 +1148,6 @@ describe('view-syncer/cvr', () => {
         type: 'row',
         op: 'del', // Already in CVRs from "189"
         id: IN_OLD_PATCH_ROW_ID,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID1,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID2,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID3,
       } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
         type: 'row',
@@ -1322,7 +1331,7 @@ describe('view-syncer/cvr', () => {
             desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
             transformationHash: 'updatedOneServerHash',
             transformationVersion: newVersion,
-            putPatch: {stateVersion: '1aa', minorVersion: 1},
+            patchVersion: {stateVersion: '1aa', minorVersion: 1},
           },
           twoHash: {
             id: 'twoHash',
@@ -1330,7 +1339,7 @@ describe('view-syncer/cvr', () => {
             desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
             transformationHash: 'updatedTwoServerHash',
             transformationVersion: newVersion,
-            putPatch: {stateVersion: '1aa', minorVersion: 1},
+            patchVersion: {stateVersion: '1aa', minorVersion: 1},
           },
         },
       } satisfies CVRSnapshot);
@@ -1358,15 +1367,21 @@ describe('view-syncer/cvr', () => {
         } satisfies LastActive,
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
-          putPatch: updated.version,
+          patchVersion: updated.version,
           queriedColumns: {id: ['oneHash', 'twoHash'], desc: ['twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-          putPatch: updated.version,
+          patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
           queriedColumns: {id: ['oneHash', 'twoHash']},
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
+          id: ROW_ID3,
+          patchVersion: {stateVersion: '1ba', minorVersion: 1},
+          queriedColumns: null,
+          rowVersion: '09',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH1}`]: {
           type: 'row',
@@ -1405,7 +1420,7 @@ describe('view-syncer/cvr', () => {
         desiredBy: {},
         transformationHash: 'oneServerHash',
         transformationVersion: {stateVersion: '1aa'},
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
       } satisfies QueryRecord,
       ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash']: {
@@ -1413,21 +1428,33 @@ describe('view-syncer/cvr', () => {
         op: 'put',
         id: 'oneHash',
       } satisfies QueryPatch,
+      [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '189'},
+        id: IN_OLD_PATCH_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '19z'},
+        id: DELETED_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-        putPatch: {stateVersion: '1ba'},
+        patchVersion: {stateVersion: '1ba'},
         id: ROW_ID2,
         rowVersion: '03',
         queriedColumns: {id: ['twoHash']},
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
         id: ROW_ID3,
-        putPatch: {stateVersion: '1aa', minorVersion: 1},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
         queriedColumns: {id: ['oneHash']},
         rowVersion: '09',
       } satisfies RowRecord,
@@ -1445,21 +1472,6 @@ describe('view-syncer/cvr', () => {
         type: 'row',
         op: 'del', // Already in CVRs from "189"
         id: IN_OLD_PATCH_ROW_ID,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH1}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID1,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH2}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later put.
-        id: ROW_ID2,
-      } satisfies RowPatch,
-      [`/vs/cvr/abc123/p/d/19z/r/${ROW_HASH3}`]: {
-        type: 'row',
-        op: 'del', // Overridden by the later delete.
-        id: ROW_ID3,
       } satisfies RowPatch,
       [`/vs/cvr/abc123/p/d/19z/r/${DELETED_ROW_HASH}`]: {
         type: 'row',
@@ -1516,12 +1528,12 @@ describe('view-syncer/cvr', () => {
           toVersion: newVersion,
         },
         {
-          patch: {type: 'row', op: 'constrain', id: ROW_ID2, columns: ['id']},
-          toVersion: {stateVersion: '1ba'},
-        },
-        {
           patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
           toVersion: {stateVersion: '19z'},
+        },
+        {
+          patch: {type: 'row', op: 'constrain', id: ROW_ID2, columns: ['id']},
+          toVersion: {stateVersion: '1ba'},
         },
       ] satisfies PatchToVersion[]);
 
@@ -1569,9 +1581,15 @@ describe('view-syncer/cvr', () => {
         } satisfies LastActive,
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
-          putPatch: updated.version,
+          patchVersion: updated.version,
           queriedColumns: {id: ['twoHash']},
           rowVersion: '03',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
+          id: ROW_ID3,
+          patchVersion: {stateVersion: '1ba', minorVersion: 1},
+          queriedColumns: null,
+          rowVersion: '09',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/p/d/1ba:01/r/${ROW_HASH1}`]: {
           type: 'row',
