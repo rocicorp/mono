@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {Downstream, Upstream, upstreamSchema} from 'zero-protocol';
-import type {MutagenService} from './mutagen/mutagen-service.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {ViewSyncerService} from './view-syncer/view-syncer.js';
 import * as valita from 'shared/src/valita.js';
@@ -10,6 +9,8 @@ import {sendError} from 'reflect-server/socket';
 import {Subscription} from '../types/subscription.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import {must} from 'shared/src/must.js';
+import type {PostgresDB} from '../types/pg.js';
+import {processMutation} from './mutagen/mutagen.js';
 
 /**
  * Represents a connection between the client and server.
@@ -24,15 +25,16 @@ export class Connection {
   readonly #ws: WebSocket;
   readonly #lc: LogContext;
   readonly #baseCookie: string | null;
+  readonly #upstreamDB: PostgresDB;
 
   readonly #viewSyncer: ViewSyncerService;
-  readonly #mutagen: MutagenService;
 
   #inboundStream: Subscription<Upstream> | undefined;
   #outboundStream: CancelableAsyncIterable<Downstream> | undefined;
 
   constructor(
     lc: LogContext,
+    db: PostgresDB,
     serviceRunner: ServiceRunner,
     clientGroupID: string,
     clientID: string,
@@ -43,10 +45,9 @@ export class Connection {
     this.#ws = ws;
     this.#lc = lc;
     this.#baseCookie = baseCookie;
+    this.#upstreamDB = db;
 
     this.#viewSyncer = serviceRunner.getViewSyncer(clientGroupID);
-    this.#mutagen = serviceRunner.getMutagen(clientGroupID);
-
     this.#ws.addEventListener('message', this.#onMessage);
   }
 
@@ -58,7 +59,6 @@ export class Connection {
     const lc = this.#lc;
     const data = event.data.toString();
     const ws = this.#ws;
-    const mutagen = this.#mutagen;
     const viewSyncer = this.#viewSyncer;
 
     let msg;
@@ -76,7 +76,9 @@ export class Connection {
         handlePing(lc, ws);
         break;
       case 'push':
-        await mutagen.processMutations(msg[1].mutations);
+        for (const mutation of msg[1].mutations) {
+          await processMutation(lc, this.#upstreamDB, mutation);
+        }
         break;
       case 'pull':
         must(this.#inboundStream).push(msg);

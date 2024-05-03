@@ -3,7 +3,6 @@ import {Replicator, ReplicatorService} from './replicator/replicator.js';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
-import {MutagenService} from './mutagen/mutagen-service.js';
 import {
   InvalidationWatcher,
   InvalidationWatcherService,
@@ -33,7 +32,6 @@ export class ServiceRunner
   readonly #replicators: Map<string, ReplicatorService> = new Map();
   readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
     new Map();
-  readonly #mutagens: Map<string, MutagenService> = new Map();
 
   #storage: DurableStorage;
   #env: ServiceRunnerEnv;
@@ -99,21 +97,6 @@ export class ServiceRunner
       id => new ViewSyncerService(this.#lc, id, this.#storage, this),
       'ReplicatorService',
     );
-  }
-
-  // TODO: make Mutagen follow same getService pattern
-  getMutagen(clientGroupID: string): MutagenService {
-    const m = this.#mutagens.get(clientGroupID);
-    if (m) {
-      return m;
-    }
-    const mut = new MutagenService(
-      this.#lc,
-      clientGroupID,
-      this.#env.UPSTREAM_URI,
-    );
-    this.#mutagens.set(clientGroupID, mut);
-    return mut;
   }
 
   #getService<S extends Service>(
