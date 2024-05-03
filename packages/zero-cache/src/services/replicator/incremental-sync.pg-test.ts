@@ -19,8 +19,8 @@ import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
+import {setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
-import {setupReplicationTables} from './tables/replication.js';
 import type {TableSpec} from './tables/specs.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';

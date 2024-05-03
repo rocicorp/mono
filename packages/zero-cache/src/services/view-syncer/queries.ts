@@ -12,7 +12,7 @@ import {
   type InvalidationInfo,
 } from '../../zql/invalidation.js';
 import {Normalized} from '../../zql/normalize.js';
-import {ZERO_VERSION_COLUMN_NAME} from '../replicator/tables/replication.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
 import {CVRPaths} from './schema/paths.js';
 import type {QueryRecord, RowID, RowRecord} from './schema/types.js';

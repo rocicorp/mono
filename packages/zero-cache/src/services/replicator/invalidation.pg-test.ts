@@ -19,8 +19,8 @@ import {
   Invalidator,
 } from './invalidation.js';
 import type {RegisterInvalidationFiltersResponse} from './replicator.js';
-import {CREATE_INVALIDATION_TABLES} from './tables/invalidation.js';
-import {CREATE_REPLICATION_TABLES} from './tables/replication.js';
+import {CREATE_INVALIDATION_TABLES} from './schema/invalidation.js';
+import {CREATE_REPLICATION_TABLES} from './schema/replication.js';
 import {TableTracker, type RowChange} from './types/table-tracker.js';
 
 describe('replicator/invalidation', () => {

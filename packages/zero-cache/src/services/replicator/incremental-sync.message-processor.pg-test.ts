@@ -9,7 +9,7 @@ import type {PostgresDB} from '../../types/pg.js';
 import {MessageProcessor} from './incremental-sync.js';
 import {InvalidationFilters} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
-import {setupReplicationTables} from './tables/replication.js';
+import {setupReplicationTables} from './schema/replication.js';
 
 describe('replicator/message-processor', () => {
   let replica: PostgresDB;
