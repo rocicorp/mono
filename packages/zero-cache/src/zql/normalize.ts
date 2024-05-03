@@ -101,7 +101,9 @@ export class Normalized {
     }
     if (orderBy) {
       const [names, dir] = orderBy;
-      query += ` ORDER BY ${names.map(x => selector(x)).join(', ')} ${dir}`;
+      query += ` ORDER BY ${names
+        .map(x => `${selector(x)} ${dir}`)
+        .join(', ')}`;
     }
     if (limit !== undefined) {
       query += ` LIMIT ${limit}`;
