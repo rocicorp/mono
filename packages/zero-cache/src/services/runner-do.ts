@@ -1,5 +1,4 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {CONNECT_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 // TODO(mlaw): break dependency on reflect-server
@@ -23,19 +22,12 @@ export class ServiceRunnerDO {
   readonly #clients = new Map<string, Connection>();
 
   constructor(
-    registry: InvalidationWatcherRegistry,
     logSink: LogSink,
     logLevel: LogLevel,
     state: DurableObjectState,
     env: ServiceRunnerEnv,
   ) {
-    this.#serviceRunner = new ServiceRunner(
-      registry,
-      logSink,
-      logLevel,
-      state,
-      env,
-    );
+    this.#serviceRunner = new ServiceRunner(logSink, logLevel, state, env);
     this.#lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ServiceRunnerDO',

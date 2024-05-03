@@ -80,8 +80,9 @@ const App = ({undoManager}: AppProps) => {
 
   const issueQuery = zero.query.issue;
 
-  const allIssues = useQuery(issueQuery.select('*'));
+  const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
   const issueListQuery = issueQuery
+    .limit(200)
     .leftJoin(
       zero.query.issueLabel,
       'issueLabel',

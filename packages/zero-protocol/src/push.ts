@@ -49,11 +49,11 @@ const crudOpSchema = v.union(
   deleteOpSchema,
 );
 
-const crudArgsSchema = v.tuple([
-  v.object({
-    ops: v.array(crudOpSchema),
-  }),
-]);
+const crudArgSchema = v.object({
+  ops: v.array(crudOpSchema),
+});
+
+const crudArgsSchema = v.tuple([crudArgSchema]);
 
 export const crudMutationSchema = v.object({
   id: v.number(),
@@ -89,6 +89,7 @@ export type SetOp = v.Infer<typeof setOpSchema>;
 export type UpdateOp = v.Infer<typeof updateOpSchema>;
 export type DeleteOp = v.Infer<typeof deleteOpSchema>;
 export type CRUDOp = v.Infer<typeof crudOpSchema>;
+export type CRUDMutationArg = v.Infer<typeof crudArgSchema>;
 export type CRUDMutationArgs = v.Infer<typeof crudArgsSchema>;
 export type CRUDMutation = v.Infer<typeof crudMutationSchema>;
 export type CustomMutation = v.Infer<typeof customMutationSchema>;

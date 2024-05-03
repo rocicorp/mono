@@ -4,6 +4,14 @@ import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {MutagenService} from './mutagen/mutagen-service.js';
+import {
+  InvalidationWatcher,
+  InvalidationWatcherService,
+} from './invalidation-watcher/invalidation-watcher.js';
+import type {ReplicatorRegistry} from './replicator/registry.js';
+import postgres from 'postgres';
+import {postgresTypeConfig} from '../types/pg.js';
+import type {Service} from './service.js';
 
 export interface ServiceRunnerEnv {
   runnerDO: DurableObjectNamespace;
@@ -15,20 +23,23 @@ export interface ServiceRunnerEnv {
   LOG_LEVEL: LogLevel;
 }
 
-export class ServiceRunner {
-  readonly #viewSyncers: Map<string, ViewSyncerService>;
-  readonly #replicator: Map<string, ReplicatorService>;
-  readonly #mutagens: Map<string, MutagenService>;
+const REPLICATOR_ID = 'r1';
+const INVALIDATION_WATCHER_ID = 'iw1';
+
+export class ServiceRunner
+  implements ReplicatorRegistry, InvalidationWatcherRegistry
+{
+  readonly #viewSyncers: Map<string, ViewSyncerService> = new Map();
+  readonly #replicators: Map<string, ReplicatorService> = new Map();
+  readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
+    new Map();
+  readonly #mutagens: Map<string, MutagenService> = new Map();
 
   #storage: DurableStorage;
   #env: ServiceRunnerEnv;
-  #registry: InvalidationWatcherRegistry;
   readonly #lc: LogContext;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  #REPLICATOR_ID = 'r1';
 
   constructor(
-    registry: InvalidationWatcherRegistry,
     logSink: LogSink,
     logLevel: LogLevel,
     state: DurableObjectState,
@@ -38,53 +49,59 @@ export class ServiceRunner {
       'component',
       'ServiceRunnerDO',
     );
-    this.#viewSyncers = new Map();
-    this.#replicator = new Map();
-    this.#mutagens = new Map();
     this.#storage = new DurableStorage(state.storage);
-    this.#registry = registry;
     this.#env = env;
 
     // start the replicator
     void this.getReplicator();
   }
 
-  getReplicator(): Promise<Replicator> {
-    const r = this.#replicator.get(this.#REPLICATOR_ID);
-    if (r) {
-      return Promise.resolve(r);
-    }
-    const rep = new ReplicatorService(
-      this.#lc,
-      this.#REPLICATOR_ID,
-      this.#env.UPSTREAM_URI,
-      this.#env.SYNC_REPLICA_URI,
+  getInvalidationWatcher(): Promise<InvalidationWatcher> {
+    return Promise.resolve(
+      this.#getService(
+        INVALIDATION_WATCHER_ID,
+        this.#invalidationWatchers,
+        id =>
+          new InvalidationWatcherService(
+            id,
+            this.#lc,
+            this,
+            postgres(this.#env.SYNC_REPLICA_URI, {
+              ...postgresTypeConfig(),
+            }),
+          ),
+        'InvalidationWatcherService',
+      ),
     );
-    this.#replicator.set(this.#REPLICATOR_ID, rep);
-    void rep.run().then(() => {
-      this.#replicator.delete(this.#REPLICATOR_ID);
-    });
-    return Promise.resolve(rep);
+  }
+
+  getReplicator(): Promise<Replicator> {
+    return Promise.resolve(
+      this.#getService(
+        REPLICATOR_ID,
+        this.#replicators,
+        id =>
+          new ReplicatorService(
+            this.#lc,
+            id,
+            this.#env.UPSTREAM_URI,
+            this.#env.SYNC_REPLICA_URI,
+          ),
+        'ReplicatorService',
+      ),
+    );
   }
 
   getViewSyncer(clientGroupID: string): ViewSyncerService {
-    const v = this.#viewSyncers.get(clientGroupID);
-    if (v) {
-      return v;
-    }
-    const vsync = new ViewSyncerService(
-      this.#lc,
-      clientGroupID,
-      this.#storage,
-      this.#registry,
+    return this.#getService(
+      'viewSyncer:' + clientGroupID,
+      this.#viewSyncers,
+      id => new ViewSyncerService(this.#lc, id, this.#storage, this),
+      'ReplicatorService',
     );
-    this.#viewSyncers.set(clientGroupID, vsync);
-    void vsync.run().then(() => {
-      this.#viewSyncers.delete(clientGroupID);
-    });
-    return vsync;
   }
 
+  // TODO: make Mutagen follow same getService pattern
   getMutagen(clientGroupID: string): MutagenService {
     const m = this.#mutagens.get(clientGroupID);
     if (m) {
@@ -97,5 +114,29 @@ export class ServiceRunner {
     );
     this.#mutagens.set(clientGroupID, mut);
     return mut;
+  }
+
+  #getService<S extends Service>(
+    id: string,
+    registry: Map<string, S>,
+    create: (id: string) => S,
+    description: string,
+  ): S {
+    const existing = registry.get(id);
+    if (existing) {
+      return existing;
+    }
+    this.#lc.debug?.('Createing and running service', description);
+    const service = create(id);
+    registry.set(id, service);
+    void service
+      .run()
+      .catch(e => {
+        this.#lc.info?.('Error in run of', description, e);
+      })
+      .finally(() => {
+        registry.delete(id);
+      });
+    return service;
   }
 }
