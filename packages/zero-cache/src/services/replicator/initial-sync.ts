@@ -3,13 +3,13 @@ import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
 import {postgresTypeConfig} from '../../types/pg.js';
 import {id, idList} from '../../types/sql.js';
+import {ZERO_VERSION_COLUMN_NAME} from './schema/replication.js';
 import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
 import {
   PublicationInfo,
   ZERO_PUB_PREFIX,
   getPublicationInfo,
 } from './tables/published.js';
-import {ZERO_VERSION_COLUMN_NAME} from './tables/replication.js';
 import type {ColumnSpec} from './tables/specs.js';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {

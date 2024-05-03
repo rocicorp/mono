@@ -5,11 +5,11 @@ import {
   startPostgresReplication,
   waitForInitialDataSynchronization,
 } from '../initial-sync.js';
-import {setupReplicationTables} from '../tables/replication.js';
 import {
   runSyncSchemaMigrations,
   type VersionMigrationMap,
 } from './migration.js';
+import {setupReplicationTables} from './replication.js';
 
 const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
   1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
