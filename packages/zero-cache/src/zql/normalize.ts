@@ -45,6 +45,7 @@ export class Normalized {
 
   #constructQuery(ast: AST): string {
     const {
+      schema,
       table,
       alias,
       select,
@@ -72,6 +73,9 @@ export class Normalized {
 
     if (selection) {
       query += `SELECT ${selection} FROM `;
+    }
+    if (schema) {
+      query += ident(schema) + '.';
     }
     query += ident(table);
     if (alias) {
