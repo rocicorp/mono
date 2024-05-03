@@ -5,6 +5,7 @@ import {
   initStorage,
   runWithDurableObjectStorage,
 } from '../../test/do.js';
+import {createSilentLogContext} from '../../test/logger.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {PatchToVersion} from './client-handler.js';
 import {
@@ -28,6 +29,8 @@ import type {
 } from './schema/types.js';
 
 describe('view-syncer/cvr', () => {
+  const lc = createSilentLogContext();
+
   test('load first time cvr', async () => {
     await runWithDurableObjectStorage(async doStorage => {
       const storage = new DurableStorage(doStorage);
@@ -589,6 +592,7 @@ describe('view-syncer/cvr', () => {
       // Simulate receiving different views rows at different time times.
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
@@ -616,6 +620,7 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
@@ -663,6 +668,7 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
@@ -690,7 +696,9 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
 
       expect(
-        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+        await updater.deleteUnreferencedColumnsAndRows(lc, {
+          stateVersion: '189',
+        }),
       ).toEqual([
         {
           patch: {id: ROW_ID2, op: 'constrain', type: 'row', columns: ['id']},
@@ -901,6 +909,7 @@ describe('view-syncer/cvr', () => {
       updater.executed('oneHash', 'serverTwoHash');
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
@@ -928,6 +937,7 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               // Now referencing ROW_ID2 instead of ROW_ID3
@@ -958,7 +968,9 @@ describe('view-syncer/cvr', () => {
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
       expect(
-        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+        await updater.deleteUnreferencedColumnsAndRows(lc, {
+          stateVersion: '189',
+        }),
       ).toEqual([
         {
           patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
@@ -1171,6 +1183,7 @@ describe('view-syncer/cvr', () => {
       updater.executed('twoHash', 'updatedTwoServerHash');
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
@@ -1198,6 +1211,7 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
       expect(
         await updater.received(
+          lc,
           new Map([
             [
               `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
@@ -1224,6 +1238,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
       await updater.received(
+        lc,
         new Map([
           [
             // Now referencing ROW_ID2 instead of ROW_ID3
@@ -1242,6 +1257,7 @@ describe('view-syncer/cvr', () => {
         ]),
       );
       await updater.received(
+        lc,
         new Map([
           [
             `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
@@ -1262,7 +1278,9 @@ describe('view-syncer/cvr', () => {
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
       expect(
-        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+        await updater.deleteUnreferencedColumnsAndRows(lc, {
+          stateVersion: '189',
+        }),
       ).toEqual([
         {
           patch: {
@@ -1485,7 +1503,9 @@ describe('view-syncer/cvr', () => {
 
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
       expect(
-        await updater.deleteUnreferencedColumnsAndRows({stateVersion: '189'}),
+        await updater.deleteUnreferencedColumnsAndRows(lc, {
+          stateVersion: '189',
+        }),
       ).toEqual([
         {
           patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},

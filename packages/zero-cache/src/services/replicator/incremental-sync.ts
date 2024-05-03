@@ -113,10 +113,8 @@ export class IncrementalSyncer {
       this.#service.on(
         'heartbeat',
         (lsn: string, time: number, shouldRespond: boolean) => {
-          lc.debug?.(
-            `heartbeat (lastLSN: ${lastLSN}): ${lsn}, ${time}, ${shouldRespond}`,
-          );
           if (shouldRespond) {
+            lc.debug?.(`keepalive (lastLSN: ${lastLSN}): ${lsn}, ${time}`);
             void service.acknowledge(lastLSN ?? '0/0');
           }
         },
