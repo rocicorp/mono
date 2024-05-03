@@ -20,6 +20,23 @@ describe('zql/normalize-query-hash', () => {
       query: 'SELECT id AS id FROM issues ORDER BY id asc',
     },
     {
+      name: 'statement with schema',
+      asts: [
+        {
+          schema: 'zero',
+          table: 'clients',
+          select: [
+            ['clientID', 'clientID'],
+            ['lastMutationID', 'lastMutationID'],
+          ],
+          orderBy: [['clientID'], 'asc'],
+        },
+      ],
+      query:
+        'SELECT "clientID" AS "clientID", "lastMutationID" AS "lastMutationID" ' +
+        'FROM zero.clients ORDER BY "clientID" asc',
+    },
+    {
       name: 'table alias',
       asts: [
         {

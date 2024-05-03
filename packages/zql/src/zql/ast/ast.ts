@@ -1,8 +1,8 @@
 // Going for a subset of the SQL `SELECT` grammar
 // https://www.sqlite.org/lang_select.html
 
-import {compareUTF8} from 'compare-utf8';
-import {defined} from 'shared/src/arrays.js';
+import { compareUTF8 } from 'compare-utf8';
+import { defined } from 'shared/src/arrays.js';
 
 // TODO: the chosen operator needs to constrain the allowed values for the value
 // input to the query builder.
@@ -112,6 +112,7 @@ export type SimpleCondition = {
 export function normalizeAST(ast: AST): AST {
   const where = flattened(ast.where);
   return {
+    schema: ast.schema,
     table: ast.table,
     alias: ast.alias,
     select: ast.select

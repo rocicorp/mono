@@ -22,6 +22,23 @@ describe('zql/ast', () => {
       },
     },
     {
+      name: 'statement with schema',
+      asts: [
+        {
+          schema: 'zero',
+          table: 'clients',
+          select: [['id', 'alias']],
+          orderBy: [['id'], 'asc'],
+        },
+      ],
+      normalized: {
+        schema: 'zero',
+        table: 'clients',
+        select: [['id', 'alias']],
+        orderBy: [['id'], 'asc'],
+      },
+    },
+    {
       name: 'column selection',
       asts: [
         {
