@@ -58,6 +58,7 @@ describe('view-syncer/queries', () => {
         ['parent.title', 'parent_title'],
         ['parent.owner', 'parent_owner'],
       ],
+      orderBy: [['id', 'title'], 'desc'],
       table: 'issues',
       joins: [
         {
@@ -101,22 +102,23 @@ describe('view-syncer/queries', () => {
         'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
         'INNER JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
-        'AS parent ON issues.parent_id = parent.issues_id',
+        'AS parent ON issues.parent_id = parent.issues_id ' +
+        'ORDER BY id desc, title desc',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
-      {
-        id: '3',
-        title: 'foo',
-        owner: 'Candice',
-        parent_title: 'parent issue foo',
-        parent_owner: 'Alice',
-      },
       {
         id: '4',
         title: 'bar',
         owner: 'Bob',
         parent_title: 'parent issue bar',
         parent_owner: 'Bob',
+      },
+      {
+        id: '3',
+        title: 'foo',
+        owner: 'Candice',
+        parent_title: 'parent issue foo',
+        parent_owner: 'Alice',
       },
     ]);
 

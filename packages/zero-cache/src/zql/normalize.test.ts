@@ -144,7 +144,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues GROUP BY id, name ORDER BY id, name desc',
+        'SELECT id AS i, name AS n FROM issues GROUP BY id, name ORDER BY id desc, name desc',
     },
     {
       name: 'group by, order by, limit',
@@ -163,7 +163,7 @@ describe('zql/normalize-query-hash', () => {
       ],
       query:
         'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY issues.id, name ORDER BY "dueDate", priority desc LIMIT 10',
+        'GROUP BY issues.id, name ORDER BY "dueDate" desc, priority desc LIMIT 10',
     },
     {
       name: 'group by, order by (ordering preserved), limit',
@@ -182,7 +182,7 @@ describe('zql/normalize-query-hash', () => {
       ],
       query:
         'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY id, name ORDER BY priority, "dueDate" desc LIMIT 10',
+        'GROUP BY id, name ORDER BY priority desc, "dueDate" desc LIMIT 10',
     },
     {
       name: 'quoted identifiers',
