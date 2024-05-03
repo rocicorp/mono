@@ -695,7 +695,11 @@ class TransactionProcessor {
       rowKey: (key as postgres.JSONValue) ?? {}, // Empty object for truncate
       row: (row as postgres.JSONValue) ?? null,
     };
-    return tx`INSERT INTO _zero."ChangeLog" ${tx(change)};`;
+    return tx`
+    INSERT INTO _zero."ChangeLog" ${tx(change)}
+      ON CONFLICT ON CONSTRAINT "RK_change_log"
+      DO UPDATE SET ${tx(change)};
+    `;
   }
 
   #getTableTracker(relation: Pgoutput.MessageRelation) {
