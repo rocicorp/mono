@@ -1,8 +1,8 @@
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {Chunk} from '../dag/chunk.js';
 import type {LazyRead} from '../dag/lazy-store.js';
 import {Visitor} from '../dag/visitor.js';
 import type {Hash} from '../hash.js';
-import {promiseVoid} from '../resolved-promises.js';
 
 export class GatherMemoryOnlyVisitor extends Visitor {
   readonly #gatheredChunks: Map<Hash, Chunk> = new Map();

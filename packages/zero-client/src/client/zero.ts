@@ -6,19 +6,6 @@ import {ZeroContext} from '@rocicorp/zql/src/zql/context/zero-context.js';
 import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
 import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {EntityQuery} from '@rocicorp/zql/src/zql/query/entity-query.js';
-import {
-  ConnectedMessage,
-  Downstream,
-  NullableVersion,
-  PingMessage,
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
-  PushMessage,
-  downstreamSchema,
-  nullableVersionSchema,
-  type ErrorMessage,
-} from 'zero-protocol';
 import type {MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
@@ -39,6 +26,25 @@ import {getDocument} from 'shared/src/get-document.js';
 import {must} from 'shared/src/must.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
+import {
+  ConnectedMessage,
+  Downstream,
+  NullableVersion,
+  PingMessage,
+  PokeEndMessage,
+  PokePartMessage,
+  PokeStartMessage,
+  PushMessage,
+  downstreamSchema,
+  nullableVersionSchema,
+  type ErrorMessage,
+} from 'zero-protocol';
+import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.js';
+import type {
+  PullRequestMessage,
+  PullResponseBody,
+  PullResponseMessage,
+} from 'zero-protocol/src/pull.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {checkConnectivity} from './connect-checks.js';
@@ -61,7 +67,7 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import type {QueryParseDefs, ZeroOptions} from './options.js';
-import {PokeHandler} from './zero-poke-handler.js';
+import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
@@ -70,13 +76,7 @@ import {
   ZQLWatchSubscription,
 } from './subscriptions.js';
 import {version} from './version.js';
-import type {
-  PullRequestMessage,
-  PullResponseBody,
-  PullResponseMessage,
-} from 'zero-protocol/src/pull.js';
-import {QueryManager} from './query-manager.js';
-import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.js';
+import {PokeHandler} from './zero-poke-handler.js';
 
 export type QueryDefs = {
   readonly [name: string]: Entity;
@@ -543,6 +543,27 @@ export class Zero<QD extends QueryDefs> {
 
   /**
    * Provides facilities to write data to Zero.
+   *
+   * `mutate` is a function as well as a "namespace" object for doing CRUD style
+   * mutations. When used as a function it is used to batch multiple mutations.
+   *
+   * ```ts
+   * await zero.mutate.issue.create({id: '1', title: 'First issue'});
+   * await zero.mutate.comment.create({id: '1', text: 'First comment', issueID: '1'});
+   *
+   * // or as a function:
+   * await zero.mutate(m => {
+   *   await m.issue.create({id: '1', title: 'First issue'});
+   *   await m.comment.create({id: '1', text: 'First comment', issueID: '1'});
+   * });
+   * ```
+   *
+   * The benefit of using the function form is that it allows you to batch
+   * multiple mutations together. This can be more efficient than making
+   * individual calls to `create`, `update`, `set`, and `delete`.
+   *
+   * The function form of `mutate` is not allowed to be called inside another
+   * `mutate` function. Doing so will throw an error.
    */
   readonly mutate: MakeCRUDMutate<QD>;
 

@@ -1,7 +1,7 @@
 import {RWLock} from '@rocicorp/lock';
 import {joinIterables} from 'shared/src/iterables.js';
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {Hash} from '../hash.js';
-import {promiseVoid} from '../resolved-promises.js';
 import {getSizeOfValue} from '../size-of-value.js';
 import type {MaybePromise} from '../types.js';
 import {Chunk, ChunkHasher, createChunk} from './chunk.js';

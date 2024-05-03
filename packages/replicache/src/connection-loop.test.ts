@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
+import {promiseTrue} from 'shared/src/resolved-promises.js';
 import {sleep} from 'shared/src/sleep.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
@@ -10,7 +11,6 @@ import {
   MAX_DELAY_MS,
   MIN_DELAY_MS,
 } from './connection-loop.js';
-import {promiseTrue} from './resolved-promises.js';
 
 let clock: SinonFakeTimers;
 setup(() => {

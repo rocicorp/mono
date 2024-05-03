@@ -1,13 +1,14 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {Mutation, pushMessageSchema} from 'zero-protocol/src/push.js';
-import type {NullableVersion} from 'zero-protocol/src/version.js';
 import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
+import {initConnectionMessageSchema} from 'zero-protocol';
+import {Mutation, pushMessageSchema} from 'zero-protocol/src/push.js';
+import type {NullableVersion} from 'zero-protocol/src/version.js';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
@@ -35,7 +36,6 @@ import {
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
-import {initConnectionMessageSchema} from 'zero-protocol';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1793,6 +1793,125 @@ suite('CRUD', () => {
       },
     });
 
-    expect((z.mutate as Record<string, unknown>)._zero_crud).toBeUndefined();
+    expect(
+      (z.mutate as unknown as Record<string, unknown>)._zero_crud,
+    ).toBeUndefined();
   });
+});
+
+test('mutate is a function for batching', async () => {
+  type Issue = {
+    id: string;
+    title: string;
+  };
+  type Comment = {
+    id: string;
+    issueID: string;
+    text: string;
+  };
+  const z = zeroForTest({
+    queries: {
+      issue: v => v as Issue,
+      comment: v => v as Comment,
+    },
+  });
+
+  const x = await z.mutate(async m => {
+    expect(
+      (m as unknown as Record<string, unknown>)._zero_crud,
+    ).toBeUndefined();
+    await m.issue.create({id: 'a', title: 'A'});
+    await m.comment.create({
+      id: 'b',
+      issueID: 'a',
+      text: 'Comment for issue A',
+    });
+    await m.comment.update({
+      id: 'b',
+      text: 'Comment for issue A was changed',
+    });
+    return 123 as const;
+  });
+
+  expect(x).toBe(123);
+
+  expect(await z.query.issue.select('*').prepare().exec()).toEqual([
+    {id: 'a', title: 'A'},
+  ]);
+  expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+    {id: 'b', issueID: 'a', text: 'Comment for issue A was changed'},
+  ]);
+
+  expect(
+    (z.mutate as unknown as Record<string, unknown>)._zero_crud,
+  ).toBeUndefined();
+});
+
+test('calling mutate on the non batch version should throw inside a batch', async () => {
+  type Issue = {
+    id: string;
+    title: string;
+  };
+  type Comment = {
+    id: string;
+    issueID: string;
+    text: string;
+  };
+  const z = zeroForTest({
+    queries: {
+      issue: v => v as Issue,
+      comment: v => v as Comment,
+    },
+  });
+
+  await expect(
+    z.mutate(async m => {
+      await m.issue.create({id: 'a', title: 'A'});
+      await z.mutate.issue.create({id: 'b', title: 'B'});
+    }),
+  ).rejects.toThrow('Cannot call mutate.issue.create inside a batch');
+
+  // make sure that we did not update the issue collection.
+  await expect(z.query.issue.select('*').prepare().exec()).resolves.toEqual([]);
+
+  await z.mutate.comment.create({id: 'a', text: 'A', issueID: 'a'});
+  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
+    {id: 'a', text: 'A', issueID: 'a'},
+  ]);
+
+  await expect(
+    z.mutate(async () => {
+      await z.mutate.comment.update({id: 'a', text: 'A2'});
+    }),
+  ).rejects.toThrow('Cannot call mutate.comment.update inside a batch');
+  // make sure that we did not update the comment collection.
+  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
+    {id: 'a', text: 'A', issueID: 'a'},
+  ]);
+
+  await expect(
+    z.mutate(async () => {
+      await z.mutate.comment.set({id: 'a', text: 'A2', issueID: 'a'});
+    }),
+  ).rejects.toThrow('Cannot call mutate.comment.set inside a batch');
+  // make sure that we did not update the comment collection.
+  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
+    {id: 'a', text: 'A', issueID: 'a'},
+  ]);
+
+  await expect(
+    z.mutate(async () => {
+      await z.mutate.comment.delete({id: 'a'});
+    }),
+  ).rejects.toThrow('Cannot call mutate.comment.delete inside a batch');
+  // make sure that we did not delete the comment row
+  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
+    {id: 'a', text: 'A', issueID: 'a'},
+  ]);
+
+  await expect(
+    z.mutate(async () => {
+      await z.mutate(() => {});
+    }),
+  ).rejects.toThrow('Cannot call mutate inside a batch');
 });
