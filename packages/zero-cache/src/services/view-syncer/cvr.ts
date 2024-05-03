@@ -210,7 +210,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     }
     // Add the ClientRecord and PutPatch
     const newVersion = this._ensureNewVersion();
-    client = {id, putPatch: newVersion, desiredQueryIDs: []};
+    client = {id, patchVersion: newVersion, desiredQueryIDs: []};
     this._cvr.clients[id] = client;
 
     void this._writes.put(this._paths.client(client), client);
@@ -345,9 +345,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     if (query.transformationHash !== transformationHash) {
       const transformationVersion = this._ensureNewVersion();
 
-      if (query.putPatch === undefined) {
+      if (query.patchVersion === undefined) {
         // desired -> gotten
-        query.putPatch = transformationVersion;
+        query.patchVersion = transformationVersion;
         void this._writes.put(
           this._paths.queryPatch(transformationVersion, {id: query.id}),
           {type: 'query', op: 'put', id: query.id} satisfies QueryPatch,
@@ -371,8 +371,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must only be called on queries that are not "desired" by any client.
    */
   removed(queryID: string) {
-    const {desiredBy, putPatch} = this._cvr.queries[queryID];
-    assert(putPatch);
+    const {desiredBy, patchVersion} = this._cvr.queries[queryID];
+    assert(patchVersion);
     assert(
       Object.keys(desiredBy).length === 0,
       `Cannot remove query ${queryID}`,
@@ -384,7 +384,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     const newVersion = this._ensureNewVersion();
     void this._writes.del(this._paths.query({id: queryID}));
-    void this._writes.del(this._paths.queryPatch(putPatch, {id: queryID}));
+    void this._writes.del(this._paths.queryPatch(patchVersion, {id: queryID}));
     void this._writes.put(this._paths.queryPatch(newVersion, {id: queryID}), {
       type: 'query',
       op: 'del',
@@ -439,19 +439,21 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         existing?.queriedColumns,
         queriedColumns,
       );
-      let putPatch: CVRVersion;
+      let patchVersion: CVRVersion;
       if (existing?.rowVersion === rowVersion && putColumns.length === 0) {
         // No CVR changes necessary. Just send the content patch to interested clients
         // (i.e. that are catching up), if any.
-        putPatch = existing.putPatch;
+        patchVersion = existing.patchVersion;
       } else {
-        putPatch = this.#assertNewVersion();
+        patchVersion = this.#assertNewVersion();
         if (existing) {
-          void this._writes.del(this._paths.rowPatch(existing.putPatch, id));
+          void this._writes.del(
+            this._paths.rowPatch(existing.patchVersion, id),
+          );
         }
-        const updated = {id, rowVersion, putPatch, queriedColumns: merged};
+        const updated = {id, rowVersion, patchVersion, queriedColumns: merged};
         void this._writes.put(path, updated);
-        void this._writes.put(this._paths.rowPatch(putPatch, id), {
+        void this._writes.put(this._paths.rowPatch(patchVersion, id), {
           type: 'row',
           op: 'put',
           id,
@@ -461,7 +463,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
       merges.push({
         patch: {type: 'row', op: 'merge', id, contents},
-        toVersion: putPatch,
+        toVersion: patchVersion,
       });
 
       // Keep track of queried columns to determine which columns to prune at the end.
@@ -517,7 +519,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       rowRecordSchema,
       2000, // Arbitrary batch size. Determines how many row records are in memory at a time.
     );
-    const newlyPatched = new Set<string>();
     for await (const existingRows of allRowRecords) {
       for (const [path, existing] of existingRows) {
         const update = this.#deleteUnreferencedColumnsOrRow(
@@ -529,7 +530,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         if (update === null) {
           continue;
         }
-        newlyPatched.add(path);
 
         const {id, columns} = update;
         if (columns) {
@@ -563,38 +563,21 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         rowPatchSchema,
         2000,
       );
-      // Note: Order of patches matter; although a delete-patch clears the put-patch that it
-      // replaces, a put-patch does not clear a previous delete-patch (because tombstones are
-      // not tracked). Therefore, delete patches are only sent if they are not overridden by
-      // a later put. This is determined from:
-      // - The `puts` encountered in this scan in the range (fromCVRVersion, this._orig.version)
-      // - The `#receivedRows` and `newlyPatched` rows.
-      const deletes = new Map<string, [CVRVersion, RowID]>();
       for await (const batch of catchupRowPatches) {
         for (const [path, rowPatch] of batch) {
           const toVersion = this._paths.versionFromPatchPath(path);
-          const rowPath = this._paths.row(rowPatch.id);
+          const {id} = rowPatch;
           if (rowPatch.op === 'put') {
-            const {id, columns} = rowPatch;
+            const {columns} = rowPatch;
             patches.push({
               patch: {type: 'row', op: 'constrain', id, columns},
               toVersion,
             });
-            deletes.delete(rowPath); // Overrides a previously seen delete patch.
-          } else if (
-            !this.#receivedRows.has(rowPath) &&
-            !newlyPatched.has(rowPath)
-          ) {
-            // Tentatively add the delete patch if it was not received. It may be removed
-            // by a later put patch.
-            deletes.set(rowPath, [toVersion, rowPatch.id]);
+          } else {
+            lc.debug?.(`catchup delete: ${JSON.stringify(id)}`);
+            patches.push({patch: {type: 'row', op: 'del', id}, toVersion});
           }
         }
-      }
-      // Any remaining deletes do not conflict with any puts.
-      for (const [toVersion, id] of deletes.values()) {
-        lc.debug?.(`catchup delete: ${JSON.stringify(id)}`);
-        patches.push({patch: {type: 'row', op: 'del', id}, toVersion});
       }
     }
 
@@ -618,34 +601,34 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     if (!delColumns.length) {
       return null; // No columns deleted.
     }
-    const putPatch = this.#assertNewVersion();
+    const patchVersion = this.#assertNewVersion();
     const {id, rowVersion} = existing;
     const columns = Object.keys(newQueriedColumns);
-    if (columns.length === 0) {
-      // No columns are referenced by any query. Delete the row from the CVR.
-      void this._writes.del(rowRecordPath);
-      void this._writes.del(this._paths.rowPatch(existing.putPatch, id));
-      void this._writes.put(this._paths.rowPatch(putPatch, id), {
-        type: 'row',
-        op: 'del',
-        id,
-      } satisfies RowPatch);
+    const op = columns.length ? 'put' : 'del';
+
+    const rowRecord: RowRecord = {
+      ...existing,
+      patchVersion,
+      queriedColumns: op === 'put' ? newQueriedColumns : null,
+    };
+    void this._writes.put(rowRecordPath, rowRecord);
+    void this._writes.del(this._paths.rowPatch(existing.patchVersion, id));
+
+    if (op === 'del') {
       lc.debug?.(
         `deleting ${JSON.stringify(id)}, before: ${JSON.stringify(
           existing.queriedColumns,
         )}, merged: ${JSON.stringify(newQueriedColumns)}`,
       );
+      void this._writes.put(this._paths.rowPatch(patchVersion, id), {
+        type: 'row',
+        op: 'del',
+        id,
+      } satisfies RowPatch);
       return {id}; // DeleteOp
     }
 
-    const rowRecord: RowRecord = {
-      ...existing,
-      putPatch,
-      queriedColumns: newQueriedColumns,
-    };
-    void this._writes.put(rowRecordPath, rowRecord);
-    void this._writes.del(this._paths.rowPatch(existing.putPatch, id));
-    void this._writes.put(this._paths.rowPatch(putPatch, id), {
+    void this._writes.put(this._paths.rowPatch(patchVersion, id), {
       type: 'row',
       op: 'put',
       id,
@@ -658,8 +641,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 }
 
 function mergeQueriedColumns(
-  existing: QueriedColumns | undefined,
-  received: QueriedColumns | undefined,
+  existing: QueriedColumns | null | undefined,
+  received: QueriedColumns | null | undefined,
   removeIDs?: Set<string>,
 ): {
   merged: QueriedColumns;

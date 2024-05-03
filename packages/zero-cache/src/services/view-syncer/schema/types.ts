@@ -85,14 +85,17 @@ export type CvrID = v.Infer<typeof cvrIDSchema>;
 
 const cvrRecordSchema = v.object({
   /**
-   * CVR records store the CVRVersion at which record was last "put" into the CVR,
-   * which corresponds with a patch row that can be cleaned up when the record
-   * is deleted (or updated in the case of rows).
+   * CVR records store the CVRVersion at which the record was last patched into
+   * the CVR, which corresponds with a patch row that is cleaned up when the
+   * record is changed (updated, deleted, and re-added in the case of rows).
    *
-   * Note that delete patches are not tracked, as tombstones are not stored,
-   * so logic to expire old patch entries is still needed to bound storage usage.
+   * Tombstones are stored for row records but not for config records. This means
+   * that "orphaned" delete patches for config records may exist, and therefore
+   * scans of config patches must always run until the end of the list. On the
+   * contrary, for row patches, the row record tombstones allow cleanup of delete
+   * patches.
    */
-  putPatch: cvrVersionSchema,
+  patchVersion: cvrVersionSchema,
 });
 
 export const clientRecordSchema = cvrRecordSchema.extend({
@@ -140,19 +143,19 @@ export const queryRecordSchema = cvrRecordSchema.extend({
 
   /**
    * The CVR version corresponding to the `transformationHash`. This essentially tracks when
-   * this version of the query was effectively added to the CVR (as opposed to the `putPatch`,
-   * which is simply when the client was notified that its query was added to the gotten set).
-   * Catchup of clients from old CVR versions require executing all queries with newer
-   * `transformationVersion`.
+   * this version of the query was effectively added to the CVR (as opposed to the
+   * `patchVersion`, which is simply when the client was notified that its query was added
+   * to the gotten set). Catchup of clients from old CVR versions require executing all
+   * queries with a newer `transformationVersion`.
    */
   transformationVersion: cvrVersionSchema.optional(),
 
-  // For queries, the putPatch indicates when query was added to the got set,
+  // For queries, the `patchVersion` indicates when query was added to the got set,
   // and is absent if not yet gotten.
-  putPatch: cvrVersionSchema.optional(),
+  patchVersion: cvrVersionSchema.optional(),
 
   // Maps each of the desiring client's IDs to the version at which
-  // the queryID was added to their desired query set (i.e. individual `putPatch`es).
+  // the queryID was added to their desired query set (i.e. individual `patchVersion`s).
   desiredBy: v.record(cvrVersionSchema),
 
   // TODO: Iron this out.
@@ -183,7 +186,8 @@ export type RowID = v.Infer<typeof rowIDSchema>;
 export const rowRecordSchema = cvrRecordSchema.extend({
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
-  queriedColumns: v.record(v.array(v.string())), // column => query IDs
+  // column => query IDs, or `null` for a row that was removed from the view (i.e. tombstone).
+  queriedColumns: v.record(v.array(v.string())).nullable(),
 });
 
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
