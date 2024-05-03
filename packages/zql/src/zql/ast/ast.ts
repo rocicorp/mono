@@ -36,6 +36,7 @@ export type Join = {
  * of sharing between queries.
  */
 export type AST = {
+  readonly schema?: string | undefined;
   readonly table: string;
   readonly alias?: string | undefined;
   readonly select?: [selector: string, alias: string][] | undefined;

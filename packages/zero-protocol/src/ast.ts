@@ -66,12 +66,14 @@ export const joinSchema: v.Type<Join> = v.lazy(() =>
 
 export const astSchema: v.Type<AST> = v.lazy(() =>
   v.object({
+    schema: v.string().optional(),
     table: v.string(),
     alias: v.string().optional(),
     select: v.array(v.tuple([v.string(), v.string()])).optional(),
     aggregate: v.array(aggregationSchema).optional(),
     where: conditionSchema.optional(),
     joins: v.array(joinSchema).optional(),
+    limit: v.number().optional(),
     groupBy: v.array(v.string()).optional(),
     orderBy: orderingSchema.optional(),
   }),
