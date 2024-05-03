@@ -19,16 +19,13 @@ import {
   nullableVersionSchema,
   type ErrorMessage,
 } from 'zero-protocol';
-import type {MutatorDefs, ReadTransaction} from 'replicache';
+import type {MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
 import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import type {
-  SubscribeOptions,
-  WatchCallback,
-} from 'replicache/src/subscriptions.js';
+import type {WatchCallback} from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
@@ -576,24 +573,6 @@ export class Zero<QD extends QueryDefs> {
     this.#closeAbortController.abort();
     this.#metrics.stop();
     return this.#rep.close();
-  }
-
-  /**
-   * Subscribe to changes to Zero data. Every time the underlying data
-   * changes `body` is called and if the result of `body` changes compared to
-   * last time `onData` is called. The function is also called once the first
-   * time the subscription is added.
-   *
-   * This returns a function that can be used to cancel the subscription.
-   *
-   * If an error occurs in the `body` the `onError` function is called if
-   * present. Otherwise, the error is thrown.
-   */
-  subscribe<R>(
-    body: (tx: ReadTransaction) => Promise<R>,
-    options: SubscribeOptions<R> | ((result: R) => void),
-  ): () => void {
-    return this.#rep.subscribe(body, options);
   }
 
   #onMessage = (e: MessageEvent<string>) => {
