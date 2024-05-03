@@ -105,7 +105,7 @@ export class QueryHandler {
 }
 
 export type ParsedRow = {
-  record: Omit<RowRecord, 'putPatch'>;
+  record: Omit<RowRecord, 'patchVersion'>;
   contents: JSONObject;
 };
 
@@ -189,6 +189,7 @@ class ResultParser {
           parsed.set(key, rowResult);
         }
         for (const col of Object.keys(row)) {
+          rowResult.record.queriedColumns ??= {}; // Appease the compiler
           rowResult.record.queriedColumns[col] = union(
             rowResult.record.queriedColumns[col],
             queryIDs,

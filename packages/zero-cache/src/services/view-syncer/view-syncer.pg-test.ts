@@ -140,7 +140,7 @@ describe('view-syncer/service', () => {
           foo: {
             desiredQueryIDs: ['query-hash1'],
             id: 'foo',
-            putPatch: {stateVersion: '00', minorVersion: 1},
+            patchVersion: {stateVersion: '00', minorVersion: 1},
           },
         },
         id: '9876',
@@ -257,7 +257,7 @@ describe('view-syncer/service', () => {
           foo: {
             desiredQueryIDs: ['query-hash1'],
             id: 'foo',
-            putPatch: {stateVersion: '00', minorVersion: 1},
+            patchVersion: {stateVersion: '00', minorVersion: 1},
           },
         },
         id: '9876',
@@ -266,7 +266,7 @@ describe('view-syncer/service', () => {
             ast: ISSUES_TITLE_QUERY,
             desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
             id: 'query-hash1',
-            putPatch: {stateVersion: '1xz'},
+            patchVersion: {stateVersion: '1xz'},
             transformationVersion: {stateVersion: '1xz'},
           },
         },
@@ -280,25 +280,25 @@ describe('view-syncer/service', () => {
         new Set([
           {
             id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-            putPatch: {stateVersion: '1xz'},
+            patchVersion: {stateVersion: '1xz'},
             queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
             rowVersion: '1a0',
           },
           {
             id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-            putPatch: {stateVersion: '1xz'},
+            patchVersion: {stateVersion: '1xz'},
             queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
             rowVersion: '1ab',
           },
           {
             id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-            putPatch: {stateVersion: '1xz'},
+            patchVersion: {stateVersion: '1xz'},
             queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
             rowVersion: '1ca',
           },
           {
             id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-            putPatch: {stateVersion: '1xz'},
+            patchVersion: {stateVersion: '1xz'},
             queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
             rowVersion: '1cd',
           },
