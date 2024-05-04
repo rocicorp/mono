@@ -1,4 +1,5 @@
 import {Lock} from '@rocicorp/lock';
+import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
@@ -19,9 +20,10 @@ import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
-import {setupReplicationTables} from './schema/replication.js';
+import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
+import {toLexiVersion} from './types/lsn.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 
@@ -1274,6 +1276,8 @@ describe('replicator/incremental-sync', () => {
         ),
       );
 
+      expect(await queryLastLSN(replica)).toBeNull();
+
       if (c.invalidationFilters?.length) {
         const specs = c.invalidationFilters.map(spec =>
           normalizeFilterSpec(spec),
@@ -1317,6 +1321,14 @@ describe('replicator/incremental-sync', () => {
           // Wait or throw any error from the syncer.
           await Promise.race([sleep(50), syncing]);
         }
+      }
+
+      if (versions.length) {
+        const lsn = await queryLastLSN(replica);
+        assert(lsn);
+        expect(toLexiVersion(lsn)).toBe(versions.at(-1));
+      } else {
+        expect(await queryLastLSN(replica)).toBeNull();
       }
 
       const published = await getPublicationInfo(replica);
