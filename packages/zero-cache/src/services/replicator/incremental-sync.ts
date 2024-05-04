@@ -25,9 +25,12 @@ import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {replicationSlot} from './initial-sync.js';
 import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
-import {queryStateVersion} from './queries.js';
 import type {VersionChange} from './replicator.js';
-import {ZERO_VERSION_COLUMN_NAME} from './schema/replication.js';
+import {
+  ZERO_VERSION_COLUMN_NAME,
+  queryLastLSN,
+  queryStateVersion,
+} from './schema/replication.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import {toLexiVersion} from './types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
@@ -81,17 +84,17 @@ export class IncrementalSyncer {
     const replicated = await getPublicationInfo(this.#replica);
     const publicationNames = replicated.publications.map(p => p.pubname);
 
+    // Using default from https://github.com/kibae/pg-logical-replication/blob/34b90136b06aa52f7d1fd86b91c2405692445d5a/src/logical-replication-service.ts#L135C62-L135C74
+    let lastLSN = (await queryLastLSN(this.#replica)) ?? '0/00000000';
+
     lc.info?.(`Syncing publications ${publicationNames}`);
     while (!this.#stopped) {
-      lc.info?.(`!!! in while loop`);
-
       const service = new LogicalReplicationService(
         {connectionString: this.#upstreamUri},
         {acknowledge: {auto: false, timeoutSeconds: 0}},
       );
       this.#service = service;
 
-      let lastLSN: string | undefined;
       const processor = new MessageProcessor(
         this.#replica,
         replicated,
@@ -125,6 +128,7 @@ export class IncrementalSyncer {
         await this.#service.subscribe(
           new PgoutputPlugin({protoVersion: 1, publicationNames}),
           replicationSlot(this.#replicaID),
+          lastLSN,
         );
       } catch (e) {
         if (!this.#stopped) {

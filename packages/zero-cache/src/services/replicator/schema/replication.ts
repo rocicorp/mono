@@ -7,6 +7,7 @@
 
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import type {LexiVersion} from '../../../types/lexi-version.js';
 import {getPublicationInfo} from '../tables/published.js';
 import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
 
@@ -82,4 +83,17 @@ export async function setupReplicationTables(
 
   await Promise.all(alterStmts);
   await tx.unsafe(CREATE_REPLICATION_TABLES + CREATE_INVALIDATION_TABLES);
+}
+
+export function queryStateVersion(db: postgres.Sql) {
+  return db<
+    {max: LexiVersion | null}[]
+  >`SELECT MAX("stateVersion") FROM _zero."TxLog";`;
+}
+
+export async function queryLastLSN(db: postgres.Sql): Promise<string | null> {
+  const result = await db<
+    {lsn: string}[]
+  >`SELECT "lsn" FROM _zero."TxLog" ORDER BY "stateVersion" desc LIMIT 1;`;
+  return result.length ? result[0].lsn : null;
 }

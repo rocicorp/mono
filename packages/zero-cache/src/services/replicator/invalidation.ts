@@ -16,11 +16,11 @@ import type {LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {RowKeyType, RowValue} from '../../types/row-key.js';
 import {rowKeyString} from '../../types/row-key.js';
-import {queryStateVersion} from './queries.js';
 import type {
   RegisterInvalidationFiltersRequest,
   RegisterInvalidationFiltersResponse,
 } from './replicator.js';
+import {queryStateVersion} from './schema/replication.js';
 import type {EffectiveRowChange, TableTracker} from './types/table-tracker.js';
 
 export class Invalidator {
