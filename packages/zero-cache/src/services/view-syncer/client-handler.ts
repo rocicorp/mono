@@ -18,12 +18,20 @@ import {
   type CVRVersion,
 } from './schema/types.js';
 
+export type PutRowPatch = {
+  type: 'row';
+  op: 'put';
+  id: RowID;
+  contents: JSONObject;
+};
+
 export type MergeRowPatch = {
   type: 'row';
   op: 'merge';
   id: RowID;
   contents: JSONObject;
 };
+
 export type ConstrainRowPatch = {
   type: 'row';
   op: 'constrain';
@@ -37,7 +45,11 @@ export type DeleteRowPatch = {
   id: RowID;
 };
 
-export type RowPatch = MergeRowPatch | ConstrainRowPatch | DeleteRowPatch;
+export type RowPatch =
+  | PutRowPatch
+  | MergeRowPatch
+  | ConstrainRowPatch
+  | DeleteRowPatch;
 export type ConfigPatch =
   | ClientPatch
   | DelQueryPatch
@@ -175,6 +187,11 @@ function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
   switch (op) {
     case 'constrain':
       return {...entity, op: 'update', constrain: patch.columns};
+    case 'put': {
+      const {contents} = patch;
+      assertJSONValue(contents); // Asserts on unsafe integers, which BigIntJSON deserializes to bigints.
+      return {...entity, op: 'put', value: contents};
+    }
     case 'merge': {
       const {contents} = patch;
       assertJSONValue(contents); // Asserts on unsafe integers, which BigIntJSON deserializes to bigints.
