@@ -6,7 +6,14 @@ Built with Zero and [Next.js](https://nextjs.org/),).
 
 Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
-# To run locally
+# To run wrangler worker locally
+update wrangler.toml URIs to point to your internal ip adress (169.*.*.*)
+```
+cd docker && docker-compose up
+npx wrangler dev --ip 0.0.0.0
+```
+
+# To run web locally
 
 ```
 npm install
