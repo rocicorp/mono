@@ -2,7 +2,7 @@ import {LogContext, consoleLogSink} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import type {Upstream} from 'zero-protocol';
+import type {PokePartBody, Upstream} from 'zero-protocol';
 import {TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
@@ -211,34 +211,34 @@ describe('view-syncer/service', () => {
             },
             entitiesPatch: [
               {
-                op: 'update',
+                op: 'put',
                 entityID: {id: '1'},
                 entityType: 'issues',
-                merge: {id: '1', title: 'parent issue foo'},
+                value: {id: '1', title: 'parent issue foo'},
               },
               {
-                op: 'update',
+                op: 'put',
                 entityID: {id: '2'},
                 entityType: 'issues',
-                merge: {id: '2', title: 'parent issue bar'},
+                value: {id: '2', title: 'parent issue bar'},
               },
               {
-                op: 'update',
+                op: 'put',
                 entityID: {id: '3'},
                 entityType: 'issues',
-                merge: {id: '3', title: 'foo'},
+                value: {id: '3', title: 'foo'},
               },
               {
-                op: 'update',
+                op: 'put',
                 entityID: {id: '4'},
                 entityType: 'issues',
-                merge: {id: '4', title: 'bar'},
+                value: {id: '4', title: 'bar'},
               },
             ],
             gotQueriesPatch: [
               {ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'},
             ],
-          },
+          } satisfies PokePartBody,
         ],
         ['pokeEnd', {pokeID: '1xz'}],
       ];

@@ -76,7 +76,7 @@ describe('view-syncer/client-handler', () => {
         toVersion: {stateVersion: '120', minorVersion: 2},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
           contents: {id: 'bar', name: 'hello', num: 123},
         },
@@ -148,10 +148,10 @@ describe('view-syncer/client-handler', () => {
           ],
           entitiesPatch: [
             {
-              op: 'update',
+              op: 'put',
               entityType: 'issues',
               entityID: {id: 'bar'},
-              merge: {id: 'bar', name: 'hello', num: 123},
+              value: {id: 'bar', name: 'hello', num: 123},
             },
             {
               op: 'update',
@@ -204,10 +204,10 @@ describe('view-syncer/client-handler', () => {
           ],
           entitiesPatch: [
             {
-              op: 'update',
+              op: 'put',
               entityType: 'issues',
               entityID: {id: 'bar'},
-              merge: {id: 'bar', name: 'hello', num: 123},
+              value: {id: 'bar', name: 'hello', num: 123},
             },
             {op: 'del', entityType: 'issues', entityID: {id: 'foo'}},
             {

@@ -462,7 +462,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         } satisfies RowPatch);
       }
       merges.push({
-        patch: {type: 'row', op: 'merge', id, contents},
+        patch: {
+          type: 'row',
+          op: existing?.queriedColumns ? 'merge' : 'put',
+          id,
+          contents,
+        },
         toVersion: patchVersion,
       });
 
