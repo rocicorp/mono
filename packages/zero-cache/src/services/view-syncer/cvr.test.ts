@@ -668,7 +668,7 @@ describe('view-syncer/cvr', () => {
           toVersion: {stateVersion: '1aa', minorVersion: 1},
           patch: {
             type: 'row',
-            op: 'merge',
+            op: 'put',
             id: ROW_ID3,
             contents: {id: 'new version patch'},
           },

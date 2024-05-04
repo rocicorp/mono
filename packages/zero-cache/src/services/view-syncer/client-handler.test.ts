@@ -7,7 +7,7 @@ import type {
 } from 'zero-protocol';
 import {createSilentLogContext} from '../../test/logger.js';
 import {Subscription} from '../../types/subscription.js';
-import {ClientHandler} from './client-handler.js';
+import {ClientHandler, Patch} from './client-handler.js';
 
 describe('view-syncer/client-handler', () => {
   test('poke handler', () => {
@@ -76,7 +76,7 @@ describe('view-syncer/client-handler', () => {
         toVersion: {stateVersion: '120', minorVersion: 2},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
           contents: {id: 'bar', name: 'hello', num: 123},
         },
@@ -148,10 +148,10 @@ describe('view-syncer/client-handler', () => {
           ],
           entitiesPatch: [
             {
-              op: 'update',
+              op: 'put',
               entityType: 'issues',
               entityID: {id: 'bar'},
-              merge: {id: 'bar', name: 'hello', num: 123},
+              value: {id: 'bar', name: 'hello', num: 123},
             },
             {
               op: 'update',
@@ -204,10 +204,10 @@ describe('view-syncer/client-handler', () => {
           ],
           entitiesPatch: [
             {
-              op: 'update',
+              op: 'put',
               entityType: 'issues',
               entityID: {id: 'bar'},
-              merge: {id: 'bar', name: 'hello', num: 123},
+              value: {id: 'bar', name: 'hello', num: 123},
             },
             {op: 'del', entityType: 'issues', entityID: {id: 'foo'}},
             {
@@ -245,20 +245,27 @@ describe('view-syncer/client-handler', () => {
     );
     const poker = handler.startPoke({stateVersion: '123'});
 
-    let err;
-    try {
-      poker.addPatch({
-        toVersion: {stateVersion: '123'},
-        patch: {
-          type: 'row',
-          op: 'merge',
-          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-          contents: {id: 'boo', name: 'world', big: 12345n},
-        },
-      });
-    } catch (e) {
-      err = e;
+    for (const patch of [
+      {
+        type: 'row',
+        op: 'merge',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+        contents: {id: 'boo', name: 'world', big: 12345n},
+      },
+      {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+        contents: {id: 'boo', name: 'world', big: 98378n},
+      },
+    ] satisfies Patch[]) {
+      let err;
+      try {
+        poker.addPatch({toVersion: {stateVersion: '123'}, patch});
+      } catch (e) {
+        err = e;
+      }
+      expect(err).not.toBeUndefined();
     }
-    expect(err).not.toBeUndefined();
   });
 });
