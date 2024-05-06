@@ -14,6 +14,5 @@ export default defineWorkersConfig({
         },
       },
     },
-    retry: 3,
   },
 });
