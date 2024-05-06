@@ -93,7 +93,8 @@ test('replace', async () => {
   );
 });
 
-// the pending items are not included in the next tx
+// we don't do any rollbacks. If Materialite throws then
+// it has diverged from Replicache and we're in a bad state.
 test('rollback', async () => {
   const m = new Materialite();
   const source = m.newSetSource(comparator);
@@ -108,11 +109,11 @@ test('rollback', async () => {
   }
   await Promise.resolve();
 
-  expect([...source.value]).toEqual([]);
+  expect([...source.value]).toEqual([{id: 1}]);
 
   source.add({id: 2});
   await Promise.resolve();
-  expect([...source.value]).toEqual([{id: 2}]);
+  expect([...source.value]).toEqual([{id: 1}, {id: 2}]);
 });
 
 test('withNewOrdering - we do not update the derived thing / withNewOrdering is not tied to the original. User must do that.', async () => {
