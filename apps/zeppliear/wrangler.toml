@@ -1,0 +1,26 @@
+name = "zeppliear-service-runner"
+main = "../../packages/zero-cache/src/services/index.ts"
+compatibility_date = "2024-04-03"
+account_id = "085f6d8eb08e5b23debfb08b21bda1eb"
+node_compat = true
+logpush = true
+durable_objects.bindings = [
+  { name = "runnerDO", class_name = "RunnerDO" },
+]
+
+[vars]
+LOG_LEVEL = "debug"
+DO_LOCATION_HINT = "wnam"
+
+#[secrets]
+#UPSTREAM_URI
+#SYNC_REPLICA_URI
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RunnerDO"]
+
+[build]
+# don't watch all resources because we want to run without --persist when
+# possible, so restarts delete data.
+watch_dir = "../../packages/zero-cache/src/services"

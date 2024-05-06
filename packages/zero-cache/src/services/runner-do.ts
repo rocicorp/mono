@@ -34,10 +34,16 @@ export class ServiceRunnerDO {
     this.#db = postgres(env.UPSTREAM_URI, {
       ...postgresTypeConfig(),
     });
-    this.#lc = new LogContext(logLevel, undefined, logSink).withContext(
+    const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ServiceRunnerDO',
     );
+    this.#lc = lc;
+    void (async () => {
+      const traceResponse = await fetch('https://cloudflare.com/cdn-cgi/trace');
+      const traceText = await traceResponse.text();
+      lc.info?.('Location information:\n', traceText);
+    })();
 
     this.#initRoutes();
   }
@@ -78,7 +84,6 @@ export class ServiceRunnerDO {
     if (existing) {
       this.#lc.info?.('closing old socket');
       existing.close();
-      return;
     }
 
     const connection = new Connection(

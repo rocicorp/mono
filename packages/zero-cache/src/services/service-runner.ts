@@ -19,6 +19,8 @@ export interface ServiceRunnerEnv {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   SYNC_REPLICA_URI: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
+  DO_LOCATION_HINT: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   LOG_LEVEL: LogLevel;
 }
 
@@ -109,13 +111,14 @@ export class ServiceRunner
     if (existing) {
       return existing;
     }
-    this.#lc.debug?.('Createing and running service', description);
+    this.#lc.debug?.('Creating and running service', description);
     const service = create(id);
     registry.set(id, service);
     void service
       .run()
       .catch(e => {
         this.#lc.info?.('Error in run of', description, e);
+        this.#lc.info?.(e.toString());
       })
       .finally(() => {
         registry.delete(id);

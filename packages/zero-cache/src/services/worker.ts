@@ -115,7 +115,7 @@ async function sendToRunnerDO(
   const {runnerDO} = env;
 
   const id = runnerDO.idFromName('runnerDO');
-  const stub = runnerDO.get(id);
+  const stub = runnerDO.get(id, {locationHint: ctx.env.DO_LOCATION_HINT});
 
   lc.debug?.(`Sending request ${request.url} to runnerDO`);
   const responseFromDO = await timed(lc.debug, 'runnerDO fetch', async () => {
