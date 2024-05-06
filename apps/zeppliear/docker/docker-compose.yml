@@ -1,4 +1,3 @@
-version: '3.8'
 x-postgres-common:
   &postgres-common
   image: postgres:16.2-alpine
@@ -27,8 +26,9 @@ services:
       -c hot_standby=on 
       -c hot_standby_feedback=on
     volumes:
-      - ./data_upstream:/var/lib/postgresql/data
+      - pgdata_upstream:/var/lib/postgresql/data
       - ./init_upstream:/docker-entrypoint-initdb.d
+    
   postgres_replica:
     <<: *postgres-common
     ports:
@@ -45,5 +45,10 @@ services:
       -c hot_standby=on 
       -c hot_standby_feedback=on
     volumes:
-      - ./data_sync:/var/lib/postgresql/data
+      - pgdata_sync:/var/lib/postgresql/data
       - ./init_sync:/docker-entrypoint-initdb.d
+volumes:
+  pgdata_sync:
+    driver: local
+  pgdata_upstream:
+    driver: local
