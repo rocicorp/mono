@@ -131,7 +131,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     // Wait for the initConnection msg before acquiring the #lock.
     const {clientID, baseCookie} = ctx;
     const lc = this.#lc.withContext('clientID', clientID);
-    lc.info?.(`awaiting initConnection`);
+    lc.debug?.('initConnection', initConnectionMessage);
 
     return this.#lock.withLock(async () => {
       assert(this.#started);
@@ -160,12 +160,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
       // Setup the downstream connection.
       const downstream = new Subscription<Downstream>();
-      const client = new ClientHandler(
-        this.#lc,
-        clientID,
-        baseCookie,
-        downstream,
-      );
+      const client = new ClientHandler(lc, clientID, baseCookie, downstream);
       // Close any existing client.
       this.#clients.get(clientID)?.close();
       this.#clients.set(clientID, client);
