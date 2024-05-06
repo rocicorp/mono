@@ -193,18 +193,20 @@ export async function putIssueComment(
 ): Promise<void> {
   // TODO: All the mutators should be synchronous. We don't have
   // transactions now.
-  await zero.mutate.comment.set(comment);
+  await zero.mutate(async m => {
+    await m.comment.set(comment);
 
-  // TODO: I think it would be more "real" to not have this denormalized
-  // lastModified date. Instead, if the UI wants to show when the issue was
-  // last modified it should select max() of comment last-modified.
-  //
-  // TODO: How would server-authoritative last-modifies work? It would be cool
-  // to have some notion of "touch" in the CRUD API. Or maybe it would be
-  // possible to setup the pg schema to ignore the incoming writes?
-  await zero.mutate.issue.update({
-    id: comment.issueID,
-    modified: Date.now(),
+    // TODO: I think it would be more "real" to not have this denormalized
+    // lastModified date. Instead, if the UI wants to show when the issue was
+    // last modified it should select max() of comment last-modified.
+    //
+    // TODO: How would server-authoritative last-modifies work? It would be cool
+    // to have some notion of "touch" in the CRUD API. Or maybe it would be
+    // possible to setup the pg schema to ignore the incoming writes?
+    await m.issue.update({
+      id: comment.issueID,
+      modified: Date.now(),
+    });
   });
 }
 
