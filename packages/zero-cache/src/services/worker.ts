@@ -168,7 +168,7 @@ async function workerFetch(
   }
 }
 
-const DO_LOCATION_HINTS: ReadonlySet = new Set([
+const DO_LOCATION_HINTS: ReadonlySet<string> = new Set([
   'wnam',
   'enam',
   'sam',
