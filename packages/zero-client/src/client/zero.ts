@@ -364,7 +364,7 @@ export class Zero<QD extends QueryDefs> {
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'error',
-      server,
+      server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
     });
     const logOptions = this.#logOptions;
@@ -1409,28 +1409,29 @@ export class Zero<QD extends QueryDefs> {
 
   // Sends a set of metrics to the server. Throws unless the server
   // returns 200.
-  async #reportMetrics(allSeries: Series[]) {
-    if (this.#server === null) {
-      this.#lc.info?.('Skipping metrics report, socketOrigin is null');
-      return;
-    }
-    const body = JSON.stringify({series: allSeries});
-    const url = new URL('/api/metrics/v0/report', this.#server);
-    url.searchParams.set('clientID', this.clientID);
-    url.searchParams.set('clientGroupID', await this.clientGroupID);
-    url.searchParams.set('userID', this.userID);
-    url.searchParams.set('requestID', nanoid());
-    const res = await fetch(url.toString(), {
-      method: 'POST',
-      body,
-      keepalive: true,
-    });
-    if (!res.ok) {
-      const maybeBody = await res.text();
-      throw new Error(
-        `unexpected response: ${res.status} ${res.statusText} body: ${maybeBody}`,
-      );
-    }
+  // TODO: Reenable metrics reporting
+  async #reportMetrics(_allSeries: Series[]) {
+    // if (this.#server === null) {
+    //   this.#lc.info?.('Skipping metrics report, socketOrigin is null');
+    //   return;
+    // }
+    // const body = JSON.stringify({series: allSeries});
+    // const url = new URL('/api/metrics/v0/report', this.#server);
+    // url.searchParams.set('clientID', this.clientID);
+    // url.searchParams.set('clientGroupID', await this.clientGroupID);
+    // url.searchParams.set('userID', this.userID);
+    // url.searchParams.set('requestID', nanoid());
+    // const res = await fetch(url.toString(), {
+    //   method: 'POST',
+    //   body,
+    //   keepalive: true,
+    // });
+    // if (!res.ok) {
+    //   const maybeBody = await res.text();
+    //   throw new Error(
+    //     `unexpected response: ${res.status} ${res.statusText} body: ${maybeBody}`,
+    //   );
+    // }
   }
 
   #checkConnectivity(reason: string) {
