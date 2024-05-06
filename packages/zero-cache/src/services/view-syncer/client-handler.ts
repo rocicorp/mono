@@ -248,22 +248,19 @@ function assertStringValues(
  * result in an Error.
  */
 export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
-  let modified = false;
-
-  const entries = Object.entries(row).map(([k, v]) => {
-    if (typeof v === 'bigint') {
-      if (v >= Number.MIN_SAFE_INTEGER && v <= Number.MAX_SAFE_INTEGER) {
-        modified = true;
-        return [k, Number(v)];
+  const modified = Object.entries(row)
+    .filter(([k, v]) => {
+      if (typeof v === 'bigint') {
+        if (v >= Number.MIN_SAFE_INTEGER && v <= Number.MAX_SAFE_INTEGER) {
+          return true; // send this entry onto the next map() step.
+        }
+        throw new Error(`Value of "${k}" exceeds safe Number rage (${v})`);
+      } else if (typeof v === 'object') {
+        assertJSONValue(v);
       }
-      throw new Error(`Value of "${k}" exceeds safe Number rage (${v})`);
-    } else if (typeof v === 'object') {
-      assertJSONValue(v);
-    }
-    return [k, v] as [string, JSONValue | undefined];
-  });
-  if (modified) {
-    return Object.fromEntries(entries);
-  }
-  return row as SafeJSONObject;
+      return false;
+    })
+    .map(([k, v]) => [k, Number(v)]);
+
+  return modified.length ? {...row, ...Object.fromEntries(modified)} : row;
 }
