@@ -1,6 +1,6 @@
 import {RWLock} from '@rocicorp/lock';
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
-import {promiseVoid} from '../resolved-promises.js';
 import {stringCompare} from '../string-compare.js';
 import {ReadImpl} from './read-impl.js';
 import type {Read, Store, Write} from './store.js';

@@ -1,10 +1,14 @@
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {
+  promiseFalse,
+  promiseTrue,
+  promiseVoid,
+} from 'shared/src/resolved-promises.js';
+import {
   FrozenJSONValue,
   deepFreeze,
   deepFreezeAllowUndefined,
 } from '../frozen-json.js';
-import {promiseFalse, promiseTrue, promiseVoid} from '../resolved-promises.js';
 import type {Read} from './store.js';
 
 export const deleteSentinel = Symbol();

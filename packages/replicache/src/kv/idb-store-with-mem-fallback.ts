@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import {IDBStore} from './idb-store.js';
 import {MemStore, dropMemStore} from './mem-store.js';
 import type {Read, Store, Write} from './store.js';
-import {promiseVoid} from '../resolved-promises.js';
 
 /**
  * This store uses an {@link IDBStore} by default. If the {@link IDBStore} fails

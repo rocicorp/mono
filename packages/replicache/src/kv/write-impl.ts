@@ -1,5 +1,5 @@
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
-import {promiseVoid} from '../resolved-promises.js';
 import {ReadImpl} from './read-impl.js';
 import type {Write} from './store.js';
 import {deleteSentinel, WriteImplBase} from './write-impl-base.js';

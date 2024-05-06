@@ -1,9 +1,9 @@
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {Chunk} from '../dag/chunk.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Read} from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
 import type {Hash} from '../hash.js';
-import {promiseVoid} from '../resolved-promises.js';
 import {getSizeOfValue} from '../size-of-value.js';
 
 export type ChunkWithSize = {chunk: Chunk; size: number};

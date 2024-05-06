@@ -12,6 +12,7 @@ import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import {sleep} from 'shared/src/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
@@ -47,7 +48,6 @@ import type {MutatorDefs, Poke} from './types.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {promiseVoid} from './resolved-promises.js';
 
 const {fail} = chaiAssert;
 
