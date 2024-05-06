@@ -98,14 +98,12 @@ describe('view-syncer/service', () => {
       const done = vs.run();
       await vs.sync(
         {clientID: 'foo', baseCookie: null},
-        clientUpstream([
-          'initConnection',
-          {
-            desiredQueriesPatch: [
-              {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-            ],
-          },
-        ]),
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
+          ],
+        },
+        clientUpstream(),
       );
 
       expect(await storage.get('/vs/storage_schema_meta')).toEqual({
@@ -133,14 +131,12 @@ describe('view-syncer/service', () => {
       const done = vs.run();
       await vs.sync(
         {clientID: 'foo', baseCookie: null},
-        clientUpstream([
-          'initConnection',
-          {
-            desiredQueriesPatch: [
-              {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-            ],
-          },
-        ]),
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
+          ],
+        },
+        clientUpstream(),
       );
 
       const cvr = await loadCVR(new DurableStorage(storage), serviceID);
@@ -181,14 +177,12 @@ describe('view-syncer/service', () => {
       const done = vs.run();
       const downstream = await vs.sync(
         {clientID: 'foo', baseCookie: null},
-        clientUpstream([
-          'initConnection',
-          {
-            desiredQueriesPatch: [
-              {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-            ],
-          },
-        ]),
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
+          ],
+        },
+        clientUpstream(),
       );
 
       const request = await watcher.requests.dequeue();
