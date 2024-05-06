@@ -6,8 +6,9 @@ import type {
   PokeStartMessage,
 } from 'zero-protocol';
 import {createSilentLogContext} from '../../test/logger.js';
+import type {JSONObject} from '../../types/bigint-json.js';
 import {Subscription} from '../../types/subscription.js';
-import {ClientHandler, Patch} from './client-handler.js';
+import {ClientHandler, Patch, ensureSafeJSON} from './client-handler.js';
 
 describe('view-syncer/client-handler', () => {
   test('poke handler', () => {
@@ -59,6 +60,19 @@ describe('view-syncer/client-handler', () => {
         },
       });
       poker.addPatch({
+        toVersion: {stateVersion: '120'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {
+            schema: 'zero',
+            table: 'clients',
+            rowKey: {clientID: 'bar'},
+          },
+          contents: {clientID: 'bar', lastMutationID: 321},
+        },
+      });
+      poker.addPatch({
         toVersion: {stateVersion: '120', minorVersion: 2},
         patch: {type: 'query', op: 'del', id: 'barhash', clientID: 'foo'},
       });
@@ -79,6 +93,19 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
           contents: {id: 'bar', name: 'hello', num: 123},
+        },
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '120'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {
+            schema: 'zero',
+            table: 'clients',
+            rowKey: {clientID: 'foo'},
+          },
+          contents: {clientID: 'foo', lastMutationID: 123},
         },
       });
       poker.addPatch({
@@ -105,6 +132,19 @@ describe('view-syncer/client-handler', () => {
           op: 'constrain',
           id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
           columns: ['id', 'name', 'num'],
+        },
+      });
+      poker.addPatch({
+        toVersion: {stateVersion: '121'},
+        patch: {
+          type: 'row',
+          op: 'merge',
+          id: {
+            schema: 'zero',
+            table: 'clients',
+            rowKey: {clientID: 'foo'},
+          },
+          contents: {clientID: 'foo', lastMutationID: 124},
         },
       });
 
@@ -140,6 +180,7 @@ describe('view-syncer/client-handler', () => {
         {
           pokeID: '121',
           clientsPatch: [{clientID: 'baz', op: 'put'}],
+          lastMutationIDChanges: {foo: 124},
           desiredQueriesPatches: {
             foo: [{op: 'del', hash: 'barhash'}],
           },
@@ -193,6 +234,10 @@ describe('view-syncer/client-handler', () => {
             {clientID: 'bar', op: 'put'},
             {clientID: 'baz', op: 'put'},
           ],
+          lastMutationIDChanges: {
+            bar: 321,
+            foo: 124,
+          },
           desiredQueriesPatches: {
             foo: [
               {op: 'put', hash: 'foohash', ast: {table: 'issues'}},
@@ -250,13 +295,19 @@ describe('view-syncer/client-handler', () => {
         type: 'row',
         op: 'merge',
         id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-        contents: {id: 'boo', name: 'world', big: 12345n},
+        contents: {id: 'boo', name: 'world', big: 12345231234123414n},
       },
       {
         type: 'row',
         op: 'put',
         id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-        contents: {id: 'boo', name: 'world', big: 98378n},
+        contents: {id: 'boo', name: 'world', big: 983712341234123412348n},
+      },
+      {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'zero', table: 'clients', rowKey: {clientID: 'boo'}},
+        contents: {clientID: 'boo', lastMutationID: 98371234123423412341238n},
       },
     ] satisfies Patch[]) {
       let err;
@@ -266,6 +317,37 @@ describe('view-syncer/client-handler', () => {
         err = e;
       }
       expect(err).not.toBeUndefined();
+    }
+  });
+
+  test('ensureSafeJSON', () => {
+    for (const {input, expected} of [
+      {
+        input: {foo: 1, bar: 2n},
+        expected: {foo: 1, bar: 2},
+      },
+      {
+        input: {foo: '1', bar: 234n},
+        expected: {foo: '1', bar: 234},
+      },
+      {
+        input: {foo: 123n, bar: {baz: 23423423}},
+        expected: {foo: 123, bar: {baz: 23423423}},
+      },
+      {
+        input: {foo: '1', bar: 23423423434923874239487n},
+      },
+      {
+        input: {foo: '1', bar: {baz: 23423423434923874239487n}},
+      },
+    ] satisfies {input: JSONObject; expected?: JSONObject}[]) {
+      let result;
+      try {
+        result = ensureSafeJSON(input);
+      } catch (e) {
+        // expected === undefined
+      }
+      expect(result).toEqual(expected);
     }
   });
 });

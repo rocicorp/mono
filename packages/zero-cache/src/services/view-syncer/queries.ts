@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import type {JSONObject} from '../../types/bigint-json.js';
+import {stringify, type JSONObject} from '../../types/bigint-json.js';
 import {deaggregate} from '../../zql/deaggregation.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
@@ -64,14 +64,14 @@ export class QueryHandler {
     const transformed = new Map<string, TransformedQueryBuilder>();
 
     for (const q of queries) {
-      const requiredColumns = (tableRef: string) => {
-        const table = this.#tables.spec(tableRef);
-        if (!table) {
+      const requiredColumns = (schema = 'public', table: string) => {
+        const t = this.#tables.spec(schema, table);
+        if (!t) {
           throw new InvalidQueryError(
-            `Unknown table "${tableRef}" in ${JSON.stringify(q.ast)}`,
+            `Unknown table "${table}" in ${JSON.stringify(q.ast)}`,
           );
         }
-        return [...table.primaryKey, ZERO_VERSION_COLUMN_NAME];
+        return [...t.primaryKey, ZERO_VERSION_COLUMN_NAME];
       };
 
       const deaggregated = deaggregate(q.ast);
@@ -141,21 +141,21 @@ class ResultParser {
       // For example, a result:
       // ```
       // {
-      //   "issues/id": 1,
-      //   "issues/name": "foo",
-      //   "owner/users/id": 3,
-      //   "owner/users/name: "moar",
-      //   "parent/issues/id": 5,
-      //   "parent/issues/name" "trix",
+      //   "public/issues/id": 1,
+      //   "public/issues/name": "foo",
+      //   "owner/public/users/id": 3,
+      //   "owner/public/users/name: "moar",
+      //   "parent/public/issues/id": 5,
+      //   "parent/public/issues/name" "trix",
       // }
       // ```
       //
       // is partitioned into:
       //
       // ```
-      // "issues": {id: 1, name: "foo"}
-      // "owners/users": {id: 3, name: "moar"}
-      // "parent/issues": {id: 5, name: "trix"}
+      // "public/issues": {id: 1, name: "foo"}
+      // "owners/public/users": {id: 3, name: "moar"}
+      // "parent/public/issues": {id: 5, name: "trix"}
       //```
       const rows = new Map<string, JSONObject>();
 
@@ -171,13 +171,13 @@ class ResultParser {
       for (const [rowAlias, rowWithVersion] of rows.entries()) {
         // Exclude the _0_version column from what is sent to the client.
         const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
-        assert(
-          typeof rowVersion === 'string',
-          `Invalid _0_version in ${JSON.stringify(rowWithVersion)}`,
-        );
+        if (typeof rowVersion !== 'string') {
+          throw new Error(`Invalid _0_version in ${stringify(rowWithVersion)}`);
+        }
 
-        const [_, table] = splitLastComponent(rowAlias);
-        const id = this.#tables.rowID(table, row);
+        const [prefix, table] = splitLastComponent(rowAlias);
+        const [_, schema] = splitLastComponent(prefix);
+        const id = this.#tables.rowID(schema, table, row);
         const key = this.#paths.row(id);
 
         let rowResult = parsed.get(key);
@@ -212,24 +212,25 @@ class TableSchemas {
     this.#tables = new Map(tables.map(t => [`${t.schema}.${t.name}`, t]));
   }
 
-  spec(tableRef: string): TableSpec | undefined {
-    return this.#tables.get(
-      tableRef.includes('.') ? tableRef : `public.${tableRef}`,
-    );
+  spec(schema: string, table: string): TableSpec | undefined {
+    return this.#tables.get(`${schema}.${table}`);
   }
 
-  rowID(tableRef: string, row: JSONObject): RowID {
-    const table = this.spec(tableRef);
-    assert(table, `No TableSpec for "${tableRef}"`);
+  rowID(schema: string, table: string, row: JSONObject): RowID {
+    const t = this.spec(schema, table);
+    assert(t, `No TableSpec for "${schema}.${table}"`);
 
     const rowKey = Object.fromEntries(
-      table.primaryKey.map(col => {
+      t.primaryKey.map(col => {
         const val = row[col];
-        assert(val, `Primary key "${col}" missing from row in ${tableRef}`);
+        assert(
+          val,
+          `Primary key "${col}" missing from row in ${schema}.${table}`,
+        );
         return [col, val];
       }),
     );
-    return {schema: table.schema, table: table.name, rowKey};
+    return {schema: t.schema, table: t.name, rowKey};
   }
 }
 

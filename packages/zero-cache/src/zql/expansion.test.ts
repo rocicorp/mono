@@ -18,10 +18,10 @@ describe('zql/expansion', () => {
     afterReAliasAndBubble?: string;
   };
 
-  const REQUIRED_COLUMNS: RequiredColumns = (table: string) => [
-    `${table}_key`,
-    `_0_version`,
-  ];
+  const REQUIRED_COLUMNS: RequiredColumns = (
+    schema: string | undefined,
+    table: string,
+  ) => [`${schema ? schema + '_' : ''}${table}_key`, `_0_version`];
 
   const cases: Case[] = [
     {
@@ -41,10 +41,34 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues._0_version AS "issues/_0_version", 
-        issues.issues_key AS "issues/issues_key", 
-        issues.title AS "issues/title" 
+        public.issues._0_version AS "public/issues/_0_version", 
+        public.issues.issues_key AS "public/issues/issues_key", 
+        public.issues.title AS "public/issues/title" 
       FROM issues
+      `,
+    },
+    {
+      name: 'passes schema',
+      ast: {
+        schema: 'zero',
+        table: 'clients',
+        select: [['id', 'id']],
+      },
+      original: `
+      SELECT id AS id FROM zero.clients`,
+      afterSubqueryExpansion: `
+      SELECT 
+        _0_version AS _0_version,
+        id AS id,
+        zero_clients_key AS zero_clients_key
+      FROM zero.clients
+      `,
+      afterReAliasAndBubble: `
+      SELECT 
+        zero.clients._0_version AS "zero/clients/_0_version",
+        zero.clients.id AS "zero/clients/id",
+        zero.clients.zero_clients_key AS "zero/clients/zero_clients_key"
+      FROM zero.clients
       `,
     },
     {
@@ -77,15 +101,15 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT
-        issues._0_version AS "issues/_0_version",
-        issues.component_id AS "issues/component_id",
-        issues.date AS "issues/date",
-        issues.issues_key AS "issues/issues_key",
-        issues.owner_id AS "issues/owner_id",
-        issues.priority AS "issues/priority", 
-        issues.title AS "issues/title"
+        public.issues._0_version AS "public/issues/_0_version",
+        public.issues.component_id AS "public/issues/component_id",
+        public.issues.date AS "public/issues/date",
+        public.issues.issues_key AS "public/issues/issues_key",
+        public.issues.owner_id AS "public/issues/owner_id",
+        public.issues.priority AS "public/issues/priority", 
+        public.issues.title AS "public/issues/title"
       FROM issues WHERE (priority > $1 OR (component_id = $2 AND owner_id = $3))
-      ORDER BY issues.date asc, issues.priority asc
+      ORDER BY public.issues.date asc, public.issues.priority asc
       `,
     },
     {
@@ -133,23 +157,23 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues._0_version AS "issues/_0_version",
-        issues.issues_key AS "issues/issues_key",
-        issues.owner_id AS "issues/owner_id",
-        issues.title AS "issues/title",
-        owner."users/_0_version" AS "owner/users/_0_version",
-        owner."users/id" AS "owner/users/id",
-        owner."users/level" AS "owner/users/level",
-        owner."users/name" AS "owner/users/name",
-        owner."users/users_key" AS "owner/users/users_key"
+        owner."public/users/_0_version" AS "owner/public/users/_0_version",
+        owner."public/users/id" AS "owner/public/users/id",
+        owner."public/users/level" AS "owner/public/users/level",
+        owner."public/users/name" AS "owner/public/users/name",
+        owner."public/users/users_key" AS "owner/public/users/users_key",
+        public.issues._0_version AS "public/issues/_0_version",
+        public.issues.issues_key AS "public/issues/issues_key",
+        public.issues.owner_id AS "public/issues/owner_id",
+        public.issues.title AS "public/issues/title"
       FROM issues INNER JOIN (SELECT 
-        users._0_version AS "users/_0_version",
-        users.id AS "users/id",
-        users.level AS "users/level",
-        users.name AS "users/name",
-        users.users_key AS "users/users_key"
-      FROM users) AS owner ON owner."users/id" = issues.owner_id
-      ORDER BY owner."users/level" asc
+        public.users._0_version AS "public/users/_0_version",
+        public.users.id AS "public/users/id",
+        public.users.level AS "public/users/level",
+        public.users.name AS "public/users/name",
+        public.users.users_key AS "public/users/users_key"
+      FROM users) AS owner ON owner."public/users/id" = public.issues.owner_id
+      ORDER BY owner."public/users/level" asc
       `,
     },
     {
@@ -200,23 +224,23 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues._0_version AS "issues/_0_version",
-        issues.issues_key AS "issues/issues_key",
-        issues.owner_id AS "issues/owner_id",
-        issues.title AS "issues/title",
-        owner."users/_0_version" AS "owner/users/_0_version",
-        owner."users/id" AS "owner/users/id",
-        owner."users/level" AS "owner/users/level",
-        owner."users/name" AS "owner/users/name",
-        owner."users/users_key" AS "owner/users/users_key"
+        owner."public/users/_0_version" AS "owner/public/users/_0_version",
+        owner."public/users/id" AS "owner/public/users/id",
+        owner."public/users/level" AS "owner/public/users/level",
+        owner."public/users/name" AS "owner/public/users/name",
+        owner."public/users/users_key" AS "owner/public/users/users_key",
+        public.issues._0_version AS "public/issues/_0_version",
+        public.issues.issues_key AS "public/issues/issues_key",
+        public.issues.owner_id AS "public/issues/owner_id",
+        public.issues.title AS "public/issues/title"
       FROM issues INNER JOIN (SELECT
-          users._0_version AS "users/_0_version", 
-          users.id AS "users/id",
-          users.level AS "users/level",
-          users.name AS "users/name",
-          users.users_key AS "users/users_key"
+          public.users._0_version AS "public/users/_0_version", 
+          public.users.id AS "public/users/id",
+          public.users.level AS "public/users/level",
+          public.users.name AS "public/users/name",
+          public.users.users_key AS "public/users/users_key"
         FROM users WHERE level > $1)
-      AS owner ON owner."users/id" = issues.owner_id
+      AS owner ON owner."public/users/id" = public.issues.owner_id
       `,
     },
     {
@@ -298,46 +322,46 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT
-        issue._0_version                 AS "issue/_0_version",
-        issue.issue_key                  AS "issue/issue_key",
-        issue.parent_id                  AS "issue/parent_id",
-        issue.title                      AS "issue/title",
-        issue.user_id                    AS "issue/user_id",
-        owner."users/_0_version"         AS "owner/users/_0_version",
-        owner."users/awesomeness"        AS "owner/users/awesomeness",
-        owner."users/id"                 AS "owner/users/id",
-        owner."users/name"               AS "owner/users/name",
-        owner."users/users_key"          AS "owner/users/users_key",
-        parent."issue/_0_version"        AS "parent/issue/_0_version",
-        parent."issue/id"                AS "parent/issue/id",
-        parent."issue/issue_key"         AS "parent/issue/issue_key",
-        parent."issue/user_id"           AS "parent/issue/user_id",
-        parent."owner/users/_0_version"  AS "parent/owner/users/_0_version",
-        parent."owner/users/id"          AS "parent/owner/users/id",
-        parent."owner/users/users_key"   AS "parent/owner/users/users_key"
+        owner."public/users/_0_version"         AS "owner/public/users/_0_version",
+        owner."public/users/awesomeness"        AS "owner/public/users/awesomeness",
+        owner."public/users/id"                 AS "owner/public/users/id",
+        owner."public/users/name"               AS "owner/public/users/name",
+        owner."public/users/users_key"          AS "owner/public/users/users_key",
+        parent."owner/public/users/_0_version"  AS "parent/owner/public/users/_0_version",
+        parent."owner/public/users/id"          AS "parent/owner/public/users/id",
+        parent."owner/public/users/users_key"   AS "parent/owner/public/users/users_key",
+        parent."public/issue/_0_version"        AS "parent/public/issue/_0_version",
+        parent."public/issue/id"                AS "parent/public/issue/id",
+        parent."public/issue/issue_key"         AS "parent/public/issue/issue_key",
+        parent."public/issue/user_id"           AS "parent/public/issue/user_id",
+        public.issue._0_version                 AS "public/issue/_0_version",
+        public.issue.issue_key                  AS "public/issue/issue_key",
+        public.issue.parent_id                  AS "public/issue/parent_id",
+        public.issue.title                      AS "public/issue/title",
+        public.issue.user_id                    AS "public/issue/user_id"
       FROM issue INNER JOIN (SELECT 
-        users._0_version                 AS "users/_0_version",
-        users.awesomeness                AS "users/awesomeness",
-        users.id                         AS "users/id",
-        users.name                       AS "users/name",
-        users.users_key                  AS "users/users_key"
-      FROM users) AS owner ON issue.user_id = owner."users/id"
+        public.users._0_version                 AS "public/users/_0_version",
+        public.users.awesomeness                AS "public/users/awesomeness",
+        public.users.id                         AS "public/users/id",
+        public.users.name                       AS "public/users/name",
+        public.users.users_key                  AS "public/users/users_key"
+      FROM users) AS owner ON public.issue.user_id = owner."public/users/id"
       INNER JOIN (SELECT 
-        issue._0_version                 AS "issue/_0_version",
-        issue.id                         AS "issue/id",
-        issue.issue_key                  AS "issue/issue_key",
-        issue.user_id                    AS "issue/user_id",
-        owner."users/_0_version"         AS "owner/users/_0_version",
-        owner."users/id"                 AS "owner/users/id",
-        owner."users/users_key"          AS "owner/users/users_key"
+        owner."public/users/_0_version"         AS "owner/public/users/_0_version",
+        owner."public/users/id"                 AS "owner/public/users/id",
+        owner."public/users/users_key"          AS "owner/public/users/users_key",
+        public.issue._0_version                 AS "public/issue/_0_version",
+        public.issue.id                         AS "public/issue/id",
+        public.issue.issue_key                  AS "public/issue/issue_key",
+        public.issue.user_id                    AS "public/issue/user_id"
       FROM issue INNER JOIN (SELECT
-          users._0_version               AS "users/_0_version",
-          users.id                       AS "users/id",
-          users.users_key                AS "users/users_key"
+          public.users._0_version               AS "public/users/_0_version",
+          public.users.id                       AS "public/users/id",
+          public.users.users_key                AS "public/users/users_key"
         FROM users)
-        AS owner ON issue.user_id = owner."users/id")
-      AS parent ON issue.parent_id = parent."issue/id"
-      ORDER BY owner."users/awesomeness" desc
+        AS owner ON public.issue.user_id = owner."public/users/id")
+      AS parent ON public.issue.parent_id = parent."public/issue/id"
+      ORDER BY owner."public/users/awesomeness" desc
       `,
     },
     {
@@ -429,48 +453,48 @@ describe('zql/expansion', () => {
       `,
       afterReAliasAndBubble: `
       SELECT 
-        issues._0_version                AS "issues/_0_version",
-        issues.id                        AS "issues/id",
-        issues.issues_key                AS "issues/issues_key",
-        issues.owner_id                  AS "issues/owner_id",
-        issues.parent_id                 AS "issues/parent_id",
-        issues.title                     AS "issues/title",
-        owner."users/_0_version"         AS "owner/users/_0_version",
-        owner."users/id"                 AS "owner/users/id",
-        owner."users/name"               AS "owner/users/name",
-        owner."users/users_key"          AS "owner/users/users_key",
-        parent."issues/_0_version"       AS "parent/issues/_0_version",
-        parent."issues/id"               AS "parent/issues/id",
-        parent."issues/issues_key"       AS "parent/issues/issues_key",
-        parent."issues/owner_id"         AS "parent/issues/owner_id",
-        parent."issues/title"            AS "parent/issues/title",
-        parent."owner/users/_0_version"  AS "parent/owner/users/_0_version",
-        parent."owner/users/id"          AS "parent/owner/users/id",
-        parent."owner/users/name"        AS "parent/owner/users/name",
-        parent."owner/users/users_key"   AS "parent/owner/users/users_key"
+        owner."public/users/_0_version"         AS "owner/public/users/_0_version",
+        owner."public/users/id"                 AS "owner/public/users/id",
+        owner."public/users/name"               AS "owner/public/users/name",
+        owner."public/users/users_key"          AS "owner/public/users/users_key",
+        parent."owner/public/users/_0_version"  AS "parent/owner/public/users/_0_version",
+        parent."owner/public/users/id"          AS "parent/owner/public/users/id",
+        parent."owner/public/users/name"        AS "parent/owner/public/users/name",
+        parent."owner/public/users/users_key"   AS "parent/owner/public/users/users_key",
+        parent."public/issues/_0_version"       AS "parent/public/issues/_0_version",
+        parent."public/issues/id"               AS "parent/public/issues/id",
+        parent."public/issues/issues_key"       AS "parent/public/issues/issues_key",
+        parent."public/issues/owner_id"         AS "parent/public/issues/owner_id",
+        parent."public/issues/title"            AS "parent/public/issues/title",
+        public.issues._0_version                AS "public/issues/_0_version",
+        public.issues.id                        AS "public/issues/id",
+        public.issues.issues_key                AS "public/issues/issues_key",
+        public.issues.owner_id                  AS "public/issues/owner_id",
+        public.issues.parent_id                 AS "public/issues/parent_id",
+        public.issues.title                     AS "public/issues/title"
       FROM issues INNER JOIN (SELECT 
-        users._0_version                 AS "users/_0_version",
-        users.id                         AS "users/id",
-        users.name                       AS "users/name",
-        users.users_key                  AS "users/users_key"
-      FROM users) AS owner ON issues.owner_id = owner."users/id" 
+        public.users._0_version                 AS "public/users/_0_version",
+        public.users.id                         AS "public/users/id",
+        public.users.name                       AS "public/users/name",
+        public.users.users_key                  AS "public/users/users_key"
+      FROM users) AS owner ON public.issues.owner_id = owner."public/users/id" 
       INNER JOIN (SELECT 
-        issues._0_version                AS "issues/_0_version",
-        issues.id                        AS "issues/id",
-        issues.issues_key                AS "issues/issues_key",
-        issues.owner_id                  AS "issues/owner_id",
-        issues.title                     AS "issues/title",
-        owner."users/_0_version"         AS "owner/users/_0_version",
-        owner."users/id"                 AS "owner/users/id",
-        owner."users/name"               AS "owner/users/name",
-        owner."users/users_key"          AS "owner/users/users_key"
+        owner."public/users/_0_version"         AS "owner/public/users/_0_version",
+        owner."public/users/id"                 AS "owner/public/users/id",
+        owner."public/users/name"               AS "owner/public/users/name",
+        owner."public/users/users_key"          AS "owner/public/users/users_key",
+        public.issues._0_version                AS "public/issues/_0_version",
+        public.issues.id                        AS "public/issues/id",
+        public.issues.issues_key                AS "public/issues/issues_key",
+        public.issues.owner_id                  AS "public/issues/owner_id",
+        public.issues.title                     AS "public/issues/title"
       FROM issues INNER JOIN (SELECT 
-          users._0_version               AS "users/_0_version",
-          users.id                       AS "users/id",
-          users.name                     AS "users/name",
-          users.users_key                AS "users/users_key"
-        FROM users) AS owner ON issues.owner_id = owner."users/id") 
-      AS parent ON issues.parent_id = parent."issues/id"
+          public.users._0_version               AS "public/users/_0_version",
+          public.users.id                       AS "public/users/id",
+          public.users.name                     AS "public/users/name",
+          public.users.users_key                AS "public/users/users_key"
+        FROM users) AS owner ON public.issues.owner_id = owner."public/users/id") 
+      AS parent ON public.issues.parent_id = parent."public/issues/id"
       `,
     },
   ];

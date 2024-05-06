@@ -26,14 +26,15 @@ describe('zql/normalize-query-hash', () => {
           schema: 'zero',
           table: 'clients',
           select: [
-            ['clientID', 'clientID'],
-            ['lastMutationID', 'lastMutationID'],
+            ['clients.clientID', 'clientID'],
+            ['zero.clients.lastMutationID', 'lastMutationID'],
           ],
           orderBy: [['clientID'], 'asc'],
         },
       ],
       query:
-        'SELECT "clientID" AS "clientID", "lastMutationID" AS "lastMutationID" ' +
+        'SELECT clients."clientID" AS "clientID", ' +
+        'zero.clients."lastMutationID" AS "lastMutationID" ' +
         'FROM zero.clients ORDER BY "clientID" asc',
     },
     {
