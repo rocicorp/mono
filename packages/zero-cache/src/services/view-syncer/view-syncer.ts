@@ -122,7 +122,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     this.#lc.info?.('stopped');
   }
 
-  async sync(
+  sync(
     ctx: SyncContext,
     initConnectionMessage: InitConnectionBody,
     // TODO: Handle non-initial updates.
