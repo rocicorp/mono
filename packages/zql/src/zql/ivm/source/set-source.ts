@@ -4,11 +4,10 @@ import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore next.js is having issues finding the .d.ts
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
-import {must} from 'shared/src/must.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
-import {PullMsg, Request, createPullResponseMessage} from '../graph/message.js';
+import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
-import type {Entry, Multiset} from '../multiset.js';
+import type {Multiset} from '../multiset.js';
 import type {Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
 
@@ -25,11 +24,9 @@ export abstract class SetSource<T extends object> implements Source<T> {
   readonly #internal: SourceInternal;
   protected readonly _materialite: MaterialiteForSourceInternal;
   readonly #listeners = new Set<(data: ITree<T>, v: Version) => void>();
-  #pending: Entry<T>[] = [];
-  #historyRequests: Map<number, PullMsg> = new Map();
+  #historyRequests: Array<PullMsg> = [];
   #tree: ITree<T>;
   #seeded = false;
-  #noChange = false;
   readonly comparator: Comparator<T>;
   #id = id++;
   readonly #name: string | undefined;
@@ -54,76 +51,15 @@ export abstract class SetSource<T extends object> implements Source<T> {
     this.comparator = comparator;
 
     this.#internal = {
-      onCommitEnqueue: (version: Version) => {
-        if (
-          this.#seeded &&
-          !(this.#pending.length > 0 || this.#historyRequests.size > 0)
-        ) {
-          this.#noChange = true;
-          return;
-        }
-
-        // We know that the first diff to a source is the seed
-        this.#seeded = true;
-
-        const historyRequests = this.#historyRequests;
-        if (historyRequests.size > 0) {
-          this.#historyRequests = new Map();
-        }
-
-        for (const request of historyRequests.values()) {
-          this.#stream.newDifference(
-            this._materialite.getVersion(),
-            asEntries(this.#tree, request),
-            createPullResponseMessage(request),
-          );
-        }
-
-        for (let i = 0; i < this.#pending.length; i++) {
-          const [val, mult] = must(this.#pending[i]);
-          // small optimization to reduce operations for replace
-          if (i + 1 < this.#pending.length) {
-            const [nextVal, nextMult] = must(this.#pending[i + 1]);
-            if (
-              Math.abs(mult) === 1 &&
-              mult === -nextMult &&
-              comparator(val, nextVal) === 0
-            ) {
-              // The tree doesn't allow dupes -- so this is a replace.
-              this.#tree = this.#tree.add(nextMult > 0 ? nextVal : val);
-              ++i;
-              continue;
-            }
-          }
-          if (mult < 0) {
-            this.#tree = this.#tree.delete(val);
-          } else if (mult > 0) {
-            this.#tree = this.#tree.add(val);
-          }
-        }
-
-        this.#stream.newDifference(version, this.#pending);
-        this.#pending = [];
-      },
       onCommitted: (version: Version) => {
-        if (this.#noChange) {
-          this.#noChange = false;
-          return;
-        }
-        if (this.#seeded) {
-          this.#historyRequests.clear();
-        }
-
         // In case we have direct source observers
         const tree = this.#tree;
         for (const l of this.#listeners) {
           l(tree, version);
         }
+
+        // TODO(mlaw): only notify the path(s) that got data this tx?
         this.#stream.commit(version);
-      },
-      onRollback: () => {
-        this.#noChange = false;
-        this.#pending = [];
       },
     };
   }
@@ -161,13 +97,15 @@ export abstract class SetSource<T extends object> implements Source<T> {
   }
 
   add(v: T): this {
-    this.#pending.push([v, 1]);
+    this.#tree = this.#tree.add(v);
+    this.#stream.newDifference(this._materialite.getVersion(), [[v, 1]]);
     this._materialite.addDirtySource(this.#internal);
     return this;
   }
 
   delete(v: T): this {
-    this.#pending.push([v, -1]);
+    this.#tree = this.#tree.delete(v);
+    this.#stream.newDifference(this._materialite.getVersion(), [[v, -1]]);
     this._materialite.addDirtySource(this.#internal);
     return this;
   }
@@ -189,11 +127,46 @@ export abstract class SetSource<T extends object> implements Source<T> {
    * back with the seed/inital values.
    */
   seed(values: Iterable<T>): this {
+    // TODO: invariant to ensure we are in a tx.
+
     for (const v of values) {
       this.#tree = this.#tree.add(v);
     }
     this._materialite.addDirtySource(this.#internal);
+
+    this.#seeded = true;
+    // Notify views that requested history, if any.
+    for (const request of this.#historyRequests) {
+      this.#sendHistoryTo(request);
+    }
+    this.#historyRequests = [];
+
     return this;
+  }
+
+  processMessage(message: Request): void {
+    // TODO: invariant to ensure we are in a tx.
+
+    switch (message.type) {
+      case 'pull': {
+        this._materialite.addDirtySource(this.#internal);
+        if (this.#seeded) {
+          // Already seeded? Immediately reply with history.
+          this.#sendHistoryTo(message);
+        } else {
+          this.#historyRequests.push(message);
+        }
+        break;
+      }
+    }
+  }
+
+  #sendHistoryTo(request: PullMsg) {
+    this.#stream.newDifference(
+      this._materialite.getVersion(),
+      asEntries(this.#tree, request),
+      createPullResponseMessage(request),
+    );
   }
 
   awaitSeeding(): PromiseLike<void> {
@@ -219,16 +192,6 @@ export abstract class SetSource<T extends object> implements Source<T> {
       return undefined;
     }
     return ret;
-  }
-
-  processMessage(message: Request): void {
-    switch (message.type) {
-      case 'pull': {
-        this.#historyRequests.set(message.id, message);
-        this._materialite.addDirtySource(this.#internal);
-        break;
-      }
-    }
   }
 
   toString(): string {
