@@ -11,6 +11,7 @@ import type {ReplicatorRegistry} from './replicator/registry.js';
 import postgres from 'postgres';
 import {postgresTypeConfig} from '../types/pg.js';
 import type {Service} from './service.js';
+import type {DurableObjectLocationHint} from '@cloudflare/workers-types';
 
 export interface ServiceRunnerEnv {
   runnerDO: DurableObjectNamespace;
@@ -19,7 +20,7 @@ export interface ServiceRunnerEnv {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   SYNC_REPLICA_URI: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  DO_LOCATION_HINT: string;
+  DO_LOCATION_HINT: DurableObjectLocationHint;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   LOG_LEVEL: LogLevel;
 }
