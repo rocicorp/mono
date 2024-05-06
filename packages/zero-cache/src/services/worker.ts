@@ -184,7 +184,7 @@ function assertDOLocation(
   val: string,
 ): asserts val is DurableObjectLocationHint {
   assert(
-    DO_LOCATION_HINTS.contains(val),
+    DO_LOCATION_HINTS.has(val),
     `${val} is not a valid location hint value.  Supported values: ${[
       ...DO_LOCATION_HINTS.values(),
     ].join(',')}.`,
