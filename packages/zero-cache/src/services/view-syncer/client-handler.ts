@@ -133,46 +133,52 @@ export class ClientHandler {
       }
     };
 
-    return {
-      // TODO: Errors thrown from validating row contents (for bigints, etc.)
-      //       should result in closing the connection.
-      addPatch: (patchToVersion: PatchToVersion) => {
-        const {patch, toVersion} = patchToVersion;
-        if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
-          return;
-        }
-        const body = ensureBody();
+    const addPatch = (patchToVersion: PatchToVersion) => {
+      const {patch, toVersion} = patchToVersion;
+      if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
+        return;
+      }
+      const body = ensureBody();
 
-        const {type, op} = patch;
-        switch (type) {
-          case 'client':
-            (body.clientsPatch ??= []).push({op, clientID: patch.id});
-            break;
-          case 'query': {
-            const patches = patch.clientID
-              ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
-              : (body.gotQueriesPatch ??= []);
-            if (op === 'put') {
-              const {ast} = patch;
-              patches.push({op, hash: patch.id, ast});
-            } else {
-              patches.push({op, hash: patch.id});
-            }
-            break;
+      const {type, op} = patch;
+      switch (type) {
+        case 'client':
+          (body.clientsPatch ??= []).push({op, clientID: patch.id});
+          break;
+        case 'query': {
+          const patches = patch.clientID
+            ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
+            : (body.gotQueriesPatch ??= []);
+          if (op === 'put') {
+            const {ast} = patch;
+            patches.push({op, hash: patch.id, ast});
+          } else {
+            patches.push({op, hash: patch.id});
           }
-          case 'row':
-            if (patch.id.schema === 'zero' && patch.id.table === 'clients') {
-              updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
-            } else {
-              (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
-            }
-            break;
-          default:
-            patch satisfies never;
+          break;
         }
+        case 'row':
+          if (patch.id.schema === 'zero' && patch.id.table === 'clients') {
+            updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+          } else {
+            (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
+          }
+          break;
+        default:
+          patch satisfies never;
+      }
 
-        if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
-          flushBody();
+      if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
+        flushBody();
+      }
+    };
+
+    return {
+      addPatch: (patchToVersion: PatchToVersion) => {
+        try {
+          addPatch(patchToVersion);
+        } catch (e) {
+          this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
         }
       },
 
@@ -254,7 +260,7 @@ export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
         if (v >= Number.MIN_SAFE_INTEGER && v <= Number.MAX_SAFE_INTEGER) {
           return true; // send this entry onto the next map() step.
         }
-        throw new Error(`Value of "${k}" exceeds safe Number rage (${v})`);
+        throw new Error(`Value of "${k}" exceeds safe Number range (${v})`);
       } else if (typeof v === 'object') {
         assertJSONValue(v);
       }

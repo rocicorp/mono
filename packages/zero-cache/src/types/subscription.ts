@@ -65,7 +65,7 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
 
   #coalesce: ((curr: M, prev: M) => M) | undefined;
   #consumed: (prev: M) => void;
-  #cleanup: (unconsumed: M[]) => void;
+  #cleanup: (unconsumed: M[], err?: Error) => void;
 
   constructor(options: Options<M> = {}) {
     const {coalesce, consumed = () => {}, cleanup = () => {}} = options;
@@ -109,7 +109,10 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
   #terminate(sentinel: 'canceled' | Error) {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
-      this.#cleanup([...this.#messages]);
+      this.#cleanup(
+        [...this.#messages],
+        sentinel instanceof Error ? sentinel : undefined,
+      );
       this.#messages.splice(0);
 
       for (
@@ -197,6 +200,11 @@ type Options<M> = {
    * `cleanup` is called exactly once when the subscription is terminated via a failure or
    * cancelation (whichever happens first), which includes implicit cancelation when
    * the consumer exits an iteration via a `break`, `return`, or `throw` statement.
+   *
+   * Note that the `err` argument will only reflect an explicit cancelation via a call
+   * to {@link Subscription.fail()}. On the other hand, if the iteration is canceled via
+   * a `throw` statement, the thrown reason is not reflected in the `err` parameter, as that
+   * information is not made available to the AsyncIterator implementation.
    */
-  cleanup?: (unconsumed: M[]) => void;
+  cleanup?: (unconsumed: M[], err?: Error) => void;
 };

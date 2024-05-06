@@ -159,7 +159,20 @@ export class ViewSyncerService implements ViewSyncer, Service {
       this.#cvr = await updater.flush();
 
       // Setup the downstream connection.
-      const downstream = new Subscription<Downstream>();
+      const downstream = new Subscription<Downstream>({
+        cleanup: (_, err) => {
+          if (err) {
+            lc.error?.(`client closed with error`, err);
+          } else {
+            lc.info?.('client closed');
+          }
+          const c = this.#clients.get(clientID);
+          if (c === client) {
+            this.#clients.delete(clientID);
+          }
+        },
+      });
+
       const client = new ClientHandler(lc, clientID, baseCookie, downstream);
       // Close any existing client.
       this.#clients.get(clientID)?.close();
