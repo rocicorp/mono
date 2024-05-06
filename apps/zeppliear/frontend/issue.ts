@@ -204,7 +204,7 @@ export async function putIssueComment(
     // possible to setup the pg schema to ignore the incoming writes?
     await m.issue.update({
       id: comment.issueID,
-      modified: Date.now(),
+      modified: getModifiedDate(),
     });
   });
 }
@@ -217,7 +217,7 @@ export async function deleteIssueComment(
     await m.comment.delete(comment.id);
     await m.issue.update({
       id: comment.issueID,
-      modified: Date.now(),
+      modified: getModifiedDate(),
     });
   });
 }
@@ -226,7 +226,7 @@ export async function updateIssues(
   zero: Zero<Collections>,
   {issueUpdates}: {issueUpdates: IssueUpdate[]},
 ) {
-  const modified = Date.now();
+  const modified = getModifiedDate();
   await zero.mutate(async m => {
     for (const issueUpdate of issueUpdates) {
       await m.issue.update({
@@ -252,4 +252,11 @@ export function reverseTimestampSortKey(timestamp: number, id: string): string {
     '-' +
     id
   );
+}
+
+function getModifiedDate() {
+  const d = new Date();
+  // Shift to 33 years in the future.
+  d.setFullYear(d.getFullYear() + 33);
+  return d.getTime();
 }
