@@ -202,9 +202,9 @@ type Options<M> = {
    * the consumer exits an iteration via a `break`, `return`, or `throw` statement.
    *
    * Note that the `err` argument will only reflect an explicit cancelation via a call
-   * to {@link Subscription.fail()}. If the iteration is canceled via `throw` statement,
-   * the thrown reason is not reflected in the `err` parameter, as that information is
-   * not made available to the AsyncIterator implementation.
+   * to {@link Subscription.fail()}. On the other hand, if the iteration is canceled via
+   * a `throw` statement, the thrown reason is not reflected in the `err` parameter, as that
+   * information is not made available to the AsyncIterator implementation.
    */
   cleanup?: (unconsumed: M[], err?: Error) => void;
 };
