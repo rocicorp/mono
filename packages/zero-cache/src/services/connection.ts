@@ -1,15 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
+import * as valita from 'shared/src/valita.js';
 import {Downstream, Upstream, upstreamSchema} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
 import type {ViewSyncerService} from './view-syncer/view-syncer.js';
-import * as valita from 'shared/src/valita.js';
 // TODO(mlaw): break dependency on reflect-server
 import {handlePing} from 'reflect-server/ping';
 import {sendError} from 'reflect-server/socket';
-import {Subscription} from '../types/subscription.js';
-import type {CancelableAsyncIterable} from '../types/streams.js';
 import {must} from 'shared/src/must.js';
 import type {PostgresDB} from '../types/pg.js';
+import type {CancelableAsyncIterable} from '../types/streams.js';
+import {Subscription} from '../types/subscription.js';
 import {processMutation} from './mutagen/mutagen.js';
 
 /**
@@ -91,12 +91,12 @@ export class Connection {
         break;
       case 'initConnection': {
         this.#inboundStream = new Subscription<Upstream>();
-        this.#inboundStream.push(msg);
         this.#outboundStream = await viewSyncer.sync(
           {
             clientID: this.#clientID,
             baseCookie: this.#baseCookie,
           },
+          msg[1],
           this.#inboundStream,
         );
 

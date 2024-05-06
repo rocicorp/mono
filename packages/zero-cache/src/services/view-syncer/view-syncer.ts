@@ -32,6 +32,7 @@ export interface ViewSyncer {
   // The SyncContext comes from query parameters.
   sync(
     ctx: SyncContext,
+    initConnectionMessage: InitConnectionBody,
     updates: CancelableAsyncIterable<Upstream>,
   ): Promise<CancelableAsyncIterable<Downstream>>;
 }
@@ -121,24 +122,16 @@ export class ViewSyncerService implements ViewSyncer, Service {
     this.#lc.info?.('stopped');
   }
 
-  async sync(
+  sync(
     ctx: SyncContext,
-    updateStream: CancelableAsyncIterable<Upstream>,
+    initConnectionMessage: InitConnectionBody,
+    // TODO: Handle non-initial updates.
+    _updateStream: CancelableAsyncIterable<Upstream>,
   ): Promise<CancelableAsyncIterable<Downstream>> {
     // Wait for the initConnection msg before acquiring the #lock.
     const {clientID, baseCookie} = ctx;
     const lc = this.#lc.withContext('clientID', clientID);
-    lc.info?.(`awaiting initConnection`);
-
-    const updates = updateStream[Symbol.asyncIterator]();
-
-    const {value: msg, done} = await updates.next();
-    if (done) {
-      throw new Error('connection closed');
-    }
-    assert(msg[0] === 'initConnection', `Expected initConnection message`);
-    const initConnectionMessage: InitConnectionBody = msg[1];
-    lc.debug?.(`initConnection`, initConnectionMessage);
+    lc.debug?.('initConnection', initConnectionMessage);
 
     return this.#lock.withLock(async () => {
       assert(this.#started);
@@ -167,12 +160,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
       // Setup the downstream connection.
       const downstream = new Subscription<Downstream>();
-      const client = new ClientHandler(
-        this.#lc,
-        clientID,
-        baseCookie,
-        downstream,
-      );
+      const client = new ClientHandler(lc, clientID, baseCookie, downstream);
       // Close any existing client.
       this.#clients.get(clientID)?.close();
       this.#clients.set(clientID, client);
