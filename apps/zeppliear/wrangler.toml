@@ -1,6 +1,7 @@
-name = "zero-service-runner"
+name = "zeppliear-service-runner"
 main = "../../packages/zero-cache/src/services/index.ts"
 compatibility_date = "2024-04-03"
+account_id = "085f6d8eb08e5b23debfb08b21bda1eb"
 node_compat = true
 logpush = true
 durable_objects.bindings = [
@@ -9,9 +10,11 @@ durable_objects.bindings = [
 
 [vars]
 LOG_LEVEL = "debug"
-UPSTREAM_URI = "postgresql://user:password@add.your.host.ip:6432/postgres"
-SYNC_REPLICA_URI = "postgres://user:password@add.your.host.ip:6433/postgres"
+DO_LOCATION_HINT = "wnam"
 
+#[secrets]
+#UPSTREAM_URI
+#SYNC_REPLICA_URI
 
 [[migrations]]
 tag = "v1"
@@ -21,6 +24,3 @@ new_classes = ["RunnerDO"]
 # don't watch all resources because we want to run without --persist when
 # possible, so restarts delete data.
 watch_dir = "../../packages/zero-cache/src/services"
-
-#[triggers]
-#crons = [ "*/5 * * * *" ] # ever 5 mins for AuthDO connection revalidation
