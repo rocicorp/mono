@@ -191,8 +191,7 @@ export async function putIssueComment(
   zero: Zero<Collections>,
   comment: Comment,
 ): Promise<void> {
-  // TODO: All the mutators should be synchronous. We don't have
-  // transactions now.
+  // TODO: All the mutators should be synchronous.
   await zero.mutate(async m => {
     await m.comment.set(comment);
 
@@ -214,14 +213,12 @@ export async function deleteIssueComment(
   zero: Zero<Collections>,
   comment: Comment,
 ): Promise<void> {
-  // TODO: We need a batch API in the client so that these two happen
-  // synchronously.
-
-  // TODO: Why is the delete param "any" not "string"?
-  await zero.mutate.comment.delete(comment.id);
-  await zero.mutate.issue.update({
-    id: comment.issueID,
-    modified: Date.now(),
+  await zero.mutate(async m => {
+    await m.comment.delete(comment.id);
+    await m.issue.update({
+      id: comment.issueID,
+      modified: Date.now(),
+    });
   });
 }
 
@@ -230,12 +227,14 @@ export async function updateIssues(
   {issueUpdates}: {issueUpdates: IssueUpdate[]},
 ) {
   const modified = Date.now();
-  for (const issueUpdate of issueUpdates) {
-    await zero.mutate.issue.update({
-      ...issueUpdate,
-      modified,
-    });
-  }
+  await zero.mutate(async m => {
+    for (const issueUpdate of issueUpdates) {
+      await m.issue.update({
+        ...issueUpdate,
+        modified,
+      });
+    }
+  });
 }
 
 export const memberSchema = z.object({

@@ -75,7 +75,7 @@ export function makeCRUDMutate<QD extends QueryDefs>(
       }
 
       const rv = await body(m as BaseCRUDMutate<QD>);
-      await zeroCRUD([{ops}]);
+      await zeroCRUD({ops});
       return rv;
     } finally {
       inBatch = false;
