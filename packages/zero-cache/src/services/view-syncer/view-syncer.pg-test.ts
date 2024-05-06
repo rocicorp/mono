@@ -30,6 +30,12 @@ describe('view-syncer/service', () => {
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_service_test');
     await db`
+    CREATE SCHEMA zero;
+    CREATE TABLE zero.clients (
+      "clientID" TEXT PRIMARY KEY,
+      "lastMutationID" BIGINT,
+      _0_version VARCHAR(38)
+    );
     CREATE TABLE issues (
       id text PRIMARY KEY,
       owner_id text,
@@ -42,6 +48,9 @@ describe('view-syncer/service', () => {
       name text,
       _0_version VARCHAR(38)
     );
+
+    INSERT INTO zero.clients ("clientID", "lastMutationID", _0_version)
+                      VALUES ('foo', 42, '0a');
 
     INSERT INTO users (id, name, _0_version) VALUES (100, 'Alice', '0a');
     INSERT INTO users (id, name, _0_version) VALUES (101, 'Bob', '0b');
@@ -184,7 +193,9 @@ describe('view-syncer/service', () => {
 
       const request = await watcher.requests.dequeue();
       expect(request.fromVersion).toBeUndefined();
-      expect(Object.keys(request.queries).length).toBe(1);
+      expect(Object.keys(request.queries).length).toBe(
+        2, // including internal "lmids" query
+      );
 
       const reader = new TransactionPool(lc);
       const readerDone = reader.run(db);
@@ -206,6 +217,7 @@ describe('view-syncer/service', () => {
           {
             pokeID: '1xz',
             clientsPatch: [{clientID: 'foo', op: 'put'}],
+            lastMutationIDChanges: {foo: 42},
             desiredQueriesPatches: {
               foo: [{ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'}],
             },
@@ -262,6 +274,31 @@ describe('view-syncer/service', () => {
         },
         id: '9876',
         queries: {
+          'lmids': {
+            ast: {
+              schema: 'zero',
+              table: 'clients',
+              select: [
+                ['clientID', 'clientID'],
+                ['lastMutationID', 'lastMutationID'],
+              ],
+              where: {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    op: '=',
+                    field: 'clientID',
+                    value: {type: 'literal', value: 'foo'},
+                  },
+                ],
+              },
+            },
+            internal: true,
+            id: 'lmids',
+            transformationVersion: {stateVersion: '1xz'},
+          },
           'query-hash1': {
             ast: ISSUES_TITLE_QUERY,
             desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
@@ -301,6 +338,12 @@ describe('view-syncer/service', () => {
             patchVersion: {stateVersion: '1xz'},
             queriedColumns: {id: ['query-hash1'], title: ['query-hash1']},
             rowVersion: '1cd',
+          },
+          {
+            id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
+            patchVersion: {stateVersion: '1xz'},
+            queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+            rowVersion: '0a',
           },
         ]),
       );
@@ -347,6 +390,20 @@ describe('view-syncer/service', () => {
               id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
               op: 'put',
               rowVersion: '1ca',
+              type: 'row',
+            },
+          ],
+          [
+            '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
+            {
+              columns: ['clientID', 'lastMutationID'],
+              id: {
+                schema: 'zero',
+                table: 'clients',
+                rowKey: {clientID: 'foo'},
+              },
+              op: 'put',
+              rowVersion: '0a',
               type: 'row',
             },
           ],

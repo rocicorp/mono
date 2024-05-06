@@ -7,6 +7,7 @@ import {
 } from '../../test/do.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {rowIDHash} from '../../types/row-key.js';
+import {cond, or} from '../../zql/query-test-util.js';
 import type {PatchToVersion} from './client-handler.js';
 import {
   CVRConfigDrivenUpdater,
@@ -316,6 +317,23 @@ describe('view-syncer/cvr', () => {
           },
         },
         queries: {
+          lmids: {
+            id: 'lmids',
+            internal: true,
+            ast: {
+              schema: 'zero',
+              table: 'clients',
+              select: [
+                ['clientID', 'clientID'],
+                ['lastMutationID', 'lastMutationID'],
+              ],
+              where: or(
+                ...['dooClient', 'fooClient', 'barClient', 'bonkClient'].map(
+                  id => cond('clientID', '=', id),
+                ),
+              ),
+            },
+          },
           oneHash: {
             id: 'oneHash',
             ast: {table: 'issues'},
@@ -350,6 +368,7 @@ describe('view-syncer/cvr', () => {
         ['/vs/cvr/abc123/m/c/bonkClient']: updated.clients.bonkClient,
         ['/vs/cvr/abc123/m/c/dooClient']: updated.clients.dooClient,
         ['/vs/cvr/abc123/m/c/fooClient']: updated.clients.fooClient,
+        ['/vs/cvr/abc123/m/q/lmids']: updated.queries.lmids,
         ['/vs/cvr/abc123/m/q/oneHash']: updated.queries.oneHash,
         ['/vs/cvr/abc123/m/q/threeHash']: updated.queries.threeHash,
         ['/vs/cvr/abc123/m/q/fourHash']: updated.queries.fourHash,

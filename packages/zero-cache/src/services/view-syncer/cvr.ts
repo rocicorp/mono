@@ -12,7 +12,9 @@ import type {ParsedRow} from './queries.js';
 import {CVRPaths, lastActiveIndex} from './schema/paths.js';
 import {
   ClientPatch,
+  ClientQueryRecord,
   CvrID,
+  InternalQueryRecord,
   NullableCVRVersion,
   QueryPatch,
   RowID,
@@ -81,6 +83,18 @@ export async function loadCVR(
     }
   }
   return cvr;
+}
+
+const CLIENT_LMID_QUERY_ID = 'lmids';
+
+function assertNotInternal(
+  query: QueryRecord,
+): asserts query is ClientQueryRecord {
+  if (query.internal) {
+    // This should never happen for behaving clients, as query ids should be hashes.
+    throw new Error(`Query ID ${query.id} is reserved for internal use`);
+  }
+  query satisfies ClientQueryRecord;
 }
 
 /**
@@ -220,6 +234,34 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       id,
     } satisfies ClientPatch);
 
+    const lmidsQuery: InternalQueryRecord = {
+      id: CLIENT_LMID_QUERY_ID,
+      ast: {
+        schema: 'zero',
+        table: 'clients',
+        select: [
+          ['clientID', 'clientID'],
+          ['lastMutationID', 'lastMutationID'],
+        ],
+        where: {
+          type: 'conjunction',
+          op: 'OR',
+          conditions: Object.keys(this._cvr.clients).map(clientID => ({
+            type: 'simple',
+            field: 'clientID',
+            op: '=',
+            value: {
+              type: 'literal',
+              value: clientID,
+            },
+          })),
+        },
+      },
+      internal: true,
+    };
+    this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
+    void this._writes.put(this._paths.query(lmidsQuery), lmidsQuery);
+
     return client;
   }
 
@@ -239,6 +281,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     for (const id of needed) {
       const ast = queries[id];
       const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
+      assertNotInternal(query);
+
       query.desiredBy[clientID] = newVersion;
       this._cvr.queries[id] = query;
       added.push(ast);
@@ -269,6 +313,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       if (!query) {
         continue; // Query itself has already been removed. Should not happen?
       }
+      assertNotInternal(query);
+
       // Delete the old put-desired-patch
       const oldPutVersion = query.desiredBy[clientID];
       delete query.desiredBy[clientID];
@@ -345,8 +391,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     if (query.transformationHash !== transformationHash) {
       const transformationVersion = this._ensureNewVersion();
 
-      if (query.patchVersion === undefined) {
-        // desired -> gotten
+      if (!query.internal && query.patchVersion === undefined) {
+        // client query: desired -> gotten
         query.patchVersion = transformationVersion;
         void this._writes.put(
           this._paths.queryPatch(transformationVersion, {id: query.id}),
@@ -371,7 +417,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must only be called on queries that are not "desired" by any client.
    */
   removed(queryID: string) {
-    const {desiredBy, patchVersion} = this._cvr.queries[queryID];
+    const query = this._cvr.queries[queryID];
+    assertNotInternal(query);
+
+    const {desiredBy, patchVersion} = query;
     assert(patchVersion);
     assert(
       Object.keys(desiredBy).length === 0,

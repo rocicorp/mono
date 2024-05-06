@@ -1,18 +1,22 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {unreachable} from 'shared/src/asserts.js';
-import {assertJSONValue} from 'shared/src/json.js';
+import {
+  assertJSONValue,
+  JSONObject as SafeJSONObject,
+} from 'shared/src/json.js';
+import * as v from 'shared/src/valita.js';
 import type {Downstream, EntitiesPatchOp, PokePartBody} from 'zero-protocol';
 import type {JSONObject, JSONValue} from '../../types/bigint-json.js';
 import type {Subscription} from '../../types/subscription.js';
 import {
   ClientPatch,
+  cmpVersions,
+  cookieToVersion,
   DelQueryPatch,
   NullableCVRVersion,
   PutQueryPatch,
   RowID,
-  cmpVersions,
-  cookieToVersion,
   versionToCookie,
   versionToNullableCookie,
   type CVRVersion,
@@ -130,6 +134,8 @@ export class ClientHandler {
     };
 
     return {
+      // TODO: Errors thrown from validating row contents (for bigints, etc.)
+      //       should result in closing the connection.
       addPatch: (patchToVersion: PatchToVersion) => {
         const {patch, toVersion} = patchToVersion;
         if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
@@ -155,7 +161,11 @@ export class ClientHandler {
             break;
           }
           case 'row':
-            (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
+            if (patch.id.schema === 'zero' && patch.id.table === 'clients') {
+              updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+            } else {
+              (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
+            }
             break;
           default:
             patch satisfies never;
@@ -175,6 +185,23 @@ export class ClientHandler {
   }
 }
 
+// Note: The zero.clients table is set up in replicator/initial-sync.ts.
+const lmidRowSchema = v.object({
+  clientID: v.string(),
+  lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
+});
+
+function updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {
+  if (patch.op === 'put' || patch.op === 'merge') {
+    const row = ensureSafeJSON(patch.contents);
+    const {clientID, lastMutationID} = v.parse(row, lmidRowSchema);
+    lmids[clientID] = lastMutationID;
+  } else {
+    // The 'constrain' and 'del' ops for zero.clients can be ignored.
+    patch.op satisfies 'constrain' | 'del';
+  }
+}
+
 function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
   const {
     op,
@@ -189,13 +216,11 @@ function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
       return {...entity, op: 'update', constrain: patch.columns};
     case 'put': {
       const {contents} = patch;
-      assertJSONValue(contents); // Asserts on unsafe integers, which BigIntJSON deserializes to bigints.
-      return {...entity, op: 'put', value: contents};
+      return {...entity, op: 'put', value: ensureSafeJSON(contents)};
     }
     case 'merge': {
       const {contents} = patch;
-      assertJSONValue(contents); // Asserts on unsafe integers, which BigIntJSON deserializes to bigints.
-      return {...entity, op: 'update', merge: contents};
+      return {...entity, op: 'update', merge: ensureSafeJSON(contents)};
     }
     case 'del':
       return {...entity, op};
@@ -213,4 +238,32 @@ function assertStringValues(
       throw new Error(`invalid row key type ${typeof value}`);
     }
   }
+}
+
+/**
+ * Column values of type INT8 are returned as the `bigint` from the
+ * Postgres library. These are converted to `number` if they are within
+ * the safe Number range, allowing the protocol to support numbers larger
+ * than 32-bits. Values outside of the safe number range (e.g. > 2^53) will
+ * result in an Error.
+ */
+export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
+  let modified = false;
+
+  const entries = Object.entries(row).map(([k, v]) => {
+    if (typeof v === 'bigint') {
+      if (v >= Number.MIN_SAFE_INTEGER && v <= Number.MAX_SAFE_INTEGER) {
+        modified = true;
+        return [k, Number(v)];
+      }
+      throw new Error(`Value of "${k}" exceeds safe Number rage (${v})`);
+    } else if (typeof v === 'object') {
+      assertJSONValue(v);
+    }
+    return [k, v] as [string, JSONValue | undefined];
+  });
+  if (modified) {
+    return Object.fromEntries(entries);
+  }
+  return row as SafeJSONObject;
 }

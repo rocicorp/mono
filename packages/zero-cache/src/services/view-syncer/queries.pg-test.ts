@@ -304,8 +304,9 @@ describe('view-syncer/queries', () => {
     const expanded = transformedAST.query();
     const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
     expect(expanded.query).toBe(
-      'SELECT issues._0_version AS "issues/_0_version", ' +
-        'issues.id AS "issues/id", issues.title AS "issues/title" ' +
+      'SELECT public.issues._0_version AS "public/issues/_0_version", ' +
+        'public.issues.id AS "public/issues/id", ' +
+        'public.issues.title AS "public/issues/title" ' +
         'FROM issues',
     );
     const results = await db.unsafe(expanded.query, expanded.values);
