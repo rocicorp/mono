@@ -69,7 +69,7 @@ describe('view-syncer/client-handler', () => {
             table: 'clients',
             rowKey: {clientID: 'bar'},
           },
-          contents: {clientID: 'bar', lastMutationID: 321},
+          contents: {clientID: 'bar', lastMutationID: 321n},
         },
       });
       poker.addPatch({
@@ -105,7 +105,7 @@ describe('view-syncer/client-handler', () => {
             table: 'clients',
             rowKey: {clientID: 'foo'},
           },
-          contents: {clientID: 'foo', lastMutationID: 123},
+          contents: {clientID: 'foo', lastMutationID: 123n},
         },
       });
       poker.addPatch({
@@ -144,7 +144,7 @@ describe('view-syncer/client-handler', () => {
             table: 'clients',
             rowKey: {clientID: 'foo'},
           },
-          contents: {clientID: 'foo', lastMutationID: 124},
+          contents: {clientID: 'foo', lastMutationID: 124n},
         },
       });
 
