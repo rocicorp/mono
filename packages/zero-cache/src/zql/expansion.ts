@@ -7,7 +7,10 @@ import {union} from 'shared/src/set-utils.js';
  * this may be used to ensure that `PRIMARY KEY` columns are included, as well
  * as the `_0_version` column.
  */
-export type RequiredColumns = (table: string) => readonly string[];
+export type RequiredColumns = (
+  schema: string | undefined,
+  table: string,
+) => readonly string[];
 
 /**
  * The character used to separate the column aliases created during query expansion
@@ -27,11 +30,11 @@ export const ALIAS_COMPONENT_SEPARATOR = '/';
  * for deconstructing the result is necessary to compute the views of the constituent
  * rows to send to the client.
  *
- * The format for aliasing columns is either of:
+ * The format for aliased columns:
  *
  * ```
- *               {source-table}/{column-name}  // e.g. "users/id"
- * {subquery-id}/{source-table}/{column-name}  // e.g. "owner/users/id"
+ *               {schema}/{source-table}/{column-name}  // e.g. "public/users/id"
+ * {subquery-id}/{schema}/{source-table}/{column-name}  // e.g. "owner/public/users/id"
  * ```
  *
  * ### Simple Queries
@@ -212,7 +215,7 @@ export function expandSubqueries(
   requiredColumns: RequiredColumns,
   externallyReferencedColumns: Set<string>,
 ): AST {
-  const {select, where, joins, groupBy, orderBy, table, alias} = ast;
+  const {schema, select, where, joins, groupBy, orderBy, table, alias} = ast;
 
   // Collect all references from SELECT, WHERE, and ON clauses
   const selectors = new Map<string, Set<string>>(); // Maps from alias to column aliases
@@ -236,7 +239,7 @@ export function expandSubqueries(
   orderBy?.[0].forEach(addSelector);
 
   // Add primary keys
-  requiredColumns(table).forEach(addSelector);
+  requiredColumns(schema, table).forEach(addSelector);
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
@@ -305,7 +308,7 @@ export function reAliasAndBubbleSelections(
   );
 
   // reAlias the columns selected from this AST's FROM table/alias.
-  const defaultFrom = ast.alias ?? ast.table;
+  const defaultFrom = ast.table;
   const reAliasMap = new Map<string, string>();
   reAliasMaps.set(defaultFrom, reAliasMap);
   select?.forEach(([selector, alias]) => {
@@ -322,7 +325,12 @@ export function reAliasAndBubbleSelections(
     const [from, col] = parts.length === 2 ? parts : [defaultFrom, selector];
     const newCol = reAliasMaps.get(from)?.get(col);
     assert(newCol, `New column not found for ${from}.${col}`);
-    return `${from}.${newCol}`;
+    // Note: The absence of a schema is assumed to be the "public" schema. If
+    //       non-public schemas and schema search paths are to be supported, this
+    //       is where the logic would have to be to resolve the schema for the table.
+    return from === ast.table
+      ? `${ast.schema ?? 'public'}.${from}.${newCol}`
+      : `${from}.${newCol}`;
   };
 
   // Return a modified AST with all selectors realiased (SELECT, ON, GROUP BY, ORDER BY),

@@ -108,7 +108,7 @@ export const clientRecordSchema = cvrRecordSchema.extend({
 
 export type ClientRecord = v.Infer<typeof clientRecordSchema>;
 
-export const queryRecordSchema = cvrRecordSchema.extend({
+export const baseQueryRecordSchema = v.object({
   /** The client-specified ID used to identify this query. Typically a hash. */
   id: v.string(),
 
@@ -149,6 +149,22 @@ export const queryRecordSchema = cvrRecordSchema.extend({
    * queries with a newer `transformationVersion`.
    */
   transformationVersion: cvrVersionSchema.optional(),
+});
+
+/**
+ * Internal queries track rows in the database for internal use, such as the
+ * `lastMutationID`s in the `zero.clients` table. They participate in the standard
+ * invalidation / update logic for row contents, but not in the desired/got or
+ * size-based quota logic for client-requested queries.
+ */
+export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
+  internal: v.literal(true),
+});
+
+export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
+
+export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
+  internal: v.literal(false).optional(),
 
   // For queries, the `patchVersion` indicates when query was added to the got set,
   // and is absent if not yet gotten.
@@ -162,6 +178,13 @@ export const queryRecordSchema = cvrRecordSchema.extend({
   // estimatedBytes: v.number(),
   // lru information?
 });
+
+export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;
+
+export const queryRecordSchema = v.union(
+  clientQueryRecordSchema,
+  internalQueryRecordSchema,
+);
 
 export type QueryRecord = v.Infer<typeof queryRecordSchema>;
 

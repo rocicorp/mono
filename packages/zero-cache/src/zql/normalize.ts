@@ -155,9 +155,7 @@ export class Normalized {
 
 function selector(x: string): string {
   const parts = x.split('.');
-  return parts.length === 2
-    ? `${ident(parts[0])}.${ident(parts[1])}`
-    : ident(x);
+  return parts.map(id => ident(id)).join('.');
 }
 
 const SEED = 0x1234567890;
