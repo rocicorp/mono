@@ -10,7 +10,9 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
-    "lint": "next lint"
+    "lint": "next lint",
+    "publish-worker-prod": "npm run wrangler-prod -- publish",
+    "wrangler-prod": "npx wrangler --config wrangler.toml"
   },
   "dependencies": {
     "@emotion/react": "^11.8.2",
