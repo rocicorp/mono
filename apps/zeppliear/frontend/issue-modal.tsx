@@ -1,7 +1,7 @@
 import {nanoid} from 'nanoid';
 import {useState} from 'react';
 import CloseIcon from './assets/icons/close.svg';
-import {Issue, JIM_HOLDEN_MEMBER_ID, Priority, Status} from './issue';
+import {IssueCreationPartial, Priority, Status} from './issue';
 import Modal from './modal';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
@@ -9,7 +9,7 @@ import StatusMenu from './status-menu';
 interface Props {
   isOpen: boolean;
   onDismiss?: () => void;
-  onCreateIssue: (i: Omit<Issue, 'kanbanOrder'>) => void;
+  onCreateIssue: (i: IssueCreationPartial) => void;
 }
 
 export default function IssueModal({isOpen, onDismiss, onCreateIssue}: Props) {
@@ -28,10 +28,6 @@ export default function IssueModal({isOpen, onDismiss, onCreateIssue}: Props) {
       title,
       priority,
       status,
-      modified: new Date().getTime(),
-      created: new Date().getTime(),
-      // TODO: Create a Member for this user
-      creatorID: JIM_HOLDEN_MEMBER_ID,
       description,
     });
     if (onDismiss) onDismiss();

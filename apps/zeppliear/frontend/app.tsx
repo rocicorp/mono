@@ -22,6 +22,8 @@ import {
   deleteIssueComment,
   updateIssues,
   Member,
+  createIssue,
+  IssueCreationPartial,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -114,22 +116,12 @@ const App = ({undoManager}: AppProps) => {
   const viewIssueCount = 0;
 
   const handleCreateIssue = useCallback(
-    async (issue: Omit<Issue, 'kanbanOrder'>) => {
-      // TODO(arv): Use zql min
-      // const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
-      // const minKanbanOrder = minKanbanOrderIssue
-      //   ? minKanbanOrderIssue.kanbanOrder
-      //   : null;
-
+    async (issue: IssueCreationPartial) => {
       // TODO: UndoManager? - audit every other place we're doing mutations,
       // or remove undo for now.
-      await zero.mutate.issue.create({
-        ...issue,
-        //  TODO: fix kanban
-        kanbanOrder: '0', //generateKeyBetween(null, minKanbanOrder),
-      });
+      await createIssue(zero, issue);
     },
-    [zero.mutate],
+    [zero],
   );
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
@@ -228,7 +220,7 @@ interface LayoutProps {
   onCloseMenu: () => void;
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
-  onCreateIssue: (issue: Omit<Issue, 'kanbanOrder'>) => void;
+  onCreateIssue: (issue: IssueCreationPartial) => void;
   onCreateComment: (comment: Comment) => void;
   onOpenDetail: (issue: Issue) => void;
 }
