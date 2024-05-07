@@ -31,15 +31,18 @@ interface Props {
 }
 
 // TODO: join comment.creatorID with members
-function CommentsList(comments: Comment[], isLoading: boolean) {
-  const elements = comments.map(comment => (
+function CommentsList(
+  comments: {comment: Comment; creator: {name: string}}[],
+  isLoading: boolean,
+) {
+  const elements = comments.map(({comment, creator}) => (
     <div
       key={comment.id}
       className="max-w-[85vw] mx-3 bg-gray-850 mt-0 mb-5 border-transparent rounded py-3 px-3 relative whitespace-pre-wrap overflow-auto"
     >
       <div className="h-6 mb-1 -mt-px relative">
         <DefaultAvatarIcon className="w-4.5 h-4.5 rounded-full overflow-hidden flex-shrink-0 float-left mr-2" />
-        {comment.creatorID} {timeAgo(comment.created)}
+        {creator.name} {timeAgo(comment.created)}
       </div>
       <div className="block flex-1 whitespace-pre-wrap">
         <Remark>{comment.body}</Remark>
@@ -108,9 +111,17 @@ export default function IssueDetail({
 
   const comments = useQuery(
     commentQuery
-      .select('id', 'issueID', 'created', 'body', 'creatorID')
       .where('issueID', '=', detailIssueID ?? '')
-      .asc('created'),
+      .join(zero.query.member, 'creator', 'comment.creatorID', 'member.id')
+      .select(
+        'comment.id',
+        'comment.issueID',
+        'comment.created',
+        'comment.creatorID',
+        'comment.body',
+        'creator.name',
+      )
+      .asc('comment.created'),
     [detailIssueID],
   );
 
