@@ -26,6 +26,17 @@ export function computeInvalidationInfo(
 ): InvalidationInfo {
   const {schema = 'public', table, select, aggregate, where} = normalized.ast();
 
+  const sanitizeSelector = (selector: string) => {
+    const parts = selector.split('.');
+    if (parts.length >= 3 && parts.at(-3) !== schema) {
+      return undefined; // not a column of this table. filtered in next step.
+    }
+    if (parts.length >= 2 && parts.at(-2) !== table) {
+      return undefined; // not a column of this table. filtered in next step.
+    }
+    return parts.at(-1);
+  };
+
   const selected = new Set<string>([
     ...(select ?? []).map(([col]) => col),
     ...(aggregate ?? []).map(agg => agg.field ?? '*'),
@@ -33,23 +44,14 @@ export function computeInvalidationInfo(
   const selectedColumns: readonly string[] | undefined = selected.has('*')
     ? undefined
     : [...selected]
-        .map(col => {
-          const parts = col.split('.');
-          if (parts.length >= 3 && parts.at(-3) !== schema) {
-            return ''; // not a column of this table. filtered in next step.
-          }
-          if (parts.length >= 2 && parts.at(-2) !== table) {
-            return ''; // not a column of this table. filtered in next step.
-          }
-          return parts.at(-1) ?? col;
-        })
+        .map(col => sanitizeSelector(col) ?? '')
         .filter(col => col.length)
         .sort(compareUTF8);
 
   const hashes = new Set<string>();
   const filters = new Map<string, NormalizedInvalidationFilterSpec>();
 
-  computeMatchers(where).forEach(matcher =>
+  computeMatchers(where, sanitizeSelector).forEach(matcher =>
     matcher.addInvalidationInfo(
       {schema, table, selectedColumns},
       hashes,
@@ -215,11 +217,13 @@ export function computeInvalidationInfo(
  */
 export function computeMatchers(
   cond: Condition | undefined,
+  sanitize: (selector: string) => string | undefined,
   maxDepth = 10,
   depth = 0,
 ): Matcher[] {
   if (cond === undefined || cond.type === 'simple') {
-    return [new Matcher(cond)];
+    const field = cond ? sanitize(cond.field) : undefined;
+    return [new Matcher(cond && field ? {...cond, field} : undefined)];
   }
   if (depth >= maxDepth) {
     console.warn(`Max depth reached while computing invalidation filters`);
@@ -231,11 +235,13 @@ export function computeMatchers(
   const matchers =
     cond.op === 'OR'
       ? // An OR is the list of independent Matchers for each sub-condition.
-        cond.conditions.flatMap(c => computeMatchers(c, maxDepth, depth + 1))
+        cond.conditions.flatMap(c =>
+          computeMatchers(c, sanitize, maxDepth, depth + 1),
+        )
       : // An AND is the cumulative outer product (concatenation) of the groups
         // of Matchers produced by sub-conditions.
         cond.conditions
-          .map(c => computeMatchers(c, maxDepth, depth + 1))
+          .map(c => computeMatchers(c, sanitize, maxDepth, depth + 1))
           .reduce((acc, group) => outerProduct(acc, group), [new Matcher()]);
   return removeRedundant(matchers);
 }
