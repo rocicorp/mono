@@ -23,6 +23,10 @@ export interface ServiceRunnerEnv {
   DO_LOCATION_HINT: DurableObjectLocationHint;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   LOG_LEVEL: LogLevel;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  DATADOG_LOGS_API_KEY?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  DATADOG_SERVICE_LABEL?: string;
 }
 
 const REPLICATOR_ID = 'r1';
