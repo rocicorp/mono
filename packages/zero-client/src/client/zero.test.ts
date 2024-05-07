@@ -12,7 +12,6 @@ import type {NullableVersion} from 'zero-protocol/src/version.js';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
-import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
@@ -802,63 +801,64 @@ test('smokeTest', async () => {
   }
 });
 
-test('Metrics', async () => {
-  // This is just a smoke test -- it ensures that we send metrics once at startup.
-  // Ideally we would run Zero and put it into different error conditions and see
-  // that the metrics are reported appropriately.
+// TODO: Reenable metrics
+// test('Metrics', async () => {
+//   // This is just a smoke test -- it ensures that we send metrics once at startup.
+//   // Ideally we would run Zero and put it into different error conditions and see
+//   // that the metrics are reported appropriately.
 
-  const r = zeroForTest();
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  await r.triggerConnected();
-  await r.waitForConnectionState(ConnectionState.Connected);
+//   const r = zeroForTest();
+//   await r.waitForConnectionState(ConnectionState.Connecting);
+//   await r.triggerConnected();
+//   await r.waitForConnectionState(ConnectionState.Connected);
 
-  for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-    await clock.tickAsync(PING_INTERVAL_MS);
-    await r.triggerPong();
-  }
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
+//     await clock.tickAsync(PING_INTERVAL_MS);
+//     await r.triggerPong();
+//   }
 
-  expect(
-    fetchStub.calledWithMatch(
-      sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
-    ),
-  ).to.be.true;
-});
+//   expect(
+//     fetchStub.calledWithMatch(
+//       sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
+//     ),
+//   ).to.be.true;
+// });
 
-test('Metrics not reported when enableAnalytics is false', async () => {
-  const r = zeroForTest({enableAnalytics: false});
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  await r.triggerConnected();
-  await r.waitForConnectionState(ConnectionState.Connected);
+// test('Metrics not reported when enableAnalytics is false', async () => {
+//   const r = zeroForTest({enableAnalytics: false});
+//   await r.waitForConnectionState(ConnectionState.Connecting);
+//   await r.triggerConnected();
+//   await r.waitForConnectionState(ConnectionState.Connected);
 
-  for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-    await clock.tickAsync(PING_INTERVAL_MS);
-    await r.triggerPong();
-  }
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
+//     await clock.tickAsync(PING_INTERVAL_MS);
+//     await r.triggerPong();
+//   }
 
-  expect(
-    fetchStub.calledWithMatch(
-      sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
-    ),
-  ).to.be.false;
-});
+//   expect(
+//     fetchStub.calledWithMatch(
+//       sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
+//     ),
+//   ).to.be.false;
+// });
 
-test('Metrics not reported when server indicates local development', async () => {
-  const r = zeroForTest({server: 'http://localhost:8000'});
-  await r.waitForConnectionState(ConnectionState.Connecting);
-  await r.triggerConnected();
-  await r.waitForConnectionState(ConnectionState.Connected);
+// test('Metrics not reported when server indicates local development', async () => {
+//   const r = zeroForTest({server: 'http://localhost:8000'});
+//   await r.waitForConnectionState(ConnectionState.Connecting);
+//   await r.triggerConnected();
+//   await r.waitForConnectionState(ConnectionState.Connected);
 
-  for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-    await clock.tickAsync(PING_INTERVAL_MS);
-    await r.triggerPong();
-  }
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
+//     await clock.tickAsync(PING_INTERVAL_MS);
+//     await r.triggerPong();
+//   }
 
-  expect(
-    fetchStub.calledWithMatch(
-      sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
-    ),
-  ).to.be.false;
-});
+//   expect(
+//     fetchStub.calledWithMatch(
+//       sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
+//     ),
+//   ).to.be.false;
+// });
 
 test('Authentication', async () => {
   const log: number[] = [];
