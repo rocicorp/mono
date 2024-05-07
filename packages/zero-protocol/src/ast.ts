@@ -135,6 +135,6 @@ export const simpleConditionSchema: v.Type<SimpleCondition> = v.object({
   field: v.string(),
   value: v.object({
     type: v.literal('literal'),
-    value: primitiveSchema,
+    value: v.union(primitiveSchema, primitiveArraySchema),
   }),
 });
