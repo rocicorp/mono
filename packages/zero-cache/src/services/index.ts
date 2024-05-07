@@ -2,16 +2,11 @@ import type {LogLevel, LogSink} from '@rocicorp/logger';
 import {ServiceRunnerDO} from './runner-do.js';
 import {createWorker} from './worker.js';
 import type {ServiceRunnerEnv} from './service-runner.js';
+import {createLogSink, getLogLevel} from './logging.js';
 
-const DEFAULT_LOG_LEVEL = 'info';
-
-const worker = createWorker((_env: ServiceRunnerEnv) => ({
-  logLevel: DEFAULT_LOG_LEVEL,
-  logSink: {
-    log: (lc, level, message, details) => {
-      console.log(lc, level, message, details);
-    },
-  },
+const worker = createWorker((env: ServiceRunnerEnv) => ({
+  logLevel: getLogLevel(env),
+  logSink: createLogSink(env),
 }));
 
 type GetNormalizedOptions<Env extends ServiceRunnerEnv> = (
@@ -36,11 +31,7 @@ function createServiceRunnerDO<Env extends ServiceRunnerEnv>(
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const RunnerDO = createServiceRunnerDO((env: ServiceRunnerEnv) => ({
-  logLevel: env.LOG_LEVEL ?? DEFAULT_LOG_LEVEL,
-  logSink: {
-    log: (lc, level, message, details) => {
-      console.log(lc, level, message, details);
-    },
-  },
+  logLevel: getLogLevel(env),
+  logSink: createLogSink(env),
 }));
 export {RunnerDO, worker as default};
