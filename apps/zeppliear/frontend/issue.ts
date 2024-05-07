@@ -241,6 +241,9 @@ export const memberSchema = z.object({
   id: z.string(),
   name: z.string(),
 });
+export type Member = Immutable<z.TypeOf<typeof memberSchema>>;
+
+export const JIM_HOLDEN_MEMBER_ID = '2-GMrGGTIl';
 
 const REVERSE_TIMESTAMP_LENGTH = Number.MAX_SAFE_INTEGER.toString().length;
 

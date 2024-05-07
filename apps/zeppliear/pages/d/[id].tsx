@@ -3,7 +3,13 @@ import {useEffect, useRef, useState} from 'react';
 import {Zero} from 'zero-client';
 import App, {Collections} from '../../frontend/app';
 import {ZeroProvider} from '../../frontend/hooks/use-zero';
-import type {Comment, Issue, IssueLabel, Label} from '../../frontend/issue.js';
+import type {
+  Comment,
+  Issue,
+  IssueLabel,
+  Label,
+  Member,
+} from '../../frontend/issue.js';
 
 export default function Home() {
   const [zero, setZero] = useState<Zero<Collections> | null>(null);
@@ -25,6 +31,7 @@ export default function Home() {
           comment: v => v as Comment,
           label: v => v as Label,
           issueLabel: v => v as IssueLabel,
+          member: v => v as Member,
         },
       });
 

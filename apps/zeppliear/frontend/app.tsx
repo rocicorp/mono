@@ -21,6 +21,7 @@ import {
   putIssueComment,
   deleteIssueComment,
   updateIssues,
+  Member,
 } from './issue';
 import IssueBoard from './issue-board';
 import IssueDetail from './issue-detail';
@@ -52,6 +53,7 @@ function getTitle(view: string | null) {
 }
 
 export type Collections = {
+  member: Member;
   issue: Issue;
   comment: Comment;
   label: Label;
