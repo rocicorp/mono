@@ -102,6 +102,10 @@ export class QueryHandler {
   resultParser(lc: LogContext, cvrID: string) {
     return new ResultParser(lc, this.#tables, cvrID);
   }
+
+  tableSpec(schema: string, table: string) {
+    return this.#tables.spec(schema, table);
+  }
 }
 
 export type ParsedRow = {

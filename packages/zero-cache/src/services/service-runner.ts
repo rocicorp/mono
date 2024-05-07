@@ -1,17 +1,17 @@
-import {ViewSyncerService} from './view-syncer/view-syncer.js';
-import {Replicator, ReplicatorService} from './replicator/replicator.js';
+import type {DurableObjectLocationHint} from '@cloudflare/workers-types';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import postgres from 'postgres';
 import {DurableStorage} from '../storage/durable-storage.js';
-import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {
   InvalidationWatcher,
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
+import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import type {ReplicatorRegistry} from './replicator/registry.js';
-import postgres from 'postgres';
-import {postgresTypeConfig} from '../types/pg.js';
+import {Replicator, ReplicatorService} from './replicator/replicator.js';
 import type {Service} from './service.js';
-import type {DurableObjectLocationHint} from '@cloudflare/workers-types';
+import {ViewSyncerService} from './view-syncer/view-syncer.js';
 
 export interface ServiceRunnerEnv {
   runnerDO: DurableObjectNamespace;
@@ -36,8 +36,9 @@ export class ServiceRunner
   readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
     new Map();
 
-  #storage: DurableStorage;
-  #env: ServiceRunnerEnv;
+  readonly #storage: DurableStorage;
+  readonly #env: ServiceRunnerEnv;
+  readonly #replica: PostgresDB;
   readonly #lc: LogContext;
 
   constructor(
@@ -52,6 +53,9 @@ export class ServiceRunner
     );
     this.#storage = new DurableStorage(state.storage);
     this.#env = env;
+    this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
+      ...postgresTypeConfig(),
+    });
 
     // start the replicator
     void this.getReplicator();
@@ -62,15 +66,7 @@ export class ServiceRunner
       this.#getService(
         INVALIDATION_WATCHER_ID,
         this.#invalidationWatchers,
-        id =>
-          new InvalidationWatcherService(
-            id,
-            this.#lc,
-            this,
-            postgres(this.#env.SYNC_REPLICA_URI, {
-              ...postgresTypeConfig(),
-            }),
-          ),
+        id => new InvalidationWatcherService(id, this.#lc, this, this.#replica),
         'InvalidationWatcherService',
       ),
     );
@@ -97,7 +93,8 @@ export class ServiceRunner
     return this.#getService(
       'viewSyncer:' + clientGroupID,
       this.#viewSyncers,
-      id => new ViewSyncerService(this.#lc, id, this.#storage, this),
+      id =>
+        new ViewSyncerService(this.#lc, id, this.#storage, this, this.#replica),
       'ReplicatorService',
     );
   }

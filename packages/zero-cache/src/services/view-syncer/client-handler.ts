@@ -105,6 +105,10 @@ export class ClientHandler {
     return this.#baseVersion;
   }
 
+  fail(e: unknown) {
+    this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
+  }
+
   close() {
     this.#pokes.cancel();
   }
