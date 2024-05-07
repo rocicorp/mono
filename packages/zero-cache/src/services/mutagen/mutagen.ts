@@ -17,10 +17,20 @@ export async function processMutation(
   mutation: Mutation,
 ) {
   assert(mutation.name === '_zero_crud', 'Only CRUD mutations are supported');
-
-  await db.begin(async tx => {
-    await processMutationWithTx(lc, tx, mutation as CRUDMutation);
-  });
+  lc = lc?.withContext('mutationID', mutation.id);
+  lc = lc?.withContext('processMutation');
+  lc?.debug?.('Process mutation start', mutation);
+  try {
+    const start = Date.now();
+    await db.begin(async tx => {
+      await processMutationWithTx(lc, tx, mutation as CRUDMutation);
+    });
+    lc?.withContext('mutationTiming', Date.now() - start);
+    lc?.debug?.('Process mutation complete');
+  } catch (e) {
+    lc?.error?.('Process mutation error', e);
+    throw e;
+  }
 }
 
 async function processMutationWithTx(
