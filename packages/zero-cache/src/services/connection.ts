@@ -30,7 +30,6 @@ export class Connection {
   readonly #viewSyncer: ViewSyncerService;
 
   #inboundStream: Subscription<Upstream> | undefined;
-  #outboundStream: CancelableAsyncIterable<Downstream> | undefined;
 
   constructor(
     lc: LogContext,
@@ -43,7 +42,7 @@ export class Connection {
   ) {
     this.#clientID = clientID;
     this.#ws = ws;
-    this.#lc = lc;
+    this.#lc = lc.withContext('clientID', clientID);
     this.#baseCookie = baseCookie;
     this.#upstreamDB = db;
 
@@ -91,7 +90,7 @@ export class Connection {
         break;
       case 'initConnection': {
         this.#inboundStream = new Subscription<Upstream>();
-        this.#outboundStream = await viewSyncer.sync(
+        const outboundStream = await viewSyncer.sync(
           {
             clientID: this.#clientID,
             baseCookie: this.#baseCookie,
@@ -100,9 +99,7 @@ export class Connection {
           this.#inboundStream,
         );
 
-        for await (const outMsg of this.#outboundStream) {
-          ws.send(JSON.stringify(outMsg));
-        }
+        void proxyOutbound(lc, ws, outboundStream);
         break;
       }
       default:
@@ -113,4 +110,21 @@ export class Connection {
 
 export function send(ws: WebSocket, data: Downstream) {
   ws.send(JSON.stringify(data));
+}
+
+async function proxyOutbound(
+  lc: LogContext,
+  ws: WebSocket,
+  outboundStream: CancelableAsyncIterable<Downstream>,
+) {
+  try {
+    for await (const outMsg of outboundStream) {
+      send(ws, outMsg);
+    }
+    lc.info?.('downstream closed by ViewSyncer');
+  } catch (e) {
+    sendError(lc, ws, 'InvalidMessage', String(e));
+  } finally {
+    ws.close();
+  }
 }
