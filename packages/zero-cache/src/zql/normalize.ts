@@ -118,7 +118,7 @@ export class Normalized {
       } = cond;
       assert(type === 'literal');
       this.#values.push(value);
-      return `${ident(cond.field)} ${cond.op} $${this.#nextParam++}`;
+      return `${selector(cond.field)} ${cond.op} $${this.#nextParam++}`;
     }
 
     return `(${cond.conditions
