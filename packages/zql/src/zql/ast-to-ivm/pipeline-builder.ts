@@ -7,6 +7,7 @@ import type {
   Join,
   Primitive,
   SimpleCondition,
+  Ordering,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {isJoinResult, StringOrNumber} from '../ivm/types.js';
@@ -16,11 +17,15 @@ function getId(e: Entity) {
 }
 
 export function buildPipeline(
-  sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
+  sourceStreamProvider: (
+    sourceName: string,
+    order: Ordering | undefined,
+  ) => DifferenceStream<Entity>,
   ast: AST,
 ) {
   let stream = sourceStreamProvider(
     must(ast.table, 'Table not specified in the AST'),
+    ast.orderBy,
   );
 
   // TODO: start working on pipeline sharing so we don't have to
@@ -64,7 +69,10 @@ export function buildPipeline(
 }
 
 export function applyJoins<T extends Entity, O extends Entity>(
-  sourceStreamProvider: (sourceName: string) => DifferenceStream<Entity>,
+  sourceStreamProvider: (
+    sourceName: string,
+    order: Ordering | undefined,
+  ) => DifferenceStream<Entity>,
   sourceTableOrAlias: string,
   stream: DifferenceStream<T>,
   joins: Join[],

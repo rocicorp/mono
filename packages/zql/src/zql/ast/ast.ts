@@ -6,7 +6,10 @@ import {defined} from 'shared/src/arrays.js';
 
 // TODO: the chosen operator needs to constrain the allowed values for the value
 // input to the query builder.
-export type Ordering = readonly [readonly string[], 'asc' | 'desc'];
+export type Ordering = readonly [
+  fields: readonly string[],
+  direction: 'asc' | 'desc',
+];
 export type Primitive = string | number | boolean | null;
 export type PrimitiveArray = string[] | number[] | boolean[];
 

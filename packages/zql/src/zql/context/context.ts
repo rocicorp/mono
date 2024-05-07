@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import type {Entity} from '../../entity.js';
-import type {AST} from '../ast/ast.js';
+import type {AST, Ordering} from '../ast/ast.js';
 import {Materialite} from '../ivm/materialite.js';
 import type {Source} from '../ivm/source/source.js';
 
@@ -18,7 +18,10 @@ export type SubscriptionDelegate = {
  */
 export type Context = SubscriptionDelegate & {
   materialite: Materialite;
-  getSource: <T extends Entity>(name: string) => Source<T>;
+  getSource: <T extends Entity>(
+    name: string,
+    ordering: Ordering | undefined,
+  ) => Source<T>;
 };
 
 export class TestContext implements Context {
