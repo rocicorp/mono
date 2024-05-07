@@ -8,7 +8,7 @@ Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
 # To run wrangler worker locally
 
-update .dev.vars URIs to point to your internal ip adress (169._._.\*)
+update .dev.vars URIs to point to your internal ip adress (169._._._ or 192._._._) do not use the 127.0.0.1 address
 
 ```
 UPSTREAM_URI = "postgresql://user:password@add.your.host.ip:6432/postgres"
@@ -26,7 +26,7 @@ npx wrangler dev --ip 0.0.0.0
 
 ```
 npm install
-NEXT_PUBLIC_SERVER='http://localhost:8080' npm run dev
+NEXT_PUBLIC_SERVER='http://localhost:8787' npm run dev
 ```
 
 ## Credits
