@@ -1,4 +1,3 @@
-import {LogContext, consoleLogSink} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
@@ -25,8 +24,7 @@ import {ViewSyncerService} from './view-syncer.js';
 
 describe('view-syncer/service', () => {
   let db: PostgresDB;
-  const lc = new LogContext('debug', {}, consoleLogSink);
-  createSilentLogContext();
+  const lc = createSilentLogContext();
 
   let storage: FakeDurableObjectStorage;
   let watcher: MockInvalidationWatcher;
@@ -131,6 +129,15 @@ describe('view-syncer/service', () => {
       ['big', 'big'],
     ],
     table: 'issues',
+    where: {
+      type: 'simple',
+      field: 'id',
+      op: 'IN',
+      value: {
+        type: 'literal',
+        value: ['1', '2', '3', '4'],
+      },
+    },
   };
 
   const USERS_NAME_QUERY: AST = {

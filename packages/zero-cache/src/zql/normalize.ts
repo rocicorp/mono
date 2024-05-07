@@ -117,8 +117,18 @@ export class Normalized {
         value: {type, value},
       } = cond;
       assert(type === 'literal');
-      this.#values.push(value);
-      return `${selector(cond.field)} ${cond.op} $${this.#nextParam++}`;
+      if (!Array.isArray(value)) {
+        this.#values.push(value);
+        return `${selector(cond.field)} ${cond.op} $${this.#nextParam++}`;
+      }
+      // Unroll the array
+      let expr = `${selector(cond.field)} ${cond.op} (`;
+      value.forEach((v, i) => {
+        this.#values.push(v);
+        expr += (i ? ', ' : '') + `$${this.#nextParam++}`;
+      });
+      expr += ')';
+      return expr;
     }
 
     return `(${cond.conditions

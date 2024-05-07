@@ -324,6 +324,28 @@ describe('zql/normalize-query-hash', () => {
       values: [1234],
     },
     {
+      name: 'condition with array',
+      asts: [
+        {
+          table: 'issues',
+          select: [
+            ['id', 'i'],
+            ['name', 'n'],
+          ],
+          where: {
+            type: 'simple',
+            field: 'issues.id',
+            op: 'IN',
+            value: {type: 'literal', value: ['1234', '2345', '4567']},
+          },
+          orderBy: [['id'], 'asc'],
+        },
+      ],
+      query:
+        'SELECT id AS i, name AS n FROM issues WHERE issues.id IN ($1, $2, $3) ORDER BY id asc',
+      values: ['1234', '2345', '4567'],
+    },
+    {
       name: 'simple condition (value types affect hash)',
       asts: [
         {
