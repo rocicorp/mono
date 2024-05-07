@@ -39,7 +39,6 @@ export type PullMsg = {
   readonly type: 'pull';
   readonly order?: Ordering | undefined;
   readonly hoistedConditions: SimpleCondition[];
-  readonly queryType?: 'count' | 'select' | undefined;
 };
 
 export type Reply = PullReplyMsg;
@@ -47,6 +46,10 @@ export type Reply = PullReplyMsg;
 export type PullReplyMsg = {
   readonly replyingTo: number;
   readonly type: 'pullResponse';
+  // the order of the data we are sending.
+  readonly order: Ordering | undefined;
+  // columns we are not ordered by but do produce contiguous groups for.
+  readonly contiguousGroups: readonly string[];
 };
 
 let messageID = 0;
@@ -65,22 +68,23 @@ export function nextMessageID() {
  * E.g., if there is a filter against the primary key. The source
  * can use that information to restrict the rows it returns.
  */
-export function createPullMessage(
-  order: Ordering | undefined,
-  queryType?: 'count' | 'select' | undefined,
-): Request {
+export function createPullMessage(order: Ordering | undefined): Request {
   return {
     id: nextMessageID(),
     type: 'pull',
     order,
     hoistedConditions: [],
-    queryType,
   };
 }
 
-export function createPullResponseMessage(pullMsg: PullMsg): Reply {
+export function createPullResponseMessage(
+  pullMsg: PullMsg,
+  order: Ordering | undefined,
+): Reply {
   return {
     replyingTo: pullMsg.id,
     type: 'pullResponse',
+    order,
+    contiguousGroups: [],
   };
 }

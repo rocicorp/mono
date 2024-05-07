@@ -143,3 +143,7 @@ export function makeComparator<T extends object>(
 
   return direction === 'asc' ? comparator : (l, r) => comparator(r, l);
 }
+
+export function fieldsMatch(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((v, i) => v === right[i]);
+}

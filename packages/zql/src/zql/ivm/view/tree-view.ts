@@ -1,8 +1,9 @@
 import BTree from 'sorted-btree-roci';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
+import {fieldsMatch} from '../../query/statement.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
-import {createPullMessage} from '../graph/message.js';
+import {createPullMessage, Reply} from '../graph/message.js';
 import type {Multiset} from '../multiset.js';
 import type {Comparator} from '../types.js';
 import {AbstractView} from './abstract-view.js';
@@ -25,7 +26,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
   #limit?: number | undefined;
   #min?: T | undefined;
   #max?: T | undefined;
-  // readonly #order;
+  readonly #order;
   readonly id = id++;
   readonly #comparator;
 
@@ -33,7 +34,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     context: Context,
     stream: DifferenceStream<T>,
     comparator: Comparator<T>,
-    _order: Ordering | undefined,
+    order: Ordering | undefined,
     limit?: number | undefined,
     name: string = '',
   ) {
@@ -43,28 +44,31 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     // @ts-ignore
     this.#data = new BTree(undefined, comparator);
     this.#comparator = comparator;
-    // this.#order = order;
+    this.#order = order;
     if (limit !== undefined) {
-      this.#addAll = this.#limitedAddAll;
-      this.#removeAll = this.#limitedRemoveAll;
+      this.#add = this.#limitedAdd;
+      this.#remove = this.#limitedRemove;
     } else {
-      this.#addAll = addAll;
-      this.#removeAll = removeAll;
+      this.#add = add;
+      this.#remove = remove;
     }
   }
 
-  #addAll: (data: BTree<T, undefined>, value: T) => BTree<T, undefined>;
-  #removeAll: (data: BTree<T, undefined>, value: T) => BTree<T, undefined>;
+  #add: (data: BTree<T, undefined>, value: T) => BTree<T, undefined>;
+  #remove: (data: BTree<T, undefined>, value: T) => BTree<T, undefined>;
 
   get value(): T[] {
     return this.#jsSlice;
   }
 
-  protected _newDifference(data: Multiset<T>): boolean {
+  protected _newDifference(
+    data: Multiset<T>,
+    reply?: Reply | undefined,
+  ): boolean {
     let needsUpdate = false || this.hydrated === false;
 
     let newData = this.#data;
-    [needsUpdate, newData] = this.#sink(data, newData, needsUpdate);
+    [needsUpdate, newData] = this.#sink(data, newData, needsUpdate, reply);
     this.#data = newData;
 
     if (needsUpdate) {
@@ -85,23 +89,45 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     c: Multiset<T>,
     data: BTree<T, undefined>,
     needsUpdate: boolean,
+    reply?: Reply | undefined,
   ): [boolean, BTree<T, undefined>] {
-    const iterator = c[Symbol.iterator]();
     let next;
 
     const process = (value: T, mult: number) => {
       if (mult > 0) {
         needsUpdate = true;
-        data = this.#addAll(data, value);
+        data = this.#add(data, value);
       } else if (mult < 0) {
         needsUpdate = true;
-        data = this.#removeAll(data, value);
+        data = this.#remove(data, value);
       }
     };
 
+    let iterator;
+    if (reply === undefined || this.#limit === undefined) {
+      iterator = c[Symbol.iterator]();
+    } else {
+      // We only get the limited iterator if we're receiving historical data.
+      iterator = this.#getLimitedIterator(c, reply, this.#limit);
+    }
+
     // TODO: process with a limit if we have a limit and we're in source order.
+    // We're always in source order. At least to an extent.
+    // We need to know to what extent.
+    // I.e., all order by columns are present in source?
+    // Only the first?
+    // If only the first N, then we loop until we meet something beyond the first N and we're
+    // at limimt.
+    // So source must reply with its order param(s).
+    // Then we can iterate correctly.
+    // Join will update the reply.
+    // Reply should also include contiguous groups or not.
+    //   If we're sorted by `modified` but we have contiguous `issue id` groups
+    //     this happens in the case of a join where the contiguous grouping can be something
+    //     we are not sorted by. The sort drives the join order but the join key drives the grouping.
     while (!(next = iterator.next()).done) {
-      const [value, mult] = next.value;
+      const entry = next.value;
+      const [value, mult] = entry;
 
       const nextNext = iterator.next();
       if (!nextNext.done) {
@@ -128,9 +154,96 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     return [needsUpdate, data];
   }
 
+  /**
+   * Limits the iterator to only pull `limit` items from the stream.
+   * This is only used in cases where we're processing history
+   * for initial query run.
+   *
+   * In those cases:
+   * 1. We're in partially overlapping order with the source
+   * 2. There are no deletes, only adds
+   */
+  #getLimitedIterator(data: Multiset<T>, reply: Reply, limit: number) {
+    const {order} = reply;
+    const fields = (order && order[0]) || [];
+    const iterator = data[Symbol.iterator]();
+    let i = 0;
+    let last: T | undefined = undefined;
+    const comparator = this.#comparator;
+
+    // source order may be a subset of desired order
+    // in which case we process until we hit the next thing after
+    // the source order order after we hit the limit.
+
+    if (this.#order === undefined || fieldsMatch(fields, this.#order[0])) {
+      return {
+        next() {
+          if (i >= limit) {
+            return {done: true, value: undefined} as const;
+          }
+          const next = iterator.next();
+          if (next.done) {
+            return next;
+          }
+          const entry = next.value;
+          i += Math.abs(entry[1]);
+          return next;
+        },
+      };
+    }
+
+    // The source order is a subset of the desired order.
+    // We keep porcessing beyond `limit` until we hit the next
+    // thing according to source order.
+    if (fields[0] !== this.#order[0][0]) {
+      throw new Error(
+        `Order must overlap on at least one field! Got: ${fields[0]} | ${
+          this.#order[0][0]
+        }`,
+      );
+    }
+
+    return {
+      next() {
+        if (i >= limit) {
+          // keep processing until `next` is greater than `last`
+          const next = iterator.next();
+          if (next.done) {
+            return next;
+          }
+
+          const entry = next.value;
+          if (last === undefined) {
+            return {
+              done: true,
+              value: undefined,
+            } as const;
+          }
+
+          if (comparator(entry[0], last) > 0) {
+            return {
+              done: true,
+              value: undefined,
+            } as const;
+          }
+          return next;
+        }
+
+        const next = iterator.next();
+        if (next.done) {
+          return next;
+        }
+        const entry = next.value;
+        i += Math.abs(entry[1]);
+        last = entry[0];
+        return next;
+      },
+    };
+  }
+
   // TODO: if we're not in source order --
   // We should create a source in the order we need so we can always be in source order.
-  #limitedAddAll(data: BTree<T, undefined>, value: T) {
+  #limitedAdd(data: BTree<T, undefined>, value: T) {
     const limit = this.#limit || 0;
     // Under limit? We can just add.
     if (data.size < limit) {
@@ -162,7 +275,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     return data;
   }
 
-  #limitedRemoveAll(data: BTree<T, undefined>, value: T) {
+  #limitedRemove(data: BTree<T, undefined>, value: T) {
     // if we're outside the window, do not remove.
     const minComp = this.#min && this.#comparator(value, this.#min);
     const maxComp = this.#max && this.#comparator(value, this.#max);
@@ -196,9 +309,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
   pullHistoricalData(): void {
     this._materialite.tx(() => {
       this.stream.messageUpstream(
-        // this.#order will go in for `undefined` once we've completed handling `orderBy`
-        // optimizations.
-        createPullMessage(undefined, 'select'),
+        createPullMessage(this.#order),
         this._listener,
       );
     });
@@ -222,13 +333,13 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
   }
 }
 
-function addAll<T>(data: BTree<T, undefined>, value: T) {
+function add<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
   data = data.with(value, undefined, true);
   return data;
 }
 
-function removeAll<T>(data: BTree<T, undefined>, value: T) {
+function remove<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
   data = data.without(value);
   return data;
