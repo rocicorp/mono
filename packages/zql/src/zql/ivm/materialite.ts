@@ -3,7 +3,7 @@
 import type {Comparator} from './types.js';
 import {must} from 'shared/src/must.js';
 import {SetSource} from './source/set-source.js';
-import type {SourceInternal} from './source/source.js';
+import type {Source, SourceInternal} from './source/source.js';
 import type {Version} from './types.js';
 
 export type MaterialiteForSourceInternal = {
@@ -45,6 +45,12 @@ export class Materialite {
     name?: string | undefined,
   ) {
     return new SetSource<T>(this.#internal, comparator, name);
+  }
+
+  constructSource<T extends object>(
+    ctor: (internal: MaterialiteForSourceInternal) => Source<T>,
+  ) {
+    return ctor(this.#internal);
   }
 
   /**
