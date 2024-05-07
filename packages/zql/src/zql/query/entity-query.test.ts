@@ -1,7 +1,7 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import {z} from 'zod';
 import type {AST, Condition, SimpleOperator} from '../ast/ast.js';
-import {makeTestContext} from '../context/context.js';
+import {makeTestContext} from '../context/test-context.js';
 import * as agg from './agg.js';
 import {conditionToString} from './condition-to-string.js';
 import {

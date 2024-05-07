@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
 import type {Entity} from '../../../entity.js';
-import {makeTestContext} from '../../context/context.js';
+import {makeTestContext} from '../../context/test-context.js';
 import {makeComparator} from '../../query/statement.js';
 import {MutableTreeView} from './tree-view.js';
 
