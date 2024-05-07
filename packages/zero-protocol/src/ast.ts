@@ -19,6 +19,7 @@ import type {
   OrderOps,
   Ordering,
   Primitive,
+  PrimitiveArray,
   SimpleCondition,
   SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
@@ -34,6 +35,12 @@ export const primitiveSchema: v.Type<Primitive> = v.union(
   v.number(),
   v.boolean(),
   v.null(),
+);
+
+export const primitiveArraySchema: v.Type<PrimitiveArray> = v.union(
+  v.array(v.string()),
+  v.array(v.number()),
+  v.array(v.boolean()),
 );
 
 export const aggregateSchema: v.Type<Aggregate> = v.union(
