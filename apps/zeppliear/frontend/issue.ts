@@ -222,6 +222,32 @@ export async function deleteIssueComment(
   });
 }
 
+export type IssueCreationPartial = Omit<
+  Issue,
+  'kanbanOrder' | 'created' | 'modified' | 'creatorID'
+>;
+
+export async function createIssue(
+  zero: Zero<Collections>,
+  i: IssueCreationPartial,
+) {
+  // TODO(arv): Use zql min
+  // const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
+  // const minKanbanOrder = minKanbanOrderIssue
+  //   ? minKanbanOrderIssue.kanbanOrder
+  //   : null;
+  const modified = getModifiedDate();
+  await zero.mutate.issue.create({
+    ...i,
+    // TODO: Create a Member for this user
+    creatorID: JIM_HOLDEN_MEMBER_ID,
+    created: modified,
+    modified,
+    //  TODO: fix kanban
+    kanbanOrder: '0', //generateKeyBetween(null, minKanbanOrder),
+  });
+}
+
 export async function updateIssues(
   zero: Zero<Collections>,
   {issueUpdates}: {issueUpdates: IssueUpdate[]},

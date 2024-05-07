@@ -8,7 +8,7 @@ import classnames from 'classnames';
 import SearchBox from './searchbox';
 import IssueModal from './issue-modal';
 import ReactLogo from './assets/images/logo.svg';
-import type {Issue} from './issue';
+import type {IssueCreationPartial} from './issue';
 import {queryTypes, useQueryState, useQueryStates} from 'next-usequerystate';
 import AboutModal from './about-modal';
 import {noop} from 'lodash';
@@ -17,7 +17,7 @@ interface Props {
   // Show menu (for small screen only)
   menuVisible: boolean;
   onCloseMenu?: () => void;
-  onCreateIssue: (i: Omit<Issue, 'kanbanOrder'>) => void;
+  onCreateIssue: (i: IssueCreationPartial) => void;
 }
 
 function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
