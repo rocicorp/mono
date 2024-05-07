@@ -84,6 +84,7 @@ const PART_COUNT_FLUSH_THRESHOLD = 100;
  * Handles a single {@link ViewSyncer.sync()} connection.
  */
 export class ClientHandler {
+  readonly clientID: string;
   readonly #lc: LogContext;
   readonly #pokes: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
@@ -94,6 +95,7 @@ export class ClientHandler {
     baseCookie: string | null,
     pokes: Subscription<Downstream>,
   ) {
+    this.clientID = clientID;
     this.#lc = lc.withContext('clientID', clientID);
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);

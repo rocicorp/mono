@@ -420,20 +420,18 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const query = this._cvr.queries[queryID];
     assertNotInternal(query);
 
-    const {desiredBy, patchVersion} = query;
-    assert(patchVersion);
-    assert(
-      Object.keys(desiredBy).length === 0,
-      `Cannot remove query ${queryID}`,
-    );
-
     assert(!this.#executedQueryIDs.has(queryID));
     this.#removedQueryIDs.add(queryID);
     delete this._cvr.queries[queryID];
 
     const newVersion = this._ensureNewVersion();
     void this._writes.del(this._paths.query({id: queryID}));
-    void this._writes.del(this._paths.queryPatch(patchVersion, {id: queryID}));
+    const {patchVersion} = query;
+    if (patchVersion) {
+      void this._writes.del(
+        this._paths.queryPatch(patchVersion, {id: queryID}),
+      );
+    }
     void this._writes.put(this._paths.queryPatch(newVersion, {id: queryID}), {
       type: 'query',
       op: 'del',

@@ -1,11 +1,13 @@
+import {LogContext, consoleLogSink} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
+import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import type {PokePartBody, Upstream} from 'zero-protocol';
+import type {Downstream, PokePartBody, Upstream} from 'zero-protocol';
 import {TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
-import {runWithFakeDurableObjectStorage} from '../../test/fake-do.js';
+import {FakeDurableObjectStorage} from '../../test/fake-do.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
@@ -23,7 +25,15 @@ import {ViewSyncerService} from './view-syncer.js';
 
 describe('view-syncer/service', () => {
   let db: PostgresDB;
-  const lc = createSilentLogContext();
+  const lc = new LogContext('debug', {}, consoleLogSink);
+  createSilentLogContext();
+
+  let storage: FakeDurableObjectStorage;
+  let watcher: MockInvalidationWatcher;
+  let vs: ViewSyncerService;
+  let upstream: Subscription<Upstream>;
+  let viewSyncerDone: Promise<void>;
+  let downstream: Queue<Downstream>;
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_service_test');
@@ -62,9 +72,43 @@ describe('view-syncer/service', () => {
 
     CREATE PUBLICATION zero_all FOR ALL TABLES;
     `.simple();
+
+    storage = new FakeDurableObjectStorage();
+    watcher = new MockInvalidationWatcher();
+    vs = new ViewSyncerService(
+      lc,
+      serviceID,
+      new DurableStorage(storage),
+      watcher,
+    );
+    upstream = clientUpstream();
+    viewSyncerDone = vs.run();
+    downstream = new Queue();
+    const stream = await vs.sync(
+      {clientID: 'foo', baseCookie: null},
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
+        ],
+      },
+      upstream,
+    );
+    void pipeDownstreamToQueue(stream);
   });
 
+  async function pipeDownstreamToQueue(stream: AsyncIterable<Downstream>) {
+    try {
+      for await (const msg of stream) {
+        await downstream.enqueue(msg);
+      }
+    } catch (e) {
+      await downstream.enqueueRejection(e);
+    }
+  }
+
   afterEach(async () => {
+    await vs.stop();
+    await viewSyncerDone;
     await testDBs.drop(db);
   });
 
@@ -85,595 +129,611 @@ describe('view-syncer/service', () => {
     table: 'issues',
   };
 
+  const USERS_NAME_QUERY: AST = {
+    select: [
+      ['id', 'id'],
+      ['name', 'name'],
+    ],
+    table: 'users',
+  };
+
   test('initializes schema', async () => {
-    await runWithFakeDurableObjectStorage(async storage => {
-      const watcher = new MockInvalidationWatcher();
-      const vs = new ViewSyncerService(
-        lc,
-        serviceID,
-        new DurableStorage(storage),
-        watcher,
-      );
-
-      const done = vs.run();
-      await vs.sync(
-        {clientID: 'foo', baseCookie: null},
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-          ],
-        },
-        clientUpstream(),
-      );
-
-      expect(await storage.get('/vs/storage_schema_meta')).toEqual({
-        // Update versions as necessary
-        version: 1,
-        maxVersion: 1,
-        minSafeRollbackVersion: 1,
-      });
-
-      await vs.stop();
-      return done;
+    expect(await storage.get('/vs/storage_schema_meta')).toEqual({
+      // Update versions as necessary
+      version: 1,
+      maxVersion: 1,
+      minSafeRollbackVersion: 1,
     });
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    await runWithFakeDurableObjectStorage(async storage => {
-      const watcher = new MockInvalidationWatcher();
-      const vs = new ViewSyncerService(
-        lc,
-        serviceID,
-        new DurableStorage(storage),
-        watcher,
-      );
-
-      const done = vs.run();
-      await vs.sync(
-        {clientID: 'foo', baseCookie: null},
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-          ],
+    const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+    expect(cvr).toMatchObject({
+      clients: {
+        foo: {
+          desiredQueryIDs: ['query-hash1'],
+          id: 'foo',
+          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
-        clientUpstream(),
-      );
-
-      const cvr = await loadCVR(new DurableStorage(storage), serviceID);
-      expect(cvr).toMatchObject({
-        clients: {
-          foo: {
-            desiredQueryIDs: ['query-hash1'],
-            id: 'foo',
-            patchVersion: {stateVersion: '00', minorVersion: 1},
-          },
+      },
+      id: '9876',
+      queries: {
+        'query-hash1': {
+          ast: ISSUES_TITLE_QUERY,
+          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          id: 'query-hash1',
         },
-        id: '9876',
-        queries: {
-          'query-hash1': {
-            ast: ISSUES_TITLE_QUERY,
-            desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
-            id: 'query-hash1',
-          },
-        },
-        version: {stateVersion: '00', minorVersion: 1},
-      });
-
-      await vs.stop();
-      return done;
+      },
+      version: {stateVersion: '00', minorVersion: 1},
     });
   });
 
   test('subscribes and responds to initial invalidation', async () => {
-    await runWithFakeDurableObjectStorage(async storage => {
-      const watcher = new MockInvalidationWatcher();
-      const vs = new ViewSyncerService(
-        lc,
-        serviceID,
-        new DurableStorage(storage),
-        watcher,
-      );
+    const request = await watcher.requests.dequeue();
+    expect(request.fromVersion).toBeUndefined();
+    expect(Object.keys(request.queries).length).toBe(
+      2, // including internal "lmids" query
+    );
 
-      const done = vs.run();
-      const downstream = await vs.sync(
-        {clientID: 'foo', baseCookie: null},
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-          ],
+    await watcher.notify({
+      fromVersion: null,
+      newVersion: '1xz',
+      invalidatedQueries: new Set(),
+    });
+
+    expect(await downstream.dequeue()).toEqual([
+      'pokeStart',
+      {pokeID: '1xz', baseCookie: null, cookie: '1xz'},
+    ]);
+    expect(await downstream.dequeue()).toEqual([
+      'pokePart',
+      {
+        pokeID: '1xz',
+        clientsPatch: [{clientID: 'foo', op: 'put'}],
+        lastMutationIDChanges: {foo: 42},
+        desiredQueriesPatches: {
+          foo: [{ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'}],
         },
-        clientUpstream(),
-      );
-
-      const request = await watcher.requests.dequeue();
-      expect(request.fromVersion).toBeUndefined();
-      expect(Object.keys(request.queries).length).toBe(
-        2, // including internal "lmids" query
-      );
-
-      const reader = new TransactionPool(lc);
-      const readerDone = reader.run(db);
-
-      watcher.subscriptions[0].push({
-        fromVersion: null,
-        newVersion: '1xz',
-        invalidatedQueries: new Set(),
-        reader,
-      });
-
-      await watcher.consumed[0].dequeue();
-      reader.setDone();
-
-      const expectedPokes = [
-        ['pokeStart', {pokeID: '1xz', baseCookie: null, cookie: '1xz'}],
-        [
-          'pokePart',
+        entitiesPatch: [
           {
-            pokeID: '1xz',
-            clientsPatch: [{clientID: 'foo', op: 'put'}],
-            lastMutationIDChanges: {foo: 42},
-            desiredQueriesPatches: {
-              foo: [{ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'}],
+            op: 'put',
+            entityID: {id: '1'},
+            entityType: 'issues',
+            value: {
+              id: '1',
+              title: 'parent issue foo',
+              big: 9007199254740991,
             },
-            entitiesPatch: [
-              {
-                op: 'put',
-                entityID: {id: '1'},
-                entityType: 'issues',
-                value: {
-                  id: '1',
-                  title: 'parent issue foo',
-                  big: 9007199254740991,
-                },
-              },
-              {
-                op: 'put',
-                entityID: {id: '2'},
-                entityType: 'issues',
-                value: {
-                  id: '2',
-                  title: 'parent issue bar',
-                  big: -9007199254740991,
-                },
-              },
-              {
-                op: 'put',
-                entityID: {id: '3'},
-                entityType: 'issues',
-                value: {id: '3', title: 'foo', big: 123},
-              },
-              {
-                op: 'put',
-                entityID: {id: '4'},
-                entityType: 'issues',
-                value: {id: '4', title: 'bar', big: 100},
-              },
-            ],
-            gotQueriesPatch: [
-              {ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'},
-            ],
-          } satisfies PokePartBody,
-        ],
-        ['pokeEnd', {pokeID: '1xz'}],
-      ];
-
-      let i = 0;
-      for await (const poke of downstream) {
-        expect(poke).toEqual(expectedPokes[i]);
-        if (++i >= expectedPokes.length) {
-          break;
-        }
-      }
-
-      const cvr = await loadCVR(new DurableStorage(storage), serviceID);
-      expect(cvr).toMatchObject({
-        clients: {
-          foo: {
-            desiredQueryIDs: ['query-hash1'],
-            id: 'foo',
-            patchVersion: {stateVersion: '00', minorVersion: 1},
           },
+          {
+            op: 'put',
+            entityID: {id: '2'},
+            entityType: 'issues',
+            value: {
+              id: '2',
+              title: 'parent issue bar',
+              big: -9007199254740991,
+            },
+          },
+          {
+            op: 'put',
+            entityID: {id: '3'},
+            entityType: 'issues',
+            value: {id: '3', title: 'foo', big: 123},
+          },
+          {
+            op: 'put',
+            entityID: {id: '4'},
+            entityType: 'issues',
+            value: {id: '4', title: 'bar', big: 100},
+          },
+        ],
+        gotQueriesPatch: [
+          {ast: ISSUES_TITLE_QUERY, hash: 'query-hash1', op: 'put'},
+        ],
+      } satisfies PokePartBody,
+    ]);
+    expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
+
+    const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+    expect(cvr).toMatchObject({
+      clients: {
+        foo: {
+          desiredQueryIDs: ['query-hash1'],
+          id: 'foo',
+          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
-        id: '9876',
-        queries: {
-          'lmids': {
-            ast: {
+      },
+      id: '9876',
+      queries: {
+        'lmids': {
+          ast: {
+            schema: 'zero',
+            table: 'clients',
+            select: [
+              ['clientID', 'clientID'],
+              ['lastMutationID', 'lastMutationID'],
+            ],
+            where: {
+              type: 'conjunction',
+              op: 'OR',
+              conditions: [
+                {
+                  type: 'simple',
+                  op: '=',
+                  field: 'clientID',
+                  value: {type: 'literal', value: 'foo'},
+                },
+              ],
+            },
+          },
+          internal: true,
+          id: 'lmids',
+          transformationVersion: {stateVersion: '1xz'},
+        },
+        'query-hash1': {
+          ast: ISSUES_TITLE_QUERY,
+          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          id: 'query-hash1',
+          patchVersion: {stateVersion: '1xz'},
+          transformationVersion: {stateVersion: '1xz'},
+        },
+      },
+      version: {stateVersion: '1xz'},
+    });
+
+    const rowRecords = await storage.list({
+      prefix: `/vs/cvr/${serviceID}/d/`,
+    });
+    expect(new Set(rowRecords.values())).toEqual(
+      new Set([
+        {
+          id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1a0',
+        },
+        {
+          id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1ab',
+        },
+        {
+          id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1ca',
+        },
+        {
+          id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1cd',
+        },
+        {
+          id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+          rowVersion: '0a',
+        },
+      ]),
+    );
+
+    const rowPatches = await storage.list({
+      prefix: `/vs/cvr/${serviceID}/p/d/`,
+    });
+    expect(rowPatches).toEqual(
+      new Map([
+        [
+          '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1cd',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1ab',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1a0',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1ca',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
+          {
+            columns: ['clientID', 'lastMutationID'],
+            id: {
               schema: 'zero',
               table: 'clients',
-              select: [
-                ['clientID', 'clientID'],
-                ['lastMutationID', 'lastMutationID'],
-              ],
-              where: {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    op: '=',
-                    field: 'clientID',
-                    value: {type: 'literal', value: 'foo'},
-                  },
-                ],
-              },
+              rowKey: {clientID: 'foo'},
             },
-            internal: true,
-            id: 'lmids',
-            transformationVersion: {stateVersion: '1xz'},
-          },
-          'query-hash1': {
-            ast: ISSUES_TITLE_QUERY,
-            desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
-            id: 'query-hash1',
-            patchVersion: {stateVersion: '1xz'},
-            transformationVersion: {stateVersion: '1xz'},
-          },
-        },
-        version: {stateVersion: '1xz'},
-      });
-
-      const rowRecords = await storage.list({
-        prefix: `/vs/cvr/${serviceID}/d/`,
-      });
-      expect(new Set(rowRecords.values())).toEqual(
-        new Set([
-          {
-            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1a0',
-          },
-          {
-            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1ab',
-          },
-          {
-            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1ca',
-          },
-          {
-            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1cd',
-          },
-          {
-            id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+            op: 'put',
             rowVersion: '0a',
+            type: 'row',
           },
-        ]),
-      );
+        ],
+      ]),
+    );
+  });
 
-      const rowPatches = await storage.list({
-        prefix: `/vs/cvr/${serviceID}/p/d/`,
-      });
-      expect(rowPatches).toEqual(
-        new Map([
-          [
-            '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1cd',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1ab',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1a0',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1ca',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
-            {
-              columns: ['clientID', 'lastMutationID'],
-              id: {
-                schema: 'zero',
-                table: 'clients',
-                rowKey: {clientID: 'foo'},
-              },
-              op: 'put',
-              rowVersion: '0a',
-              type: 'row',
-            },
-          ],
-        ]),
-      );
+  test('responds to changeQueriesPatch', async () => {
+    await watcher.requests.dequeue();
 
-      await vs.stop();
-      return Promise.all([done, readerDone]);
+    // Change the set of queries.
+    upstream.push([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash2', ast: USERS_NAME_QUERY},
+          {op: 'del', hash: 'query-hash1'},
+        ],
+      },
+    ]);
+
+    // Should ask the invalidation watcher for a new subscription.
+    await watcher.requests.dequeue();
+
+    await watcher.notify({
+      fromVersion: null,
+      newVersion: '1xz',
+      invalidatedQueries: new Set(),
+    });
+
+    expect(await downstream.dequeue()).toEqual([
+      'pokeStart',
+      {pokeID: '1xz', baseCookie: null, cookie: '1xz'},
+    ]);
+    expect(await downstream.dequeue()).toEqual([
+      'pokePart',
+      {
+        pokeID: '1xz',
+        clientsPatch: [{clientID: 'foo', op: 'put'}],
+        lastMutationIDChanges: {foo: 42},
+        desiredQueriesPatches: {
+          foo: [
+            {hash: 'query-hash1', op: 'del'},
+            {ast: USERS_NAME_QUERY, hash: 'query-hash2', op: 'put'},
+          ],
+        },
+        entitiesPatch: [
+          {
+            op: 'put',
+            entityID: {id: '100'},
+            entityType: 'users',
+            value: {id: '100', name: 'Alice'},
+          },
+          {
+            op: 'put',
+            entityID: {id: '101'},
+            entityType: 'users',
+            value: {id: '101', name: 'Bob'},
+          },
+          {
+            op: 'put',
+            entityID: {id: '102'},
+            entityType: 'users',
+            value: {id: '102', name: 'Candice'},
+          },
+        ],
+        gotQueriesPatch: [
+          {hash: 'query-hash1', op: 'del'},
+          {ast: USERS_NAME_QUERY, hash: 'query-hash2', op: 'put'},
+        ],
+      } satisfies PokePartBody,
+    ]);
+    expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
+
+    const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+    expect(cvr).toMatchObject({
+      clients: {
+        foo: {
+          desiredQueryIDs: ['query-hash2'],
+          id: 'foo',
+          patchVersion: {stateVersion: '00', minorVersion: 1},
+        },
+      },
+      id: '9876',
+      queries: {
+        'lmids': {
+          ast: {
+            schema: 'zero',
+            table: 'clients',
+            select: [
+              ['clientID', 'clientID'],
+              ['lastMutationID', 'lastMutationID'],
+            ],
+            where: {
+              type: 'conjunction',
+              op: 'OR',
+              conditions: [
+                {
+                  type: 'simple',
+                  op: '=',
+                  field: 'clientID',
+                  value: {type: 'literal', value: 'foo'},
+                },
+              ],
+            },
+          },
+          internal: true,
+          id: 'lmids',
+          transformationVersion: {stateVersion: '1xz'},
+        },
+        'query-hash2': {
+          ast: USERS_NAME_QUERY,
+          desiredBy: {foo: {stateVersion: '00', minorVersion: 2}},
+          id: 'query-hash2',
+          patchVersion: {stateVersion: '1xz'},
+          transformationVersion: {stateVersion: '1xz'},
+        },
+      },
+      version: {stateVersion: '1xz'},
     });
   });
 
   test('fails pokes with error on unsafe integer', async () => {
-    await runWithFakeDurableObjectStorage(async storage => {
-      const watcher = new MockInvalidationWatcher();
-      const vs = new ViewSyncerService(
-        lc,
-        serviceID,
-        new DurableStorage(storage),
-        watcher,
-      );
+    // Make one value too large to send back in the current zero-protocol.
+    await db`UPDATE issues SET big = 10000000000000000 WHERE id = '4';`;
 
-      const done = vs.run();
+    await watcher.requests.dequeue();
+    await watcher.notify({
+      fromVersion: null,
+      newVersion: '1xz',
+      invalidatedQueries: new Set(),
+    });
 
-      // Make one value too large to send back in the current zero-protocol.
-      await db`UPDATE issues SET big = 10000000000000000 WHERE id = '4';`;
-
-      const downstream = await vs.sync(
-        {clientID: 'foo', baseCookie: null},
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
-          ],
-        },
-        clientUpstream(),
-      );
-
-      await watcher.requests.dequeue();
-      const reader = new TransactionPool(lc);
-      const readerDone = reader.run(db);
-
-      watcher.subscriptions[0].push({
-        fromVersion: null,
-        newVersion: '1xz',
-        invalidatedQueries: new Set(),
-        reader,
-      });
-
-      await watcher.consumed[0].dequeue();
-      reader.setDone();
-
-      let err;
-      let i = 0;
-      try {
-        for await (const _ of downstream) {
-          if (++i >= 3) {
-            break;
-          }
-        }
-      } catch (e) {
-        err = e;
+    let err;
+    try {
+      for (let i = 0; i < 3; i++) {
+        await downstream.dequeue();
       }
-      expect(err).not.toBeUndefined();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
 
-      // Everything else should succeed, however, because CVRs are agnostic to row
-      // contents, and the data in the DB is technically "valid" (and available when
-      // the protocol supports it).
-      const cvr = await loadCVR(new DurableStorage(storage), serviceID);
-      expect(cvr).toMatchObject({
-        clients: {
-          foo: {
-            desiredQueryIDs: ['query-hash1'],
-            id: 'foo',
-            patchVersion: {stateVersion: '00', minorVersion: 1},
-          },
+    // Everything else should succeed, however, because CVRs are agnostic to row
+    // contents, and the data in the DB is technically "valid" (and available when
+    // the protocol supports it).
+    const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+    expect(cvr).toMatchObject({
+      clients: {
+        foo: {
+          desiredQueryIDs: ['query-hash1'],
+          id: 'foo',
+          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
-        id: '9876',
-        queries: {
-          'lmids': {
-            ast: {
+      },
+      id: '9876',
+      queries: {
+        'lmids': {
+          ast: {
+            schema: 'zero',
+            table: 'clients',
+            select: [
+              ['clientID', 'clientID'],
+              ['lastMutationID', 'lastMutationID'],
+            ],
+            where: {
+              type: 'conjunction',
+              op: 'OR',
+              conditions: [
+                {
+                  type: 'simple',
+                  op: '=',
+                  field: 'clientID',
+                  value: {type: 'literal', value: 'foo'},
+                },
+              ],
+            },
+          },
+          internal: true,
+          id: 'lmids',
+          transformationVersion: {stateVersion: '1xz'},
+        },
+        'query-hash1': {
+          ast: ISSUES_TITLE_QUERY,
+          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          id: 'query-hash1',
+          patchVersion: {stateVersion: '1xz'},
+          transformationVersion: {stateVersion: '1xz'},
+        },
+      },
+      version: {stateVersion: '1xz'},
+    });
+
+    const rowRecords = await storage.list({
+      prefix: `/vs/cvr/${serviceID}/d/`,
+    });
+    expect(new Set(rowRecords.values())).toEqual(
+      new Set([
+        {
+          id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1a0',
+        },
+        {
+          id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1ab',
+        },
+        {
+          id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1ca',
+        },
+        {
+          id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+            big: ['query-hash1'],
+          },
+          rowVersion: '1cd',
+        },
+        {
+          id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
+          patchVersion: {stateVersion: '1xz'},
+          queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+          rowVersion: '0a',
+        },
+      ]),
+    );
+
+    const rowPatches = await storage.list({
+      prefix: `/vs/cvr/${serviceID}/p/d/`,
+    });
+    expect(rowPatches).toEqual(
+      new Map([
+        [
+          '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1cd',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1ab',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1a0',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
+          {
+            columns: ['big', 'id', 'title'],
+            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+            op: 'put',
+            rowVersion: '1ca',
+            type: 'row',
+          },
+        ],
+        [
+          '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
+          {
+            columns: ['clientID', 'lastMutationID'],
+            id: {
               schema: 'zero',
               table: 'clients',
-              select: [
-                ['clientID', 'clientID'],
-                ['lastMutationID', 'lastMutationID'],
-              ],
-              where: {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    op: '=',
-                    field: 'clientID',
-                    value: {type: 'literal', value: 'foo'},
-                  },
-                ],
-              },
+              rowKey: {clientID: 'foo'},
             },
-            internal: true,
-            id: 'lmids',
-            transformationVersion: {stateVersion: '1xz'},
-          },
-          'query-hash1': {
-            ast: ISSUES_TITLE_QUERY,
-            desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
-            id: 'query-hash1',
-            patchVersion: {stateVersion: '1xz'},
-            transformationVersion: {stateVersion: '1xz'},
-          },
-        },
-        version: {stateVersion: '1xz'},
-      });
-
-      const rowRecords = await storage.list({
-        prefix: `/vs/cvr/${serviceID}/d/`,
-      });
-      expect(new Set(rowRecords.values())).toEqual(
-        new Set([
-          {
-            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1a0',
-          },
-          {
-            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1ab',
-          },
-          {
-            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1ca',
-          },
-          {
-            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {
-              id: ['query-hash1'],
-              title: ['query-hash1'],
-              big: ['query-hash1'],
-            },
-            rowVersion: '1cd',
-          },
-          {
-            id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
-            patchVersion: {stateVersion: '1xz'},
-            queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+            op: 'put',
             rowVersion: '0a',
+            type: 'row',
           },
-        ]),
-      );
-
-      const rowPatches = await storage.list({
-        prefix: `/vs/cvr/${serviceID}/p/d/`,
-      });
-      expect(rowPatches).toEqual(
-        new Map([
-          [
-            '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1cd',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1ab',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1a0',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
-            {
-              columns: ['big', 'id', 'title'],
-              id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-              op: 'put',
-              rowVersion: '1ca',
-              type: 'row',
-            },
-          ],
-          [
-            '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
-            {
-              columns: ['clientID', 'lastMutationID'],
-              id: {
-                schema: 'zero',
-                table: 'clients',
-                rowKey: {clientID: 'foo'},
-              },
-              op: 'put',
-              rowVersion: '0a',
-              type: 'row',
-            },
-          ],
-        ]),
-      );
-
-      await vs.stop();
-      return Promise.all([done, readerDone]);
-    });
+        ],
+      ]),
+    );
   });
 
   class MockInvalidationWatcher
     implements InvalidationWatcher, InvalidationWatcherRegistry
   {
     readonly requests = new Queue<WatchRequest>();
-    readonly subscriptions: Subscription<QueryInvalidationUpdate>[] = [];
-    readonly consumed: Queue<true>[] = [];
+    readonly consumed = new Queue<true>();
+    subscription: Subscription<QueryInvalidationUpdate> | undefined;
 
     watch(
       request: WatchRequest,
     ): Promise<CancelableAsyncIterable<QueryInvalidationUpdate>> {
       void this.requests.enqueue(request);
-      const consumed = new Queue<true>();
-      const sub = new Subscription<QueryInvalidationUpdate>({
-        consumed: () => void consumed.enqueue(true),
+      assert(
+        this.subscription === undefined,
+        'Only one subscription expected (at a time) in this test',
+      );
+      this.subscription = new Subscription<QueryInvalidationUpdate>({
+        consumed: () => this.consumed.enqueue(true),
+        cleanup: () => (this.subscription = undefined),
       });
-      this.subscriptions.push(sub);
-      this.consumed.push(consumed);
-      return Promise.resolve(sub);
+      return Promise.resolve(this.subscription);
+    }
+
+    async notify(invalidation: Omit<QueryInvalidationUpdate, 'reader'>) {
+      const reader = new TransactionPool(lc);
+      const readerDone = reader.run(db);
+
+      assert(this.subscription, 'no subscription');
+      this.subscription.push({...invalidation, reader});
+      await this.consumed.dequeue();
+
+      reader.setDone();
+      await readerDone;
     }
 
     async getTableSchemas(): Promise<readonly TableSpec[]> {
