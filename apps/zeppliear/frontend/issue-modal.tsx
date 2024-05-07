@@ -1,7 +1,7 @@
 import {nanoid} from 'nanoid';
 import {useState} from 'react';
 import CloseIcon from './assets/icons/close.svg';
-import {Issue, Priority, Status} from './issue';
+import {Issue, JIM_HOLDEN_MEMBER_ID, Priority, Status} from './issue';
 import Modal from './modal';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
@@ -31,7 +31,7 @@ export default function IssueModal({isOpen, onDismiss, onCreateIssue}: Props) {
       modified: new Date().getTime(),
       created: new Date().getTime(),
       // TODO: Create a Member for this user
-      creatorID: 'Me',
+      creatorID: JIM_HOLDEN_MEMBER_ID,
       description,
     });
     if (onDismiss) onDismiss();
