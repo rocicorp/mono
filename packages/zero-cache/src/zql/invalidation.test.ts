@@ -197,7 +197,9 @@ describe('zql/invalidation matchers', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      const matches = computeMatchers(c.cond, MAX_DEPTH).map(m => m.getMatch());
+      const matches = computeMatchers(c.cond, col => col, MAX_DEPTH).map(m =>
+        m.getMatch(),
+      );
       expect(new Set(matches)).toEqual(new Set(c.matches));
     });
   }
@@ -301,6 +303,38 @@ describe('zql/invalidation hashes filters and hashes', () => {
         where: and(
           cond('foo', '=', 'bar'),
           cond('bar', '=', 2),
+          cond('a', '<', 3), // Ignored
+        ),
+      },
+      filters: [
+        {
+          id: '3aqv7m9tgnnqr',
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['id'],
+          filteredColumns: {foo: '=', bar: '='},
+        },
+      ],
+      hashes: [
+        FULL_TABLE_INVALIDATION,
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['id'],
+          filteredColumns: {bar: '2', foo: '"bar"'},
+        }),
+      ],
+    },
+    {
+      name: 'AND filter with selectors in fields',
+      ast: {
+        table: 'foo',
+        select: [['id', 'id']],
+        orderBy: [['id'], 'asc'],
+        where: and(
+          cond('foo.foo', '=', 'bar'),
+          cond('join.alias.baz', '=', 3), // Ignored
+          cond('public.foo.bar', '=', 2),
           cond('a', '<', 3), // Ignored
         ),
       },
