@@ -1,8 +1,7 @@
 import type {UndoManager} from '@rocicorp/undo';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
-import {generateKeyBetween} from 'fractional-indexing';
-import {minBy, pickBy} from 'lodash';
+import {pickBy} from 'lodash';
 import {queryTypes, useQueryState} from 'next-usequerystate';
 import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
@@ -80,7 +79,8 @@ const App = ({undoManager}: AppProps) => {
 
   const issueQuery = zero.query.issue;
 
-  const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
+  // TODO: fix kanban
+  //const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
   const issueListQuery = issueQuery
     .limit(200)
     .leftJoin(
@@ -123,6 +123,7 @@ const App = ({undoManager}: AppProps) => {
       // or remove undo for now.
       await zero.mutate.issue.create({
         ...issue,
+        //  TODO: fix kanban
         kanbanOrder: '0', //generateKeyBetween(null, minKanbanOrder),
       });
     },
