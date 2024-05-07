@@ -22,7 +22,7 @@ test('getSource - no ordering', () => {
     subscriptionAdded() {},
     subscriptionRemoved() {},
   });
-  const source = context.getSource('e1');
+  const source = context.getSource('e1', undefined);
   expect(source).toBeDefined();
   expect(callback).toBeDefined();
   assert(callback);

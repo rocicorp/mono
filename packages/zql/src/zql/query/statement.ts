@@ -5,7 +5,7 @@ import {
   getValueFromEntity,
   selectorsToQualifiedColumns,
 } from '../ast-to-ivm/pipeline-builder.js';
-import type {AST} from '../ast/ast.js';
+import type {AST, Ordering} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -89,12 +89,15 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   assert(orderBy);
 
   const usedSources: Source<Entity>[] = [];
-  const pipeline = buildPipeline(<T extends Entity>(sourceName: string) => {
-    const source = context.getSource(sourceName);
-    const ret = source.stream as unknown as DifferenceStream<T>;
-    usedSources.push(source);
-    return ret;
-  }, ast);
+  const pipeline = buildPipeline(
+    <T extends Entity>(sourceName: string, order: Ordering | undefined) => {
+      const source = context.getSource(sourceName, order);
+      const ret = source.stream as unknown as DifferenceStream<T>;
+      usedSources.push(source);
+      return ret;
+    },
+    ast,
+  );
 
   // We need to await seeding since sources can be ready at different times.
   // If someone queries for Table A in one query then
@@ -112,10 +115,7 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
     pipeline as unknown as DifferenceStream<
       Return extends [] ? Return[number] : never
     >,
-    makeComparator<readonly string[], Record<string, unknown>>(
-      orderBy[0],
-      orderBy[1],
-    ),
+    makeComparator<Record<string, unknown>>(orderBy[0], orderBy[1]),
     orderBy,
     limit,
   ) as unknown as View<Return extends [] ? Return[number] : Return>;
@@ -123,10 +123,10 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   return view;
 }
 
-export function makeComparator<
-  Keys extends ReadonlyArray<keyof T>,
-  T extends object,
->(sortKeys: Keys, direction: 'asc' | 'desc'): (l: T, r: T) => number {
+export function makeComparator<T extends object>(
+  sortKeys: readonly string[],
+  direction: 'asc' | 'desc',
+): (l: T, r: T) => number {
   const qualifiedColumns = selectorsToQualifiedColumns(
     sortKeys as unknown as string[],
   );
