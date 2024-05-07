@@ -37,12 +37,16 @@ export class Connection {
     serviceRunner: ServiceRunner,
     clientGroupID: string,
     clientID: string,
+    wsID: string,
     baseCookie: string | null,
     ws: WebSocket,
   ) {
     this.#clientID = clientID;
     this.#ws = ws;
-    this.#lc = lc.withContext('clientID', clientID);
+    this.#lc = lc
+      .withContext('clientID', clientID)
+      .withContext('clientGroupID', clientGroupID)
+      .withContext('wsID', wsID);
     this.#baseCookie = baseCookie;
     this.#upstreamDB = db;
 
@@ -60,6 +64,7 @@ export class Connection {
     const ws = this.#ws;
     const viewSyncer = this.#viewSyncer;
 
+    lc.debug?.('Received message', data);
     let msg;
     try {
       const value = JSON.parse(data);
