@@ -93,7 +93,7 @@ const App = ({undoManager}: AppProps) => {
       'issue.id',
       'issueLabel.issueID',
     )
-    .join(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
+    .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
 
   const {filteredQuery, hasNonViewFilters} = filterQuery(
     issueListQuery,
