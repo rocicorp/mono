@@ -30,7 +30,6 @@ interface Props {
   isLoading: boolean;
 }
 
-// TODO: join comment.creatorID with members
 function CommentsList(
   comments: {comment: Comment; creator: {name: string}}[],
   isLoading: boolean,
