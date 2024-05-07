@@ -114,19 +114,19 @@ const App = ({undoManager}: AppProps) => {
   const handleCreateIssue = useCallback(
     async (issue: Omit<Issue, 'kanbanOrder'>) => {
       // TODO(arv): Use zql min
-      const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
-      const minKanbanOrder = minKanbanOrderIssue
-        ? minKanbanOrderIssue.kanbanOrder
-        : null;
+      // const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
+      // const minKanbanOrder = minKanbanOrderIssue
+      //   ? minKanbanOrderIssue.kanbanOrder
+      //   : null;
 
       // TODO: UndoManager? - audit every other place we're doing mutations,
       // or remove undo for now.
       await zero.mutate.issue.create({
         ...issue,
-        kanbanOrder: generateKeyBetween(null, minKanbanOrder),
+        kanbanOrder: '0', //generateKeyBetween(null, minKanbanOrder),
       });
     },
-    [zero.mutate, allIssues],
+    [zero.mutate],
   );
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
