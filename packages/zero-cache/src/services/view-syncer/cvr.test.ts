@@ -253,7 +253,7 @@ describe('view-syncer/cvr', () => {
       // This adds a new barClient with desired queries.
       expect(
         updater.putDesiredQueries('barClient', {
-          oneHash: {table: 'issues'}, // oneHash is already "got", formerly desired by foo.
+          oneHash: {table: 'issues'},
           threeHash: {table: 'comments'},
         }),
       ).toEqual([
