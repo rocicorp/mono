@@ -16,6 +16,7 @@ SYNC_REPLICA_URI = "postgres://user:password@add.your.host.ip:6433/postgres"
 ```
 
 Open two windows one with docker-compose and the other wrangler:
+
 ```
 cd docker && docker-compose up
 npx wrangler dev --ip 0.0.0.0
