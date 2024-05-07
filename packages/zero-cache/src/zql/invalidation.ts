@@ -24,7 +24,7 @@ export type InvalidationInfo = {
 export function computeInvalidationInfo(
   normalized: Normalized,
 ): InvalidationInfo {
-  const {table, select, aggregate, where} = normalized.ast();
+  const {schema = 'public', table, select, aggregate, where} = normalized.ast();
 
   const selected = new Set<string>([
     ...(select ?? []).map(([col]) => col),
@@ -32,7 +32,19 @@ export function computeInvalidationInfo(
   ]);
   const selectedColumns: readonly string[] | undefined = selected.has('*')
     ? undefined
-    : [...selected].sort(compareUTF8);
+    : [...selected]
+        .map(col => {
+          const parts = col.split('.');
+          if (parts.length >= 3 && parts.at(-3) !== schema) {
+            return ''; // not a column of this table. filtered in next step.
+          }
+          if (parts.length >= 2 && parts.at(-2) !== table) {
+            return ''; // not a column of this table. filtered in next step.
+          }
+          return parts.at(-1) ?? col;
+        })
+        .filter(col => col.length)
+        .sort(compareUTF8);
 
   const hashes = new Set<string>();
   const filters = new Map<string, NormalizedInvalidationFilterSpec>();

@@ -4,6 +4,7 @@ import {
   NormalizedInvalidationFilterSpec,
   invalidationHash,
 } from '../types/invalidation.js';
+import {expandSelection} from './expansion.js';
 import {computeInvalidationInfo, computeMatchers} from './invalidation.js';
 import {getNormalized} from './normalize.js';
 import {and, cond, or} from './query-test-util.js';
@@ -634,6 +635,163 @@ describe('zql/invalidation hashes filters and hashes', () => {
       },
       filters: [],
       hashes: [],
+    },
+    {
+      name: 'Expanded AND with nested ORs (full outer product)',
+      ast: expandSelection(
+        {
+          table: 'foo',
+          select: [['id', 'id']],
+          orderBy: [['id'], 'asc'],
+          where: and(
+            or(cond('a', '=', 1), cond('b', '=', 2)),
+            or(cond('c', '=', 3), cond('d', '=', 4)),
+            or(cond('e', '=', 5), cond('f', '=', 6)),
+          ),
+        },
+        () => [],
+      ),
+      filters: [
+        {
+          filteredColumns: {
+            a: '=',
+            c: '=',
+            e: '=',
+          },
+          id: '94cwrmogrdg6',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            a: '=',
+            c: '=',
+            f: '=',
+          },
+          id: '22tz9cwb7jht7',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            a: '=',
+            d: '=',
+            e: '=',
+          },
+          id: '3m1rfajv6hbwb',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            a: '=',
+            d: '=',
+            f: '=',
+          },
+          id: '16jh6tzb2nz5d',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            b: '=',
+            c: '=',
+            e: '=',
+          },
+          id: '1j32xv49y8eog',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            b: '=',
+            c: '=',
+            f: '=',
+          },
+          id: '170umsu0w1edm',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            b: '=',
+            d: '=',
+            e: '=',
+          },
+          id: '1unv470xwgp9g',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+        {
+          filteredColumns: {
+            b: '=',
+            d: '=',
+            f: '=',
+          },
+          id: '2ekf70d5m36eq',
+          schema: 'public',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          table: 'foo',
+        },
+      ],
+      hashes: [
+        FULL_TABLE_INVALIDATION,
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {a: '1', c: '3', e: '5'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {a: '1', d: '4', e: '5'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {a: '1', c: '3', f: '6'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {a: '1', d: '4', f: '6'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {b: '2', c: '3', e: '5'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {b: '2', d: '4', e: '5'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {b: '2', c: '3', f: '6'},
+        }),
+        invalidationHash({
+          schema: 'public',
+          table: 'foo',
+          selectedColumns: ['a', 'b', 'c', 'd', 'e', 'f', 'id'],
+          filteredColumns: {b: '2', d: '4', f: '6'},
+        }),
+      ],
     },
   ];
 
