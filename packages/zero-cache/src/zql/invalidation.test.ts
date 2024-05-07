@@ -220,11 +220,16 @@ describe('zql/invalidation hashes filters and hashes', () => {
   const cases: Case[] = [
     {
       name: 'no WHERE',
-      ast: {table: 'foo', select: [['id', 'id']], orderBy: [['id'], 'asc']},
+      ast: {
+        schema: 'zero',
+        table: 'foo',
+        select: [['id', 'id']],
+        orderBy: [['id'], 'asc'],
+      },
       filters: [
         {
-          id: '1scpn2ec370qk',
-          schema: 'public',
+          id: '16dq50vgca6xn',
+          schema: 'zero',
           table: 'foo',
           selectedColumns: ['id'],
           filteredColumns: {},
@@ -233,7 +238,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       hashes: [
         FULL_TABLE_INVALIDATION,
         invalidationHash({
-          schema: 'public',
+          schema: 'zero',
           table: 'foo',
           selectedColumns: ['id'],
         }),

@@ -51,9 +51,7 @@ export function computeInvalidationInfo(
 
   computeMatchers(where).forEach(matcher =>
     matcher.addInvalidationInfo(
-      // TODO: Either (1) enforce the 'public' schema on the replication side,
-      //       or (2) support other schemas on the AST side.
-      {schema: 'public', table, selectedColumns},
+      {schema, table, selectedColumns},
       hashes,
       filters,
     ),
