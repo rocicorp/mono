@@ -12,7 +12,6 @@ import type {NullableVersion} from 'zero-protocol/src/version.js';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
-import {REPORT_INTERVAL_MS} from './metrics.js';
 import type {ZeroOptions} from './options.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
