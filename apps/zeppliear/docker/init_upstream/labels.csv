@@ -1,1838 +1,1838 @@
 id,label
-3iQO0joibB,failure
-z8OP2uosuh,navigation
--9kBOHsCe3,electrical
-_JNz_Hy49k,software
-pzrWYtj4nR,hardware
-8DBKrSgqaP,calibration
-Jqpazm-Hki,power
-GEEJfTwfyh,communications
-kkQmJChUSG,maintenance
-BK6obsSt-9,vibration
-BP_N3_eAbN,engineering
-6ml2VFcBKR,weapons
-FdTu2sBpY4,politics
-ntCOXwzdXt,security
-azcEqmfuKC,diplomacy
-DAJwjZle_I,strategy
-02dK79IvML,intelligence
-szcrGkeOYb,compliance
-2L89tkzbfh,negotiation
-fAwX3DGBMP,wear
-HZId-HezdB,engine
-ykHxYlxlZg,escape pod
-08k1ZZ4xGo,bug
-BnvaYluZHx,repair
-xkpBW9K_Bo,mechanical
-ZO4QJ54VOl,diagnostics
-qwypfp32LA,inspection
-SNGoysYIL7,structural
-YN2se1f3Ul,life-support
-TUvQLiE0ZW,corruption
-2qn99TJpSx,navigational_charts
-MPFRpK0jcB,Rocinante
-II6AZyP3ZU,issue
-u95yUT8VPE,ventilation
-VhfFU50P7E,health
-7dATFq6AOT,safety
-BFIPs1SR6R,medical
-ciEbuHSBQ7,pipes
-d3CeQbdwse,life support
-7YcoQeaUUa,hull
-HOyU0g4x7K,pumps
-UtGdOruiHl,water
-bdInmAe4ud,emergency
-sseQDVRLgp,contamination
-U1DN21N9Lx,repair_site
-p35Ey66jSo,water_supply
-JHPV-ziMX5,life_support
-hD4DFRhsoc,fuel
-dumRou3SRk,radiation
-6ynxWE--ix,environmental
-ZUR3avlD4u,gravity
-7srhNKUWnt,protomolecule
-XlZR6eASGd,tactics
-ztOu86m9by,damage
-OGItzJWgFn,meteor
-IR5vZi0eVu,shield
-DZJXha5ZGS,structure
-TsEpHPqeLA,sensor
-dCoWPwbhdB,fire
-dG0-7MuO_e,interference
-TOZJLnQ0A9,update
-fIGUu86ZgD,replacement
-tBphFnozbF,schedule
-gRmr9Dnjcx,training
-XZhWtXdGMl,environment
-S8pDgXFyiB,configuration
-Y4DV50jAJN,cracks
-rlQNRHYqWv,welding
-IXHidmCF7J,materials
-hhzmVPiidH,dignity_violation
-3MXch53_Ia,biohazard
-VlhJxS8ucl,privacy
-YYQPVcvZ_J,nutrition
-wBztZ_9AAO,hygiene
-Ki4MCD_BGb,comfort
-vjy-4irXos,communication
-D4JDPhOWcD,respect
-5xcDIpyxlo,dignity
-1zyEmVo_Si,noise
-FNyjRpvSy1,ethics
-KPS-pyeH12, Rocinante
-agRXR-MBq1,technical
-Pp6cvndqqw,gravitational_waves
-G8u1X2JC7I,firmware
-hU24yb-YDr,networking
-UIIOpS5Fq4,testing
-mWO7Im97YE,jam
-6OJoIk-Q9P,toilet paper
-NgnH4U8bp9,critical systems
-8-toPsw512,node
-yaHa5NZS_i,data
--C0a5VbHvN,sensors
-rQ90z9Ywhp,food_storage
-8899wFan55,water_storage
-gXzZY0d3IA,leadership
-ioiPq5sEZx,crisis
-F1riGbB-BV,defensive_shields
-bsL7b9gzCq,error
-NA4B6pp5Yz,electromagnetics
-4u9WlBX2Aj,inadequate_staffing
-3Mm0u83Nxa,thermal
--TZ0IyGtod,insulation
-SBdN744qu9,cabin pressure
-18sg5ApcLc,malfunction
-es-YDA-EQj,design
-3uCEjLFLE5,upgrade
-xEHINYYH4o,procedures
-OqLPhOU1ce,review
-LUVsr4ylQ6,evaluation
-N1aGo6No3c,chemical
-W66EvyhYnv,integration
-OllzPK6ilZ,amplification
-aN2cOJBAxR,quantum foam
-eQmOmSnSms,reactor
-l8doI3do6Q,shields
-UV8zmcMMBe,seals
-t6LGg7lhfA,joints
-sWjqmVIspc,oxygen_depletion
-VVmGVcakU_,gear
-7dNwwGJG3i,short-circuit
-2ltSTcR_O2,inadequate_supervision
-bAyuHV6fUz,research
-514oLS_YIP,solar_panels
-9Il8PS1FoW,batteries
-qYlSsCcTrf,synergy
-gjQ-1EaaVi,soundproofing
-UkeIvfwduP,bathroom
-kmNbgqAwDJ,budgeting
-kZoqf2kHgS,system
-hm5insF3aH,combat
-o3CSZg3uUq,realignment
-cejfND_vGe,recalibration
-cRbCx-4tGm,debugging
-JU4jM-xu54,adjustment
-iRws580sDw,optimization
-DGx8XcaP4Q,patching
-Dk2pDruKLv,airlock
-xV5OdvNPYC,haptics
-7BeSUfMVD2,defect
-Rva3-Ki1Jx,controls
-_NIm_qUeOk,fault
-rssrlxF3GZ,feedback
-K-lRGu83rJ,problem
-2exQdivIa1,surface_properties
-_sEPbpgnXL,cosmic_rays
-aGlYON-Tpt,water_sensor
-9qlFouXknq,water_tank
-7iUFjliIoQ,water_pump
-R34p1_JhOP,water_filter
-iK5XMITO1n,water_heater
-FJCERSLCLH,water_line
-pRHwmcjAsD,water_pressure
-iIZfGlgLwf,water_quality
-a4pnYFd1at,water_level
-Oa1aIkGxyC,reconnaissance
-R-UHVOO9KR,log flooding
-9CZ3ztmd2H,network
-mT72mKBl-i,database
-HwgNSTTeor,storage
-wIUUy0wU2u,mold
-TSz2h4PseA,lockout
-G9cYUZ3kT-,weapon
-OGqqXBUR42,authentication
-Afyv09lecd,software_update
-yIkTM8cDKt,user_error
--Txw6KEQLS,system_error
-w8gAVexjWw,network_connectivity
-y7aX6YN-la,authorization
-s0pZ3tLVZH,stability
-OxxZwbRcVw,dark energy
-96jIhSubFL,algorithm
-u7vJu1QLfW,follow-up
-RAyBWng3e3,thruster
-4K74uTyZ8-,thruster_pod
-lYZ8zhKrv_,design_error
-GTeA99VEed,catastrophic_failure
-pdcTm8J15h,certification
-t7c97U7DBQ,dark matter
-B7zwxyFoUJ,shielding
-PR8PCozx7S,memory
-JbYsO0McBI,warning
-cLWG1B1qEi,critical
-82v8rjF-fL,inefficiency
-se37wuco3N,threats
-0bcEg4kXli,supply
-NtEeNa1QBG,celestial
-17Jm1UIItv,fire_suppression
-1OlOw6V27L,gravitational waves
-C7ZAdEHjIH,black hole
-QgwIgnJpNd,physics
-CmrDcFH32z,biology
-YIF90Ruv8b,mathematics
-6Ve3fgwrPZ,chemistry
-TtJ1MWbeiC,anxiety
-59C9bIwR92,overload
-pALVNKC--j,thrusters
-6HFCP_x96o,vulnerability
-E9mvwL9ySx,firewall
-IfilH9hKRX,encryption
-hlg60L2ECk,antivirus
-TfK7T8gSWs,intrusion detection
-PRXJ97e2sO,patch management
-meJbl6N4QK,malware
-e5ztx0UiBq,access control
-924moMJp60,anomaly
-8lEk7Fm2JX,space-time
-10ezOtGZ-s,atmosphere
-kdsyGFb4Hz,rivets
-urAz2JT6F8,infusion_pump
-SYZW-RZQUN,inventory
-hGmroIC3Ak,power_surge
-9wCi4NWJLV,threat assessment
--ErYEnRtX_,antenna
-IVCotJhtK0,ceramic_coating
-5xyj6FZaLD,absorption
-JqiSpQzqeo,unsanitized
-rHMOxOlokb,equipment
-BY21I52ASe,impact
-kDj9kl_Ia8,space debris
-wha1N_BDma,entanglement
-U0Z8FPzHWo,glass
-ffL2j8qgqU,ionosphere
-RFb7LbKUXr,technology
-nPY1vbFWrH,astrophysics
-1DSR85U9Cf,astrobiology
-PFu0zRzxmr,cosmology
-lVGJCFV1KM,plating
-PWXfo27950,containment
-sTujWAXKdE,presenteeism
-MHeRGzpbdC,medical_staff
-rodtBow_uB,gravitational_lensing
-2F7Iw-KfKZ,scattering
-RRlFZ_7bGU,collaboration
-jQuGFaDCHf,documentation
-RQmXiFB0g1,data_visualization
-c8C-UEHOwT,usability
-MNOZIIRoGo,medical_tech
-pbbgMbKop2,accessibility
-iVi-Ld2gD-,compatibility
-xq-7Ta5vG3,customization
-KqabsoyNYQ,plumbing
-r4nEWVRmW_,cleaning
-i1iMOgD0wB,supplies
-5ob5UvAot-,pest control
-e0h9g2j8l7,space
-9TfbEeJYVU,lighting
-ph--pPxhvZ,painting
-R9R8_sKQdF,color scheme
-IwMTZJHGpr,conflict
-S9wMy3Agtl,personnel
-Dhx13sMThl,drones
-Kc4jRtqotc,propulsion
-MFIqAPrZmK,hacking
-WY9wRugkDR,facility
-Pijx9WTiby,excess
-SyvZ6yDUY8,insufficient
--Gej8KD28O,fire_extinguishers
-IhckrUXi3r,valves
-AFEd_nhjQ0,aging
-2OX5j99Xuq,procedure
--TrYZ6b0_O,quarantine
-yfXaabNcja,battleship
-h91iEv82Ko,misfire
-Stkuylj8Dp,gas_leak
-nvFB_vr6KV,fire_hazard
-28FDkjd_D3,oxygen_leak
-q-HrAtYHI4,pressure
-rStR0TJpCS,oxygen_levels
-VtZIwE3CRX,radiation_shielding
-kJ9kd8Rafi,engine_cooling
-sIZ59fC0Ut,fire_prevention
-PS0p6_6t-n,hull_integrity
-eJNxT2D4RR,electrical_wiring
-nvqJffpUYW,battery
-2RfjYZXUFF,solar
-O2jawBvfih,generator
-062pvNk_xQ,wind
-f7BPysmDWB,hydro
-eYZDot5NZr,geothermal
-GE5qiprc8i,nuclear
-TMyHYOp165,wind_turbines
-1txX3cfMuF,cargo
-WMrCZsuxyl,grappling_hook
-2wu_TLohuG,maintenance_log
-YpzY_RJv7R,design_review
-LumL4-BmhP,repair_log
-KW7PQ1UypS,testing_log
-o3p-Yqq4Rn,training_log
-451v5Ze_3Q,design_modification
-grWNuN8TVU,winch
-sFijMXd0Vr,construction
-NOV7RxHbUO,neurology
-of91l-2_07,programming
-B9w_sYZfPW,inadequate_intelligence
-gpjgii76wH,transmitter
-3XrdpNxstT,S-band
-Bk0QjpUN7d,minor
-JaX2e9MMaJ,urgent
-cVXUef-ZE2,major
-U52Q0O7Ht9,stress
-TzwhabynIm,joint
--uM0gXXxru,corner
-2j_yKyAssA,leak
-fl9vgQJgC-,engine room
-t2OSfwXXic,cooling system
-OmjZ4TpNTy,sewage
-sj4e_GOPGu,hydroponics
-IEzcg8fOh_,systems
-KQ5LxDy0f7,wiring
-RHg1jdpAPG,transformer
-1wp6wpG9RM,fuse
-jypdP4ZiSe,relay
-NHzfR7nvZk,circuit
-WUM97lnEdE,switch
-t6jqicbICG,diode
-KLkQPyhqQu,capacitor
-lbfuuyn04U,fuse box
-tdVP1PlpFg,fiber optics
-8zy3_d0K3e,decompression_suit
-Ep14QDp91n,filters
-nR4SZRmIcS,hoses
-1DZnbID88h,regulators
-6FNplWuVAM,heating
-m0JUtcYOBM,threat_detection
-WjrRMkGiuD,rocinante
-TbwQWOxbBA,structural integrity
-LqVm4yMyWG,cloaking
-uc6jP7Cc6s,inaccuracy
-pSqO7Cs9AU,medical_records
--LeiPXyG6Y,counter-surveillance
-vuMbk00B3r,toxic
-ZCo00c4e2A,emc
-AkSA_QD5WG,solution
-PZROyRBvqr,decoherence
-Q9hw2yJSa7,quantum
-qYLKpyZa2l,unstable_software
-epCqu9JqSZ,propellant
-_8Cawy_ZfC,operations
-YpkO3MOJnl,quality_assurance
-TWi4HCB4am,procurement
-oCMePOo08j,gym_equipment
-cR3cw6hU8x,licensure
-YkZQYNhn8g,dentistry
-QbfF2dNtDP,nursing
-OBH8x319zm,pharmacy
-dmDrLL3zJG,psychiatry
-oRQ7UGdgjM,radiology
-Cf1WvfJNZ0,surgery
-dB4k1Mqt7G,pathology
-_JJrypCyD0,anesthesiology
-_p0qxnHlD9,ophthalmology
-YyAKv6IjAh,cardiology
-xqJcCUPcd1,gastroenterology
-j-AUZNF4P2,toxic_waste
-hfX702U1Dq,oxygen_shortage
-xt-N0RlAVJ,oxygen_tank
-6TBvqxKvHu,oxygen_line
-MsLhj_33HI,oxygen_sensor
-v_ZrtWGe22,oxygen_regulator
-PRPDEIS-lr,oxygen_compressor
-OEY5BDMJHW,oxygen_vent
-3Fz1QoPeZm,oxygen_filter
-Mvxyc6lnTu,oxygen_valve
-DzeKsST06t,oxygen_tank_pressure
-x0JlS7V0qb,oxygen_generator
-BdDtHOJY_4,oxygen_line_insulation
-jkZJ9WI3MX,oxygen_sensor_calibration
-_g50Ame8fQ,oxygen_tank_inspection
-4XtvxvmCeD,oxygen_regulator_seals
-dqt4_he3Di,oxygen_tank_venting
-g3IU3n0atU,oxygen_generator_efficiency
-3ld-_DOn5u,oxygen_line_leak
-lf8wKXH4Lh,oxygen_tank_pressure_relief_valve
-hXme7yrXok,oxygen_tank_insulation
-77l1-AfSjW,oxygen_line_crack
-_LOhM_VMHm,oxygen_sensor_contamination
-XKi5txLvFS,oxygen_tank_inspection_log
-7oDTfSISYj,oxygen_line_corrosion
-NbptcrQ4Xu,oxygen_tank_pressure_regulator
-ImAos7FvCk,logistics
-a9SfcUGDL3,paint
-zSMTIkBSzF,singularity
-CgFi5TyuKJ,cosmic rays
-91-lWf0W8F,waste
-NkB0cfCUs7,heat exchanger
-CVL_sd9Ixk,crew
-W-oyT7aifw,thermal management
-SLbDZykB0x,solar_panel
-idD_29vH5D,vacuum_tube
-KHsidZ_Kaa,seal
-ZxtIISrFEF,ejection seat
-WkvJwusV38,structural_integrity
-1I5oTQHlI7,frame
-PvmraQMUlE,keel
-_ZDK_NOI89,girder
-zaFFoxfmUC,beam
-iCUWdFkM3R,traffic_control
-KwIyTVZzR8,excessive
-ufCGP-bRxi,jumper_cable
-opzOrAEVkB,lag
-FtfZgrOxjJ,joint_operations
-ylJwTqjz_h,cracking
-EYgV65GSze,corrosion
-bhohwIFGps,oxygen
-Z8P2jIjnZ6,sulfuric acid
-5e9VFvhIZp,helium
-IDIBHEqjrU,hydrogen
-4WxjSIzHFr,methane
-5D8cBGzBbv,carbon dioxide
-PDdCMzTq4R,nitrogen
-R4WGM2Ln6y,chlorine
-leETTeDKqb,argon
-wFWq86mXxb,xenon
-xBeFQaRJZS,neon
-bElm0loFcB,helium-3
-of8Jg0pdxl,hydrogen-3
-EmLMd262BU,deuterium
-jDAAGN5S-v,tritium
-JcLL6Eo_jP,fuses
-dPpEbCodVk,outlets
-MJZJgoRno7,wires
-JCyIidlZ4W,faulty
-DUjBEhsyQU,shortage
-pyxRrPaz1P,recruitment
-5Eg3qHrRjs,morale
-61Wytkmpi8,education
-YjnQImCu6N,spare_parts
-UmPshyAU1o,alien_theft
-T1Skx9n6gy,alien_technology
-EI6Xzc03UQ,alien_biology
-ptj_XeBpjj,alien_language
-JjSm-gpiYd,power_system
-aw-kzi1FRG,alien_energy
-zy7m3JyRY_,alien_coordinates
-Hz1n5d6ckh,alien_materials
-c3YqF_pQCm,weapons_system
-4VBtV4N50z,alien_alloy
-NKrYhHL09u,alien_biotech
-Ziw_vXiKcj,alien_network
-JAoueZHTH3,alien_batteries
-1YjODjehAz,alien_maps
-OTdLY-jJhg,alien_ammo
-uxkY84AvgW,alien_components
-n53ANfQwXe,decision_making
-awDoxqfDId,wormhole
-M0UuadxmwQ,Epstein Drive
-o3s1_J11KT,Epstein Drive Thrust
-Urv8v9T_TC,Epstein Drive Cooling
-N_SCWubu1_,Epstein Drive Control
-78xsMNXEDL,Epstein Drive Bearings
-2zvU868qt8,Epstein Drive Housing
-l4cb88WwEH,Epstein Drive Wiring
-oif0cCVO7J,overheating
-aMLa-Ho16d,Epstein Drive Lubrication
-00jBP4sOLv,worn-out
-ga8euKAQYT,Epstein Drive Belts
-F4xUZARem9,Epstein Drive Electrical
-PWnUN8Q5Lf,misalignment
-hGQ-WAw0nK,Epstein Drive Gears
-TzuhAaCkJY,Epstein Drive Seals
-1he6L-3R_Z,human_error
-4ty71_2cfQ,targeting
-pOU2RsRuwe,LIDAR
-I4TqhUnlRv,protocols
-L69s2lRZQA,debris
-JllsajhC7M,emissions
-ql1JFdUEfx,electromagnetic
-4V_eU_VDMD,oxygen mask
-WkBKPpId7T,design review
-pI0H0EOOvc,training material
-b6y9WE6s5K,maintenance schedule
-wl9C8sLGmt,design improvement
-I_KO4FOSra,software patch
-7Qt7Q-Wsdw,rifle
-w2gKm5uD_m,abrasion
-p8x4wAbC_N,dust
-jy4z5osmuC,exterior
-rSeZceKclZ,flood
-wEba4Iftz_,water tank
-agtnMVetal,water pump
-H6gX6SI3RP,seawater intrusion
-fZxy-gm5Mw,damage assessment
-synJZDZ2fu,water leak
-9K8A-NUhD-,water level sensor
-vFqi00WTdg,water tank design
-bCRSichWyJ,water pump failure
-xxHUF6IOEe,water tank inspection
--xeHaQfZxm,water tank material
-OOddxXtTK2,water tank drainage
-mWaEjAsZQX,water tank maintenance
-be7-s5trSL,excessive insulation
-lYRV4IDaAV,filtration
-ozeGVbtKBB,allergy
-Zbl8q-nQlW,toilet_paper
-HBmeq7tFjR,magnetic_fields
-XrnT6yzWZW,food_safety
-npEXhdKMNL,cross_contamination
-GlnmvjAHOP,pests
-p-aSDJDf8C,cooking
-3WHcexG5mM,recoil
-xVswu8CzWJ,frames
-FginJ3O1z5,walls
-VkVYmNc-8S,floors
-S3N5xcMClj,support
-99Mrsek7f9,point-defense
-neHTm94WV_,alignment
-sfIQuK-kd1,coordination
-Yn_lHlIv2O,priority
-ImG9VGlt3T,systems_integration
-LDzXDmakJj,Warhead
-6iBSFIJRUA,atmospheric_pressure
-SdvMHfnt-H,confidentiality
-lMyB_OiE-b,jamming
-J4PNJxbFbu,wireless
-KZfAgzuq1P,scalability
-2FL7fpuuXY,magnetic_field
-0145WTTTyj,life_support_2
-IQTw8E0OVb,communications_2
-ViFVAgmj5r,engine_2
-abYEUnaAB6,sensors_2
-E0OxvjsQ-B,power_system_2
-BB6ejvxU6S,shields_2
-6p9_7M8MTQ,mismatch
-lq2089WBCu,explosive decompression
-UI7toW5E4P,lost_item
-ZWFgD0y98v,electronics
-6sJFoxF8Lc,comms
-B9zT7YomZg,prevention
-2teMjE7cEp,drain
-EUHqxePmy6,protocol
-Og0P32ZCla,automation
-nPN0Ymtu_g,laundry
-tjAGjOdQft,espionage
-sJmRhyLRYN,hydraulics
-Svz66B273b,flooding
-TxiMECK9Uw,supply_chain
-fMkPM7tuzz,hazard
-kickp3qS_f,navigational
-Gh65p3gJ8X,gas_cloud
-V6UTg1mfSS,nebula
-hQ0EaRL0FK,septic_tank
-JGyQ5P2ddW,toilet
-zImaNKY38W,enhancement
-GezH0aG8Ab,refraction
-CmUcmYb2hI,oscillation
-qa_DF3cbx5,signal
-_pKAethV4L,ECM
-2sD4yXqWys,science
-oyacf8S_kR,quantum mechanics
-Uwxr9zE1wk,stealth
-oqM2VTVPS7,cooling
-hq6mI-00gr,objectives
-Wu0zwP-1-9,panel
-AuaDHxMZLk,flickering
-wQ23dCdG4m,treatment
-ls-9n4yqid,disposal
-yNGohOWmGi,sterilization
-oUV6BdLtuq,transport
-qcEc09nSoH,lifeboats
-TfMnUC8xtz,crash
-MLcIv1FMM0,complexity
-5jnNmqATDw,interface
-lDXYNut5NY,control
-HMOE1W0M_O,strategic_relations
-55zZ3tmuj3,trust
-Pe-eF4dM2C,loyalty
-cG7ktzeECo,conflict_resolution
-_S6ayOxC5n,alliances
-SDTqRlGf7c,glitch
-0RTz_m1PdB,map
-HHmh4NeQtt,route
-9y0gWT8o8h,autopilot
-7eV7-rQ0N3,waypoints
-CjP9prx3Bf,heat
-mwTfnzQhU2,cost-cutting
-cqrJx6NOA7,electro-optical
-3Df0SZdm4D,electrostatic
-XbDYJoNl51,staffing
-1Uz3CMFNp0,data corruption
-399BAJwJ6f,high priority
-iqjirsgLZJ,medium
-9_CZkKqRnT,low
-YBmRXaSI9a,grounding
-LXKt3n-a2n,modules
-r11_0VA92t,habitat
-oABVUq2PMZ,infrared
-PHiFKe_jbc,alert
-qRQohP5ppQ,compartment
-C8OYuctYPx,redundancy
-GfIpoJ3Buw,evacuation
-hi2pT3wQkL,lack_of_surprise
-vDzuMITc_z,particle physics
-4-S1WGjnaD,guidance
-k4IMAaiJAL,formation
-aulzss6-pP,radar
-YSPMpwt8gR,temperature
-rLm-Zr6x2b,humidity
-05UG9PtMbV,instability
-lDdxunBQmw,alignment tool
-0DClPACkeq,sensor replacement
-J3Ypiq8_Zj,calibration check
-43YiT_1Ks_,sensor adjustment
-DCm8hG6v94,alignment tool calibration
-H8hYMpuyO5,realignment check
-vay7N31t68,sensor replacement check
-uM4Jriv6Rx,finance
-oSwO-GWoDH,tiling
-4DqHhHSWu9,diagnosis
-zws-7sM_jI,intrusion
-crJPT58XK5,access
-6kYJRSrQxn,tank
-K43BHWCGde,bacteria
-AR2dFbWBzN,chemicals
-iRy4ND1Poz,sediment
-kFrh8U09Cd,algae
-x7BS-SGs-u,metals
-yjgYU3foYc,microbes
-Weiy88VpEB,oil
-_2ng0KxYEw,plastics
-RZuwwidBw9,precision
-tmnCuY-q0Q,toolbox
-Zq_HNiEWmO,screwdriver
-S06SX-ib2Y,pliers
-bxIsW7Hf63,hammer
-QqI6zTJ25N,socket_wrench
-pdOC3GIryx,wrench
-L9jpKBVVIi,cables
-HpRf4NrCCw,exterior sensors
-PN55yBO5pW,ammunition
-Yr64IyWnLr,loading
-JYdfyotD9I,legal
-JF9f8vKlBu,fluctuation
-d1tof6tYr0,projectile
-GOdvWNqk5T,explosive
-HwEz_yJFtZ,plasma
-utmHQKFfDM,missile
-d8Nf3mUrAo,torpedo
--SmMBN2AEs,laser
-3gMNYoL7XG,hazardous
-FU5QDc5luY,docking_computer
-uyAdpttsXt,docking_system
-GrtiDLtK9H,docking_port
-FXQhFsmRGm,sealant
-mvJRGl9Jls,valve
-ijiMf9I6RQ,drainage
-PF9gaMuIzz,gasket
-WG5A4YjX9X,hull_coating
-Ju6nzPaIuv,pump
-J-Bq_c7lUF,hull_damage
-N-63tXhslM,valve_handle
-QtRGO2R6XW,hull_seam
-9-nXOZsOBW,hull_plating
-hOax2o84QM,alien encryption
-aXOlbb139B,UV spectrum detector
-jzMRGiIloZ,quality
-1w7665BSIh,control_systems
-2uqmC2-PXx,connectors
-9L4yq9Uhg_,relays
-kMZHbN3O0O,brownout
-BnHo5VmbSS,medlab
-mlUjVMWrBT,cargo_bay
-GPhRjSSpCu,engineering_lab
-qiD8u9d3zx,odor
-WVIvR3ce2Z,fire suppression
-FLptuMD9zi,air filtration
-XTVOInSPZF,spectrometer
-rPypPFIOkd,thermometer
-K819hHD2vP,mass-spectrometer
-sjWRk6ahFx,gyroscope
-KS_6GERrZs,accelerometer
-zJDZgMxS-M,magnetometer
-D2QzTpDb0X,spectrophotometer
-HKZOU_SOs5,pH-meter
-cBewox7K7f,temperature-sensor
-AtVbMVd1Bt,pressure-sensor
-pQBby87IUv,humidity-sensor
-o3_qqyh7WD,flow-meter
-hCLcZNmSGI,pH-electrode
-VrUGvJoQu2,conductivity-sensor
-jyLn4qAUcz,autonomy
-AEJC_wHcVu,psychological
-lV9r5II9PM,ethical
-bDmSaepbDT,emotional
-5YVuE7ZKBM,medical_waste
-XL6s95vOhj,toiletries
-MsTGODaCv4,oxygen_recycling
-5_0Zad57Co,air
-sFJOurNXd6,disruption
-Gi3sD8WYKA,medical_supplies
-UnJOZRh0-R,ambush
-xTt2hwLCUD,diagnostic
-CJ5RAMxBuL,infrastructure
-9E6fpSDH4C,alien
-nJTaNeTVGq,backup
-sHWpVLlmAn,monitoring
-4B7WD8D1QE,main computer
-7y7c8oUlLN,input
-NAjbNGwHYN,output
-pNdLF04gDN,virus
-7sdwEWKsGk,hard drive
-WE4T42XIKL,oxidation
-LXF3bboI-e,coating
-deksNxnOl5,composites
-NfBezZosSa,luggage
-0zRTQMsrOo,dark energy containment
--WUS9Lcbi_,dark energy shielding
-vkm1AGdv7s,dark energy origins
-AcHx0K6Exc,dark energy propulsion
-enMz-e_mWm,dark energy interactions
-cdLc4eHN4F,thermal insulation
-0F2SMFC0KY,emergency_beacon
-C4oLqloNKL,epstein_drive
-VMv8wXn8qD,mission_plan
-cimCaP1L2L,library
-vPNgksxkP3,particles
-DM4JImbOmx,supplier
-MfzXzfM8lT,safety_interlock
-zO27THTovp,engine_room
-uUMQjfdzhJ,bridge
-BsgqQxJegj,medical_bay
-ZyI8Mh2zWt,sealing
-X4FKCbTFxI,inadequacy
-F0F4g8HyWf,incinerator
-gAK2l0acw5,solar panel
-eygTNM7POu,cooling_system
-xNCWKEN3eO,tear
-Ra7QSV-XRX,sliding_joints
-i89t0u9oHR,sliding_joi
-GoOvkQfhHJ,transfer
-VbL7IuvYCY,filter
-yzUY321LUC,simulation
-tfqS_AN25p,data_loss
-JxemtqbIzc,experiment
-5hbxBhUZxO,cosmic_radiation
-tkDCeDrCP3,power_management
-4YQLctOEx8,hardware_failure
-OXZqnSEsls,network_congestion
-Kk4WUdITn2,software_bug
-IJ5VnJSLKh,temperature_fluctuation
-gPrbG3Hjf2,charging
-M14C4u54WH,asteroid
-n8xEXBw_OI,alien_tech
-3WTcsznloq,aliens
-K6v99r1FKa,space_debris
-DJyex_yvmx,sanitation
-tBhVSP6skn,oxygen_generation
-aUMjzm1BH9,gas
-LkPsKQIZlx,oxygen_tank_valve
-UHuQUCb7-p,oxygen_filter_replacement
-KS-1NyHmwP,oxygen_generator_seals
-BXs_ctOBG2,oxygen_line_replacement
-oOlP9Up7r6,oxygen_generator_cleaning
-ywnmvS0z0r,fasteners
-BktQg5-xqO,planning
-bj2QHhLHTb,missing_data
-XL1Kkgz6Sw,reliability
-1BjTL2nmlv,climate_control
-5g4D3pz4Cv,resonance
-xdeNlsl-bJ,material_science
-H8CrNPtvjW,vacuum_welding
-fHr7O4JUoe,investigation
-3bGZpJLodq,blindspot
-fSUaDdY8j4,sonar
-SCGi2U8D3M,multispectral
-bAU-tGO5Qc,magnetic
-2sdxrnTLNu,neutron
-pRCzG2126h,gamma
-rVIGaLiloM,x-ray
-TPmLk0XVRa,ultraviolet
-y55DQgbOes,microwave
-wI1n_LcALL,seismic
-NAOBV0cM8g,acoustic
-YsWBoA5pF6,particle
-rNYxXnURv4,mount
-y3RfZ-9atG,performance
-r1fh6AGdlV,computing
-UYuerXdgQK,recycling
-TM1KELyIWV,mentorship
-px7fWtv75q,mentoring
-OX_tZvFc9L,continuous
-z2htvBlYM2,retention
-fHTIwjPU1j,vacuum
-0p6GGFbKhu,incident
-jUdF6DnuZM,isolation valve
-yzwO55WESd,cargo bay
-pWh7Pg6hYm,exhaust
-RE2NmOq3pX,celestial bodies
-_NlDSDmeZJ,contingency
--QGYUTciS_,outdated_info
-9oFR_LKIy1,dark_matter
-2X-E2nAhn-,piloting
-Tq_W__ZiIh,analysis
-y0aPUvXwl9,maintenance_check
-lfVAyzyzCz,research_grant
-Wi6ZxmFHNK,checklist
-2P_PThJTyc,rushed
-niBETJ-46l,rushed_repairs
-EiDp3unASq,radio
-TPtOrKcULF,maps
-0qvje6BQNO,satellites
-gIDZ_MzOOz,theft
-RZ5Y2TnGmI,rationing
-MC4sgcbBc-,weight
-nes3RNEmIm,energy
-OOvX8kgoI-,quality_control
-eYHa-dpvq2,integrity
-9rCqtQt3Fy,Malfunctioning Medbay
-avtnEAJPOZ,leaks
-V3xamLH0vQ,motors
-lwGoxgAaVO,ECSystem
-6E18PF2_gP,internal_leak
-7b-YE8lP32,signals_intelligence
-xDVNmtQRlE,language
-aQFbo-zz2d,visualization
-ftJP_hQDuo,escalation
-DkjvZIi-IB,engines
-zFtrQ70U1k,windows
-4IRa2gXV_7,computers
-DP5V-NO3oh,crew_support_systems
-SL3gVUeSpa,ergonomics
-4v9iI9Uhbo,aesthetics
-YQ91j0rN2M,workflow
-7BvjB6F5NS,repairs
-INffUZHplu,doors
-KWr_-dmhSI,bearings
-62_NQcYuH5,gears
-5N7ZzvsKlA,inadequate_situational_awareness
-oIQ5llIAcd,astronomy
-WDN5Ajxdy1,phenomena
-PgfFl1GWaL,external
-CY0bFdvTOj,weather
-c3Fxw0ocht,asteroid field
-4MianjrkPs,mess_hall
-jk4Xq_uys1,alien_habitat
-L5xMiMpp8E,environment_control
-ugbd3N4MZS,alien_lifeform
-TIOgAWFIJv,alien_material
-3ToCUOPY3V,power_supply
-ZUstzkhD_v,oxygen_supply
-Bc8WY3Xdts,emergency_systems
-dy0h_ngdRs,oxygen_line_leak_detection
-6Pau0YSm9m,oxygen_tank_vent
-CEfuphlsno,oxygen_generator_catalyst
-a6VDAXMqQU,oxygen_line_insulation_repair
-I4GGQclVnn,oxygen_line_leak_detection_system_calibration
-DzELMib697,oxygen_sensor_replacement
-_2V6oLZyc4,effect
-mxOMf_my3S,time
-DGq2IgKvjM,geology
-gTYZPbFPCO,disparity
-Kki6SP3GRN,warning_system
-Www2TRVTRS,safearm
-OwtvPABa-p,thrust
-a6l9n5W2jS,pilot
-oSeL9XExj3,conflict resolution
-uGzWTbdu-a,professional development
-EECUVm6_E-,policy
-NDnGvbY_Mu,teamwork
-w6YgAYcUhf,hydronics
-6FPtiuGJWh,water_waste
-UuY-pHrVb6,sensor_failure
-HTXDhGy9Ak,valve_issue
-zmBwgijZse,pump_failure
-XDzLbuC25C,pressure_issue
-h7kv1nXN-9,insulation_issue
-ZG8XSZ0K7v,flow_issue
-Y6r-NuXosE,sensor_calibration
-CbK9Qo8191,valve_actuation
-qzhxo_B9Rq,pump_seal
-fLoWB2F4hl,insufficient_flow
-kO817OKFp6,temperature_control
-vqE5mO1T7A,camera
-t9OxOzchB1,aerodynamics
-J-VJkHwxP7,electric_field
-6xRgecZLV-,FTL
-afN0CSBTZY,cooperation
-6PKynqEt3x,food
-CayfXLtVXF,resource
-nxDVksYAKT,wear_and_tear
-rxWR3JgWMb,trajectory
-TQA0k4UVeg,regulation
-zouA5qlcJw,generation
-nfUMHFKPWt,distribution
-GvmSnlxsfm,surge
-2A8ZLKXxsv,faulty_components
-Iy8ZmjMdut,weld
-8gWwkoOHfc,toxic_gases
--dlbwTE9Mm,air_recycling
-j4YmHxESk9,air_quality
-zQCeUlCUBp,miscommunication
-0R-hAGASAU,friendly_fire
-hCSHZuI3ME,manual_override
-v8osFsfpd3,pneumatics
-7ZKMSKwgd2,leakage
-XRQEgJXobw,personal_hygiene
-zRm9JGorDl,extreme_temperatures
-IdvWr5iSlf,time dilation
-5Wzse9Irjj,power_distribution
-uhSemc7VVX,computer
-SqTDB2Mjag,lubrication
-ePurdbYuII,upgrades
-NuXfBxmruC,record-keeping
-oLpWjsIWtv,toxic_substances
-l6_6OBZAAE,water_treatment
-uhWUPG2Bae,water_filtration
-4EA9vVJFsv,water_purification
-D7nDywUBd5,water_contamination
-1oIsGdikJC,guidance system
-Up06MGpb74,thermostat
-qqG7aXwLGI,technical debt
-DQuRbYBChx,high_priority
-46dU_Ah4D9,main_electrical
-ILLgfqr2Ud,inverter
-tkP4lzsewK,alternator
-GGrlgibgJz,ion_propulsion
--9F6LSlNQ7,coatings
-DthHJjrJG2,quantum_physics
-9vcjOs-Oo3,computer_systems
-t05eviw0-m,particle_physics
-t7CgeiXQln,astrogeology
-eiuIuv2ybw,gravitational_lenses
-H69Ugse0Xl,optics
-tdenQwhSlr,pyrotechnics
-jejMQaizk_,acoustics
-5vFuQvyFvM,compression
-aJsbmgQxkC,timing
-k5BiCe3NIi,fuel injection
-HegLw4xr7o,ignition
-7-fiAvKvde,air filter
-F0ahOhp1Xj,throttle
-r_5zQHhHxm,crankshaft
-I3Y2omUsZo,camshaft
-kLS_tu9Vmb,pistons
-znPc-_5bwj,timing chain
-XljK2C90N2,crankcase ventilation
-JoSjwvP9rr,valve clearance
-OPUpIFUMn0,fuel pump
-hHXl69UgAA,oil pump
-MNW-XhLWBh,coolant pump
-52-hmkaJEI,air filter housing
-m3lz7aUAfq,fuel injector pressure
-LpdlxJExqw,crankshaft position sensor
-AGlZqb2gd6,label1
-hfIL5v65Mf,label2
-EOsvf7SiRp,resonance_chamber
--YvUlqUHw6,loading_systems
-0qqPrmmKHn,zero-gravity
-vraLKbfGwx,manufacturing
-x2K-jYmN2O,accidental damage
-uFrwnsBVJ_,dark_energy
-KJ99zXneLJ,gravitational
-gTMxA_8fLt,detection
-IaCJ7oPHxm,organism
-9sZkOqogPg,emp
-tZU9GqHDG8,hull_breach
-uvKYBetNim,weaponry
-8TXxs2RZ_0,light-speed
-36jFwvRGfB,ventilator
-O5d5wy1N_1,hazmat
-A9i2Bn7ngH,crew_safety
-VgyNopyiUU,med bay
-8iIeVwCG1H,power distribution
-TZihrCDBsF,deck
-1HqvosWbh_,artificial gravity
-oJgTkK5pzh,imbalance
-jaKI-35MmU,weight_distribution
-YtB-5c57Mz,missile_guidance
-iv9s7aNJx1,missile_fuse
-gufImmPNUG,missile_warhead
-y3qHhjjy_V,missile_motor
-E_ZlOSb1yF,missile_fuze
-jf_WrX28gm,drift
-6cpBZScYUJ,magnetics
-gfkxu7ZaBd,gravity_gradient
-Rb9aWb-wt-,coriolis_effect
-X4-DQU0RY1,ui
-TwxqTae8GW,time_dilation
-SWVmQZLKw1,solar flare
-9NkBu4CuIE,radiation storm
-DeiyJnF9Qj,landing gear
-sYkmRQJIim,fuel_tank
-Qo2ZuSQpoT,fuel_filter
-iLJPrEhzGq,fuel_pump
-ZGBtgg-CvD,pressure_regulator
-K-nkAZRR6z,fuel_lines
-QJGI-Wk6Ia,fuel_injector
-FIgm6MgROM,munitions
-1ipL2PQEzu,air_filter
-jkw-0VWjSU,medbay
-y7N3D9W4Dg,toxic_gas
-_u4qDLRYo8,counterfeit
-Y3Xl6wn4ZR,bulkhead
-BTTIHTlnGm,holographic_camouflage
-eZe9bynMw1,improper circulation
-CGWsJ9rVjt,air circulation
-NwXRueQEGV,circulation
-w0_z-OFoaF,kalman_filter
-ugj_dUaast,explosives
-0PcATfhE9R,misuse
-a-RabLBgDD,transponder
-M9bwU3DVO-,identification
-ZBkMlQvurD,funding
-B-FDVE6tlP,defense
-bBDW85N-Aw,hatches
-Y-xw6yYmPh,incentive
-qDwlj0qXpz,phishing
-fKLiyye8gB,email
-PTs2Uk0xM_,ransomware
-eBdbQWpqYg,DDoS
-bmcfWFpi9V,cloud
-LX7m4rxHbJ,password
-VHuLq9lOlA,spyware
-7aMablxbGE,browser
-AhEEAsGB9k,trojan
-LzYeRtOZnQ,worm
-TtRjdBxxco,rootkit
-XDFO8386CP,pressure_control
-3U1OxVZcbZ,improvement
-8WuJOPLiQh,records
-FmFc4uXMXT,scheduling
-Gg8EXm3Zsa,instrumentation
-yyLwIcGTDV,air recycling system
--81xj_pXM6,weather_monitoring
-MW0O6xZ6y5,medical_technology
-2xng90P-A_,micrometeoroid
-y0FMr7sytj,hull breach alarm
-z9BRt9tSME,troubleshooting
-lK9OG25G_K,propagation
--7rD3GeHGZ,gravitational lensing
-wBiwnivKNz,shipping
-sSFuwEpZ3z,voltage
-D7hwExNsBA,water_scarcity
-BlDsaHt6I2,oxygen_system
-9p5K_ndXNK,heat_exchangers
-rlYYGMk2WX,air_filtration
-VBIAn2VWmN,water_recycling
-waYre-SJlO,artificial_gravity
-6TcL2o4luo,communications_relay
-S0E6UKf6cW,life_support_backup
-ua9C8aUOnh,engine_backup
-k-JdWLUGyd,thruster_backup
-4enZLMeq9W,shield_backup
-MrfEYGHScC,medical_backup
-1l0xr8mcjz,weapons_backup
-nRqUMOeEds,sensors_backup
-NSHeXeqz7t,hull_repair
-PVKDeeyI3b,air pressure
-wq9mFjLTxT,air compressor
-843cbM9E4Z,microgravity
-Si3E1cg-jB,warp
-JMYggVEGOS,grid
-UFLyYiAeYO,sustainability
-2GLbhTwPm8,atmosphere control
-9jSRn_3cYL,PDAMS
-V_GrTnu-cR,fatigue
-QelmEG-RvI,reboot
-N7pTxl0ltk,magnetic containment
-7Xzkvc1HSI,abuse
-GgHzbKRh9L,physical
-xLFtp5iaFj,verbal
-31Z5NPOG_I,efficiency
-4NeuNwKOCX,power supply
-e9MEfMPtqi,gas supply
-am9d6BqkLE,metallurgy
-O6xRLHCn0a,attachment_point
-dOnKxAAWAz,life_support_system
-0bzTrqxGLS,communications_system
-EMQaD9dtop,door
-Qwndsxx645,gaskets
-x9qc_qcrRj,connections
-N1pVM58WLb,tanks
-fESd1Ii78R,burnout
-yZE5YeFZq7,crew_welfare
-GWrUz534WP,mental_health
-vqC1UDdBB0,work_environment
-ojLrEzq4rG,workload
-JyS2R_t-41,ice
-EgbERbsKGN,bulbs
-gGEd0g_mQT,switches
-EE80ppuY2y,continuous_improvement
-nDOHANcjTI,empathy
-e2RXNVd7jg,crisis_management
-twfebMLRFn,emergency_response
-7WQeYIEwSA,patient_care
-UggBCooWIy,storage_tank
-qx7imvgu26,water_intake
-7lNOKLQqnX,water_hose
-JXQO6jyUk3,water_containers
-d9pZxDBWd3,water_tank_heater
-Vxx969WXsn,water_pipes_insulation
-JvcIyUbBMo,water_filtration_membrane
-foepuwAlIK,water_tank_cover
-0UQqH4WkfK,sensor_damage
-lnCS0YoGnE,calibration_check
-SHUgOJoOVD,sensor_alignment
-NPCFzhWzmj,data_processing
-JbK7wShm_a,sensor_contamination
-WGOo95DHGz,load
-QWGAGDpcXX,balancing
-pN0yM0J0Il,screen
-ppl0ny2n9Y,assessment
-Neeyw9IjkJ,extreme_heat
-GoMVD3er-1,extreme_cold
-4ZX_bxOb8y,isolation
-bkzsFinhSd,psychology
-J_2uhAR-QW,heat_exchanger
-p1DtXlQalM,fan
-I4u1PKIoEg,radiator
-DNNYcKrsoW,coolant
-MqHPDH6ZcM,condenser
-gZRs5YjVRP,compressor
-pjIr8iHG3p,heat_sink
-VUzfguXRWw,fan_controller
-fVxKb3bss_,HEPA
-0Dn2MKd7XY,livingquarters
-rQQWGy9Y-6,optical sensor
-b41gU7K_Or,firing mechanism
-vG8b4LTw7W,docking
-Go-BUQJIEE,infestation
-iez7Gf2ejA,rodents
-8im-HVF6sg,pest_control
-E3szqZhLY6,infection_control
-h-ux-Dxo82,waste_management
-Ic2jyPBTY5,food_preparation
-ZFe5kKxJnq,personal_protective_equipment
-oa7NBCYeR6,disinfection
-LfVLUY8FVi,pressurized air
-NKmKWd0x1E,gearbox
-AZoISiXLBl,radiation_sensor
-d83jO3nTj3,radiation_absorber
-WUVhfZF0pV,radiation_shield
-vPYy6i5ukx,radiation_vent
-Vcq1WT6Jxy,radiation_monitor
-gxZgzQa4nh,radiation_seal
-7YtkeQ3Fz0,radiation_filter
-nu1ggDFcLf,drive
-A_RRz2bxbr,negotiation_breakdown
-M7SCxZD3pn,reflection
--rFRHPSTUX,water_leaks
-gj0DQMzt7H,water_temperature
-W8nbd48GP1,hf_radio
-bqKEf9tvOV,docking_clamp
-WM_tlpU9aZ,sensor_malfunction
-ImXHFGBByn,tactical
-ZHjUHT9qY9,outdated_software
-wp6VfQVHLq,accountability
-Hin-14NBL5,mistrust
-Mfgt4wFOgE,astral
-OzNBV3fS8P,instruments
-RkuJtgz-I0,food_supply
-7PVNBYFvGv,life_forms
-3bfi4pWwmR,jet_engine
-Je7JLoqMFJ,hierarchy
-dtYd1AMVhv,erosion
-NtMDBxw3xc,display
-Ta7FnSZrGl,moving_parts
-DnE5zxjGkx,solar panels
-MhNDmkAmBQ,fuel cells
-ITSnOQZvW1,solar sails
-EfiW2Kbc2e,power converter
-syh13yd9hX,wind turbines
-b4C5jRPQgA,adhesive
-qDF9IAsVh8,oversight
-qu0QwJAvFm,interstellar_medium
-54yYiYBh9O,evaporation
-6K6cAhwsme,retractable_boom
-Wpj92PVGwg,retractable_rover
-IUkxGCkShP,retractable_solar_panels
-VqbiMrwNgT,retractable_landing_gear
--JdZDUXRsH,retractable_ramp
-cMBLZ0OuL5,retractable_cargo_bay
-ECPvnrOJZg,retractable_radar
-5o8UJZu972,retractable_air_conditioning
-uoWAE1VrJT,retractable_lifeboats
---ZoIDf74A,retractable_communications_antenna
-VfH8IKM4t5,retractable_shields
-JCBo02xCo2,retractable_medical_bay
-c-SxqIEdzQ,retractable_engine_nacelles
-6G6Q-lsAkN,retractable_engine_thrusters
-MPNn_rZreP,retractable_life_support
-LZ77ERQxan,lights
-egvViyOzf2,measurement
-rkBE8hIMYD,inadequate_disinfection
-w_-R67Z605,data_analysis
-TfH-q5ZSB3,mitigation
-z1i1Gghlrp,defenses
-qmRNrUOx0g,acceleration
-WhXAkBtPLa,density
-TziYSoMWYt,turbulence
-OQ7y_Xoz1J,distortion
-6GIxOh4sqI,gyroscopic
-1i3dlrNrlz,stabilizers
-dbAAMm8Mvj,gyroscopes
--_U1_0S7gB,jamming_system
-NmiRDQnazK,rebooting
-D5jKd5utDf,crew_morale
-_4LfnyZjMR,regulations
-GyVzvqWZkG,personal_protection
-3UxgDJAY4u,emergency_procedures
-z1tjVlkkMV,hazardous_materials
-TwNJeErCZ8,infiltration
-o4EKml49W0,unknown
-je-FMgLqUC,surveillance
-wJSJXpZDwj,external_attachments
-8tCcGcDZMD,modification
-vflTD58iHG,faulty_component
-xqaINybS2M,engagement
-xCahMCuWfl,crew morale
-m_MnuM2duu,rewards
-s8f08uXMBb,work environment
-tEHTCdDs-H,team building
-JqzM7E3tci,delay
-W1MWTbTYhi,customs
-H-eLjZGFio,political
-HAnQOCc4Kh,flooring
-UFFoybxrOS,mirror
-uArasqJ3qR,shelves
-cYbxlYqEN3,foundation
-o8AECwNcm1,floor
-2TsbVWuydj,beams
-cQqSMrq8Qk,exotic_atmospheres
-oQVYSYzGEQ,heat shield
-ynYF74Atpw,neglect
-GhLI0vn76-,IR signature
-gXXBTExDlO,IR system
-0Af5VVebh_,IR sensor
-z9cy-r216V,retractable
-FbwoU4CoKq,LLEGO
-Jdr8dZ4Syo,composite_material
-pPatLb3Phj,staff
-UKijQtESan,experience
-CeyH0Wdp4C,power_plant
-_Arjonk1y3,environmental control
-Q7i7LwqIMo,genetics
-XpMaRr4teJ,budget
-fndfnUyxbC,grant
-j3KRAMVeeA,partnership
-jkUXlFgEF3,crowdfunding
-bQQeTMjoj2,cryo_pump
-0n_GOfqSYa,cryo_system
-Mbt6yvBi1B,cryo_tank
-lau1t1qCXo,water damage
-vrrQJfqpDH,starchart
-StxPezkbvc,outdated
-JmmAKqg2FO,spoofing
-UQjLe8J-mb,EW
-LSi5OSdysP,countermeasures
-J5BamZPvGU,impeller
-BCJHUC6YiJ,motor
-rhsbbfgKz6,mechanism
-vwCo42e4c9,hatch
-okBtxBSPsZ,medical_equipment
-WAbtPyilsM,samples
-7et8onpZZ4,terrain
-6mFCbb88ts,spoilage
-p09gixdhFD,allocation
-q6xFwHme1a,preservation
-UJYNHoTY8W,production
-thSVYIN4_U,variety
-o5Cbf-IsZj,silo
-UPf9PpwcW9,solar_arrays
-h-J-6mucOe,discipline
-JIVFb00lmm,fire control
-jqjFahhSPW,rocket
-z97NLwT4pq,fabrication
-zdN1knbJMS,magnetic storm
-rZRTfgTGs0,cosmic_ray
-SRofI01jQ8,adapters
-_eJ7PDXfwd,tools
-S_BB9t-sZf,scheduled
-lhF2Sl3Cfd,routine
-BZDR5CYXUk,carbon_scrubber
-y78nBZF7dC,fixtures
-C1ddbfp7xl,damaged
-gcNUZfM_QL,worn_parts
-VIPspCI_Ha,lubricant
-6WKrJ-LiFK,loop
-od2F7U8m8e,catastrophic
-7q94pPNP32,drone
-E_42hdEKvq,maintenance_schedule
-ogu-C8RBXj,training_materials
-K8B4edu8Qw,system_integration
-ICt7SjQYHE,system_monitoring
-V0tH4Ju9Hb,system_upgrades
-qOYq7p95bE,system_maintenance
-uir_GlsVI6,system_documentation
-jQUw9p85sG,system_testing
-Y7uF6qc-Pg,system_design
-UfGLO4pWe-,system_optimization
-aEaQ-UJLac,system_integration_testing
-UcY2vYuEkU,system_monitoring_tools
-s342gMSgrV,system_upgrades_planning
-8D7kWsOQii,system_maintenance_scheduling
-Un2yUscRbp,bearing
-aCvnDU5vu4,cabling
-9gqh3AduHS,device
-oS9fwLIoXt,defensive_systems
-n06_o-4OCe,trade
-MjlyEvUc_q,drafted
-kSDjMqNxDs,chart
-B7J9Zxigjw,inaccurate
-gx8mjekUB_,missing
-TC53vg_C51,recreation
-tKrU1P3l1y,obstruction
-T3sX6Q7iPV,degradation
-b5Bvd4XHYr,expansion joint
-Z5ZDn1voRw,backup_system
-8WyRkhVInx,power_backup
-DgJbTyy-FG,data_backup
-hufTT1W7ag,mechanical_backup
-XiAE4jdOsw,electrical_backup
-QohUDwmlB2,software_backup
-JPznFlemvI,thermal_backup
-LlbWTjRT3D,EOD
-2W3_Oc-LOk,entropy
-VVBZutephK,star chart
-robOsgkmXt,incomplete
-DRm2RD1SN0,fire hazard
-qDWZnGHXkx,corrosive_gas
--bFNFHy2W4,gas_lines
-AJiFEJzoRT,gas_filtration
-WXaPCK7ovM,alien_containment
-MZOL1Pdr9E,gas_exposure
-FnT0RSoP0y,gas_storage
-WfHsOSlnDg,gas_containment
-AGb7PzCx44,gas_detection
-k-MxQcPnkl,ghosts
-JzhraYHmKB,poltergeists
-06R_UwuKea,mechanics
-90oWAZNQOp,sheath
-yEEX4ozpnp,flux
-y1bmdFz-Pn,sabotage
-eSqqUhQS-J,pool
-a0i7IBsaY5,gym
-jUB4aM87x3,sauna
-b1fyIU5JsC,bar
-ec4YWVU1aQ,game_room
-a1D2d_gyCS,theater
-0CJ-s7QHzX,arcade
-7z7pd2gjbb,specializations
-eUMwK0pyd0,virtual
-iXt4SuVCGj,recruitment_strategy
-xBrG2A_KpI,medical bay
-AGcRb8z8mA,equipment failure
-nbS6vuAROK,equipment malfunction
-K8y9gijVCQ,deficiency
-9ojNICnmGe,surplus
-ntWTOTryFi,latency
-GH6IMRtYHa,risk
-0EZIFgMEmC,radiation_dosage
-YbgV1u6Pzu,radiation_protection
-lsRNOoHfVS,radiation_leak
-E95BZ9m8gm,radiation_monitoring
-l0IDRGhh2U,radiation_safety
-VeckKmux3b,radiation_contamination
-KFzP0jbIBS,radiation_shielding_design
-Y81teBk3IV,radiation_detection
-GgJ8u4_t5a,radiation_safety_training
-n9XMZGUZM5,radiation_containment_system
-M0SkZdWWPO,combat_readiness
-W4-vym_E4a,armor
-9tCl7zMuw4,components
-xMwkUU2P0l,parts
-t4yYAZBUuj,water_reclamation
-Ip94yq3kek,dynamometer
-VNX3Hu7Asm,cryogenics
-o6Orr9APMi,heat-resistant
-UEoSUys3lX,thermal-expansion
-kPx4YzNpjH,superconductors
-WaR6of7IXJ,heat-dissipation
-e2vD_XQG4-,cooling-system
-tqWQcS_5_3,phase-transition-materials
-rBqRKRHQvG,heat-exchangers
-RKoa5RCVOn,phase-transition-simulation
-6IpHS_RkmV,GPS
-L9VvgnuDVT,star charts
--8gDVLOvli,hull reinforcement
-GR7D37DP0z,backup power
-CAXjT4Y_1W,satellite
-70tA7EyxM3,oxygen regeneration
-7NGhQURdaa,waterproofing
-n-X3CVsQGg,gravity_waves
-NMo8v0HH1S,vendor
-HERb1oVWp4,delivery
-FvYZjKK4Pj,living quarters
-RbTkO0qBy5,galley
-IlO9ka8yey,overheat
-AvjbzmHea5,main_server_rack
-2jKMsc1T88,particle_detector
-XPAPRn8ouV,theory
-7NnI4MgI_D,jammer
-KvkxsyKnfw,pantry
-aMYRsRf7MG,breakroom
-9dQLUInFvi,quality assurance
-6d7Rane3PI,skills
-0zPXnofz5M,purchasing
-JHMne9ebO3,development
-cI5xD6-0h-,production scheduling
-QC0K6c3L8_,meteoroids
-p9IEe0j69r,electromagnetism
-wGv40D9kqn,electromagnetic_interference
-1VflqWioCU,electrostatic_discharge
-HixWNiqph3,bms
-dbzv7wJP07,medical_facilities
-Dozczltbkc,medical_training
-1witvANvZn,locks
-NWv6kjzi45,GUI
-dO-Bu2g2M3,filesystem
-XGFxe-D7iF,navigational_error
-tzjrsI49qs,handling
-jYjxCz1W23,unauthorized_access
-dLw1iA5igw,transportation
-tegT24kCIz,life sciences
-bXpP7S7Tmf,power management
-4oVifZpy0E,missile_launcher
-Zb8_fw5UVa,circuit breaker
-i8gQOZHyuz,sickness
-dQNJDUzR1c,kinetic
-IqxuPJCLQK,medkit
-eC3GJW993g,piracy
-lNfj8tmfLz,challenge
-C4PYjwUidT,Xenon
-Y2ADstPYl7,waste_disposal
-i_luP4Ez_p,zero_gravity
-818qP_YvPq,waste_containment
-_gGZOSINfo,waste_processing
-g13Bcku38a,waste_recycling
-x2qtOYxlKe,waste_storage
-GnaBkro12b,waste_filtration
-pudabWHSPN,waste_heat_exchange
-H9h2GelTl3,waste_pressure
-xUMKUa2Keq,waste_pump
-9SGjB7l85Y,waste_valve
-VG_hCTOQl5,waste_sensor
-v_kkqZ71SZ,turnover
-MwREijrHih,compensation
-AuVxQ2X05Q,benefits
-vdt9cwhC0h,work-life balance
-J51tTfoWwT,training programs
-aG3LrfKQ-K,cyber-attack
-Byl683yzM7,router
-prmIFZpgZq,intrusion_detection
-puFe3Iy8y1,gravitational sensors
-LrSHhXegA-,low-energy
-sQlPMSr4YT,deformation
-gKo-1WTKip,particulates
-XfXVcejlO8,fans
-a1NX341lZ_,freeze up
-4_k1NWKTMl,catering
-alLcPaJca5,spareparts
-JhhQhB9JSs,laser sensor
-ziZHsMh5Dk,medicine
-GFD_gl5qiQ,rations
-f0zbl-neih,reservoir
-F2R7EsBaew,clamp
-tfKN0dfits,clothing
-3H0S2PcmZ2,hand_sanitizer
-Y4PpzaWX0-,recognition
-MgfXvbVopz,mental health
-B1SjbtZy57,diversity
-1zRGB80DFE,passengers
-JmyH30atsL,team management
-JZq7wpgzSj,motivation
-5i3wpTAAW-,delegation
-Zyf062PjII,performance improvement
-WO5lXuaAsl,ship_structure
-tJW-WKyrRj,accelerometers
-ONgwT1kYzC,pressure sensors
-kry73_yXsa,magnetometers
-juITiHi6VG,infrared sensors
-m5q00PJrZZ,gravity sensors
-F1Q5Gfvcb0,ultraviolet sensors
-KntC7wSfQ8,visual sensors
-MtZO4Dpkwv,spectrometers
-tFHXzEvz26,lidar
-h3RDXs2sRq,acoustic sensors
-j-JiG6fam1,magnetic field sensors
-csI5EhDiuB,gravity wave sensors
-9-NuU8c7Ps,neutron sensors
-rpA9ToGckA,climbing_gear
-3vjg9CZ2JY,rope
-XsmdPzu9gd,harness
-dVGtGgKQMu,carabiner
-L-pSZMvE0q,janitorial
-Wl9u-V69R2,maintainance
-kw28gqtxF4,entertainment system
-sDHY7nqPYV,user experience
-MD6pw5VElX,connectivity
-wuMNzPyJiZ,dark
-mHkXJWsK8Q,thermal_regulator
-Qw8EK2zNLj,robotics
--g6HeMRr1U,tool
-L1dg8iJgAR,electronic_warfare
-qKMyIvQ_2a,oxygen_scarcity
-sxTumk-mzR,resource_management
-Z-xtwryKEx,dehydration
-LzhkhhbCsc,crew_health
-H0X4IGMIMO,mobility
-DFQnSDC0fo,railgun
-vrrwAumCif,tiles
-d6RJ4FzitU,collapsed vacuum
-2-2SDjE4j4,fluid dynamics
-J7jsd1Eyv3,vacuum technology
-I7U5gWT365,fluid contamination
-9HxKYI6Cug,vacuum seals
-l1VZqRiYX7,vacuum pumps
-WhKv7VpsMh,vacuum lines
-ZB2IKGgu-s,vacuum valves
-sNpHBGY-nZ,vacuum insulation
-72GGdKWqqC,vacuum filters
-qXZH0Jb2-I,vacuum leaks
-Pkeb1SC5pf,avionics
-aNtFq0pV2m,moisture
-oUU4kG_Cvv,ejection
-uU9UT8cWlB,Epstein_Drive
-_0s2jwB6Oq,vessel
-aoJ-DIsNho,system_upgrade
-Y0xguudSY_,system_integrity
-mPZqapnXja,system_repair
-Mb7oLQdpDW,system_security
-1XOKHfdG3v,short_circuit
-4Ir7DXuF9V,quantum_gate
-V-QrqXtKB8,quantum_entanglement
-dtBG515SHV,quantum_algorithm
-uDdzClcAOn,quantum_cooling
-WtFlmT2S-K,quantum_memory
-3gktUwKt-r,quantum_error_correction
-in5FfZa2g4,quantum_simulation
-uVJCxPEg6z,quantum_interference
-2WT9no5t3Z,quantum_teleportation
-OR3GmTNBiS,quantum_decoherence
-noRYaVz0Qd,quantum_entanglement_swapping
-bNFGwjcOCg,quantum_error_mitigation
-X3ChpOh5UT,quantum_annealing
-EuOL_7QblF,cable
-uWkS61DlYK,instrument_panel
-DJ64pVGPvU,lifeforms
-dBtb8kEJTI,food_prep
-85GSGnI0xd,emergency_response_unit
-rs6KM1d9qQ,software_glitch
-cOV8JEwi6Y,communication_issue
-HDDbe6hB42,calibration_issue
-zhUxJZd1bV,mechanical_failure
-tdaisMvqOY,electrical_issue
-n-X75CytRN,sensor_drift
-yaz7dHE6r2,software_error
-w-mlaEeqLw,toxic_fumes
-sTshUHzd__,discomfort
-3eGBqkrIEN,cramped_spaces
-d9MZ8B1kau,cramped_quarter
-7EAjPbc46D,living_quarters
-ZOf49ndW3E,navigations
-Mr8aiuCA8I,skin
-W2ZpUAx0s7,patch
-Wcxj63Bj0S,tooling
-3Sb8pPqU4Z,landing
-lxTA0EL8pU,biological
-s0MfgAAsN2,optical
-JAb5YIeqLI,gravitic
-hWt45lRgt-,particulate
-u_KJNrbtWY,interdimensional
-NwEzACrwVd,magnetic shielding
-YEedg8Pkp8,data processing
-j5zdzPTC9z,protomolecule chamber
-gEvWENwv8W,magnetic fields
-YH6P86nvI9,protomolecule properties
-QwfaDQh3Yp,magnetic field generators
--8Xq6tqT4o,magnetic sensors
-UBockV0M06,protomolecule behavior
-3XePFUqEAc,smoke_detector
-YVNYBknQXr,deflection
-IJMx5c6CiM,reduction
-y3JSz7Ygh4,diversion
-lgr2QHS7er,embargo
-csILsqG2eu,port
-XTpcG8YRRq,military
-Dc1uAwiWaO,mining
-sFuj-_sJeH,incompatibility
-E_IHh-8JJq,code_correction
--s4-SA8Fwa,hardware_issue
-Cwb48VP0s3,firmware_update
-P3rNKLSXD4,configuration_error
-0S0U3B4W4W,hardware_repair
-TTQeUkR9nC,firmware_correction
-Ju74TLeDs5,retreat
-U6_BDzxJX4,defective_parts
-o6G-80ZlCt,verification
-KA_qeNYUlU,emission
-4mFZJ7TujR,human_interest
-XTXCoq_srm,faulty_display
-Y5nB_J2lGX,installation
-CeGgjXGCc4,difference
-E__Creuzke,etiquette
-V0M43q-UPa,holidays
-xshspsH2MH,religion
-gzI6AM0OgB,family
-xvabWqpAUk,music
-bVP4uRZaQm,sports
-Dvlm3tpvKH,art
-4L6fBnElGa,literature
-tEdCXs3qzv,animal_welfare
-aqDebAzUab,clinical_trials
-Z2yhi8otVh,informed_consent
-G_F6XfUfnU,onboard_computers
-vEl6CAE4P3,data_handling
-3DdmpRRGBg,sensor_repair
-2jheW7BwlT,software_customization
-u3Bp55_K7x,system_backup
-O9uPUA7xYk,course_deviation
-OXstMx6pL_,course_correction
-qcjGCq1H4-,power_issue
-Cvxx77AoNR,user_training
-JB5Fm0fYVg,hardware_upgrade
-O5yll4lhP8,cloning
-MS1RJ7Cp1N,artificial intelligence
-xG7zxizGiT,genetic modification
-oGWJT3Irfj,medical experimentation
-4AzCouOABn,animal welfare
-3XVPQ2NPIw,euthanasia
-ZyloYggxzC,informed consent
-EUXWVipE9b,human experimentation
-n3drG4u2vP,data security
-bHiYBMxRCj,environmental impact
-ytSQQM0RpX,military applications
-0iUwD2ik6W,artificial limbs
-B-k9_WrsDR,genetic enhancement
-5ZWMRvKa0I,cybernetics
-Y_St74q6GA,astrogation
-oNLvjBgQdQ,material
-n2MPkTLTFz,innovation
-AG2pKO80WU,logs
-PXU1lAM2oM,high-priority
-8cFnbNmtEX,low-priority
-zrMapGlv2X,scatter
-FdwPZMITZk,blast door
-HfwnV1Z3m5,weapon bay
-noHck0mjlC,missiles
-RuuTlvXM0F,gyro
-ERGYtQ3diz,Zircaloy
-8ZYvsFWgHi,high-energy
-zYRFC2_7ob,utilities
-SdeCEtHbrm,inflatable
-H0dTl2BVoD,atmospheric
-3yrjLMr-NT,decision-making
-GCAGWRzWJB,growth
-cRUjzko-37,interoperability
-HidgS_HOo3,water_damage
-JnnIr6RAYY,engine mount
-H1W1E9PvoN,navigation system
-AkDCJGRoHY,thruster armature
--4vscHixRR,autopilot algorithm
-37xpVg9lpc,engine coupling
-pQecPG78UH,power inverter
-wDWwI47Pjm,line_of_sight
-Tdg0jbp9Pb,transmission
-cfPRpWvc2L,attachment
-idTCXbocWd,fluid_coupling
-1ksgpesKsb,mission
-aBfSZDrqb7,resources
-4wCKXm3QYy,contingencies
-pKXJdhO6J7,explosion
-WzOYy-M0zA,explosive_gases
-KxD26HE7Ja,ship_engineering
-hTkBYtMyiw,explosive_materials
-Ws06We2ucU,magnetic field
-B5irAl5RY9,duplication
-XUfrM5PicB,formatting
-L8LqYFQhkw,validation
-Tn1FQsaQmI,cabin_atmosphere
-jZqOQWDHqT,machining
-ZX-c9K0C93,turbine
-QXvN5Spf7_,preventive
-Uhkzm5zNZC,communication array
-n_0h2fihU6,power surge
-v1UMy_KLgo,software glitch
-7n0_a5WqEr,mechanical failure
-wCfOPKY4WV,power drain
-bs5xvMqe6s,signal loss
-9U9E1XxuqH,temperature fluctuation
-3xyhStMZxv,heating element
-3s_rLn4jp7,surge protector
-uP-2PmyjmS,visual
-DEFNRetM0r,dispute
-x2HO43-iGr,geometry
-wxQVqlBNuM,containers
-dkS6tiw6nd,landing_gear
-_izGrQcoVM,inverters
-6-5h3P8XRc,generators
-W3XErAkQoJ,dissatisfaction
-0UCJCkKaqH,equipment_access
-JoNVk0_xu2,work_schedule
-fKbaA9txCe,drains
-o7BSwFuY6B,compressors
-o1fqz8C4hp,environmental_controls
-WzT7xk-z9g,allergies
-JRDH9cO2rQ,routes
-LfCUZCsQVX,signals
-eogme5YIQ3,malfunctions
-zm0_OtP3w6,toxins
-84tpwzBfZ1,cover
-l5F1WEWGDG,firing_system
-zN0vSJlmyU,conflict-resolution
-S5gY9nbn73,polymer
-o2c_-PSqiu,process
-RHxYZV-O_i,false_reading
-JfYI2P8RWu,medical_database
-YHM-7uVJmp,medical_data
-6qNDZIROOn,medical_software
-Vb-0xdYOSZ,medical_systems
-84CjJN_7ks,paint job
-Q2OcQtsFkg,infection
-VzxqDAZkTp,contagion
-J3J4bNrIsj,wound
-_HD2Z_Azad,methodology
-4afxlooJoC,empowerment
-Yich16YFcw,confined_spaces
-UTvJIizIcb,reactive_materials
-w-aNLCxmdh,quantum physics
-jAXu_Mxres,nanotechnology
-pT6uHDqCUO,material science
-6wbG6RJz5Y,rescue_beacon
-zLXK6dsGAH,weapons safe
-YtMQyN70Jf,arm switch
-CL2FmXQO_b,crew_leadership
-TFUZoZWMge,malfunctioning_firewalls
-epbSxtSpus,temperature_issue
-a7nyXKY1Mb,network_issue
-HxvybAraDc,air quality
-CPQGbZumEe,compromise
-OWhsLQ_Zks,battle
-NMHja854j6,decision making
-TyTyFoe-DG,compromised_hull
-3hG329S3i0,control systems
-QEDJ5Q4Vly,decoy_launcher
-7j1zkq5mNH,nightvision
-pFogHO4niB,shutdown
-cQBBKW3Ffk,uncertainty
-P2m93ac9b3,receiver
-30uUfR1doG,mismanagement
-k6_PyjNLYN,travel
-eFa5dkDhXb,consumption
-bHIxEfemdf,em-effects
-VOJRqcmGFh,extreme temperatures
-rAkfl-qOV1,extreme pressures
-2NGVuu3piP,micrometeorites
-m6Zbmxm1DJ,extreme vacuum
-6YSRFF-PqB,packaging
-8HYMrwZUMc,maneuvers
-H9psKdykkv,resupply
-h9gy_X62Sk,absenteeism
-kZaPr4ZPuW,AI
-0p-scOECfm,routing
-gbKt2v_isl,amplifier
-7dsJyslyn5,deception
-JXlVXjskuF,electrolysis
-_KH2r76Cjx,settings
-EnBLeoC35C,patient_abandonment
-y72Kag9AE8,non-essential
-jIYM8Ni8ZL,refrigeration
-FqYLNJ9wGy,impurities
-gugh6ZhgNc,depletion
-AT0wM7k5-i,fuel_cells
-XgGaJXPgLF,power_grid
-Ssv27ub34D,expansion
-QoTWcCqLwW,first aid kit
-Dwu4Wwo1km,historical_data
-7_DrKKjWKq,capacity
-8mJFBXzhnM,suspension
-lKB_uTDPpv,adaptation
-4DdmWfaYYp,sensor_array
-tqYbeh98kc,geomagnetic
-h3PVU9gwUE,alien_interference
-M70cmaAoX8,hinges
-zIzbB8irAA,sliders
-dS0c5du6_6,blackout
-p85-QeWUdV,gas_line
-oWyXEYMLDr,cosmic_dust
-HVa-pkszcw,freeze
-F3PPGF05gd,entertainment
-gsd8QZK68X,energy-efficiency
-C92VtOW_lK,stowaway
-hbNnGcLBwF,electricity
-riK7p1vofr,external equipment
-Em_4rI54vZ,adhesives
-KrSSpoape7,sealants
-I5j_wANkfx,O'Farrell drive
-mHhorL-0r7,crew_quarter
-fJHS_mZzhD,fire_safety
-qwbgmX0lF5,medical_staffing
-VAQDLa-FHR,medical_research
-l_iCp_ouOS,medical_ethics
-owvUsnd2tY,medical_telemedicine
-L0Q_vvRufc,medical_education
-u5KkICYPiV,medical_innovation
-hZqbywYuxJ,medical_mental_health
-gK0xO9SkmU,first_aid
-EPNkzm4_22,oncology
-VHzhYFniva,immunology
-i4QLuba7BX,orthopedics
--g5GjSmYJ2,rheumatology
-jntLqia4z0,nephrology
-dA2J-YrrH2,endocrinology
-j6CmD8af0y,hematology
-REOVRx5Akn,otolaryngology
-NOkGI6ccuB,dermatology
-KWFbJniy8S,vapor
-aXBMThDw07,gamma rays
-29jnIqSo7r,neutrinos
-i96lJIDLIG,X-rays
-u5mkWNjQFh,beta particles
-ktXb0dmTk7,alpha particles
-jMaEmkK_45,muons
-jO9Q1-HSKP,positrons
-OLO4FRQ6B8,electrons
-shqsyysWgL,neutrons
-hk-xHE5Ump,protons
-UYVKrEpyi2,gamma-rays
-V6D1F12RuG,tidal_forces
-UmDt_2jkQd,pressure drop
-s_SeKY0sXu,converters
-YdAYSXGKDM,transformers
-V4P_rZlmEg,capacitors
-ILbSj_ffMF,diodes
-ll7fkejIEx,rectifiers
-5fEg92o1Bq,capacitor_bank
-upJS1lnJ-u,electric_fields
-frP7-HusJd,containment_system
-jpDX7-Aw-k,electrical_system
-8H0ZqY7Yo1,counterintelligence
-804dxSXAQe,housing
-B7odumCb_V,belts
-XkMz7FUOtl,high_energy_particles
-cKyXivb1rd,neutrino_detector
-JHrLOW_cjx,coil
-8Bn1A-iyfz,fusion
-ckIe2SiYI1,enemy_capabilities
-Bk4LPOooB_,insurance
+s3Yh0HhGyv,failure
+OFtKnIXD8D,navigation
+DLIyqpNBu0,electrical
+e81rJ4HyCn,software
+V1b6Ia62UX,hardware
+vLp22zZJwG,calibration
+W2ARtdLiWN,power
+LZo4gqRvac,communications
+lVrwnyjLV-,maintenance
+87zBOVsRz8,vibration
+EZjuwwrDGT,engineering
+uQifMdBug1,weapons
+Uk-QezvjKv,politics
+tg5ceoRe43,security
+0Bvc3t7gw5,diplomacy
+LJAT_wC4Lo,strategy
+JkD_9d3JcF,intelligence
+GnMpq3RpY2,compliance
+nskHsJCWJ3,negotiation
+2LJTTCR4GR,wear
+_6gfeAK5zl,engine
+wekrHUCI2S,escape pod
+B_9GoYX9ZJ,bug
+W45_7kpOB8,repair
+UZGfmZACaH,mechanical
+YPis9yQeXf,diagnostics
+0G620a8Qww,inspection
+557xG2MBX6,structural
+-iRx9jmGGE,life-support
+swg6DFR7O5,corruption
+46sEpc4gc5,navigational_charts
+lcsQq7-VGL,Rocinante
+Qy3QQ84szA,issue
+O2rGBIilXY,ventilation
+abiPzPXFc3,health
+NGv-8e5oFk,safety
+qO7PcrZK2y,medical
+MT-8A5R-4d,pipes
+0jv1r6eqeS,life support
+kxj7IsM6JR,hull
+f9NHDaBFzQ,pumps
+rIVZL01Vvo,water
+TV0T2V64-D,emergency
+BesxqQ5sa0,contamination
+Xq_r8WVbC7,repair_site
+ZtqAes6ARR,water_supply
+-VfaBFPaAN,life_support
+_7-hG5_0TI,fuel
+NXLWw7gT7X,radiation
+BoUzIgx_1P,environmental
+NXyBNGE54G,gravity
+ZWmiGBEoiu,protomolecule
+UhnHMmtnGV,tactics
+0W0isT2ImV,damage
+pb3Q3C0Ica,meteor
+XQ9YIYAzWP,shield
+olPH8ONmFN,structure
+52dYWeu9v_,sensor
+Le13dgG7J0,fire
+_mjmDmgAVJ,interference
+y_QPTgJ3Rw,update
+knS5yxL3jV,replacement
+R9Dpd3rZpu,schedule
+gXzmk4EwtY,training
+7T-ot_J95p,environment
+4cLCXCOrgL,configuration
+4ncXaQ_Xi7,cracks
+QcfYDtYO6H,welding
+-Tij2Ic3cS,materials
+LYMoUm14Lo,dignity_violation
+4mbPYiq81Y,biohazard
+PJW51Pz9Kb,privacy
+IHBERW71Ff,nutrition
+MmxurxlFDn,hygiene
+TdTsB0--7m,comfort
+ARM1s_jCrl,communication
+YuU7HRqNBV,respect
+VgIvMxkMFJ,dignity
+uX1h-nsCZL,noise
+zoqkWs7mSR,ethics
+QJOgxHW25z, Rocinante
+JeJjBonkS2,technical
+2kSm9X_LsL,gravitational_waves
+u9X13aveHL,firmware
+RMlKQWEqx8,networking
+tF-PRqwmFg,testing
+-ZZ5LU2w6Q,jam
+n9TjkGfCTR,toilet paper
+mCZ38Y-lPU,critical systems
+u19TJHW4yo,node
+X1SkxOJFGW,data
+cHcHh7HevS,sensors
+GorjqSGv0M,food_storage
+2QG-3mvAs4,water_storage
+0gDPJeeuuW,leadership
+J_ckpX_b_A,crisis
+eZQbM4XjVp,defensive_shields
+HTHZAS5fO0,error
+ovmTZRrbnp,electromagnetics
+XFVj5xSYg7,inadequate_staffing
+2W3SpvA4Co,thermal
+R6VxmftxOd,insulation
+njprWsj1g_,cabin pressure
+p58YeNux4u,malfunction
+QssnEIHhS2,design
+LAkwThZF28,upgrade
+t6u8ZA8q0w,procedures
+lF2KYhdXzn,review
+NNBCi26IU1,evaluation
+R_zg3bXsL8,chemical
+M719fj76UQ,integration
+68XJXSOYWB,amplification
+boeYLf7ZLB,quantum foam
+D-ITUpx6it,reactor
+b5kWRRQap3,shields
+3Ohia7-uSt,seals
+0BosC7u9E2,joints
+YqNeKZz_qE,oxygen_depletion
+8BgnrUS76O,gear
+I3LizadqFR,short-circuit
+eflrhF2hXk,inadequate_supervision
+nVESAa4BZ6,research
+kgZOsorPyE,solar_panels
+EY7EUHgs43,batteries
+GBW8ICP0wW,synergy
+HWgwOaVzMz,soundproofing
+2CIn1oMZHK,bathroom
+822pw0OMfr,budgeting
+1qyrikA4Wg,system
+EiNsuYGcIZ,combat
+blUkvCjNKh,realignment
+szbvHA3Lbk,recalibration
+77qcSgbkJE,debugging
+WgKg_rAENZ,adjustment
+mzhmtrqPvY,optimization
+Go_OXLDQyl,patching
+LT7nVz5Gg-,airlock
+ypx7sHRWua,haptics
+QjxAaoEX2i,defect
+rrvQxsNpLj,controls
+9SoqkNpkiW,fault
+h0gonyM9ys,feedback
+Y5TEMvxovG,problem
+JneelOBPeJ,surface_properties
+LI4Q-M1yfd,cosmic_rays
+9NlVo6-q6-,water_sensor
+xus8gRGPtd,water_tank
+nzCQBcLzNW,water_pump
+Yy24Tlp84k,water_filter
+2jYfcjEodu,water_heater
+llqs_8JKq9,water_line
+GKWR3rVcZC,water_pressure
+r4LcNfBjqx,water_quality
+JzDJSlxZG_,water_level
+L_ocCua_ff,reconnaissance
+QrzLZP4WQ1,log flooding
+pNUS0qIWYp,network
+fe0WU7P07F,database
+17r5mjYCOG,storage
+SjzIHA69sR,mold
+u096T_Nehu,lockout
+2HXKTa0Heb,weapon
+U_VzDqVpxN,authentication
+pw8E8vA97w,software_update
+ZIMh7Zov09,user_error
+chrtafX_t-,system_error
+tSZDTQYH0b,network_connectivity
+2o0Bc6LviX,authorization
+0CdOJfNuOC,stability
+vKgC8skHdX,dark energy
+rlTnq7stIg,algorithm
+LNiNpn-ulV,follow-up
+1Wd79pq2Jl,thruster
+rmF0gtjJzL,thruster_pod
+kmBf8ORFbP,design_error
+Qe8-8FVxrZ,catastrophic_failure
+Fchdgv1RHy,certification
+EuuTGoIgx6,dark matter
+Eb-ek_sofL,shielding
+yTeGPqHtv2,memory
+sXM4yTqTTe,warning
+aCO3CtxkVU,critical
+O-5vv8TYxw,inefficiency
+l67sZByEf1,threats
+F3JUbkt4kR,supply
+hQaSUQ2LuX,celestial
+An6Y-Xrg5I,fire_suppression
+SJFPxPG1PI,gravitational waves
+dDg68ZQ36S,black hole
+6Ul8sE59lP,physics
+xPbkE4d6zD,biology
+f1zcXTH3nn,mathematics
+26uzdSR_Ds,chemistry
+Rq4nf2Px_a,anxiety
+8v2GE6fNiv,overload
+FMb_p9-FW5,thrusters
+LSrwzF0W43,vulnerability
+mj2AQQtbOO,firewall
+NpOr6QBo_F,encryption
+J9Ar2d0fv3,antivirus
+qeFZdH_x2M,intrusion detection
+PzqYtwCovG,patch management
+UcIIn4EiUw,malware
+XVw7Wbg4jN,access control
+9vP3Xk54TD,anomaly
+2SfUykN1Zx,space-time
+oaZIHE1Uw9,atmosphere
+MxVmlcRa0L,rivets
+3PyfddGdre,infusion_pump
+Y2KBGwyDCS,inventory
+v6mN7QuDs8,power_surge
+88v3yPo8C7,threat assessment
+-LSSUqphox,antenna
+bUJT0UxX6Q,ceramic_coating
+8b1-UGKP2A,absorption
+RaodY0k7Cp,unsanitized
+NcU4vW9_xb,equipment
+78jtbVtb0z,impact
+TMUqcs40zL,space debris
+PLsDf__Ghj,entanglement
+hCoxgTTHWW,glass
+0RNMsPXDnb,ionosphere
+EJBQwpRwCk,technology
+4jf1oInMUA,astrophysics
+x28vg1EpGM,astrobiology
+lDwWlvKTRn,cosmology
+XUhfzheWK5,plating
+hrb0YRmfJu,containment
+YcchPysZax,presenteeism
+k6B8R3P4BQ,medical_staff
+mtnLRMzLFs,gravitational_lensing
+bgm8buigqs,scattering
+8G8W6PZC6D,collaboration
+g_f1mA5cMz,documentation
+OEnjXDUyRM,data_visualization
+fBvJr-PT4k,usability
+Vpy6MFfM30,medical_tech
+di639aBDbv,accessibility
+SGz-pZKt9k,compatibility
+9Y48KJFXPO,customization
+G_XsvNUYWC,plumbing
+rGfIsVLcyB,cleaning
+Nu1YE2N2Q2,supplies
+T82oPHNUny,pest control
+kdIaLw7_TU,space
+Tr9ZURE3FD,lighting
+DnSg6ZCONp,painting
+39K1HhNwQS,color scheme
+i75PqZyjoC,conflict
+cRpZ6dWhRZ,personnel
+lleAFZl6aZ,drones
+MSUfUBd5kW,propulsion
+ixJ1dfaZDM,hacking
+AB5eG5hnNH,facility
+SkL-m-Sgx7,excess
+jW_vSzKRQy,insufficient
+kVGSnhAaOO,fire_extinguishers
+vBoV-f1EUv,valves
+MturCYrToA,aging
+okgZhFQyuJ,procedure
+I22Mv4L3Wm,quarantine
+KQse2Q5fqg,battleship
+iqNaV93cW9,misfire
+aRVtod3n2B,gas_leak
+Fozl1v7q3b,fire_hazard
+C5eHE-4ehH,oxygen_leak
+3d1Y6UglpV,pressure
+PaeuVcMT1D,oxygen_levels
+L9xCOmFsQY,radiation_shielding
+yHoCfX2YRu,engine_cooling
+SxYt0W24f6,fire_prevention
+L4nloppMEf,hull_integrity
+PJpn8JoWrD,electrical_wiring
+ZAh6Tsk9GI,battery
+KK_xAkyXPr,solar
+cudhXtyoAj,generator
+iZcepwLkWj,wind
+PGPqcW4_OT,hydro
+N7UUHwYodZ,geothermal
+PHPIxZjNpx,nuclear
+7QkfWDAufq,wind_turbines
+TstQMSJbtC,cargo
+Msihk4FfJY,grappling_hook
+iqu4ROn_GD,maintenance_log
+ZFDCL3zJNW,design_review
+qt9Ky16Pd9,repair_log
+JP3Y0ytBSK,testing_log
+XJMgHRNCbK,training_log
+zHz4gKfEro,design_modification
+eg19b72Mz9,winch
+k7hl27VEMn,construction
+qO0a-3synD,neurology
+CiWH7r94U5,programming
+TmKqwfajoo,inadequate_intelligence
+D8Skj5swj0,transmitter
+6riy7tXFr5,S-band
+-WwEJPvlZA,minor
+IL6BII3rHq,urgent
+ypzts3Ea7Z,major
+AklMO_d38Y,stress
+K9K84trlBu,joint
+dALlQ34qGF,corner
+o5OffTVEDn,leak
+-z3FdsabvA,engine room
+AUzJlOdcsH,cooling system
+piHO6w5VC6,sewage
+kT8IXc6h1-,hydroponics
+UpUm7sXjh9,systems
+e_lvc9xy9_,wiring
+39gFmNjdCz,transformer
+ibbVYUQyxr,fuse
+704qpZsmN2,relay
+2cCUzvH1bS,circuit
+xXjdVkVJEH,switch
+pkW-vEJunf,diode
+YPU8v92pVa,capacitor
+27oWnTGF1s,fuse box
+Sn1WxEIs-j,fiber optics
+kgqUGWPfsL,decompression_suit
+iK0oCgMHWm,filters
+huGK7UEtQI,hoses
+qpFgI2Sk01,regulators
+_yPw_zXK-T,heating
+-y-SQqZElA,threat_detection
+uXoc759T4s,rocinante
+BjOIDcGnzU,structural integrity
+QrgxAb_z8F,cloaking
+aDbKjKaxkk,inaccuracy
+6A0jcC34Vy,medical_records
+iLSf_kvgee,counter-surveillance
+cGuULOAxlw,toxic
+W167tRZJu8,emc
+7ya_YA7Ewd,solution
+gx1_0rsNMt,decoherence
+xNnYymtjOL,quantum
+dgyGd03g2i,unstable_software
+odnxlRDWTQ,propellant
+9HiauoZOao,operations
+DebUuqqSyz,quality_assurance
+YlocB-mKDn,procurement
+CbkZVgySOG,gym_equipment
+l9PKlrMJ6T,licensure
+Iism31jcM4,dentistry
+ahyw3Tdh3V,nursing
+Aj838X2Muf,pharmacy
+lqUNORrkJC,psychiatry
+bk28ExH52F,radiology
+sTbr1AB79U,surgery
+zjFHr4zt2B,pathology
+NNKbDrWQ3y,anesthesiology
+gHnH-OWAOo,ophthalmology
+bQ7B-xFqrC,cardiology
+VCuKtepaSD,gastroenterology
+bZnU8M7_o6,toxic_waste
+6L5QRGSfKC,oxygen_shortage
+YYO0BjiWV0,oxygen_tank
+ehzlExxj73,oxygen_line
+HffA9eZ92f,oxygen_sensor
+9diBKUMWuc,oxygen_regulator
+7ea7Udoh39,oxygen_compressor
+d2L5E3MnJH,oxygen_vent
+OyHAwqrWMn,oxygen_filter
+r5aEB8V0jY,oxygen_valve
+cV_sSweeFm,oxygen_tank_pressure
+KBIMmTqEju,oxygen_generator
+E2ydBASP8n,oxygen_line_insulation
+p_-EESxtwN,oxygen_sensor_calibration
+0VrizE2wBM,oxygen_tank_inspection
+0vT4_hA1J8,oxygen_regulator_seals
+HdEz60IGAJ,oxygen_tank_venting
+Mob52XwvHE,oxygen_generator_efficiency
+oC3ibjUzZO,oxygen_line_leak
+SJTIa-1qTZ,oxygen_tank_pressure_relief_valve
+-StMcS8YEM,oxygen_tank_insulation
+zbDmshPybg,oxygen_line_crack
+edIIV8KJ2P,oxygen_sensor_contamination
+5u0MhCGvHN,oxygen_tank_inspection_log
+cKcMZ3MB7K,oxygen_line_corrosion
+WQelhUGFzf,oxygen_tank_pressure_regulator
+mUWL4JfOdF,logistics
+3WGa_UbzOA,paint
+y3HEcP7axC,singularity
+OTrCQNVOJI,cosmic rays
+ScyiT4chU0,waste
+dVnM5P7DBi,heat exchanger
+IGzt4tRaT5,crew
+DOfKkbeVip,thermal management
+0WS2Qj7kFV,solar_panel
+blTSSbwUIp,vacuum_tube
+Wl4MHoYLqc,seal
+BysBq6qA8k,ejection seat
+mPb-qGc8EO,structural_integrity
+LkHra8P1BY,frame
+k8kv9wc2z1,keel
+tgofgtskno,girder
+OXmY6j-mrw,beam
+5AkDLM-6lq,traffic_control
+8NR7kbH3ut,excessive
+kD5svA2fYw,jumper_cable
+L-7LgIQUML,lag
+hmGcPCrUOA,joint_operations
+3JYfOQRejr,cracking
+7TD73QGWIO,corrosion
+zB2XkVJhW8,oxygen
+7ldJsK-5Av,sulfuric acid
+k7_ebL_09t,helium
+YeMxn7N0CX,hydrogen
+cQKFcBbGs7,methane
+OjoTNMk0yS,carbon dioxide
+9CrPr-DTKY,nitrogen
+LveWbG8KeI,chlorine
+xbg-4BU0I9,argon
+sTu1QcsoHK,xenon
+S6g7-vBGwL,neon
+8vYRbzq7QZ,helium-3
+EOVAdEc3Bm,hydrogen-3
+GgJO4MNs9S,deuterium
+Tw-LmRBY4c,tritium
+OuC2wVyl7s,fuses
+QBj1cD7oP3,outlets
+dRLNtRlLg6,wires
+aMDrHvowzB,faulty
+hfsR_oeKDS,shortage
+NXK3r2-D2p,recruitment
+xyohJMTOj0,morale
+1sOJidlOPK,education
+_54gaoXpPC,spare_parts
+5AnYeWlADG,alien_theft
+yFwDCRfbVo,alien_technology
+Yxvx08gMHp,alien_biology
+RfJ723l--6,alien_language
+MNccUYskdg,power_system
+vumLAoRlZN,alien_energy
+mitbNaRIYL,alien_coordinates
+Hss-YAIRU9,alien_materials
+i6WhLLkLJ1,weapons_system
+kZPRqdfLo0,alien_alloy
+cW5BRZUenB,alien_biotech
+xa9yA5zoyx,alien_network
+Au9i5NIW_Z,alien_batteries
+TIJcBI8QKM,alien_maps
+w4we8qIREB,alien_ammo
+iR4SeQKQzj,alien_components
+hpjhNn7Tlv,decision_making
+i4oDH8vtwE,wormhole
+bQibuZfGyx,Epstein Drive
+gCKnN3Uwtn,Epstein Drive Thrust
+CkCb6lfw_u,Epstein Drive Cooling
+dvgVdkzENy,Epstein Drive Control
+IrXIQ9otoe,Epstein Drive Bearings
+NNYilW1ofm,Epstein Drive Housing
+fY8mG6air2,Epstein Drive Wiring
+8mMN_kBUWR,overheating
+kVEflas1VP,Epstein Drive Lubrication
+SmoplwxeyG,worn-out
+hwPMQOpLIe,Epstein Drive Belts
+ZUg6iEPhVL,Epstein Drive Electrical
+aVNGzymIMN,misalignment
+pvOfv2jXGz,Epstein Drive Gears
+eUt5swvEhG,Epstein Drive Seals
+MBnNZ9C5-J,human_error
+lefrRJ41oY,targeting
+KYath2ftAB,LIDAR
+tMfxiJ_CHG,protocols
+g7IeTqAEgD,debris
+ExltqOaaHW,emissions
+6EIhkXmc11,electromagnetic
+hHKbk5mBcR,oxygen mask
+5SBVaW_HOY,design review
+AeoO7FopYV,training material
+_obEXPiEjz,maintenance schedule
+_uhOJdxRBU,design improvement
+Ba72S832n-,software patch
+Uetsi9j7FW,rifle
+khasxyD6mF,abrasion
+4R3Mhm8s1b,dust
+N7bbYodUf-,exterior
+1E022Npx9o,flood
+v2HCsUA3Xg,water tank
+UWCcQHKLy7,water pump
+szsbWXfFba,seawater intrusion
+kR1WTkug_Q,damage assessment
+tGS5Ooa4PR,water leak
+ROHRJIMMkN,water level sensor
+stgeAwywkZ,water tank design
+pbvNlzzFNv,water pump failure
+SHIKP5Ts0_,water tank inspection
+0Z9zqtsVHv,water tank material
+CVti9_ugy-,water tank drainage
+mN4pv0TIaw,water tank maintenance
+yqwJCtcDfA,excessive insulation
+R2QdX_zZu7,filtration
+Xe4G45GEJO,allergy
+nnBOg5lxLs,toilet_paper
+mV9RlZ3guJ,magnetic_fields
+ZaHS7LZaHy,food_safety
+Uj7u5Bm773,cross_contamination
+b0L7H2hr_I,pests
+DQZ9F69-0p,cooking
+YiV03-UPsp,recoil
+WtMkgNrCkp,frames
+LVoLGmm6ZD,walls
+9hSRz3XDLy,floors
+JW28K4CM8g,support
+hMH9-WtUVA,point-defense
+A08nlWRwhj,alignment
+NNN9HjfqbQ,coordination
+wCYk-7xI9w,priority
+3YtEVrhUkx,systems_integration
+7mCrz_qoh7,Warhead
+WH658u6Umy,atmospheric_pressure
+yFfC_pQcFj,confidentiality
+Ud9JCB6MQ5,jamming
+Nf2Z2g59y3,wireless
+jIwfiebX1p,scalability
+Rzd4tRLJBT,magnetic_field
+nZ0Y6eOmaX,life_support_2
+ZjB8sNbjFm,communications_2
+K0RtJwErU0,engine_2
+6jGgCYiO08,sensors_2
+PRMG6avIIB,power_system_2
+KpnaOwB4qK,shields_2
+o0WmPVlvxN,mismatch
+fBIXOkH-lK,explosive decompression
+INr3LO62mG,lost_item
+pHGlA8ZhUj,electronics
+nSrBKQfy9W,comms
+ZOcJ2S0JJN,prevention
+sz-k-t9YI2,drain
+7MbEVvy-UX,protocol
+xyAFPcRF5q,automation
+Xv8GKIVBtS,laundry
+tfc5C8hmaH,espionage
+OzOWa-rvne,hydraulics
+duU6CTxJdO,flooding
+HSZgdR5Xe4,supply_chain
+97UeWts1nt,hazard
+CDavP2h0z0,navigational
+QAzpJB-4hv,gas_cloud
+KUUXWc2gsU,nebula
+uDlsTlILTw,septic_tank
+A4bjzlVAIF,toilet
+Jr9R3b6-Sv,enhancement
+jmLd1kqKGe,refraction
+sGGptnRJwF,oscillation
+1-1kdAjxvb,signal
+yQGotb_nT7,ECM
+Bi2OtTZraq,science
+rCvpyjWuyw,quantum mechanics
+aLbMDlNA1b,stealth
+-QHnwJMd2w,cooling
+SmFxw4c2QN,objectives
+IAt1nHQHTn,panel
+Gmo2PAL9Nr,flickering
+t7HOv5i0aN,treatment
+jTC-AX2tzr,disposal
+4mLsea9BhN,sterilization
+ReHWo5kqBE,transport
+LZHEvyfyl9,lifeboats
+FO-IuSRgbl,crash
+lhcBa6y-co,complexity
+Z06h-cNC6A,interface
+bsGHCOdTzF,control
+RCE55p-U5C,strategic_relations
+bSZO37NW6Y,trust
+yTuKOQQ9jV,loyalty
+OzTbLLWdRr,conflict_resolution
+HlDJC41cvW,alliances
+BhkiqgPRnG,glitch
+qu1_N-IJv4,map
+W49xySxMME,route
+ZLYbNXuvcU,autopilot
+P8tc5bbksd,waypoints
+hgMFsUkWYI,heat
+85GRKdr0rW,cost-cutting
+KiYgkoCF9S,electro-optical
+ZdpB38r2Em,electrostatic
+pamJv2-sl9,staffing
+fXye0qeY7l,data corruption
+-HdViX5UPA,high priority
+NyzAprDFF0,medium
+zUbmLgBbA3,low
+c6U08DWnnK,grounding
+sFeCG-k7IX,modules
+DRl2mPxIxH,habitat
+vr_3sbbwpk,infrared
+lmL11jDOya,alert
+IL1BZSFjEU,compartment
+UJ5xQPcZUD,redundancy
+cdDjGmRbqU,evacuation
+XbPdMpZvye,lack_of_surprise
+O_9t70BHby,particle physics
+-v-X8RGEO3,guidance
+6QHUPvtr55,formation
+ElBEyl7zvT,radar
+q0wIUWPZpf,temperature
+8Byj69pWzt,humidity
+hkNQ3yF9GW,instability
+A4fCoZYoL4,alignment tool
+IUpZL1B73j,sensor replacement
+dR7n4S6eu9,calibration check
+v75ptimS0p,sensor adjustment
+rZYaP-mn6T,alignment tool calibration
+JR0h-24uqI,realignment check
+g6mcs_YWbf,sensor replacement check
+3A7UCgYPdM,finance
+m2Haex5UAh,tiling
+XUB-cHVO76,diagnosis
+Vij74_8MwH,intrusion
+xNfU7uqg7-,access
+ilewf38JUz,tank
+n7UkYlmvsU,bacteria
+Lz0I9B1HLJ,chemicals
+j0aFqElxYW,sediment
+gvqlCRyPje,algae
+TlBtpb2To6,metals
+qcvmES7dz7,microbes
+thJYKQKWkU,oil
+C0q7vxx0s9,plastics
+bTDfRPFMDq,precision
+kf6ijxXZ0E,toolbox
+KGpG31HNhL,screwdriver
+z08pQyfNdf,pliers
+SZrPhC04qJ,hammer
+tkrlDhTL2z,socket_wrench
+nYDoHrWrNl,wrench
+iMvC8SOqVk,cables
+tCaoeGCfyB,exterior sensors
+MqX1Wrv8pS,ammunition
+_0RP6frhnI,loading
+fKFbXG145p,legal
+iBj5iYEffz,fluctuation
+0pG82hDUvv,projectile
+79HFLsL-O1,explosive
+BhMwIumg8G,plasma
+ZBxq-C7sCO,missile
+RhS3DBCevn,torpedo
+wc1QXfxmAw,laser
+mUNiUK1us6,hazardous
+B921EHWq_h,docking_computer
+zN14Royb1H,docking_system
+V3VmarLHhY,docking_port
+98JQXuCiYT,sealant
+_beO6Smo63,valve
+0gS25WqHfu,drainage
+1F13YbuHq2,gasket
+LSJJfoRIMV,hull_coating
+QSii6ukyfd,pump
+lCwOGN50gS,hull_damage
+Vj7f6jJJLr,valve_handle
+tsC72eNnbN,hull_seam
+lvoqB0trpB,hull_plating
+2RsqHQEAcU,alien encryption
+0Q-NYeT9WO,UV spectrum detector
+7jh_ANd6p6,quality
+VAlYzJFyVq,control_systems
+AaLbkDoIAJ,connectors
+VpwjWObd6A,relays
+-oBXFrh8ZS,brownout
+LOxMDgyHYh,medlab
+tWIQbBvwdz,cargo_bay
+Ik-wytVCfq,engineering_lab
+qVocIJlhQW,odor
+VguQ1k9Zgp,fire suppression
+M9qssplP77,air filtration
+pUU2P1fn28,spectrometer
+1HOizLFCp8,thermometer
+S0oHOxoc2x,mass-spectrometer
+UcxRznu7B1,gyroscope
+TB8fRzA1U9,accelerometer
+rH3-i6I8IE,magnetometer
+HELj9kUIRF,spectrophotometer
+PSLHArIeUg,pH-meter
+W_AUXBAtBU,temperature-sensor
+IPQiiD5ntp,pressure-sensor
+XElX5LUnNO,humidity-sensor
+af7j2A40Nj,flow-meter
+JaIj6nsMig,pH-electrode
+28edQAUe9E,conductivity-sensor
+2NCsau4F7S,autonomy
+Uwx4wFfQOD,psychological
+hV25h6OEeH,ethical
+C9SP1jzips,emotional
+EPAmcUnQ7k,medical_waste
+ARwKz1ITyW,toiletries
+7iTaBXrn8G,oxygen_recycling
+LHJ0_eAM76,air
+-9kqILBSDb,disruption
+xBZWC-oBA3,medical_supplies
+QMFgZUmZF8,ambush
+sdMKZHSYlm,diagnostic
+Nmbac-hiA3,infrastructure
+BjydIMl6Eg,alien
+sv6wL9Qf6H,backup
+F8AYrkpf1d,monitoring
+byVS04winP,main computer
+6qhthqNs3H,input
+iM6-P7F6o9,output
+XAN7d8Fv-E,virus
+cRlu6r6lCw,hard drive
+uykhNDr11F,oxidation
+quVSqYDP0k,coating
+fTOxWAgcIc,composites
+EuJWwsTC_3,luggage
+j4vq1GjKss,dark energy containment
+sLY8_p2t8O,dark energy shielding
+HitwaL6TTh,dark energy origins
+P_WCeOs-zw,dark energy propulsion
+5A8HU7bqyV,dark energy interactions
+W9jWvm-U5y,thermal insulation
+10JTIdrAc6,emergency_beacon
+AmCgR_kXlL,epstein_drive
+tazzLm63E4,mission_plan
+ypiSlirWzO,library
+XWK8oOMmen,particles
+xQuKrvO9C5,supplier
+zWAJx2957V,safety_interlock
+84dgNH7JVG,engine_room
+nztBtOOOav,bridge
+7RHeJzKdmQ,medical_bay
+Yqon70bP9y,sealing
+oMTtDeutYL,inadequacy
+A2DwL2oqQF,incinerator
+EiWzY4hFd_,solar panel
+Bxvb2B6Xjr,cooling_system
+3ddrirE3qD,tear
+UahNxssCza,sliding_joints
+HuWU7q9yBV,sliding_joi
+NDzPJqRCoN,transfer
+KTtBAh5sQ8,filter
+4-A4no9rHg,simulation
+AaBJfPm5W4,data_loss
+PWfZnP62sk,experiment
+rwyHEPwXT9,cosmic_radiation
+UdjBJ9lhns,power_management
+Tbuc_s-dcH,hardware_failure
+QaxiahitYd,network_congestion
+riOLwLFYrR,software_bug
+GDHfUnY91-,temperature_fluctuation
+0w1T0Yh4Gt,charging
+ZOs9GY8iCk,asteroid
+LoeKnydtaE,alien_tech
+0Ke0pPRHC3,aliens
+u3uyBE4IWB,space_debris
+rejXgcLK4A,sanitation
+Gko0ZLpfjL,oxygen_generation
+roCQx0unlP,gas
+Z6zDKZkXqp,oxygen_tank_valve
+fZu5X5tJeq,oxygen_filter_replacement
+eJiXmGdnZk,oxygen_generator_seals
+lwlQL_hTCj,oxygen_line_replacement
+8hvtQGKl3X,oxygen_generator_cleaning
+0_8pISzsv_,fasteners
+EW0J39Az8b,planning
+ENfgfmXLnp,missing_data
+5BXuB8ii6O,reliability
+vYo9ZrM9Kx,climate_control
+zmU6O9QGUo,resonance
+M8bzP7Dm7H,material_science
+kpQMBfk5SS,vacuum_welding
+qkx5SK4wzS,investigation
+sgm5dstc9B,blindspot
+v54S8Wu2Gt,sonar
+4S_IC6qVvj,multispectral
+jqpTHtxupL,magnetic
+I13z6qIZ8A,neutron
+0liWnOf7P1,gamma
+iInPlTjLFv,x-ray
+59sRtHd3Qg,ultraviolet
+nNIm6WNHoP,microwave
+troL4UgfAH,seismic
+6dS0uHXmFq,acoustic
+WsKVyuGKUR,particle
+vHvXv41bcq,mount
+dlCity3a1l,performance
+XdRvPy9DC6,computing
+_QBCvAdiek,recycling
+VLsGIs_gp4,mentorship
+b577gBBULM,mentoring
+WZKMRG9c_m,continuous
+HW4_aCu7pB,retention
+2XeWYYGxNK,vacuum
+konDbIB6bF,incident
+03yHU3-FDo,isolation valve
+FV8xluKneX,cargo bay
+IKnInTsjok,exhaust
+YUfX2ZqcuD,celestial bodies
+gkHO04gOwM,contingency
+iFw8_xhbUa,outdated_info
+gkqmAY3H_P,dark_matter
+xrrSYmD7Hq,piloting
+CdOw-_tT7h,analysis
+hEae3F-Iri,maintenance_check
+OpcypHf8s5,research_grant
+lYOfQ7guqQ,checklist
+wPEmogSvY-,rushed
+xE4819zJso,rushed_repairs
+FrQOd6vpAN,radio
+QddhPJgm6m,maps
+aQId3VIhJV,satellites
+pmwWqqB8WU,theft
+GPTv5UQL1d,rationing
+FO6xjKzA65,weight
+ckL0EcJKxQ,energy
+zUKdRuN2E6,quality_control
+bj2XFlWuYY,integrity
+RWomx_Tbeg,Malfunctioning Medbay
+7pyVyOE-SB,leaks
+Xqu-DP1UAp,motors
+MeXlhklNxc,ECSystem
+aLLVUA2pBU,internal_leak
+0BJqoKEiU-,signals_intelligence
+7JZHr1lo2Y,language
+zWiUZ2cTCY,visualization
+VfJ-oUBrPb,escalation
+E7cdotVghi,engines
+dLUCgSzhgL,windows
+6WoyAP9Q0r,computers
+QmG_ZNxOEf,crew_support_systems
+yExirwKkVQ,ergonomics
+gQH4O9jeqG,aesthetics
+BdRRxuzI41,workflow
+6zBvyZr8-7,repairs
+_fU22csOSW,doors
+hWL5MwsruZ,bearings
+AJFwf3_w7H,gears
+a6Z0pIWGU6,inadequate_situational_awareness
+SbLvGnbTTj,astronomy
+IsU5FlDeSb,phenomena
+LDJJzLUA13,external
+veywPr9dP6,weather
+fBpIaCvbiu,asteroid field
+sh7bKD3ZiW,mess_hall
+DwP24sgjgx,alien_habitat
+FgNIDjiRTG,environment_control
+pZsu9fHJ_g,alien_lifeform
+q24NU-KLZq,alien_material
+scs00aIc3S,power_supply
+z41D1o-ZpA,oxygen_supply
+t6AGl28eOF,emergency_systems
+95ajpTBd1V,oxygen_line_leak_detection
+wunNQSMBw-,oxygen_tank_vent
+9mc4j7JOAk,oxygen_generator_catalyst
+64qN2x08Bs,oxygen_line_insulation_repair
+zvRILaVLqA,oxygen_line_leak_detection_system_calibration
+ynhr923rpX,oxygen_sensor_replacement
+bIcnLKWvWt,effect
+C97pV3vZ7d,time
+_pT56wYwlN,geology
+GMncduAO2r,disparity
+Z0e5YYqSBk,warning_system
+m9rNStFyfy,safearm
+GrT-PmxHeI,thrust
+myINMMPxVC,pilot
+3Dq_XBmVue,conflict resolution
+Rip0rf5gmT,professional development
+sHEewVqNaZ,policy
+tFLNUBJGXB,teamwork
+S8SMZg2yN7,hydronics
+2HOS5G3SsQ,water_waste
+XdBL1F60MJ,sensor_failure
+ijpjng2pvx,valve_issue
+fCQH8dNoXV,pump_failure
+OGHvNAcv-7,pressure_issue
+V8_TkouSaP,insulation_issue
+B6Q1RfkXyY,flow_issue
+kSxonldCIv,sensor_calibration
+NSL2s9_1oK,valve_actuation
+0_ue9MrZGf,pump_seal
+nfNYCtRjIa,insufficient_flow
+-xlNRLlqvG,temperature_control
+ij3x6b9NO7,camera
+tOP2pYZ0vT,aerodynamics
+sme5q_k9Fy,electric_field
+k-tGOqzmSM,FTL
+JC5jTzjCPn,cooperation
+GRE9B6PiUu,food
+Nju0JgfiGD,resource
+4cHYFiiD0C,wear_and_tear
+S5jmdCh_Q3,trajectory
+8gydWulQLU,regulation
+fQ-Rp2L57-,generation
+StfWmzn7CK,distribution
+vvQnoBrUrE,surge
+QfpcI8hBXA,faulty_components
+QAeTsfzgRT,weld
+6GhlT4Ihup,toxic_gases
+UpaGDld-lP,air_recycling
+NxHOP8yrjj,air_quality
+zeICPIREfo,miscommunication
+oJFHLYO-wd,friendly_fire
+4ixSPYV_4g,manual_override
+NG2FayVKp7,pneumatics
+2b42HVuu7Z,leakage
+FlZEqLcWMv,personal_hygiene
+05lk_Zs9VH,extreme_temperatures
+ruH1wOccZZ,time dilation
+QGj32pwtx8,power_distribution
+P1d05FxhVM,computer
+bXhnIus7Zq,lubrication
+vrUczwG7Vs,upgrades
+uPMWD3JVLo,record-keeping
+q4UWLsZDTq,toxic_substances
+K0bgVLoxIm,water_treatment
+UAsN3Y5jTA,water_filtration
+5MCoV9o3_R,water_purification
+jA4i1BDWk4,water_contamination
+-z66Ou-Mb8,guidance system
+y9Osa1ECyf,thermostat
+yUuijByh_7,technical debt
+2iYttwmflm,high_priority
+RCi7sv-uj3,main_electrical
+Pur4qLz9tt,inverter
+O6LZvkTudr,alternator
+YlJuqRxTCz,ion_propulsion
+tdDvyDfZl_,coatings
+_1hKBNpBep,quantum_physics
+GDONK0qFjn,computer_systems
+TOYvBMai9p,particle_physics
+spqK8SmnC9,astrogeology
+bO_GrLdohS,gravitational_lenses
+JtsKqobhCT,optics
+9ZzIGsW5Ai,pyrotechnics
+THzR93Juuz,acoustics
+RuHV7B6rKg,compression
+u3UcuZYYtJ,timing
+Fup-m7ypUY,fuel injection
+H72OUXQAgM,ignition
+XpRmEk6b33,air filter
+2QhXoTIAPq,throttle
+oJCp7RM_94,crankshaft
+l85TuwWvZP,camshaft
+UZKe9DPlfa,pistons
+bvhKKaL3Tj,timing chain
+qhHBuiSjrN,crankcase ventilation
+7JzBQoykHc,valve clearance
+mVbE8Kqaab,fuel pump
+uZsjwvSQmD,oil pump
+LuGCK9OHpd,coolant pump
+nsa716JtxF,air filter housing
+qP1PNO5Hc0,fuel injector pressure
+Ntqcx576L8,crankshaft position sensor
+LORwNB6Ld0,label1
+vrk0CSpWEA,label2
+966AAxvV0E,resonance_chamber
+rIpvOxkleR,loading_systems
+lMNfidsqCB,zero-gravity
+i9tfYpHlIy,manufacturing
+KGsr3zDGDo,accidental damage
+yk2ExHRLvl,dark_energy
+paCYbA7jVR,gravitational
+69tI8pIRQf,detection
+7WABY9Co90,organism
+mLkm09C38Q,emp
+wE_C7sdBDg,hull_breach
+qKfOPX0o4w,weaponry
+i5PkmREcrw,light-speed
+Dmnb1CVDmr,ventilator
+rEP7bYyYtO,hazmat
+W4-mjZOSCw,crew_safety
+XWDCqTJ8j7,med bay
+hdCughRU-q,power distribution
+sEq9w-VLaE,deck
+Zr4BP61jOH,artificial gravity
+1hvE_R9ufn,imbalance
+dzouoTXmZf,weight_distribution
+uKyK5TsClO,missile_guidance
+bh-XHcCsKl,missile_fuse
+dtL7TvNkZ2,missile_warhead
+nbI_qAcfVK,missile_motor
+FekiMLwotW,missile_fuze
+urDtl2bnof,drift
+nqyyITEMt_,magnetics
+UhxKKDWqHV,gravity_gradient
+OIvPzA3aQe,coriolis_effect
+C-lc6yY1RT,ui
+tjh3-bzzk3,time_dilation
+UCYTCq3eAl,solar flare
+Gwk26YlDK2,radiation storm
+qh7LP-UDRG,landing gear
+DvxSQzd9SM,fuel_tank
+UwUOcWqhoi,fuel_filter
+lWJq56CR3L,fuel_pump
+KAZp4ZX4iy,pressure_regulator
+QEPHL3UrIM,fuel_lines
+OxdWlKpuVK,fuel_injector
+TlnNcKAGRc,munitions
+intEXuONY2,air_filter
+C1ItagDJ1U,medbay
+_aUxZAB-mM,toxic_gas
+GP_us1sjmp,counterfeit
+4xgm1IoBgu,bulkhead
+F3Meij-i4A,holographic_camouflage
+eN1VbOdjHU,improper circulation
+_J0-zBVHIN,air circulation
+7oylhn0AYK,circulation
+1l6u-ozQ4Q,kalman_filter
+sGG2urKt3O,explosives
+rS-_MOBx5I,misuse
+PXVHF4MrP6,transponder
+11UEEBhIL9,identification
+-Igo-llcpl,funding
+rBT4ej7poa,defense
+5CKLebFNFO,hatches
+5evzGbiFjU,incentive
+wZhSN5Ik5R,phishing
+WHPDZmFW5V,email
+AZKG1m7H2R,ransomware
+YS-sErd4Gy,DDoS
+0T-KX-NhMT,cloud
+F7PMSLNDp8,password
+c4etMlmgw0,spyware
+CkMhQJ-8DQ,browser
+NIb6DlTWIR,trojan
+6AqdxT_FaP,worm
+XWp6BmQUgF,rootkit
+C0EBW6fU9c,pressure_control
+J5wdrI9TMi,improvement
+Mo4DSy75s2,records
+i2vdDRDkcQ,scheduling
+uBkW2xe1GN,instrumentation
+o2ZJjKPtZD,air recycling system
+aDmAnepznW,weather_monitoring
+KKDr1q7aB4,medical_technology
+icj_dT1PwW,micrometeoroid
+2SPn8lGnyM,hull breach alarm
+cIEKttUnjV,troubleshooting
+7u34nAAlbS,propagation
+LDUY7N4FTV,gravitational lensing
+VHrMlTJpp2,shipping
+Hk197hl2a1,voltage
+-Cr_rcMza7,water_scarcity
+eB-9H8PW8h,oxygen_system
+emg_X9hzoM,heat_exchangers
+u2b8mop_1z,air_filtration
+5Lb4VbjQoE,water_recycling
+lbAL8le6dW,artificial_gravity
+3rGdLwKyoL,communications_relay
+NB7hhmJ7xk,life_support_backup
+GjgxnO-4sW,engine_backup
+NNHiXCwRUV,thruster_backup
+r2nYMT2jGz,shield_backup
+b6yDtscWeQ,medical_backup
+zrifzLyGky,weapons_backup
+SgqQaz6yaB,sensors_backup
+OMtu_DXAsx,hull_repair
+AQt1jaNq5D,air pressure
+-tfXvPgxon,air compressor
+cHJwN-Abkt,microgravity
+ZF4Iio5io-,warp
+vJ1TlFUAQi,grid
+-mhi6VArJz,sustainability
+lJAa9G7nqz,atmosphere control
+T7DXSfu7cD,PDAMS
+F9Z98GLM0G,fatigue
+qVaY5IKwUE,reboot
+WDaSl6e07l,magnetic containment
+ey0n8FBIpv,abuse
+KP7nxY6eOd,physical
+Hz_9hWLZZ_,verbal
+VNt9RY6k7Y,efficiency
+BjvW-lGMTX,power supply
+LfuluizcBw,gas supply
+To4bfvitMD,metallurgy
+PXx2GnrqJX,attachment_point
+s3ZwgsdyI3,life_support_system
+keFP4xUtLW,communications_system
+PiqO2_KiVe,door
+960aE_jDWA,gaskets
+XfPWE0Zjg6,connections
+s-hurjkHf6,tanks
+nuJSjs_l5-,burnout
+CJr8qkXqQP,crew_welfare
+UqG1ofeNbX,mental_health
+ki8pP3QIFW,work_environment
+dS9gzS2SAO,workload
+RnphTZDuo9,ice
+d87RbqBObE,bulbs
+f2dCq6I4qe,switches
+ZKzBPoZXZp,continuous_improvement
+1nE9JjQLLY,empathy
+hrAvVzfJto,crisis_management
+eKjz58WWR6,emergency_response
+jNu4__G303,patient_care
+wZFvygBu3q,storage_tank
+f2ZkCSoVdC,water_intake
+UOuDVToU8a,water_hose
+8r9txb66LK,water_containers
+0Fdp6ZCs3m,water_tank_heater
+ucwNE-ct_f,water_pipes_insulation
+2Srhsi94Xu,water_filtration_membrane
+n9-wgSMs1n,water_tank_cover
+Y9kBt4Tlht,sensor_damage
+u-apAitFnM,calibration_check
+5mY3c8-S7P,sensor_alignment
+PtF3XVHh-3,data_processing
+PjyId8psz2,sensor_contamination
+yo2j9ttSgu,load
+h5u1mS7suK,balancing
+v92LGhX2fS,screen
+Jix_mPwn0-,assessment
+VI-643pxKa,extreme_heat
+wslWtZB-sC,extreme_cold
+s_5CkV5Jlz,isolation
+gQ7oh6Avsk,psychology
+MmSHq5ouGa,heat_exchanger
+EeLefkIxRh,fan
+4NPEp3kmOE,radiator
+fYm4ifv7bo,coolant
+CwPxWd89ZC,condenser
+E7pmcmhL7N,compressor
+bofimT0vrs,heat_sink
+wJGM-_qoRl,fan_controller
+oxhtgiaefe,HEPA
+7XCN1yl5RY,livingquarters
+h_Lj-a3WHU,optical sensor
+h81GSdSP-P,firing mechanism
+w-_EUSPp-k,docking
+im2xP6905D,infestation
+IOHfA2aE0U,rodents
+kmq61gJlKM,pest_control
+VKWHBm3Qo-,infection_control
+vO14woYlKS,waste_management
+vdV5KBjmAg,food_preparation
+I-yFj-DpEe,personal_protective_equipment
+HHeuf6grkL,disinfection
+Smn4wrrtzl,pressurized air
+q48vtIveQS,gearbox
+y2oYYotSKe,radiation_sensor
+_uf36NrZL2,radiation_absorber
+XlnUchphZE,radiation_shield
+klBStdktfi,radiation_vent
+J0H2RGPgzl,radiation_monitor
+DOnvQuqyOc,radiation_seal
+NRLx5b2uoy,radiation_filter
+WOI8xX85vk,drive
+faD3UhDtVG,negotiation_breakdown
+4dvnmtsK1l,reflection
+SF-MCQd7x3,water_leaks
+U-zNtX1Mi5,water_temperature
+JVtFVlVMsf,hf_radio
+N5XyIGsAUu,docking_clamp
+NbWyIehD48,sensor_malfunction
+9loWSgEB8b,tactical
+4K5_kB42y0,outdated_software
+8EgXzsH7Vi,accountability
+BUpsjprzyj,mistrust
+IO5IUBaNnf,astral
+kjOcHc7ALw,instruments
+8ULSsG6AAK,food_supply
+_54lBB-efZ,life_forms
+r6oKWfEI7H,jet_engine
+XnEaKZqlPK,hierarchy
+xJ1w6R4P2W,erosion
+30Y_MexFIi,display
+A5kJX_F3Xq,moving_parts
+VgL2pjvdQH,solar panels
+gwjGtBnSGB,fuel cells
+yxhPy-DomU,solar sails
+y13QmtLJsx,power converter
+evu44K_uNT,wind turbines
+3pd9uA4LFh,adhesive
+PiVIb9w3v_,oversight
+DJFqOz0H7M,interstellar_medium
+UF0ZXKY9ky,evaporation
+DAwLVuTsum,retractable_boom
+QX7oN2WTSF,retractable_rover
+YcXfAiK6lx,retractable_solar_panels
+TnTP_BJl4H,retractable_landing_gear
+E-VCJiwlO7,retractable_ramp
+XQlRph2qEK,retractable_cargo_bay
+nxU73388NU,retractable_radar
+2L73eYeQnr,retractable_air_conditioning
+PvM_YbDb50,retractable_lifeboats
+jf7_RrkKfg,retractable_communications_antenna
+NQzQVsjGlN,retractable_shields
+zAHv9TAm0P,retractable_medical_bay
+0bmN1yXI_Q,retractable_engine_nacelles
+SsOgZGSl3u,retractable_engine_thrusters
+ZJvENEE6mp,retractable_life_support
+U2oOy5nNm8,lights
+FFf89bIdSC,measurement
+Xd_whcRyZu,inadequate_disinfection
+avDDDqUVQf,data_analysis
+ng779flNSI,mitigation
+pabJy7nv3d,defenses
+-DrkOz-fm7,acceleration
+5Z8VYTufwQ,density
+dvM0tlJpMT,turbulence
+-SRVxGXjDY,distortion
+Pksoeq-APp,gyroscopic
+_VQeuOg6Cn,stabilizers
+r-62G08NO-,gyroscopes
+ZlpRmyPiKc,jamming_system
+F3MZHoL1Fd,rebooting
+jUncioZlpL,crew_morale
+njP0rfa9HU,regulations
+H1CNgia0Dp,personal_protection
+mV7muw_Ef9,emergency_procedures
+4FeHoL_PG6,hazardous_materials
+Dvtu23oXYo,infiltration
+xn-ekY7H3E,unknown
+iy0eG-KYkt,surveillance
+EeWQEnRnTp,external_attachments
+hBCZKESxwp,modification
+jr6nF2XP3t,faulty_component
+CVRdR3SWrk,engagement
+YDH6yzCg3P,crew morale
+qfuw1kr0We,rewards
+zOG7_yE_5V,work environment
+BV4lXHrmCf,team building
+a2O4RFO6CV,delay
+vujPwo1-Ta,customs
+e51EzptCRy,political
+OXSA-Swjgt,flooring
+hFH-1gPtaf,mirror
+B-KhzqSgjs,shelves
+fHbOJ90ay2,foundation
+-stsZ3PUqe,floor
+CIgeA4jIs9,beams
+-zC-xlCNhL,exotic_atmospheres
+wLLIcgtXBR,heat shield
+0x-uE1dLEE,neglect
+XmWOVyOltG,IR signature
+HPRDHbVBoV,IR system
+OnQmubJ9IK,IR sensor
+Wb3d22UY7D,retractable
+RZW65zMlZ3,LLEGO
+Esq7BWEyMr,composite_material
+yW2jTTBHf2,staff
+y8GKo4E1Zz,experience
+SqKLfKcAVx,power_plant
+yhvykz-NDe,environmental control
+rLJxYQiDJp,genetics
+o4SlddFllI,budget
+9jcG51wIka,grant
+FZkgX-ufJl,partnership
+TiPB-z6B1X,crowdfunding
+vG3kcKY7Mz,cryo_pump
+I_fSD1ANaN,cryo_system
+z-qIeRZsTW,cryo_tank
+PdPtL2vhsc,water damage
+V1jzO16bv8,starchart
+wuWHT8Tl1M,outdated
+Wcpu9xxNCY,spoofing
+k7-duS0k3z,EW
+hI2booxUIq,countermeasures
+e4RPBIPmli,impeller
+xPqQY-TZav,motor
+CPBQo9I5CI,mechanism
+WjGWsJKcmA,hatch
+WvWWV-GSSX,medical_equipment
+5TssK-IARS,samples
+RU5SLFa6gx,terrain
+AKEy3uuJMv,spoilage
+Uj5p8D8wfF,allocation
+1-oa2kGEbg,preservation
+WfztU5wuH7,production
+xI1d1zRtnf,variety
+z_rmZ8Mm04,silo
+3mvmnYTUB6,solar_arrays
+A0uX1ogE3q,discipline
+yKpQ1aIM_q,fire control
+NUoAOfzoM6,rocket
+1iLawCJGTq,fabrication
+ze5LF_WHX6,magnetic storm
+d-Ql2K63Ty,cosmic_ray
+nJAnyZXLNC,adapters
+orLXPgW6xp,tools
+FW9ep6jcKW,scheduled
+e7RPkq124D,routine
+zCB9zj8ZjP,carbon_scrubber
+OrEWc3lW0u,fixtures
+3CXlUNekAH,damaged
+OdYanZEhFO,worn_parts
+2E0KXdRkWV,lubricant
+9GgFPXUWz_,loop
+7uPfUEPFkl,catastrophic
+aEIqvwm7Gc,drone
+0iNXOYVU01,maintenance_schedule
+BFSuk3ufss,training_materials
+DcaYJkIxK0,system_integration
+XNv4ApDhJM,system_monitoring
+fyt-sT0KZu,system_upgrades
+r-BD3UhaZH,system_maintenance
+M0JXxlKfOo,system_documentation
+fnEo6S-tL4,system_testing
+kjuK-GDGR9,system_design
+ORC0LSkGEW,system_optimization
+_I9e6zNzhg,system_integration_testing
+boekWNT76Z,system_monitoring_tools
+owiyxZcPoX,system_upgrades_planning
+glchu7XZ53,system_maintenance_scheduling
+JBr4zbPR4j,bearing
+XbrF1PQRqp,cabling
+C6mjwipp_1,device
+MSE_5v5bOg,defensive_systems
+CTcj3Mr4dr,trade
+oNbJWVFVTe,drafted
+KDLt2h4x3A,chart
+wyH9B1_EEN,inaccurate
+PCihng7ZGQ,missing
+TB2BbYPVOA,recreation
+RPHDpx_m9O,obstruction
+2Mt9Qpgzne,degradation
+1k8PPx2e8o,expansion joint
+-qyJXc6nGy,backup_system
+o0Is3mVL7s,power_backup
+PtTe0FI2PF,data_backup
+_qbrui5Nmd,mechanical_backup
+F-fmJcipKs,electrical_backup
+eSzwUL8J1H,software_backup
+oj9-UcQa9Z,thermal_backup
+u4t9K8QXen,EOD
+X6OydzLXVO,entropy
+eXr5oHz3vY,star chart
+fHPD0xSi47,incomplete
+ccBJUsl6pk,fire hazard
+csAXN5ZYRe,corrosive_gas
+ZO25FbY9R8,gas_lines
+P3BU_OZEyS,gas_filtration
+a55SQUP8hV,alien_containment
+q9J3Ez7BtN,gas_exposure
+YBUVcaRE55,gas_storage
+FJGk7anPcI,gas_containment
+OdB6tBR8Nr,gas_detection
+TN3fMTcOfs,ghosts
+UJ2oIQiy6V,poltergeists
+zD2LZ5_dvs,mechanics
+kKLhIInyLZ,sheath
+HAb4EkOvSd,flux
+9f95OesK20,sabotage
+XllgACaVT-,pool
+xuQzTbNAv5,gym
+Ko6vrmy4T8,sauna
+OqgrW1anzI,bar
+c2MgMSmm4t,game_room
+X0kcaz5mQa,theater
+q1gS9mWrFT,arcade
+tSKKyWQIUx,specializations
+Sm4oAjg_os,virtual
+_SCY5Zb3Sk,recruitment_strategy
+cOI48uJK99,medical bay
+E9qBcIJ1WC,equipment failure
+8m7uMnp35R,equipment malfunction
+dVL3xDUKTa,deficiency
+wD0HoHBRnP,surplus
+7YXeH7RCqb,latency
+bL0pA8zvuV,risk
+sNUcBO-8bA,radiation_dosage
+yX6iOPJnjR,radiation_protection
+TzACGSgoeg,radiation_leak
+ZPe0v8Pyuu,radiation_monitoring
+hrQZxOS-2Z,radiation_safety
+4GtHy6bhgB,radiation_contamination
+2fpbVcQylr,radiation_shielding_design
+wEHADBkZlX,radiation_detection
+voG4oYDNz2,radiation_safety_training
+S3zf_DVqp7,radiation_containment_system
+sCywM4JAHi,combat_readiness
+K_H_prHf9F,armor
+t5yIbHGmEC,components
+PhtaX7UwRu,parts
+ZfWjCYZ4Pz,water_reclamation
+WKrTgbegQZ,dynamometer
+EolvzyrtgM,cryogenics
+SQPgUHV0yF,heat-resistant
+XjSGvlUbdK,thermal-expansion
+_evbuvX8uL,superconductors
+apQjZOIqsY,heat-dissipation
+_k-5jTmPO2,cooling-system
+r7j_mbseuP,phase-transition-materials
+xYeY9pmo6u,heat-exchangers
+Gf4Y6vi8Bs,phase-transition-simulation
+VcHTsj_4oW,GPS
+B-VOch-Szm,star charts
+YO6IGmFjvD,hull reinforcement
+tKRQfVJMuq,backup power
+wyxLsf48rL,satellite
+NKX7w-SruR,oxygen regeneration
+gYYDvIO113,waterproofing
+toj5ae2Axw,gravity_waves
+hWIrSGMZqc,vendor
+XV6wFkxPuv,delivery
+CywrK2Qiv3,living quarters
+3jwtsCsK_U,galley
+0N50dmnc5u,overheat
+LT8MCmbQNM,main_server_rack
+XcaI36YQ7t,particle_detector
+ddcNonYF7P,theory
+OydLZb_oXa,jammer
+NEUEN-zjOC,pantry
+Up2LUcS9uP,breakroom
+Zk8JrDwQCt,quality assurance
+sB7j2O3LeS,skills
+w93lcPTyfd,purchasing
+Fk06pSyj7y,development
+ni3HnT3REo,production scheduling
+9odk8z2W8P,meteoroids
+ODJy7L3jL6,electromagnetism
+aivF6_noXj,electromagnetic_interference
+JYw3YfMomk,electrostatic_discharge
+-WABr-F_0A,bms
+kgphC6VTyl,medical_facilities
+ihBBPMmsJ5,medical_training
+wARazcRt98,locks
+wt82VDPGcY,GUI
+BfFVZX7ufA,filesystem
+HYOwP3a4qM,navigational_error
+0Mmp9Ywi7y,handling
+KUNqV152kW,unauthorized_access
+Hm5YSiHHH7,transportation
+EgLMVKe2UA,life sciences
+1CMxHTJEdc,power management
+xvaNJvEct2,missile_launcher
+QBGYfltvJh,circuit breaker
+5wCvwTO1BH,sickness
+RMixauGfid,kinetic
+oq5hEiRH-L,medkit
+2Ym4KCeQSm,piracy
+3paw_pxI_n,challenge
+DDhe845SyQ,Xenon
+o0znrxopIA,waste_disposal
+ISFe1x5vA1,zero_gravity
+T-AmhCyzrU,waste_containment
+mHNPJHGWTd,waste_processing
+-TqcZZ8tHr,waste_recycling
+NeTWve-wwD,waste_storage
+g2PEEoxjED,waste_filtration
+cH4au-SWlj,waste_heat_exchange
+KB98jITsgh,waste_pressure
+UWkvU2gWhr,waste_pump
+0n9dlgEHoU,waste_valve
+dFPv1aQQJB,waste_sensor
+y7ztXkZWcq,turnover
+HdZgveYQyv,compensation
+3X9_d8ixl8,benefits
+acwNoGzi2S,work-life balance
+vSlPDojFTF,training programs
+nqtBc4Cg7-,cyber-attack
+DBLkwo3Yte,router
+W_cUZaHBy_,intrusion_detection
+2jdw5fm06r,gravitational sensors
+swNZzdKgMp,low-energy
+AYsUYDxyvH,deformation
+Ybqlbbyv5j,particulates
+KGKxm9qO6C,fans
+7tSfriVfRW,freeze up
+rICBcIW6HS,catering
+Ivj2WkUHQA,spareparts
+b5mmFLprOi,laser sensor
+BMqbdWY1x2,medicine
+R1SiDBynlU,rations
+mRN7cXpslb,reservoir
+VqsHUboafl,clamp
+OWlIooLlno,clothing
+OJC80Zvf5X,hand_sanitizer
+3FrYM3AY-M,recognition
+nb7sxH-euM,mental health
+ESq1HZOUGX,diversity
+YAAFc37GW0,passengers
+JznnUiYOyX,team management
+3wgn-MlfGc,motivation
+IBr-bCxr7M,delegation
+TQHKaeL7lb,performance improvement
+kKwzo1Kwuo,ship_structure
+r-u9fvgPKU,accelerometers
+MvZjQmNsjt,pressure sensors
+0RGowiBzn1,magnetometers
+BFrcH0dZYp,infrared sensors
+QRDxzIWWPD,gravity sensors
+ZvV4Od0c9C,ultraviolet sensors
+pfUKRXUNoa,visual sensors
+7PFIfWEZHm,spectrometers
+joZ1gdBKBG,lidar
+WKu4gsXSF7,acoustic sensors
+t2s28D7Zy2,magnetic field sensors
+xAyeMb62lx,gravity wave sensors
+SovlmoDZA3,neutron sensors
+Co1gMMz34Q,climbing_gear
+KFWhKvyE9_,rope
+fhdtiudeH0,harness
+IyyphXxkXN,carabiner
+NXFMuhCaaa,janitorial
+1DB9-fkU5v,maintainance
+hF18F6UTE9,entertainment system
+biJabNdzqH,user experience
+W830FVjBeS,connectivity
+R4BxzsBJiz,dark
+Ce_PeSyvEu,thermal_regulator
+oumw3nei-b,robotics
+XlsMMGL6cr,tool
+Nb4SdQEq_B,electronic_warfare
+SKk7FmN5_K,oxygen_scarcity
+rSLUSBNywu,resource_management
+jiaKYHR48J,dehydration
+XBSddkXBqW,crew_health
+etH79YKk51,mobility
+mdclNTZ5dd,railgun
+PWOkBX6rCr,tiles
+MLsh25GWsU,collapsed vacuum
+JwDO_Uycqm,fluid dynamics
+9IqkwHnloN,vacuum technology
+KzdJgrjziz,fluid contamination
+gmuPZCIAdA,vacuum seals
+Uf3dEP2jWI,vacuum pumps
+n2zJgqHoU5,vacuum lines
+lsw4fDH1Nl,vacuum valves
+Xk3JZcoqyK,vacuum insulation
+iq2XOYgVsr,vacuum filters
+sE7XDpbbAI,vacuum leaks
+ij71uMmTMi,avionics
+cLTlmMW_9I,moisture
+_rd0kScQen,ejection
+b2T5zBX-PC,Epstein_Drive
+mHbUT9PVj2,vessel
+lWXL407wWY,system_upgrade
+HGz4u6Fwk1,system_integrity
+heRhbkDq9J,system_repair
+vfKlpDRl2S,system_security
+_H79jnzxBj,short_circuit
+uIOyPZaJfb,quantum_gate
+NTHy8roLHt,quantum_entanglement
+9DawiTab6d,quantum_algorithm
+IDMnZLON-g,quantum_cooling
+627n6JG6wJ,quantum_memory
+l8lkpuvo27,quantum_error_correction
+dQmmS5Disl,quantum_simulation
+ajUWYT-j_k,quantum_interference
+9dVULRvbHO,quantum_teleportation
+_lkuRP8-rc,quantum_decoherence
+zuvAOyWLLD,quantum_entanglement_swapping
+qyVyS2fSw0,quantum_error_mitigation
+ZYIuNyUMpV,quantum_annealing
+NYTbLTVwMK,cable
+VjKWBsPCwY,instrument_panel
+7LBhfeHQ53,lifeforms
+L9Ww7N4Q96,food_prep
+98YvM1AMZ5,emergency_response_unit
+xiDPBM2QKq,software_glitch
+sBaInKcsPg,communication_issue
+MjMGrls274,calibration_issue
+PUX9h81zmz,mechanical_failure
+whEzCDoc8p,electrical_issue
+jDlzNEy0Gl,sensor_drift
+udDycDGJ_m,software_error
+7lFaG8QJl3,toxic_fumes
+zU2JeW12Yw,discomfort
+tAkj-zgLKE,cramped_spaces
+qGV1YqOMbL,cramped_quarter
+1xuZSbtbfq,living_quarters
+DqUJh9BKoF,navigations
+cZjr4F1kmC,skin
+DJkeEc46zx,patch
+cCjNtgUh7X,tooling
+fNtQqI1_Nt,landing
+oe71miyN4M,biological
+kSPt0cbeD6,optical
+H2APyRVZjm,gravitic
+LoUHfqB9dG,particulate
+nxifIR4IDv,interdimensional
+i7f4WkLw_P,magnetic shielding
+PZwcLBURFs,data processing
+cWQzju4P2i,protomolecule chamber
+oqizG0Mv5b,magnetic fields
+k_nM-066bL,protomolecule properties
+tcfCXRc4Hc,magnetic field generators
+N19EEvSoVB,magnetic sensors
+i3fJl_g9Sr,protomolecule behavior
+dnI9KuyTmM,smoke_detector
+uhLIQhnHBs,deflection
+vIh8meiwNg,reduction
+0HOTE2GjWB,diversion
+1RnoKsQMaQ,embargo
+HIaQQ2VF-i,port
+sl3vHeF_2p,military
+gJ9XEtt-kR,mining
+7fI1yBerVM,incompatibility
+p7BAnvC-F8,code_correction
+lDTug9IEpQ,hardware_issue
+gbIoQIUUmP,firmware_update
+IUxA0ipe5T,configuration_error
+LnUkSh03--,hardware_repair
+ejI5wBe-JU,firmware_correction
+eVkKrPrytZ,retreat
+z1dw230k1H,defective_parts
+80-cs2OBlc,verification
+gRx7DCvTrY,emission
+NXmTH6SPcG,human_interest
+3P6f71rsJm,faulty_display
+mjCNhad9Lp,installation
+Mi3iHiDW3N,difference
+ESVcRDVyxZ,etiquette
+hSAFGdTEUe,holidays
+RtDKQVL3fO,religion
+FY3joE7xxf,family
+RxQiHufjG4,music
+ykVi6yUqSi,sports
+EpiW_u35VD,art
+9C0bjiRrSU,literature
+jL8acbEwqk,animal_welfare
+YmALNqszzK,clinical_trials
+ivUEg6XrEe,informed_consent
+j7jEy0vbda,onboard_computers
+O4vn--TvnP,data_handling
+xx84nt6xaI,sensor_repair
+rDx7S8j4i4,software_customization
+o5wmtleRyz,system_backup
+b1lJl-phX5,course_deviation
+q8YIPH0KDi,course_correction
+3zaUzBFDQb,power_issue
+_seU_YcjzD,user_training
+5O4LEXGQEw,hardware_upgrade
+0cveWITMab,cloning
+_fmO4AeTsp,artificial intelligence
+3AKXTKCCs5,genetic modification
+x9seYpyEC0,medical experimentation
+7BT-zVCk5p,animal welfare
+f5wmhMWkhx,euthanasia
+qy9cMfuWEg,informed consent
+CEqgDWsud8,human experimentation
+h7G3tdruUw,data security
+cPgeZOHzZr,environmental impact
+Bj42tKwgIw,military applications
+dOUVdujb8P,artificial limbs
+Xu4I8AjNY7,genetic enhancement
+a8a_cFCKFq,cybernetics
+I2oKU2VAi6,astrogation
+SXNmPQgUqk,material
+wJpuM4gSlI,innovation
+f5EJsYCZe3,logs
+6K_a0xFhWu,high-priority
+txVOq1pJYR,low-priority
+0E-WtIMwnz,scatter
+cQXRjPVyIP,blast door
+whuk-AMqfL,weapon bay
+crNVnNv7kG,missiles
+8ZHdXTctc5,gyro
+j6AFs8knwU,Zircaloy
+oi5ULbMJwY,high-energy
+fhomLgTlrF,utilities
+YchRCJFWoi,inflatable
+SA026vWdcw,atmospheric
+P9Wop48vp7,decision-making
+AeeGkQLCbW,growth
+p5hfBByrRq,interoperability
+0o2JToA_5U,water_damage
+Rk7uaRHUpG,engine mount
+hpYOyWfPqO,navigation system
+JY0_GdtoUh,thruster armature
+nGTRYdDPrs,autopilot algorithm
+Zfc2wc7EqG,engine coupling
+ufkICre4Ik,power inverter
+hLrSJ5CtBk,line_of_sight
+EMgUP4EqKn,transmission
+9w8t_sR0AA,attachment
+90SvjReRte,fluid_coupling
+r0_8ekei5H,mission
+57BxlNsv9V,resources
+oxTQoxZo-h,contingencies
+BYnO8mE2gU,explosion
+_0vE8NhCGs,explosive_gases
+VaXLLaYIsO,ship_engineering
+C2ajA8s5zi,explosive_materials
+rsLer8wr2x,magnetic field
+FD6qXuLlMJ,duplication
+uPAR6O-STZ,formatting
+89d90_uZDN,validation
+SoBtplqG0w,cabin_atmosphere
+vZRt0JuMvM,machining
+VWNjLYTAUG,turbine
+KkLKG0g76p,preventive
+gp2raER40S,communication array
+9zsKCDphiM,power surge
+1qwMpdpz0R,software glitch
+M2FPW9fJ-0,mechanical failure
+BHj-ohFIt0,power drain
+fhG23zUBYr,signal loss
+iCOZPWEWKU,temperature fluctuation
+rGooG5kIKD,heating element
+nApKn3nDUR,surge protector
+pt_I7ZaY5-,visual
+ViC9PEpvwt,dispute
+tHlxtdxNrY,geometry
+fGv_qgdtL7,containers
+AQqVnLK5VP,landing_gear
+wQe2G4cgQH,inverters
+n2av85UZq2,generators
+hQvb-5gE5k,dissatisfaction
+6mR0ZADV-m,equipment_access
+8MUj48EDFy,work_schedule
+TX2twY2QNY,drains
+aVEA3AqFkV,compressors
+cffC2I5QS0,environmental_controls
+w6pmeGk7Hg,allergies
+hKgqkUcASz,routes
+vUPnR46r0D,signals
+njO8Bw4tvk,malfunctions
+LxiBIwuAaT,toxins
+nQ00yOO92Q,cover
+JAXc28u5F1,firing_system
+ZnqXXKj_s1,conflict-resolution
+lRVs87BIcU,polymer
+c-vmm6a1ka,process
+ig3bK2BUTK,false_reading
+AKO22sEXPX,medical_database
+FjuG-AE-e2,medical_data
+V3o7yML2w0,medical_software
+6VcvaGfGIn,medical_systems
+E5h34ygPcI,paint job
+EwE0K3aoRw,infection
+49eLV3qAMl,contagion
+qqNxu-kkhK,wound
+f3KDchyyvj,methodology
+Be2oBRgkRB,empowerment
+_KwlVYYtZU,confined_spaces
+9D-YNgz4Qx,reactive_materials
+J2LtabPben,quantum physics
+K7crI6WmvL,nanotechnology
+pKbEWq77O-,material science
+VJ_hW0ZxhN,rescue_beacon
+0GtCqh6ojB,weapons safe
+3ToOneXp2Q,arm switch
+dsCn14hJz8,crew_leadership
+04_120WFc4,malfunctioning_firewalls
+wD3QV0r4Ns,temperature_issue
+mvQkDu5BXm,network_issue
+sQMqHXfgDl,air quality
+NexagG3sNY,compromise
+w_R5lAXljW,battle
+VhDNhtcu8V,decision making
+vHt9-6EIZG,compromised_hull
+-WqRA1cKuS,control systems
+vKobTfIIh5,decoy_launcher
+Q9khhIPXJ4,nightvision
+MGxZkrv4Fu,shutdown
+-SXXDB_EfN,uncertainty
+np7GlKpVSy,receiver
+hMIep_U-3_,mismanagement
+IotJw65_vw,travel
+Ns_L5G8rrj,consumption
+RR3hGYsGij,em-effects
+Ret2slbcnC,extreme temperatures
+sM6VmZSAGy,extreme pressures
+0fNr07k036,micrometeorites
+70eUAIf00d,extreme vacuum
+IBU32duYX9,packaging
+UlEqO6w2S1,maneuvers
+8Uv-Fzjc9Q,resupply
+vpEUDuWdaT,absenteeism
+1owz8NuRXw,AI
+1mtXW22VJE,routing
+3OBfoDDGOg,amplifier
+h7HxN7SDm0,deception
+CHYe280wkK,electrolysis
+KQcMAPs5xA,settings
+neytpwZPZ4,patient_abandonment
+kQa6Exdtoe,non-essential
+stq0U2cjUJ,refrigeration
+eZtqa3k8ll,impurities
+nmzTs6bMcp,depletion
+6bVEBH6Uov,fuel_cells
+mLfqP-K4I8,power_grid
+2ZpgFzizi3,expansion
+mjJz4ic7X9,first aid kit
+RLNktNMaI-,historical_data
+loBRpS7hEb,capacity
+NBvfpiV0MN,suspension
+eQBMygrlQT,adaptation
+W6sPNUbRH8,sensor_array
+63las66WjD,geomagnetic
+_WgBlceCdW,alien_interference
+gb5A3s1vTE,hinges
+uJJXDa1P53,sliders
+srYyvFiIpU,blackout
+ADAC_V31o6,gas_line
+O2AnhM-BaM,cosmic_dust
+kM-Rfc59a1,freeze
+xeJmR3Apd9,entertainment
+TM4VjRX_EO,energy-efficiency
+kB937QIJHD,stowaway
+4Uo68zE_RH,electricity
+VjNOVFf4yd,external equipment
+GXT4vy6-YG,adhesives
+fPhxlmdRbD,sealants
+0KTMtlWahS,O'Farrell drive
+ht8MGh6C3_,crew_quarter
+e7nxRdZa4W,fire_safety
+T9ZiwvQhMf,medical_staffing
+RNs8feB0NU,medical_research
+rn_6TlpvlC,medical_ethics
+ML_ECiDA_X,medical_telemedicine
+QF-Erf81a9,medical_education
+lajK2oS288,medical_innovation
+tSaPZAUIi0,medical_mental_health
+dE2ywJHUJI,first_aid
+Ks_YLTcEAB,oncology
+gczsiDdy3O,immunology
+owTTFCmDWv,orthopedics
+T1PduVAiVx,rheumatology
+5ueAYVzeCX,nephrology
+zJ__JBvfy1,endocrinology
+_RX8xiVd4S,hematology
+RRCzbNk9Qf,otolaryngology
+vE7WRwqib7,dermatology
+x8XV5-AGvK,vapor
+vgJ8iubGbM,gamma rays
+uhE3xSAV8j,neutrinos
+SwJ1zA2BjO,X-rays
+Dl6KyJhqbz,beta particles
+grK-bmFGBd,alpha particles
+hC8jMUbqRX,muons
+Asjdxejn7M,positrons
+WeOWov-0Xp,electrons
+RVfbC2o0Dq,neutrons
+GRJqBD5IJ-,protons
+VuZk4WlL20,gamma-rays
+ka8gAuw7wz,tidal_forces
+9-P_5yZyS3,pressure drop
+5s7tFOsYOY,converters
+UuHyshaH19,transformers
+yBCN9zCoy7,capacitors
+Zs3MqsgkY3,diodes
+WwPkEE_Rns,rectifiers
+-C1whxYJWV,capacitor_bank
+thuOfIpE7S,electric_fields
+O0lumSYS1e,containment_system
+sN5UII-Tsf,electrical_system
+iWZDJEbia1,counterintelligence
+UoKVMTw3Xq,housing
+S3hJGt_Kej,belts
+aueVll5Cwv,high_energy_particles
+golph32RGQ,neutrino_detector
+DcfFR0xLyH,coil
+elzHXEVEXA,fusion
+IxtOR_Phd6,enemy_capabilities
+NXeZgKJ7rU,insurance

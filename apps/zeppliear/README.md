@@ -29,6 +29,14 @@ npm install
 NEXT_PUBLIC_SERVER='http://localhost:8787' npm run dev
 ```
 
+# To reset clear local postgres dbs and docker volumes 
+
+```
+docker-compose down
+docker volume rm -f docker_pgdata_sync
+docker volume rm -f docker_pgdata_upstream
+```
+
 ## Credits
 
 We started this project by forking [linear_clone](https://github.com/tuan3w/linearapp_clone). This enabled us to get the visual styling right much faster than we otherwise could have.
