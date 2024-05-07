@@ -219,7 +219,7 @@ test('replying to a message only notifies along the requesting path', () => {
   x.setUpstream(s2Dbg);
   s3.debug(() => notified.push(6));
 
-  const msg = createPullMessage([[], 'asc'], 'select');
+  const msg = createPullMessage([[], 'asc']);
 
   x.messageUpstream(msg, {
     commit: () => {},
@@ -228,7 +228,7 @@ test('replying to a message only notifies along the requesting path', () => {
 
   expect(notified).toEqual([]);
 
-  stream.newDifference(1, [], createPullResponseMessage(msg));
+  stream.newDifference(1, [], createPullResponseMessage(msg, undefined));
 
   expect(notified).toEqual([2, 5]);
 });

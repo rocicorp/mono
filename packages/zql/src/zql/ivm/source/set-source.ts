@@ -212,7 +212,7 @@ export class SetSource<T extends object> implements Source<T> {
       this._materialite.getVersion(),
       // TODO(mlaw): check asc/desc and iterate in correct direction
       asEntries(newSort.#tree, request),
-      createPullResponseMessage(request),
+      createPullResponseMessage(request, request.order),
     );
   }
 

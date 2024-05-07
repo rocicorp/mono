@@ -63,6 +63,12 @@ export function makeTestContext(): TestContext {
   return new TestContext();
 }
 
+export function makeInfiniteSourceContext<T extends Entity>(generator: {
+  [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
+}): InfiniteSourceContext<T> {
+  return new InfiniteSourceContext(generator);
+}
+
 class InfiniteSuorce<T extends object> implements Source<T> {
   readonly #materialite: MaterialiteForSourceInternal;
   readonly #stream: DifferenceStream<T>;
@@ -132,7 +138,7 @@ class InfiniteSuorce<T extends object> implements Source<T> {
         this.#stream.newDifference(
           this.#materialite.getVersion(),
           this.#generator,
-          createPullResponseMessage(message),
+          createPullResponseMessage(message, [['id'], 'asc']),
         );
         break;
       }
