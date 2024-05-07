@@ -14,6 +14,7 @@ import {
   Issue,
   IssueUpdate,
   IssueWithLabels,
+  JIM_HOLDEN_MEMBER_ID,
   Priority,
   Status,
 } from './issue';
@@ -138,7 +139,7 @@ export default function IssueDetail({
         issueID: issue.id as string,
         created: Date.now(),
         // TODO: Create member for this user
-        creatorID: 'Me',
+        creatorID: JIM_HOLDEN_MEMBER_ID,
         body: commentText,
       });
       setCommentText('');

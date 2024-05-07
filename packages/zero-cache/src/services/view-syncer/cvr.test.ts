@@ -246,14 +246,20 @@ describe('view-syncer/cvr', () => {
           fourHash: {table: 'users'},
           threeHash: {table: 'comments'},
         }),
-      ).toEqual([{table: 'users'}, {table: 'comments'}]);
+      ).toEqual([
+        {id: 'fourHash', ast: {table: 'users'}},
+        {id: 'threeHash', ast: {table: 'comments'}},
+      ]);
       // This adds a new barClient with desired queries.
       expect(
         updater.putDesiredQueries('barClient', {
-          oneHash: {table: 'issues'}, // oneHash is already "got", formerly desired by foo.
+          oneHash: {table: 'issues'},
           threeHash: {table: 'comments'},
         }),
-      ).toEqual([{table: 'issues'}, {table: 'comments'}]);
+      ).toEqual([
+        {id: 'oneHash', ast: {table: 'issues'}},
+        {id: 'threeHash', ast: {table: 'comments'}},
+      ]);
       // Adds a new client with no desired queries.
       expect(updater.putDesiredQueries('bonkClient', {})).toEqual([]);
       updater.clearDesiredQueries('dooClient');

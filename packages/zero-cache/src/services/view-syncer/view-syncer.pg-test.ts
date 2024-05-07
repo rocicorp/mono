@@ -80,6 +80,7 @@ describe('view-syncer/service', () => {
       serviceID,
       new DurableStorage(storage),
       watcher,
+      db,
     );
     upstream = clientUpstream();
     viewSyncerDone = vs.run();
@@ -93,16 +94,19 @@ describe('view-syncer/service', () => {
       },
       upstream,
     );
-    void pipeDownstreamToQueue(stream);
+    void pipeToQueue(stream, downstream);
   });
 
-  async function pipeDownstreamToQueue(stream: AsyncIterable<Downstream>) {
+  async function pipeToQueue(
+    stream: AsyncIterable<Downstream>,
+    queue: Queue<Downstream>,
+  ) {
     try {
       for await (const msg of stream) {
-        await downstream.enqueue(msg);
+        await queue.enqueue(msg);
       }
     } catch (e) {
-      await downstream.enqueueRejection(e);
+      await queue.enqueueRejection(e);
     }
   }
 
@@ -511,6 +515,108 @@ describe('view-syncer/service', () => {
         },
       },
       version: {stateVersion: '1xz'},
+    });
+  });
+
+  const INVALID_QUERY: AST = {
+    table: 'users',
+    select: [['non_existent_column', 'non_existent_column']],
+  };
+
+  test('rejects a bad initConnectionMessage', async () => {
+    const stream = await vs.sync(
+      {clientID: 'boo', baseCookie: null},
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'bad-query', ast: INVALID_QUERY},
+        ],
+      },
+      upstream,
+    );
+    const down = new Queue<Downstream>();
+    void pipeToQueue(stream, down);
+
+    let err;
+    try {
+      for (let i = 0; i < 3; i++) {
+        await down.dequeue();
+      }
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
+
+    // Bad client / query should not have been added to the CVR.
+    const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+    expect(Object.keys(cvr.clients)).not.toContain('boo');
+    expect(Object.keys(cvr.queries)).not.toContain('bad-query');
+  });
+
+  test('rejects a bad changeQueriesPatch', async () => {
+    await watcher.requests.dequeue();
+
+    // Try adding an invalid query.
+    upstream.push([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash3', ast: INVALID_QUERY},
+        ],
+      },
+    ]);
+
+    let err;
+    try {
+      for (let i = 0; i < 3; i++) {
+        await downstream.dequeue();
+      }
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
+
+    // Bad query should not have been added to the CVR.
+    const cvr = await loadCVR(new DurableStorage(storage), serviceID);
+    expect(cvr).toMatchObject({
+      clients: {
+        foo: {
+          desiredQueryIDs: ['query-hash1'],
+          id: 'foo',
+          patchVersion: {stateVersion: '00', minorVersion: 1},
+        },
+      },
+      id: '9876',
+      queries: {
+        'lmids': {
+          ast: {
+            schema: 'zero',
+            table: 'clients',
+            select: [
+              ['clientID', 'clientID'],
+              ['lastMutationID', 'lastMutationID'],
+            ],
+            where: {
+              type: 'conjunction',
+              op: 'OR',
+              conditions: [
+                {
+                  type: 'simple',
+                  op: '=',
+                  field: 'clientID',
+                  value: {type: 'literal', value: 'foo'},
+                },
+              ],
+            },
+          },
+          internal: true,
+          id: 'lmids',
+        },
+        'query-hash1': {
+          ast: ISSUES_TITLE_QUERY,
+          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          id: 'query-hash1',
+        },
+      },
     });
   });
 

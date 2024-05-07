@@ -12,6 +12,7 @@ import type {
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import {initStorageSchema} from '../../storage/schema.js';
 import {stringify} from '../../types/bigint-json.js';
+import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import type {QueryInvalidationUpdate} from '../invalidation-watcher/invalidation-watcher.js';
@@ -48,6 +49,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
   readonly #lc: LogContext;
   readonly #storage: DurableStorage;
   readonly #registry: InvalidationWatcherRegistry;
+  readonly #validatorDB: PostgresDB;
 
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
@@ -70,6 +72,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     clientGroupID: string,
     storage: DurableStorage,
     registry: InvalidationWatcherRegistry,
+    validatorDB: PostgresDB,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
@@ -77,6 +80,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
       .withContext('serviceID', this.id);
     this.#storage = storage;
     this.#registry = registry;
+    this.#validatorDB = validatorDB;
   }
 
   async run(): Promise<void> {
@@ -163,19 +167,25 @@ export class ViewSyncerService implements ViewSyncer, Service {
       });
 
       const client = new ClientHandler(lc, clientID, baseCookie, downstream);
-      const {desiredQueriesPatch} = initConnectionMessage;
-      await this.#patchQueries(client, desiredQueriesPatch);
 
-      // Update #clients, close any previous connection.
-      this.#clients.get(clientID)?.close();
-      this.#clients.set(clientID, client);
+      try {
+        const {desiredQueriesPatch} = initConnectionMessage;
+        await this.#patchQueries(client, desiredQueriesPatch);
 
-      // Kick off an async await loop that dispatches subsequent upstream requests.
-      this.handleUpstreamRequests(lc, client, upstream).catch(
-        e => lc.error?.(e),
-      );
+        // Update #clients, close any previous connection.
+        this.#clients.get(clientID)?.close();
+        this.#clients.set(clientID, client);
 
-      this.#hasSyncRequests.resolve(true);
+        // Kick off an async await loop that dispatches subsequent upstream requests.
+        this.handleUpstreamRequests(lc, client, upstream).catch(
+          e => lc.error?.(e),
+        );
+
+        this.#hasSyncRequests.resolve(true);
+      } catch (e) {
+        this.#lc.error?.(`closing connection with error`, e);
+        client.fail(e);
+      }
       return downstream;
     });
   }
@@ -206,10 +216,10 @@ export class ViewSyncerService implements ViewSyncer, Service {
         }
       }
       lc.info?.('upstream connection closed');
-    } catch (e) {
-      lc.error?.(`error from upstream connection`, e);
-    } finally {
       client.close();
+    } catch (e) {
+      lc.error?.(`closing connection with error`, e);
+      client.fail(e);
     }
   }
 
@@ -221,7 +231,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     // Apply patches requested in the initConnectionMessage.
     const {clientID} = client;
     const updater = new CVRConfigDrivenUpdater(this.#storage, this.#cvr);
-    const added: AST[] = [];
+    const added: {id: string; ast: AST}[] = [];
     for (const patch of queriesPatch) {
       switch (patch.op) {
         case 'put':
@@ -237,7 +247,8 @@ export class ViewSyncerService implements ViewSyncer, Service {
           break;
       }
     }
-    // TODO: Validate the "added" queries with a Postgres describe() command.
+    await this.#validateQueries(added);
+
     this.#cvr = await updater.flush();
 
     // The client will not be up to date if it is old, or if the set of queries
@@ -395,6 +406,46 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     for (const client of this.#clients.values()) {
       client.close();
+    }
+  }
+
+  async #validateQueries(queries: {id: string; ast: AST}[]): Promise<void> {
+    if (queries.length === 0) {
+      return;
+    }
+    const watcher = await this.#registry.getInvalidationWatcher();
+    const tableSchemas = await watcher.getTableSchemas();
+
+    const queryHandler = new QueryHandler(tableSchemas);
+    const transformed = queryHandler.transform(queries);
+
+    for (const {
+      transformedAST: ast,
+      invalidationInfo: {filters},
+    } of transformed.values()) {
+      const parameterized = ast.query();
+      this.#lc.debug?.('Validating query', parameterized.query);
+      const result = await this.#validatorDB
+        .unsafe(parameterized.query, parameterized.values)
+        .describe();
+      this.#lc.debug?.('Validated', result);
+
+      for (const filter of filters) {
+        const t = queryHandler.tableSpec(filter.schema, filter.table);
+        if (!t) {
+          throw new Error(`Invalid table ${filter.schema}.${filter.table}`);
+        }
+        for (const col of Object.keys(filter.filteredColumns)) {
+          if (!(col in t.columns)) {
+            throw new Error(`Column ${col} does not exist in ${filter.table}`);
+          }
+        }
+        for (const col of filter.selectedColumns ?? []) {
+          if (!(col in t.columns)) {
+            throw new Error(`Column ${col} does not exist in ${filter.table}`);
+          }
+        }
+      }
     }
   }
 }
