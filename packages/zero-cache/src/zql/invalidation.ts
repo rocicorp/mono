@@ -246,7 +246,7 @@ class Matcher {
   readonly #match = new Map<string, Primitive>();
 
   constructor(cond?: SimpleCondition) {
-    if (cond?.op === '=') {
+    if (cond?.op === '=' && !Array.isArray(cond.value.value)) {
       this.#match.set(cond.field, cond.value.value);
     }
     // For all other simple operators, or the absence of a condition,
