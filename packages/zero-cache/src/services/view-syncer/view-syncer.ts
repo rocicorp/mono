@@ -3,9 +3,15 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import type {Downstream, InitConnectionBody, Upstream} from 'zero-protocol';
+import type {
+  Downstream,
+  InitConnectionBody,
+  QueriesPatch,
+  Upstream,
+} from 'zero-protocol';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import {initStorageSchema} from '../../storage/schema.js';
+import {stringify} from '../../types/bigint-json.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import type {QueryInvalidationUpdate} from '../invalidation-watcher/invalidation-watcher.js';
@@ -21,7 +27,7 @@ import {
 import {QueryHandler, TransformedQuery} from './queries.js';
 import {SCHEMA_MIGRATIONS} from './schema/migrations.js';
 import {schemaRoot} from './schema/paths.js';
-import {cmpVersions, cookieToVersion} from './schema/types.js';
+import {cmpVersions} from './schema/types.js';
 
 export type SyncContext = {
   clientID: string;
@@ -126,7 +132,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     ctx: SyncContext,
     initConnectionMessage: InitConnectionBody,
     // TODO: Handle non-initial updates.
-    _updateStream: CancelableAsyncIterable<Upstream>,
+    upstream: CancelableAsyncIterable<Upstream>,
   ): Promise<CancelableAsyncIterable<Downstream>> {
     // Wait for the initConnection msg before acquiring the #lock.
     const {clientID, baseCookie} = ctx;
@@ -134,30 +140,6 @@ export class ViewSyncerService implements ViewSyncer, Service {
     lc.debug?.('initConnection', initConnectionMessage);
 
     return this.#lock.withLock(async () => {
-      assert(this.#started);
-      assert(this.#cvr);
-
-      // Apply patches requested in the initConnectionMessage.
-      const updater = new CVRConfigDrivenUpdater(this.#storage, this.#cvr);
-      const added: AST[] = [];
-      for (const patch of initConnectionMessage.desiredQueriesPatch) {
-        switch (patch.op) {
-          case 'put':
-            added.push(
-              ...updater.putDesiredQueries(clientID, {[patch.hash]: patch.ast}),
-            );
-            break;
-          case 'del':
-            updater.deleteDesiredQueries(clientID, [patch.hash]);
-            break;
-          case 'clear':
-            updater.clearDesiredQueries(clientID);
-            break;
-        }
-      }
-      // TODO: Validate the "added" queries with a Postgres describe() command.
-      this.#cvr = await updater.flush();
-
       // Setup the downstream connection.
       const downstream = new Subscription<Downstream>({
         cleanup: (_, err) => {
@@ -169,24 +151,102 @@ export class ViewSyncerService implements ViewSyncer, Service {
           const c = this.#clients.get(clientID);
           if (c === client) {
             this.#clients.delete(clientID);
+
+            if (this.#clients.size === 0) {
+              lc.info?.('no more clients. closing invalidation subscription');
+              this.#invalidationSubscription?.cancel();
+              this.#invalidationSubscription = undefined;
+              this.#hasSyncRequests = resolver<true>();
+            }
           }
         },
       });
 
       const client = new ClientHandler(lc, clientID, baseCookie, downstream);
-      // Close any existing client.
+      const {desiredQueriesPatch} = initConnectionMessage;
+      await this.#patchQueries(client, desiredQueriesPatch);
+
+      // Update #clients, close any previous connection.
       this.#clients.get(clientID)?.close();
       this.#clients.set(clientID, client);
 
-      // If new client is not to date, cancel any current subscription so that it
-      // is restarted to take the new client's baseCookie into account.
-      if (cmpVersions(cookieToVersion(baseCookie), this.#cvr.version) < 0) {
-        this.#invalidationSubscription?.cancel();
-        this.#invalidationSubscription = undefined;
-      }
+      // Kick off an async await loop that dispatches subsequent upstream requests.
+      this.handleUpstreamRequests(lc, client, upstream).catch(
+        e => lc.error?.(e),
+      );
+
       this.#hasSyncRequests.resolve(true);
       return downstream;
     });
+  }
+
+  async handleUpstreamRequests(
+    lc: LogContext,
+    client: ClientHandler,
+    upstream: CancelableAsyncIterable<Upstream>,
+  ) {
+    try {
+      for await (const up of upstream) {
+        lc.debug?.(`up: `, up);
+        const [op, msg] = up;
+        switch (op) {
+          case 'changeDesiredQueries':
+            await this.#lock.withLock(() =>
+              this.#patchQueries(client, msg.desiredQueriesPatch),
+            );
+            break;
+          case 'deleteClients':
+            lc.info?.(`TODO: Handle deleteClients msg`);
+            break;
+          default:
+            op satisfies 'initConnection' | 'pull' | 'push' | 'ping';
+            // TODO: Make this an Error.
+            lc.error?.(`Unexpected upstream op ${op}: ${stringify(msg)}`);
+            break;
+        }
+      }
+      lc.info?.('upstream connection closed');
+    } catch (e) {
+      lc.error?.(`error from upstream connection`, e);
+    } finally {
+      client.close();
+    }
+  }
+
+  // Must be called from within #lock.
+  async #patchQueries(client: ClientHandler, queriesPatch: QueriesPatch) {
+    assert(this.#started);
+    assert(this.#cvr);
+
+    // Apply patches requested in the initConnectionMessage.
+    const {clientID} = client;
+    const updater = new CVRConfigDrivenUpdater(this.#storage, this.#cvr);
+    const added: AST[] = [];
+    for (const patch of queriesPatch) {
+      switch (patch.op) {
+        case 'put':
+          added.push(
+            ...updater.putDesiredQueries(clientID, {[patch.hash]: patch.ast}),
+          );
+          break;
+        case 'del':
+          updater.deleteDesiredQueries(clientID, [patch.hash]);
+          break;
+        case 'clear':
+          updater.clearDesiredQueries(clientID);
+          break;
+      }
+    }
+    // TODO: Validate the "added" queries with a Postgres describe() command.
+    this.#cvr = await updater.flush();
+
+    // The client will not be up to date if it is old, or if the set of queries
+    // changed. Cancel any current subscription to start a new one that takes the
+    // changed queries and/or client's baseCookie into account.
+    if (cmpVersions(client.version(), this.#cvr.version) < 0) {
+      this.#invalidationSubscription?.cancel();
+      this.#invalidationSubscription = undefined;
+    }
   }
 
   // Must be called in lock.
@@ -202,17 +262,23 @@ export class ViewSyncerService implements ViewSyncer, Service {
       .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b));
     const tableSchemas = await watcher.getTableSchemas();
     const queryHandler = new QueryHandler(tableSchemas);
-    const queries = queryHandler.transform(Object.values(this.#cvr.queries));
+
+    // Exclude queries that are no longer desired.
+    // These will be removed on the first invalidation.
+    const queries = Object.values(this.#cvr.queries).filter(
+      q => q.internal || Object.keys(q.desiredBy).length > 0,
+    );
+    const transformed = queryHandler.transform(queries);
     this.#invalidationSubscription = await watcher.watch({
       fromVersion: minVersion?.stateVersion,
       queries: Object.fromEntries(
-        [...queries].map(([id, t]) => [id, t.invalidationInfo]),
+        [...transformed].map(([id, t]) => [id, t.invalidationInfo]),
       ),
     });
     return {
       subscription: this.#invalidationSubscription,
       handleInvalidations: (update: QueryInvalidationUpdate) =>
-        this.#handleInvalidations(update, queryHandler, queries),
+        this.#handleInvalidations(update, queryHandler, transformed),
     };
   }
 
@@ -263,7 +329,11 @@ export class ViewSyncerService implements ViewSyncer, Service {
     queriesToExecute.forEach(q =>
       q.queryIDs.forEach(id => updater.executed(id, q.transformationHash)),
     );
-    // TODO: handle removed queries.
+
+    // Remove queries that are no longer desired.
+    Object.values(cvr.queries)
+      .filter(q => !q.internal && Object.keys(q.desiredBy).length === 0)
+      .forEach(q => updater.removed(q.id));
 
     // At this point the CVR version is fixed, either from a new stateVersion
     // or from a minorVersion bump due to a change in the query set.
@@ -306,7 +376,11 @@ export class ViewSyncerService implements ViewSyncer, Service {
     for (const patch of await updater.generateConfigPatches(minCVRVersion)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
-    await updater.flush();
+
+    // Commit the changes and update the CVR snapshot.
+    this.#cvr = await updater.flush();
+
+    // Signal clients to commit.
     pokers.forEach(poker => poker.end());
 
     lc.info?.(`finished processing update`);
@@ -318,5 +392,9 @@ export class ViewSyncerService implements ViewSyncer, Service {
     this.#shouldRun.resolve(false);
     this.#invalidationSubscription?.cancel();
     this.#invalidationSubscription = undefined;
+
+    for (const client of this.#clients.values()) {
+      client.close();
+    }
   }
 }
