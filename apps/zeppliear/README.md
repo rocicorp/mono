@@ -29,7 +29,7 @@ npm install
 NEXT_PUBLIC_SERVER='http://localhost:8787' npm run dev
 ```
 
-# To reset clear local postgres dbs and docker volumes 
+# To reset clear local postgres dbs and docker volumes
 
 ```
 docker-compose down
