@@ -92,6 +92,7 @@ export class ServiceRunnerDO {
       this.#serviceRunner,
       clientGroupID,
       clientID,
+      wsid,
       baseCookie,
       serverWS,
     );

@@ -302,6 +302,28 @@ describe('zql/normalize-query-hash', () => {
       values: [1234],
     },
     {
+      name: 'condition with selector',
+      asts: [
+        {
+          table: 'issues',
+          select: [
+            ['id', 'i'],
+            ['name', 'n'],
+          ],
+          where: {
+            type: 'simple',
+            field: 'issues.id',
+            op: '=',
+            value: {type: 'literal', value: 1234},
+          },
+          orderBy: [['id'], 'asc'],
+        },
+      ],
+      query:
+        'SELECT id AS i, name AS n FROM issues WHERE issues.id = $1 ORDER BY id asc',
+      values: [1234],
+    },
+    {
       name: 'simple condition (value types affect hash)',
       asts: [
         {
