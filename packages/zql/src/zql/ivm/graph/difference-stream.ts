@@ -57,11 +57,13 @@ export type Listener<T> = {
  *   filtered
  */
 // T extends object: I believe in the context of ZQL we only deal with object.
+let id = 0;
 export class DifferenceStream<T extends object> {
   /**
    * Operators that are listening to this stream.
    */
   readonly #downstreams: Set<Listener<T>> = new Set();
+  readonly #id = id++;
   /**
    * The operator that is sending data to this stream.
    */
@@ -83,6 +85,8 @@ export class DifferenceStream<T extends object> {
 
   newDifference(version: Version, data: Multiset<T>, reply: Reply | undefined) {
     if (reply) {
+      console.log(reply);
+      console.log(this.#id, [...this.#requestors]);
       const requestors = this.#requestors.get(reply.replyingTo);
       for (const requestor of must(requestors)) {
         requestor.newDifference(version, data, reply);
