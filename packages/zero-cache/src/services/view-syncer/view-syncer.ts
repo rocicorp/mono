@@ -163,14 +163,14 @@ export class ViewSyncerService implements ViewSyncer, Service {
       });
 
       const client = new ClientHandler(lc, clientID, baseCookie, downstream);
-      // Close any existing client.
-      this.#clients.get(clientID)?.close();
-      this.#clients.set(clientID, client);
-
       const {desiredQueriesPatch} = initConnectionMessage;
       await this.#patchQueries(client, desiredQueriesPatch);
 
-      // Kicks off an async await loop that dispatches subsequent upstream requests.
+      // Update #clients, close any previous connection.
+      this.#clients.get(clientID)?.close();
+      this.#clients.set(clientID, client);
+
+      // Kick off an async await loop that dispatches subsequent upstream requests.
       this.handleUpstreamRequests(lc, client, upstream).catch(
         e => lc.error?.(e),
       );
