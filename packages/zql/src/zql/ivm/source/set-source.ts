@@ -4,10 +4,11 @@ import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore next.js is having issues finding the .d.ts
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
+import {must} from 'shared/src/must.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
-import type {Multiset} from '../multiset.js';
+import type {Entry, Multiset} from '../multiset.js';
 import type {Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
 
@@ -30,6 +31,7 @@ export abstract class SetSource<T extends object> implements Source<T> {
   readonly comparator: Comparator<T>;
   #id = id++;
   readonly #name: string | undefined;
+  #pending: Entry<T>[] = [];
 
   constructor(
     materialite: MaterialiteForSourceInternal,
@@ -51,6 +53,33 @@ export abstract class SetSource<T extends object> implements Source<T> {
     this.comparator = comparator;
 
     this.#internal = {
+      onCommitEnqueue: (version: Version) => {
+        for (let i = 0; i < this.#pending.length; i++) {
+          const [val, mult] = must(this.#pending[i]);
+          // small optimization to reduce operations for replace
+          if (i + 1 < this.#pending.length) {
+            const [nextVal, nextMult] = must(this.#pending[i + 1]);
+            if (
+              Math.abs(mult) === 1 &&
+              mult === -nextMult &&
+              comparator(val, nextVal) === 0
+            ) {
+              // The tree doesn't allow dupes -- so this is a replace.
+              this.#tree = this.#tree.add(nextMult > 0 ? nextVal : val);
+              ++i;
+              continue;
+            }
+          }
+          if (mult < 0) {
+            this.#tree = this.#tree.delete(val);
+          } else if (mult > 0) {
+            this.#tree = this.#tree.add(val);
+          }
+        }
+
+        this.#stream.newDifference(version, this.#pending);
+        this.#pending = [];
+      },
       onCommitted: (version: Version) => {
         // In case we have direct source observers
         const tree = this.#tree;
@@ -60,6 +89,9 @@ export abstract class SetSource<T extends object> implements Source<T> {
 
         // TODO(mlaw): only notify the path(s) that got data this tx?
         this.#stream.commit(version);
+      },
+      onRollback: () => {
+        this.#pending = [];
       },
     };
   }
@@ -97,15 +129,13 @@ export abstract class SetSource<T extends object> implements Source<T> {
   }
 
   add(v: T): this {
-    this.#tree = this.#tree.add(v);
-    this.#stream.newDifference(this._materialite.getVersion(), [[v, 1]]);
+    this.#pending.push([v, 1]);
     this._materialite.addDirtySource(this.#internal);
     return this;
   }
 
   delete(v: T): this {
-    this.#tree = this.#tree.delete(v);
-    this.#stream.newDifference(this._materialite.getVersion(), [[v, -1]]);
+    this.#pending.push([v, -1]);
     this._materialite.addDirtySource(this.#internal);
     return this;
   }

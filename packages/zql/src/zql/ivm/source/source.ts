@@ -16,6 +16,9 @@ export interface Source<T extends object> {
 }
 
 export interface SourceInternal {
+  // Add values to queues
+  onCommitEnqueue(version: Version): void;
   // Now that the graph has computed itself fully, notify effects / listeners
   onCommitted(version: Version): void;
+  onRollback(): void;
 }

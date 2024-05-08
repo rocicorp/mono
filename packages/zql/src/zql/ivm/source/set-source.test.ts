@@ -109,11 +109,11 @@ test('rollback', async () => {
   }
   await Promise.resolve();
 
-  expect([...source.value]).toEqual([{id: 1}]);
+  expect([...source.value]).toEqual([]);
 
   source.add({id: 2});
   await Promise.resolve();
-  expect([...source.value]).toEqual([{id: 1}, {id: 2}]);
+  expect([...source.value]).toEqual([{id: 2}]);
 });
 
 test('withNewOrdering - we do not update the derived thing / withNewOrdering is not tied to the original. User must do that.', async () => {
