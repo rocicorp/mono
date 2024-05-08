@@ -175,6 +175,13 @@ class ResultParser {
       for (const [rowAlias, rowWithVersion] of rows.entries()) {
         // Exclude the _0_version column from what is sent to the client.
         const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
+        if (rowVersion === null) {
+          this.#lc.debug?.(
+            `skipping non-existent row ${rowAlias}`, // This can happen for LEFT JOINs
+            rowWithVersion,
+          );
+          continue;
+        }
         if (typeof rowVersion !== 'string') {
           throw new Error(`Invalid _0_version in ${stringify(rowWithVersion)}`);
         }
