@@ -38,12 +38,12 @@ export type SyncContext = {
 export interface ViewSyncer {
   initConnection(
     ctx: SyncContext,
-    initConnectionMessage: InitConnectionMessage,
+    msg: InitConnectionMessage,
   ): Promise<CancelableAsyncIterable<Downstream>>;
 
   changeDesiredQueries(
     ctx: SyncContext,
-    ChangeDesiredQueriesMessage: ChangeDesiredQueriesMessage,
+    msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
 }
 
