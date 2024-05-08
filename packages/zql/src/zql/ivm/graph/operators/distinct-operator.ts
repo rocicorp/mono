@@ -16,9 +16,6 @@ import {UnaryOperator} from './unary-operator.js';
 export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
   // The entries for this version. The string is the ID of the entity.
   readonly #entriesCache = new Map<string, Entry<T>>();
-  // The emitted data for this version. The string is the ID of the entity. The
-  // number is the multiplicity outputted so far in this tx.
-  readonly #emitted = new Map<string, number>();
   readonly #seenUpstreamMessages = new Set<number>();
   #lastSeenVersion: Version = -1;
 
@@ -26,37 +23,69 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
     super(input, output, (version, data) => this.#handleDiff(version, data));
   }
 
+  // TODO(mlaw): if what we're distinct on is being emitted in contiguous chunks we can optimize this.
+  // E.g., `or` would be a good example of this.
   #handleDiff(version: number, multiset: Multiset<T>): Multiset<T> {
     if (version > this.#lastSeenVersion) {
       this.#entriesCache.clear();
-      this.#emitted.clear();
       this.#lastSeenVersion = version;
     }
 
     const entriesCache = this.#entriesCache;
-    const emitted = this.#emitted;
-
+    const ret: Entry<T>[] = [];
     for (const entry of multiset) {
+      if (entry[1] === 0) {
+        continue;
+      }
+
       const {id} = entry[0];
       const existingEntry = entriesCache.get(id);
-      entriesCache.set(
-        id,
-        existingEntry ? [entry[0], existingEntry[1] + entry[1]] : entry,
-      );
-    }
 
-    const newMultiset: Entry<T>[] = [];
-    for (const [value, multiplicity] of entriesCache.values()) {
-      const {id} = value;
-      const existingMultiplicity = emitted.get(id) ?? 0;
-      const desiredMultiplicity = Math.sign(multiplicity);
-      if (existingMultiplicity !== desiredMultiplicity) {
-        newMultiset.push([value, desiredMultiplicity - existingMultiplicity]);
-        emitted.set(id, desiredMultiplicity);
+      if (!existingEntry) {
+        entriesCache.set(id, entry);
+        ret.push([entry[0], Math.sign(entry[1])]);
+        continue;
+      }
+
+      const newMult = existingEntry[1] + entry[1];
+      entriesCache.set(id, [entry[0], newMult]);
+
+      if (existingEntry[1] > 0 && newMult < 0) {
+        ret.push([entry[0], -2]);
+        continue;
+      }
+
+      if (existingEntry[1] === 0 && newMult < 0) {
+        ret.push([entry[0], -1]);
+        continue;
+      }
+
+      if (existingEntry[1] > 0 && newMult === 0) {
+        ret.push([entry[0], -1]);
+        continue;
+      }
+
+      if (existingEntry[1] <= 0 && newMult < 0) {
+        continue;
+      }
+
+      if (existingEntry[1] < 0 && newMult === 0) {
+        ret.push([entry[0], 1]);
+        continue;
+      }
+
+      if (existingEntry[1] === 0 && newMult > 0) {
+        ret.push([entry[0], 1]);
+        continue;
+      }
+
+      if (existingEntry[1] < 0 && newMult > 0) {
+        ret.push([entry[0], 2]);
+        continue;
       }
     }
 
-    return newMultiset;
+    return ret;
   }
 
   messageUpstream(message: Request): void {
