@@ -1,5 +1,4 @@
 import {assert} from 'shared/src/asserts.js';
-import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import {
   buildPipeline,
@@ -10,8 +9,8 @@ import type {AST} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
-import {MutableTreeView} from '../ivm/view/tree-view.js';
 import type {Source} from '../ivm/source/source.js';
+import {MutableTreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
 
@@ -35,50 +34,9 @@ export class Statement<Return> implements IStatement<Return> {
 
   #getMaterialization(): PromiseLike<View<Return>> {
     if (this.#materialization === undefined) {
-      this.#createMaterilization();
+      this.#materialization = createMaterialization(this.#ast, this.#context);
     }
-    return this.#materialization as PromiseLike<View<Return>>;
-  }
-
-  #createMaterilization() {
-    assert(this.#materialization === undefined);
-
-    const usedSources: Source<Entity>[] = [];
-    const pipeline = buildPipeline(<T extends Entity>(sourceName: string) => {
-      const source = this.#context.getSource(sourceName);
-      const ret = source.stream as unknown as DifferenceStream<T>;
-      usedSources.push(source);
-      return ret;
-    }, this.#ast);
-
-    // We need to await seeding since sources can be ready at different times.
-    // If someone queries for Table A in one query then
-    // queries for Table A join Table B, Table A will be immediately ready.
-    // Since we optimisitcally run joins, we'll return an incomplete result
-    // as Table B hasn't returned from `watch` yet.
-    //
-    // This waits for all sources to have been loaded into memory
-    // before creating the view.
-    this.#materialization = Promise.all(
-      usedSources.filter(s => !s.isSeeded()).map(s => s.awaitSeeding()),
-    ).then(() => {
-      const view = new MutableTreeView<
-        Return extends [] ? Return[number] : never
-      >(
-        this.#context,
-        pipeline as unknown as DifferenceStream<
-          Return extends [] ? Return[number] : never
-        >,
-        makeComparator<readonly string[], Record<string, unknown>>(
-          must(this.#ast.orderBy)[0],
-          must(this.#ast.orderBy)[1],
-        ),
-        this.#ast.orderBy,
-        this.#ast.limit,
-      ) as unknown as View<Return extends [] ? Return[number] : Return>;
-      view.pullHistoricalData();
-      return view;
-    });
+    return this.#materialization;
   }
 
   subscribe(
@@ -124,6 +82,45 @@ export class Statement<Return> implements IStatement<Return> {
   destroy() {
     void this.#materialization?.then(v => v.destroy());
   }
+}
+
+async function createMaterialization<Return>(ast: AST, context: Context) {
+  const {orderBy, limit} = ast;
+  assert(orderBy);
+
+  const usedSources: Source<Entity>[] = [];
+  const pipeline = buildPipeline(<T extends Entity>(sourceName: string) => {
+    const source = context.getSource(sourceName);
+    const ret = source.stream as unknown as DifferenceStream<T>;
+    usedSources.push(source);
+    return ret;
+  }, ast);
+
+  // We need to await seeding since sources can be ready at different times.
+  // If someone queries for Table A in one query then
+  // queries for Table A join Table B, Table A will be immediately ready.
+  // Since we optimistically run joins, we'll return an incomplete result
+  // as Table B hasn't returned from `watch` yet.
+  //
+  // This waits for all sources to have been loaded into memory
+  // before creating the view.
+  await Promise.all(
+    usedSources.filter(s => !s.isSeeded()).map(s => s.awaitSeeding()),
+  );
+  const view = new MutableTreeView<Return extends [] ? Return[number] : never>(
+    context,
+    pipeline as unknown as DifferenceStream<
+      Return extends [] ? Return[number] : never
+    >,
+    makeComparator<readonly string[], Record<string, unknown>>(
+      orderBy[0],
+      orderBy[1],
+    ),
+    orderBy,
+    limit,
+  ) as unknown as View<Return extends [] ? Return[number] : Return>;
+  view.pullHistoricalData();
+  return view;
 }
 
 export function makeComparator<
