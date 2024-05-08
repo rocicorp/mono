@@ -8,7 +8,7 @@ import type {
 } from './view-syncer/view-syncer.js';
 // TODO(mlaw): break dependency on reflect-server
 import {handlePing} from 'reflect-server/ping';
-import {sendError} from 'reflect-server/socket';
+import {closeWithError} from 'reflect-server/socket';
 import type {PostgresDB} from '../types/pg.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import {processMutation} from './mutagen/mutagen.js';
@@ -71,7 +71,7 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
-      sendError(lc, ws, 'InvalidMessage', String(e));
+      closeWithError(lc, ws, 'InvalidMessage', String(e));
       return;
     }
     try {
@@ -108,7 +108,8 @@ export class Connection {
       }
     } catch (e) {
       // TODO: Determine the ErrorKind from a custom Error type for e.
-      sendError(lc, ws, 'InvalidMessage', String(e));
+      closeWithError(lc, ws, 'InvalidMessage', String(e));
+      this.close();
     }
   };
 
@@ -124,7 +125,7 @@ export class Connection {
       lc.info?.('downstream closed by ViewSyncer');
     } catch (e) {
       // TODO: Determine the ErrorKind from a custom Error type for e.
-      sendError(lc, ws, 'InvalidMessage', String(e));
+      closeWithError(lc, ws, 'InvalidMessage', String(e));
     } finally {
       this.close();
     }
