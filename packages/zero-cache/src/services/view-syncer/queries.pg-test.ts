@@ -361,5 +361,348 @@ describe('view-syncer/queries', () => {
       ]),
     );
   });
+
+  test('left joins which can return with null rows', async () => {
+    const published = await getPublicationInfo(db);
+    const queryHandler = new QueryHandler(published.tables);
+
+    const ast: AST = {
+      select: [
+        ['issues.id', 'id'],
+        ['issues.title', 'title'],
+        ['owner.name', 'owner'],
+        ['parent.title', 'parent_title'],
+        ['parent.owner', 'parent_owner'],
+      ],
+      orderBy: [['id', 'title'], 'desc'],
+      table: 'issues',
+      joins: [
+        {
+          type: 'inner',
+          other: {table: 'users'},
+          as: 'owner',
+          on: ['issues.owner_id', 'owner.id'],
+        },
+        {
+          type: 'left',
+          other: {
+            select: [
+              ['issues.id', 'issues_id'],
+              ['title', 'title'],
+              ['owner.name', 'owner'],
+            ],
+            table: 'issues',
+            joins: [
+              {
+                type: 'inner',
+                other: {table: 'users'},
+                as: 'owner',
+                on: ['issues.owner_id', 'owner.id'],
+              },
+            ],
+          },
+          as: 'parent',
+          on: ['issues.parent_id', 'parent.issues_id'],
+        },
+      ],
+    };
+
+    // Explanatory:
+    //   This is the original query and what the results need to be when
+    //   executing on the client.
+    const original = new Normalized(ast).query();
+    expect(original.query).toBe(
+      'SELECT ' +
+        'issues.id AS id, issues.title AS title, owner.name AS owner, ' +
+        'parent.owner AS parent_owner, parent.title AS parent_title FROM issues ' +
+        'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
+        'LEFT JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
+        'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
+        'AS parent ON issues.parent_id = parent.issues_id ' +
+        'ORDER BY id desc, title desc',
+    );
+    expect(await db.unsafe(original.query, original.values)).toEqual([
+      {
+        id: '4',
+        title: 'bar',
+        owner: 'Bob',
+        parent_title: 'parent issue bar',
+        parent_owner: 'Bob',
+      },
+      {
+        id: '3',
+        title: 'foo',
+        owner: 'Candice',
+        parent_title: 'parent issue foo',
+        parent_owner: 'Alice',
+      },
+      {
+        id: '2',
+        title: 'parent issue bar',
+        owner: 'Bob',
+        parent_title: null,
+        parent_owner: null,
+      },
+      {
+        id: '1',
+        title: 'parent issue foo',
+        owner: 'Alice',
+        parent_title: null,
+        parent_owner: null,
+      },
+    ]);
+
+    const equivalentAST: AST = {
+      ...ast,
+      select: [
+        ['issues.id', 'different_id_alias'],
+        ['issues.title', 'different_title_alias'],
+        ['owner.name', 'different_owner_alias'],
+        ['parent.title', 'parent_title'],
+        ['parent.owner', 'parent_owner'],
+      ],
+    };
+
+    const transformed = queryHandler.transform([
+      {id: 'queryHash', ast},
+      {id: 'queryHash2', ast: equivalentAST},
+    ]);
+    const first = transformed.values().next();
+    assert(!first.done);
+
+    const {queryIDs, transformedAST} = first.value;
+    expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
+    const expanded = transformedAST.query();
+    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    const results = await db.unsafe(expanded.query, expanded.values);
+
+    // This is what gets synced to the client (contents) and stored in the CVR (record).
+    expect(resultParser.parseResults(queryIDs, results)).toEqual(
+      new Map([
+        [
+          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          {
+            contents: {id: '3', owner_id: '102', parent_id: '1', title: 'foo'},
+            record: {
+              id: {schema: 'public', table: 'issues', rowKey: {id: '3'}},
+              rowVersion: '1ca',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                owner_id: ['queryHash', 'queryHash2'],
+                parent_id: ['queryHash', 'queryHash2'],
+                title: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/dygxK_hEWhfHvQ8eowTfCQ',
+          {
+            contents: {id: '102', name: 'Candice'},
+            record: {
+              id: {schema: 'public', table: 'users', rowKey: {id: '102'}},
+              rowVersion: '0c',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                name: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          {
+            contents: {
+              id: '1',
+              owner_id: '100',
+              title: 'parent issue foo',
+              parent_id: null,
+            },
+            record: {
+              id: {schema: 'public', table: 'issues', rowKey: {id: '1'}},
+              rowVersion: '1a0',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                owner_id: ['queryHash', 'queryHash2'],
+                title: ['queryHash', 'queryHash2'],
+                parent_id: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/1G9hXQhMWdq9f737TmE6rg',
+          {
+            contents: {id: '100', name: 'Alice'},
+            record: {
+              id: {schema: 'public', table: 'users', rowKey: {id: '100'}},
+              rowVersion: '0a',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                name: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          {
+            contents: {id: '4', owner_id: '101', parent_id: '2', title: 'bar'},
+            record: {
+              id: {schema: 'public', table: 'issues', rowKey: {id: '4'}},
+              rowVersion: '1cd',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                owner_id: ['queryHash', 'queryHash2'],
+                parent_id: ['queryHash', 'queryHash2'],
+                title: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/Z3BOpMPd4QMKJ8IeYx1QvQ',
+          {
+            contents: {id: '101', name: 'Bob'},
+            record: {
+              id: {schema: 'public', table: 'users', rowKey: {id: '101'}},
+              rowVersion: '0b',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                name: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          {
+            contents: {
+              id: '2',
+              owner_id: '101',
+              title: 'parent issue bar',
+              parent_id: null,
+            },
+            record: {
+              id: {schema: 'public', table: 'issues', rowKey: {id: '2'}},
+              rowVersion: '1ab',
+              queriedColumns: {
+                id: ['queryHash', 'queryHash2'],
+                owner_id: ['queryHash', 'queryHash2'],
+                title: ['queryHash', 'queryHash2'],
+                parent_id: ['queryHash', 'queryHash2'],
+              },
+            },
+          },
+        ],
+      ]),
+    );
+  });
+
+  test('deaggregation', async () => {
+    const published = await getPublicationInfo(db);
+    const queryHandler = new QueryHandler(published.tables);
+
+    const ast: AST = {
+      select: [['issues.id', 'id']],
+      aggregate: [{aggregate: 'array', field: 'title', alias: 'ignored'}],
+      groupBy: ['id'],
+      table: 'issues',
+    };
+
+    // Explanatory:
+    //   This is the original query and what the results need to be when
+    //   executing on the client.
+    const original = new Normalized(ast).query();
+    expect(original.query).toBe(
+      'SELECT issues.id AS id, array_agg(title) AS "array_agg(title)" FROM issues GROUP BY id',
+    );
+    expect(await db.unsafe(original.query, original.values)).toEqual([
+      {
+        id: '2',
+        ['array_agg(title)']: ['parent issue bar'],
+      },
+      {
+        id: '4',
+        ['array_agg(title)']: ['bar'],
+      },
+      {
+        id: '3',
+        ['array_agg(title)']: ['foo'],
+      },
+      {
+        id: '1',
+        ['array_agg(title)']: ['parent issue foo'],
+      },
+    ]);
+
+    const transformed = queryHandler.transform([{id: 'queryHash', ast}]);
+    const first = transformed.values().next();
+    assert(!first.done);
+
+    const {queryIDs, transformedAST} = first.value;
+    // expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
+    expect(queryIDs).toEqual(['queryHash']);
+    const expanded = transformedAST.query();
+    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    expect(expanded.query).toBe(
+      'SELECT public.issues._0_version AS "public/issues/_0_version", ' +
+        'public.issues.id AS "public/issues/id", ' +
+        'public.issues.title AS "public/issues/title" ' +
+        'FROM issues',
+    );
+    const results = await db.unsafe(expanded.query, expanded.values);
+
+    // This is what gets synced to the client (contents) and stored in the CVR (record).
+    expect(resultParser.parseResults(queryIDs, results)).toEqual(
+      new Map([
+        [
+          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          {
+            contents: {id: '4', title: 'bar'},
+            record: {
+              id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1cd',
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          {
+            contents: {id: '2', title: 'parent issue bar'},
+            record: {
+              id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1ab',
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          {
+            contents: {id: '1', title: 'parent issue foo'},
+            record: {
+              id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1a0',
+            },
+          },
+        ],
+        [
+          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          {
+            contents: {id: '3', title: 'foo'},
+            record: {
+              id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
+              queriedColumns: {id: ['queryHash'], title: ['queryHash']},
+              rowVersion: '1ca',
+            },
+          },
+        ],
+      ]),
+    );
+  });
+
   /* eslint-enable @typescript-eslint/naming-convention */
 });
