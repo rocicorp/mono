@@ -88,11 +88,17 @@ export class Materialite {
 
   #rollback() {
     this.#currentTx = null;
+    for (const source of this.#dirtySources) {
+      source.onRollback();
+    }
   }
 
   #commit() {
     this.#version = must(this.#currentTx);
     this.#currentTx = null;
+    for (const source of this.#dirtySources) {
+      source.onCommitEnqueue(this.#version);
+    }
     for (const source of this.#dirtySources) {
       source.onCommitted(this.#version);
     }
