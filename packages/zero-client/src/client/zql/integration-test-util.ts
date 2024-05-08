@@ -44,22 +44,24 @@ export async function bulkSet(
   },
 ) {
   const promises: Promise<void>[] = [];
-  for (const track of items.tracks ?? []) {
-    promises.push(z.mutate.track.create(track));
-  }
-  for (const album of items.albums ?? []) {
-    promises.push(z.mutate.album.create(album));
-  }
-  for (const artist of items.artists ?? []) {
-    promises.push(z.mutate.artist.create(artist));
-  }
-  for (const playlist of items.playlists ?? []) {
-    promises.push(z.mutate.playlist.create(playlist));
-  }
-  for (const trackArtist of items.trackArtists ?? []) {
-    promises.push(z.mutate.trackArtist.create(trackArtist));
-  }
-  await Promise.all(promises);
+  await z.mutate(async tx => {
+    for (const track of items.tracks ?? []) {
+      promises.push(tx.track.create(track));
+    }
+    for (const album of items.albums ?? []) {
+      promises.push(tx.album.create(album));
+    }
+    for (const artist of items.artists ?? []) {
+      promises.push(tx.artist.create(artist));
+    }
+    for (const playlist of items.playlists ?? []) {
+      promises.push(tx.playlist.create(playlist));
+    }
+    for (const trackArtist of items.trackArtists ?? []) {
+      promises.push(tx.trackArtist.create(trackArtist));
+    }
+    await Promise.all(promises);
+  });
 }
 
 export async function bulkRemove(
@@ -72,21 +74,23 @@ export async function bulkRemove(
     trackArtists?: TrackArtist[] | undefined;
   },
 ) {
-  const promises: Promise<void>[] = [];
-  for (const track of items.tracks ?? []) {
-    promises.push(z.mutate.track.delete({id: track.id}));
-  }
-  for (const album of items.albums ?? []) {
-    promises.push(z.mutate.album.delete({id: album.id}));
-  }
-  for (const artist of items.artists ?? []) {
-    promises.push(z.mutate.artist.delete({id: artist.id}));
-  }
-  for (const playlist of items.playlists ?? []) {
-    promises.push(z.mutate.playlist.delete({id: playlist.id}));
-  }
-  for (const trackArtist of items.trackArtists ?? []) {
-    promises.push(z.mutate.trackArtist.delete({id: trackArtist.id}));
-  }
-  await Promise.all(promises);
+  await z.mutate(async tx => {
+    const promises: Promise<void>[] = [];
+    for (const track of items.tracks ?? []) {
+      promises.push(tx.track.delete({id: track.id}));
+    }
+    for (const album of items.albums ?? []) {
+      promises.push(tx.album.delete({id: album.id}));
+    }
+    for (const artist of items.artists ?? []) {
+      promises.push(tx.artist.delete({id: artist.id}));
+    }
+    for (const playlist of items.playlists ?? []) {
+      promises.push(tx.playlist.delete({id: playlist.id}));
+    }
+    for (const trackArtist of items.trackArtists ?? []) {
+      promises.push(tx.trackArtist.delete({id: trackArtist.id}));
+    }
+    await Promise.all(promises);
+  });
 }
