@@ -29,7 +29,7 @@ export type Listener<T> = {
   newDifference: (
     version: Version,
     multiset: Multiset<T>,
-    reply?: Reply | undefined,
+    reply: Reply | undefined,
   ) => void;
   commit: (version: Version) => void;
 };
@@ -81,11 +81,7 @@ export class DifferenceStream<T extends object> {
     return this;
   }
 
-  newDifference(
-    version: Version,
-    data: Multiset<T>,
-    reply?: Reply | undefined,
-  ) {
+  newDifference(version: Version, data: Multiset<T>, reply: Reply | undefined) {
     if (reply) {
       const requestors = this.#requestors.get(reply.replyingTo);
       for (const requestor of must(requestors)) {

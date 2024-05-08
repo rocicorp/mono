@@ -22,8 +22,8 @@ export class UnaryOperator<I extends object, O extends object>
   ) {
     super(output);
     this.#listener = {
-      newDifference: (version, data) => {
-        output.newDifference(version, fn(version, data));
+      newDifference: (version, data, reply) => {
+        output.newDifference(version, fn(version, data), reply);
       },
       commit: version => {
         this.commit(version);

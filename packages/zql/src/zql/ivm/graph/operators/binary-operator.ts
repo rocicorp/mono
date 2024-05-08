@@ -26,16 +26,16 @@ export class BinaryOperator<
   ) {
     super(output);
     this.#listener1 = {
-      newDifference: (version, data) => {
-        output.newDifference(version, fn(version, data, undefined));
+      newDifference: (version, data, reply) => {
+        output.newDifference(version, fn(version, data, undefined), reply);
       },
       commit: version => {
         this.commit(version);
       },
     };
     this.#listener2 = {
-      newDifference: (version, data) => {
-        output.newDifference(version, fn(version, undefined, data));
+      newDifference: (version, data, reply) => {
+        output.newDifference(version, fn(version, undefined, data), reply);
       },
       commit: version => {
         this.commit(version);

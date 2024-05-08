@@ -10,53 +10,69 @@ test('count', () => {
   });
 
   // does not count things that do not exist
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 'foo',
-      },
-      0,
+      [
+        {
+          x: 'foo',
+        },
+        0,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check(1, [[{x: 'foo', count: 0}, 1]]);
 
   // counts multiplicity of 1
-  input.newDifference(2, [
+  input.newDifference(
+    2,
     [
-      {
-        x: 'foo',
-      },
-      1,
+      [
+        {
+          x: 'foo',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check(2, [
     [{x: 'foo', count: 0}, -1],
     [{x: 'foo', count: 1}, 1],
   ]);
 
   // decrements if an item is removed
-  input.newDifference(3, [
+  input.newDifference(
+    3,
     [
-      {
-        x: 'foo',
-      },
-      -1,
+      [
+        {
+          x: 'foo',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check(3, [
     [{x: 'foo', count: 1}, -1],
     [{x: 'foo', count: 0}, 1],
   ]);
 
   // double counts doubly present items
-  input.newDifference(4, [
+  input.newDifference(
+    4,
     [
-      {
-        x: 'foo',
-      },
-      2,
+      [
+        {
+          x: 'foo',
+        },
+        2,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check(4, [
     [{x: 'foo', count: 0}, -1],
     [{x: 'foo', count: 2}, 1],
@@ -81,77 +97,93 @@ test('average', () => {
   });
 
   // does not avg things that do not exist
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 1,
-      },
-      0,
+      [
+        {
+          x: 1,
+        },
+        0,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check(1, [[{x: 0}, 1]]);
 
   // averages things that exist
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 1,
-      },
-      1,
+      [
+        {
+          x: 1,
+        },
+        1,
+      ],
+      [
+        {
+          x: 2,
+        },
+        1,
+      ],
+      [
+        {
+          x: 3,
+        },
+        1,
+      ],
     ],
-    [
-      {
-        x: 2,
-      },
-      1,
-    ],
-    [
-      {
-        x: 3,
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   check(2, [
     [{x: 0}, -1],
     [{x: 2}, 1],
   ]);
 
   // updates the average when new items enter
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 4,
-      },
-      1,
+      [
+        {
+          x: 4,
+        },
+        1,
+      ],
+      [
+        {
+          x: 5,
+        },
+        1,
+      ],
     ],
-    [
-      {
-        x: 5,
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   check(3, [
     [{x: 2}, -1],
     [{x: 3}, 1],
   ]);
 
   // updates the average when items leave
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 4,
-      },
-      -1,
+      [
+        {
+          x: 4,
+        },
+        -1,
+      ],
+      [
+        {
+          x: 5,
+        },
+        -1,
+      ],
     ],
-    [
-      {
-        x: 5,
-      },
-      -1,
-    ],
-  ]);
+    undefined,
+  );
   check(4, [
     [{x: 3}, -1],
     [{x: 2}, 1],
@@ -173,77 +205,93 @@ test('sum', () => {
   });
 
   // does not sum things that do not exist
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 1,
-      },
-      0,
+      [
+        {
+          x: 1,
+        },
+        0,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check(1, [[{x: 0}, 1]]);
 
   // sums things that exist
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 1,
-      },
-      1,
+      [
+        {
+          x: 1,
+        },
+        1,
+      ],
+      [
+        {
+          x: 2,
+        },
+        1,
+      ],
+      [
+        {
+          x: 3,
+        },
+        1,
+      ],
     ],
-    [
-      {
-        x: 2,
-      },
-      1,
-    ],
-    [
-      {
-        x: 3,
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   check(2, [
     [{x: 0}, -1],
     [{x: 6}, 1],
   ]);
 
   // updates the sum when new items enter
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 4,
-      },
-      1,
+      [
+        {
+          x: 4,
+        },
+        1,
+      ],
+      [
+        {
+          x: 5,
+        },
+        1,
+      ],
     ],
-    [
-      {
-        x: 5,
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   check(3, [
     [{x: 6}, -1],
     [{x: 15}, 1],
   ]);
 
   // updates the sum when items leave
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        x: 4,
-      },
-      -1,
+      [
+        {
+          x: 4,
+        },
+        -1,
+      ],
+      [
+        {
+          x: 5,
+        },
+        -1,
+      ],
     ],
-    [
-      {
-        x: 5,
-      },
-      -1,
-    ],
-  ]);
+    undefined,
+  );
   check(4, [
     [{x: 15}, -1],
     [{x: 6}, 1],

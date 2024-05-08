@@ -14,12 +14,16 @@ test('does not emit any rows that fail the filter', () => {
     items.push(e);
   });
 
-  input.newDifference(1, [
-    [{id: 1}, 1],
-    [{id: 2}, 2],
-    [{id: 1}, -1],
-    [{id: 2}, -2],
-  ]);
+  input.newDifference(
+    1,
+    [
+      [{id: 1}, 1],
+      [{id: 2}, 2],
+      [{id: 1}, -1],
+      [{id: 2}, -2],
+    ],
+    undefined,
+  );
   input.commit(1);
 
   expect(items.length).toBe(0);
@@ -34,12 +38,16 @@ test('emits all rows that pass the filter (including deletes / retractions)', ()
     items.push([e, mult]);
   });
 
-  input.newDifference(1, [
-    [{id: 1}, 1],
-    [{id: 2}, 2],
-    [{id: 1}, -1],
-    [{id: 2}, -2],
-  ]);
+  input.newDifference(
+    1,
+    [
+      [{id: 1}, 1],
+      [{id: 2}, 2],
+      [{id: 1}, -1],
+      [{id: 2}, -2],
+    ],
+    undefined,
+  );
   input.commit(1);
 
   expect(items).toEqual([
@@ -62,12 +70,16 @@ test('test that filter is lazy / the filter is not actually run until we pull on
     msgs.push(data);
   });
 
-  input.newDifference(1, [
-    [{id: 1}, 1],
-    [{id: 2}, 2],
-    [{id: 1}, -1],
-    [{id: 2}, -2],
-  ]);
+  input.newDifference(
+    1,
+    [
+      [{id: 1}, 1],
+      [{id: 2}, 2],
+      [{id: 1}, -1],
+      [{id: 2}, -2],
+    ],
+    undefined,
+  );
   input.commit(1);
 
   // we run the graph but the filter is not run until we pull on it

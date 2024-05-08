@@ -59,17 +59,21 @@ test('left join', () => {
   });
 
   let version = 1;
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -93,16 +97,20 @@ test('left join', () => {
   items.length = 0;
 
   // now add an album
-  albumInput.newDifference(version, [
+  albumInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Album One',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Album One',
+          artistId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   albumInput.commit(version);
   ++version;
 
@@ -144,17 +152,21 @@ test('left join', () => {
 
   // now remove a track.
   // The joined row should be retracted since the track is no longer present.
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -183,16 +195,20 @@ test('left join', () => {
 
   // now remove the album. Nothing should be output since there
   // was nothing output last time.
-  albumInput.newDifference(version, [
+  albumInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Album One',
-        artistId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1',
+          title: 'Album One',
+          artistId: '1',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   albumInput.commit(version);
   ++version;
 
@@ -201,16 +217,20 @@ test('left join', () => {
 
   // now add an album first
   // nothing should be output since there's no track on the left to join with the album
-  albumInput.newDifference(version, [
+  albumInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Album One',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Album One',
+          artistId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   albumInput.commit(version);
   ++version;
 
@@ -218,17 +238,21 @@ test('left join', () => {
   items.length = 0;
 
   // now add a track back
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -289,51 +313,63 @@ test('junction table left join', () => {
     items.push([e, m]);
   });
 
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
-  trackArtistInput.newDifference(version, [
+    undefined,
+  );
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        1,
+      ],
     ],
+    undefined,
+  );
+  artistInput.newDifference(
+    version,
     [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      1,
+      [
+        {
+          id: '1',
+          name: 'Artist One',
+        },
+        1,
+      ],
+      [
+        {
+          id: '2',
+          name: 'Artist Two',
+        },
+        1,
+      ],
     ],
-  ]);
-  artistInput.newDifference(version, [
-    [
-      {
-        id: '1',
-        name: 'Artist One',
-      },
-      1,
-    ],
-    [
-      {
-        id: '2',
-        name: 'Artist Two',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
 
   trackInput.commit(version);
   trackArtistInput.commit(version);
@@ -446,17 +482,21 @@ test('junction table left join', () => {
   ++version;
 
   // remove the track
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -485,17 +525,21 @@ test('junction table left join', () => {
   items.length = 0;
 
   // re-add the track
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -524,24 +568,28 @@ test('junction table left join', () => {
   items.length = 0;
 
   // remove the track-artist links
-  trackArtistInput.newDifference(version, [
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        -1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        -1,
+      ],
     ],
-    [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      -1,
-    ],
-  ]);
+    undefined,
+  );
   trackArtistInput.commit(version);
   ++version;
   expect(items).toEqual([
@@ -582,24 +630,28 @@ test('junction table left join', () => {
   items.length = 0;
 
   // add the track-artist link
-  trackArtistInput.newDifference(version, [
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        1,
+      ],
     ],
-    [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   trackArtistInput.commit(version);
   ++version;
 
@@ -641,22 +693,26 @@ test('junction table left join', () => {
   items.length = 0;
 
   // remove the artist
-  artistInput.newDifference(version, [
+  artistInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        name: 'Artist One',
-      },
-      -1,
+      [
+        {
+          id: '1',
+          name: 'Artist One',
+        },
+        -1,
+      ],
+      [
+        {
+          id: '2',
+          name: 'Artist Two',
+        },
+        -1,
+      ],
     ],
-    [
-      {
-        id: '2',
-        name: 'Artist Two',
-      },
-      -1,
-    ],
-  ]);
+    undefined,
+  );
   artistInput.commit(version);
   ++version;
   expect(items).toEqual([
@@ -702,17 +758,21 @@ test('junction table left join', () => {
   items.length = 0;
 
   // add a track with no links to anyone
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '2',
-        title: 'Track Two',
-        length: 1,
-        albumId: '2',
-      },
-      1,
+      [
+        {
+          id: '2',
+          title: 'Track Two',
+          length: 1,
+          albumId: '2',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -762,58 +822,70 @@ test('repro 1', () => {
     items.push([e, m]);
   });
 
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
-  artistInput.newDifference(version, [
+  artistInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        name: 'Artist One',
-      },
-      1,
+      [
+        {
+          id: '1',
+          name: 'Artist One',
+        },
+        1,
+      ],
+      [
+        {
+          id: '2',
+          name: 'Artist Two',
+        },
+        1,
+      ],
     ],
-    [
-      {
-        id: '2',
-        name: 'Artist Two',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   artistInput.commit(version);
   ++version;
 
   items.length = 0;
-  trackArtistInput.newDifference(version, [
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        1,
+      ],
     ],
-    [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   trackArtistInput.commit(version);
   ++version;
   expect(items).toEqual([
@@ -848,24 +920,28 @@ test('repro 1', () => {
   ]);
   items.length = 0;
 
-  trackArtistInput.newDifference(version, [
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        -1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        -1,
+      ],
     ],
-    [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      -1,
-    ],
-  ]);
+    undefined,
+  );
   trackArtistInput.commit(version);
   ++version;
   expect(items).toEqual([
@@ -920,27 +996,35 @@ test('add track & album, then remove album', () => {
   });
 
   let version = 1;
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
-  albumInput.newDifference(version, [
+    undefined,
+  );
+  albumInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Album One',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Album One',
+          artistId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   albumInput.commit(version);
   ++version;
@@ -975,16 +1059,20 @@ test('add track & album, then remove album', () => {
   items.length = 0;
 
   // retract the album
-  albumInput.newDifference(version, [
+  albumInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Album One',
-        artistId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1',
+          title: 'Album One',
+          artistId: '1',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   albumInput.commit(version);
   ++version;
 
@@ -1032,35 +1120,43 @@ test('one to many, remove the one, add the one', () => {
     items.push([e, m]);
   });
 
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
-  trackArtistInput.newDifference(version, [
+    undefined,
+  );
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        1,
+      ],
     ],
-    [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   trackArtistInput.commit(version);
   ++version;
@@ -1103,17 +1199,21 @@ test('one to many, remove the one, add the one', () => {
   ]);
   items.length = 0;
 
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      -1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -1139,17 +1239,21 @@ test('one to many, remove the one, add the one', () => {
   ]);
   items.length = 0;
 
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   ++version;
 
@@ -1210,60 +1314,72 @@ test('two tracks, only 1 is linked to artists', () => {
     items.push([e, m]);
   });
 
-  trackInput.newDifference(version, [
+  trackInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        title: 'Track One',
-        length: 1,
-        albumId: '1',
-      },
-      1,
+      [
+        {
+          id: '1',
+          title: 'Track One',
+          length: 1,
+          albumId: '1',
+        },
+        1,
+      ],
+      [
+        {
+          id: '2',
+          albumId: '1',
+          title: 'track 2',
+          length: 1,
+        },
+        1,
+      ],
     ],
+    undefined,
+  );
+  artistInput.newDifference(
+    version,
     [
-      {
-        id: '2',
-        albumId: '1',
-        title: 'track 2',
-        length: 1,
-      },
-      1,
+      [
+        {
+          id: '1',
+          name: 'Artist One',
+        },
+        1,
+      ],
+      [
+        {
+          id: '2',
+          name: 'Artist Two',
+        },
+        1,
+      ],
     ],
-  ]);
-  artistInput.newDifference(version, [
+    undefined,
+  );
+  trackArtistInput.newDifference(
+    version,
     [
-      {
-        id: '1',
-        name: 'Artist One',
-      },
-      1,
+      [
+        {
+          id: '1-1',
+          trackId: '1',
+          artistId: '1',
+        },
+        1,
+      ],
+      [
+        {
+          id: '1-2',
+          trackId: '1',
+          artistId: '2',
+        },
+        1,
+      ],
     ],
-    [
-      {
-        id: '2',
-        name: 'Artist Two',
-      },
-      1,
-    ],
-  ]);
-  trackArtistInput.newDifference(version, [
-    [
-      {
-        id: '1-1',
-        trackId: '1',
-        artistId: '1',
-      },
-      1,
-    ],
-    [
-      {
-        id: '1-2',
-        trackId: '1',
-        artistId: '2',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   trackInput.commit(version);
   artistInput.commit(version);
   trackArtistInput.commit(version);

@@ -15,11 +15,15 @@ test('map', () => {
     expect(x).toEqual({x: 4});
   });
 
-  s.newDifference(1, [
-    [{x: 2}, 1],
-    [{x: 2}, 1],
-    [{x: 2}, 1],
-  ]);
+  s.newDifference(
+    1,
+    [
+      [{x: 2}, 1],
+      [{x: 2}, 1],
+      [{x: 2}, 1],
+    ],
+    undefined,
+  );
   s.commit(1);
 
   expect(expectRan).toBe(3);
@@ -33,11 +37,15 @@ test('filter', () => {
     expect(x).toEqual({x: 2});
   });
 
-  s.newDifference(1, [
-    [{x: 1}, 1],
-    [{x: 2}, 1],
-    [{x: 3}, 1],
-  ]);
+  s.newDifference(
+    1,
+    [
+      [{x: 1}, 1],
+      [{x: 2}, 1],
+      [{x: 3}, 1],
+    ],
+    undefined,
+  );
   s.commit(1);
 
   expect(expectRan).toBe(1);
@@ -54,21 +62,29 @@ test('count', () => {
     }
   });
 
-  s.newDifference(1, [
-    [{x: 1}, 1],
-    [{x: 2}, 1],
-    [{x: 3}, 1],
-  ]);
+  s.newDifference(
+    1,
+    [
+      [{x: 1}, 1],
+      [{x: 2}, 1],
+      [{x: 3}, 1],
+    ],
+    undefined,
+  );
   s.commit(1);
 
   expect(expectRan).toBe(1);
 
-  s.newDifference(2, [
-    [{x: 1}, 1],
-    [{x: 2}, 1],
-    [{x: 3}, 1],
-    [{x: 3}, 1],
-  ]);
+  s.newDifference(
+    2,
+    [
+      [{x: 1}, 1],
+      [{x: 2}, 1],
+      [{x: 3}, 1],
+      [{x: 3}, 1],
+    ],
+    undefined,
+  );
   expectedCount = 7;
   s.commit(2);
 
@@ -91,15 +107,19 @@ test('map, filter, linearCount', () => {
       }
     });
 
-  s.newDifference(1, [[{x: 1}, 1]]);
+  s.newDifference(1, [[{x: 1}, 1]], undefined);
   s.commit(1);
 
   expect(expectRan).toBe(1);
 
-  s.newDifference(2, [
-    [{x: 1}, 1],
-    [{x: 2}, 1],
-  ]);
+  s.newDifference(
+    2,
+    [
+      [{x: 1}, 1],
+      [{x: 2}, 1],
+    ],
+    undefined,
+  );
   expectedCount = 3;
   s.commit(2);
 
@@ -160,7 +180,7 @@ test('adding data runs the operator', () => {
     ran = true;
   });
   expect(ran).toBe(false);
-  stream.newDifference(1, []);
+  stream.newDifference(1, [], undefined);
   expect(ran).toBe(true);
 });
 
@@ -170,7 +190,7 @@ test('commit notifies the operator', () => {
   stream.effect(() => {
     ran = true;
   });
-  stream.newDifference(1, [[{}, 1]]);
+  stream.newDifference(1, [[{}, 1]], undefined);
   expect(ran).toBe(false);
   stream.commit(1);
   expect(ran).toBe(true);
@@ -201,7 +221,10 @@ test('replying to a message only notifies along the requesting path', () => {
 
   const msg = createPullMessage([[], 'asc'], 'select');
 
-  s2Dbg.messageUpstream(msg);
+  x.messageUpstream(msg, {
+    commit: () => {},
+    newDifference: () => {},
+  });
 
   expect(notified).toEqual([]);
 

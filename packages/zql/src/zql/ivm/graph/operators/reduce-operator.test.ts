@@ -44,100 +44,124 @@ test('collects all things with the same key', () => {
     items.push([e, m]);
   });
 
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        id: 'a',
-        value: 1,
-        groupKey: 'x',
-      },
-      1,
+      [
+        {
+          id: 'a',
+          value: 1,
+          groupKey: 'x',
+        },
+        1,
+      ],
+      [
+        {
+          id: 'b',
+          value: 2,
+          groupKey: 'x',
+        },
+        2,
+      ],
     ],
-    [
-      {
-        id: 'b',
-        value: 2,
-        groupKey: 'x',
-      },
-      2,
-    ],
-  ]);
+    undefined,
+  );
   check([[{id: 'x', sum: 5}, 1]]);
 
   // retract an item
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        id: 'a',
-        value: 1,
-        groupKey: 'x',
-      },
-      -1,
+      [
+        {
+          id: 'a',
+          value: 1,
+          groupKey: 'x',
+        },
+        -1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check([
     [{id: 'x', sum: 5}, -1],
     [{id: 'x', sum: 4}, 1],
   ]);
 
   // fully retract items that constitute a grouping
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        id: 'b',
-        value: 2,
-        groupKey: 'x',
-      },
-      -2,
+      [
+        {
+          id: 'b',
+          value: 2,
+          groupKey: 'x',
+        },
+        -2,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check([[{id: 'x', sum: 4}, -1]]);
 
   // add more entries
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        id: 'a',
-        value: 1,
-        groupKey: 'c',
-      },
-      1,
+      [
+        {
+          id: 'a',
+          value: 1,
+          groupKey: 'c',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check([[{id: 'c', sum: 1}, 1]]);
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        id: 'b',
-        value: 2,
-        groupKey: 'c',
-      },
-      1,
+      [
+        {
+          id: 'b',
+          value: 2,
+          groupKey: 'c',
+        },
+        1,
+      ],
     ],
-  ]);
+    undefined,
+  );
   check([
     [{id: 'c', sum: 1}, -1],
     [{id: 'c', sum: 3}, 1],
   ]);
 
-  input.newDifference(1, [
+  input.newDifference(
+    1,
     [
-      {
-        id: 'a',
-        value: 1,
-        groupKey: 'c',
-      },
-      -1,
+      [
+        {
+          id: 'a',
+          value: 1,
+          groupKey: 'c',
+        },
+        -1,
+      ],
+      [
+        {
+          id: 'a',
+          value: 2,
+          groupKey: 'c',
+        },
+        1,
+      ],
     ],
-    [
-      {
-        id: 'a',
-        value: 2,
-        groupKey: 'c',
-      },
-      1,
-    ],
-  ]);
+    undefined,
+  );
   check([
     [{id: 'c', sum: 3}, -1],
     [{id: 'c', sum: 4}, 1],

@@ -15,12 +15,16 @@ test('lazy', () => {
     items.push(d);
   });
 
-  input.newDifference(1, [
-    [{id: 1}, 1],
-    [{id: 2}, 2],
-    [{id: 1}, -1],
-    [{id: 2}, -2],
-  ]);
+  input.newDifference(
+    1,
+    [
+      [{id: 1}, 1],
+      [{id: 2}, 2],
+      [{id: 1}, -1],
+      [{id: 2}, -2],
+    ],
+    undefined,
+  );
   input.commit(1);
 
   // we run the graph but the mapper is not run until we pull on it
@@ -43,12 +47,16 @@ test('applies to rows', () => {
     items.push([e, m]);
   });
 
-  input.newDifference(1, [
-    [{id: 1}, 1],
-    [{id: 2}, 2],
-    [{id: 1}, -1],
-    [{id: 2}, -2],
-  ]);
+  input.newDifference(
+    1,
+    [
+      [{id: 1}, 1],
+      [{id: 2}, 2],
+      [{id: 1}, -1],
+      [{id: 2}, -2],
+    ],
+    undefined,
+  );
   input.commit(1);
 
   expect(items).toEqual([
