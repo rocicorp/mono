@@ -4,14 +4,13 @@ import {resolver} from '@rocicorp/resolver';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import type {
+  ChangeDesiredQueriesBody,
+  ChangeDesiredQueriesMessage,
   Downstream,
-  InitConnectionBody,
-  QueriesPatch,
-  Upstream,
+  InitConnectionMessage,
 } from 'zero-protocol';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import {initStorageSchema} from '../../storage/schema.js';
-import {stringify} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -31,17 +30,21 @@ import {schemaRoot} from './schema/paths.js';
 import {cmpVersions} from './schema/types.js';
 
 export type SyncContext = {
-  clientID: string;
-  baseCookie: string | null;
+  readonly clientID: string;
+  readonly wsID: string;
+  readonly baseCookie: string | null;
 };
 
 export interface ViewSyncer {
-  // The SyncContext comes from query parameters.
-  sync(
+  initConnection(
     ctx: SyncContext,
-    initConnectionMessage: InitConnectionBody,
-    updates: CancelableAsyncIterable<Upstream>,
+    msg: InitConnectionMessage,
   ): Promise<CancelableAsyncIterable<Downstream>>;
+
+  changeDesiredQueries(
+    ctx: SyncContext,
+    msg: ChangeDesiredQueriesMessage,
+  ): Promise<void>;
 }
 
 export class ViewSyncerService implements ViewSyncer, Service {
@@ -132,99 +135,108 @@ export class ViewSyncerService implements ViewSyncer, Service {
     this.#lc.info?.('stopped');
   }
 
-  sync(
+  async initConnection(
     ctx: SyncContext,
-    initConnectionMessage: InitConnectionBody,
-    // TODO: Handle non-initial updates.
-    upstream: CancelableAsyncIterable<Upstream>,
+    initConnectionMessage: InitConnectionMessage,
   ): Promise<CancelableAsyncIterable<Downstream>> {
-    // Wait for the initConnection msg before acquiring the #lock.
-    const {clientID, baseCookie} = ctx;
-    const lc = this.#lc.withContext('clientID', clientID);
+    const {clientID, wsID, baseCookie} = ctx;
+    const lc = this.#lc
+      .withContext('clientID', clientID)
+      .withContext('wsID', wsID);
     lc.debug?.('initConnection', initConnectionMessage);
 
-    return this.#lock.withLock(async () => {
-      // Setup the downstream connection.
-      const downstream = new Subscription<Downstream>({
-        cleanup: (_, err) => {
-          if (err) {
-            lc.error?.(`client closed with error`, err);
-          } else {
-            lc.info?.('client closed');
+    // Setup the downstream connection.
+    const downstream = new Subscription<Downstream>({
+      cleanup: (_, err) => {
+        if (err) {
+          lc.error?.(`client closed with error`, err);
+        } else {
+          lc.info?.('client closed');
+        }
+        const c = this.#clients.get(clientID);
+        if (c === client) {
+          this.#clients.delete(clientID);
+
+          if (this.#clients.size === 0) {
+            lc.info?.('no more clients. closing invalidation subscription');
+            this.#invalidationSubscription?.cancel();
+            this.#invalidationSubscription = undefined;
+            this.#hasSyncRequests = resolver<true>();
           }
-          const c = this.#clients.get(clientID);
-          if (c === client) {
-            this.#clients.delete(clientID);
-
-            if (this.#clients.size === 0) {
-              lc.info?.('no more clients. closing invalidation subscription');
-              this.#invalidationSubscription?.cancel();
-              this.#invalidationSubscription = undefined;
-              this.#hasSyncRequests = resolver<true>();
-            }
-          }
-        },
-      });
-
-      const client = new ClientHandler(lc, clientID, baseCookie, downstream);
-
-      try {
-        const {desiredQueriesPatch} = initConnectionMessage;
-        await this.#patchQueries(client, desiredQueriesPatch);
-
-        // Update #clients, close any previous connection.
-        this.#clients.get(clientID)?.close();
-        this.#clients.set(clientID, client);
-
-        // Kick off an async await loop that dispatches subsequent upstream requests.
-        this.handleUpstreamRequests(lc, client, upstream).catch(
-          e => lc.error?.(e),
-        );
-
-        this.#hasSyncRequests.resolve(true);
-      } catch (e) {
-        this.#lc.error?.(`closing connection with error`, e);
-        client.fail(e);
-      }
-      return downstream;
+        }
+      },
     });
+
+    const client = new ClientHandler(
+      lc,
+      clientID,
+      wsID,
+      baseCookie,
+      downstream,
+    );
+
+    // Note: It is tempting to try to re-use #runInLockForClient(), but for
+    // the initConnection case the client is not yet in the #clients map, and
+    // it must be added from within the lock, and only after the desired
+    // queries have been processed.
+    await this.#lock.withLock(async () => {
+      await this.#patchQueries(client, initConnectionMessage[1]);
+
+      // Update #clients, close any previous connection.
+      this.#clients.get(clientID)?.close();
+      this.#clients.set(clientID, client);
+
+      this.#hasSyncRequests.resolve(true);
+    });
+    return downstream;
   }
 
-  async handleUpstreamRequests(
-    lc: LogContext,
-    client: ClientHandler,
-    upstream: CancelableAsyncIterable<Upstream>,
-  ) {
+  async changeDesiredQueries(
+    ctx: SyncContext,
+    msg: ChangeDesiredQueriesMessage,
+  ): Promise<void> {
+    await this.#runInLockForClient<ChangeDesiredQueriesBody>(
+      ctx,
+      msg,
+      (client, body) => this.#patchQueries(client, body),
+    );
+  }
+
+  async #runInLockForClient<B, M extends [cmd: string, B] = [string, B]>(
+    ctx: SyncContext,
+    msg: M,
+    fn: (client: ClientHandler, body: B) => Promise<void>,
+  ): Promise<void> {
+    const {clientID, wsID} = ctx;
+    const lc = this.#lc
+      .withContext('clientID', clientID)
+      .withContext('wsID', wsID);
+
+    const [cmd, body] = msg;
+    lc.debug?.(cmd, body);
+
+    const client = this.#clients.get(clientID);
+    if (client?.wsID !== wsID) {
+      // Only respond to messages of the currently connected client.
+      // Past connections may have been dropped due to an error, so consider them invalid.
+      lc.info?.(`client no longer connected. dropping ${cmd} message`);
+      return;
+    }
+
     try {
-      for await (const up of upstream) {
-        lc.debug?.(`up: `, up);
-        const [op, msg] = up;
-        switch (op) {
-          case 'changeDesiredQueries':
-            await this.#lock.withLock(() =>
-              this.#patchQueries(client, msg.desiredQueriesPatch),
-            );
-            break;
-          case 'deleteClients':
-            lc.info?.(`TODO: Handle deleteClients msg`);
-            break;
-          default:
-            op satisfies 'initConnection' | 'pull' | 'push' | 'ping';
-            // TODO: Make this an Error.
-            lc.error?.(`Unexpected upstream op ${op}: ${stringify(msg)}`);
-            break;
-        }
-      }
-      lc.info?.('upstream connection closed');
-      client.close();
+      await this.#lock.withLock(() => fn(client, body));
     } catch (e) {
       lc.error?.(`closing connection with error`, e);
       client.fail(e);
+      throw e;
     }
   }
 
   // Must be called from within #lock.
-  async #patchQueries(client: ClientHandler, queriesPatch: QueriesPatch) {
+  async #patchQueries(
+    client: ClientHandler,
+    {desiredQueriesPatch}: ChangeDesiredQueriesBody,
+  ) {
     assert(this.#started);
     assert(this.#cvr);
 
@@ -232,7 +244,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     const {clientID} = client;
     const updater = new CVRConfigDrivenUpdater(this.#storage, this.#cvr);
     const added: {id: string; ast: AST}[] = [];
-    for (const patch of queriesPatch) {
+    for (const patch of desiredQueriesPatch) {
       switch (patch.op) {
         case 'put':
           added.push(
