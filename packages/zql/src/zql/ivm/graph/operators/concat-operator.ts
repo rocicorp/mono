@@ -16,8 +16,8 @@ export class ConcatOperator<T extends object> implements Operator {
     this.#inputs = inputs;
     this.#output = output;
     this.#listener = {
-      newDifference: (version, data) => {
-        output.newDifference(version, data);
+      newDifference: (version, data, reply) => {
+        output.newDifference(version, data, reply);
       },
       commit: version => {
         this.commit(version);

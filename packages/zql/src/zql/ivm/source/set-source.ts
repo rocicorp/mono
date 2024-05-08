@@ -77,7 +77,7 @@ export abstract class SetSource<T extends object> implements Source<T> {
           }
         }
 
-        this.#stream.newDifference(version, this.#pending);
+        this.#stream.newDifference(version, this.#pending, undefined);
         this.#pending = [];
       },
       onCommitted: (version: Version) => {
