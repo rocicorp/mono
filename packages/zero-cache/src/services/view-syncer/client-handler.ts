@@ -85,6 +85,7 @@ const PART_COUNT_FLUSH_THRESHOLD = 100;
  */
 export class ClientHandler {
   readonly clientID: string;
+  readonly wsID: string;
   readonly #lc: LogContext;
   readonly #pokes: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
@@ -92,10 +93,12 @@ export class ClientHandler {
   constructor(
     lc: LogContext,
     clientID: string,
+    wsID: string,
     baseCookie: string | null,
     pokes: Subscription<Downstream>,
   ) {
     this.clientID = clientID;
+    this.wsID = wsID;
     this.#lc = lc.withContext('clientID', clientID);
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);

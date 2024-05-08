@@ -2,7 +2,7 @@ import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import type {Downstream, PokePartBody, Upstream} from 'zero-protocol';
+import type {Downstream, PokePartBody} from 'zero-protocol';
 import {TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
@@ -29,9 +29,10 @@ describe('view-syncer/service', () => {
   let storage: FakeDurableObjectStorage;
   let watcher: MockInvalidationWatcher;
   let vs: ViewSyncerService;
-  let upstream: Subscription<Upstream>;
   let viewSyncerDone: Promise<void>;
   let downstream: Queue<Downstream>;
+
+  const SYNC_CONTEXT = {clientID: 'foo', wsID: 'ws1', baseCookie: null};
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_service_test');
@@ -82,18 +83,16 @@ describe('view-syncer/service', () => {
       watcher,
       db,
     );
-    upstream = clientUpstream();
     viewSyncerDone = vs.run();
     downstream = new Queue();
-    const stream = await vs.sync(
-      {clientID: 'foo', baseCookie: null},
+    const stream = await vs.initConnection(SYNC_CONTEXT, [
+      'initConnection',
       {
         desiredQueriesPatch: [
           {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
         ],
       },
-      upstream,
-    );
+    ]);
     void pipeToQueue(stream, downstream);
   });
 
@@ -117,12 +116,6 @@ describe('view-syncer/service', () => {
   });
 
   const serviceID = '9876';
-
-  function clientUpstream(...up: Upstream[]): Subscription<Upstream> {
-    const stream = new Subscription<Upstream>();
-    up.forEach(msg => stream.push(msg));
-    return stream;
-  }
 
   const ISSUES_TITLE_QUERY: AST = {
     select: [
@@ -415,8 +408,18 @@ describe('view-syncer/service', () => {
   test('responds to changeQueriesPatch', async () => {
     await watcher.requests.dequeue();
 
+    // Ignore messages from an old websockets.
+    await vs.changeDesiredQueries({...SYNC_CONTEXT, wsID: 'old-wsid'}, [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash-1234567890', ast: USERS_NAME_QUERY},
+        ],
+      },
+    ]);
+
     // Change the set of queries.
-    upstream.push([
+    await vs.changeDesiredQueries(SYNC_CONTEXT, [
       'changeDesiredQueries',
       {
         desiredQueriesPatch: [
@@ -533,23 +536,16 @@ describe('view-syncer/service', () => {
   };
 
   test('rejects a bad initConnectionMessage', async () => {
-    const stream = await vs.sync(
-      {clientID: 'boo', baseCookie: null},
-      {
-        desiredQueriesPatch: [
-          {op: 'put', hash: 'bad-query', ast: INVALID_QUERY},
-        ],
-      },
-      upstream,
-    );
-    const down = new Queue<Downstream>();
-    void pipeToQueue(stream, down);
-
     let err;
     try {
-      for (let i = 0; i < 3; i++) {
-        await down.dequeue();
-      }
+      await vs.initConnection(SYNC_CONTEXT, [
+        'initConnection',
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: 'bad-query', ast: INVALID_QUERY},
+          ],
+        },
+      ]);
     } catch (e) {
       err = e;
     }
@@ -564,23 +560,28 @@ describe('view-syncer/service', () => {
   test('rejects a bad changeQueriesPatch', async () => {
     await watcher.requests.dequeue();
 
-    // Try adding an invalid query.
-    upstream.push([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {op: 'put', hash: 'query-hash3', ast: INVALID_QUERY},
-        ],
-      },
-    ]);
-
     let err;
     try {
-      for (let i = 0; i < 3; i++) {
-        await downstream.dequeue();
-      }
+      // Try adding an invalid query.
+      await vs.changeDesiredQueries(SYNC_CONTEXT, [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: 'query-hash3', ast: INVALID_QUERY},
+          ],
+        },
+      ]);
     } catch (e) {
       err = e;
+    }
+    expect(err).not.toBeUndefined();
+
+    try {
+      // Catch this too so that vite does not flag an unhandled rejection.
+      await downstream.dequeue();
+      err = undefined;
+    } catch (e) {
+      expect(e).toBe(err);
     }
     expect(err).not.toBeUndefined();
 
