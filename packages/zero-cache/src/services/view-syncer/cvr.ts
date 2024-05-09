@@ -240,21 +240,37 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         schema: 'zero',
         table: 'clients',
         select: [
+          ['clientGroupID', 'clientGroupID'],
           ['clientID', 'clientID'],
           ['lastMutationID', 'lastMutationID'],
         ],
         where: {
           type: 'conjunction',
-          op: 'OR',
-          conditions: Object.keys(this._cvr.clients).map(clientID => ({
-            type: 'simple',
-            field: 'clientID',
-            op: '=',
-            value: {
-              type: 'literal',
-              value: clientID,
+          op: 'AND',
+          conditions: [
+            {
+              type: 'simple',
+              field: 'clientGroupID',
+              op: '=',
+              value: {
+                type: 'literal',
+                value: this._cvr.id,
+              },
             },
-          })),
+            {
+              type: 'conjunction',
+              op: 'OR',
+              conditions: Object.keys(this._cvr.clients).map(clientID => ({
+                type: 'simple',
+                field: 'clientID',
+                op: '=',
+                value: {
+                  type: 'literal',
+                  value: clientID,
+                },
+              })),
+            },
+          ],
         },
       },
       internal: true,

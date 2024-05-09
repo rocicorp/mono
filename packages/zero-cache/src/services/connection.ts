@@ -23,6 +23,7 @@ import {processMutation} from './mutagen/mutagen.js';
  */
 export class Connection {
   readonly #ws: WebSocket;
+  readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #lc: LogContext;
   readonly #upstreamDB: PostgresDB;
@@ -42,6 +43,7 @@ export class Connection {
     ws: WebSocket,
   ) {
     this.#ws = ws;
+    this.#clientGroupID = clientGroupID;
     this.#syncContext = {clientID, wsID, baseCookie};
     this.#lc = lc
       .withContext('clientID', clientID)
@@ -80,11 +82,24 @@ export class Connection {
         case 'ping':
           handlePing(lc, ws);
           break;
-        case 'push':
-          for (const mutation of msg[1].mutations) {
-            await processMutation(lc, this.#upstreamDB, mutation);
+        case 'push': {
+          const {clientGroupID, mutations} = msg[1];
+          if (clientGroupID !== this.#clientGroupID) {
+            throw new Error(
+              `clientGroupID in mutation "${clientGroupID}" does not match ` +
+                `clientGroupID of connection "${this.#clientGroupID}`,
+            );
+          }
+          for (const mutation of mutations) {
+            await processMutation(
+              lc,
+              this.#upstreamDB,
+              clientGroupID,
+              mutation,
+            );
           }
           break;
+        }
         case 'pull':
           lc.error?.('TODO: implement pull');
           break;

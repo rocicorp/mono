@@ -169,6 +169,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     const client = new ClientHandler(
       lc,
+      this.id,
       clientID,
       wsID,
       baseCookie,

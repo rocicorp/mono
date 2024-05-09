@@ -136,7 +136,6 @@ export async function startPostgresReplication(
   await tx.unsafe(stmts.join('\n'));
 
   lc.info?.(`Started initial data synchronization from ${upstreamUri}`);
-  lc.info?.(`!!!!!!Create-Sub-Command ${stmts.join('\n')}`);
 }
 
 type SubscribedTable = {
@@ -341,10 +340,13 @@ function ensurePublishedTables(
     // Send everything as a single batch.
     await tx.unsafe(
       `
-    CREATE SCHEMA zero;
+    CREATE SCHEMA IF NOT EXISTS zero;
     CREATE TABLE zero.clients (
-      "clientID" TEXT PRIMARY KEY,
-      "lastMutationID" BIGINT
+      "clientGroupID"  TEXT   NOT NULL,
+      "clientID"       TEXT   NOT NULL,
+      "lastMutationID" BIGINT,
+      "userID"         TEXT,
+      PRIMARY KEY("clientGroupID", "clientID")
     );
     CREATE PUBLICATION "${ZERO_PUB_PREFIX}meta" FOR TABLES IN SCHEMA zero;
     ${dataPublication}

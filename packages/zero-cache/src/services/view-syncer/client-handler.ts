@@ -84,6 +84,7 @@ const PART_COUNT_FLUSH_THRESHOLD = 100;
  * Handles a single {@link ViewSyncer.sync()} connection.
  */
 export class ClientHandler {
+  readonly #clientGroupID: string;
   readonly clientID: string;
   readonly wsID: string;
   readonly #lc: LogContext;
@@ -92,11 +93,13 @@ export class ClientHandler {
 
   constructor(
     lc: LogContext,
+    clientGroupID: string,
     clientID: string,
     wsID: string,
     baseCookie: string | null,
     pokes: Subscription<Downstream>,
   ) {
+    this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
     this.#lc = lc.withContext('clientID', clientID);
@@ -168,7 +171,7 @@ export class ClientHandler {
         }
         case 'row':
           if (patch.id.schema === 'zero' && patch.id.table === 'clients') {
-            updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+            this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else {
             (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
           }
@@ -198,24 +201,36 @@ export class ClientHandler {
       },
     };
   }
+
+  #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {
+    if (patch.op === 'put' || patch.op === 'merge') {
+      const row = ensureSafeJSON(patch.contents);
+      const {clientGroupID, clientID, lastMutationID} = v.parse(
+        row,
+        lmidRowSchema,
+      );
+      if (clientGroupID !== this.#clientGroupID) {
+        this.#lc.error?.(
+          `Received zero.clients row for wrong clientGroupID. Ignoring.`,
+          clientGroupID,
+        );
+      } else {
+        lmids[clientID] = lastMutationID;
+      }
+    } else {
+      // The 'constrain' and 'del' ops for zero.clients can be ignored.
+      patch.op satisfies 'constrain' | 'del';
+    }
+  }
 }
 
 // Note: The zero.clients table is set up in replicator/initial-sync.ts.
 const lmidRowSchema = v.object({
+  clientGroupID: v.string(),
   clientID: v.string(),
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
+  userID: v.string().optional(),
 });
-
-function updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {
-  if (patch.op === 'put' || patch.op === 'merge') {
-    const row = ensureSafeJSON(patch.contents);
-    const {clientID, lastMutationID} = v.parse(row, lmidRowSchema);
-    lmids[clientID] = lastMutationID;
-  } else {
-    // The 'constrain' and 'del' ops for zero.clients can be ignored.
-    patch.op satisfies 'constrain' | 'del';
-  }
-}
 
 function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
   const {
