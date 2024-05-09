@@ -99,7 +99,7 @@ export class ServiceRunner
       this.#viewSyncers,
       id =>
         new ViewSyncerService(this.#lc, id, this.#storage, this, this.#replica),
-      'ReplicatorService',
+      'ViewSyncer',
     );
   }
 
