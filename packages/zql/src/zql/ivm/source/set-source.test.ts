@@ -254,3 +254,8 @@ test('history requests with an alternate ordering are fulfilled by that ordering
     baseItems.concat({id: 4, x: 'd'}).sort((l, r) => l.x.localeCompare(r.x)),
   );
 });
+
+test('alternate ordering creations', () => {
+  // is created for an ordering
+  // is not created for undefined
+});

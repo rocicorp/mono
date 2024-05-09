@@ -1,5 +1,9 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {TestContext, makeTestContext} from '../context/test-context.js';
+import {
+  makeInfiniteSourceContext,
+  makeTestContext,
+  TestContext,
+} from '../context/test-context.js';
 import type {Source} from '../ivm/source/source.js';
 import {EntityQuery} from './entity-query.js';
 
@@ -19,21 +23,6 @@ describe('a limited window is correctly maintained over differences', () => {
     Array.from({length: 10}, (_, i) => source.add({id: letters[i * 2 + 3]}));
   });
 
-  test('adding values above the established window (asc)', async () => {
-    const stmt = q.select('id').limit(5).prepare();
-    const data = await stmt.exec();
-
-    expect(data.map(x => x.id)).toEqual(['d', 'f', 'h', 'j', 'l']);
-
-    source.add({id: 'p'});
-    const newData = await stmt.exec();
-
-    // if we are limited and in ASC order, things above MAX are not added to the window
-    expect(newData.map(x => x.id)).toEqual(['d', 'f', 'h', 'j', 'l']);
-
-    stmt.destroy();
-  });
-
   test('adding values below the established window (asc)', async () => {
     const stmt = q.select('id').limit(5).prepare();
     const data = await stmt.exec();
@@ -45,8 +34,19 @@ describe('a limited window is correctly maintained over differences', () => {
 
     // if we are limited and in ASC order, things below MIN are added to the window
     expect(newData.map(x => x.id)).toEqual(['c', 'd', 'f', 'h', 'j']);
+  });
 
-    stmt.destroy();
+  test('adding values above the established window (asc)', async () => {
+    const stmt = q.select('id').limit(5).prepare();
+    const data = await stmt.exec();
+
+    expect(data.map(x => x.id)).toEqual(['d', 'f', 'h', 'j', 'l']);
+
+    source.add({id: 'p'});
+    const newData = await stmt.exec();
+
+    // if we are limited and in ASC order, things above MAX are not added to the window
+    expect(newData.map(x => x.id)).toEqual(['d', 'f', 'h', 'j', 'l']);
   });
 
   test('adding values above the established window (desc)', async () => {
@@ -127,4 +127,64 @@ describe('a limited window is correctly maintained over differences', () => {
 
   //   stmt.destroy();
   // });
+});
+
+/**
+ * To make sure `limit` is actually `limiting` the amount of data we're processing
+ * from a source, we need to test it with an infinite source.
+ *
+ * There are some forms of queries which are not supported with an infinite source
+ * but here we test all those that we expect to work.
+ */
+describe('pulling from an infinite source is possible if we set a limit', () => {
+  type E = {
+    id: string;
+  };
+  const infiniteGenerator = {
+    *[Symbol.iterator]() {
+      let i = 0;
+      while (true) {
+        yield [{id: String(++i)}, 1] as const;
+      }
+    },
+  };
+
+  const context = makeInfiniteSourceContext(infiniteGenerator);
+
+  test('bare select', async () => {
+    const q = new EntityQuery<{e: E}>(context, 'e');
+    const stmt = q.select('id').limit(2).prepare();
+    const data = await stmt.exec();
+
+    expect(data).toEqual([{id: '1'}, {id: '2'}]);
+
+    stmt.destroy();
+  });
+
+  test('select and where', async () => {
+    const q = new EntityQuery<{e: E}>(context, 'e');
+    const stmt = q.select('id').where('e.id', '>', '9').limit(2).prepare();
+    const data = await stmt.exec();
+
+    expect(data).toEqual([{id: '90'}, {id: '91'}]);
+
+    stmt.destroy();
+  });
+
+  // TODO(mlaw): test select with alternate ordering. differing fields and same fields but differing direction
+  // TODO(mlaw): test cases for when `withNewOrdering` should or should not be invoked. e.g., join should drop order rn
+
+  // test when the view is sorted by a superset of the fields used to sort the source
+
+  // join currently tries to consume the entire source. This is fixed and tested in later commits.
+  // test('join 2 tables', () => {});
+  // test('join 3 tables', () => {});
+
+  // need the `contiguous groups` optimization
+  // test('group-by', () => {});
+
+  // test:
+  // - concat (or)
+  // - distinct
+  // - concat + distinct (or)
 });

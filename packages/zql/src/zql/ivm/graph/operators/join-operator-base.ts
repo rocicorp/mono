@@ -1,8 +1,20 @@
 import type {Multiset} from '../../multiset.js';
 import type {Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
-import type {Request} from '../message.js';
+
+import type {Reply, Request} from '../message.js';
 import {OperatorBase} from './operator.js';
+
+function convertReply(reply: Reply | undefined): Reply | undefined {
+  if (reply !== undefined) {
+    return {
+      ...reply,
+      // Join does not yet respect order coming from a source.
+      order: undefined,
+    };
+  }
+  return reply;
+}
 
 export class JoinOperatorBase<
   I1 extends object,
@@ -27,7 +39,11 @@ export class JoinOperatorBase<
     super(output);
     this.#listener1 = {
       newDifference: (version, data, reply) => {
-        output.newDifference(version, fn(version, data, undefined), reply);
+        output.newDifference(
+          version,
+          fn(version, data, undefined),
+          convertReply(reply),
+        );
       },
       commit: version => {
         this.commit(version);
@@ -35,7 +51,11 @@ export class JoinOperatorBase<
     };
     this.#listener2 = {
       newDifference: (version, data, reply) => {
-        output.newDifference(version, fn(version, undefined, data), reply);
+        output.newDifference(
+          version,
+          fn(version, undefined, data),
+          convertReply(reply),
+        );
       },
       commit: version => {
         this.commit(version);
