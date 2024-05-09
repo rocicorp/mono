@@ -20,8 +20,9 @@ export class TestContext implements Context {
 
   getSource<T extends Entity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {
-      const source = this.materialite.newSetSource((l: T, r: T) =>
-        compareUTF8(l.id, r.id),
+      const source = this.materialite.newSetSource(
+        (l: T, r: T) => compareUTF8(l.id, r.id),
+        [['id'], 'asc'],
       ) as unknown as Source<object>;
       source.seed([]);
       this.#sources.set(name, source);
@@ -95,11 +96,11 @@ class InfiniteSuorce<T extends object> implements Source<T> {
     });
 
     this.#internal = {
-      onCommitEnqueue() {},
-      onRollback() {},
+      onCommitEnqueue: (_: Version) => {},
       onCommitted: (version: Version) => {
         this.#stream.commit(version);
       },
+      onRollback: () => {},
     };
   }
 

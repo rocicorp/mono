@@ -104,7 +104,11 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     };
 
     let iterator;
-    if (reply === undefined || this.#limit === undefined) {
+    if (
+      reply === undefined ||
+      this.#limit === undefined ||
+      !orderingsAreCompatible(reply.order, this.#order)
+    ) {
       iterator = c[Symbol.iterator]();
     } else {
       // We only get the limited iterator if we're receiving historical data.
@@ -117,7 +121,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     // I.e., all order by columns are present in source?
     // Only the first?
     // If only the first N, then we loop until we meet something beyond the first N and we're
-    // at limimt.
+    // at limit.
     // So source must reply with its order param(s).
     // Then we can iterate correctly.
     // Join will update the reply.
@@ -171,10 +175,6 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     let last: T | undefined = undefined;
     const comparator = this.#comparator;
 
-    // source order may be a subset of desired order
-    // in which case we process until we hit the next thing after
-    // the source order order after we hit the limit.
-
     if (this.#order === undefined || fieldsMatch(fields, this.#order[0])) {
       return {
         next() {
@@ -192,9 +192,10 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
       };
     }
 
-    // The source order is a subset of the desired order.
-    // We keep porcessing beyond `limit` until we hit the next
-    // thing according to source order.
+    // source order may be a subset of desired order
+    // e.g., [modified] vs [modified, created]
+    // in which case we process until we hit the next thing after
+    // the source order after we hit the limit.
     if (fields[0] !== this.#order[0][0]) {
       throw new Error(
         `Order must overlap on at least one field! Got: ${fields[0]} | ${
@@ -343,4 +344,34 @@ function remove<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
   data = data.without(value);
   return data;
+}
+
+function orderingsAreCompatible(
+  sourceOrder: Ordering | undefined,
+  destOrder: Ordering | undefined,
+) {
+  // destination doesn't care about order. Ok.
+  if (destOrder === undefined) {
+    return true;
+  }
+
+  // source is unordered, not ok.
+  if (sourceOrder === undefined) {
+    return false;
+  }
+
+  // asc/desc differ.
+  if (sourceOrder[1] !== destOrder[1]) {
+    return false;
+  }
+
+  const sourceFields = sourceOrder[0];
+  const destFields = destOrder[0];
+
+  // If at least the left most field is the same, we're compatible.
+  if (sourceFields[0] === destFields[0]) {
+    return true;
+  }
+
+  return false;
 }
