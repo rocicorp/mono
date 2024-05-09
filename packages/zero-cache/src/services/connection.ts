@@ -2,15 +2,11 @@ import type {LogContext} from '@rocicorp/logger';
 import * as valita from 'shared/src/valita.js';
 import {Downstream, PongMessage, upstreamSchema} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
-import type {
-  SyncContext,
-  ViewSyncerService,
-} from './view-syncer/view-syncer.js';
+import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 // TODO(mlaw): break dependency on reflect-server
 import {closeWithError} from 'reflect-server/socket';
-import type {PostgresDB} from '../types/pg.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
-import {processMutation} from './mutagen/mutagen.js';
+import type {Mutagen} from './mutagen/mutagen.js';
 
 /**
  * Represents a connection between the client and server.
@@ -25,15 +21,14 @@ export class Connection {
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #lc: LogContext;
-  readonly #upstreamDB: PostgresDB;
 
-  readonly #viewSyncer: ViewSyncerService;
+  readonly #viewSyncer: ViewSyncer;
+  readonly #mutagen: Mutagen;
 
   #outboundStream: CancelableAsyncIterable<Downstream> | undefined;
 
   constructor(
     lc: LogContext,
-    db: PostgresDB,
     serviceRunner: ServiceRunner,
     clientGroupID: string,
     clientID: string,
@@ -48,9 +43,10 @@ export class Connection {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
-    this.#upstreamDB = db;
 
     this.#viewSyncer = serviceRunner.getViewSyncer(clientGroupID);
+    this.#mutagen = serviceRunner.getMutagen(clientGroupID);
+
     this.#ws.addEventListener('message', this.#onMessage);
   }
 
@@ -89,12 +85,7 @@ export class Connection {
             );
           }
           for (const mutation of mutations) {
-            await processMutation(
-              lc,
-              this.#upstreamDB,
-              clientGroupID,
-              mutation,
-            );
+            await this.#mutagen.processMutation(mutation);
           }
           break;
         }
