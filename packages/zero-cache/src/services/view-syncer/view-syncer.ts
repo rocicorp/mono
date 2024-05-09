@@ -371,19 +371,21 @@ export class ViewSyncerService implements ViewSyncer, Service {
     // and the cursor page size limits the amount of row content in memory.
     const cursorPageSize = 1000; // TODO: something less arbitrary.
     const queriesDone = queriesToExecute.map(q =>
-      reader.processReadTask(tx => {
+      reader.processReadTask(async tx => {
         const {query, values} = q.transformedAST.query();
         const {queryIDs} = q;
         lc.debug?.(`executing [${queryIDs}]: ${query}`);
 
-        return tx.unsafe(query, values).cursor(cursorPageSize, async rows => {
+        for await (const rows of tx
+          .unsafe(query, values)
+          .cursor(cursorPageSize)) {
           lc.debug?.(`processing ${rows.length} for queries ${queryIDs}`);
           const parsed = resultParser.parseResults(queryIDs, rows);
           const patches = await updater.received(lc, parsed);
           patches.forEach(patch =>
             pokers.forEach(poker => poker.addPatch(patch)),
           );
-        });
+        }
       }),
     );
 
