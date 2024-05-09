@@ -27,8 +27,13 @@ import {must} from 'shared/src/must.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {
+  CRUDMutation,
+  CRUDMutationArg,
+  CRUD_MUTATION_NAME,
   ConnectedMessage,
+  CustomMutation,
   Downstream,
+  MutationType,
   NullableVersion,
   PingMessage,
   PokeEndMessage,
@@ -1036,20 +1041,31 @@ export class Zero<QD extends QueryDefs> {
     const now = Date.now();
     for (let i = start; i < req.mutations.length; i++) {
       const m = req.mutations[i];
+      const timestamp = now - Math.round(performance.now() - m.timestamp);
+      const zeroM =
+        m.name === CRUD_MUTATION_NAME
+          ? ({
+              type: MutationType.CRUD,
+              timestamp,
+              id: m.id,
+              clientID: m.clientID,
+              name: m.name,
+              args: [m.args as CRUDMutationArg],
+            } satisfies CRUDMutation)
+          : ({
+              type: MutationType.Custom,
+              timestamp,
+              id: m.id,
+              clientID: m.clientID,
+              name: m.name,
+              args: [m.args],
+            } satisfies CustomMutation);
       const msg: PushMessage = [
         'push',
         {
           timestamp: now,
           clientGroupID: req.clientGroupID,
-          mutations: [
-            {
-              timestamp: now - Math.round(performance.now() - m.timestamp),
-              id: m.id,
-              clientID: m.clientID,
-              name: m.name,
-              args: [m.args],
-            },
-          ],
+          mutations: [zeroM],
           pushVersion: req.pushVersion,
           schemaVersion: req.schemaVersion,
           requestID,

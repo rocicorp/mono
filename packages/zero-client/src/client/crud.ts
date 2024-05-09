@@ -3,10 +3,11 @@ import type {MutatorDefs, WriteTransaction} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {EntityID} from 'zero-protocol/src/entity.js';
-import type {
+import {
   CRUDMutationArg,
   CRUDOp,
   CRUDOpKind,
+  CRUD_MUTATION_NAME,
   CreateOp,
   DeleteOp,
   SetOp,
@@ -46,7 +47,7 @@ export type CRUDBatch<QD extends QueryDefs> = <R>(
 ) => Promise<R>;
 
 type ZeroCRUDMutate = {
-  ['_zero_crud']: CRUDMutate;
+  [CRUD_MUTATION_NAME]: CRUDMutate;
 };
 
 /**
@@ -58,7 +59,7 @@ export function makeCRUDMutate<QD extends QueryDefs>(
   queries: QueryParseDefs<QD>,
   repMutate: ZeroCRUDMutate,
 ): MakeCRUDMutate<QD> {
-  const {_zero_crud: zeroCRUD} = repMutate;
+  const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
   let inBatch = false;
 
   const mutate = async <R>(body: (m: BaseCRUDMutate<QD>) => R): Promise<R> => {
@@ -185,7 +186,7 @@ function makeBatchCRUDMutate<E extends Entity>(
 }
 
 export type WithCRUD<MD extends MutatorDefs> = MD & {
-  ['_zero_crud']: CRUDMutator;
+  [CRUD_MUTATION_NAME]: CRUDMutator;
 };
 
 export type CRUDMutate = (crudArg: CRUDMutationArg) => Promise<void>;
