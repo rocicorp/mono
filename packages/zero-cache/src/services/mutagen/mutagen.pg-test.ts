@@ -2,6 +2,7 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation, readLastMutationID} from './mutagen.js';
+import {MutationType, type CRUDMutation} from 'zero-protocol';
 
 async function createTables(db: PostgresDB) {
   await db.unsafe(`
@@ -44,6 +45,7 @@ describe('processMutation', () => {
     });
 
     await processMutation(undefined, db, 'abc', {
+      type: MutationType.CRUD,
       id: 1,
       clientID: '123',
       name: '_zero_crud',
@@ -79,6 +81,7 @@ describe('processMutation', () => {
     });
 
     await processMutation(undefined, db, 'abc', {
+      type: MutationType.CRUD,
       id: 2,
       clientID: '123',
       name: '_zero_crud',
@@ -114,6 +117,7 @@ describe('processMutation', () => {
     });
 
     await processMutation(undefined, db, 'abc', {
+      type: MutationType.CRUD,
       id: 1,
       clientID: '123',
       name: '_zero_crud',
@@ -150,6 +154,7 @@ describe('processMutation', () => {
 
     await expect(
       processMutation(undefined, db, 'abc', {
+        type: MutationType.CRUD,
         id: 3,
         clientID: '123',
         name: '_zero_crud',
@@ -172,6 +177,7 @@ describe('processMutation', () => {
 
   test('process create, set, update, delete all at once', async () => {
     await processMutation(undefined, db, 'abc', {
+      type: MutationType.CRUD,
       id: 1,
       clientID: '123',
       name: '_zero_crud',
@@ -221,7 +227,7 @@ describe('processMutation', () => {
         },
       ],
       timestamp: Date.now(),
-    });
+    } satisfies CRUDMutation);
 
     const rows = await db`SELECT * FROM id_and_cols`;
     expect(rows).toEqual([
