@@ -796,6 +796,28 @@ describe('view-syncer/service', () => {
     );
   });
 
+  test('disconnects on unexpected query result error', async () => {
+    // This will result in failing the query parsing.
+    await db`UPDATE issues SET _0_version = '' WHERE id = '4';`;
+
+    await watcher.requests.dequeue();
+    await watcher.notify({
+      fromVersion: null,
+      newVersion: '1xz',
+      invalidatedQueries: new Set(),
+    });
+
+    let err;
+    try {
+      for (let i = 0; i < 3; i++) {
+        await downstream.dequeue();
+      }
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
+  });
+
   class MockInvalidationWatcher
     implements InvalidationWatcher, InvalidationWatcherRegistry
   {

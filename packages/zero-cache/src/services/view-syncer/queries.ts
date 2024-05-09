@@ -182,7 +182,7 @@ class ResultParser {
           );
           continue;
         }
-        if (typeof rowVersion !== 'string') {
+        if (typeof rowVersion !== 'string' || rowVersion.length === 0) {
           throw new Error(`Invalid _0_version in ${stringify(rowWithVersion)}`);
         }
 
