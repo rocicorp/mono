@@ -7,7 +7,7 @@ import {
 } from '../../test/do.js';
 import {createSilentLogContext} from '../../test/logger.js';
 import {rowIDHash} from '../../types/row-key.js';
-import {cond, or} from '../../zql/query-test-util.js';
+import {and, cond, or} from '../../zql/query-test-util.js';
 import type {PatchToVersion} from './client-handler.js';
 import {
   CVRConfigDrivenUpdater,
@@ -330,12 +330,16 @@ describe('view-syncer/cvr', () => {
               schema: 'zero',
               table: 'clients',
               select: [
+                ['clientGroupID', 'clientGroupID'],
                 ['clientID', 'clientID'],
                 ['lastMutationID', 'lastMutationID'],
               ],
-              where: or(
-                ...['dooClient', 'fooClient', 'barClient', 'bonkClient'].map(
-                  id => cond('clientID', '=', id),
+              where: and(
+                cond('clientGroupID', '=', 'abc123'),
+                or(
+                  ...['dooClient', 'fooClient', 'barClient', 'bonkClient'].map(
+                    id => cond('clientID', '=', id),
+                  ),
                 ),
               ),
             },

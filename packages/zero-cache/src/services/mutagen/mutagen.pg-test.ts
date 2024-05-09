@@ -17,8 +17,11 @@ async function createTables(db: PostgresDB) {
       );
       CREATE SCHEMA zero;
       CREATE TABLE zero.clients (
-        "clientID" TEXT PRIMARY KEY,
-        "lastMutationID" BIGINT
+        "clientGroupID"  TEXT NOT NULL,
+        "clientID"       TEXT NOT NULL,
+        "lastMutationID" BIGINT,
+        "userID"         TEXT,
+        PRIMARY KEY ("clientGroupID", "clientID")
       );
     `);
 }
@@ -36,13 +39,13 @@ describe('processMutation', () => {
 
   test('new client with no last mutation id', async () => {
     await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, '1');
+      const mid = await readLastMutationID(tx, 'abc', '123');
       expect(mid).toBe(0n);
     });
 
-    await processMutation(undefined, db, {
+    await processMutation(undefined, db, 'abc', {
       id: 1,
-      clientID: '1',
+      clientID: '123',
       name: '_zero_crud',
       args: [
         {
@@ -60,7 +63,7 @@ describe('processMutation', () => {
     });
 
     await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, '1');
+      const mid = await readLastMutationID(tx, 'abc', '123');
       expect(mid).toBe(1n);
     });
 
@@ -70,12 +73,14 @@ describe('processMutation', () => {
 
   test('next sequential mutation for previously seen client', async () => {
     await db.begin(async tx => {
-      await tx`INSERT INTO zero.clients ("clientID", "lastMutationID") VALUES ('1', 1)`;
+      await tx`
+      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
+         VALUES ('abc', '123', 1)`;
     });
 
-    await processMutation(undefined, db, {
+    await processMutation(undefined, db, 'abc', {
       id: 2,
-      clientID: '1',
+      clientID: '123',
       name: '_zero_crud',
       args: [
         {
@@ -93,7 +98,7 @@ describe('processMutation', () => {
     });
 
     await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, '1');
+      const mid = await readLastMutationID(tx, 'abc', '123');
       expect(mid).toBe(2n);
     });
 
@@ -103,12 +108,14 @@ describe('processMutation', () => {
 
   test('old mutations are skipped', async () => {
     await db.begin(async tx => {
-      await tx`INSERT INTO zero.clients ("clientID", "lastMutationID") VALUES ('1', 2)`;
+      await tx`
+      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 2)`;
     });
 
-    await processMutation(undefined, db, {
+    await processMutation(undefined, db, 'abc', {
       id: 1,
-      clientID: '1',
+      clientID: '123',
       name: '_zero_crud',
       args: [
         {
@@ -126,7 +133,7 @@ describe('processMutation', () => {
     });
 
     await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, '1');
+      const mid = await readLastMutationID(tx, 'abc', '123');
       expect(mid).toBe(2n);
     });
 
@@ -136,13 +143,15 @@ describe('processMutation', () => {
 
   test('mutation id too far in the future throws', async () => {
     await db.begin(async tx => {
-      await tx`INSERT INTO zero.clients ("clientID", "lastMutationID") VALUES ('1', 1)`;
+      await tx`
+      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 1)`;
     });
 
     await expect(
-      processMutation(undefined, db, {
+      processMutation(undefined, db, 'abc', {
         id: 3,
-        clientID: '1',
+        clientID: '123',
         name: '_zero_crud',
         args: [
           {
@@ -162,9 +171,9 @@ describe('processMutation', () => {
   });
 
   test('process create, set, update, delete all at once', async () => {
-    await processMutation(undefined, db, {
+    await processMutation(undefined, db, 'abc', {
       id: 1,
-      clientID: '1',
+      clientID: '123',
       name: '_zero_crud',
       args: [
         {

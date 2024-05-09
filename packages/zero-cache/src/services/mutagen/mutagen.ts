@@ -1,19 +1,20 @@
+import type {LogContext} from '@rocicorp/logger';
+import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import type {
-  Mutation,
   CRUDMutation,
   CreateOp,
+  DeleteOp,
+  Mutation,
   SetOp,
   UpdateOp,
-  DeleteOp,
 } from 'zero-protocol/src/push.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
-import type postgres from 'postgres';
-import type {LogContext} from '@rocicorp/logger';
 
 export async function processMutation(
   lc: LogContext | undefined,
   db: PostgresDB,
+  clientGroupID: string,
   mutation: Mutation,
 ) {
   assert(mutation.name === '_zero_crud', 'Only CRUD mutations are supported');
@@ -23,7 +24,12 @@ export async function processMutation(
   try {
     const start = Date.now();
     await db.begin(async tx => {
-      await processMutationWithTx(lc, tx, mutation as CRUDMutation);
+      await processMutationWithTx(
+        lc,
+        tx,
+        clientGroupID,
+        mutation as CRUDMutation,
+      );
     });
     lc?.withContext('mutationTiming', Date.now() - start);
     lc?.debug?.('Process mutation complete');
@@ -36,9 +42,14 @@ export async function processMutation(
 async function processMutationWithTx(
   lc: LogContext | undefined,
   tx: PostgresTransaction,
+  clientGroupID: string,
   mutation: CRUDMutation,
 ) {
-  const lastMutationID = await readLastMutationID(tx, mutation.clientID);
+  const lastMutationID = await readLastMutationID(
+    tx,
+    clientGroupID,
+    mutation.clientID,
+  );
   const expectedMutationID = lastMutationID + 1n;
 
   if (mutation.id < expectedMutationID) {
@@ -76,7 +87,12 @@ async function processMutationWithTx(
   // All the CRUD operations were dispatched serially (above).
   // Now wait for their completion and then update `lastMutationID`.
   await Promise.all(queryPromises);
-  await writeLastMutationID(tx, mutation.clientID, expectedMutationID);
+  await writeLastMutationID(
+    tx,
+    clientGroupID,
+    mutation.clientID,
+    expectedMutationID,
+  );
 }
 
 export function getCreateSQL(
@@ -138,10 +154,12 @@ function getDeleteSQL(
 
 export async function readLastMutationID(
   tx: postgres.TransactionSql,
+  clientGroupID: string,
   clientID: string,
 ): Promise<bigint> {
-  const rows =
-    await tx`SELECT "lastMutationID" FROM zero.clients WHERE "clientID" = ${clientID}`;
+  const rows = await tx`
+    SELECT "lastMutationID" FROM zero.clients 
+    WHERE "clientGroupID" = ${clientGroupID} AND "clientID" = ${clientID}`;
   if (rows.length === 0) {
     return 0n;
   }
@@ -150,13 +168,14 @@ export async function readLastMutationID(
 
 function writeLastMutationID(
   tx: PostgresTransaction,
+  clientGroupID: string,
   clientID: string,
   nextMutationID: bigint,
 ) {
   return tx`
-    INSERT INTO zero.clients ("clientID", "lastMutationID")
-    VALUES (${clientID}, ${nextMutationID})
-    ON CONFLICT ("clientID")
+    INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID")
+    VALUES (${clientGroupID}, ${clientID}, ${nextMutationID})
+    ON CONFLICT ("clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = ${nextMutationID}
   `;
 }

@@ -21,6 +21,12 @@ const REPLICA_ID = 'initial_sync_test_id';
 
 const ZERO_CLIENTS_SPEC: TableSpec = {
   columns: {
+    clientGroupID: {
+      characterMaximumLength: null,
+      columnDefault: null,
+      dataType: 'text',
+      notNull: true,
+    },
     clientID: {
       characterMaximumLength: null,
       columnDefault: null,
@@ -33,9 +39,15 @@ const ZERO_CLIENTS_SPEC: TableSpec = {
       dataType: 'int8',
       notNull: false,
     },
+    userID: {
+      characterMaximumLength: null,
+      columnDefault: null,
+      dataType: 'text',
+      notNull: false,
+    },
   },
   name: 'clients',
-  primaryKey: ['clientID'],
+  primaryKey: ['clientGroupID', 'clientID'],
   schema: 'zero',
 } as const;
 
@@ -81,8 +93,11 @@ describe('replicator/initial-sync', () => {
       setupUpstreamQuery: `
       CREATE SCHEMA zero;
       CREATE TABLE zero.clients (
-       "clientID" TEXT PRIMARY KEY,
-        "lastMutationID" BIGINT
+        "clientGroupID"  TEXT    NOT NULL,
+        "clientID"       TEXT    NOT NULL,
+        "lastMutationID" BIGINT,
+        "userID"         TEXT,
+        PRIMARY KEY("clientGroupID", "clientID")
       );
       CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
       CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA zero, public;

@@ -27,11 +27,11 @@ describe('view-syncer/client-handler', () => {
     const lc = createSilentLogContext();
     const handlers = [
       // Client 1 is already caught up.
-      new ClientHandler(lc, 'id1', 'ws1', '121', subscriptions[0]),
+      new ClientHandler(lc, 'g1', 'id1', 'ws1', '121', subscriptions[0]),
       // Client 2 is a bit behind.
-      new ClientHandler(lc, 'id2', 'ws2', '120:01', subscriptions[1]),
+      new ClientHandler(lc, 'g1', 'id2', 'ws2', '120:01', subscriptions[1]),
       // Client 3 is more behind.
-      new ClientHandler(lc, 'id3', 'ws3', '11z', subscriptions[2]),
+      new ClientHandler(lc, 'g1', 'id3', 'ws3', '11z', subscriptions[2]),
     ];
 
     let pokers = handlers.map(client => client.startPoke(poke1Version));
@@ -69,7 +69,11 @@ describe('view-syncer/client-handler', () => {
             table: 'clients',
             rowKey: {clientID: 'bar'},
           },
-          contents: {clientID: 'bar', lastMutationID: 321n},
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'bar',
+            lastMutationID: 321n,
+          },
         },
       });
       poker.addPatch({
@@ -105,7 +109,11 @@ describe('view-syncer/client-handler', () => {
             table: 'clients',
             rowKey: {clientID: 'foo'},
           },
-          contents: {clientID: 'foo', lastMutationID: 123n},
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'foo',
+            lastMutationID: 123n,
+          },
         },
       });
       poker.addPatch({
@@ -144,7 +152,11 @@ describe('view-syncer/client-handler', () => {
             table: 'clients',
             rowKey: {clientID: 'foo'},
           },
-          contents: {clientID: 'foo', lastMutationID: 124n},
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'foo',
+            lastMutationID: 124n,
+          },
         },
       });
 
@@ -299,7 +311,11 @@ describe('view-syncer/client-handler', () => {
         type: 'row',
         op: 'put',
         id: {schema: 'zero', table: 'clients', rowKey: {clientID: 'boo'}},
-        contents: {clientID: 'boo', lastMutationID: 98371234123423412341238n},
+        contents: {
+          clientGroupID: 'g1',
+          clientID: 'boo',
+          lastMutationID: 98371234123423412341238n,
+        },
       },
     ] satisfies Patch[]) {
       let terminated = false;
@@ -311,6 +327,7 @@ describe('view-syncer/client-handler', () => {
 
       const handler = new ClientHandler(
         createSilentLogContext(),
+        'g1',
         'id1',
         'ws1',
         '121',

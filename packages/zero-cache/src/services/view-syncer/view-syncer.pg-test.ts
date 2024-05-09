@@ -22,6 +22,40 @@ import type {TableSpec} from '../replicator/tables/specs.js';
 import {loadCVR} from './cvr.js';
 import {ViewSyncerService} from './view-syncer.js';
 
+const EXPECTED_LMIDS_AST: AST = {
+  schema: 'zero',
+  table: 'clients',
+  select: [
+    ['clientGroupID', 'clientGroupID'],
+    ['clientID', 'clientID'],
+    ['lastMutationID', 'lastMutationID'],
+  ],
+  where: {
+    type: 'conjunction',
+    op: 'AND',
+    conditions: [
+      {
+        type: 'simple',
+        op: '=',
+        field: 'clientGroupID',
+        value: {type: 'literal', value: '9876'},
+      },
+      {
+        type: 'conjunction',
+        op: 'OR',
+        conditions: [
+          {
+            type: 'simple',
+            op: '=',
+            field: 'clientID',
+            value: {type: 'literal', value: 'foo'},
+          },
+        ],
+      },
+    ],
+  },
+};
+
 describe('view-syncer/service', () => {
   let db: PostgresDB;
   const lc = createSilentLogContext();
@@ -39,9 +73,12 @@ describe('view-syncer/service', () => {
     await db`
     CREATE SCHEMA zero;
     CREATE TABLE zero.clients (
-      "clientID" TEXT PRIMARY KEY,
+      "clientGroupID"  TEXT NOT NULL,
+      "clientID"       TEXT NOT NULL,
       "lastMutationID" BIGINT,
-      _0_version VARCHAR(38)
+      "userID"         TEXT,
+      _0_version VARCHAR(38),
+      PRIMARY KEY ("clientGroupID", "clientID")
     );
     CREATE TABLE issues (
       id text PRIMARY KEY,
@@ -57,8 +94,8 @@ describe('view-syncer/service', () => {
       _0_version VARCHAR(38)
     );
 
-    INSERT INTO zero.clients ("clientID", "lastMutationID", _0_version)
-                      VALUES ('foo', 42, '0a');
+    INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID", _0_version)
+                      VALUES ('9876', 'foo', 42, '0a');
 
     INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '0a');
     INSERT INTO users (id, name,  _0_version) VALUES ('101', 'Bob', '0b');
@@ -253,26 +290,7 @@ describe('view-syncer/service', () => {
       id: '9876',
       queries: {
         'lmids': {
-          ast: {
-            schema: 'zero',
-            table: 'clients',
-            select: [
-              ['clientID', 'clientID'],
-              ['lastMutationID', 'lastMutationID'],
-            ],
-            where: {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  op: '=',
-                  field: 'clientID',
-                  value: {type: 'literal', value: 'foo'},
-                },
-              ],
-            },
-          },
+          ast: EXPECTED_LMIDS_AST,
           internal: true,
           id: 'lmids',
           transformationVersion: {stateVersion: '1xz'},
@@ -334,9 +352,18 @@ describe('view-syncer/service', () => {
           rowVersion: '1cd',
         },
         {
-          id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
+          id: {
+            rowKey: {clientGroupID: '9876', clientID: 'foo'},
+            schema: 'zero',
+            table: 'clients',
+          },
           patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+          queriedColumns: {
+            clientGroupID: ['lmids'],
+            clientID: ['lmids'],
+            lastMutationID: ['lmids'],
+          },
+
           rowVersion: '0a',
         },
       ]),
@@ -388,13 +415,13 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
+          '/vs/cvr/9876/p/d/1xz/r/Fck9j70JNRFEeb3ry5TrEw',
           {
-            columns: ['clientID', 'lastMutationID'],
+            columns: ['clientGroupID', 'clientID', 'lastMutationID'],
             id: {
               schema: 'zero',
               table: 'clients',
-              rowKey: {clientID: 'foo'},
+              rowKey: {clientGroupID: '9876', clientID: 'foo'},
             },
             op: 'put',
             rowVersion: '0a',
@@ -494,26 +521,7 @@ describe('view-syncer/service', () => {
       id: '9876',
       queries: {
         'lmids': {
-          ast: {
-            schema: 'zero',
-            table: 'clients',
-            select: [
-              ['clientID', 'clientID'],
-              ['lastMutationID', 'lastMutationID'],
-            ],
-            where: {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  op: '=',
-                  field: 'clientID',
-                  value: {type: 'literal', value: 'foo'},
-                },
-              ],
-            },
-          },
+          ast: EXPECTED_LMIDS_AST,
           internal: true,
           id: 'lmids',
           transformationVersion: {stateVersion: '1xz'},
@@ -598,26 +606,7 @@ describe('view-syncer/service', () => {
       id: '9876',
       queries: {
         'lmids': {
-          ast: {
-            schema: 'zero',
-            table: 'clients',
-            select: [
-              ['clientID', 'clientID'],
-              ['lastMutationID', 'lastMutationID'],
-            ],
-            where: {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  op: '=',
-                  field: 'clientID',
-                  value: {type: 'literal', value: 'foo'},
-                },
-              ],
-            },
-          },
+          ast: EXPECTED_LMIDS_AST,
           internal: true,
           id: 'lmids',
         },
@@ -666,26 +655,7 @@ describe('view-syncer/service', () => {
       id: '9876',
       queries: {
         'lmids': {
-          ast: {
-            schema: 'zero',
-            table: 'clients',
-            select: [
-              ['clientID', 'clientID'],
-              ['lastMutationID', 'lastMutationID'],
-            ],
-            where: {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  op: '=',
-                  field: 'clientID',
-                  value: {type: 'literal', value: 'foo'},
-                },
-              ],
-            },
-          },
+          ast: EXPECTED_LMIDS_AST,
           internal: true,
           id: 'lmids',
           transformationVersion: {stateVersion: '1xz'},
@@ -747,9 +717,17 @@ describe('view-syncer/service', () => {
           rowVersion: '1cd',
         },
         {
-          id: {rowKey: {clientID: 'foo'}, schema: 'zero', table: 'clients'},
+          id: {
+            rowKey: {clientGroupID: '9876', clientID: 'foo'},
+            schema: 'zero',
+            table: 'clients',
+          },
           patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {clientID: ['lmids'], lastMutationID: ['lmids']},
+          queriedColumns: {
+            clientGroupID: ['lmids'],
+            clientID: ['lmids'],
+            lastMutationID: ['lmids'],
+          },
           rowVersion: '0a',
         },
       ]),
@@ -801,13 +779,13 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/RRjZLHnRXDtSeGWxUc_a4w',
+          '/vs/cvr/9876/p/d/1xz/r/Fck9j70JNRFEeb3ry5TrEw',
           {
-            columns: ['clientID', 'lastMutationID'],
+            columns: ['clientGroupID', 'clientID', 'lastMutationID'],
             id: {
               schema: 'zero',
               table: 'clients',
-              rowKey: {clientID: 'foo'},
+              rowKey: {clientGroupID: '9876', clientID: 'foo'},
             },
             op: 'put',
             rowVersion: '0a',
