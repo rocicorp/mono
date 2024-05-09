@@ -83,14 +83,14 @@ export class Connection {
           handlePing(lc, ws);
           break;
         case 'push': {
-          const {clientGroupID} = msg[1];
+          const {clientGroupID, mutations} = msg[1];
           if (clientGroupID !== this.#clientGroupID) {
             throw new Error(
               `clientGroupID in mutation "${clientGroupID}" does not match ` +
                 `clientGroupID of connection "${this.#clientGroupID}`,
             );
           }
-          for (const mutation of msg[1].mutations) {
+          for (const mutation of mutations) {
             await processMutation(
               lc,
               this.#upstreamDB,

@@ -340,7 +340,7 @@ function ensurePublishedTables(
     // Send everything as a single batch.
     await tx.unsafe(
       `
-    CREATE SCHEMA zero;
+    CREATE SCHEMA IF NOT EXISTS zero;
     CREATE TABLE zero.clients (
       "clientGroupID"  TEXT   NOT NULL,
       "clientID"       TEXT   NOT NULL,
