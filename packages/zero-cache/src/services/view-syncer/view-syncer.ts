@@ -90,49 +90,54 @@ export class ViewSyncerService implements ViewSyncer, Service {
     assert(!this.#started, `ViewSyncer ${this.id} has already been started`);
     this.#started = true;
 
-    await this.#lock.withLock(async () => {
-      await initStorageSchema(
-        this.#lc,
-        this.#storage,
-        schemaRoot,
-        SCHEMA_MIGRATIONS,
-      );
-      this.#cvr = await loadCVR(this.#storage, this.id);
-    });
+    try {
+      await this.#lock.withLock(async () => {
+        await initStorageSchema(
+          this.#lc,
+          this.#storage,
+          schemaRoot,
+          SCHEMA_MIGRATIONS,
+        );
+        this.#cvr = await loadCVR(this.#storage, this.id);
+      });
 
-    this.#lc.info?.('started');
+      this.#lc.info?.('started');
 
-    while (
-      await Promise.race([
-        this.#shouldRun.promise, // resolves to false on stop()
-        this.#hasSyncRequests.promise, // resolves to true on a sync request
-        // TODO: Figure out idle shutdown + incoming sync() race condition.
-        //       Maybe it's the ServiceRunner that needs to track this.
-        // sleep(IDLE_TIMEOUT_MS),
-      ])
-    ) {
-      const {subscription, handleInvalidations} = await this.#lock.withLock(
-        () => this.#watchInvalidations(),
-      );
-      if (this.#stopped) {
-        // Cancel the subscription that started concurrently with stop().
-        await this.stop();
-        break;
+      while (
+        await Promise.race([
+          this.#shouldRun.promise, // resolves to false on stop()
+          this.#hasSyncRequests.promise, // resolves to true on a sync request
+          // TODO: Figure out idle shutdown + incoming sync() race condition.
+          //       Maybe it's the ServiceRunner that needs to track this.
+          // sleep(IDLE_TIMEOUT_MS),
+        ])
+      ) {
+        const {subscription, handleInvalidations} = await this.#lock.withLock(
+          () => this.#watchInvalidations(),
+        );
+        if (this.#stopped) {
+          // Cancel the subscription that started concurrently with stop().
+          await this.stop();
+          break;
+        }
+        for await (const update of subscription) {
+          await this.#lock.withLock(async () => {
+            if (!this.#invalidationSubscription) {
+              return; // Subscription was canceled. Update must be dropped.
+            }
+            await handleInvalidations(update);
+          });
+        }
+
+        this.#invalidationSubscription = undefined;
+        this.#lc.info?.(`waiting for syncers`);
       }
-      for await (const update of subscription) {
-        await this.#lock.withLock(async () => {
-          if (!this.#invalidationSubscription) {
-            return; // Subscription was canceled. Update must be dropped.
-          }
-          await handleInvalidations(update);
-        });
-      }
-
-      this.#invalidationSubscription = undefined;
-      this.#lc.info?.(`waiting for syncers`);
+    } catch (e) {
+      this.#lc.error?.(e);
+    } finally {
+      await this.stop();
+      this.#lc.info?.('stopped');
     }
-
-    this.#lc.info?.('stopped');
   }
 
   async initConnection(
