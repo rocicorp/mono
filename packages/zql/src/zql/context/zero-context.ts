@@ -29,6 +29,7 @@ export class ZeroContext implements Context {
   }
 
   getSource<T extends Entity>(name: string): Source<T> {
+    // TODO(mlaw): we should eventually evict sources that are no longer used.
     return this.#sourceStore.getSource(name) as unknown as Source<T>;
   }
 
@@ -102,7 +103,13 @@ class ZeroSource {
         // really need to do it this way the only way to do this would be to
         // use the JSON string as a key. But since the storage is KV store we
         // can do better. The #canonicalSource should not be a "Set" but a
-        // "Map".
+        // "Map". <-- If we make it a `Map` then we cannot efficiently implement range queries.
+        // We need to be able to perform an in-order iteration over the source for range queries.
+        // Range queries are implemented by creating a source in the desired order.
+        // If joins are involved and the result of the join needs to be ordered,
+        // it is done so by iterating over the source that determines the result order
+        // as the outer loop of the join. If two sources determine order then the leftmost one
+        // in the order-by is the outer loop.
         const old = this.#canonicalSource.get(diff.oldValue as Entity);
         assert(old, 'oldValue not found in canonical source');
         this.#canonicalSource.delete(old);

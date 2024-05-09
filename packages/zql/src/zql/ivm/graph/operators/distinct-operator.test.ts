@@ -30,7 +30,9 @@ test('distinct', () => {
 
   expect(items).toEqual([
     [
+      [{id: 'a'}, 1],
       [{id: 'b'}, 1],
+      [{id: 'a'}, -1],
       [{id: 'c'}, -1],
     ],
   ]);

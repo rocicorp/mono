@@ -57,11 +57,13 @@ export type Listener<T> = {
  *   filtered
  */
 // T extends object: I believe in the context of ZQL we only deal with object.
+let id = 0;
 export class DifferenceStream<T extends object> {
   /**
    * Operators that are listening to this stream.
    */
   readonly #downstreams: Set<Listener<T>> = new Set();
+  readonly #id = id++;
   /**
    * The operator that is sending data to this stream.
    */
@@ -272,7 +274,7 @@ export class DifferenceStream<T extends object> {
   }
 
   toString() {
-    return this.#upstream?.toString() ?? 'DifferenceStream';
+    return this.#upstream?.toString() ?? `DifferenceStream ${this.#id}`;
   }
 }
 

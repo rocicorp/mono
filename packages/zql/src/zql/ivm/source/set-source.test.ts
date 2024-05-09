@@ -1,5 +1,6 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
+import type {Listener} from '../graph/difference-stream.js';
 import {Materialite} from '../materialite.js';
 
 type E = {id: number};
@@ -151,5 +152,85 @@ test('withNewOrdering - is correctly ordered', async () => {
         arr.sort((l, r) => r - l).map(id => ({id})),
       );
     }),
+  );
+});
+
+test('history requests with an alternate ordering are fulfilled by that ordering', () => {
+  type E2 = {
+    id: number;
+    x: string;
+  };
+  const comparator = (l: E2, r: E2) => l.id - r.id;
+
+  const m = new Materialite();
+  const source = m.newSetSource(comparator);
+
+  const baseItems = [
+    {id: 1, x: 'c'},
+    {id: 2, x: 'b'},
+    {id: 3, x: 'a'},
+  ];
+  m.tx(() => {
+    source.seed(baseItems);
+  });
+
+  const items: E2[] = [];
+  const listener: Listener<E2> = {
+    commit(_version) {},
+    newDifference(_version, multiset, _reply) {
+      for (const item of multiset) {
+        items.push(item[0]);
+      }
+    },
+  };
+  m.tx(() => {
+    source.stream.messageUpstream(
+      {
+        id: 1,
+        type: 'pull',
+        order: [['id'], 'asc'],
+        hoistedConditions: [],
+      },
+      listener,
+    );
+  });
+
+  expect(items).toEqual(baseItems);
+  items.length = 0;
+
+  m.tx(() => {
+    source.stream.messageUpstream(
+      {
+        id: 2,
+        type: 'pull',
+        order: [['x', 'id'], 'asc'],
+        hoistedConditions: [],
+      },
+      listener,
+    );
+  });
+
+  expect(items).toEqual(
+    baseItems.slice().sort((l, r) => l.x.localeCompare(r.x)),
+  );
+  items.length = 0;
+
+  // add some data to see that we're maintained past seed phase
+  source.add({id: 4, x: 'd'});
+
+  m.tx(() => {
+    source.stream.messageUpstream(
+      {
+        id: 3,
+        type: 'pull',
+        order: [['x', 'id'], 'asc'],
+        hoistedConditions: [],
+      },
+      listener,
+    );
+  });
+
+  expect(items).toEqual(
+    baseItems.concat({id: 4, x: 'd'}).sort((l, r) => l.x.localeCompare(r.x)),
   );
 });

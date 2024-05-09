@@ -5,6 +5,7 @@ import {Treap} from '@vlcn.io/ds-and-algos/Treap';
 // @ts-ignore next.js is having issues finding the .d.ts
 import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import {must} from 'shared/src/must.js';
+import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
@@ -23,14 +24,16 @@ let id = 0;
 export abstract class SetSource<T extends object> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
-  protected readonly _materialite: MaterialiteForSourceInternal;
   readonly #listeners = new Set<(data: ITree<T>, v: Version) => void>();
+  readonly #sorts = new Map<string, SetSource<T>>();
+  readonly comparator: Comparator<T>;
+  readonly #name: string | undefined;
+
+  protected readonly _materialite: MaterialiteForSourceInternal;
+  #id = id++;
   #historyRequests: Array<PullMsg> = [];
   #tree: ITree<T>;
   #seeded = false;
-  readonly comparator: Comparator<T>;
-  #id = id++;
-  readonly #name: string | undefined;
   #pending: Entry<T>[] = [];
 
   constructor(
@@ -131,12 +134,22 @@ export abstract class SetSource<T extends object> implements Source<T> {
   add(v: T): this {
     this.#pending.push([v, 1]);
     this._materialite.addDirtySource(this.#internal);
+
+    for (const alternateSort of this.#sorts.values()) {
+      alternateSort.add(v);
+    }
+
     return this;
   }
 
   delete(v: T): this {
     this.#pending.push([v, -1]);
     this._materialite.addDirtySource(this.#internal);
+
+    for (const alternateSort of this.#sorts.values()) {
+      alternateSort.delete(v);
+    }
+
     return this;
   }
 
@@ -192,11 +205,46 @@ export abstract class SetSource<T extends object> implements Source<T> {
   }
 
   #sendHistoryTo(request: PullMsg) {
+    const newSort = this.#getOrCreateAndMaintainNewSort(request);
+
     this.#stream.newDifference(
       this._materialite.getVersion(),
-      asEntries(this.#tree, request),
+      // TODO(mlaw): check asc/desc and iterate in correct direction
+      asEntries(newSort.#tree, request),
       createPullResponseMessage(request),
     );
+  }
+
+  // TODO(mlaw): we need to validate that this ordering
+  // is compatible with the source. I.e., it doesn't contain columns from other sources.
+  // The latter can happen if the user is sorting on joined columns.
+  // Join should do this for us when a `PullMsg` passes through it.
+  #getOrCreateAndMaintainNewSort(request: PullMsg) {
+    const ordering = request.order;
+    if (ordering === undefined) {
+      return this;
+    }
+    const fields = ordering[0];
+
+    // If length is 1, we're sorted by ID.
+    // TODO(mlaw): update AST structure so we can validate this.
+    if (fields.length === 1) {
+      return this;
+    }
+
+    const key = fields.join(',');
+    const alternateSort = this.#sorts.get(key);
+    if (alternateSort !== undefined) {
+      return alternateSort;
+    }
+
+    // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
+    // We do not need a separate source.
+    const comparator = makeComparator(ordering[0], 'asc');
+    const source = this.withNewOrdering(comparator);
+
+    this.#sorts.set(key, source);
+    return source;
   }
 
   awaitSeeding(): PromiseLike<void> {

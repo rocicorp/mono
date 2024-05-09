@@ -138,7 +138,7 @@ test('makeComparator', () => {
 
   function check(values1: unknown[], values2: unknown[], expected: number) {
     expect(
-      makeComparator<string[], Record<string, unknown>>(
+      makeComparator<Record<string, unknown>>(
         Array.from({length: values1.length}).map((_, i) => 'field' + i),
         'asc',
       )(makeObject(values1), makeObject(values2)),
