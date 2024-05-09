@@ -511,6 +511,14 @@ describe('invalidation-watcher', () => {
     );
 
     await db.unsafe(`
+    CREATE SCHEMA zero;
+    CREATE TABLE zero.clients(
+      "clientGroupID"  TEXT NOT NULL,
+      "clientID"       TEXT NOT NULL,
+      "lastMutationID" BIGINT,
+      "userID"         TEXT,
+      PRIMARY KEY ("clientGroupID", "clientID")
+    );
     CREATE TABLE issues (
       issue_id INTEGER,
       description TEXT,
@@ -522,7 +530,7 @@ describe('invalidation-watcher', () => {
       user_id INTEGER PRIMARY KEY,
       handle text
     );
-    CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;
+    CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public, zero;
     `);
 
     expect(await watcher.getTableSchemas()).toEqual([
@@ -575,6 +583,37 @@ describe('invalidation-watcher', () => {
           },
         },
         primaryKey: ['user_id'],
+      },
+      {
+        columns: {
+          clientGroupID: {
+            characterMaximumLength: null,
+            columnDefault: null,
+            dataType: 'text',
+            notNull: true,
+          },
+          clientID: {
+            characterMaximumLength: null,
+            columnDefault: null,
+            dataType: 'text',
+            notNull: true,
+          },
+          lastMutationID: {
+            characterMaximumLength: null,
+            columnDefault: null,
+            dataType: 'int8',
+            notNull: false,
+          },
+          userID: {
+            characterMaximumLength: null,
+            columnDefault: null,
+            dataType: 'text',
+            notNull: false,
+          },
+        },
+        name: 'clients',
+        primaryKey: ['clientGroupID', 'clientID'],
+        schema: 'zero',
       },
     ]);
   });
