@@ -29,7 +29,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   #limit?: number | undefined;
   #min?: T | undefined;
   #max?: T | undefined;
-  readonly #order;
+  // readonly #order;
   readonly id = id++;
   readonly #comparator;
 
@@ -37,7 +37,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     context: Context,
     stream: DifferenceStream<T>,
     comparator: Comparator<T>,
-    order: Ordering | undefined,
+    _order: Ordering | undefined,
     limit?: number | undefined,
     name: string = '',
   ) {
@@ -45,7 +45,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     this.#limit = limit;
     this.#data = new Treap(comparator);
     this.#comparator = comparator;
-    this.#order = order;
+    // this.#order = order;
     if (limit !== undefined) {
       this.#addAll = this.#limitedAddAll;
       this.#removeAll = this.#limitedRemoveAll;
@@ -193,7 +193,8 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   pullHistoricalData(): void {
     this._materialite.tx(() => {
       this.stream.messageUpstream(
-        createPullMessage(this.#order, 'select'),
+        //this.#order
+        createPullMessage(undefined, 'select'),
         this._listener,
       );
     });
