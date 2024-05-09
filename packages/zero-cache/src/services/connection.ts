@@ -1,13 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as valita from 'shared/src/valita.js';
-import {Downstream, upstreamSchema} from 'zero-protocol';
+import {Downstream, PongMessage, upstreamSchema} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
 import type {
   SyncContext,
   ViewSyncerService,
 } from './view-syncer/view-syncer.js';
 // TODO(mlaw): break dependency on reflect-server
-import {handlePing} from 'reflect-server/ping';
 import {closeWithError} from 'reflect-server/socket';
 import type {PostgresDB} from '../types/pg.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
@@ -67,7 +66,6 @@ export class Connection {
     const ws = this.#ws;
     const viewSyncer = this.#viewSyncer;
 
-    lc.debug?.('Received message', data);
     let msg;
     try {
       const value = JSON.parse(data);
@@ -80,7 +78,7 @@ export class Connection {
       const msgType = msg[0];
       switch (msgType) {
         case 'ping':
-          handlePing(lc, ws);
+          handlePing(ws);
           break;
         case 'push': {
           const {clientGroupID, mutations} = msg[1];
@@ -149,4 +147,9 @@ export class Connection {
 
 export function send(ws: WebSocket, data: Downstream) {
   ws.send(JSON.stringify(data));
+}
+
+function handlePing(ws: WebSocket) {
+  const pongMessage: PongMessage = ['pong', {}];
+  send(ws, pongMessage);
 }
