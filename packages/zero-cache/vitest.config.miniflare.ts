@@ -14,5 +14,13 @@ export default defineWorkersConfig({
         },
       },
     },
+    onConsoleLog(log: string) {
+      if (
+        log.includes('Max depth reached while computing invalidation filters')
+      ) {
+        return false;
+      }
+      return undefined;
+    },
   },
 });
