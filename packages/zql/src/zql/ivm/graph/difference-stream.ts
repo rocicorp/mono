@@ -85,8 +85,6 @@ export class DifferenceStream<T extends object> {
 
   newDifference(version: Version, data: Multiset<T>, reply: Reply | undefined) {
     if (reply) {
-      console.log(reply);
-      console.log(this.#id, [...this.#requestors]);
       const requestors = this.#requestors.get(reply.replyingTo);
       for (const requestor of must(requestors)) {
         requestor.newDifference(version, data, reply);
@@ -276,7 +274,7 @@ export class DifferenceStream<T extends object> {
   }
 
   toString() {
-    return this.#upstream?.toString() ?? 'DifferenceStream';
+    return this.#upstream?.toString() ?? `DifferenceStream ${this.#id}`;
   }
 }
 
