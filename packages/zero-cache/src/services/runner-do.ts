@@ -2,7 +2,7 @@ import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {CONNECT_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 // TODO(mlaw): break dependency on reflect-server
-import {Router, BaseContext} from 'reflect-server/router';
+import {BaseContext, Router} from 'reflect-server/router';
 // TODO(mlaw): break dependency on reflect-server
 import {
   requireUpgradeHeader,
@@ -11,18 +11,15 @@ import {
 import type {ErrorKind} from 'zero-protocol/src/error.js';
 // TODO(mlaw): break dependency on reflect-server
 import {closeWithError} from 'reflect-server/socket';
+import type {ConnectedMessage} from 'zero-protocol';
 import {getConnectRequest} from '../connect.js';
 import {Connection, send} from './connection.js';
-import type {ConnectedMessage} from 'zero-protocol';
-import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
-import postgres from 'postgres';
 
 export class ServiceRunnerDO {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
   readonly #router = new Router();
   readonly #clients = new Map<string, Connection>();
-  readonly #db: PostgresDB;
 
   constructor(
     logSink: LogSink,
@@ -31,9 +28,6 @@ export class ServiceRunnerDO {
     env: ServiceRunnerEnv,
   ) {
     this.#serviceRunner = new ServiceRunner(logSink, logLevel, state, env);
-    this.#db = postgres(env.UPSTREAM_URI, {
-      ...postgresTypeConfig(),
-    });
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ServiceRunnerDO',
@@ -88,7 +82,6 @@ export class ServiceRunnerDO {
 
     const connection = new Connection(
       this.#lc,
-      this.#db,
       this.#serviceRunner,
       clientGroupID,
       clientID,

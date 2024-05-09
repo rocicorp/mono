@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import type {
@@ -10,6 +11,39 @@ import type {
   UpdateOp,
 } from 'zero-protocol/src/push.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
+import type {Service} from '../service.js';
+
+export interface Mutagen {
+  processMutation(mutation: Mutation): Promise<void>;
+}
+
+export class MutagenService implements Mutagen, Service {
+  readonly id: string;
+  readonly #lc: LogContext;
+  readonly #upstream: PostgresDB;
+  readonly #stopped = resolver();
+
+  constructor(lc: LogContext, clientGroupID: string, upstream: PostgresDB) {
+    this.id = clientGroupID;
+    this.#lc = lc
+      .withContext('component', 'Mutagen')
+      .withContext('serviceID', this.id);
+    this.#upstream = upstream;
+  }
+
+  processMutation(mutation: Mutation): Promise<void> {
+    return processMutation(this.#lc, this.#upstream, this.id, mutation);
+  }
+
+  run(): Promise<void> {
+    return this.#stopped.promise;
+  }
+
+  stop(): Promise<void> {
+    this.#stopped.resolve();
+    return Promise.resolve();
+  }
+}
 
 export async function processMutation(
   lc: LogContext | undefined,

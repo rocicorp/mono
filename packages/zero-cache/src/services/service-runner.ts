@@ -8,10 +8,11 @@ import {
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import {Mutagen, MutagenService} from './mutagen/mutagen.js';
 import type {ReplicatorRegistry} from './replicator/registry.js';
 import {Replicator, ReplicatorService} from './replicator/replicator.js';
 import type {Service} from './service.js';
-import {ViewSyncerService} from './view-syncer/view-syncer.js';
+import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
 
 export interface ServiceRunnerEnv {
   runnerDO: DurableObjectNamespace;
@@ -42,6 +43,7 @@ export class ServiceRunner
 
   readonly #storage: DurableStorage;
   readonly #env: ServiceRunnerEnv;
+  readonly #upstream: PostgresDB;
   readonly #replica: PostgresDB;
   readonly #lc: LogContext;
 
@@ -57,6 +59,11 @@ export class ServiceRunner
     );
     this.#storage = new DurableStorage(state.storage);
     this.#env = env;
+    // TODO: We should have separate upstream URIs for the Replicator (direct connection)
+    //       vs mutagen (can be a pooled connection).
+    this.#upstream = postgres(this.#env.UPSTREAM_URI, {
+      ...postgresTypeConfig(),
+    });
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
     });
@@ -93,14 +100,19 @@ export class ServiceRunner
     );
   }
 
-  getViewSyncer(clientGroupID: string): ViewSyncerService {
+  getViewSyncer(clientGroupID: string): ViewSyncer {
     return this.#getService(
-      'viewSyncer:' + clientGroupID,
+      clientGroupID,
       this.#viewSyncers,
       id =>
         new ViewSyncerService(this.#lc, id, this.#storage, this, this.#replica),
       'ViewSyncer',
     );
+  }
+
+  getMutagen(clientGroupID: string): Mutagen {
+    // The MutagenService implementation is stateless. No need to keep a map or share instances.
+    return new MutagenService(this.#lc, clientGroupID, this.#upstream);
   }
 
   #getService<S extends Service>(
