@@ -2,7 +2,12 @@
 // @ts-ignore next.js is having issues finding the .d.ts
 import type {Comparator} from './types.js';
 import {must} from 'shared/src/must.js';
+<<<<<<< HEAD
 import {SetSource} from './source/set-source.js';
+=======
+import type {Ordering} from '../ast/ast.js';
+import {MutableSetSource} from './source/set-source.js';
+>>>>>>> 3c63430ac (feat(zql): update order code so we can land it without having join and reduce complete)
 import type {Source, SourceInternal} from './source/source.js';
 import type {Version} from './types.js';
 
@@ -42,9 +47,14 @@ export class Materialite {
 
   newSetSource<T extends object>(
     comparator: Comparator<T>,
+    order: Ordering,
     name?: string | undefined,
   ) {
+<<<<<<< HEAD
     return new SetSource<T>(this.#internal, comparator, name);
+=======
+    return new MutableSetSource<T>(this.#internal, comparator, order, name);
+>>>>>>> 3c63430ac (feat(zql): update order code so we can land it without having join and reduce complete)
   }
 
   constructSource<T extends object>(

@@ -23,10 +23,11 @@ type E1 = z.infer<typeof e1>;
 const context = makeTestContext();
 
 const comparator = (l: E1, r: E1) => compareUTF8(l.id, r.id);
+const ordering = [['id'], 'asc'] as const;
 test('A simple select', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
-  let s = m.newSetSource<E1>(comparator);
+  let s = m.newSetSource<E1>(comparator, ordering);
   let pipeline = buildPipeline(
     () => s.stream as unknown as DifferenceStream<Entity>,
     ast(q.select('id', 'a', 'b', 'c', 'd')),
@@ -46,7 +47,7 @@ test('A simple select', () => {
   s.add(expected[1]);
   expect(effectRunCount).toBe(2);
 
-  s = m.newSetSource(comparator);
+  s = m.newSetSource(comparator, ordering);
   pipeline = buildPipeline(
     () => s.stream as unknown as DifferenceStream<Entity>,
     ast(q.select('a', 'd')),
@@ -65,7 +66,7 @@ test('A simple select', () => {
 test('Count', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
-  const s = m.newSetSource<E1>(comparator);
+  const s = m.newSetSource<E1>(comparator, ordering);
   const pipeline = buildPipeline(
     () => s.stream as unknown as DifferenceStream<Entity>,
     ast(q.select(agg.count())),
@@ -95,7 +96,7 @@ test('Count', () => {
 test('Where', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
-  const s = m.newSetSource<E1>(comparator);
+  const s = m.newSetSource<E1>(comparator, ordering);
   const pipeline = buildPipeline(
     () => s.stream as unknown as DifferenceStream<Entity>,
     ast(q.select('id').where('a', '>', 1).where('b', '<', 2)),
@@ -543,7 +544,7 @@ describe('OR', () => {
     test((c.name ? c.name + ': ' : '') + conditionToString(c.where), () => {
       const {values = defaultValues} = c;
       const m = new Materialite();
-      const s = m.newSetSource<E>(comparator);
+      const s = m.newSetSource<E>(comparator, [['id'], 'asc']);
 
       const ast: AST = {
         table: 'items',

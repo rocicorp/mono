@@ -1,4 +1,5 @@
 import {must} from 'shared/src/must.js';
+import type {Ordering} from '../../ast/ast.js';
 import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
@@ -26,6 +27,7 @@ export class SetSource<T extends object> implements Source<T> {
   readonly #sorts = new Map<string, SetSource<T>>();
   readonly comparator: Comparator<T>;
   readonly #name: string | undefined;
+  readonly #order: Ordering;
 
   protected readonly _materialite: MaterialiteForSourceInternal;
   #id = id++;
@@ -37,8 +39,10 @@ export class SetSource<T extends object> implements Source<T> {
   constructor(
     materialite: MaterialiteForSourceInternal,
     comparator: Comparator<T>,
+    order: Ordering,
     name?: string | undefined,
   ) {
+    this.#order = order;
     this._materialite = materialite;
     this.#stream = new DifferenceStream<T>();
     this.#name = name;
@@ -102,8 +106,8 @@ export class SetSource<T extends object> implements Source<T> {
     };
   }
 
-  withNewOrdering(comp: Comparator<T>): this {
-    const ret = new SetSource(this._materialite, comp) as this;
+  withNewOrdering(comp: Comparator<T>, ordering: Ordering): this {
+    const ret = new SetSource(this._materialite, comp, ordering) as this;
     if (this.#seeded) {
       ret.seed(this.#tree.keys());
     }
@@ -206,13 +210,13 @@ export class SetSource<T extends object> implements Source<T> {
   }
 
   #sendHistoryTo(request: PullMsg) {
-    const newSort = this.#getOrCreateAndMaintainNewSort(request);
+    const [newSort, order] = this.#getOrCreateAndMaintainNewSort(request);
 
     this.#stream.newDifference(
       this._materialite.getVersion(),
       // TODO(mlaw): check asc/desc and iterate in correct direction
       asEntries(newSort.#tree, request),
-      createPullResponseMessage(request, request.order),
+      createPullResponseMessage(request, order),
     );
   }
 
@@ -220,32 +224,34 @@ export class SetSource<T extends object> implements Source<T> {
   // is compatible with the source. I.e., it doesn't contain columns from other sources.
   // The latter can happen if the user is sorting on joined columns.
   // Join should do this for us when a `PullMsg` passes through it.
-  #getOrCreateAndMaintainNewSort(request: PullMsg) {
+  #getOrCreateAndMaintainNewSort(
+    request: PullMsg,
+  ): [SetSource<T>, Ordering | undefined] {
     const ordering = request.order;
     if (ordering === undefined) {
-      return this;
+      return [this, this.#order];
     }
     const fields = ordering[0];
 
     // If length is 1, we're sorted by ID.
     // TODO(mlaw): update AST structure so we can validate this.
     if (fields.length === 1) {
-      return this;
+      return [this, this.#order];
     }
 
     const key = fields.join(',');
     const alternateSort = this.#sorts.get(key);
     if (alternateSort !== undefined) {
-      return alternateSort;
+      return [alternateSort, ordering];
     }
 
     // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
     // We do not need a separate source.
     const comparator = makeComparator(ordering[0], 'asc');
-    const source = this.withNewOrdering(comparator);
+    const source = this.withNewOrdering(comparator, ordering);
 
     this.#sorts.set(key, source);
-    return source;
+    return [source, ordering];
   }
 
   awaitSeeding(): PromiseLike<void> {

@@ -34,6 +34,9 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
     stmt.destroy();
   });
 
+  // TODO(mlaw): test select with alternate ordering. differing fields and same fields but differing direction
+  // TODO(mlaw): test cases for when `withNewOrdering` should or should not be invoked. e.g., join should drop order rn
+
   test('select and where', async () => {
     const q = new EntityQuery<{e: E}>(context, 'e', 'e');
     const stmt = q.select('id').where('e.id', '>', '9').limit(2).prepare();
