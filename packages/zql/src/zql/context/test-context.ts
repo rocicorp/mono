@@ -134,6 +134,9 @@ class InfiniteSuorce<T extends object> implements Source<T> {
 
   processMessage(message: Request): void {
     switch (message.type) {
+      // TODO: check for alternative order in the message.
+      // create the source in the new order.
+      // send from that source.
       case 'pull': {
         this.#materialite.addDirtySource(this.#internal);
         this.#stream.newDifference(

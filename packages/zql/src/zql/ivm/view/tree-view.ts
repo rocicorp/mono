@@ -204,6 +204,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
       );
     }
 
+    // Partial order overlap
     return {
       next() {
         if (i >= limit) {
@@ -258,6 +259,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     }
 
     // at limit? We can only add if the value is under max
+    // TODO(mlaw): asc/desc matters here.
     const comp = this.#comparator(value, this.#max!);
     if (comp > 0) {
       return data;

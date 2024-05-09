@@ -126,5 +126,6 @@ class ZeroSource {
   }
 }
 
-const canonicalOrdering = [['id'], 'asc'] as const;
-const canonicalComparator = (l: Entity, r: Entity) => compareUTF8(l.id, r.id);
+export const canonicalOrdering = [['id'], 'asc'] as const;
+export const canonicalComparator = (l: Entity, r: Entity) =>
+  compareUTF8(l.id, r.id);

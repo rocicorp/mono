@@ -38,7 +38,7 @@ export type PullMsg = {
   readonly id: number;
   readonly type: 'pull';
   readonly order?: Ordering | undefined;
-  readonly hoistedConditions: SimpleCondition[];
+  readonly hoistedConditions: readonly SimpleCondition[];
 };
 
 export type Reply = PullReplyMsg;
