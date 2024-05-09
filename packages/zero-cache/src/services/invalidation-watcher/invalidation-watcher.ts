@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
+import {sleep} from 'shared/src/sleep.js';
 import {
   TransactionPool,
   sharedReadOnlySnapshot,
@@ -14,7 +15,10 @@ import type {InvalidationInfo} from '../../zql/invalidation.js';
 import type {ReplicatorRegistry} from '../replicator/registry.js';
 import type {VersionChange} from '../replicator/replicator.js';
 import {queryStateVersion} from '../replicator/schema/replication.js';
-import {getPublicationInfo} from '../replicator/tables/published.js';
+import {
+  PublicationInfo,
+  getPublicationInfo,
+} from '../replicator/tables/published.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
 import type {Service} from '../service.js';
 import {HashSubscriptions} from './hash-subscriptions.js';
@@ -141,6 +145,9 @@ export interface InvalidationWatcher {
   ): Promise<CancelableAsyncIterable<QueryInvalidationUpdate>>;
 }
 
+const INITIAL_RETRY_DELAY_MS = 100;
+const MAX_RETRY_DELAY_MS = 10000;
+
 export class InvalidationWatcherService
   implements InvalidationWatcher, Service
 {
@@ -218,7 +225,25 @@ export class InvalidationWatcherService
 
   async getTableSchemas(): Promise<readonly TableSpec[]> {
     if (!this.#cachedTableSchemas) {
-      const published = await getPublicationInfo(this.#replica);
+      let published: PublicationInfo;
+      for (
+        let delay = INITIAL_RETRY_DELAY_MS;
+        ;
+        delay = Math.min(delay * 2, MAX_RETRY_DELAY_MS)
+      ) {
+        published = await getPublicationInfo(this.#replica);
+        if (
+          published.tables.find(
+            t => t.schema === 'zero' && t.name === 'clients',
+          )
+        ) {
+          break;
+        }
+        // This is a bootstrapping condition that happens for sync requests
+        // received when initial replication is still happening.
+        this.#lc.info?.(`No zero.clients table. Retrying in ${delay} ms`);
+        await sleep(delay);
+      }
       this.#cachedTableSchemas = published.tables;
     }
     return this.#cachedTableSchemas;

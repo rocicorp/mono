@@ -1,5 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import * as v from 'shared/src/valita.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
@@ -104,6 +105,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly #syncReplica: PostgresDB;
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #invalidator: Invalidator;
+  readonly #ready = resolver();
 
   constructor(
     lc: LogContext,
@@ -146,12 +148,17 @@ export class ReplicatorService implements Replicator, Service {
       this.#syncReplica,
       this.#upstreamUri,
     );
+
+    this.#ready.resolve();
+
     await this.#incrementalSyncer.run(this.#lc);
   }
 
-  registerInvalidationFilters(
+  async registerInvalidationFilters(
     req: RegisterInvalidationFiltersRequest,
   ): Promise<RegisterInvalidationFiltersResponse> {
+    // Registration requires the sync schema to be initialized.
+    await this.#ready.promise;
     return this.#invalidator.registerInvalidationFilters(this.#lc, req);
   }
 
