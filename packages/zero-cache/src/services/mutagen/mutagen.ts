@@ -2,13 +2,14 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
-import type {
-  CRUDMutation,
-  CreateOp,
-  DeleteOp,
-  Mutation,
-  SetOp,
-  UpdateOp,
+import {
+  MutationType,
+  type CRUDMutation,
+  type CreateOp,
+  type DeleteOp,
+  type Mutation,
+  type SetOp,
+  type UpdateOp,
 } from 'zero-protocol/src/push.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
@@ -51,19 +52,17 @@ export async function processMutation(
   clientGroupID: string,
   mutation: Mutation,
 ) {
-  assert(mutation.name === '_zero_crud', 'Only CRUD mutations are supported');
+  assert(
+    mutation.type === MutationType.CRUD,
+    'Only CRUD mutations are supported',
+  );
   lc = lc?.withContext('mutationID', mutation.id);
   lc = lc?.withContext('processMutation');
   lc?.debug?.('Process mutation start', mutation);
   try {
     const start = Date.now();
     await db.begin(async tx => {
-      await processMutationWithTx(
-        lc,
-        tx,
-        clientGroupID,
-        mutation as CRUDMutation,
-      );
+      await processMutationWithTx(lc, tx, clientGroupID, mutation);
     });
     lc?.withContext('mutationTiming', Date.now() - start);
     lc?.debug?.('Process mutation complete');

@@ -7,7 +7,11 @@ import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
 import {initConnectionMessageSchema} from 'zero-protocol';
-import {Mutation, pushMessageSchema} from 'zero-protocol/src/push.js';
+import {
+  Mutation,
+  MutationType,
+  pushMessageSchema,
+} from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
@@ -522,7 +526,14 @@ test('pusher sends one mutation per push message', async () => {
   await t([
     {
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 1}],
+          timestamp: 1,
+        },
       ],
       expectedPushMessages: 1,
     },
@@ -530,9 +541,30 @@ test('pusher sends one mutation per push message', async () => {
   await t([
     {
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
-        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 1}],
+          timestamp: 1,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 2}],
+          timestamp: 2,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
       ],
       expectedPushMessages: 3,
     },
@@ -542,17 +574,59 @@ test('pusher sends one mutation per push message', async () => {
   await t([
     {
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
-        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 1}],
+          timestamp: 1,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 2}],
+          timestamp: 2,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
       ],
       expectedPushMessages: 3,
     },
     {
       mutations: [
-        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
-        {clientID: 'c2', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 2}],
+          timestamp: 2,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
       ],
       expectedPushMessages: 1,
     },
@@ -564,18 +638,60 @@ test('pusher sends one mutation per push message', async () => {
     {
       clientGroupID: 'c1',
       mutations: [
-        {clientID: 'c1', id: 1, name: 'mut1', args: [{d: 1}], timestamp: 1},
-        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 1}],
+          timestamp: 1,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 2}],
+          timestamp: 2,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
       ],
       expectedPushMessages: 3,
     },
     {
       clientGroupID: 'c1',
       mutations: [
-        {clientID: 'c2', id: 1, name: 'mut1', args: [{d: 2}], timestamp: 2},
-        {clientID: 'c1', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
-        {clientID: 'c2', id: 2, name: 'mut1', args: [{d: 3}], timestamp: 3},
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 1,
+          name: 'mut1',
+          args: [{d: 2}],
+          timestamp: 2,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c1',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
+        {
+          type: MutationType.Custom,
+          clientID: 'c2',
+          id: 2,
+          name: 'mut1',
+          args: [{d: 3}],
+          timestamp: 3,
+        },
       ],
       expectedPushMessages: 3,
     },

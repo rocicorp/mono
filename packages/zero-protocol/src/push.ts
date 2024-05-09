@@ -2,6 +2,12 @@ import {jsonObjectSchema, jsonSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import {entityIDSchema} from './entity.js';
 
+export const CRUD_MUTATION_NAME = '_zero_crud';
+export enum MutationType {
+  CRUD = 'crud',
+  Custom = 'custom',
+}
+
 /**
  * Inserts if entity with id does not already exist.
  */
@@ -56,14 +62,16 @@ const crudArgSchema = v.object({
 const crudArgsSchema = v.tuple([crudArgSchema]);
 
 export const crudMutationSchema = v.object({
+  type: v.literal(MutationType.CRUD),
   id: v.number(),
   clientID: v.string(),
-  name: v.literal('_zero_crud'),
+  name: v.literal(CRUD_MUTATION_NAME),
   args: crudArgsSchema,
   timestamp: v.number(),
 });
 
 export const customMutationSchema = v.object({
+  type: v.literal(MutationType.Custom),
   id: v.number(),
   clientID: v.string(),
   name: v.string(),
