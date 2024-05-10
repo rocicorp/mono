@@ -1,7 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import * as v from 'shared/src/valita.js';
 import XXH from 'xxhashjs'; // TODO: Use xxhash-wasm
-import {stringify} from './bigint-json.js';
 
 /**
  * Encodes the operations over filtered columns for which invalidation
@@ -66,7 +65,14 @@ export type InvalidationFilterSpec = v.Infer<typeof rawFilterSpecSchema>;
  * stringified representation. An additional `id` hash is added to uniquely
  * identify the spec.
  */
-export const normalizedFilterSpecSchema = rawFilterSpecSchema.map(val => {
+export const normalizedFilterSpecSchema =
+  rawFilterSpecSchema.map(normalizeFilterSpec);
+
+export type NormalizedInvalidationFilterSpec = v.Infer<
+  typeof normalizedFilterSpecSchema
+>;
+
+export function normalizeFilterSpec(val: InvalidationFilterSpec) {
   // Normalized field ordering.
   const normalized: InvalidationFilterSpec = {
     schema: val.schema,
@@ -79,19 +85,9 @@ export const normalizedFilterSpecSchema = rawFilterSpecSchema.map(val => {
     normalized.selectedColumns = [...val.selectedColumns].sort(compareUTF8);
   }
   return {
-    id: XXH.h64(SEED).update(stringify(normalized)).digest().toString(36),
+    id: XXH.h64(SEED).update(JSON.stringify(normalized)).digest().toString(36),
     ...normalized,
   };
-});
-
-export type NormalizedInvalidationFilterSpec = v.Infer<
-  typeof normalizedFilterSpecSchema
->;
-
-export function normalizeFilterSpec(
-  spec: InvalidationFilterSpec,
-): NormalizedInvalidationFilterSpec {
-  return parseFilterSpec(spec);
 }
 
 export function parseFilterSpec(
