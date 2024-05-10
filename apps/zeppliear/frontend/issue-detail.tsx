@@ -157,7 +157,7 @@ export default function IssueDetail({
       });
       setCommentText('');
     }
-  }, [onAddComment, commentText, issue]);
+  }, [onAddComment, commentText, issue, userID]);
 
   const handleFwdPrev = useCallback(
     async (direction: 'prev' | 'fwd') => {
@@ -245,8 +245,9 @@ export default function IssueDetail({
         isOpen={isDeleteModalOpen}
         onDismiss={handleDismiss}
         onConfirm={handleDeleteConfirm}
-        title="Delete Issue"
-        message="Are you sure you want to delete this item?"
+        title=""
+        message="Are you sure you want to delete this issue?"
+        action="Delete"
       />
       <div className="">
         <div className="flex bg-gray-850 border border-gray-700 justify-around">
@@ -321,7 +322,7 @@ export default function IssueDetail({
                   </div>
                 ) : (
                   <div className="flex mb-1">
-                    <div className="text-sm">
+                    <div className="text-sm mr-2">
                       <EditIcon
                         className="!w-4 cursor-pointer"
                         onMouseDown={handleEdit}
