@@ -13,6 +13,11 @@ export const errorKindSchema = v.union(
   v.literal('InvalidConnectionRequestClientDeleted'),
   v.literal('InvalidMessage'),
   v.literal('InvalidPush'),
+  // TODO: This error should include the ID of the mutation that failed so that
+  // the app can update the UI if it wants. This requires restructuring the
+  // protocol types a little since some error kinds will have additional info
+  // and others will not.
+  v.literal('MutationFailed'),
   v.literal('RoomClosed'),
   v.literal('RoomNotFound'),
   v.literal('Unauthorized'),

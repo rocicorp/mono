@@ -16,6 +16,12 @@ async function createTables(db: PostgresDB) {
         col2 text,
         PRIMARY KEY(id)
       );
+      CREATE TABLE fk_ref (
+        id text,
+        ref text,
+        PRIMARY KEY(id),
+        FOREIGN KEY(ref) REFERENCES idonly(id)
+      );
       CREATE SCHEMA zero;
       CREATE TABLE zero.clients (
         "clientGroupID"  TEXT NOT NULL,
@@ -44,7 +50,7 @@ describe('processMutation', () => {
       expect(mid).toBe(0n);
     });
 
-    await processMutation(undefined, db, 'abc', {
+    const error = await processMutation(undefined, db, 'abc', {
       type: MutationType.CRUD,
       id: 1,
       clientID: '123',
@@ -64,6 +70,8 @@ describe('processMutation', () => {
       timestamp: Date.now(),
     });
 
+    expect(error).undefined;
+
     await db.begin(async tx => {
       const mid = await readLastMutationID(tx, 'abc', '123');
       expect(mid).toBe(1n);
@@ -80,7 +88,7 @@ describe('processMutation', () => {
          VALUES ('abc', '123', 1)`;
     });
 
-    await processMutation(undefined, db, 'abc', {
+    const error = await processMutation(undefined, db, 'abc', {
       type: MutationType.CRUD,
       id: 2,
       clientID: '123',
@@ -100,6 +108,8 @@ describe('processMutation', () => {
       timestamp: Date.now(),
     });
 
+    expect(error).undefined;
+
     await db.begin(async tx => {
       const mid = await readLastMutationID(tx, 'abc', '123');
       expect(mid).toBe(2n);
@@ -116,7 +126,7 @@ describe('processMutation', () => {
         VALUES ('abc', '123', 2)`;
     });
 
-    await processMutation(undefined, db, 'abc', {
+    const error = await processMutation(undefined, db, 'abc', {
       type: MutationType.CRUD,
       id: 1,
       clientID: '123',
@@ -135,6 +145,8 @@ describe('processMutation', () => {
       ],
       timestamp: Date.now(),
     });
+
+    expect(error).undefined;
 
     await db.begin(async tx => {
       const mid = await readLastMutationID(tx, 'abc', '123');
@@ -176,7 +188,7 @@ describe('processMutation', () => {
   });
 
   test('process create, set, update, delete all at once', async () => {
-    await processMutation(undefined, db, 'abc', {
+    const error = await processMutation(undefined, db, 'abc', {
       type: MutationType.CRUD,
       id: 1,
       clientID: '123',
@@ -229,12 +241,56 @@ describe('processMutation', () => {
       timestamp: Date.now(),
     } satisfies CRUDMutation);
 
+    expect(error).undefined;
+
     const rows = await db`SELECT * FROM id_and_cols`;
     expect(rows).toEqual([
       {
         id: '1',
         col1: 'update',
         col2: 'set',
+      },
+    ]);
+  });
+
+  test('fk failure', async () => {
+    const error = await processMutation(undefined, db, 'abc', {
+      type: MutationType.CRUD,
+      id: 1,
+      clientID: '123',
+      name: '_zero_crud',
+      args: [
+        {
+          ops: [
+            {
+              op: 'create',
+              entityType: 'fk_ref',
+              id: {id: '1'},
+              value: {
+                ref: '1',
+              },
+            },
+          ],
+        },
+      ],
+      timestamp: Date.now(),
+    } satisfies CRUDMutation);
+
+    expect(error).toEqual(
+      'PostgresError: insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
+    );
+    console.log(error);
+
+    const rows = await db`SELECT * FROM fk_ref`;
+    expect(rows).toEqual([]);
+
+    const clients = await db`SELECT * FROM zero.clients`;
+    expect(clients).toEqual([
+      {
+        clientGroupID: 'abc',
+        clientID: '123',
+        lastMutationID: 1n,
+        userID: null,
       },
     ]);
   });

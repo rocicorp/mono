@@ -14,8 +14,12 @@ import {
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 
+// An error encountered processing a mutation.
+// Returned back to application for display to user.
+export type MutationError = string;
+
 export interface Mutagen {
-  processMutation(mutation: Mutation): Promise<void>;
+  processMutation(mutation: Mutation): Promise<MutationError | undefined>;
 }
 
 export class MutagenService implements Mutagen, Service {
@@ -32,7 +36,7 @@ export class MutagenService implements Mutagen, Service {
     this.#upstream = upstream;
   }
 
-  processMutation(mutation: Mutation): Promise<void> {
+  processMutation(mutation: Mutation): Promise<MutationError | undefined> {
     return processMutation(this.#lc, this.#upstream, this.id, mutation);
   }
 
@@ -51,7 +55,7 @@ export async function processMutation(
   db: PostgresDB,
   clientGroupID: string,
   mutation: Mutation,
-) {
+): Promise<MutationError | undefined> {
   assert(
     mutation.type === MutationType.CRUD,
     'Only CRUD mutations are supported',
@@ -59,16 +63,67 @@ export async function processMutation(
   lc = lc?.withContext('mutationID', mutation.id);
   lc = lc?.withContext('processMutation');
   lc?.debug?.('Process mutation start', mutation);
+  const start = Date.now();
   try {
-    const start = Date.now();
-    await db.begin(async tx => {
-      await processMutationWithTx(lc, tx, clientGroupID, mutation);
-    });
-    lc?.withContext('mutationTiming', Date.now() - start);
-    lc?.debug?.('Process mutation complete');
+    try {
+      await db.begin(tx =>
+        processMutationWithTx(lc, tx, clientGroupID, mutation, false),
+      );
+    } catch (firstError) {
+      // Mutations can fail for a variety of reasons:
+      //
+      // - application error
+      // - network/db error
+      // - zero bug
+      //
+      // For application errors what we want is to re-run the mutation in
+      // "error mode", which skips the actual mutation and just updates the
+      // lastMutationID. Then return the error to the app.
+      //
+      // However, it's hard to tell the difference between application errors
+      // and the other types.
+      //
+      // A reasonable policy ends up being to just retry every mutation once
+      // in error mode. If the error mode mutation succeeds then we assume it
+      // was an application error and return the error to the app. Otherwise,
+      // we know it was something internal and we log it.
+      //
+      // This is not 100% correct - there are theoretical cases where we
+      // return an internal error to the app that shouldn't have been. But it
+      // would have to be a crazy coincidence: we'd have to have a network
+      // error on the first attempt that resolves by the second attempt.
+      //
+      // One might ask why not try/catch just the calls to the mutators and
+      // consider those application errors. That is actually what we do in
+      // Replicache:
+      //
+      // https://github.com/rocicorp/todo-row-versioning/blob/9a0a79dc2d2de32c4fac61b5d1634bd9a9e66b7c/server/src/push.ts#L131
+      //
+      // We don't do it here because:
+      //
+      // 1. It's still not perfect. It's hard to isolate SQL errors in
+      //    mutators due to app developer mistakes from SQL errors due to
+      //    Zero mistakes.
+      // 2. It's not possible to do this with the pg library we're using in
+      //    Zero anyway: https://github.com/porsager/postgres/issues/455.
+      //
+      // Personally I think this simple retry policy is nice.
+      lc?.error?.(
+        'Got error running mutation, re-running in error mode',
+        firstError,
+      );
+      await db.begin(tx =>
+        processMutationWithTx(lc, tx, clientGroupID, mutation, true),
+      );
+      lc?.debug?.('Ran mutation successfully in error mode');
+      return String(firstError);
+    }
+    return undefined;
   } catch (e) {
     lc?.error?.('Process mutation error', e);
     throw e;
+  } finally {
+    lc?.debug?.('Process mutation complete in', Date.now() - start);
   }
 }
 
@@ -77,6 +132,7 @@ async function processMutationWithTx(
   tx: PostgresTransaction,
   clientGroupID: string,
   mutation: CRUDMutation,
+  errorMode: boolean,
 ) {
   const lastMutationID = await readLastMutationID(
     tx,
@@ -96,30 +152,34 @@ async function processMutationWithTx(
     );
   }
 
-  const {ops} = mutation.args[0];
-  const queryPromises: Promise<unknown>[] = [];
-  for (const op of ops) {
-    switch (op.op) {
-      case 'create':
-        queryPromises.push(getCreateSQL(tx, op).execute());
-        break;
-      case 'set':
-        queryPromises.push(getSetSQL(tx, op).execute());
-        break;
-      case 'update':
-        queryPromises.push(getUpdateSQL(tx, op).execute());
-        break;
-      case 'delete':
-        queryPromises.push(getDeleteSQL(tx, op).execute());
-        break;
-      default:
-        op satisfies never;
+  if (!errorMode) {
+    const {ops} = mutation.args[0];
+    const queryPromises: Promise<unknown>[] = [];
+
+    for (const op of ops) {
+      switch (op.op) {
+        case 'create':
+          queryPromises.push(getCreateSQL(tx, op).execute());
+          break;
+        case 'set':
+          queryPromises.push(getSetSQL(tx, op).execute());
+          break;
+        case 'update':
+          queryPromises.push(getUpdateSQL(tx, op).execute());
+          break;
+        case 'delete':
+          queryPromises.push(getDeleteSQL(tx, op).execute());
+          break;
+        default:
+          op satisfies never;
+      }
     }
+
+    // All the CRUD operations were dispatched serially (above).
+    // Now wait for their completion and then update `lastMutationID`.
+    await Promise.all(queryPromises);
   }
 
-  // All the CRUD operations were dispatched serially (above).
-  // Now wait for their completion and then update `lastMutationID`.
-  await Promise.all(queryPromises);
   await writeLastMutationID(
     tx,
     clientGroupID,
