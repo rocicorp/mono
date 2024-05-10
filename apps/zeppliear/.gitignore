@@ -44,3 +44,6 @@ lib
 **/supabase/.temp
 **/supabase/.env
 .env
+secrets.json
+*.orig
+*.bak
