@@ -14,7 +14,6 @@ import {
   Issue,
   IssueUpdate,
   IssueWithLabels,
-  JIM_HOLDEN_MEMBER_ID,
   Priority,
   Status,
 } from './issue';
@@ -28,6 +27,7 @@ interface Props {
   onAddComment: (comment: Comment) => void;
   issues: IssueWithLabels[];
   isLoading: boolean;
+  userID: string;
 }
 
 function CommentsList(
@@ -66,6 +66,7 @@ export default function IssueDetail({
   onAddComment,
   issues,
   isLoading,
+  userID,
 }: Props) {
   const [detailIssueID, setDetailIssueID] = useQueryState('iss', {
     history: 'push',
@@ -148,8 +149,7 @@ export default function IssueDetail({
         id: nanoid(),
         issueID: issue.id as string,
         created: Date.now(),
-        // TODO: Create member for this user
-        creatorID: JIM_HOLDEN_MEMBER_ID,
+        creatorID: userID,
         body: commentText,
       });
       setCommentText('');

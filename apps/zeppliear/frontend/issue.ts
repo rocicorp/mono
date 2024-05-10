@@ -230,6 +230,7 @@ export type IssueCreationPartial = Omit<
 export async function createIssue(
   zero: Zero<Collections>,
   i: IssueCreationPartial,
+  creatorID: string,
 ) {
   // TODO(arv): Use zql min
   // const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
@@ -239,8 +240,7 @@ export async function createIssue(
   const modified = getModifiedDate();
   await zero.mutate.issue.create({
     ...i,
-    // TODO: Create a Member for this user
-    creatorID: JIM_HOLDEN_MEMBER_ID,
+    creatorID,
     created: modified,
     modified,
     //  TODO: fix kanban
@@ -268,8 +268,6 @@ export const memberSchema = z.object({
   name: z.string(),
 });
 export type Member = Immutable<z.TypeOf<typeof memberSchema>>;
-
-export const JIM_HOLDEN_MEMBER_ID = '2-GMrGGTIl';
 
 const REVERSE_TIMESTAMP_LENGTH = Number.MAX_SAFE_INTEGER.toString().length;
 
