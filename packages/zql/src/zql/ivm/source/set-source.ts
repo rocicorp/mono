@@ -6,7 +6,8 @@ import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
 import type {Comparator, Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
-import BTree, {ISortedMap} from 'sorted-btree';
+import type {ISortedMap} from 'sorted-btree';
+import BTree from '../../btree-class.js';
 
 /**
  * A source that remembers what values it contains.
