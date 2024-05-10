@@ -34,7 +34,7 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
-    "@vlcn.io/ds-and-algos": "^3.0.2",
-    "compare-utf8": "^0.1.1"
+    "compare-utf8": "^0.1.1",
+    "sorted-btree": "^1.8.1"
   }
 }

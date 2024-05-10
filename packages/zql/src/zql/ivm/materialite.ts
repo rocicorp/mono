@@ -1,8 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore next.js is having issues finding the .d.ts
-import type {Comparator} from '@vlcn.io/ds-and-algos/types';
+import type {Comparator} from './types.js';
 import {must} from 'shared/src/must.js';
-import {MutableSetSource} from './source/set-source.js';
+import {SetSource} from './source/set-source.js';
 import type {SourceInternal} from './source/source.js';
 import type {Version} from './types.js';
 
@@ -44,7 +44,7 @@ export class Materialite {
     comparator: Comparator<T>,
     name?: string | undefined,
   ) {
-    return new MutableSetSource<T>(this.#internal, comparator, name);
+    return new SetSource<T>(this.#internal, comparator, name);
   }
 
   /**
