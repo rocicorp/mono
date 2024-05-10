@@ -4,7 +4,7 @@ import {assert} from 'shared/src//asserts.js';
 import type {Entity} from '../../entity.js';
 import type {AST} from '../ast/ast.js';
 import type {Materialite} from '../ivm/materialite.js';
-import type {MutableSetSource} from '../ivm/source/set-source.js';
+import type {SetSource} from '../ivm/source/set-source.js';
 import type {Source} from '../ivm/source/source.js';
 import {mapIter} from '../util/iterables.js';
 import type {Context, SubscriptionDelegate} from './context.js';
@@ -68,7 +68,7 @@ class ZeroSourceStore {
 }
 
 class ZeroSource {
-  readonly #canonicalSource: MutableSetSource<Entity>;
+  readonly #canonicalSource: SetSource<Entity>;
   #receivedFirstDiff = false;
 
   constructor(materialite: Materialite, name: string, addWatch: AddWatch) {

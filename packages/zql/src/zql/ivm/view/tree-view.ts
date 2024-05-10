@@ -1,15 +1,11 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore next.js is having issues finding the .d.ts
-import {Treap} from '@vlcn.io/ds-and-algos/Treap';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore next.js is having issues finding the .d.ts
-import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage} from '../graph/message.js';
 import type {Multiset} from '../multiset.js';
 import {AbstractView} from './abstract-view.js';
+import BTree, {ISortedMap} from 'sorted-btree';
+import type {Comparator} from '../types.js';
 
 /**
  * A sink that maintains the list of values in-order.
@@ -22,7 +18,7 @@ import {AbstractView} from './abstract-view.js';
  */
 let id = 0;
 export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
-  #data: ITree<T>;
+  #data: ISortedMap<T, undefined>;
 
   #jsSlice: T[] = [];
 
@@ -43,7 +39,9 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   ) {
     super(context, stream, name);
     this.#limit = limit;
-    this.#data = new Treap(comparator);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    this.#data = new BTree(undefined, comparator);
     this.#comparator = comparator;
     // this.#order = order;
     if (limit !== undefined) {
@@ -55,8 +53,14 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     }
   }
 
-  #addAll: (data: ITree<T>, value: T) => ITree<T>;
-  #removeAll: (data: ITree<T>, value: T) => ITree<T>;
+  #addAll: (
+    data: ISortedMap<T, undefined>,
+    value: T,
+  ) => ISortedMap<T, undefined>;
+  #removeAll: (
+    data: ISortedMap<T, undefined>,
+    value: T,
+  ) => ISortedMap<T, undefined>;
 
   get value(): T[] {
     return this.#jsSlice;
@@ -73,7 +77,11 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
       // idk.. would be more efficient for users to just use the
       // treap directly. We have a PersistentTreap variant for React users
       // or places where immutability is important.
-      this.#jsSlice = this.#data.toArray();
+      const arr: T[] = [];
+      for (const key of this.#data.keys()) {
+        arr.push(key);
+      }
+      this.#jsSlice = arr;
     }
 
     return needsUpdate;
@@ -81,9 +89,9 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
   #sink(
     c: Multiset<T>,
-    data: ITree<T>,
+    data: ISortedMap<T, undefined>,
     needsUpdate: boolean,
-  ): [boolean, ITree<T>] {
+  ): [boolean, ISortedMap<T, undefined>] {
     const iterator = c[Symbol.iterator]();
     let next;
 
@@ -111,7 +119,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
         ) {
           needsUpdate = true;
           // The tree doesn't allow dupes -- so this is a replace.
-          data = data.add(nextMult > 0 ? nextValue : value);
+          data.set(nextMult > 0 ? nextValue : value, undefined);
           continue;
         }
       }
@@ -128,12 +136,13 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
   // TODO: if we're not in source order --
   // We should create a source in the order we need so we can always be in source order.
-  #limitedAddAll(data: ITree<T>, value: T) {
+  #limitedAddAll(data: ISortedMap<T, undefined>, value: T) {
     const limit = this.#limit || 0;
     // Under limit? We can just add.
     if (data.size < limit) {
       this.#updateMinMax(value);
-      return data.add(value);
+      data.set(value, undefined);
+      return data;
     }
 
     if (data.size > limit) {
@@ -146,11 +155,11 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
       return data;
     }
     // <= max we add.
-    data = data.add(value);
+    data.set(value, undefined);
     // and then remove the max since we were at limit
-    data = data.delete(this.#max!);
+    data.delete(this.#max!);
     // and then update max
-    this.#max = data.getMax() || undefined;
+    this.#max = data.maxKey() || undefined;
 
     // and what if the value was under min? We update our min.
     if (this.#comparator(value, this.#min!) <= 0) {
@@ -159,7 +168,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     return data;
   }
 
-  #limitedRemoveAll(data: ITree<T>, value: T) {
+  #limitedRemoveAll(data: ISortedMap<T, undefined>, value: T) {
     // if we're outside the window, do not remove.
     const minComp = this.#min && this.#comparator(value, this.#min);
     const maxComp = this.#max && this.#comparator(value, this.#max);
@@ -177,7 +186,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     // only update min/max if the removals was equal to min/max tho
     // otherwise we removed a element that doesn't impact min/max
 
-    data = data.delete(value);
+    data.delete(value);
     // TODO: since we deleted we need to send a request upstream for more data!
 
     if (minComp && minComp === 0) {
@@ -218,12 +227,14 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   }
 }
 
-function addAll<T>(data: ITree<T>, value: T) {
+function addAll<T>(data: ISortedMap<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
-  return data.add(value);
+  data.set(value, undefined);
+  return data;
 }
 
-function removeAll<T>(data: ITree<T>, value: T) {
+function removeAll<T>(data: ISortedMap<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
-  return data.delete(value);
+  data.delete(value);
+  return data;
 }

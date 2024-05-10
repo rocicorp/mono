@@ -8,6 +8,8 @@ type JoinResultBase = {
   [joinSymbol]: true;
 };
 
+export type Comparator<T> = (l: T, r: T) => number;
+
 export type JoinResult<
   AValue,
   BValue,

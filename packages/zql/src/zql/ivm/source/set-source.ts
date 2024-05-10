@@ -1,17 +1,12 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore next.js is having issues finding the .d.ts
-import {Treap} from '@vlcn.io/ds-and-algos/Treap';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore next.js is having issues finding the .d.ts
-import type {Comparator, ITree} from '@vlcn.io/ds-and-algos/types';
 import {must} from 'shared/src/must.js';
 import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
-import type {Version} from '../types.js';
+import type {Comparator, Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
+import BTree, {ISortedMap} from 'sorted-btree';
 
 /**
  * A source that remembers what values it contains.
@@ -21,10 +16,10 @@ import type {Source, SourceInternal} from './source.js';
  *
  */
 let id = 0;
-export abstract class SetSource<T extends object> implements Source<T> {
+export class SetSource<T extends object> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
-  readonly #listeners = new Set<(data: ITree<T>, v: Version) => void>();
+  readonly #listeners = new Set<(data: ISortedMap<T, T>, v: Version) => void>();
   readonly #sorts = new Map<string, SetSource<T>>();
   readonly comparator: Comparator<T>;
   readonly #name: string | undefined;
@@ -32,14 +27,13 @@ export abstract class SetSource<T extends object> implements Source<T> {
   protected readonly _materialite: MaterialiteForSourceInternal;
   #id = id++;
   #historyRequests: Array<PullMsg> = [];
-  #tree: ITree<T>;
+  #tree: ISortedMap<T, T>;
   #seeded = false;
   #pending: Entry<T>[] = [];
 
   constructor(
     materialite: MaterialiteForSourceInternal,
     comparator: Comparator<T>,
-    treapConstructor: (comparator: Comparator<T>) => ITree<T>,
     name?: string | undefined,
   ) {
     this._materialite = materialite;
@@ -52,7 +46,9 @@ export abstract class SetSource<T extends object> implements Source<T> {
       },
       destroy: () => {},
     });
-    this.#tree = treapConstructor(comparator);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    this.#tree = new BTree(undefined, comparator);
     this.comparator = comparator;
 
     this.#internal = {
@@ -68,15 +64,18 @@ export abstract class SetSource<T extends object> implements Source<T> {
               comparator(val, nextVal) === 0
             ) {
               // The tree doesn't allow dupes -- so this is a replace.
-              this.#tree = this.#tree.add(nextMult > 0 ? nextVal : val);
+              this.#tree.set(
+                nextMult > 0 ? nextVal : val,
+                nextMult > 0 ? nextVal : val,
+              );
               ++i;
               continue;
             }
           }
           if (mult < 0) {
-            this.#tree = this.#tree.delete(val);
+            this.#tree.delete(val);
           } else if (mult > 0) {
-            this.#tree = this.#tree.add(val);
+            this.#tree.set(val, val);
           }
         }
 
@@ -100,14 +99,12 @@ export abstract class SetSource<T extends object> implements Source<T> {
   }
 
   withNewOrdering(comp: Comparator<T>): this {
-    const ret = this._withNewOrdering(comp);
+    const ret = new SetSource(this._materialite, comp) as this;
     if (this.#seeded) {
-      ret.seed(this.#tree);
+      ret.seed(this.#tree.keys());
     }
     return ret;
   }
-
-  protected abstract _withNewOrdering(comp: Comparator<T>): this;
 
   get stream(): DifferenceStream<T> {
     return this.#stream;
@@ -122,12 +119,12 @@ export abstract class SetSource<T extends object> implements Source<T> {
     this.#stream.destroy();
   }
 
-  on(cb: (value: ITree<T>, version: Version) => void): () => void {
+  on(cb: (value: ISortedMap<T, T>, version: Version) => void): () => void {
     this.#listeners.add(cb);
     return () => this.#listeners.delete(cb);
   }
 
-  off(fn: (value: ITree<T>, version: Version) => void): void {
+  off(fn: (value: ISortedMap<T, T>, version: Version) => void): void {
     this.#listeners.delete(fn);
   }
 
@@ -173,7 +170,7 @@ export abstract class SetSource<T extends object> implements Source<T> {
     // TODO: invariant to ensure we are in a tx.
 
     for (const v of values) {
-      this.#tree = this.#tree.add(v);
+      this.#tree.set(v, v);
     }
     this._materialite.addDirtySource(this.#internal);
 
@@ -266,9 +263,6 @@ export abstract class SetSource<T extends object> implements Source<T> {
 
   get(key: T): T | undefined {
     const ret = this.#tree.get(key);
-    if (ret === null) {
-      return undefined;
-    }
     return ret;
   }
 
@@ -277,22 +271,8 @@ export abstract class SetSource<T extends object> implements Source<T> {
   }
 }
 
-export class MutableSetSource<T extends object> extends SetSource<T> {
-  constructor(
-    materialite: MaterialiteForSourceInternal,
-    comparator: Comparator<T>,
-    name?: string | undefined,
-  ) {
-    super(materialite, comparator, comparator => new Treap(comparator), name);
-  }
-
-  protected _withNewOrdering(comp: Comparator<T>): this {
-    return new MutableSetSource<T>(this._materialite, comp) as this;
-  }
-}
-
 function asEntries<T>(
-  m: ITree<T>,
+  m: ISortedMap<T, T>,
   _message?: Request | undefined,
 ): Multiset<T> {
   // message will contain hoisted expressions so we can do relevant
@@ -311,7 +291,7 @@ function asEntries<T>(
   // which matches this position in the source. (e.g., where id > x)
   return {
     [Symbol.iterator]() {
-      return gen(m);
+      return gen(m.keys());
     },
   };
 }
