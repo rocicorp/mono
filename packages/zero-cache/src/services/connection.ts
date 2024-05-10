@@ -4,7 +4,7 @@ import {Downstream, PongMessage, upstreamSchema} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 // TODO(mlaw): break dependency on reflect-server
-import {closeWithError} from 'reflect-server/socket';
+import {closeWithError, sendError} from 'reflect-server/socket';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 
@@ -85,7 +85,10 @@ export class Connection {
             );
           }
           for (const mutation of mutations) {
-            await this.#mutagen.processMutation(mutation);
+            const error = await this.#mutagen.processMutation(mutation);
+            if (error !== undefined) {
+              sendError(lc, ws, 'MutationFailed', error);
+            }
           }
           break;
         }
