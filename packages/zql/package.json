@@ -35,6 +35,6 @@
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "compare-utf8": "^0.1.1",
-    "sorted-btree": "^1.8.1"
+    "sorted-btree-roci": "0.0.0"
   }
 }

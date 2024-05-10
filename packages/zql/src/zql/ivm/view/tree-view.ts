@@ -4,8 +4,7 @@ import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage} from '../graph/message.js';
 import type {Multiset} from '../multiset.js';
 import {AbstractView} from './abstract-view.js';
-import type {ISortedMap} from 'sorted-btree';
-import BTree from '../../btree-class.js';
+import BTree from 'sorted-btree-roci';
 import type {Comparator} from '../types.js';
 
 /**
@@ -19,7 +18,7 @@ import type {Comparator} from '../types.js';
  */
 let id = 0;
 export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
-  #data: ISortedMap<T, undefined>;
+  #data: BTree<T, undefined>;
 
   #jsSlice: T[] = [];
 
@@ -54,14 +53,8 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     }
   }
 
-  #addAll: (
-    data: ISortedMap<T, undefined>,
-    value: T,
-  ) => ISortedMap<T, undefined>;
-  #removeAll: (
-    data: ISortedMap<T, undefined>,
-    value: T,
-  ) => ISortedMap<T, undefined>;
+  #addAll: (data: BTree<T, undefined>, value: T) => BTree<T, undefined>;
+  #removeAll: (data: BTree<T, undefined>, value: T) => BTree<T, undefined>;
 
   get value(): T[] {
     return this.#jsSlice;
@@ -90,9 +83,9 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
   #sink(
     c: Multiset<T>,
-    data: ISortedMap<T, undefined>,
+    data: BTree<T, undefined>,
     needsUpdate: boolean,
-  ): [boolean, ISortedMap<T, undefined>] {
+  ): [boolean, BTree<T, undefined>] {
     const iterator = c[Symbol.iterator]();
     let next;
 
@@ -137,7 +130,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
   // TODO: if we're not in source order --
   // We should create a source in the order we need so we can always be in source order.
-  #limitedAddAll(data: ISortedMap<T, undefined>, value: T) {
+  #limitedAddAll(data: BTree<T, undefined>, value: T) {
     const limit = this.#limit || 0;
     // Under limit? We can just add.
     if (data.size < limit) {
@@ -169,7 +162,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     return data;
   }
 
-  #limitedRemoveAll(data: ISortedMap<T, undefined>, value: T) {
+  #limitedRemoveAll(data: BTree<T, undefined>, value: T) {
     // if we're outside the window, do not remove.
     const minComp = this.#min && this.#comparator(value, this.#min);
     const maxComp = this.#max && this.#comparator(value, this.#max);
@@ -228,13 +221,13 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
   }
 }
 
-function addAll<T>(data: ISortedMap<T, undefined>, value: T) {
+function addAll<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
   data.set(value, undefined);
   return data;
 }
 
-function removeAll<T>(data: ISortedMap<T, undefined>, value: T) {
+function removeAll<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
   data.delete(value);
   return data;

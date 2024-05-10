@@ -1,9 +1,8 @@
 {
-  "name": "sorted-btree",
-  "version": "1.8.0",
+  "name": "sorted-btree-roci",
+  "version": "0.0.0",
   "description": "A sorted list of key-value pairs in a fast, typed in-memory B+ tree with a powerful API.",
   "main": "b+tree.js",
-  "typings": "b+tree",
   "type": "module",
   "scripts": {
     "test": "vitest run",
@@ -49,14 +48,14 @@
     "@types/bintrees": "^1.0.2",
     "@types/collections": "^5.0.2",
     "@types/mersenne-twister": "^1.1.2",
-    "@types/node": "^10.17.28",
+    "@types/node": "^18.16.0",
     "babel-core": "^6.26.3",
     "bintrees": "^1.0.2",
     "collections": "^5.1.11",
     "functional-red-black-tree": "^1.0.1",
     "mersenne-twister": "^1.1.0",
     "testpack-cli": "^1.1.4",
-    "ts-node": "^7.0.1",
+    "ts-node": "^10.9.1",
     "typescript": "^5.4.2"
   },
   "dependencies": {},
