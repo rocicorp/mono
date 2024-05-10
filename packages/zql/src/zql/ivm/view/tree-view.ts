@@ -4,7 +4,8 @@ import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage} from '../graph/message.js';
 import type {Multiset} from '../multiset.js';
 import {AbstractView} from './abstract-view.js';
-import BTree, {ISortedMap} from 'sorted-btree';
+import type {ISortedMap} from 'sorted-btree';
+import BTree from '../../btree-class.js';
 import type {Comparator} from '../types.js';
 
 /**
