@@ -1459,6 +1459,11 @@ export default class BTree<K = any, V = any>
       this.size,
     );
   }
+
+  [Symbol.iterator] = this.entries.bind(this);
+  where = this.filter.bind(this);
+  setRange = this.setPairs.bind(this);
+  add = this.set.bind(this); // for compatibility with ISetSink<K>
 }
 
 /** A TypeScript helper function that simply returns its argument, typed as
@@ -1471,14 +1476,6 @@ export function asSet<K, V>(
 ): undefined extends V ? ISortedSet<K> : unknown {
   return btree as any;
 }
-
-declare const Symbol: any;
-if (Symbol && Symbol.iterator)
-  // iterator is equivalent to entries()
-  (BTree as any).prototype[Symbol.iterator] = BTree.prototype.entries;
-(BTree as any).prototype.where = BTree.prototype.filter;
-(BTree as any).prototype.setRange = BTree.prototype.setPairs;
-(BTree as any).prototype.add = BTree.prototype.set; // for compatibility with ISetSink<K>
 
 function iterator<T>(
   next: () => IteratorResult<T> = () => ({done: true, value: undefined}),

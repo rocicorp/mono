@@ -6,8 +6,8 @@ import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
 import type {Comparator, Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
-import type {ISortedMap} from 'sorted-btree';
-import BTree from '../../btree-class.js';
+import type {ISortedMap} from 'sorted-btree-roci';
+import BTree from 'sorted-btree-roci';
 
 /**
  * A source that remembers what values it contains.
@@ -28,7 +28,7 @@ export class SetSource<T extends object> implements Source<T> {
   protected readonly _materialite: MaterialiteForSourceInternal;
   #id = id++;
   #historyRequests: Array<PullMsg> = [];
-  #tree: ISortedMap<T, T>;
+  #tree: BTree<T, T>;
   #seeded = false;
   #pending: Entry<T>[] = [];
 
