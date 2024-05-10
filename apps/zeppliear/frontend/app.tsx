@@ -66,6 +66,9 @@ type AppProps = {
   undoManager: UndoManager;
 };
 
+const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
+const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
+
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const App = ({undoManager}: AppProps) => {
   const [view] = useQueryState('view');
@@ -80,6 +83,18 @@ const App = ({undoManager}: AppProps) => {
   const [detailIssueID, setDetailIssueID] = useQueryState('iss');
   const [menuVisible, setMenuVisible] = useState(false);
   const zero = useZero<Collections>();
+
+  // Sync the user rows for the entire crew so that when we pick a random
+  // crew member below to be the current active user, we already have it
+  // synced.
+  useQuery(
+    zero.query.member.select('id', 'name').where('name', 'IN', crewNames),
+  );
+
+  const userID =
+    useQuery(
+      zero.query.member.select('id').where('name', '=', activeUserName),
+    ).at(0)?.id ?? '';
 
   const issueQuery = zero.query.issue;
 
@@ -119,9 +134,9 @@ const App = ({undoManager}: AppProps) => {
     async (issue: IssueCreationPartial) => {
       // TODO: UndoManager? - audit every other place we're doing mutations,
       // or remove undo for now.
-      await createIssue(zero, issue);
+      await createIssue(zero, issue, userID);
     },
-    [zero],
+    [zero, userID],
   );
   const handleCreateComment = useCallback(
     async (comment: Comment) => {
@@ -192,6 +207,7 @@ const App = ({undoManager}: AppProps) => {
         filteredIssues={filteredIssues}
         hasNonViewFilters={hasNonViewFilters}
         zero={zero}
+        userID={userID}
         onCloseMenu={handleCloseMenu}
         onToggleMenu={handleToggleMenu}
         onUpdateIssues={handleUpdateIssues}
@@ -217,6 +233,7 @@ interface LayoutProps {
   filteredIssues: {issue: Issue; labels: string[]}[];
   hasNonViewFilters: boolean;
   zero: Zero<Collections>;
+  userID: string;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
@@ -233,6 +250,7 @@ function RawLayout({
   viewIssueCount,
   filteredIssues,
   hasNonViewFilters,
+  userID,
   onCloseMenu,
   onToggleMenu,
   onUpdateIssues,
@@ -271,6 +289,7 @@ function RawLayout({
                 onUpdateIssues={onUpdateIssues}
                 onAddComment={onCreateComment}
                 isLoading={isLoading}
+                userID={userID}
               />
             )}
             <div
