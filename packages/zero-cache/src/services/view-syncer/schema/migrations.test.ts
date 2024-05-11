@@ -36,6 +36,7 @@ describe('view-syncer/migrations', () => {
 
         await initStorageSchema(
           createSilentLogContext(),
+          'view-syncer',
           new DurableStorage(storage),
           schemaRoot,
           SCHEMA_MIGRATIONS,
