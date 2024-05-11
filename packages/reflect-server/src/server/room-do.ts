@@ -23,7 +23,6 @@ import {
   type ClientMap,
   type ClientState,
 } from '../types/client-state.js';
-import type {Socket} from 'cf-shared/src/socket.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {decodeHeaderValue} from 'shared/src/headers.js';
 import {LoggingLock} from '../util/lock.js';
@@ -38,9 +37,10 @@ import {handleClose} from './close.js';
 import {handleConnection} from './connect.js';
 import {closeConnections, getConnections} from './connections.js';
 import {
+  Socket,
   requireUpgradeHeader,
   upgradeWebsocketResponse,
-} from 'cf-shared/src/socket.js';
+} from '../util/socket.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
 import {handleMessage} from './message.js';
 import {

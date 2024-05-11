@@ -4,7 +4,7 @@ import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
-import {closeWithError, sendError, Socket} from 'cf-shared/src/socket.js';
+import {closeWithError, sendError, Socket} from '../util/socket.js';
 import {handlePing} from './ping.js';
 import {handlePull} from './pull.js';
 import {handlePush, type ProcessUntilDone} from './push.js';

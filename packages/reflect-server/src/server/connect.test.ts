@@ -20,7 +20,7 @@ import type {
   ClientID,
   ClientMap,
 } from '../types/client-state.js';
-import type {Socket} from 'cf-shared/src/socket.js';
+import type {Socket} from '../util/socket.js';
 import {putVersion} from '../types/version.js';
 import {encodeHeaderValue} from 'shared/src/headers.js';
 import {Mocket, client, clientRecord} from '../util/test-utils.js';

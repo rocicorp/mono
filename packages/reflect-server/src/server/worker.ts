@@ -8,7 +8,7 @@ import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {
   SEC_WEBSOCKET_PROTOCOL_HEADER,
   createWSAndCloseWithTailError,
-} from 'cf-shared/src/socket.js';
+} from '../util/socket.js';
 import {
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_CUSTOM_AUTH,

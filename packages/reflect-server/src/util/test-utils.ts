@@ -2,7 +2,7 @@ import {afterEach, beforeEach, jest} from '@jest/globals';
 import type {Mutation, NullableVersion} from 'reflect-protocol';
 import type {AuthData} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
-import type {Socket} from 'cf-shared/src/socket.js';
+import type {Socket} from '../util/socket.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
 import type {
   ClientGroupID,

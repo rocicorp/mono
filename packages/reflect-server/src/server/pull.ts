@@ -6,9 +6,9 @@ import {
   listClientRecordsForClientGroup,
 } from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
-import type {Socket} from 'cf-shared/src/socket.js';
+import type {Socket} from '../util/socket.js';
 import {compareVersions, getVersion} from '../types/version.js';
-import {send} from 'cf-shared/src/socket.js';
+import {send} from '../util/socket.js';
 
 export async function handlePull(
   storage: DurableStorage,

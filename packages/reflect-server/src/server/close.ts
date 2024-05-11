@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ClientID, ClientMap} from '../types/client-state.js';
-import type {Socket} from 'cf-shared/src/socket.js';
+import type {Socket} from '../util/socket.js';
 
 export function handleClose(
   lc: LogContext,

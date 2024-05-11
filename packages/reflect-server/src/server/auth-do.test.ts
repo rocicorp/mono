@@ -41,7 +41,7 @@ import {
   TestExecutionContext,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
-import {upgradeWebsocketResponse} from 'cf-shared/src/socket.js';
+import {upgradeWebsocketResponse} from '../util/socket.js';
 import {
   AUTH_DATA_HEADER_NAME,
   ROOM_ID_HEADER_NAME,

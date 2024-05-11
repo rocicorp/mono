@@ -28,7 +28,7 @@ import {
   createWSAndCloseWithError,
   createWSAndCloseWithTailError,
   requireUpgradeHeader,
-} from 'cf-shared/src/socket.js';
+} from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
 import {roomNotFoundAPIError} from 'cf-shared/src/api-errors.js';
 import {initAuthDOSchema} from './auth-do-schema.js';

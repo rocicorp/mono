@@ -1,5 +1,5 @@
 import type {AuthData} from 'reflect-shared/src/types.js';
-import type {Socket} from 'cf-shared/src/socket.js';
+import type {Socket} from '../util/socket.js';
 
 export type ClientID = string;
 export type ClientGroupID = string;
