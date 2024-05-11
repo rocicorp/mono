@@ -813,7 +813,7 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           patchVersion: updated.version,
-          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
@@ -1069,14 +1069,14 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           patchVersion: updated.version,
-          queriedColumns: {id: ['oneHash', 'twoHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash', 'twoHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
@@ -1403,7 +1403,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash', 'twoHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,

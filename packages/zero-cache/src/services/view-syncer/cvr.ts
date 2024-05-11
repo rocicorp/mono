@@ -555,12 +555,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       } = row;
 
       const existing = existingRows.get(path);
-      const {merged, putColumns} = mergeQueriedColumns(
+      const merged = mergeQueriedColumns(
         existing?.queriedColumns,
         queriedColumns,
       );
+
       let patchVersion: CVRVersion;
-      if (existing?.rowVersion === rowVersion && putColumns.length === 0) {
+      if (
+        existing?.rowVersion === rowVersion &&
+        Object.keys(merged).every(col => existing.queriedColumns?.[col])
+      ) {
         // No CVR changes necessary. Just send the content patch to interested clients
         // (i.e. that are catching up), if any.
         patchVersion = existing.patchVersion;
@@ -592,7 +596,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       });
 
       // Keep track of queried columns to determine which columns to prune at the end.
-      const {merged: allQueriedColumns} = mergeQueriedColumns(
+      const allQueriedColumns = mergeQueriedColumns(
         this.#receivedRows.get(path),
         queriedColumns,
       );
@@ -715,13 +719,15 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): {id: RowID; columns?: string[]} | null {
     const received = this.#receivedRows.get(rowRecordPath);
 
-    const {merged: newQueriedColumns, delColumns} = mergeQueriedColumns(
+    const newQueriedColumns = mergeQueriedColumns(
       existing.queriedColumns,
       received,
       this.#removedOrExecutedQueryIDs,
     );
-
-    if (!delColumns.length) {
+    if (
+      existing.queriedColumns &&
+      Object.keys(existing.queriedColumns).every(col => newQueriedColumns[col])
+    ) {
       return null; // No columns deleted.
     }
     const patchVersion = this.#assertNewVersion();
@@ -762,34 +768,27 @@ function mergeQueriedColumns(
   existing: QueriedColumns | null | undefined,
   received: QueriedColumns | null | undefined,
   removeIDs?: Set<string>,
-): {
-  merged: QueriedColumns;
-  putColumns: string[];
-  delColumns: string[];
-} {
+): QueriedColumns {
+  if (!existing) {
+    return received ?? {};
+  }
   const merged: QueriedColumns = {};
-  const putColumns = [];
-  const delColumns = [];
 
-  for (const col of new Set([
-    ...(existing ? Object.keys(existing) : []),
-    ...(received ? Object.keys(received) : []),
-  ])) {
-    const existingQueryIDs = new Set(existing?.[col]);
-    const receivedQueryIDs = new Set(received?.[col]);
-    const finalQueryIDs = union(
-      removeIDs ? difference(existingQueryIDs, removeIDs) : existingQueryIDs,
-      receivedQueryIDs,
-    );
-    if (finalQueryIDs.size === 0) {
-      delColumns.push(col);
-    } else {
-      merged[col] = [...finalQueryIDs].sort(compareUTF8);
-      if (!existing?.[col]) {
-        putColumns.push(col);
+  [existing, received].forEach((row, i) => {
+    if (!row) {
+      return;
+    }
+    for (const [col, queries] of Object.entries(row)) {
+      for (const id of queries) {
+        if (i === 0 /* existing */ && removeIDs?.has(id)) {
+          continue; // removeIDs from existing row.
+        }
+        if (!merged[col]?.includes(id)) {
+          (merged[col] ??= []).push(id);
+        }
       }
     }
-  }
+  });
 
-  return {merged, putColumns, delColumns};
+  return merged;
 }
