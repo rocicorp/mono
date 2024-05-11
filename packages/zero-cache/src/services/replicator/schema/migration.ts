@@ -86,7 +86,7 @@ export async function runSyncSchemaMigrations(
       for (const [dest, migration] of versionMigrations) {
         if (meta.version < dest) {
           log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
-          await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+          void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
           // Run the optional PreMigration step before starting the transaction.
           if ('pre' in migration) {
