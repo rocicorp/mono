@@ -90,18 +90,21 @@ export class ViewSyncerService implements ViewSyncer, Service {
     assert(!this.#started, `ViewSyncer ${this.id} has already been started`);
     this.#started = true;
 
+    this.#lc.info?.('starting view-syncer');
     try {
       await this.#lock.withLock(async () => {
         await initStorageSchema(
           this.#lc,
+          'view-syncer',
           this.#storage,
           schemaRoot,
           SCHEMA_MIGRATIONS,
         );
-        this.#cvr = await loadCVR(this.#storage, this.id);
+
+        this.#cvr = await loadCVR(this.#lc, this.#storage, this.id);
       });
 
-      this.#lc.info?.('started');
+      this.#lc.info?.('started view-syncer');
 
       while (
         await Promise.race([
