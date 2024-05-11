@@ -5,7 +5,7 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from 'zero-protocol';
-import {createSilentLogContext} from '../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {Subscription} from '../../types/subscription.js';
 import {ClientHandler, Patch, ensureSafeJSON} from './client-handler.js';

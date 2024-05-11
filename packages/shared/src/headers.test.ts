@@ -1,4 +1,4 @@
-import {test, expect} from '@jest/globals';
+import {test, expect} from 'vitest';
 import {decodeHeaderValue, encodeHeaderValue} from './headers.js';
 
 function testEncodeDecodeHeaderValue(value: string, expected: string): void {

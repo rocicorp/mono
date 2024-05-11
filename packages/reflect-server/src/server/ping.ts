@@ -1,7 +1,7 @@
-import type {Socket} from '../types/client-state.js';
+import type {Socket} from 'cf-shared/src/socket.js';
 import type {PongMessage} from 'reflect-protocol';
 import type {LogContext} from '@rocicorp/logger';
-import {send} from 'shared/src/cf/socket.js';
+import {send} from 'cf-shared/src/socket.js';
 
 /**
  * handles the 'ping' upstream message by sending a pong!

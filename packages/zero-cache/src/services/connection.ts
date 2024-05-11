@@ -3,7 +3,7 @@ import * as valita from 'shared/src/valita.js';
 import {Downstream, PongMessage, upstreamSchema} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
-import {closeWithError, sendError} from 'shared/src/cf/socket.js';
+import {closeWithError, sendError} from 'cf-shared/src/socket.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 

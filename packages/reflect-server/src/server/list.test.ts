@@ -3,7 +3,7 @@ import {must} from 'shared/src/must.js';
 import type {ListOptions} from '../storage/storage.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {listParamsSchema, makeListControl, makeListResults} from './list.js';
-import {queryParams} from 'shared/src/cf/router.js';
+import {queryParams} from 'cf-shared/src/router.js';
 
 describe('parse ListOptions', () => {
   type Case = {

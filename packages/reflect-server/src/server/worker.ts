@@ -8,7 +8,7 @@ import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {
   SEC_WEBSOCKET_PROTOCOL_HEADER,
   createWSAndCloseWithTailError,
-} from 'shared/src/cf/socket.js';
+} from 'cf-shared/src/socket.js';
 import {
   AUTH_ROUTES_AUTHED_BY_API_KEY,
   AUTH_ROUTES_CUSTOM_AUTH,
@@ -16,7 +16,7 @@ import {
   AUTH_WEBSOCKET_ROUTES_AUTHED_BY_API_KEY,
 } from './auth-do.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
-import {makeErrorResponse} from './errors.js';
+import {makeErrorResponse} from 'cf-shared/src/errors.js';
 import {
   CANARY_GET,
   HELLO,
@@ -33,7 +33,7 @@ import {
   checkAuthAPIKey,
   get,
   post,
-} from 'shared/src/cf/router.js';
+} from 'cf-shared/src/router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export type MetricsSink = (

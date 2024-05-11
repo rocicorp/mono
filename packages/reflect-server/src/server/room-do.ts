@@ -22,8 +22,8 @@ import {
   type ClientID,
   type ClientMap,
   type ClientState,
-  type Socket,
 } from '../types/client-state.js';
+import type {Socket} from 'cf-shared/src/socket.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {decodeHeaderValue} from 'shared/src/headers.js';
 import {LoggingLock} from '../util/lock.js';
@@ -40,7 +40,7 @@ import {closeConnections, getConnections} from './connections.js';
 import {
   requireUpgradeHeader,
   upgradeWebsocketResponse,
-} from 'shared/src/cf/socket.js';
+} from 'cf-shared/src/socket.js';
 import {ROOM_ID_HEADER_NAME} from './internal-headers.js';
 import {handleMessage} from './message.js';
 import {
@@ -71,7 +71,7 @@ import {
   queryParams,
   roomID,
   userID,
-} from 'shared/src/cf/router.js';
+} from 'cf-shared/src/router.js';
 import {connectTail} from './tail.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 

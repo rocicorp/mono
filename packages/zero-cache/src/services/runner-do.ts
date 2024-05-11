@@ -1,14 +1,13 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {CONNECT_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-import {BaseContext, Router} from 'shared/src/cf/router.js';
-// TODO(mlaw): break dependency on reflect-server
+import {BaseContext, Router} from 'cf-shared/src/router.js';
+import type {ErrorKind} from 'zero-protocol/src/error.js';
 import {
   requireUpgradeHeader,
   upgradeWebsocketResponse,
-} from 'reflect-server/http-util';
-import type {ErrorKind} from 'zero-protocol/src/error.js';
-import {closeWithError} from 'shared/src/cf/socket.js';
+  closeWithError,
+} from 'cf-shared/src/socket.js';
 import type {ConnectedMessage} from 'zero-protocol';
 import {getConnectRequest} from '../connect.js';
 import {Connection, send} from './connection.js';

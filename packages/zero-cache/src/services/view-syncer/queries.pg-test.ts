@@ -2,7 +2,7 @@ import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
-import {createSilentLogContext} from '../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Normalized} from '../../zql/normalize.js';
 import {getPublicationInfo} from '../replicator/tables/published.js';
