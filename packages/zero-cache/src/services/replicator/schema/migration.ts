@@ -61,7 +61,7 @@ export async function runSyncSchemaMigrations(
     const codeSchemaVersion =
       versionMigrations[versionMigrations.length - 1][0];
     log.info?.(
-      `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
+      `Checking schema for compatibility with replicator at schema v${codeSchemaVersion}`,
     );
 
     log.info?.('runSyncSchemaMigrations Connecting to: ', upstreamUri);
@@ -69,7 +69,7 @@ export async function runSyncSchemaMigrations(
       const meta = await getSyncSchemaVersions(tx);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
         throw new Error(
-          `Cannot run server at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
+          `Cannot run replicator at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
         );
       }
 
@@ -115,12 +115,12 @@ export async function runSyncSchemaMigrations(
     }
 
     assert(meta.version === codeSchemaVersion);
-    log.info?.(`Running server at schema v${codeSchemaVersion}`);
+    log.info?.(`Running replicator at schema v${codeSchemaVersion}`);
   } catch (e) {
     log.error?.('Error in ensureSyncSchemaMigrated', e);
     throw e;
   } finally {
-    await log.flush();
+    void log.flush(); // Flush the logs but do not block server progress on it.
   }
 }
 

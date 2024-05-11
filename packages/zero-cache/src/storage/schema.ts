@@ -94,7 +94,7 @@ export async function initStorageSchema(
     log.error?.('Error in ensureStorageSchemaMigrated', e);
     throw e;
   } finally {
-    await log.flush();
+    void log.flush(); // Flush the logs but do not block server progress on it.
   }
 }
 
