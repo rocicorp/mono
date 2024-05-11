@@ -75,7 +75,7 @@ export async function initStorageSchema(
       for (const [dest, migration] of versionMigrations) {
         if (meta.version < dest) {
           log.info?.(`Migrating storage from v${meta.version} to v${dest}`);
-          await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+          void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
           meta = await migrateStorageSchemaVersion(
             log,
@@ -94,7 +94,7 @@ export async function initStorageSchema(
     log.error?.('Error in ensureStorageSchemaMigrated', e);
     throw e;
   } finally {
-    await log.flush();
+    void log.flush(); // Flush the logs but do not block server progress on it.
   }
 }
 
