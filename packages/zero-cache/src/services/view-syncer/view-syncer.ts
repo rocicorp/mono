@@ -132,10 +132,11 @@ export class ViewSyncerService implements ViewSyncer, Service {
         this.#invalidationSubscription = undefined;
         this.#lc.info?.(`waiting for syncers`);
       }
+      await this.stop();
     } catch (e) {
       this.#lc.error?.(e);
+      await this.stop(e);
     } finally {
-      await this.stop();
       this.#lc.info?.('stopped');
     }
   }
@@ -418,14 +419,18 @@ export class ViewSyncerService implements ViewSyncer, Service {
   }
 
   // eslint-disable-next-line require-await
-  async stop(): Promise<void> {
+  async stop(err?: unknown): Promise<void> {
     this.#stopped = true;
     this.#shouldRun.resolve(false);
     this.#invalidationSubscription?.cancel();
     this.#invalidationSubscription = undefined;
 
     for (const client of this.#clients.values()) {
-      client.close();
+      if (err) {
+        client.fail(err);
+      } else {
+        client.close();
+      }
     }
   }
 
