@@ -35,7 +35,7 @@ describe('view-syncer/cvr', () => {
   test('load first time cvr', async () => {
     await runWithDurableObjectStorage(async doStorage => {
       const storage = new DurableStorage(doStorage);
-      const cvr = await loadCVR(storage, 'abc123');
+      const cvr = await loadCVR(lc, storage, 'abc123');
       expect(cvr).toEqual({
         id: 'abc123',
         version: {stateVersion: '00'},
@@ -54,7 +54,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(storage, 'abc123');
+      const reloaded = await loadCVR(lc, storage, 'abc123');
       expect(reloaded).toEqual(flushed);
 
       await expectStorage(doStorage, {
@@ -90,7 +90,7 @@ describe('view-syncer/cvr', () => {
         } satisfies QueryRecord,
       });
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(cvr).toEqual({
         id: 'abc123',
         version: {stateVersion: '1a9', minorVersion: 2},
@@ -142,7 +142,7 @@ describe('view-syncer/cvr', () => {
         ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       });
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRUpdater(new DurableStorage(storage), cvr);
 
       const updated = await updater.flush(new Date(Date.UTC(2024, 3, 24)));
@@ -175,7 +175,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
@@ -233,7 +233,7 @@ describe('view-syncer/cvr', () => {
         ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       });
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRConfigDrivenUpdater(
         new DurableStorage(storage),
         cvr,
@@ -368,7 +368,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
@@ -468,7 +468,7 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRConfigDrivenUpdater(
         new DurableStorage(storage),
         cvr,
@@ -487,7 +487,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
@@ -618,7 +618,7 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRQueryDrivenUpdater(
         new DurableStorage(storage),
         cvr,
@@ -790,7 +790,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       const {
@@ -934,7 +934,7 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRQueryDrivenUpdater(
         new DurableStorage(storage),
         cvr,
@@ -1049,7 +1049,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       const {
@@ -1210,7 +1210,7 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRQueryDrivenUpdater(
         new DurableStorage(storage),
         cvr,
@@ -1374,7 +1374,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       const {
@@ -1533,7 +1533,7 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(new DurableStorage(storage), 'abc123');
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRQueryDrivenUpdater(
         new DurableStorage(storage),
         cvr,
@@ -1589,7 +1589,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(new DurableStorage(storage), 'abc123');
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       expect(reloaded).toEqual(updated);
 
       const {

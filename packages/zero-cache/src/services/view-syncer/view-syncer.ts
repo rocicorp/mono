@@ -101,8 +101,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
           SCHEMA_MIGRATIONS,
         );
 
-        this.#lc.debug?.('loading CVR');
-        this.#cvr = await loadCVR(this.#storage, this.id);
+        this.#cvr = await loadCVR(this.#lc, this.#storage, this.id);
       });
 
       this.#lc.info?.('started view-syncer');
