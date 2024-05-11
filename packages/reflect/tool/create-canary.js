@@ -65,12 +65,6 @@ try {
     'package.json',
   );
 
-  const changes = execute('git diff HEAD .', {stdio: 'pipe'}).toString().trim();
-  if (changes.length > 0) {
-    console.error('There are uncommitted changes, cannot continue');
-    process.exit(1);
-  }
-
   const hash = execute('git rev-parse HEAD', {stdio: 'pipe'})
     .toString()
     .trim()
@@ -100,7 +94,7 @@ try {
 
   execute('npm install');
   execute('npm run format');
-  execute('npx syncpack');
+  execute('npx syncpack fix-mismatches');
   execute('git status');
   execute('git add package.json');
   execute('git add **/package.json');
