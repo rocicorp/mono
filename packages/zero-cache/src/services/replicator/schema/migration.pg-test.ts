@@ -123,7 +123,7 @@ describe('schema/migration', () => {
         minSafeRollbackVersion: 8,
       },
       expectedErr:
-        'Error: Cannot run server at schema v7 because rollback limit is v8',
+        'Error: Cannot run replicator at schema v7 because rollback limit is v8',
     },
     {
       name: 'bump rollback limit',

@@ -58,7 +58,6 @@
     "ts-node": "^10.9.1",
     "typescript": "^5.4.2"
   },
-  "dependencies": {},
   "jest": {
     "transform": {
       "^.+\\.tsx?$": "ts-jest"

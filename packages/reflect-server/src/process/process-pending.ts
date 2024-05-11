@@ -119,7 +119,7 @@ export async function processPending(
       hasConnectsOrDisconnectsToProcess,
       missCount,
     },
-    toProcessMutations,
+    toProcessMutations.slice(0, 10),
   );
   const pokesByClientID = await processRoom(
     lc,

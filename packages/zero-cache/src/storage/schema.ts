@@ -38,6 +38,7 @@ export type VersionMigrationMap = {
  */
 export async function initStorageSchema(
   log: LogContext,
+  service: string,
   storage: DurableStorage,
   schemaRoot: string,
   versionMigrationMap: VersionMigrationMap,
@@ -51,13 +52,13 @@ export async function initStorageSchema(
     const codeSchemaVersion =
       versionMigrations[versionMigrations.length - 1][0];
     log.info?.(
-      `Checking schema for compatibility with server at schema v${codeSchemaVersion}`,
+      `Checking schema for compatibility with ${service} at schema v${codeSchemaVersion}`,
     );
 
     let meta = await getStorageSchemaMeta(storage, schemaRoot);
     if (codeSchemaVersion < meta.minSafeRollbackVersion) {
       throw new Error(
-        `Cannot run server at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
+        `Cannot run ${service} at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
       );
     }
 
@@ -74,7 +75,7 @@ export async function initStorageSchema(
       for (const [dest, migration] of versionMigrations) {
         if (meta.version < dest) {
           log.info?.(`Migrating storage from v${meta.version} to v${dest}`);
-          await log.flush(); // Flush logs before each migration to help debug crash-y migrations.
+          void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
           meta = await migrateStorageSchemaVersion(
             log,
@@ -88,12 +89,12 @@ export async function initStorageSchema(
       }
     }
     assert(meta.version === codeSchemaVersion);
-    log.info?.(`Running server at schema v${codeSchemaVersion}`);
+    log.info?.(`Running ${service} at schema v${codeSchemaVersion}`);
   } catch (e) {
     log.error?.('Error in ensureStorageSchemaMigrated', e);
     throw e;
   } finally {
-    await log.flush();
+    void log.flush(); // Flush the logs but do not block server progress on it.
   }
 }
 

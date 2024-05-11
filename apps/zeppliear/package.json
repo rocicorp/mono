@@ -38,7 +38,7 @@
     "react-remark": "^2.1.0",
     "react-virtualized-auto-sizer": "^1.0.6",
     "react-window": "^1.8.6",
-    "@rocicorp/reflect": "0.39.202402230127+b70f6b",
+    "@rocicorp/reflect": "0.39.202405110706+9cdeac",
     "zero-client": "0.0.0",
     "replicache-react": "^4.0.1",
     "zod": "^3.21.4"

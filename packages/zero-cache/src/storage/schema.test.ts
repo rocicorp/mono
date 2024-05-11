@@ -123,7 +123,7 @@ describe('storage schema', () => {
         minSafeRollbackVersion: 8,
       },
       expectedErr:
-        'Error: Cannot run server at schema v7 because rollback limit is v8',
+        'Error: Cannot run my-service at schema v7 because rollback limit is v8',
     },
     {
       name: 'bump rollback limit',
@@ -185,6 +185,7 @@ describe('storage schema', () => {
         try {
           await initStorageSchema(
             createSilentLogContext(),
+            'my-service',
             new DurableStorage(storage),
             '/vs/1234',
             c.migrations,

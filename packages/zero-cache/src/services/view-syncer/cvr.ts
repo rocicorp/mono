@@ -54,9 +54,11 @@ export type CVRSnapshot = {
 
 /** Loads the CVR metadata from storage. */
 export async function loadCVR(
+  lc: LogContext,
   storage: Storage,
   id: string,
 ): Promise<CVRSnapshot> {
+  lc.debug?.('loading CVR');
   const cvr: CVR = {
     id,
     version: {stateVersion: versionToLexi(0)},
@@ -70,6 +72,7 @@ export async function loadCVR(
     {prefix: paths.metaPrefix()},
     metaRecordSchema, // TODO: Consider an alternative API to union type + casting.
   );
+  lc.debug?.(`loaded ${metaRecords.size} meta entries`);
   for (const [key, value] of metaRecords) {
     if (key.endsWith('/version')) {
       cvr.version = value as CVRVersion;

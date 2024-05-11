@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import type {Multiset} from '../../multiset.js';
 import {DifferenceStream} from '../difference-stream.js';
 
 type Thing = {
@@ -172,4 +173,72 @@ test('collects all things with the same key', () => {
     expect(items).toEqual(expected);
     items.length = 0;
   }
+});
+
+test('reduce is lazy', () => {
+  const input = new DifferenceStream<Thing>();
+  let called = false;
+  function getGroupKey(t: Thing) {
+    return t.groupKey;
+  }
+  function getValueIdentity(t: Thing) {
+    return t.id;
+  }
+  const output = input.reduce(
+    getGroupKey,
+    getValueIdentity,
+    (group: Iterable<Thing>) => {
+      called = true;
+      let sum = 0;
+      let id = '';
+      for (const item of group) {
+        id = item.groupKey;
+        sum += item.value;
+      }
+
+      return {
+        id,
+        sum,
+      };
+    },
+  );
+
+  const items: Multiset<{id: string; sum: number}>[] = [];
+  output.debug((_, d) => {
+    items.push(d);
+  });
+
+  input.newDifference(
+    1,
+    [
+      [
+        {
+          id: 'a',
+          value: 1,
+          groupKey: 'x',
+        },
+        1,
+      ],
+      [
+        {
+          id: 'b',
+          value: 2,
+          groupKey: 'x',
+        },
+        2,
+      ],
+    ],
+    undefined,
+  );
+
+  input.commit(1);
+
+  // we run the graph but the reducer is not run until we pull on it
+  expect(called).toBe(false);
+
+  // drain the output
+  for (const item of items) {
+    [...item];
+  }
+  expect(called).toBe(true);
 });
