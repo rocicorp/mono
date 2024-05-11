@@ -2,7 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
 import {flatMapIter} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import type {StringOrNumber, Version} from '../../types.js';
+import type {StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
@@ -49,25 +49,35 @@ export class ReduceOperator<
     getGroupKey: (value: V) => K,
     f: (input: Iterable<V>) => O,
   ) {
-    const inner = (_: Version, data: Multiset<V>) => {
-      const keysToProcess = new Set<K>();
-      const ret: Entry<O>[] = [];
-      for (const [value, mult] of data) {
-        const key = getGroupKey(value);
-        keysToProcess.add(key);
-        this.#addToIndex(key, value, mult);
-      }
+    super(input, output, (_version, data) => this.#inner(data, getGroupKey, f));
+    this.#getValueIdentity = getValueIdentity;
+  }
 
-      for (const k of keysToProcess) {
+  #inner = (
+    data: Multiset<V>,
+    getGroupKey: (value: V) => K,
+    f: (input: Iterable<V>) => O,
+  ) => {
+    const keysToProcess = new Set<K>();
+
+    for (const [value, mult] of data) {
+      const key = getGroupKey(value);
+      keysToProcess.add(key);
+      this.#addToIndex(key, value, mult);
+    }
+
+    return flatMapIter(
+      () => keysToProcess,
+      k => {
         const dataIn = this.#inIndex.get(k);
         const existingOut = this.#outIndex.get(k);
         if (dataIn === undefined) {
           if (existingOut !== undefined) {
             // retract the reduction
             this.#outIndex.delete(k);
-            ret.push([existingOut, -1]);
+            return [[existingOut, -1]] as const;
           }
-          continue;
+          return [];
         }
 
         const reduction = f(
@@ -80,19 +90,17 @@ export class ReduceOperator<
             },
           ),
         );
+        const ret: Entry<O>[] = [];
         if (existingOut !== undefined) {
           // modified reduction
           ret.push([existingOut, -1]);
         }
         ret.push([reduction, 1]);
         this.#outIndex.set(k, reduction);
-      }
-
-      return ret;
-    };
-    super(input, output, inner);
-    this.#getValueIdentity = getValueIdentity;
-  }
+        return ret;
+      },
+    );
+  };
 
   #addToIndex(key: K, value: V, mult: number) {
     let existing = this.#inIndex.get(key);
