@@ -21,9 +21,10 @@ import {
   newGetRoomRequest,
 } from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {encodeHeaderValue} from '../util/headers.js';
+import {encodeHeaderValue} from 'shared/src/headers.js';
 import {sleep} from '../util/sleep.js';
-import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
+import {Mocket, mockWebSocketPair} from '../util/test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {TestAuthDO} from './auth-do-test-util.js';
 import {
   ALARM_INTERVAL,
@@ -39,7 +40,7 @@ import {
   TestExecutionContext,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
-import {upgradeWebsocketResponse} from './http-util.js';
+import {upgradeWebsocketResponse} from 'shared/src/cf/socket.js';
 import {
   AUTH_DATA_HEADER_NAME,
   ROOM_ID_HEADER_NAME,

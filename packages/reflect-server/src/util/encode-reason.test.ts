@@ -1,5 +1,5 @@
 import {test, expect} from '@jest/globals';
-import {encodeReason} from './socket.js';
+import {encodeReason} from 'shared/src/cf/socket.js';
 
 test('encodeReason', () => {
   expect(encodeReason('')).toEqual('');

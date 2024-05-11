@@ -14,7 +14,8 @@ import type {ClientID} from '../types/client-state.js';
 import {putConnectedClients} from '../types/connected-clients.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
-import {createSilentLogContext, setUserEntries} from '../util/test-utils.js';
+import {setUserEntries} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {ClientDeleteHandler} from './client-delete-handler.js';
 import {
   collectClientIfDeleted,

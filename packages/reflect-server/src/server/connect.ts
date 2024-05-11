@@ -21,8 +21,8 @@ import type {
   Socket,
 } from '../types/client-state.js';
 import {compareVersions, getVersion} from '../types/version.js';
-import {decodeHeaderValue} from '../util/headers.js';
-import {closeWithError, send} from '../util/socket.js';
+import {decodeHeaderValue} from 'shared/src/headers.js';
+import {closeWithError, send} from 'shared/src/cf/socket.js';
 import {AUTH_DATA_HEADER_NAME} from './internal-headers.js';
 
 export type MessageHandler = (

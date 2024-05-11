@@ -10,7 +10,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {subscribe, unsubscribe} from 'node:diagnostics_channel';
 import {Queue} from 'shared/src/queue.js';
 import type {AlarmScheduler} from '../server/alarms.js';
-import {createSilentLogContext} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {
   ConnectionSecondsReporter,
   REPORTING_INTERVAL_MS,

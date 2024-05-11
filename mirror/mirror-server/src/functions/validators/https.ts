@@ -1,7 +1,8 @@
 import type {Response} from 'express';
 import {logger} from 'firebase-functions';
 import {HttpsError, type Request} from 'firebase-functions/v2/https';
-import type {MaybePromise, RequestContextValidator} from './types.js';
+import type {RequestContextValidator} from './types.js';
+import type {MaybePromise} from 'shared/src/types.js';
 
 type OnRequest = (request: Request, response: Response) => MaybePromise<void>;
 

@@ -8,7 +8,6 @@ import type {IndexDefinitions} from './index-defs.js';
 import type {PatchOperation} from './patch-operation.js';
 import type {ScanOptions} from './scan-options.js';
 import {
-  TestLogSink,
   clock,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
@@ -17,6 +16,7 @@ import {
   tickAFewTimes,
   tickUntil,
 } from './test-util.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.

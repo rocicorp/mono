@@ -1,13 +1,20 @@
+import {
+  type URLPatternURLPatternResult,
+  URLPattern,
+} from '@cloudflare/workers-types';
 import type {LogContext} from '@rocicorp/logger';
-import type {MaybePromise} from 'replicache';
 import {API_KEY_HEADER_NAME} from 'shared/src/api/headers.js';
 import {makeAPIResponse} from 'shared/src/api/responses.js';
+import {APIError, makeAPIErrorResponse} from 'shared/src/api/api-errors.js';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import * as valita from 'shared/src/valita.js';
-import {decodeHeaderValue} from '../util/headers.js';
-import {APIError, makeAPIErrorResponse} from './api-errors.js';
-import {HttpError, makeErrorResponse} from './errors.js';
+import {decodeHeaderValue} from 'shared/src/headers.js';
+import {
+  HttpError,
+  makeErrorResponse,
+} from '../../../reflect-server/src/server/errors.js';
+import type {MaybePromise} from 'shared/src/types.js';
 
 /**
  * Handles a request dispatched by router. The Handler is

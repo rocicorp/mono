@@ -9,7 +9,7 @@ import {
 } from '../types/client-record.js';
 import type {ClientID, ClientMap} from '../types/client-state.js';
 import type {PendingMutation} from '../types/mutation.js';
-import {closeWithError} from '../util/socket.js';
+import {closeWithError} from 'shared/src/cf/socket.js';
 
 export type Now = () => number;
 export type ProcessUntilDone = () => void;

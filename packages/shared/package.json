@@ -18,6 +18,7 @@
     "semver": "^7.5.4"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20231010.0",
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rollup/plugin-node-resolve": "^15.0.1",

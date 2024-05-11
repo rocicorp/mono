@@ -4,7 +4,8 @@ import {version} from 'reflect-shared/src/version.js';
 import {createAPIHeaders} from 'shared/src/api/headers.js';
 import {assertString} from 'shared/src/asserts.js';
 import type {Series} from '../types/report-metrics.js';
-import {Mocket, TestLogSink, fail} from '../util/test-utils.js';
+import {Mocket, fail} from '../util/test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {
   TestDurableObjectId,
   TestDurableObjectStub,

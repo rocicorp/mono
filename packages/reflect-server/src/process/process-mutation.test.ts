@@ -18,11 +18,8 @@ import {
 import {getUserValue} from '../../src/types/user-value.js';
 import {getVersion} from '../../src/types/version.js';
 import type {PendingMutation} from '../types/mutation.js';
-import {
-  clientRecord,
-  createSilentLogContext,
-  pendingMutation,
-} from '../util/test-utils.js';
+import {clientRecord, pendingMutation} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

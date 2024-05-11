@@ -3,8 +3,7 @@ import * as valita from 'shared/src/valita.js';
 import {Downstream, PongMessage, upstreamSchema} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
-// TODO(mlaw): break dependency on reflect-server
-import {closeWithError, sendError} from 'reflect-server/socket';
+import {closeWithError, sendError} from 'shared/src/cf/socket.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 

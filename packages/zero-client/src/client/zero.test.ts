@@ -21,12 +21,12 @@ import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
 import {
   MockSocket,
-  TestLogSink,
   TestZero,
   tickAFewTimes,
   waitForUpstreamMessage,
   zeroForTest,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,

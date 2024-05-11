@@ -3,7 +3,7 @@ import {resetAllConfig, setConfig} from 'reflect-shared/src/config.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {CloseBeaconManager} from './close-beacon.js';
-import {TestLogSink} from './test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 
 beforeEach(() => {
   setConfig('closeBeacon', true);

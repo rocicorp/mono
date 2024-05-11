@@ -6,7 +6,7 @@ import {
   initDB,
   testDBs,
 } from '../../../test/db.js';
-import {createSilentLogContext} from '../../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {replicationSlot} from '../initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 

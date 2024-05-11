@@ -6,7 +6,7 @@ import {
   synchronizedSnapshots,
 } from '../../db/transaction-pool.js';
 import {expectTables, initDB, testDBs} from '../../test/db.js';
-import {createSilentLogContext} from '../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {
   NormalizedInvalidationFilterSpec,
   invalidationHash,

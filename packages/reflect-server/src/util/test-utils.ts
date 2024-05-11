@@ -1,14 +1,13 @@
 import {afterEach, beforeEach, jest} from '@jest/globals';
-import {Context, LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import type {Mutation, NullableVersion} from 'reflect-protocol';
 import type {AuthData} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {Socket} from 'shared/src/cf/socket.js';
 import type {ClientRecord} from '../../src/types/client-record.js';
 import type {
   ClientGroupID,
   ClientID,
   ClientState,
-  Socket,
 } from '../../src/types/client-state.js';
 import type {Storage} from '../storage/storage.js';
 import type {PendingMutation} from '../types/mutation.js';
@@ -178,24 +177,6 @@ export function userValue(
 
 export function fail(s: string): never {
   throw new Error(s);
-}
-
-export class TestLogSink implements LogSink {
-  messages: [LogLevel, Context | undefined, unknown[]][] = [];
-
-  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
-    this.messages.push([level, context, args]);
-  }
-}
-
-export class SilentLogSink implements LogSink {
-  log(_l: LogLevel, _c: Context | undefined, ..._args: unknown[]): void {
-    return;
-  }
-}
-
-export function createSilentLogContext() {
-  return new LogContext('error', undefined, new SilentLogSink());
 }
 
 export function mockMathRandom() {

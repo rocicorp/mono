@@ -1,6 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {createSilentLogContext} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 
 describe('auth do schema migration', () => {

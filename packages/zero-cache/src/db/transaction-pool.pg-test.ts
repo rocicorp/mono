@@ -4,7 +4,7 @@ import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../test/db.js';
-import {createSilentLogContext} from '../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../types/pg.js';
 import {
   TransactionPool,

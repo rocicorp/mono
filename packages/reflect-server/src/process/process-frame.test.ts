@@ -33,11 +33,11 @@ import type {PendingMutation} from '../types/mutation.js';
 import {
   client,
   clientRecord,
-  createSilentLogContext,
   mockMathRandom,
   pendingMutation,
   userValue,
 } from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

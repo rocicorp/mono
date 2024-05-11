@@ -1,5 +1,6 @@
 import {test, expect} from '@jest/globals';
-import {client, createSilentLogContext, Mocket} from '../util/test-utils.js';
+import {client, Mocket} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {handleAuthInvalidate} from './auth-invalidate.js';
 
 function createClientMap() {

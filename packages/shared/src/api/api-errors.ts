@@ -3,7 +3,7 @@ import {
   type APIErrorCode,
   type APIErrorInfo,
 } from 'shared/src/api/responses.js';
-import {ErrorWithResponse} from './errors.js';
+import {ErrorWithResponse} from '../../../reflect-server/src/server/errors.js';
 
 export class APIError extends ErrorWithResponse {
   readonly #info: APIErrorInfo;
