@@ -1,3 +1,4 @@
+import wasm from 'vite-plugin-wasm';
 import {defineConfig} from 'vitest/config';
 
 export default defineConfig({
@@ -6,4 +7,5 @@ export default defineConfig({
     include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
     retry: 3,
   },
+  plugins: [wasm()],
 });

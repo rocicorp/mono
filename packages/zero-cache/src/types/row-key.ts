@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
-import xxh from 'xxhashjs'; // TODO: Use xxhash-wasm
 import {stringify, type JSONValue} from './bigint-json.js';
+import {h64} from './xxhash.js';
 
 export type ColumnType = {typeOid: number};
 export type RowKeyType = Record<string, ColumnType>;
@@ -43,8 +43,8 @@ export function rowIDHash(id: RowID): string {
 
   // xxhash only computes 64-bit values. Run it on the forward and reverse string
   // to get better collision resistance.
-  const forward = BigInt(xxh.h64().update(str).digest().toString());
-  const backward = BigInt(xxh.h64().update(reverse(str)).digest().toString());
+  const forward = h64(str);
+  const backward = h64(reverse(str));
   const full = (forward << 64n) + backward;
   let fullHex = full.toString(16);
   if (fullHex.length % 2) {
