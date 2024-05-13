@@ -5,7 +5,8 @@ import {
   IncludeDeleted,
   listClientRecordsForClientGroup,
 } from '../types/client-record.js';
-import type {ClientID, Socket} from '../types/client-state.js';
+import type {ClientID} from '../types/client-state.js';
+import type {Socket} from '../util/socket.js';
 import {compareVersions, getVersion} from '../types/version.js';
 import {send} from '../util/socket.js';
 

@@ -3,7 +3,7 @@ import type {DatadogLogSinkOptions} from 'datadog';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {createLogOptions} from './log-options.js';
-import {TestLogSink} from './test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 
 let consoleLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
 let datadogLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;

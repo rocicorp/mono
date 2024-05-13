@@ -1,4 +1,4 @@
-import {encodeHeaderValue} from '../util/headers.js';
+import {encodeHeaderValue} from 'shared/src/headers.js';
 
 /**
  * Name of header used to pass `AuthData` received by AuthDO from the

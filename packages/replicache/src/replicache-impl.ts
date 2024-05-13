@@ -111,7 +111,6 @@ import type {
   BeginPullResult,
   MakeMutator,
   MakeMutators,
-  MaybePromise,
   MutatorDefs,
   MutatorReturn,
   PokeInternal,
@@ -119,6 +118,7 @@ import type {
   RequestOptions,
   UpdateNeededReason,
 } from './types.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import {uuid as makeUuid} from './uuid.js';
 import {version} from './version.js';
 import {

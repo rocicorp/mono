@@ -23,6 +23,7 @@ export const jestConfig = {
     ],
   },
   moduleNameMapper: {
+    '^cf-shared/(.*)\\.js$': '<rootDir>/../../packages/cf-shared/$1',
     '^shared/(.*)\\.js$': '<rootDir>/../../packages/shared/$1',
     '^reflect-shared/(.*)\\.js$': '<rootDir>/../../packages/reflect-shared/$1',
     '^reflect-protocol/(.*)\\.js$':

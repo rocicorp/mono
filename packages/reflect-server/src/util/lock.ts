@@ -1,6 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {MaybePromise} from 'replicache';
+import type {MaybePromise} from 'shared/src/types.js';
 import {randInt} from './rand.js';
 
 export class LoggingLock {

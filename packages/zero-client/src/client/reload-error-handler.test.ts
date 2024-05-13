@@ -6,7 +6,7 @@ import {
   reloadWithReason,
   reportReloadReason,
 } from './reload-error-handler.js';
-import {TestLogSink} from './test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 
 const localStorageDescriptor = Object.getOwnPropertyDescriptor(
   globalThis,

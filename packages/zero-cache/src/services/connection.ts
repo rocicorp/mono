@@ -1,10 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as valita from 'shared/src/valita.js';
-import {Downstream, PongMessage, upstreamSchema} from 'zero-protocol';
+import {
+  Downstream,
+  ErrorKind,
+  ErrorMessage,
+  PongMessage,
+  upstreamSchema,
+} from 'zero-protocol';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
-// TODO(mlaw): break dependency on reflect-server
-import {closeWithError, sendError} from 'reflect-server/socket';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 
@@ -85,9 +89,9 @@ export class Connection {
             );
           }
           for (const mutation of mutations) {
-            const error = await this.#mutagen.processMutation(mutation);
-            if (error !== undefined) {
-              sendError(lc, ws, 'MutationFailed', error);
+            const errorDesc = await this.#mutagen.processMutation(mutation);
+            if (errorDesc !== undefined) {
+              sendError(lc, ws, 'MutationFailed', errorDesc);
             }
           }
           break;
@@ -141,6 +145,31 @@ export class Connection {
 
 export function send(ws: WebSocket, data: Downstream) {
   ws.send(JSON.stringify(data));
+}
+
+export function sendError(
+  lc: LogContext,
+  ws: WebSocket,
+  kind: ErrorKind,
+  message = '',
+  logLevel: 'info' | 'error' = 'info',
+) {
+  lc[logLevel]?.('Sending error on socket', {
+    kind,
+    message,
+  });
+  const errorMessage: ErrorMessage = ['error', kind, message];
+  send(ws, errorMessage);
+}
+
+export function closeWithError(
+  lc: LogContext,
+  ws: WebSocket,
+  kind: ErrorKind,
+  message = '',
+  logLevel: 'info' | 'error' = 'info',
+) {
+  sendError(lc, ws, kind, message, logLevel);
 }
 
 function handlePing(ws: WebSocket) {

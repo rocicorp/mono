@@ -189,7 +189,7 @@ function useEnsureLocation(r: Reflect<M> | null) {
         if (ignore) {
           return;
         }
-        setLocation(data);
+        setLocation(data as Location);
       });
   }, [ignore]);
 

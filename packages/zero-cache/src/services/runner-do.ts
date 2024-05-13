@@ -1,19 +1,11 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {CONNECT_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-// TODO(mlaw): break dependency on reflect-server
-import {BaseContext, Router} from 'reflect-server/router';
-// TODO(mlaw): break dependency on reflect-server
-import {
-  requireUpgradeHeader,
-  upgradeWebsocketResponse,
-} from 'reflect-server/http-util';
+import {BaseContext, Router} from 'cf-shared/src/router.js';
 import type {ErrorKind} from 'zero-protocol/src/error.js';
-// TODO(mlaw): break dependency on reflect-server
-import {closeWithError} from 'reflect-server/socket';
 import type {ConnectedMessage} from 'zero-protocol';
 import {getConnectRequest} from '../connect.js';
-import {Connection, send} from './connection.js';
+import {Connection, closeWithError, send} from './connection.js';
 
 export class ServiceRunnerDO {
   readonly #lc: LogContext;
@@ -47,9 +39,9 @@ export class ServiceRunnerDO {
   }
 
   #connect = async (_ctx: BaseContext, request: Request): Promise<Response> => {
-    const error = requireUpgradeHeader(request, this.#lc);
-    if (error) {
-      return error;
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      this.#lc.info?.('missing Upgrade header for', request.url);
+      return new Response('expected websocket Upgrade header', {status: 400});
     }
 
     const {0: clientWS, 1: serverWS} = new WebSocketPair();
@@ -58,7 +50,22 @@ export class ServiceRunnerDO {
 
     await this.#handleConnection(serverWS, url);
 
-    return upgradeWebsocketResponse(clientWS, request.headers);
+    // Sec-WebSocket-Protocol is being used as a mechanism for sending `auth`
+    // since custom headers are not supported by the browser WebSocket API, the
+    // Sec-WebSocket-Protocol semantics must be followed. Send a
+    // Sec-WebSocket-Protocol response header with a value matching the
+    // Sec-WebSocket-Protocol request header, to indicate support for the
+    // protocol, otherwise the client will close the connection.
+    const responseHeaders = new Headers();
+    const protocol = request.headers.get('Sec-WebSocket-Protocol');
+    if (protocol) {
+      responseHeaders.set('Sec-WebSocket-Protocol', protocol);
+    }
+    return new Response(null, {
+      status: 101,
+      webSocket: clientWS,
+      headers: responseHeaders,
+    });
   };
 
   // eslint-disable-next-line require-await

@@ -1,4 +1,4 @@
-import type {Socket} from '../types/client-state.js';
+import type {Socket} from '../util/socket.js';
 import type {PongMessage} from 'reflect-protocol';
 import type {LogContext} from '@rocicorp/logger';
 import {send} from '../util/socket.js';

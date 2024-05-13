@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {must} from 'shared/src/must.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import {FormatVersion} from './format-version.js';
 import {
   dropIDBStoreWithMemFallback,
@@ -21,7 +22,6 @@ import type {
 import type {ReadTransaction} from './transactions.js';
 import type {
   MakeMutators,
-  MaybePromise,
   MutatorDefs,
   Poke,
   RequestOptions,

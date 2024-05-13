@@ -1,4 +1,4 @@
-import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
+import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
   ConnectedMessage,
@@ -13,6 +13,7 @@ import {
   PokeStartMessage,
 } from 'zero-protocol';
 import {assert} from 'shared/src/asserts.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
@@ -206,20 +207,6 @@ export function zeroForTest<QD extends QueryDefs>(
   // Keep track of all instances so we can close them in teardown.
   testZeroInstances.add(r as TestZero<QueryDefs>);
   return r;
-}
-
-export class TestLogSink implements LogSink {
-  messages: [LogLevel, Context | undefined, unknown[]][] = [];
-  flushCallCount = 0;
-
-  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
-    this.messages.push([level, context, args]);
-  }
-
-  flush() {
-    this.flushCallCount++;
-    return Promise.resolve();
-  }
 }
 
 export async function waitForUpstreamMessage(

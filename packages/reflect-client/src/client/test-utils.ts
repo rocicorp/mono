@@ -1,4 +1,4 @@
-import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
+import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
   ConnectedMessage,
@@ -14,6 +14,7 @@ import {
 } from 'reflect-protocol';
 import type {MutatorDefs} from 'reflect-shared/src/types.js';
 import {assert} from 'shared/src/asserts.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import type {SinonFakeTimers} from 'sinon';
 import type {LogOptions} from './log-options.js';
 import type {ReflectOptions} from './options.js';
@@ -218,20 +219,6 @@ if (typeof teardown === 'function') {
       }
     }
   });
-}
-
-export class TestLogSink implements LogSink {
-  messages: [LogLevel, Context | undefined, unknown[]][] = [];
-  flushCallCount = 0;
-
-  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
-    this.messages.push([level, context, args]);
-  }
-
-  flush() {
-    this.flushCallCount++;
-    return Promise.resolve();
-  }
 }
 
 export async function waitForUpstreamMessage(
