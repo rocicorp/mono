@@ -147,7 +147,7 @@ export type RowTag = v.Infer<typeof rowTagSchema>;
 
 export type InvalidationTag = TableTag | FullTableTag | RowTag;
 
-const SEED = 0x1234567890n;
+const SEED = 0x34567890n;
 
 /**
  * @returns The hex-encoded invalidation hash for the given `tag`.

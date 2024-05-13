@@ -167,4 +167,4 @@ function selector(x: string): string {
   return parts.map(id => ident(id)).join('.');
 }
 
-const SEED = 0x1234567890n;
+const SEED = 0x34567890n;
