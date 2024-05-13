@@ -381,8 +381,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): CVRVersion {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
-    executed.forEach(q => this.executed(q.id, q.transformationHash));
-    removed.forEach(id => this.removed(id));
+    executed.forEach(q => this.#trackExecuted(q.id, q.transformationHash));
+    removed.forEach(id => this.#trackRemoved(id));
 
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
 
@@ -457,7 +457,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *
    * This must be called for all executed queries.
    */
-  executed(queryID: string, transformationHash: string) {
+  #trackExecuted(queryID: string, transformationHash: string) {
     assert(!this.#removedOrExecutedQueryIDs.has(queryID));
     this.#removedOrExecutedQueryIDs.add(queryID);
 
@@ -492,7 +492,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *
    * This must only be called on queries that are not "desired" by any client.
    */
-  removed(queryID: string) {
+  #trackRemoved(queryID: string) {
     const query = this._cvr.queries[queryID];
     assertNotInternal(query);
 
@@ -519,7 +519,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   /**
    * Asserts that a new version has already been set.
    *
-   * After {@link executed} and {@link removed} are called, we must have properly
+   * After {@link #executed} and {@link #removed} are called, we must have properly
    * decided on the final CVR version because the poke-start message declares the
    * final cookie (i.e. version), and that must be sent before any poke parts
    * generated from {@link received} are sent.
@@ -610,8 +610,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   /**
    * Computes and updates the row records based on:
-   * * The {@link executed} queries
-   * * The {@link removed} queries
+   * * The {@link #executed} queries
+   * * The {@link #removed} queries
    * * The {@link received} rows
    *
    * Returns the final delete and patch ops that must be sent to the client

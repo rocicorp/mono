@@ -202,7 +202,6 @@ export class WriteCache implements Storage {
 
     // build a list of pending changes to overlay atop stored values
     const pending: [string, T | undefined][] = [];
-    console.error(`filtering ${this.#cache.size} entries`);
     for (const entry of this.#cache.entries()) {
       const [k, v] = entry;
 
@@ -224,7 +223,6 @@ export class WriteCache implements Storage {
 
     // The map of entries coming back from DurableStorage is utf8 sorted.
     // Maintain this by merging the pending changes in-order
-    console.error(`sorting ${pending.length} entries in range`);
     pending.sort(([a], [b]) => compareUTF8(a, b));
 
     const out = new Map<string, T>();
