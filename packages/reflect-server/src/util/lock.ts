@@ -85,7 +85,10 @@ export class LoggingLock {
       }
     });
     if (flushAfterLock) {
-      await lc.flush();
+      // Do not await, log flushes can be very slow (10s of seconds).
+      // The logical success/failure of withLock does not
+      // depend on this calls result.
+      void lc.flush();
     }
     return result;
   }
