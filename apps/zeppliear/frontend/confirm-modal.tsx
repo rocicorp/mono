@@ -1,4 +1,3 @@
-import CloseIcon from './assets/icons/close.svg';
 import Modal from './modal';
 
 interface Props {
@@ -32,20 +31,14 @@ export default function ConfirmationModal({
   };
 
   return (
-    <Modal isOpen={isOpen} center={true} onDismiss={onDismiss}>
-      <div className="flex flex-col w-full p-4">
+    <Modal isOpen={isOpen} size="small" center={true} onDismiss={onDismiss}>
+      <div className="flex flex-col w-full p-6">
         {/* Header */}
         <div className="flex items-center justify-between flex-shrink-0">
           <span className="text-md text-white">{title}</span>
-          <div
-            className="inline-flex items-center justify-center h-7 w-7 rounded hover:bg-gray-850 hover-text-gray-400 text-white"
-            onMouseDown={handleClickCancel}
-          >
-            <CloseIcon className="w-4" />
-          </div>
         </div>
 
-        <div className="flex flex-col flex-1 py-6">
+        <div className="flex flex-col flex-1 py-2">
           <p className="text-white text-md">{message}</p>
         </div>
 

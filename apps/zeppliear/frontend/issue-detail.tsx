@@ -245,8 +245,8 @@ export default function IssueDetail({
         isOpen={isDeleteModalOpen}
         onDismiss={handleDismiss}
         onConfirm={handleDeleteConfirm}
-        title=""
-        message="Are you sure you want to delete this issue?"
+        title="Are you sure you want to delete this issue?"
+        message=""
         action="Delete"
       />
       <div className="">
