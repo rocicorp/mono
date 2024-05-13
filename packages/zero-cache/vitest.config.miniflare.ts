@@ -1,5 +1,5 @@
 import {defineWorkersConfig} from '@cloudflare/vitest-pool-workers/config';
-import wasm from 'vite-plugin-wasm';
+// import wasm from 'vite-plugin-wasm';
 
 export default defineWorkersConfig({
   test: {
@@ -12,6 +12,7 @@ export default defineWorkersConfig({
           compatibilityDate: '2024-04-05',
           compatibilityFlags: ['nodejs_compat'],
           durableObjects: {runnerDO: 'ServiceRunnerDO'},
+          modulesRules: [{type: 'CompiledWasm', include: ['**/*.wasm']}],
         },
       },
     },
@@ -24,5 +25,5 @@ export default defineWorkersConfig({
       return undefined;
     },
   },
-  plugins: [wasm()],
+  // plugins: [wasm()],
 });

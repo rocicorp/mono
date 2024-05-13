@@ -8,7 +8,7 @@
 /* eslint-disable */
 
 // Cloudflare requires wasm modules to be import to prevent dynamic code execution.
-import wasmBytes from './xxhash.wasm';
+import wasmModule from './xxhash.wasm';
 
 const u32_BYTES = 4;
 const u64_BYTES = 8;
@@ -33,7 +33,7 @@ const XXH64_STATE_SIZE_BYTES =
 
 async function xxhash() {
   const {
-    // Cloudflare wasmBytes is already a WebAssembly.Module
+    // Cloudflare wasmModule is already a WebAssembly.Module
     exports: {
       mem,
       xxh32,
@@ -45,7 +45,7 @@ async function xxhash() {
       update64,
       digest64,
     },
-  } = await WebAssembly.instantiate(wasmBytes);
+  } = await WebAssembly.instantiate(wasmModule);
 
   let memory = new Uint8Array(mem.buffer);
   // Grow the wasm linear memory to accommodate length + offset bytes
