@@ -11,12 +11,13 @@ interface Props {
   /* function called when modal is closed */
   onDismiss?: (() => void) | undefined;
   children?: React.ReactNode;
-  size: 'normal' | 'large' | 'wide';
+  size: 'small' | 'normal' | 'large' | 'wide';
 }
 const sizeClasses = {
   wide: 'w-185',
   large: 'w-175',
   normal: 'w-140',
+  small: 'w-115',
 };
 
 function Modal({isOpen, center, size, className, onDismiss, children}: Props) {

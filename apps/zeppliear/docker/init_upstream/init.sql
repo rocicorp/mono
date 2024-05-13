@@ -17,7 +17,7 @@ CREATE TABLE issue (
 );
 CREATE TABLE comment (
     id VARCHAR PRIMARY KEY,
-    "issueID" VARCHAR REFERENCES issue(id),
+    "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
     "created" double precision,
     "body" TEXT NOT NULL,
     "creatorID" VARCHAR REFERENCES member(id)
@@ -29,7 +29,7 @@ CREATE TABLE label (
 CREATE TABLE "issueLabel" (
     "id" VARCHAR PRIMARY KEY,
     "labelID" VARCHAR REFERENCES label(id),
-    "issueID" VARCHAR REFERENCES issue(id)
+    "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE
 );
 COPY "member" FROM '/docker-entrypoint-initdb.d/members.csv' WITH CSV HEADER;
 COPY "label" FROM '/docker-entrypoint-initdb.d/labels.csv' WITH CSV HEADER;
