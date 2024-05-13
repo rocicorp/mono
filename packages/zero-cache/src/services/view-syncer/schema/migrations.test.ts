@@ -2,7 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {DurableStorage} from '../../../storage/durable-storage.js';
 import {initStorageSchema} from '../../../storage/schema.js';
 import {runWithDurableObjectStorage} from '../../../test/do.js';
-import {createSilentLogContext} from '../../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {SCHEMA_MIGRATIONS} from './migrations.js';
 import {schemaRoot} from './paths.js';
 

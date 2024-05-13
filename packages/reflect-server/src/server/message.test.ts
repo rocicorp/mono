@@ -17,13 +17,8 @@ import type {
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {PendingMutation} from '../types/mutation.js';
 import {randomID} from '../util/rand.js';
-import {
-  Mocket,
-  client,
-  createSilentLogContext,
-  mutation,
-  pendingMutation,
-} from '../util/test-utils.js';
+import {Mocket, client, mutation, pendingMutation} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 beforeEach(() => {
   jest.useFakeTimers();

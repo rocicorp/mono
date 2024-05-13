@@ -21,9 +21,10 @@ import {
   newGetRoomRequest,
 } from '../client/room.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {encodeHeaderValue} from '../util/headers.js';
+import {encodeHeaderValue} from 'shared/src/headers.js';
 import {sleep} from '../util/sleep.js';
-import {Mocket, TestLogSink, mockWebSocketPair} from '../util/test-utils.js';
+import {Mocket, mockWebSocketPair} from '../util/test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {TestAuthDO} from './auth-do-test-util.js';
 import {
   ALARM_INTERVAL,
@@ -33,13 +34,14 @@ import {
 } from './auth-do.js';
 import type {AuthHandler} from './auth.js';
 import {
+  IncomingRequest,
   TestDurableObjectId,
   TestDurableObjectState,
   TestDurableObjectStub,
   TestExecutionContext,
   createTestDurableObjectNamespace,
 } from './do-test-utils.js';
-import {upgradeWebsocketResponse} from './http-util.js';
+import {upgradeWebsocketResponse} from '../util/socket.js';
 import {
   AUTH_DATA_HEADER_NAME,
   ROOM_ID_HEADER_NAME,
@@ -737,7 +739,9 @@ test('get room that does not exist', async () => {
   });
 });
 
-function newRoomRecordsRequest(queryParams?: URLSearchParamsInit) {
+function newRoomRecordsRequest(
+  queryParams?: Record<string, string> | [key: string, value: string][],
+) {
   const query = queryParams
     ? `?${new URLSearchParams(queryParams).toString()}`
     : '';
@@ -987,7 +991,10 @@ function createConnectTestFixture(
           );
         }
 
-        return upgradeWebsocketResponse(mocket, request.headers);
+        return upgradeWebsocketResponse(
+          mocket as unknown as WebSocket,
+          request.headers,
+        );
       });
     },
   };
@@ -2464,7 +2471,13 @@ function createTailTestFixture(
     testRoomID?: string | null;
     testApiToken?: string | null;
   } = {},
-) {
+): {
+  testRoomID: string | null;
+  testRequest: IncomingRequest;
+  testRoomDO: DurableObjectNamespace;
+  socketFromRoomDO: Mocket;
+  testApiToken: string | null;
+} {
   const {testRoomID = null, testApiToken = null} = options;
 
   const headers = new Headers();
@@ -2477,7 +2490,7 @@ function createTailTestFixture(
     tailURL.searchParams.set('roomID', testRoomID);
   }
 
-  const testRequest = new Request(tailURL.toString(), {
+  const testRequest: IncomingRequest = new Request(tailURL.toString(), {
     headers,
   });
 
@@ -2510,7 +2523,10 @@ function createTailTestFixture(
           expect(request.headers.has('Sec-WebSocket-Protocol')).toBe(false);
         }
 
-        return upgradeWebsocketResponse(socketFromRoomDO, request.headers);
+        return upgradeWebsocketResponse(
+          socketFromRoomDO as unknown as WebSocket,
+          request.headers,
+        );
       });
     },
   };

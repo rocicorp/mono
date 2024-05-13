@@ -1,5 +1,5 @@
 import type {AuthData, Env} from 'reflect-shared/src/types.js';
-import type {MaybePromise} from 'replicache';
+import type {MaybePromise} from 'shared/src/types.js';
 
 /**
  * An `AuthHandler` should validate that the user authenticated by `auth` is

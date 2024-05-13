@@ -19,7 +19,7 @@ describe('paths', () => {
       name: string;
       pattern: string;
       groups?: Record<string, string>;
-      query?: URLSearchParamsInit;
+      query?: Record<string, string>;
       result: string;
     };
     const cases: Case[] = [

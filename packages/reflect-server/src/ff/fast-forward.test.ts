@@ -5,7 +5,8 @@ import type {ClientPoke} from '../types/client-poke.js';
 import {ClientRecordMap, putClientRecord} from '../types/client-record.js';
 import type {ClientID} from '../types/client-state.js';
 import {UserValue, putUserValue} from '../types/user-value.js';
-import {createSilentLogContext, mockMathRandom} from '../util/test-utils.js';
+import {mockMathRandom} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

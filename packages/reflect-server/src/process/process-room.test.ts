@@ -17,11 +17,11 @@ import {getVersion, versionKey} from '../types/version.js';
 import {
   client,
   clientRecord,
-  createSilentLogContext,
   fail,
   mockMathRandom,
   pendingMutation,
 } from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();

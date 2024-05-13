@@ -5,7 +5,7 @@ import {
   initStorage,
   runWithDurableObjectStorage,
 } from '../../test/do.js';
-import {createSilentLogContext} from '../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {rowIDHash} from '../../types/row-key.js';
 import {and, cond, or} from '../../zql/query-test-util.js';
 import type {PatchToVersion} from './client-handler.js';

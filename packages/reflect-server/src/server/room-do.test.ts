@@ -27,7 +27,7 @@ import {getUserValue, putUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
 import {resolver} from '../util/resolver.js';
 import {sleep} from '../util/sleep.js';
-import {TestLogSink} from '../util/test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {originalConsole} from './console.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';

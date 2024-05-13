@@ -1,5 +1,6 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {KVStoreProvider, MaybePromise} from 'replicache';
+import type {KVStoreProvider} from 'replicache';
+import type {MaybePromise} from 'shared/src/types.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {QueryDefs} from './zero.js';
 

@@ -2,8 +2,8 @@ import type {Hash} from './hash.js';
 import type {ReadonlyJSONValue, WriteTransaction} from './mod.js';
 import type {PullResponseV1, PullResponseV1Internal} from './puller.js';
 import type {ReadTransactionImpl} from './transactions.js';
+import type {MaybePromise} from 'shared/src/types.js';
 
-export type MaybePromise<T> = T | Promise<T>;
 export type BeginPullResult = {
   requestID: string;
   syncHead: Hash;

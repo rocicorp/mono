@@ -7,7 +7,10 @@ import {
   jest,
 } from '@jest/globals';
 import {AlarmManager, AlarmScheduler} from './alarms.js';
-import {TestLogSink, createSilentLogContext} from '../util/test-utils.js';
+import {
+  TestLogSink,
+  createSilentLogContext,
+} from 'shared/src/logging-test-utils.js';
 import {LogContext} from '@rocicorp/logger';
 
 describe('alarm timeout tests', () => {

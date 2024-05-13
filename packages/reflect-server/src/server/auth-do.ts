@@ -21,20 +21,23 @@ import {must} from 'shared/src/must.js';
 import {timed} from 'shared/src/timed.js';
 import * as valita from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
-import {encodeHeaderValue} from '../util/headers.js';
+import {encodeHeaderValue} from 'shared/src/headers.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
 import {sleep} from '../util/sleep.js';
 import {
   createWSAndCloseWithError,
   createWSAndCloseWithTailError,
+  requireUpgradeHeader,
 } from '../util/socket.js';
 import {AlarmManager, TimeoutID} from './alarms.js';
-import {roomNotFoundAPIError} from './api-errors.js';
+import {roomNotFoundAPIError} from 'cf-shared/src/api-errors.js';
 import {initAuthDOSchema} from './auth-do-schema.js';
 import type {AuthHandler} from './auth.js';
-import {ErrorWithForwardedResponse, makeErrorResponse} from './errors.js';
+import {
+  ErrorWithForwardedResponse,
+  makeErrorResponse,
+} from 'cf-shared/src/errors.js';
 import {getRequiredSearchParams} from './get-required-search-params.js';
-import {requireUpgradeHeader} from './http-util.js';
 import {AUTH_DATA_HEADER_NAME, addRoomIDHeader} from './internal-headers.js';
 import {listRoomsParamsSchema, makeListControl} from './list.js';
 import {
@@ -85,7 +88,7 @@ import {
   roomID,
   urlVersion,
   userID,
-} from './router.js';
+} from 'cf-shared/src/router.js';
 import {registerUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export const AUTH_HANDLER_TIMEOUT_MS = 5_000;
