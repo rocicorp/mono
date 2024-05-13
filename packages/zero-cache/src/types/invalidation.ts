@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import * as v from 'shared/src/valita.js';
-import XXH from 'xxhashjs'; // TODO: Use xxhash-wasm
+import {create64} from './xxhash.js';
 
 /**
  * Encodes the operations over filtered columns for which invalidation
@@ -85,7 +85,7 @@ export function normalizeFilterSpec(val: InvalidationFilterSpec) {
     normalized.selectedColumns = [...val.selectedColumns].sort(compareUTF8);
   }
   return {
-    id: XXH.h64(SEED).update(JSON.stringify(normalized)).digest().toString(36),
+    id: create64(SEED).update(JSON.stringify(normalized)).digest().toString(36),
     ...normalized,
   };
 }
@@ -147,13 +147,13 @@ export type RowTag = v.Infer<typeof rowTagSchema>;
 
 export type InvalidationTag = TableTag | FullTableTag | RowTag;
 
-const SEED = 0x1234567890;
+const SEED = 0x34567890n;
 
 /**
  * @returns The hex-encoded invalidation hash for the given `tag`.
  */
 export function invalidationHash(tag: InvalidationTag): string {
-  const hasher = XXH.h64().init(SEED).update(tag.schema).update(tag.table);
+  const hasher = create64(SEED).update(tag.schema).update(tag.table);
 
   if ('allRows' in tag) {
     // FullTableTag

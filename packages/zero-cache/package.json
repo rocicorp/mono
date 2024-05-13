@@ -35,7 +35,6 @@
     "pg-logical-replication": "^2.0.5",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
-    "xxhashjs": "^0.2.2",
     "zero-protocol": "0.0.0"
   },
   "devDependencies": {

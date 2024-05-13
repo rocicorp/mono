@@ -11,6 +11,7 @@ export default defineWorkersConfig({
           compatibilityDate: '2024-04-05',
           compatibilityFlags: ['nodejs_compat'],
           durableObjects: {runnerDO: 'ServiceRunnerDO'},
+          modulesRules: [{type: 'CompiledWasm', include: ['**/*.wasm']}],
         },
       },
     },

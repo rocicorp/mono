@@ -7,7 +7,7 @@ import {
 import {ident} from 'pg-format';
 import type {JSONValue} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
-import xxh from 'xxhashjs';
+import {create64} from '../types/xxhash.js';
 
 export type ParameterizedQuery = {
   query: string;
@@ -154,8 +154,7 @@ export class Normalized {
    *    equivalent ASTs.
    */
   hash(radix = 36): string {
-    return xxh
-      .h64(SEED)
+    return create64(SEED)
       .update(this.#query)
       .update(JSON.stringify(this.#values))
       .digest()
@@ -168,4 +167,4 @@ function selector(x: string): string {
   return parts.map(id => ident(id)).join('.');
 }
 
-const SEED = 0x1234567890;
+const SEED = 0x34567890n;
