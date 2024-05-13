@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ErrorKind as ServerErrorKind} from 'reflect-protocol';
-import type {MaybePromise} from 'replicache';
+import type {MaybePromise} from 'shared/src/types.js';
 
 export enum MetricName {
   TimeToConnectMs = 'time_to_connect_ms',

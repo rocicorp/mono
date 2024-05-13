@@ -15,7 +15,8 @@ import {
 import {putConnectedClients} from '../types/connected-clients.js';
 import {UserValue, userValueKey, userValueSchema} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
-import {TestLogSink, clientRecord, setUserEntries} from '../util/test-utils.js';
+import {clientRecord, setUserEntries} from '../util/test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {createTestDurableObjectState} from './do-test-utils.js';
 import {addRoomIDHeader} from './internal-headers.js';
 import {BaseRoomDO} from './room-do.js';

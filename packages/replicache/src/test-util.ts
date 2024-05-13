@@ -1,5 +1,4 @@
 import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
-import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
@@ -381,11 +380,3 @@ export const disableAllBackgroundProcesses = {
   enableScheduledRefresh: false,
   enableScheduledPersist: false,
 };
-
-export class TestLogSink implements LogSink {
-  messages: [LogLevel, Context | undefined, unknown[]][] = [];
-
-  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
-    this.messages.push([level, context, args]);
-  }
-}

@@ -1,6 +1,6 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {version} from 'reflect-shared/src/version.js';
-import type {MaybePromise} from 'replicache';
+import type {MaybePromise} from 'shared/src/types.js';
 import {timed} from 'shared/src/timed.js';
 import {Series, reportMetricsSchema} from '../types/report-metrics.js';
 import {isTrueEnvValue} from '../util/env.js';
@@ -16,7 +16,7 @@ import {
   AUTH_WEBSOCKET_ROUTES_AUTHED_BY_API_KEY,
 } from './auth-do.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
-import {makeErrorResponse} from './errors.js';
+import {makeErrorResponse} from 'cf-shared/src/errors.js';
 import {
   CANARY_GET,
   HELLO,
@@ -33,7 +33,7 @@ import {
   checkAuthAPIKey,
   get,
   post,
-} from './router.js';
+} from 'cf-shared/src/router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export type MetricsSink = (

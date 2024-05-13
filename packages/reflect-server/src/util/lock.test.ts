@@ -1,7 +1,10 @@
 import {describe, test, expect, jest} from '@jest/globals';
 import {LoggingLock} from './lock.js';
 import {LogContext} from '@rocicorp/logger';
-import {TestLogSink, createSilentLogContext} from './test-utils.js';
+import {
+  TestLogSink,
+  createSilentLogContext,
+} from 'shared/src/logging-test-utils.js';
 import {resolver} from './resolver.js';
 import {sleep} from './sleep.js';
 

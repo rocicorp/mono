@@ -4,7 +4,7 @@ import type {RoomStartHandler} from '../server/room-start.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {getUserValue} from '../types/user-value.js';
 import {getVersion, putVersion} from '../types/version.js';
-import {createSilentLogContext} from '../util/test-utils.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {processRoomStart} from './process-room-start.js';
 
 const {roomDO} = getMiniflareBindings();

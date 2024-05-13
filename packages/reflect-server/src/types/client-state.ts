@@ -1,4 +1,5 @@
 import type {AuthData} from 'reflect-shared/src/types.js';
+import type {Socket} from '../util/socket.js';
 
 export type ClientID = string;
 export type ClientGroupID = string;
@@ -44,13 +45,6 @@ export class ConnectionCountTrackingClientMap
     this.#trackCount();
     return this;
   }
-}
-
-export interface Socket extends EventTarget<WebSocketEventMap> {
-  accept(): void;
-  send(message: ArrayBuffer | string): void;
-  close(code?: number, reason?: string): void;
-  readonly readyState: number;
 }
 
 export type ClientState = {

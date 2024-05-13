@@ -7,9 +7,9 @@ import {
 import * as valita from 'shared/src/valita.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
 import type {ListOptions} from '../storage/storage.js';
-import {APIError, roomNotFoundAPIError} from './api-errors.js';
+import {APIError, roomNotFoundAPIError} from 'cf-shared/src/api-errors.js';
 import {roomDOFetch} from './auth-do.js';
-import {ErrorWithForwardedResponse} from './errors.js';
+import {ErrorWithForwardedResponse} from 'cf-shared/src/errors.js';
 import {CREATE_ROOM_PATH, fmtPath} from './paths.js';
 import {jsonSchema} from 'shared/src/json-schema.js';
 

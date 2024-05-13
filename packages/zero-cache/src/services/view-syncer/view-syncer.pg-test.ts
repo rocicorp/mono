@@ -7,7 +7,7 @@ import {TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
 import {FakeDurableObjectStorage} from '../../test/fake-do.js';
-import {createSilentLogContext} from '../../test/logger.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';

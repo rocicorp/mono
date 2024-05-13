@@ -13,7 +13,7 @@ import {
   SetOp,
   UpdateOp,
 } from 'zero-protocol/src/push.js';
-import type {MaybePromise} from '../mod.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import {toEntitiesKey} from './keys.js';
 import type {QueryParseDefs} from './options.js';
 import type {QueryDefs} from './zero.js';

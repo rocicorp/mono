@@ -13,6 +13,7 @@ export const errorKindSchema = v.union(
   v.literal('InvalidConnectionRequestClientDeleted'),
   v.literal('InvalidMessage'),
   v.literal('InvalidPush'),
+  v.literal('MutationFailed'),
   v.literal('Unauthorized'),
   v.literal('VersionNotSupported'),
 );

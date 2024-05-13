@@ -1,5 +1,5 @@
 import {describe, test, expect} from '@jest/globals';
-import {TestLogSink} from '../util/test-utils.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {
   DataDogLogEnv,
   DataDogMetricsEnv,

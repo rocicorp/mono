@@ -15,12 +15,12 @@ import {randomID} from '../util/rand.js';
 import {resolver} from '../util/resolver.js';
 import {
   Mocket,
-  SilentLogSink,
   client,
   clientRecord,
   mutation,
   pendingMutation,
 } from '../util/test-utils.js';
+import {SilentLogSink} from 'shared/src/logging-test-utils.js';
 
 const {roomDO} = getMiniflareBindings();
 const id = roomDO.newUniqueId();
