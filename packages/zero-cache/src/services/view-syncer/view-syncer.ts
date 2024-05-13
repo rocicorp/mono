@@ -358,19 +358,18 @@ export class ViewSyncerService implements ViewSyncer, Service {
     lc.info?.(`Executing ${queriesToExecute.length} queries`);
 
     const updater = new CVRQueryDrivenUpdater(this.#storage, cvr, newVersion);
-    // Track which queries are being executed.
-    queriesToExecute.forEach(q =>
-      q.queryIDs.forEach(id => updater.executed(id, q.transformationHash)),
+    // Track which queries are being executed and removed.
+    const cvrVersion = updater.trackQueries(
+      lc,
+      queriesToExecute.flatMap(q =>
+        q.queryIDs.map(id => ({id, transformationHash: q.transformationHash})),
+      ),
+      Object.values(cvr.queries)
+        .filter(q => !q.internal && Object.keys(q.desiredBy).length === 0)
+        .map(q => q.id),
+      minCVRVersion,
     );
 
-    // Remove queries that are no longer desired.
-    Object.values(cvr.queries)
-      .filter(q => !q.internal && Object.keys(q.desiredBy).length === 0)
-      .forEach(q => updater.removed(q.id));
-
-    // At this point the CVR version is fixed, either from a new stateVersion
-    // or from a minorVersion bump due to a change in the query set.
-    const cvrVersion = updater.updatedVersion();
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(cvrVersion),
     );
@@ -401,14 +400,11 @@ export class ViewSyncerService implements ViewSyncer, Service {
     await Promise.all(queriesDone);
 
     lc.debug?.(`generating delete / constrain patches`);
-    for (const patch of await updater.deleteUnreferencedColumnsAndRows(
-      lc,
-      minCVRVersion,
-    )) {
+    for (const patch of await updater.deleteUnreferencedColumnsAndRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
     lc.debug?.(`generating config patches`);
-    for (const patch of await updater.generateConfigPatches(minCVRVersion)) {
+    for (const patch of await updater.generateConfigPatches(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
 

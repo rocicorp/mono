@@ -114,9 +114,13 @@ export class CVRPaths {
     return `${this.root}/d/r/`;
   }
 
+  rowPatchPrefix(): string {
+    return `${this.root}/p/d/`;
+  }
+
   rowPatchVersionPrefix(cvrVersion: CVRVersion): string {
     const v = versionString(cvrVersion);
-    return `${this.root}/p/d/${v}/`;
+    return `${this.rowPatchPrefix()}${v}/`;
   }
 
   rowPatch(v: CVRVersion, row: RowID): string {

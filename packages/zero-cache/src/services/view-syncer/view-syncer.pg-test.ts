@@ -502,8 +502,8 @@ describe('view-syncer/service', () => {
           },
         ],
         gotQueriesPatch: [
-          {hash: 'query-hash1', op: 'del'},
           {ast: USERS_NAME_QUERY, hash: 'query-hash2', op: 'put'},
+          {hash: 'query-hash1', op: 'del'},
         ],
       } satisfies PokePartBody,
     ]);

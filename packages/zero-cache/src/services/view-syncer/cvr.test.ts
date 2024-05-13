@@ -625,7 +625,12 @@ describe('view-syncer/cvr', () => {
         '1aa',
       );
 
-      updater.executed('oneHash', 'serverOneHash');
+      updater.trackQueries(
+        lc,
+        [{id: 'oneHash', transformationHash: 'serverOneHash'}],
+        [],
+        {stateVersion: '189'},
+      );
       // Simulate receiving different views rows at different time times.
       expect(
         await updater.received(
@@ -732,11 +737,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
-      expect(
-        await updater.deleteUnreferencedColumnsAndRows(lc, {
-          stateVersion: '189',
-        }),
-      ).toEqual([
+      expect(await updater.deleteUnreferencedColumnsAndRows(lc)).toEqual([
         {
           patch: {id: ROW_ID2, op: 'constrain', type: 'row', columns: ['id']},
           toVersion: {stateVersion: '1a0'},
@@ -753,9 +754,7 @@ describe('view-syncer/cvr', () => {
       // });
 
       const newVersion = {stateVersion: '1aa', minorVersion: 1};
-      expect(
-        await updater.generateConfigPatches({stateVersion: '189'}),
-      ).toEqual([
+      expect(await updater.generateConfigPatches(lc)).toEqual([
         {
           patch: {type: 'query', op: 'del', id: 'catchup-delete'},
           toVersion: {stateVersion: '19z'},
@@ -814,7 +813,7 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           patchVersion: updated.version,
-          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
@@ -941,7 +940,12 @@ describe('view-syncer/cvr', () => {
         '1ba',
       );
 
-      updater.executed('oneHash', 'serverTwoHash');
+      updater.trackQueries(
+        lc,
+        [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
+        [],
+        {stateVersion: '189'},
+      );
       expect(
         await updater.received(
           lc,
@@ -1002,11 +1006,7 @@ describe('view-syncer/cvr', () => {
 
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
-      expect(
-        await updater.deleteUnreferencedColumnsAndRows(lc, {
-          stateVersion: '189',
-        }),
-      ).toEqual([
+      expect(await updater.deleteUnreferencedColumnsAndRows(lc)).toEqual([
         {
           patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
           toVersion: newVersion,
@@ -1021,9 +1021,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
-      expect(
-        await updater.generateConfigPatches({stateVersion: '189'}),
-      ).toEqual([
+      expect(await updater.generateConfigPatches(lc)).toEqual([
         {
           patch: {type: 'query', op: 'del', id: 'catchup-delete'},
           toVersion: {stateVersion: '19z'},
@@ -1071,14 +1069,14 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           patchVersion: updated.version,
-          queriedColumns: {id: ['oneHash', 'twoHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash', 'twoHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
@@ -1217,8 +1215,15 @@ describe('view-syncer/cvr', () => {
         '1ba',
       );
 
-      updater.executed('oneHash', 'updatedOneServerHash');
-      updater.executed('twoHash', 'updatedTwoServerHash');
+      updater.trackQueries(
+        lc,
+        [
+          {id: 'oneHash', transformationHash: 'updatedOneServerHash'},
+          {id: 'twoHash', transformationHash: 'updatedTwoServerHash'},
+        ],
+        [],
+        {stateVersion: '189'},
+      );
       expect(
         await updater.received(
           lc,
@@ -1315,11 +1320,7 @@ describe('view-syncer/cvr', () => {
 
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
-      expect(
-        await updater.deleteUnreferencedColumnsAndRows(lc, {
-          stateVersion: '189',
-        }),
-      ).toEqual([
+      expect(await updater.deleteUnreferencedColumnsAndRows(lc)).toEqual([
         {
           patch: {
             type: 'row',
@@ -1338,9 +1339,7 @@ describe('view-syncer/cvr', () => {
           toVersion: {stateVersion: '1ba'},
         },
       ] satisfies PatchToVersion[]);
-      expect(
-        await updater.generateConfigPatches({stateVersion: '189'}),
-      ).toEqual([
+      expect(await updater.generateConfigPatches(lc)).toEqual([
         {
           patch: {type: 'query', op: 'del', id: 'catchup-delete'},
           toVersion: {stateVersion: '19z'},
@@ -1404,7 +1403,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash', 'twoHash']},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
@@ -1540,14 +1539,10 @@ describe('view-syncer/cvr', () => {
         '1ba',
       );
 
-      updater.removed('oneHash');
+      updater.trackQueries(lc, [], ['oneHash'], {stateVersion: '189'});
 
       const newVersion = {stateVersion: '1ba', minorVersion: 1};
-      expect(
-        await updater.deleteUnreferencedColumnsAndRows(lc, {
-          stateVersion: '189',
-        }),
-      ).toEqual([
+      expect(await updater.deleteUnreferencedColumnsAndRows(lc)).toEqual([
         {
           patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
           toVersion: newVersion,
@@ -1566,9 +1561,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
-      expect(
-        await updater.generateConfigPatches({stateVersion: '189'}),
-      ).toEqual([
+      expect(await updater.generateConfigPatches(lc)).toEqual([
         {
           patch: {type: 'query', op: 'del', id: 'catchup-delete'},
           toVersion: {stateVersion: '19z'},

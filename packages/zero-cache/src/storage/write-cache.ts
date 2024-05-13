@@ -107,6 +107,11 @@ export class WriteCache implements Storage {
     return this.#cache.size > 0;
   }
 
+  pendingDelete(k: string): boolean {
+    const v = this.#cache.get(k);
+    return v !== undefined && v.value === undefined;
+  }
+
   pending(): (PutOp | DelOp)[] {
     const res: (PutOp | DelOp)[] = [];
     for (const [key, {value}] of this.#cache.entries()) {

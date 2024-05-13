@@ -112,11 +112,13 @@ describe('view-syncer/schema/paths', () => {
       rowKey: {id: 123},
     };
 
+    expect(paths.rowPatchPrefix()).toBe('/vs/cvr/fbr/p/d/');
     expect(paths.rowPatchVersionPrefix(v1)).toBe('/vs/cvr/fbr/p/d/1ab/');
     expect(paths.rowPatchVersionPrefix(v2)).toBe('/vs/cvr/fbr/p/d/1ab:01/');
     expect(paths.rowPatchVersionPrefix(v3)).toBe('/vs/cvr/fbr/p/d/1ac/');
 
     const ordered = [
+      paths.rowPatchPrefix(),
       paths.rowPatchVersionPrefix(v1),
       paths.rowPatch(v1, row),
       paths.rowPatchVersionPrefix(v2),
