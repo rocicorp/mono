@@ -1,4 +1,3 @@
-import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
 import {stringify, type JSONValue} from './bigint-json.js';
 import {h64} from './xxhash.js';
@@ -19,11 +18,13 @@ export type RowValue = RowKey;
  * that can be used as a Map key.
  */
 export function rowKeyString(key: RowKey): string {
-  const tuples = Object.entries(key)
-    .sort(([col1], [col2]) => compareUTF8(col1, col2))
-    .flat();
+  return stringify(tuples(key));
+}
 
-  return stringify(tuples);
+function tuples(key: RowKey) {
+  return Object.entries(key)
+    .sort(([col1], [col2]) => (col1 < col2 ? -1 : col1 > col2 ? 1 : 0))
+    .flat();
 }
 
 /**
@@ -36,30 +37,17 @@ export function rowKeyString(key: RowKey): string {
  * * can be used to compactly encode (and lookup) the rows of query results for CVR
  *   bookkeeping.
  *
- * The hash is encoded in `base64url`, with the maximum 128-bit value being 22 characters long.
+ * The hash is encoded in `base36`, with the maximum 128-bit value being 25 characters long.
  */
 export function rowIDHash(id: RowID): string {
-  const str = JSON.stringify([id.schema, id.table]) + rowKeyString(id.rowKey);
+  const str = stringify([id.schema, id.table, ...tuples(id.rowKey)]);
 
   // xxhash only computes 64-bit values. Run it on the forward and reverse string
   // to get better collision resistance.
   const forward = h64(str);
   const backward = h64(reverse(str));
   const full = (forward << 64n) + backward;
-  let fullHex = full.toString(16);
-  if (fullHex.length % 2) {
-    fullHex = '0' + fullHex;
-  }
-  return (
-    Buffer.from(fullHex, 'hex')
-      .toString('base64')
-      // Emulate "base64url" (which Cloudflare does not support), to eliminate
-      // problematic "/" characters in the hashes as they are used in slash-delimited
-      // keys when stored in the CVR.
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '')
-  );
+  return full.toString(36);
 }
 
 function reverse(str: string): string {
