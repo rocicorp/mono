@@ -14,43 +14,43 @@ describe('types/row-key', () => {
     {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
-      rowIDHash: 'LzYCyoprbpgVX1OvowtR0w',
+      rowIDHash: '3z7dbf9d35nybsu0u6j0qdduu',
     },
     {
       table: 'clients',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
-      rowIDHash: '5dx4yFSW4NH-U00OUN6nBA',
+      rowIDHash: '369s9ujkm8cshq8maksagrk4z',
     },
     {
       schema: 'zero',
       table: 'clients',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
-      rowIDHash: 'TP0l9Jbd9d4Jppi30gCF7A',
+      rowIDHash: 'bdi7ujkjhk018p49qckqpjs59',
     },
     {
       schema: 'clients',
       table: 'zero',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
-      rowIDHash: 'iakA7CJFm2Yxz2vcRy-tgw',
+      rowIDHash: '83rna1e2y74s7ik5skigv9223',
     },
     {
       table: 'issues',
       keys: [{foo: ['bar']}, {foo: ['bar']}],
       rowKeyString: '["foo",["bar"]]',
-      rowIDHash: '-sQXIlhIMvuh7cZ_2j_VUQ',
+      rowIDHash: 'c8pu7tydek3r9wopx9c4o64nl',
     },
     {
       keys: [{foo: 1}, {foo: 1}],
       rowKeyString: '["foo",1]',
-      rowIDHash: '7P8yzu686tZglB9sTe-EUQ',
+      rowIDHash: 'gjssbmsl6avdktnaq8an52jg',
     },
     {
       keys: [{foo: '1'}, {foo: '1'}],
       rowKeyString: '["foo","1"]',
-      rowIDHash: 'PzXFZK-F8o5nIMOJa0TQ6g',
+      rowIDHash: 'cr6zlx3dei78jpjv8qecv5b63',
     },
     {
       // Two-column keys
@@ -59,7 +59,7 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar'},
       ],
       rowKeyString: '["bar",["foo"],"foo","bar"]',
-      rowIDHash: 'BPPyZXf9D3XzztvswmthYA',
+      rowIDHash: '73vrcw1djlz99hvz4lqjyt2bw',
     },
     {
       // Three-column keys
@@ -69,12 +69,12 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar', baz: 2},
       ],
       rowKeyString: '["bar",["foo"],"baz",2,"foo","bar"]',
-      rowIDHash: '6aqwQTpouYQb9ST-v53efw',
+      rowIDHash: '802jgj2gmrqy0khigiknxueof',
     },
     {
       keys: [{id: 'HhCx1Vi3js'}],
       rowKeyString: '["id","HhCx1Vi3js"]',
-      rowIDHash: 'DRduv2GfSDYjdImfnsw1Aw',
+      rowIDHash: 'd9wwy0a6s1olyhxq8vkvw7kln',
     },
   ];
 

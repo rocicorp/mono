@@ -1,8 +1,8 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Normalized} from '../../zql/normalize.js';
 import {getPublicationInfo} from '../replicator/tables/published.js';
@@ -150,7 +150,7 @@ describe('view-syncer/queries', () => {
     expect(resultParser.parseResults(queryIDs, results)).toEqual(
       new Map([
         [
-          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          '/vs/cvr/foo-cvr/d/r/e3jqcp8k60hejdhju08414x2z',
           {
             contents: {id: '3', owner_id: '102', parent_id: '1', title: 'foo'},
             record: {
@@ -166,7 +166,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/dygxK_hEWhfHvQ8eowTfCQ',
+          '/vs/cvr/foo-cvr/d/r/idb04wek62w1kiltjxjn3fxk',
           {
             contents: {id: '102', name: 'Candice'},
             record: {
@@ -180,7 +180,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          '/vs/cvr/foo-cvr/d/r/1ngjqp2ckvs2ur64mjoacg55',
           {
             contents: {id: '1', owner_id: '100', title: 'parent issue foo'},
             record: {
@@ -195,7 +195,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/1G9hXQhMWdq9f737TmE6rg',
+          '/vs/cvr/foo-cvr/d/r/9483jb6yy1yq0etzidy62072z',
           {
             contents: {id: '100', name: 'Alice'},
             record: {
@@ -209,7 +209,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          '/vs/cvr/foo-cvr/d/r/7flkrz0yskhi5ko0l0lqjccoe',
           {
             contents: {id: '4', owner_id: '101', parent_id: '2', title: 'bar'},
             record: {
@@ -225,7 +225,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/Z3BOpMPd4QMKJ8IeYx1QvQ',
+          '/vs/cvr/foo-cvr/d/r/epxvfoxp9ktkty20rjo1yyheu',
           {
             contents: {id: '101', name: 'Bob'},
             record: {
@@ -239,7 +239,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          '/vs/cvr/foo-cvr/d/r/2z8i982skum71jkx73g5y2gao',
           {
             contents: {id: '2', owner_id: '101', title: 'parent issue bar'},
             record: {
@@ -315,7 +315,7 @@ describe('view-syncer/queries', () => {
     expect(resultParser.parseResults(queryIDs, results)).toEqual(
       new Map([
         [
-          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          '/vs/cvr/foo-cvr/d/r/7flkrz0yskhi5ko0l0lqjccoe',
           {
             contents: {id: '4', title: 'bar'},
             record: {
@@ -326,7 +326,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          '/vs/cvr/foo-cvr/d/r/2z8i982skum71jkx73g5y2gao',
           {
             contents: {id: '2', title: 'parent issue bar'},
             record: {
@@ -337,7 +337,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          '/vs/cvr/foo-cvr/d/r/1ngjqp2ckvs2ur64mjoacg55',
           {
             contents: {id: '1', title: 'parent issue foo'},
             record: {
@@ -348,7 +348,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          '/vs/cvr/foo-cvr/d/r/e3jqcp8k60hejdhju08414x2z',
           {
             contents: {id: '3', title: 'foo'},
             record: {
@@ -480,7 +480,7 @@ describe('view-syncer/queries', () => {
     expect(resultParser.parseResults(queryIDs, results)).toEqual(
       new Map([
         [
-          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          '/vs/cvr/foo-cvr/d/r/e3jqcp8k60hejdhju08414x2z',
           {
             contents: {id: '3', owner_id: '102', parent_id: '1', title: 'foo'},
             record: {
@@ -496,7 +496,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/dygxK_hEWhfHvQ8eowTfCQ',
+          '/vs/cvr/foo-cvr/d/r/idb04wek62w1kiltjxjn3fxk',
           {
             contents: {id: '102', name: 'Candice'},
             record: {
@@ -510,7 +510,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          '/vs/cvr/foo-cvr/d/r/1ngjqp2ckvs2ur64mjoacg55',
           {
             contents: {
               id: '1',
@@ -531,7 +531,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/1G9hXQhMWdq9f737TmE6rg',
+          '/vs/cvr/foo-cvr/d/r/9483jb6yy1yq0etzidy62072z',
           {
             contents: {id: '100', name: 'Alice'},
             record: {
@@ -545,7 +545,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          '/vs/cvr/foo-cvr/d/r/7flkrz0yskhi5ko0l0lqjccoe',
           {
             contents: {id: '4', owner_id: '101', parent_id: '2', title: 'bar'},
             record: {
@@ -561,7 +561,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/Z3BOpMPd4QMKJ8IeYx1QvQ',
+          '/vs/cvr/foo-cvr/d/r/epxvfoxp9ktkty20rjo1yyheu',
           {
             contents: {id: '101', name: 'Bob'},
             record: {
@@ -575,7 +575,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          '/vs/cvr/foo-cvr/d/r/2z8i982skum71jkx73g5y2gao',
           {
             contents: {
               id: '2',
@@ -657,7 +657,7 @@ describe('view-syncer/queries', () => {
     expect(resultParser.parseResults(queryIDs, results)).toEqual(
       new Map([
         [
-          '/vs/cvr/foo-cvr/d/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          '/vs/cvr/foo-cvr/d/r/7flkrz0yskhi5ko0l0lqjccoe',
           {
             contents: {id: '4', title: 'bar'},
             record: {
@@ -668,7 +668,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/VPg9hxKPhJtHB6oYkGqBpw',
+          '/vs/cvr/foo-cvr/d/r/2z8i982skum71jkx73g5y2gao',
           {
             contents: {id: '2', title: 'parent issue bar'},
             record: {
@@ -679,7 +679,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/oA1bf0ulYhik9qypZFPeLQ',
+          '/vs/cvr/foo-cvr/d/r/1ngjqp2ckvs2ur64mjoacg55',
           {
             contents: {id: '1', title: 'parent issue foo'},
             record: {
@@ -690,7 +690,7 @@ describe('view-syncer/queries', () => {
           },
         ],
         [
-          '/vs/cvr/foo-cvr/d/r/wfZrxQPRsszHpdfLRWoPzA',
+          '/vs/cvr/foo-cvr/d/r/e3jqcp8k60hejdhju08414x2z',
           {
             contents: {id: '3', title: 'foo'},
             record: {

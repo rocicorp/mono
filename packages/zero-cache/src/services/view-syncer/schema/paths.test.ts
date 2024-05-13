@@ -68,14 +68,14 @@ describe('view-syncer/schema/paths', () => {
         table: 'issues',
         rowKey: {id: 123},
       }),
-    ).toBe('/vs/cvr/fbr/d/r/hmiZ0jkPKW203clzP4Mg6w');
+    ).toBe('/vs/cvr/fbr/d/r/7voyfyr4kp3iwnbimxjlziq8d');
     expect(
       paths.row({
         schema: 'public',
         table: 'issues',
         rowKey: {id: 124},
       }),
-    ).toBe('/vs/cvr/fbr/d/r/Z1Lzg3qVqQAbTf_PsUvlCg');
+    ).toBe('/vs/cvr/fbr/d/r/5925di8zkpciz02gvhiot6rk0');
     expect(
       paths.row({
         schema: 'public',
@@ -84,8 +84,7 @@ describe('view-syncer/schema/paths', () => {
           this: `could be a really a big row k${'e'.repeat(1000)}y`,
         },
       }),
-    ).toBe('/vs/cvr/fbr/d/r/PNJVDvpmnF-qcv1Mw8AfiQ');
-
+    ).toBe('/vs/cvr/fbr/d/r/bwsh8gfsm99es7mhufgwcgm24');
     expect(
       paths.rowPatch(
         {stateVersion: '28c8', minorVersion: 100},
@@ -97,7 +96,7 @@ describe('view-syncer/schema/paths', () => {
           },
         },
       ),
-    ).toBe('/vs/cvr/fbr/p/d/28c8:12s/r/PNJVDvpmnF-qcv1Mw8AfiQ');
+    ).toBe('/vs/cvr/fbr/p/d/28c8:12s/r/bwsh8gfsm99es7mhufgwcgm24');
   });
 
   test('row patch prefixes', () => {

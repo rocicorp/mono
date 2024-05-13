@@ -1,5 +1,6 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Downstream, PokePartBody} from 'zero-protocol';
@@ -7,7 +8,6 @@ import {TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
 import {FakeDurableObjectStorage} from '../../test/fake-do.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -375,7 +375,7 @@ describe('view-syncer/service', () => {
     expect(rowPatches).toEqual(
       new Map([
         [
-          '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          '/vs/cvr/9876/p/d/1xz/r/7flkrz0yskhi5ko0l0lqjccoe',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
@@ -385,7 +385,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
+          '/vs/cvr/9876/p/d/1xz/r/2z8i982skum71jkx73g5y2gao',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
@@ -395,7 +395,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
+          '/vs/cvr/9876/p/d/1xz/r/1ngjqp2ckvs2ur64mjoacg55',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
@@ -405,7 +405,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
+          '/vs/cvr/9876/p/d/1xz/r/e3jqcp8k60hejdhju08414x2z',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
@@ -415,7 +415,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/Fck9j70JNRFEeb3ry5TrEw',
+          '/vs/cvr/9876/p/d/1xz/r/7fxlm9v6qwokjvqa9d20cc09v',
           {
             columns: ['clientGroupID', 'clientID', 'lastMutationID'],
             id: {
@@ -739,7 +739,7 @@ describe('view-syncer/service', () => {
     expect(rowPatches).toEqual(
       new Map([
         [
-          '/vs/cvr/9876/p/d/1xz/r/Qxp2tFD-UOgu7-78ZYiLHw',
+          '/vs/cvr/9876/p/d/1xz/r/7flkrz0yskhi5ko0l0lqjccoe',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
@@ -749,7 +749,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/VPg9hxKPhJtHB6oYkGqBpw',
+          '/vs/cvr/9876/p/d/1xz/r/2z8i982skum71jkx73g5y2gao',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
@@ -759,7 +759,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/oA1bf0ulYhik9qypZFPeLQ',
+          '/vs/cvr/9876/p/d/1xz/r/1ngjqp2ckvs2ur64mjoacg55',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
@@ -769,7 +769,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/wfZrxQPRsszHpdfLRWoPzA',
+          '/vs/cvr/9876/p/d/1xz/r/e3jqcp8k60hejdhju08414x2z',
           {
             columns: ['big', 'id', 'title'],
             id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
@@ -779,7 +779,7 @@ describe('view-syncer/service', () => {
           },
         ],
         [
-          '/vs/cvr/9876/p/d/1xz/r/Fck9j70JNRFEeb3ry5TrEw',
+          '/vs/cvr/9876/p/d/1xz/r/7fxlm9v6qwokjvqa9d20cc09v',
           {
             columns: ['clientGroupID', 'clientID', 'lastMutationID'],
             id: {
