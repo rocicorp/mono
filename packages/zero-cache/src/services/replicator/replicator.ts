@@ -1,10 +1,9 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import postgres from 'postgres';
 import * as v from 'shared/src/valita.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
-import {PostgresDB, postgresTypeConfig} from '../../types/pg.js';
+import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
@@ -111,16 +110,14 @@ export class ReplicatorService implements Replicator, Service {
     lc: LogContext,
     replicaID: string,
     upstreamUri: string,
-    syncReplicaUri: string,
+    syncReplica: PostgresDB,
   ) {
     this.id = replicaID;
     this.#lc = lc
       .withContext('component', 'Replicator')
       .withContext('serviceID', this.id);
     this.#upstreamUri = upstreamUri;
-    this.#syncReplica = postgres(syncReplicaUri, {
-      ...postgresTypeConfig(),
-    });
+    this.#syncReplica = syncReplica;
 
     // This lock ensures that transactions are processed serially, even
     // across re-connects to the upstream db.

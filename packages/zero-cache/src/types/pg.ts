@@ -32,6 +32,9 @@ export const postgresTypeConfig = () => ({
       parse: BigIntJSON.parse,
     },
   },
+  // Named prepared statements are not supported by Hyperdrive.
+  // https://developers.cloudflare.com/hyperdrive/configuration/connect-to-postgres/#postgresjs
+  prepare: false,
 });
 
 export type PostgresDB = postgres.Sql<{
