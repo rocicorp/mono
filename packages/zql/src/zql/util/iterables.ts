@@ -10,9 +10,7 @@ export function genMap<T, U>(
           yield cb(x);
         }
       } finally {
-        if (finallyCb !== undefined) {
-          finallyCb();
-        }
+        finallyCb?.();
       }
     },
   };
@@ -48,9 +46,7 @@ export function genFilter<S extends T, T>(
           }
         }
       } finally {
-        if (finallyCb !== undefined) {
-          finallyCb();
-        }
+        finallyCb?.();
       }
     },
   };
@@ -69,9 +65,7 @@ export function genFlatMap<T, U>(
           yield* f(t, index++);
         }
       } finally {
-        if (finallyCb !== undefined) {
-          finallyCb();
-        }
+        finallyCb?.();
       }
     },
   };
@@ -108,9 +102,7 @@ export function genMapCached<T, U>(
           i++;
         }
       } finally {
-        if (finallyCb !== undefined) {
-          finallyCb();
-        }
+        finallyCb?.();
       }
     },
   };
@@ -141,9 +133,7 @@ export function genFilterCached<S extends T, T>(
           i++;
         }
       } finally {
-        if (finallyCb !== undefined) {
-          finallyCb();
-        }
+        finallyCb?.();
       }
     },
   };
@@ -170,9 +160,7 @@ export function genFlatMapCached<T, U>(
           i++;
         }
       } finally {
-        if (finallyCb !== undefined) {
-          finallyCb();
-        }
+        finallyCb?.();
       }
     },
   };
