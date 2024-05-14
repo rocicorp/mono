@@ -1,11 +1,9 @@
 import {expect, test} from 'vitest';
 import {
+  genCached,
   genFilter,
-  genFilterCached,
   genFlatMap,
-  genFlatMapCached,
   genMap,
-  genMapCached,
   mapIter,
 } from './iterables.js';
 
@@ -106,36 +104,54 @@ test('genFlatMap finally handling', () => {
 });
 
 test('multiple iterations over a genMapCached will return the exact same results', () => {
-  const iterable = [1, 2, 3];
-  const mapper = genMapCached(iterable, _ => Math.random());
-
-  const first = [...mapper];
-  const second = [...mapper];
-
-  expect(first).toEqual(second);
+  check<number>(genMap, _ => Math.random());
 });
 
 test('multiple iterations over a genFilterCached will return the exact same results', () => {
-  const iterable = [1, 2, 3];
-  const filter = genFilterCached(
-    iterable,
-    (x): x is number => Math.random() > 0.5 || x === 2,
-  );
-
-  const first = [...filter];
-  const second = [...filter];
-
-  expect(first).toEqual(second);
+  check<boolean>(genFilter, _ => Math.random() > 0.5);
 });
 
 test('multiple iterations over a genFlatMapCached will return the exact same results', () => {
-  const iterable = [[1], [2, 3], [4, 5, 6]];
-  const flatMapper = genFlatMapCached(iterable, x =>
-    Math.random() > 0.5 ? x : [],
-  );
-
-  const first = [...flatMapper];
-  const second = [...flatMapper];
-
-  expect(first).toEqual(second);
+  check<number[]>(genFlatMap, x => (Math.random() > 0.5 ? [x, x, x] : []));
 });
+
+function check<R>(
+  gen: (p: Iterable<number>, f: (p: number) => R) => Iterable<number>,
+  fn: (p: number) => R,
+) {
+  const iterable = Array.from({length: 100}, (_, i) => i);
+  const filter = genCached(gen(iterable, fn));
+
+  const first = filter[Symbol.iterator]();
+  const second = filter[Symbol.iterator]();
+  let third: Iterator<number>;
+
+  const firstResult: number[] = [];
+  const secondResult: number[] = [];
+  const thirdResult: number[] = [];
+
+  let firstValue = first.next();
+  let secondValue = second.next();
+  // iterate both at random intervals to test iterators getting ahead of one another
+  while (firstValue.done === false || secondValue.done === false) {
+    if (Math.random() > 0.5 && firstValue.done === false) {
+      firstResult.push(firstValue.value);
+      firstValue = first.next();
+    } else if (secondValue.done === false) {
+      secondResult.push(secondValue.value);
+      secondValue = second.next();
+    }
+
+    if (firstResult.length === 1) {
+      third = filter[Symbol.iterator]();
+    }
+  }
+
+  let thirdValue: IteratorResult<number>;
+  while ((thirdValue = third!.next()).done === false) {
+    thirdResult.push(thirdValue.value);
+  }
+
+  expect(firstResult).toEqual(secondResult);
+  expect(secondResult).toEqual(thirdResult);
+}

@@ -16,6 +16,46 @@ export function genMap<T, U>(
   };
 }
 
+export function genCached<T>(
+  s: Iterable<T>,
+  finallyCb?: () => void | undefined,
+) {
+  const cache: T[] = [];
+
+  // we have to start it outside so it doesn't get re-started
+  // on later calls to the cache which have a cache-miss.
+  const innerIterator = s[Symbol.iterator]();
+  let lastIteratorResult: IteratorResult<T> | undefined;
+
+  return {
+    *[Symbol.iterator]() {
+      try {
+        let i = 0;
+
+        for (;;) {
+          if (i < cache.length) {
+            yield cache[i];
+            ++i;
+            continue;
+          }
+
+          lastIteratorResult = innerIterator.next();
+          if (lastIteratorResult?.done) {
+            return;
+          }
+
+          cache.push(lastIteratorResult.value);
+        }
+      } finally {
+        if (!lastIteratorResult?.done) {
+          innerIterator.return?.();
+        }
+        finallyCb?.();
+      }
+    },
+  };
+}
+
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   f: (x: T) => x is S,
@@ -79,89 +119,4 @@ export function* mapIter<T, U>(
   for (const t of iter) {
     yield f(t, index++);
   }
-}
-
-export function genMapCached<T, U>(
-  s: Iterable<T>,
-  cb: (x: T) => U,
-  finallyCb?: () => void | undefined,
-) {
-  const cache: U[] = [];
-  return {
-    *[Symbol.iterator]() {
-      try {
-        let i = 0;
-        for (const x of s) {
-          if (cache.length > i) {
-            yield cache[i];
-          } else {
-            const value = cb(x);
-            cache.push(value);
-            yield value;
-          }
-          i++;
-        }
-      } finally {
-        finallyCb?.();
-      }
-    },
-  };
-}
-
-export function genFilterCached<S extends T, T>(
-  s: Iterable<T>,
-  f: (x: T) => x is S,
-  finallyCb?: () => void | undefined,
-) {
-  const cache: boolean[] = [];
-  return {
-    *[Symbol.iterator]() {
-      try {
-        let i = 0;
-        for (const x of s) {
-          if (cache.length > i) {
-            if (cache[i]) {
-              yield x as S;
-            }
-          } else {
-            const value = f(x);
-            cache.push(value);
-            if (value) {
-              yield x as S;
-            }
-          }
-          i++;
-        }
-      } finally {
-        finallyCb?.();
-      }
-    },
-  };
-}
-
-export function genFlatMapCached<T, U>(
-  iter: Iterable<T>,
-  f: (t: T, index: number) => Iterable<U>,
-  finallyCb?: () => void | undefined,
-) {
-  const cache: Iterable<U>[] = [];
-  return {
-    *[Symbol.iterator]() {
-      try {
-        let i = 0;
-        for (const t of iter) {
-          if (cache.length > i) {
-            yield* cache[i];
-          } else {
-            const values = f(t, i);
-            cache.push(values);
-            yield* values;
-          }
-          i++;
-        }
-      } finally {
-        finallyCb?.();
-      }
-    },
-  };
 }
