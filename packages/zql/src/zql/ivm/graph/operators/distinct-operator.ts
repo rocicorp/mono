@@ -1,5 +1,5 @@
 import type {Entity} from '../../../../entity.js';
-import {genFilter, genMap, genMapCached} from '../../../util/iterables.js';
+import {genCached, genFilter, genMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {StringOrNumber, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
@@ -42,52 +42,54 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
 
     const entriesCache = this.#entriesCache;
     return genFilter(
-      genMapCached(multiset, (entry): Entry<T> | undefined => {
-        if (entry[1] === 0) {
+      genCached(
+        genMap(multiset, (entry): Entry<T> | undefined => {
+          if (entry[1] === 0) {
+            return undefined;
+          }
+
+          const {id} = entry[0];
+          const existingEntry = entriesCache.get(id);
+
+          if (!existingEntry) {
+            entriesCache.set(id, entry);
+            return [entry[0], Math.sign(entry[1])];
+          }
+
+          const newMult = existingEntry[1] + entry[1];
+          entriesCache.set(id, [entry[0], newMult]);
+
+          if (existingEntry[1] > 0 && newMult < 0) {
+            return [entry[0], -2];
+          }
+
+          if (existingEntry[1] === 0 && newMult < 0) {
+            return [entry[0], -1];
+          }
+
+          if (existingEntry[1] > 0 && newMult === 0) {
+            return [entry[0], -1];
+          }
+
+          if (existingEntry[1] <= 0 && newMult < 0) {
+            return undefined;
+          }
+
+          if (existingEntry[1] < 0 && newMult === 0) {
+            return [entry[0], 1];
+          }
+
+          if (existingEntry[1] === 0 && newMult > 0) {
+            return [entry[0], 1];
+          }
+
+          if (existingEntry[1] < 0 && newMult > 0) {
+            return [entry[0], 2];
+          }
+
           return undefined;
-        }
-
-        const {id} = entry[0];
-        const existingEntry = entriesCache.get(id);
-
-        if (!existingEntry) {
-          entriesCache.set(id, entry);
-          return [entry[0], Math.sign(entry[1])];
-        }
-
-        const newMult = existingEntry[1] + entry[1];
-        entriesCache.set(id, [entry[0], newMult]);
-
-        if (existingEntry[1] > 0 && newMult < 0) {
-          return [entry[0], -2];
-        }
-
-        if (existingEntry[1] === 0 && newMult < 0) {
-          return [entry[0], -1];
-        }
-
-        if (existingEntry[1] > 0 && newMult === 0) {
-          return [entry[0], -1];
-        }
-
-        if (existingEntry[1] <= 0 && newMult < 0) {
-          return undefined;
-        }
-
-        if (existingEntry[1] < 0 && newMult === 0) {
-          return [entry[0], 1];
-        }
-
-        if (existingEntry[1] === 0 && newMult > 0) {
-          return [entry[0], 1];
-        }
-
-        if (existingEntry[1] < 0 && newMult > 0) {
-          return [entry[0], 2];
-        }
-
-        return undefined;
-      }),
+        }),
+      ),
       (x): x is Entry<T> => x !== undefined,
     );
   }
