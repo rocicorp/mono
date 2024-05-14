@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
-import {flatMapIter} from '../../../util/iterables.js';
+import {genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
@@ -66,7 +66,7 @@ export class ReduceOperator<
       this.#addToIndex(key, value, mult);
     }
 
-    return flatMapIter(
+    return genFlatMap(
       () => keysToProcess,
       k => {
         const dataIn = this.#inIndex.get(k);
@@ -81,7 +81,7 @@ export class ReduceOperator<
         }
 
         const reduction = f(
-          flatMapIter(
+          genFlatMap(
             () => dataIn.values(),
             function* ([v, mult]) {
               for (let i = 0; i < mult; i++) {

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {flatMapIter, mapIter} from './iterables.js';
+import {genFlatMap, mapIter} from './iterables.js';
 
 test('mapIter', () => {
   const iterable = [1, 2, 3];
@@ -7,9 +7,9 @@ test('mapIter', () => {
   expect([...result]).toEqual([1, 3, 5]);
 });
 
-test('flatMapIter', () => {
+test('genFlatMap', () => {
   const iterable = [[1], [2, 3], [4, 5, 6]];
-  const flatMapper = flatMapIter(
+  const flatMapper = genFlatMap(
     () => iterable,
     x => x,
   );
