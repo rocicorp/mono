@@ -70,7 +70,7 @@ test('on', () => {
 
 test('replace', async () => {
   await fc.assert(
-    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
+    fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
       const source = m.newSetSource(comparator);
 
@@ -87,7 +87,6 @@ test('replace', async () => {
           source.add({id});
         });
       });
-      await Promise.resolve();
 
       expect([...source.value.keys()]).toEqual(
         arr.map(id => ({id})).sort(comparator),
