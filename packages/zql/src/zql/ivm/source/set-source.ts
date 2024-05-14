@@ -20,7 +20,9 @@ let id = 0;
 export class SetSource<T extends object> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
-  readonly #listeners = new Set<(data: ISortedMap<T, T>, v: Version) => void>();
+  readonly #listeners = new Set<
+    (data: ISortedMap<T, undefined>, v: Version) => void
+  >();
   readonly #sorts = new Map<string, SetSource<T>>();
   readonly comparator: Comparator<T>;
   readonly #name: string | undefined;
@@ -28,7 +30,7 @@ export class SetSource<T extends object> implements Source<T> {
   protected readonly _materialite: MaterialiteForSourceInternal;
   #id = id++;
   #historyRequests: Array<PullMsg> = [];
-  #tree: BTree<T, T>;
+  #tree: BTree<T, undefined>;
   #seeded = false;
   #pending: Entry<T>[] = [];
 
@@ -65,18 +67,19 @@ export class SetSource<T extends object> implements Source<T> {
               comparator(val, nextVal) === 0
             ) {
               // The tree doesn't allow dupes -- so this is a replace.
-              this.#tree.set(
+              this.#tree = this.#tree.with(
                 nextMult > 0 ? nextVal : val,
-                nextMult > 0 ? nextVal : val,
+                undefined,
+                true,
               );
               ++i;
               continue;
             }
           }
           if (mult < 0) {
-            this.#tree.delete(val);
+            this.#tree = this.#tree.without(val);
           } else if (mult > 0) {
-            this.#tree.set(val, val);
+            this.#tree = this.#tree.with(val, undefined, true);
           }
         }
 
@@ -120,12 +123,14 @@ export class SetSource<T extends object> implements Source<T> {
     this.#stream.destroy();
   }
 
-  on(cb: (value: ISortedMap<T, T>, version: Version) => void): () => void {
+  on(
+    cb: (value: ISortedMap<T, undefined>, version: Version) => void,
+  ): () => void {
     this.#listeners.add(cb);
     return () => this.#listeners.delete(cb);
   }
 
-  off(fn: (value: ISortedMap<T, T>, version: Version) => void): void {
+  off(fn: (value: ISortedMap<T, undefined>, version: Version) => void): void {
     this.#listeners.delete(fn);
   }
 
@@ -169,9 +174,8 @@ export class SetSource<T extends object> implements Source<T> {
    */
   seed(values: Iterable<T>): this {
     // TODO: invariant to ensure we are in a tx.
-
     for (const v of values) {
-      this.#tree.set(v, v);
+      this.#tree = this.#tree.with(v, undefined, true);
     }
     this._materialite.addDirtySource(this.#internal);
 
@@ -187,7 +191,6 @@ export class SetSource<T extends object> implements Source<T> {
 
   processMessage(message: Request): void {
     // TODO: invariant to ensure we are in a tx.
-
     switch (message.type) {
       case 'pull': {
         this._materialite.addDirtySource(this.#internal);
@@ -273,7 +276,7 @@ export class SetSource<T extends object> implements Source<T> {
 }
 
 function asEntries<T>(
-  m: ISortedMap<T, T>,
+  m: ISortedMap<T, undefined>,
   _message?: Request | undefined,
 ): Multiset<T> {
   // message will contain hoisted expressions so we can do relevant
