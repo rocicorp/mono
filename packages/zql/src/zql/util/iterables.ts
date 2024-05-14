@@ -1,3 +1,13 @@
+export function genConcat<T>(iters: Iterable<T>[]) {
+  return {
+    *[Symbol.iterator]() {
+      for (const iter of iters) {
+        yield* iter;
+      }
+    },
+  };
+}
+
 export function genMap<T, U>(
   s: Iterable<T>,
   cb: (x: T) => U,
