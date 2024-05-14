@@ -18,10 +18,6 @@ DATADOG_SERVICE_LABEL = "zeppliear"
 #SYNC_REPLICA_URI
 #UPSTREAM_URI
 
-[[hyperdrive]]
-binding = "WNAM_REPLICA"
-id = "d85135e8ff654120a8251cd8bd7b4390"
-
 [[migrations]]
 tag = "v1"
 new_classes = ["RunnerDO"]
