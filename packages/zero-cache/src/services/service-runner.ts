@@ -1,7 +1,4 @@
-import type {
-  DurableObjectLocationHint,
-  Hyperdrive,
-} from '@cloudflare/workers-types';
+import type {DurableObjectLocationHint} from '@cloudflare/workers-types';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {DurableStorage} from '../storage/durable-storage.js';
@@ -31,8 +28,6 @@ export interface ServiceRunnerEnv {
   DATADOG_LOGS_API_KEY?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_SERVICE_LABEL?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  WNAM_REPLICA: Hyperdrive;
 }
 
 const REPLICATOR_ID = 'r1';
@@ -69,10 +64,6 @@ export class ServiceRunner
     this.#upstream = postgres(this.#env.UPSTREAM_URI, {
       ...postgresTypeConfig(),
     });
-    // This is how to enable Hyperdrive for connections to the replica.
-    // Initial experiments result in doubling request latency, though, so it's
-    // clearly not desirable in the current configuration.
-    // this.#replica = postgres(this.#env.WNAM_REPLICA.connectionString, {
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
     });
