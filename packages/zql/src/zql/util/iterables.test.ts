@@ -1,5 +1,13 @@
 import {expect, test} from 'vitest';
-import {genFilter, genFlatMap, genMap, mapIter} from './iterables.js';
+import {
+  genFilter,
+  genFilterCached,
+  genFlatMap,
+  genFlatMapCached,
+  genMap,
+  genMapCached,
+  mapIter,
+} from './iterables.js';
 
 test('mapIter', () => {
   const iterable = [1, 2, 3];
@@ -9,10 +17,7 @@ test('mapIter', () => {
 
 test('genFlatMap', () => {
   const iterable = [[1], [2, 3], [4, 5, 6]];
-  const flatMapper = genFlatMap(
-    () => iterable,
-    x => x,
-  );
+  const flatMapper = genFlatMap(iterable, x => x);
 
   expect([...flatMapper]).toEqual([1, 2, 3, 4, 5, 6]);
   // can iterate it a second time
@@ -78,7 +83,7 @@ test('genFlatMap finally handling', () => {
   const iterable = [[1], [2, 3], [4, 5, 6]];
   let finallyCalled = false;
   const flatMapper = genFlatMap(
-    () => iterable,
+    iterable,
     x => x,
     () => {
       finallyCalled = true;
@@ -98,4 +103,39 @@ test('genFlatMap finally handling', () => {
   manualIter.next();
   manualIter.return();
   expect(finallyCalled).toBe(true);
+});
+
+test('multiple iterations over a genMapCached will return the exact same results', () => {
+  const iterable = [1, 2, 3];
+  const mapper = genMapCached(iterable, _ => Math.random());
+
+  const first = [...mapper];
+  const second = [...mapper];
+
+  expect(first).toEqual(second);
+});
+
+test('multiple iterations over a genFilterCached will return the exact same results', () => {
+  const iterable = [1, 2, 3];
+  const filter = genFilterCached(
+    iterable,
+    (x): x is number => Math.random() > 0.5 || x === 2,
+  );
+
+  const first = [...filter];
+  const second = [...filter];
+
+  expect(first).toEqual(second);
+});
+
+test('multiple iterations over a genFlatMapCached will return the exact same results', () => {
+  const iterable = [[1], [2, 3], [4, 5, 6]];
+  const flatMapper = genFlatMapCached(iterable, x =>
+    Math.random() > 0.5 ? x : [],
+  );
+
+  const first = [...flatMapper];
+  const second = [...flatMapper];
+
+  expect(first).toEqual(second);
 });

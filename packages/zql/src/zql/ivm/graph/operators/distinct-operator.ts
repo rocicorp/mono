@@ -1,5 +1,5 @@
 import type {Entity} from '../../../../entity.js';
-import {genFilter, genMap} from '../../../util/iterables.js';
+import {genFilter, genMap, genMapCached} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {StringOrNumber, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
@@ -31,9 +31,18 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
       this.#lastSeenVersion = version;
     }
 
+    /*
+    That distinct is stateful is a problem for laziness.
+    Future invocation of the lazy iterable returns different data than the first.
+    We need to cache what we've returned and return the same to future callers.
+
+    Lazy reduce should also be a problem for us...
+    Probably can see it with `or` and `and` operators on `having` against a reduction.
+    */
+
     const entriesCache = this.#entriesCache;
     return genFilter(
-      genMap(multiset, (entry): Entry<T> | undefined => {
+      genMapCached(multiset, (entry): Entry<T> | undefined => {
         if (entry[1] === 0) {
           return undefined;
         }

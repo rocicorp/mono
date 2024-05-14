@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
-import {genFlatMap} from '../../../util/iterables.js';
+import {genFlatMap, genFlatMapCached} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
@@ -66,40 +66,34 @@ export class ReduceOperator<
       this.#addToIndex(key, value, mult);
     }
 
-    return genFlatMap(
-      () => keysToProcess,
-      k => {
-        const dataIn = this.#inIndex.get(k);
-        const existingOut = this.#outIndex.get(k);
-        if (dataIn === undefined) {
-          if (existingOut !== undefined) {
-            // retract the reduction
-            this.#outIndex.delete(k);
-            return [[existingOut, -1]] as const;
-          }
-          return [];
-        }
-
-        const reduction = f(
-          genFlatMap(
-            () => dataIn.values(),
-            function* ([v, mult]) {
-              for (let i = 0; i < mult; i++) {
-                yield v;
-              }
-            },
-          ),
-        );
-        const ret: Entry<O>[] = [];
+    return genFlatMapCached(keysToProcess, k => {
+      const dataIn = this.#inIndex.get(k);
+      const existingOut = this.#outIndex.get(k);
+      if (dataIn === undefined) {
         if (existingOut !== undefined) {
-          // modified reduction
-          ret.push([existingOut, -1]);
+          // retract the reduction
+          this.#outIndex.delete(k);
+          return [[existingOut, -1]] as const;
         }
-        ret.push([reduction, 1]);
-        this.#outIndex.set(k, reduction);
-        return ret;
-      },
-    );
+        return [];
+      }
+
+      const reduction = f(
+        genFlatMap(dataIn, function* (mapEntry) {
+          for (let i = 0; i < mapEntry[1][1]; i++) {
+            yield mapEntry[1][0];
+          }
+        }),
+      );
+      const ret: Entry<O>[] = [];
+      if (existingOut !== undefined) {
+        // modified reduction
+        ret.push([existingOut, -1]);
+      }
+      ret.push([reduction, 1]);
+      this.#outIndex.set(k, reduction);
+      return ret;
+    });
   };
 
   #addToIndex(key: K, value: V, mult: number) {

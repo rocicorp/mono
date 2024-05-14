@@ -56,13 +56,8 @@ export function genFilter<S extends T, T>(
   };
 }
 
-/**
- * idk why `iter` needs to be returned from a lambda below.
- * Something breaks in `reduce-operator` if we change this.
- * Seems like something is wrong in `reduce` then.
- */
 export function genFlatMap<T, U>(
-  iter: () => Iterable<T>,
+  iter: Iterable<T>,
   f: (t: T, index: number) => Iterable<U>,
   finallyCb?: () => void | undefined,
 ) {
@@ -70,7 +65,7 @@ export function genFlatMap<T, U>(
     *[Symbol.iterator]() {
       try {
         let index = 0;
-        for (const t of iter()) {
+        for (const t of iter) {
           yield* f(t, index++);
         }
       } finally {
@@ -90,4 +85,95 @@ export function* mapIter<T, U>(
   for (const t of iter) {
     yield f(t, index++);
   }
+}
+
+export function genMapCached<T, U>(
+  s: Iterable<T>,
+  cb: (x: T) => U,
+  finallyCb?: () => void | undefined,
+) {
+  const cache: U[] = [];
+  return {
+    *[Symbol.iterator]() {
+      try {
+        let i = 0;
+        for (const x of s) {
+          if (cache.length > i) {
+            yield cache[i];
+          } else {
+            const value = cb(x);
+            cache.push(value);
+            yield value;
+          }
+          i++;
+        }
+      } finally {
+        if (finallyCb !== undefined) {
+          finallyCb();
+        }
+      }
+    },
+  };
+}
+
+export function genFilterCached<S extends T, T>(
+  s: Iterable<T>,
+  f: (x: T) => x is S,
+  finallyCb?: () => void | undefined,
+) {
+  const cache: boolean[] = [];
+  return {
+    *[Symbol.iterator]() {
+      try {
+        let i = 0;
+        for (const x of s) {
+          if (cache.length > i) {
+            if (cache[i]) {
+              yield x as S;
+            }
+          } else {
+            const value = f(x);
+            cache.push(value);
+            if (value) {
+              yield x as S;
+            }
+          }
+          i++;
+        }
+      } finally {
+        if (finallyCb !== undefined) {
+          finallyCb();
+        }
+      }
+    },
+  };
+}
+
+export function genFlatMapCached<T, U>(
+  iter: Iterable<T>,
+  f: (t: T, index: number) => Iterable<U>,
+  finallyCb?: () => void | undefined,
+) {
+  const cache: Iterable<U>[] = [];
+  return {
+    *[Symbol.iterator]() {
+      try {
+        let i = 0;
+        for (const t of iter) {
+          if (cache.length > i) {
+            yield* cache[i];
+          } else {
+            const values = f(t, i);
+            cache.push(values);
+            yield* values;
+          }
+          i++;
+        }
+      } finally {
+        if (finallyCb !== undefined) {
+          finallyCb();
+        }
+      }
+    },
+  };
 }

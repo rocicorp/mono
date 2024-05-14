@@ -174,3 +174,28 @@ test('lazy', () => {
   }
   expect(called).toBe(10);
 });
+
+test('re-pulling the same iterable more than once yields the same data', () => {
+  type T = {id: number};
+  const input = new DifferenceStream<T>();
+  const output = input.distinct();
+  const items: Multiset<T>[] = [];
+  output.debug((_, d) => {
+    items.push(d);
+  });
+
+  const data = [
+    [{id: 1}, 1],
+    [{id: 2}, 1],
+    [{id: 1}, -1],
+    [{id: 3}, 1],
+  ] as const;
+
+  input.newDifference(1, data, undefined);
+  input.commit(1);
+
+  const generator = items[0];
+  const first = [...generator];
+  const second = [...generator];
+  expect(first).toEqual(second);
+});

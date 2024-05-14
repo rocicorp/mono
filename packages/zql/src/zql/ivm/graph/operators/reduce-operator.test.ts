@@ -242,3 +242,84 @@ test('reduce is lazy', () => {
   }
   expect(called).toBe(true);
 });
+
+test('re-pulling the same iterable more than once yields the same data', () => {
+  const input = new DifferenceStream<Thing>();
+  let called = 0;
+  function getGroupKey(t: Thing) {
+    return t.groupKey;
+  }
+  function getValueIdentity(t: Thing) {
+    return t.id;
+  }
+  const output = input.reduce(
+    getGroupKey,
+    getValueIdentity,
+    (group: Iterable<Thing>) => {
+      ++called;
+      let sum = 0;
+      let id = '';
+      for (const item of group) {
+        id = item.groupKey;
+        sum += item.value;
+      }
+
+      return {
+        id,
+        sum,
+      };
+    },
+  );
+
+  const items: Multiset<{id: string; sum: number}>[] = [];
+  output.debug((_, d) => {
+    items.push(d);
+  });
+
+  const data = [
+    [
+      {
+        id: 'a',
+        value: 1,
+        groupKey: 'x',
+      },
+      1,
+    ],
+    [
+      {
+        id: 'b',
+        value: 2,
+        groupKey: 'x',
+      },
+      2,
+    ],
+    [
+      {
+        id: 'a',
+        value: 1,
+        groupKey: 'x',
+      },
+      -1,
+    ],
+    [
+      {
+        id: 'c',
+        value: 3,
+        groupKey: 'x',
+      },
+      1,
+    ],
+  ] as const;
+  input.newDifference(1, data, undefined);
+  input.commit(1);
+
+  const generator = items[0];
+  const first = [...generator];
+  const firstCallCount = called;
+  const second = [...generator];
+  const secondCallCount = called;
+
+  expect(first).toEqual([[{id: 'x', sum: 7}, 1]]);
+  expect(second).toEqual(first);
+  expect(firstCallCount).toBe(secondCallCount);
+});
