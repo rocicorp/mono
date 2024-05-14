@@ -17,7 +17,7 @@ import type {Comparator} from '../types.js';
  * of the tree.
  */
 let id = 0;
-export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
+export class TreeView<T extends object> extends AbstractView<T, T[]> {
   #data: BTree<T, undefined>;
 
   #jsSlice: T[] = [];
@@ -113,7 +113,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
         ) {
           needsUpdate = true;
           // The tree doesn't allow dupes -- so this is a replace.
-          data.set(nextMult > 0 ? nextValue : value, undefined);
+          data = data.with(nextMult > 0 ? nextValue : value, undefined, true);
           continue;
         }
       }
@@ -135,7 +135,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     // Under limit? We can just add.
     if (data.size < limit) {
       this.#updateMinMax(value);
-      data.set(value, undefined);
+      data = data.with(value, undefined, true);
       return data;
     }
 
@@ -149,9 +149,9 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
       return data;
     }
     // <= max we add.
-    data.set(value, undefined);
+    data = data.with(value, undefined, true);
     // and then remove the max since we were at limit
-    data.delete(this.#max!);
+    data = data.without(this.#max!);
     // and then update max
     this.#max = data.maxKey() || undefined;
 
@@ -180,7 +180,7 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
     // only update min/max if the removals was equal to min/max tho
     // otherwise we removed a element that doesn't impact min/max
 
-    data.delete(value);
+    data = data.without(value);
     // TODO: since we deleted we need to send a request upstream for more data!
 
     if (minComp && minComp === 0) {
@@ -223,12 +223,12 @@ export class MutableTreeView<T extends object> extends AbstractView<T, T[]> {
 
 function addAll<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
-  data.set(value, undefined);
+  data = data.with(value, undefined, true);
   return data;
 }
 
 function removeAll<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
-  data.delete(value);
+  data = data.without(value);
   return data;
 }

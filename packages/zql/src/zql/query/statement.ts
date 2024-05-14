@@ -10,7 +10,7 @@ import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import type {Source} from '../ivm/source/source.js';
-import {MutableTreeView} from '../ivm/view/tree-view.js';
+import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
 
@@ -110,7 +110,7 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   await Promise.all(
     usedSources.filter(s => !s.isSeeded()).map(s => s.awaitSeeding()),
   );
-  const view = new MutableTreeView<Return extends [] ? Return[number] : never>(
+  const view = new TreeView<Return extends [] ? Return[number] : never>(
     context,
     pipeline as unknown as DifferenceStream<
       Return extends [] ? Return[number] : never

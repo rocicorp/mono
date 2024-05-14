@@ -3,7 +3,7 @@ import {expect, test} from 'vitest';
 import type {Entity} from '../../../entity.js';
 import {makeTestContext} from '../../context/test-context.js';
 import {makeComparator} from '../../query/statement.js';
-import {MutableTreeView} from './tree-view.js';
+import {TreeView} from './tree-view.js';
 
 const numberComparator = (l: number, r: number) => l - r;
 
@@ -15,7 +15,7 @@ test('asc and descComparator on Entities', () => {
     l.id.localeCompare(r.id),
   );
   const orderBy = [['n', 'id'], 'asc'] as const;
-  const view = new MutableTreeView<Selected>(
+  const view = new TreeView<Selected>(
     context,
     s.stream,
     // eh... the comparator operates on the base type rather than the mapped
@@ -27,7 +27,7 @@ test('asc and descComparator on Entities', () => {
   );
 
   const orderBy2 = [['n', 'id'], 'desc'] as const;
-  const descView = new MutableTreeView<Selected>(
+  const descView = new TreeView<Selected>(
     context,
     s.stream,
     // see above for why this is any
@@ -64,7 +64,7 @@ test('add & remove', async () => {
       const context = makeTestContext();
       const {materialite} = context;
       const source = materialite.newSetSource<{x: number}>((l, r) => l.x - r.x);
-      const view = new MutableTreeView(
+      const view = new TreeView(
         context,
         source.stream,
         (l, r) => l.x - r.x,
@@ -93,7 +93,7 @@ test('replace', async () => {
       const {materialite} = context;
       const source = materialite.newSetSource<{x: number}>((l, r) => l.x - r.x);
       const orderBy = [['id'], 'asc'] as const;
-      const view = new MutableTreeView(
+      const view = new TreeView(
         context,
         source.stream,
         (l, r) => l.x - r.x,
