@@ -13,7 +13,7 @@ test('distinct', () => {
   const items: Multiset<T>[] = [];
   output.debug((v, d) => {
     expect(v).toBe(version);
-    items.push(d);
+    items.push([...d]);
   });
 
   input.newDifference(
@@ -138,4 +138,39 @@ test('distinct all', () => {
     items.length = 0;
     ++version;
   }
+});
+
+test('lazy', () => {
+  type T = {id: number};
+  const input = new DifferenceStream<T>();
+  const output = input.distinct();
+  const items: Multiset<T>[] = [];
+  output.debug((_, d) => {
+    items.push(d);
+  });
+
+  let called = 0;
+  const infinite = {
+    *[Symbol.iterator]() {
+      for (let i = 0; ; i++) {
+        ++called;
+        yield [{id: i}, 1] as const;
+      }
+    },
+  };
+
+  input.newDifference(1, infinite, undefined);
+  input.commit(1);
+
+  // we run the graph but the mapper is not run until we pull on it
+  expect(called).toBe(0);
+
+  // drain some items
+  const generator = items[0];
+  for (const x of generator) {
+    if (x[0].id === 9) {
+      break;
+    }
+  }
+  expect(called).toBe(10);
 });

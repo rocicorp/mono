@@ -32,60 +32,55 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
     }
 
     const entriesCache = this.#entriesCache;
-    const ret: Entry<T>[] = [];
-    for (const entry of multiset) {
-      if (entry[1] === 0) {
-        continue;
-      }
+    return genFilter(
+      genMap(multiset, (entry): Entry<T> | undefined => {
+        if (entry[1] === 0) {
+          return undefined;
+        }
 
-      const {id} = entry[0];
-      const existingEntry = entriesCache.get(id);
+        const {id} = entry[0];
+        const existingEntry = entriesCache.get(id);
 
-      if (!existingEntry) {
-        entriesCache.set(id, entry);
-        ret.push([entry[0], Math.sign(entry[1])]);
-        continue;
-      }
+        if (!existingEntry) {
+          entriesCache.set(id, entry);
+          return [entry[0], Math.sign(entry[1])];
+        }
 
-      const newMult = existingEntry[1] + entry[1];
-      entriesCache.set(id, [entry[0], newMult]);
+        const newMult = existingEntry[1] + entry[1];
+        entriesCache.set(id, [entry[0], newMult]);
 
-      if (existingEntry[1] > 0 && newMult < 0) {
-        ret.push([entry[0], -2]);
-        continue;
-      }
+        if (existingEntry[1] > 0 && newMult < 0) {
+          return [entry[0], -2];
+        }
 
-      if (existingEntry[1] === 0 && newMult < 0) {
-        ret.push([entry[0], -1]);
-        continue;
-      }
+        if (existingEntry[1] === 0 && newMult < 0) {
+          return [entry[0], -1];
+        }
 
-      if (existingEntry[1] > 0 && newMult === 0) {
-        ret.push([entry[0], -1]);
-        continue;
-      }
+        if (existingEntry[1] > 0 && newMult === 0) {
+          return [entry[0], -1];
+        }
 
-      if (existingEntry[1] <= 0 && newMult < 0) {
-        continue;
-      }
+        if (existingEntry[1] <= 0 && newMult < 0) {
+          return undefined;
+        }
 
-      if (existingEntry[1] < 0 && newMult === 0) {
-        ret.push([entry[0], 1]);
-        continue;
-      }
+        if (existingEntry[1] < 0 && newMult === 0) {
+          return [entry[0], 1];
+        }
 
-      if (existingEntry[1] === 0 && newMult > 0) {
-        ret.push([entry[0], 1]);
-        continue;
-      }
+        if (existingEntry[1] === 0 && newMult > 0) {
+          return [entry[0], 1];
+        }
 
-      if (existingEntry[1] < 0 && newMult > 0) {
-        ret.push([entry[0], 2]);
-        continue;
-      }
-    }
+        if (existingEntry[1] < 0 && newMult > 0) {
+          return [entry[0], 2];
+        }
 
-    return ret;
+        return undefined;
+      }),
+      (x): x is Entry<T> => x !== undefined,
+    );
   }
 
   messageUpstream(message: Request): void {
