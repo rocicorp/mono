@@ -2,8 +2,8 @@ import type {Primitive} from '../../../ast/ast.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {JoinResult, StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
-import {BinaryOperator} from './binary-operator.js';
 import {DifferenceIndex, joinType} from './difference-index.js';
+import {JoinOperatorBase} from './join-operator-base.js';
 
 export type JoinArgs<
   Key extends Primitive,
@@ -50,7 +50,7 @@ export class InnerJoinOperator<
   BValue extends object,
   AAlias extends string | undefined,
   BAlias extends string | undefined,
-> extends BinaryOperator<
+> extends JoinOperatorBase<
   AValue,
   BValue,
   // If AValue or BValue are join results

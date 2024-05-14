@@ -1,8 +1,8 @@
 import type {Primitive} from '../../../ast/ast.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import {isJoinResult, JoinResult, StringOrNumber} from '../../types.js';
-import {BinaryOperator} from './binary-operator.js';
 import {DifferenceIndex, joinType} from './difference-index.js';
+import {JoinOperatorBase} from './join-operator-base.js';
 import type {JoinArgs} from './join-operator.js';
 
 export class LeftJoinOperator<
@@ -11,9 +11,12 @@ export class LeftJoinOperator<
   BValue extends object,
   AAlias extends string | undefined,
   BAlias extends string | undefined,
-> extends BinaryOperator<
+> extends JoinOperatorBase<
   AValue,
   BValue,
+  // If AValue or BValue are join results
+  // then they should be lifted and need no aliasing
+  // since they're already aliased
   JoinResult<AValue, BValue, AAlias, BAlias>
 > {
   readonly #indexA: DifferenceIndex<K | undefined, AValue>;
