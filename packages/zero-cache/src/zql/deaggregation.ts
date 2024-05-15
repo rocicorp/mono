@@ -11,7 +11,7 @@ export function deaggregate(ast: AST): AST {
     // All other aggregation types are handled differently.
     assert(agg.aggregate === 'array');
     assert(agg.field);
-    return [agg.field, 'ignored'] as const;
+    return [agg.field, agg.field[1]] as const;
   });
   return {
     ...ast,

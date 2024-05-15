@@ -238,6 +238,12 @@ export function expandSubqueries(
   groupBy?.forEach(grouping => addSelector(grouping.join('.')));
   orderBy?.[0].forEach(ordering => addSelector(ordering.join('.')));
 
+  function asSelector(col: string): Selector {
+    return (col.includes('.')
+      ? col.split('.')
+      : [defaultFrom, col]) as unknown as Selector;
+  }
+
   // Add primary keys
   requiredColumns(schema, table).forEach(addSelector);
 
@@ -249,17 +255,13 @@ export function expandSubqueries(
   // Now add SELECT expressions for referenced columns that weren't originally SELECT'ed.
   const additionalSelection = [...allFromReferences]
     .filter(col => !selected.has(col))
-    .map(col => [col, col] as [string, string]);
+    // set default from or split and set from.
+    .map(col => [asSelector(col), col] as [Selector, string]);
   const expandedSelect = [...(select ?? []), ...additionalSelection];
 
   return {
     ...ast,
-    select: expandedSelect.map(([maybeSelector, alias]) => [
-      typeof maybeSelector === 'string'
-        ? (maybeSelector.split('.') as unknown as Selector)
-        : maybeSelector,
-      alias,
-    ]),
+    select: expandedSelect,
     joins: joins?.map(join => ({
       ...join,
       other: expandSubqueries(
@@ -347,7 +349,10 @@ export function reAliasAndBubbleSelections(
       ...(select ?? []).map(
         ([selector, alias]): readonly [Selector, string] => {
           const newSelector = renameSelector(selector);
-          const newAlias = newSelector.join(ALIAS_COMPONENT_SEPARATOR);
+          const newAlias = [
+            newSelector[0].split('.').join(ALIAS_COMPONENT_SEPARATOR),
+            newSelector[1],
+          ].join(ALIAS_COMPONENT_SEPARATOR);
           exports.set(alias, newAlias);
           exported.add(newSelector.join('.'));
           return [newSelector, newAlias] as const;

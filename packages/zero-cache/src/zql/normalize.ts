@@ -166,7 +166,7 @@ export class Normalized {
 }
 
 function selector(selector: Selector): string {
-  return selector.map(id => ident(id)).join('.');
+  return selector.flatMap(id => id.split('.').map(id => ident(id))).join('.');
 }
 
 const SEED = 0x34567890n;
