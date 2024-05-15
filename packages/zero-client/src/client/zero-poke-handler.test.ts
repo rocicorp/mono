@@ -920,10 +920,10 @@ test('mergePokes with all optionals defined', () => {
                 ast: {
                   table: 'issues',
                   select: [
-                    ['id', 'id'],
-                    ['name', 'name'],
+                    [['issues', 'id'], 'id'],
+                    [['issues', 'name'], 'name'],
                   ],
-                  orderBy: [['id'], 'asc'],
+                  orderBy: [[['issues', 'id']], 'asc'],
                 },
               },
             ],
@@ -935,10 +935,10 @@ test('mergePokes with all optionals defined', () => {
               ast: {
                 table: 'issues',
                 select: [
-                  ['id', 'id'],
-                  ['name', 'name'],
+                  [['issues', 'id'], 'id'],
+                  [['issues', 'name'], 'name'],
                 ],
-                orderBy: [['id'], 'asc'],
+                orderBy: [[['issues', 'id']], 'asc'],
               },
             },
           ],
@@ -971,10 +971,10 @@ test('mergePokes with all optionals defined', () => {
                 ast: {
                   table: 'labels',
                   select: [
-                    ['id', 'id'],
-                    ['name', 'name'],
+                    [['issues', 'id'], 'id'],
+                    [['issues', 'name'], 'name'],
                   ],
-                  orderBy: [['id'], 'asc'],
+                  orderBy: [[['issues', 'id']], 'asc'],
                 },
               },
             ],
@@ -986,10 +986,10 @@ test('mergePokes with all optionals defined', () => {
               ast: {
                 table: 'labels',
                 select: [
-                  ['id', 'id'],
-                  ['name', 'name'],
+                  [['issues', 'id'], 'id'],
+                  [['issues', 'name'], 'name'],
                 ],
-                orderBy: [['id'], 'asc'],
+                orderBy: [[['issues', 'id']], 'asc'],
               },
             },
           ],
@@ -1170,10 +1170,10 @@ test('mergePokes sparse', () => {
               ast: {
                 table: 'issues',
                 select: [
-                  ['id', 'id'],
-                  ['name', 'name'],
+                  [['issues', 'id'], 'id'],
+                  [['issues', 'name'], 'name'],
                 ],
-                orderBy: [['id'], 'asc'],
+                orderBy: [[['issues', 'id']], 'asc'],
               },
             },
           ],
@@ -1205,10 +1205,10 @@ test('mergePokes sparse', () => {
                 ast: {
                   table: 'labels',
                   select: [
-                    ['id', 'id'],
-                    ['name', 'name'],
+                    [['issues', 'id'], 'id'],
+                    [['issues', 'name'], 'name'],
                   ],
-                  orderBy: [['id'], 'asc'],
+                  orderBy: [[['issues', 'id']], 'asc'],
                 },
               },
             ],

@@ -9,6 +9,7 @@ import type {
   OrderOps,
   SetOps,
   SimpleOperator,
+  Selector as ASTSelector,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -247,7 +248,9 @@ export class EntityQuery<From extends FromSet, Return = []> {
   constructor(context: Context, tableName: string, ast?: AST) {
     this.#ast = ast ?? {
       table: tableName,
-      orderBy: [['id'], 'asc'],
+      // TODO(mlaw): this is wrong if we have joins.
+      // We need to suffix the order-by as our final operation.
+      orderBy: [[[tableName, 'id']], 'asc'],
     };
     this.#name = tableName;
     this.#context = context;
@@ -618,6 +621,7 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
   }
 }
 
+// TODO: this should return AST condition types
 export function qualify<F extends FromSet>(
   ast: AST,
   expr: WhereCondition<F>,
@@ -641,7 +645,7 @@ function qualifySelector(
   ast: AST,
   selector: string,
   alias?: string | undefined,
-): string {
+): ASTSelector {
   // if there are joins then the type system
   // will have ensured that the selector is already qualified
   if (
@@ -649,8 +653,8 @@ function qualifySelector(
     (alias && selector.startsWith(alias + '.')) ||
     (alias === undefined && selector.startsWith(ast.table + '.'))
   ) {
-    return selector;
+    return selector.split('.') as ASTSelector;
   }
 
-  return `${alias ?? ast.table}.${selector}`;
+  return [alias ?? ast.table, selector];
 }

@@ -4,10 +4,12 @@
 import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
 
+export type Selector = [table: string, column: string];
+
 // TODO: the chosen operator needs to constrain the allowed values for the value
 // input to the query builder.
 export type Ordering = readonly [
-  fields: readonly string[],
+  fields: readonly Selector[],
   direction: 'asc' | 'desc',
 ];
 export type Primitive = string | number | boolean | null;
@@ -19,7 +21,7 @@ export type PrimitiveArray = string[] | number[] | boolean[];
 // to do things not available in the query language itself.
 export type Aggregate = 'sum' | 'avg' | 'min' | 'max' | 'array' | 'count';
 export type Aggregation = {
-  readonly field?: string | undefined;
+  readonly field?: Selector | undefined;
   readonly alias: string;
   readonly aggregate: Aggregate;
 };
@@ -29,7 +31,7 @@ export type Join = {
   readonly other: AST;
   readonly as: string;
   // only joining by equality is supported at the moment.
-  readonly on: [leftTableColumn: string, rightTableColumn: string];
+  readonly on: [left: Selector, right: Selector];
 };
 
 // type Ref = `${string}.${string}`;
@@ -43,8 +45,8 @@ export type AST = {
   readonly schema?: string | undefined;
   readonly table: string;
   readonly alias?: string | undefined;
-  readonly select?: [selector: string, alias: string][] | undefined;
-  readonly distinct?: string | undefined;
+  readonly select?: [selector: Selector, alias: string][] | undefined;
+  readonly distinct?: Selector | undefined;
   readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {
   //   readonly alias: string;
@@ -53,7 +55,7 @@ export type AST = {
   readonly where?: Condition | undefined;
   readonly joins?: Join[] | undefined;
   readonly limit?: number | undefined;
-  readonly groupBy?: string[] | undefined;
+  readonly groupBy?: Selector[] | undefined;
   readonly orderBy?: Ordering | undefined;
   readonly having?: Condition | undefined;
   // readonly after?: Primitive;
@@ -86,9 +88,9 @@ export type SetOps =
 export type SimpleCondition = {
   type: 'simple';
   op: SimpleOperator;
-  field: string;
+  field: Selector;
   value: {
-    type: 'literal';
+    type: 'value';
     value: Primitive | PrimitiveArray;
   };
   //  | {
@@ -120,18 +122,34 @@ export function normalizeAST(ast: AST): AST {
     table: ast.table,
     alias: ast.alias,
     select: ast.select
-      ? [...ast.select].sort(([a], [b]) => compareUTF8(a, b))
+      ? [...ast.select].sort(
+          ([a], [b]) => compareUTF8(a[0], b[0]) || compareUTF8(a[1], b[1]),
+        )
       : undefined,
     aggregate: ast.aggregate
-      ? [...ast.aggregate].sort(
-          (a, b) =>
-            compareUTF8(a.aggregate, b.aggregate) ||
-            compareUTF8(a.field ?? '*', b.field ?? '*'),
-        )
+      ? [...ast.aggregate].sort((a, b) => {
+          const cmp = compareUTF8(a.aggregate, b.aggregate);
+          if (cmp !== 0) {
+            return cmp;
+          }
+          if (a.field === undefined) {
+            return b.field === undefined ? 0 : -1;
+          } else if (b.field === undefined) {
+            return 1;
+          }
+          return (
+            compareUTF8(a.field[0], b.field[0]) ||
+            compareUTF8(a.field[1], b.field[1])
+          );
+        })
       : undefined,
     where: where ? sorted(where) : undefined,
     joins: ast.joins?.map(join => ({...join, other: normalizeAST(join.other)})),
-    groupBy: ast.groupBy ? [...ast.groupBy].sort(compareUTF8) : undefined,
+    groupBy: ast.groupBy
+      ? [...ast.groupBy].sort(
+          (l, r) => compareUTF8(l[0], r[0]) || compareUTF8(l[1], r[1]),
+        )
+      : undefined,
     // The order of ORDER BY expressions is semantically significant, so it
     // is left as is (i.e. not sorted).
     orderBy: ast.orderBy,
@@ -200,7 +218,8 @@ function cmp(a: Condition, b: Condition): number {
       return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
     }
     return (
-      compareUTF8(a.field, b.field) ||
+      compareUTF8(a.field[0], b.field[0]) ||
+      compareUTF8(a.field[1], b.field[1]) ||
       compareUTF8(a.op, b.op) ||
       // Comparing the same field with the same op more than once doesn't make logical
       // sense, but is technically possible. Assume the values are of the same type and
