@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {makeTestContext, TestContext} from '../context/test-context.js';
+import {TestContext, makeTestContext} from '../context/test-context.js';
 import type {Source} from '../ivm/source/source.js';
 import {EntityQuery} from './entity-query.js';
 
@@ -15,7 +15,7 @@ describe('a limited window is correctly maintained over differences', () => {
   beforeEach(() => {
     context = makeTestContext();
     source = context.getSource<E>('e');
-    q = new EntityQuery<{e: E}>(context, 'e', 'e');
+    q = new EntityQuery<{e: E}>(context, 'e');
     Array.from({length: 10}, (_, i) => source.add({id: letters[i * 2 + 3]}));
   });
 

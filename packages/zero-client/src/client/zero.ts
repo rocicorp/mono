@@ -1477,7 +1477,7 @@ export class Zero<QD extends QueryDefs> {
     const context = this.#zqlContext;
     // Not using parse yet
     for (const name of Object.keys(queryDefs)) {
-      rv[name] = new EntityQuery(context, name, ENTITIES_KEY_PREFIX);
+      rv[name] = new EntityQuery(context, name);
     }
 
     return rv as MakeEntityQueriesFromQueryDefs<QD>;

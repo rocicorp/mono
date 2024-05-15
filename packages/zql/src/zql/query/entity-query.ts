@@ -241,17 +241,14 @@ type SimpleCondition<
 
 export class EntityQuery<From extends FromSet, Return = []> {
   readonly #ast: AST;
-  // TODO(arv): Remove #prefix. It is not used and dealt with in the context.
-  readonly #prefix: string;
   readonly #name: string;
   readonly #context: Context;
 
-  constructor(context: Context, tableName: string, prefix: string, ast?: AST) {
+  constructor(context: Context, tableName: string, ast?: AST) {
     this.#ast = ast ?? {
       table: tableName,
       orderBy: [['id'], 'asc'],
     };
-    this.#prefix = prefix;
     this.#name = tableName;
     this.#context = context;
 
@@ -288,7 +285,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
     return new EntityQuery<From, CombineSelections<From, Fields>[]>(
       this.#context,
       this.#name,
-      this.#prefix,
       {
         ...this.#ast,
         select: [...select],
@@ -313,7 +309,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     >,
     Return
   > {
-    return new EntityQuery(this.#context, this.#name, this.#prefix, {
+    return new EntityQuery(this.#context, this.#name, {
       ...this.#ast,
       joins: [
         ...(this.#ast.joins ?? []),
@@ -344,7 +340,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     >,
     Return
   > {
-    return new EntityQuery(this.#context, this.#name, this.#prefix, {
+    return new EntityQuery(this.#context, this.#name, {
       ...this.#ast,
       joins: [
         ...(this.#ast.joins ?? []),
@@ -359,27 +355,17 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {
-    return new EntityQuery<From, Return>(
-      this.#context,
-      this.#name,
-      this.#prefix,
-      {
-        ...this.#ast,
-        groupBy: x as string[],
-      },
-    );
+    return new EntityQuery<From, Return>(this.#context, this.#name, {
+      ...this.#ast,
+      groupBy: x as string[],
+    });
   }
 
   distinct<Field extends SimpleSelector<From>>(field: Field) {
-    return new EntityQuery<From, Return>(
-      this.#context,
-      this.#name,
-      this.#prefix,
-      {
-        ...this.#ast,
-        distinct: field,
-      },
-    );
+    return new EntityQuery<From, Return>(this.#context, this.#name, {
+      ...this.#ast,
+      distinct: field,
+    });
   }
 
   where(expr: WhereCondition<From>): EntityQuery<From, Return>;
@@ -457,18 +443,13 @@ export class EntityQuery<From extends FromSet, Return = []> {
       };
     }
 
-    return new EntityQuery<From, Return>(
-      this.#context,
-      this.#name,
-      this.#prefix,
-      {
-        ...this.#ast,
-        // Can't use satisfies here because WhereCondition is recursive.
-        // Tests ensure that the expected AST output satisfies the Condition
-        // type.
-        [whereOrHaving]: cond as Condition,
-      },
-    );
+    return new EntityQuery<From, Return>(this.#context, this.#name, {
+      ...this.#ast,
+      // Can't use satisfies here because WhereCondition is recursive.
+      // Tests ensure that the expected AST output satisfies the Condition
+      // type.
+      [whereOrHaving]: cond as Condition,
+    });
   }
 
   limit(n: number) {
@@ -476,15 +457,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
       throw new Misuse('Limit already set');
     }
 
-    return new EntityQuery<From, Return>(
-      this.#context,
-      this.#name,
-      this.#prefix,
-      {
-        ...this.#ast,
-        limit: n,
-      },
-    );
+    return new EntityQuery<From, Return>(this.#context, this.#name, {
+      ...this.#ast,
+      limit: n,
+    });
   }
 
   asc(...x: SimpleSelector<From>[]) {
@@ -492,15 +468,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
       x.push('id');
     }
 
-    return new EntityQuery<From, Return>(
-      this.#context,
-      this.#name,
-      this.#prefix,
-      {
-        ...this.#ast,
-        orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'asc'],
-      },
-    );
+    return new EntityQuery<From, Return>(this.#context, this.#name, {
+      ...this.#ast,
+      orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'asc'],
+    });
   }
 
   desc(...x: SimpleSelector<From>[]) {
@@ -508,15 +479,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
       x.push('id');
     }
 
-    return new EntityQuery<From, Return>(
-      this.#context,
-      this.#name,
-      this.#prefix,
-      {
-        ...this.#ast,
-        orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'desc'],
-      },
-    );
+    return new EntityQuery<From, Return>(this.#context, this.#name, {
+      ...this.#ast,
+      orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'desc'],
+    });
   }
 
   prepare(): Statement<Return> {

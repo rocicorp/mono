@@ -26,11 +26,9 @@ type E1 = z.infer<typeof e1>;
 
 const context = makeTestContext();
 
-const entitiesPrefix = 'e/';
-
 const comparator = (l: E1, r: E1) => compareUTF8(l.id, r.id);
 test('A simple select', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   let s = m.newSetSource<E1>(comparator);
   let pipeline = buildPipeline(
@@ -69,7 +67,7 @@ test('A simple select', () => {
 });
 
 test('Count', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator);
   const pipeline = buildPipeline(
@@ -99,7 +97,7 @@ test('Count', () => {
 });
 
 test('Where', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1', entitiesPrefix);
+  const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator);
   const pipeline = buildPipeline(
