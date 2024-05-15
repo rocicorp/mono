@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
-import type {Primitive} from '../../ast/ast.js';
+import type {Primitive, Selector} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
 import type {JoinResult, StringOrNumber, Version} from '../types.js';
 import type {Reply, Request} from './message.js';
@@ -219,14 +219,14 @@ export class DifferenceStream<T extends object> {
     return stream.setUpstream(new FullCountOperator(this, stream, alias));
   }
 
-  average<Alias extends string>(selector: string, alias: Alias) {
+  average<Alias extends string>(selector: Selector, alias: Alias) {
     const stream = new DifferenceStream<AggregateOut<T, [[Alias, number]]>>();
     return stream.setUpstream(
       new FullAvgOperator(this, stream, selector, alias),
     );
   }
 
-  sum<Alias extends string>(selector: string, alias: Alias) {
+  sum<Alias extends string>(selector: Selector, alias: Alias) {
     const stream = new DifferenceStream<AggregateOut<T, [[Alias, number]]>>();
     stream.setUpstream(new FullSumOperator(this, stream, selector, alias));
     return stream;

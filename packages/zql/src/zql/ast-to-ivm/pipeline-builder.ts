@@ -8,6 +8,7 @@ import type {
   Primitive,
   SimpleCondition,
   Ordering,
+  Selector,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {isJoinResult, StringOrNumber} from '../ivm/types.js';
@@ -82,8 +83,8 @@ export function applyJoins<T extends Entity, O extends Entity>(
   for (const join of joins) {
     const bPipeline = buildPipeline(sourceStreamProvider, join.other);
 
-    const aQualifiedColumn = selectorToQualifiedColumn(join.on[0]);
-    const bQualifiedColumn = selectorToQualifiedColumn(join.on[1]);
+    const aQualifiedColumn = join.on[0];
+    const bQualifiedColumn = join.on[1];
     const joinArgs = {
       aAs: sourceTableOrAlias,
       getAJoinKey(e: Entity) {
@@ -172,16 +173,14 @@ function applySimpleCondition<T extends Entity>(
   condition: SimpleCondition,
 ) {
   const operator = getOperator(condition);
-  const {field: selector} = condition;
-  const column = selectorToQualifiedColumn(selector);
+  const {field: column} = condition;
   return stream.filter(x => operator(getValueFromEntity(x, column)));
 }
 
 function applyDistinct<T extends Entity>(
   stream: DifferenceStream<T>,
-  distinct: string,
+  column: Selector,
 ) {
-  const column = selectorToQualifiedColumn(distinct);
   return stream.distinctAll(
     x => getValueFromEntity(x, column) as StringOrNumber,
   );
@@ -189,12 +188,12 @@ function applyDistinct<T extends Entity>(
 
 function applyGroupBy<T extends Entity>(
   stream: DifferenceStream<T>,
-  columns: string[],
+  columns: Selector[],
   aggregations: Aggregation[],
 ) {
   const keyFunction = makeKeyFunction(columns);
   const qualifiedColumns = aggregations.map(q =>
-    q.field === undefined ? undefined : selectorToQualifiedColumn(q.field),
+    q.field === undefined ? undefined : q.field,
   );
 
   return stream.reduce(
@@ -311,13 +310,13 @@ function applyFullTableAggregation<T extends Entity>(
           `${agg.aggregate} not yet supported outside of group-by`,
         );
       case 'avg':
-        ret = ret.average(agg.field as string, agg.alias);
+        ret = ret.average(must(agg.field), agg.alias);
         break;
       case 'count':
         ret = ret.count(agg.alias);
         break;
       case 'sum':
-        ret = ret.sum(agg.field as string, agg.alias);
+        ret = ret.sum(must(agg.field), agg.alias);
         break;
     }
   }
@@ -325,8 +324,7 @@ function applyFullTableAggregation<T extends Entity>(
   return ret;
 }
 
-function makeKeyFunction(selectors: string[]) {
-  const qualifiedColumns = selectorsToQualifiedColumns(selectors);
+function makeKeyFunction(qualifiedColumns: Selector[]) {
   return (x: Record<string, unknown>) => {
     const ret: unknown[] = [];
     for (const qualifiedColumn of qualifiedColumns) {
@@ -492,21 +490,6 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
     }
   }
   return new RegExp(pattern + '$', flags);
-}
-
-export function selectorsToQualifiedColumns(
-  selectors: string[],
-): (readonly [string | undefined, string])[] {
-  return selectors.map(selectorToQualifiedColumn);
-}
-
-export function selectorToQualifiedColumn(
-  x: string,
-): readonly [string | undefined, string] {
-  if (x.includes('.')) {
-    return x.split('.') as [string, string];
-  }
-  return [undefined, x];
 }
 
 export function getValueFromEntity(

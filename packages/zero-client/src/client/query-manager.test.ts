@@ -20,10 +20,10 @@ test('add', () => {
   const ast: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'asc'],
+    orderBy: [[['issues', 'id']], 'asc'],
   };
   queryManager.add(ast);
   expect(send).toBeCalledTimes(1);
@@ -63,10 +63,10 @@ test('remove', () => {
   const ast: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'asc'],
+    orderBy: [[['issues', 'id']], 'asc'],
   };
 
   expect(queryManager.remove(ast)).toBe(false);
@@ -178,20 +178,20 @@ test('getQueriesPatch', async () => {
   const ast1: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'asc'],
+    orderBy: [[['issues', 'id']], 'asc'],
   };
   queryManager.add(ast1);
   // hash 1wpmhwzkyaqrd
   const ast2: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'desc'],
+    orderBy: [[['issues', 'id']], 'desc'],
   };
   queryManager.add(ast2);
 

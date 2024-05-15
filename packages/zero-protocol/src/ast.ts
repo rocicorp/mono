@@ -25,8 +25,10 @@ import type {
 } from '@rocicorp/zql/src/zql/ast/ast.js';
 import * as v from 'shared/src/valita.js';
 
+export const selectorSchema = v.tuple([v.string(), v.string()]);
+
 export const orderingSchema: v.Type<Ordering> = v.tuple([
-  v.array(v.string()),
+  v.array(selectorSchema),
   v.union(v.literal('asc'), v.literal('desc')),
 ]);
 
@@ -52,7 +54,7 @@ export const aggregateSchema: v.Type<Aggregate> = v.union(
   v.literal('count'),
 );
 export const aggregationSchema: v.Type<Aggregation> = v.object({
-  field: v.string().optional(),
+  field: selectorSchema.optional(),
   alias: v.string(),
   aggregate: aggregateSchema,
 });
@@ -67,7 +69,7 @@ export const joinSchema: v.Type<Join> = v.lazy(() =>
     ),
     other: astSchema,
     as: v.string(),
-    on: v.tuple([v.string(), v.string()]),
+    on: v.tuple([selectorSchema, selectorSchema]),
   }),
 );
 
@@ -76,12 +78,12 @@ export const astSchema: v.Type<AST> = v.lazy(() =>
     schema: v.string().optional(),
     table: v.string(),
     alias: v.string().optional(),
-    select: v.array(v.tuple([v.string(), v.string()])).optional(),
+    select: v.array(v.tuple([selectorSchema, v.string()])).optional(),
     aggregate: v.array(aggregationSchema).optional(),
     where: conditionSchema.optional(),
     joins: v.array(joinSchema).optional(),
     limit: v.number().optional(),
-    groupBy: v.array(v.string()).optional(),
+    groupBy: v.array(selectorSchema).optional(),
     orderBy: orderingSchema.optional(),
   }),
 );
@@ -132,9 +134,9 @@ export const simpleOperatorSchema: v.Type<SimpleOperator> = v.union(
 export const simpleConditionSchema: v.Type<SimpleCondition> = v.object({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
-  field: v.string(),
+  field: selectorSchema,
   value: v.object({
-    type: v.literal('literal'),
+    type: v.literal('value'),
     value: v.union(primitiveSchema, primitiveArraySchema),
   }),
 });
