@@ -9,14 +9,9 @@ import {
   Status,
   statusStringSchema,
   statusToStatusString,
-  type Issue,
   type Order,
 } from '../issue';
 import {
-  getPriorities,
-  getPriorityFilter,
-  getStatuses,
-  getStatusFilter,
   getViewStatuses,
   hasNonViewFilters as doesHaveNonViewFilters,
 } from '../filters';
@@ -92,56 +87,52 @@ export function useIssueDetailState() {
   return useQueryState('iss', identityProcessor);
 }
 
-export function useFilterStates() {
+export type FiltersState = {
+  statusFilter: Set<Status> | null;
+  priorityFilter: Set<Priority> | null;
+  labelFilter: Set<string> | null;
+  filtersIdentity: string;
+  hasNonViewFilters: boolean;
+};
+
+function setIdentity(filters: Set<unknown> | null) {
+  return filters ? Array.from(filters).join('') : '';
+}
+export function useFilters(): FiltersState {
   const [statusFilter] = useStatusFilterState();
   const [priorityFilter] = usePriorityFilterState();
   const [labelFilter] = useLabelFilterState();
 
-  const statusFilterArray = statusFilter ? Array.from(statusFilter) : [];
-  const priorityFilterArray = priorityFilter ? Array.from(priorityFilter) : [];
-  const labelFilterArray = labelFilter ? Array.from(labelFilter) : [];
+  const filtersIdentity = [statusFilter, priorityFilter, labelFilter]
+    .map(setIdentity)
+    .join('-');
 
-  return {
-    statusFilter: statusFilterArray,
-    priorityFilter: priorityFilterArray,
-    labelFilter: labelFilterArray,
-    filtersIdentity: `${statusFilterArray.join('')}-${priorityFilterArray.join(
-      '',
-    )}-${labelFilterArray.join('')}`,
-  };
-}
-
-export function useFilters() {
-  const baseStates = useFilterStates();
   const [prevIdentity, setPrevIdentity] = useState<string | null>(null);
   const [view] = useViewState();
   const [prevView, setPrevView] = useState<string | null>(null);
-
-  const [state, setState] = useState<{
-    filters: ((issue: Issue) => boolean)[];
-    hasNonViewFilters: boolean;
-  }>({
-    filters: [],
+  const [state, setState] = useState<FiltersState>({
+    statusFilter,
+    priorityFilter,
+    labelFilter,
+    filtersIdentity,
     hasNonViewFilters: false,
   });
 
-  if (prevIdentity !== baseStates.filtersIdentity || prevView !== view) {
-    setPrevIdentity(baseStates.filtersIdentity);
+  if (prevIdentity !== filtersIdentity || prevView !== view) {
+    setPrevIdentity(filtersIdentity);
     setPrevView(view);
-
     const viewStatuses = getViewStatuses(view);
-    const statuses = getStatuses(baseStates.statusFilter);
-    const statusFilterFn = getStatusFilter(viewStatuses, statuses);
-    const filterFns = [
-      statusFilterFn,
-      getPriorityFilter(getPriorities(baseStates.priorityFilter)),
-    ].filter(f => f !== null) as ((issue: Issue) => boolean)[];
-
-    const hasNonViewFilters = !!(
-      doesHaveNonViewFilters(viewStatuses, statuses) ||
-      filterFns.filter(f => f !== statusFilterFn).length > 0
+    const hasNonViewFilters = !!doesHaveNonViewFilters(
+      viewStatuses,
+      statusFilter,
     );
-    setState({filters: filterFns, hasNonViewFilters});
+    setState({
+      statusFilter,
+      priorityFilter,
+      labelFilter,
+      filtersIdentity,
+      hasNonViewFilters,
+    });
   }
 
   return state;

@@ -22,6 +22,7 @@ import {
   usePriorityFilterState,
   useStatusFilterState,
 } from './hooks/query-state-hooks';
+import {createEnumSetFilterHandler} from './filters';
 
 interface Props {
   title: string;
@@ -166,21 +167,6 @@ function TopFilter({
       ) : null}
     </>
   );
-}
-
-function createEnumSetFilterHandler<T>(
-  filters: Set<T> | null,
-  setFilters: (f: Set<T> | null) => void,
-) {
-  return (e: T) => {
-    const set = new Set(filters);
-    if (set.has(e)) {
-      set.delete(e);
-    } else {
-      set.add(e);
-    }
-    setFilters(set.size === 0 ? null : set);
-  };
 }
 
 export default memo(TopFilter);

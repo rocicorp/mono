@@ -3,15 +3,20 @@ import AddIcon from './assets/icons/add.svg';
 import HelpIcon from './assets/icons/help.svg';
 import MenuIcon from './assets/icons/menu.svg';
 import ItemGroup from './item-group';
-import {useClickOutside} from './hooks/use-click-outside';
 import classnames from 'classnames';
 import SearchBox from './searchbox';
 import IssueModal from './issue-modal';
 import ReactLogo from './assets/images/logo.svg';
 import type {IssueCreationPartial} from './issue';
-import {queryTypes, useQueryState, useQueryStates} from 'next-usequerystate';
 import AboutModal from './about-modal';
 import {noop} from 'lodash';
+import {
+  useIssueDetailState,
+  useStatusFilterState,
+  useViewState,
+} from './hooks/query-state-hooks';
+import useQueryState, {identityProcessor} from './hooks/useQueryState';
+import {getViewStatuses} from './filters';
 
 interface Props {
   // Show menu (for small screen only)
@@ -21,16 +26,15 @@ interface Props {
 }
 
 function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
-  const [, setLayoutViewParams] = useQueryStates(
-    {view: queryTypes.string, iss: queryTypes.string},
-    {history: 'push'},
-  );
+  const [, setView] = useViewState();
+  const [, setIss] = useIssueDetailState();
 
-  const [disableAbout] = useQueryState('disableAbout');
+  const [disableAbout] = useQueryState('disableAbout', identityProcessor);
 
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
   const [issueModalVisible, setIssueModalVisible] = useState(false);
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
+  const [, setStatusFilter] = useStatusFilterState();
 
   const classes = classnames(
     'absolute lg:static inset-0 lg:relative lg:translate-x-0 flex flex-col flex-shrink-0 w-56 font-sans text-sm border-r lg:shadow-none justify-items-start bg-gray border-gray-850 text-white bg-opacity-1',
@@ -41,12 +45,6 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
       /* eslint-enable @typescript-eslint/naming-convention */
     },
   );
-
-  useClickOutside(ref, () => {
-    if (menuVisible && onCloseMenu) {
-      onCloseMenu();
-    }
-  });
 
   return (
     <>
@@ -65,7 +63,7 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
             <div
               className="flex items-center p-2 pr-3 rounded cursor-pointer hover:bg-gray-850"
               onMouseDown={async () => {
-                await setLayoutViewParams({view: null, iss: null});
+                await Promise.all([setView(null), setIss(null)]);
                 onCloseMenu && onCloseMenu();
               }}
             >
@@ -97,7 +95,11 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
               onMouseDown={async () => {
-                await setLayoutViewParams({view: 'all', iss: null});
+                await Promise.all([
+                  setView('all'),
+                  setStatusFilter(null),
+                  setIss(null),
+                ]);
                 onCloseMenu && onCloseMenu();
               }}
             >
@@ -107,7 +109,11 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
               onMouseDown={async () => {
-                await setLayoutViewParams({view: 'active', iss: null});
+                await Promise.all([
+                  setView('active'),
+                  setStatusFilter(getViewStatuses('active')),
+                  setIss(null),
+                ]);
                 onCloseMenu && onCloseMenu();
               }}
             >
@@ -117,7 +123,11 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
               onMouseDown={async () => {
-                await setLayoutViewParams({view: 'backlog', iss: null});
+                await Promise.all([
+                  setView('backlog'),
+                  setStatusFilter(getViewStatuses('backlog')),
+                  setIss(null),
+                ]);
                 onCloseMenu && onCloseMenu();
               }}
             >
@@ -126,7 +136,7 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
               onMouseDown={async () => {
-                await setLayoutViewParams({view: 'board', iss: null});
+                await Promise.all([setView('board'), setIss(null)]);
                 onCloseMenu && onCloseMenu();
               }}
             >

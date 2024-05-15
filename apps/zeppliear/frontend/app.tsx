@@ -10,8 +10,6 @@ import {
   Issue,
   IssueUpdate,
   Order,
-  Priority,
-  Status,
   orderEnumSchema,
   IssueLabel,
   Label,
@@ -30,6 +28,7 @@ import TopFilter from './top-filter';
 import {useQuery} from './hooks/use-zql';
 import {useZero} from './hooks/use-zero';
 import {
+  FiltersState,
   useFilters,
   useIssueDetailState,
   useOrderByState,
@@ -75,17 +74,8 @@ const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const App = ({undoManager}: AppProps) => {
-  // const [view] = useQueryState('view');
-  // const [priorityFilter] = useQueryState('priorityFilter');
-  // const [statusFilter] = useQueryState('statusFilter');
-  // const [labelFilter] = useQueryState('labelFilter');
   const [view] = useViewState();
-  const {filters, hasNonViewFilters} = useFilters();
-
-  // const [labelFilterDecoded] = useQueryState(
-  //   'labelFilter',
-  //   queryTypes.array(queryTypes.string),
-  // );
+  const filters = useFilters();
   const [orderBy] = useOrderByState();
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
   const [menuVisible, setMenuVisible] = useState(false);
@@ -201,7 +191,7 @@ const App = ({undoManager}: AppProps) => {
         isLoading={false}
         viewIssueCount={viewIssueCount}
         filteredIssues={filteredIssues}
-        hasNonViewFilters={hasNonViewFilters}
+        hasNonViewFilters={filters.hasNonViewFilters}
         zero={zero}
         userID={userID}
         onCloseMenu={handleCloseMenu}
@@ -326,25 +316,12 @@ function filterQuery(
   // TODO: having to know the `FromSet` is dumb.
   q: EntityQuery<{issue: Issue; label: Label}, []>,
   view: string | null,
-  filters: ((issue: Issue) => boolean)[],
+  filters: FiltersState,
 ) {
+  console.log('view', view);
   const viewStatuses = getViewStatuses(view);
 
-  let issuesStatuses: Set<Status> | undefined;
-  let issuesPriorities: Set<Priority> | undefined;
-  let issueLabels: Set<string> | undefined;
-
-  console.log('filters', filters);
-  // for (const filter of filters) {
-  //   if (filter.name === 'status') {
-  //     issuesStatuses = filter.values;
-  //   } else if (filter.name === 'priority') {
-  //     issuesPriorities = filter.values;
-  //   } else if (filter.name === 'label') {
-  //     issueLabels = filter.values;
-  //   }
-  // }
-
+  console.log('viewStatuses', viewStatuses);
   const viewStatusesQuery = viewStatuses
     ? q.where('issue.status', 'IN', [...viewStatuses])
     : q;
@@ -353,12 +330,12 @@ function filterQuery(
     .distinct('issue.id')
     .select(agg.count());
 
-  if (issuesStatuses) {
+  if (filters.statusFilter) {
     // Consider allowing Iterable<T> for IN
-    q = q.where('issue.status', 'IN', [...issuesStatuses]);
+    q = q.where('issue.status', 'IN', [...filters.statusFilter]);
   }
-  if (issuesPriorities) {
-    q = q.where('issue.priority', 'IN', [...issuesPriorities]);
+  if (filters.priorityFilter) {
+    q = q.where('issue.priority', 'IN', [...filters.priorityFilter]);
   }
 
   let filteredQuery = q
@@ -375,11 +352,11 @@ function filterQuery(
       'issue.title',
       agg.array('label.name', 'labels'),
     );
-  if (issueLabels) {
+  if (filters.labelFilter) {
     // TODO: if `having` has been applied then selection
     // set should not be updated to remove what `having` operates against.
     filteredQuery = filteredQuery.having('labels', 'INTERSECTS', [
-      ...issueLabels,
+      ...filters.labelFilter,
     ]);
   }
 
