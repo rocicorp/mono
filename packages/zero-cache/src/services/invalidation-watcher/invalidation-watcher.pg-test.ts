@@ -387,7 +387,6 @@ describe('invalidation-watcher', () => {
         versionChanges: () => Promise.resolve(versionChanges),
         registerInvalidationFilters: () =>
           Promise.resolve(registerFilterResponses.shift() ?? {specs: []}),
-        status: () => Promise.resolve({}),
       };
 
       const lc = createSilentLogContext();
@@ -462,7 +461,6 @@ describe('invalidation-watcher', () => {
         );
       },
       registerInvalidationFilters: () => Promise.resolve({specs: []}),
-      status: () => Promise.resolve({}),
     };
 
     const watcher = new InvalidationWatcherService(
@@ -504,7 +502,6 @@ describe('invalidation-watcher', () => {
     const replicator: Replicator = {
       versionChanges: () => Promise.reject('unused'),
       registerInvalidationFilters: () => Promise.reject('unused'),
-      status: () => Promise.resolve({}),
     };
     const watcher = new InvalidationWatcherService(
       'id',
