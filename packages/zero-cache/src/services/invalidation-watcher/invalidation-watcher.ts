@@ -156,6 +156,7 @@ export class InvalidationWatcherService
   readonly #registry: ReplicatorRegistry;
   readonly #replica: PostgresDB;
 
+  #latestReader: ReaderAtVersion | undefined;
   readonly #readers = new Map<TransactionPool, number>();
   readonly #hashSubscriptions = new HashSubscriptions();
 
@@ -221,6 +222,11 @@ export class InvalidationWatcherService
     this.#shouldRun.resolve(false);
     this.#versionChangeSubscription?.cancel();
     this.#versionChangeSubscription = undefined;
+
+    if (this.#latestReader) {
+      this.#decrementRefCount(this.#latestReader);
+      await this.#latestReader.reader.done();
+    }
   }
 
   async getTableSchemas(): Promise<readonly TableSpec[]> {
@@ -276,7 +282,7 @@ export class InvalidationWatcherService
           }
           // The Subscription will not call `consumed()` on coalesced `prev` messages.
           // cleanup must be done explicitly when coalescing.
-          this.#decrementRefCount(prev.reader);
+          this.#decrementRefCount(prev);
 
           return {
             version: max(prev.version, curr.version),
@@ -293,12 +299,12 @@ export class InvalidationWatcherService
         },
 
         consumed: prev => {
-          this.#decrementRefCount(prev.reader);
+          this.#decrementRefCount(prev);
         },
 
         cleanup: unconsumed => {
           for (const update of unconsumed) {
-            this.#decrementRefCount(update.reader);
+            this.#decrementRefCount(update);
           }
           this.#hashSubscriptions.remove(subscription, request);
           if (this.#hashSubscriptions.empty()) {
@@ -345,7 +351,17 @@ export class InvalidationWatcherService
     });
 
     const {fromVersion} = request;
-    const {update, hashes} = await this.#createBaseUpdate(lc, fromVersion);
+
+    // The minVersion is the latest (i.e. max) `fromStateVersion` of the registered specs.
+    const minVersion = registered.specs.reduce(
+      (acc, {fromStateVersion: version}) => (acc > version ? acc : version),
+      fromVersion ?? '00',
+    );
+    const {update, hashes} = await this.#createBaseUpdate(
+      lc,
+      fromVersion,
+      minVersion,
+    );
 
     const invalidatedQueries =
       this.#hashSubscriptions.computeInvalidationUpdate(hashes, subscription);
@@ -369,7 +385,7 @@ export class InvalidationWatcherService
       );
     }
 
-    this.#trackRefCount(update.reader, 1);
+    this.#incrementRefCount(update, 1);
     subscription.push({...update, invalidatedQueries});
   }
 
@@ -387,8 +403,8 @@ export class InvalidationWatcherService
     const {update, hashes} = await this.#createBaseUpdate(
       lc,
       versionChange.prevVersion,
-      versionChange.invalidations,
       versionChange.newVersion,
+      versionChange.invalidations,
     );
 
     const updates = this.#hashSubscriptions.computeInvalidationUpdates(hashes);
@@ -401,10 +417,47 @@ export class InvalidationWatcherService
     }
     lc.info?.(`${numUpdates} view updates for ${hashes.size} hashes`);
 
-    this.#trackRefCount(update.reader, numUpdates); // Reference counting to close the pool.
+    this.#incrementRefCount(update, numUpdates); // Reference counting to close the pool.
     for (const [subscription, queryIDs] of updates) {
       subscription.push({...update, invalidatedQueries: queryIDs});
     }
+  }
+
+  /**
+   * Checks if the `#latestReader` satisfies the specified `minVersion`,
+   * and creates a new one if not, releasing the cache reference to the
+   * existing one.
+   */
+  async #getOrCreateReader(
+    lc: LogContext,
+    minVersion: LexiVersion,
+  ): Promise<ReaderAtVersion> {
+    if (this.#latestReader && this.#latestReader.version >= minVersion) {
+      lc.debug?.(`Reusing cached reader @${this.#latestReader.version}`);
+      return this.#latestReader;
+    }
+    const {init, cleanup} = sharedReadOnlySnapshot();
+    const reader = new TransactionPool(lc, init, cleanup, 1, 4); // TODO: Choose maxWorkers more intelligently / dynamically.
+    reader.run(this.#replica).catch(e => lc.error?.(e));
+
+    const snapshotQuery = await reader.processReadTask(queryStateVersion);
+    const version = snapshotQuery[0].max ?? '00';
+    lc.debug?.(`Created reader @${version}`);
+
+    if (this.#latestReader) {
+      if (this.#latestReader.version === version) {
+        // This can happen if readers are created concurrently.
+        // Reuse the previous reader since its workers had a head start in setting up.
+        lc.info?.(`Cached reader @${version} is current. Reusing.`);
+        reader.setDone();
+        return this.#latestReader;
+      }
+      // Allow it to be cleaned up if no one else is referencing it.
+      this.#decrementRefCount(this.#latestReader);
+    }
+    this.#latestReader = {reader, version};
+    this.#incrementRefCount(this.#latestReader, 1); // Track the #latestReader cache reference.
+    return this.#latestReader;
   }
 
   /**
@@ -419,28 +472,24 @@ export class InvalidationWatcherService
    *
    * @param fromVersion The version after which to query invalidated `hashes`, or unspecified
    *                    to skip hash querying (e.g. for new CVRs).
+   * @param minVersion The minimum version expected for the TransactionPool, used for determining if
+   *                   the #latestReader is reusable. If `invalidations` are specified, this is the
+   *                   version at which they were computed (e.g. from a {@link VersionChange} update).
+   *                   If the TransactionPool snapshot is at this exact version, the `invalidation`
+   *                   can be used directly instead of querying them from the invalidation index.
    * @param invalidations Existing invalidation hashes to use if the version of the resulting
-   *                    snapshot is equal to `atVersion`.
-   * @param atVersion The version at which `invalidations` were computed (e.g. from a
-   *                  {@link VersionChange} update). If the TransactionPool snapshot is
-   *                  at this version, the `invalidation` can be used directly instead of
-   *                  querying them from the invalidation index.
+   *                    snapshot is equal to `minVersion`.
    */
   async #createBaseUpdate(
     lc: LogContext,
     fromVersion: LexiVersion | undefined,
+    minVersion: LexiVersion,
     invalidations?: Record<string, string>,
-    atVersion?: LexiVersion,
   ): Promise<{
     update: Omit<QueryInvalidationUpdate, 'invalidatedQueries'>;
     hashes: Set<string>;
   }> {
-    const {init, cleanup} = sharedReadOnlySnapshot();
-    const reader = new TransactionPool(lc, init, cleanup, 1, 5); // TODO: Choose maxWorkers more intelligently / dynamically.
-    reader.run(this.#replica).catch(e => lc.error?.(e));
-
-    const snapshotQuery = await reader.processReadTask(queryStateVersion);
-    const version = snapshotQuery[0].max ?? '00';
+    const {reader, version} = await this.#getOrCreateReader(lc, minVersion);
     const update = {version, fromVersion: fromVersion ?? null, reader};
 
     if (!fromVersion) {
@@ -448,7 +497,7 @@ export class InvalidationWatcherService
       return {update, hashes: new Set()};
     }
 
-    if (invalidations && atVersion === version) {
+    if (invalidations && minVersion === version) {
       // Invalidations sent from the Replicator's VersionChange message can be used
       // directly if `atVersion` matches that of the `reader` snapshot.
       lc.debug?.(`using hashes from VersionChange`);
@@ -456,33 +505,47 @@ export class InvalidationWatcherService
       return {update, hashes};
     }
 
-    lc.debug?.(`looking up hashes at ${version} from ${fromVersion}`);
-    const rows = await reader.processReadTask(
-      tx => tx<{hash: Buffer}[]>`
+    let hashes: Set<string>;
+    if (version === fromVersion) {
+      hashes = new Set(); // Subscriber is up to date. No hashes to look up.
+    } else {
+      lc.debug?.(`looking up hashes at ${version} from ${fromVersion}`);
+      const rows = await reader.processReadTask(
+        tx => tx<{hash: Buffer}[]>`
         SELECT "hash" FROM _zero."InvalidationIndex" WHERE "stateVersion" > ${fromVersion};
       `,
-    );
-    const hashes = new Set(rows.map(row => row.hash.toString('hex')));
+      );
+      hashes = new Set(rows.map(row => row.hash.toString('hex')));
+    }
     return {update, hashes};
   }
 
-  #trackRefCount(reader: TransactionPool, subscribers: number) {
+  #incrementRefCount(r: ReaderAtVersion, subscribers: number) {
+    const {reader} = r;
     // TODO: Consider adding timeout logic to handle the hypothetical
     //       pathological scenario in which a Subscription is orphaned
     //       and never canceled.
-    this.#readers.set(reader, subscribers);
+    const curr = this.#readers.get(reader) ?? 0;
+    this.#readers.set(reader, curr + subscribers);
   }
 
-  #decrementRefCount(reader: TransactionPool) {
+  #decrementRefCount(r: ReaderAtVersion) {
+    const {reader, version} = r;
+
     const count = this.#readers.get(reader);
-    assert(count && count > 0, `invalid subscriber count ${count}`);
+    assert(count && count > 0, `invalid reader count ${count}`);
 
     if (count > 1) {
       this.#readers.set(reader, count - 1);
     } else {
-      this.#lc.debug?.('closing TransactionPool');
+      this.#lc.debug?.(`closing TransactionPool at ${version}`);
       reader.setDone();
       this.#readers.delete(reader);
     }
   }
 }
+
+type ReaderAtVersion = {
+  readonly reader: TransactionPool;
+  readonly version: LexiVersion;
+};
