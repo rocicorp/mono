@@ -1,6 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {JSONObject} from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -95,6 +96,8 @@ export interface Replicator {
    * stream of replicated transactions.
    */
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>>;
+
+  status(): Promise<JSONObject>;
 }
 
 export class ReplicatorService implements Replicator, Service {
@@ -161,6 +164,16 @@ export class ReplicatorService implements Replicator, Service {
 
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
     return this.#incrementalSyncer.versionChanges();
+  }
+
+  async status(): Promise<JSONObject> {
+    const start = Date.now();
+    await this.#syncReplica`SELECT 1;`;
+    const elapsed = Date.now() - start;
+    return {
+      status: 'OK',
+      replicaPingMs: elapsed,
+    };
   }
 
   async stop() {}
