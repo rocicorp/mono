@@ -117,7 +117,8 @@ export class ServiceRunnerDO {
 
   #status = async (_ctx: BaseContext, _request: Request): Promise<Response> => {
     const replicator = await this.#serviceRunner.getReplicator();
-    return new Response(JSON.stringify(await replicator.status()));
+    const status = await replicator.status();
+    return new Response(JSON.stringify(status));
   };
 
   async fetch(request: Request): Promise<Response> {
