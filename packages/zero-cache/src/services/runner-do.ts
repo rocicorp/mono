@@ -1,11 +1,11 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {CONNECT_URL_PATTERN} from './paths.js';
-import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 import {BaseContext, Router} from 'cf-shared/src/router.js';
-import type {ErrorKind} from 'zero-protocol/src/error.js';
 import type {ConnectedMessage} from 'zero-protocol';
+import type {ErrorKind} from 'zero-protocol/src/error.js';
 import {getConnectRequest} from '../connect.js';
 import {Connection, closeWithError, send} from './connection.js';
+import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
+import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
 export class ServiceRunnerDO {
   readonly #lc: LogContext;
@@ -36,6 +36,7 @@ export class ServiceRunnerDO {
 
   #initRoutes() {
     this.#router.register(CONNECT_URL_PATTERN, this.#connect);
+    this.#router.register(STATUS_URL_PATTERN, this.#status);
   }
 
   #connect = async (_ctx: BaseContext, request: Request): Promise<Response> => {
@@ -112,6 +113,12 @@ export class ServiceRunnerDO {
       {wsid, timestamp: Date.now()},
     ];
     send(serverWS, connectedMessage);
+  };
+
+  #status = async (_ctx: BaseContext, _request: Request): Promise<Response> => {
+    const replicator = await this.#serviceRunner.getReplicator();
+    const status = await replicator.status();
+    return new Response(JSON.stringify(status));
   };
 
   async fetch(request: Request): Promise<Response> {
