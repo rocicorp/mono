@@ -191,7 +191,7 @@ test('history requests with an alternate ordering are fulfilled by that ordering
       {
         id: 1,
         type: 'pull',
-        order: [['id'], 'asc'],
+        order: [[['e2', 'id']], 'asc'],
         hoistedConditions: [],
       },
       listener,
@@ -206,7 +206,13 @@ test('history requests with an alternate ordering are fulfilled by that ordering
       {
         id: 2,
         type: 'pull',
-        order: [['x', 'id'], 'asc'],
+        order: [
+          [
+            ['e2', 'x'],
+            ['e2', 'id'],
+          ],
+          'asc',
+        ],
         hoistedConditions: [],
       },
       listener,
@@ -226,7 +232,13 @@ test('history requests with an alternate ordering are fulfilled by that ordering
       {
         id: 3,
         type: 'pull',
-        order: [['x', 'id'], 'asc'],
+        order: [
+          [
+            ['e2', 'x'],
+            ['e2', 'id'],
+          ],
+          'asc',
+        ],
         hoistedConditions: [],
       },
       listener,

@@ -3,9 +3,8 @@ import type {Entity} from '../../entity.js';
 import {
   buildPipeline,
   getValueFromEntity,
-  selectorsToQualifiedColumns,
 } from '../ast-to-ivm/pipeline-builder.js';
-import type {AST, Ordering} from '../ast/ast.js';
+import type {AST, Ordering, Selector} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -124,12 +123,9 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
 }
 
 export function makeComparator<T extends object>(
-  sortKeys: readonly string[],
+  qualifiedColumns: readonly Selector[],
   direction: 'asc' | 'desc',
 ): (l: T, r: T) => number {
-  const qualifiedColumns = selectorsToQualifiedColumns(
-    sortKeys as unknown as string[],
-  );
   const comparator = (l: T, r: T) => {
     let comp = 0;
     for (const qualifiedColumn of qualifiedColumns) {

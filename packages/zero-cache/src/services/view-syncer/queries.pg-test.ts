@@ -52,28 +52,37 @@ describe('view-syncer/queries', () => {
 
     const ast: AST = {
       select: [
-        ['issues.id', 'id'],
-        ['issues.title', 'title'],
-        ['owner.name', 'owner'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'id'],
+        [['issues', 'title'], 'title'],
+        [['owner', 'name'], 'owner'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
-      orderBy: [['id', 'title'], 'desc'],
+      orderBy: [
+        [
+          ['issues', 'id'],
+          ['issues', 'title'],
+        ],
+        'desc',
+      ],
       table: 'issues',
       joins: [
         {
           type: 'inner',
           other: {table: 'users'},
           as: 'owner',
-          on: ['issues.owner_id', 'owner.id'],
+          on: [
+            ['issues', 'owner_id'],
+            ['owner', 'id'],
+          ],
         },
         {
           type: 'inner',
           other: {
             select: [
-              ['issues.id', 'issues_id'],
-              ['title', 'title'],
-              ['owner.name', 'owner'],
+              [['issues', 'id'], 'issues_id'],
+              [['issues', 'title'], 'title'],
+              [['owner', 'name'], 'owner'],
             ],
             table: 'issues',
             joins: [
@@ -81,12 +90,18 @@ describe('view-syncer/queries', () => {
                 type: 'inner',
                 other: {table: 'users'},
                 as: 'owner',
-                on: ['issues.owner_id', 'owner.id'],
+                on: [
+                  ['issues', 'owner_id'],
+                  ['owner', 'id'],
+                ],
               },
             ],
           },
           as: 'parent',
-          on: ['issues.parent_id', 'parent.issues_id'],
+          on: [
+            ['issues', 'parent_id'],
+            ['parent', 'issues_id'],
+          ],
         },
       ],
     };
@@ -125,11 +140,11 @@ describe('view-syncer/queries', () => {
     const equivalentAST: AST = {
       ...ast,
       select: [
-        ['issues.id', 'different_id_alias'],
-        ['issues.title', 'different_title_alias'],
-        ['owner.name', 'different_owner_alias'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'different_id_alias'],
+        [['issues', 'title'], 'different_title_alias'],
+        [['owner', 'name'], 'different_owner_alias'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
     };
 
@@ -262,9 +277,11 @@ describe('view-syncer/queries', () => {
     const queryHandler = new QueryHandler(published.tables);
 
     const ast: AST = {
-      select: [['issues.id', 'id']],
-      aggregate: [{aggregate: 'array', field: 'title', alias: 'ignored'}],
-      groupBy: ['id'],
+      select: [[['issues', 'id'], 'id']],
+      aggregate: [
+        {aggregate: 'array', field: ['issues', 'title'], alias: 'ignored'},
+      ],
+      groupBy: [['issues', 'id']],
       table: 'issues',
     };
 
@@ -368,28 +385,37 @@ describe('view-syncer/queries', () => {
 
     const ast: AST = {
       select: [
-        ['issues.id', 'id'],
-        ['issues.title', 'title'],
-        ['owner.name', 'owner'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'id'],
+        [['issues', 'title'], 'title'],
+        [['owner', 'name'], 'owner'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
-      orderBy: [['id', 'title'], 'desc'],
+      orderBy: [
+        [
+          ['issues', 'id'],
+          ['issues', 'title'],
+        ],
+        'desc',
+      ],
       table: 'issues',
       joins: [
         {
           type: 'inner',
           other: {table: 'users'},
           as: 'owner',
-          on: ['issues.owner_id', 'owner.id'],
+          on: [
+            ['issues', 'owner_id'],
+            ['owner', 'id'],
+          ],
         },
         {
           type: 'left',
           other: {
             select: [
-              ['issues.id', 'issues_id'],
-              ['title', 'title'],
-              ['owner.name', 'owner'],
+              [['issues', 'id'], 'issues_id'],
+              [['issues', 'title'], 'title'],
+              [['owner', 'name'], 'owner'],
             ],
             table: 'issues',
             joins: [
@@ -397,12 +423,18 @@ describe('view-syncer/queries', () => {
                 type: 'inner',
                 other: {table: 'users'},
                 as: 'owner',
-                on: ['issues.owner_id', 'owner.id'],
+                on: [
+                  ['issues', 'owner_id'],
+                  ['owner', 'id'],
+                ],
               },
             ],
           },
           as: 'parent',
-          on: ['issues.parent_id', 'parent.issues_id'],
+          on: [
+            ['issues', 'parent_id'],
+            ['parent', 'issues_id'],
+          ],
         },
       ],
     };
@@ -455,11 +487,11 @@ describe('view-syncer/queries', () => {
     const equivalentAST: AST = {
       ...ast,
       select: [
-        ['issues.id', 'different_id_alias'],
-        ['issues.title', 'different_title_alias'],
-        ['owner.name', 'different_owner_alias'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'different_id_alias'],
+        [['issues', 'title'], 'different_title_alias'],
+        [['owner', 'name'], 'different_owner_alias'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
     };
 
@@ -604,9 +636,11 @@ describe('view-syncer/queries', () => {
     const queryHandler = new QueryHandler(published.tables);
 
     const ast: AST = {
-      select: [['issues.id', 'id']],
-      aggregate: [{aggregate: 'array', field: 'title', alias: 'ignored'}],
-      groupBy: ['id'],
+      select: [[['issues', 'id'], 'id']],
+      aggregate: [
+        {aggregate: 'array', field: ['issues', 'title'], alias: 'ignored'},
+      ],
+      groupBy: [['issues', 'id']],
       table: 'issues',
     };
 

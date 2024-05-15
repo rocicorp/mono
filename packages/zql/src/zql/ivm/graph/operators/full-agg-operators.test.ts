@@ -90,7 +90,7 @@ test('count', () => {
 
 test('average', () => {
   const input = new DifferenceStream<{x: number}>();
-  const output = input.average('x', 'x');
+  const output = input.average(['x', 'x'], 'x');
   const items: [{x: number}, number][] = [];
   output.effect((e, m) => {
     items.push([e, m]);
@@ -198,7 +198,7 @@ test('average', () => {
 
 test('sum', () => {
   const input = new DifferenceStream<{x: number}>();
-  const output = input.sum('x', 'x');
+  const output = input.sum(['x', 'x'], 'x');
   const items: [{x: number}, number][] = [];
   output.effect((e, m) => {
     items.push([e, m]);

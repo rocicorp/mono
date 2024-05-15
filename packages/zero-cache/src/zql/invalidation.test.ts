@@ -24,84 +24,84 @@ describe('zql/invalidation matchers', () => {
     },
     {
       name: 'inequality',
-      cond: cond('foo', '>', 3),
+      cond: cond(['foo', 'foo'], '>', 3),
       matches: [{}],
     },
     {
       name: 'AND inequalities',
-      cond: and(cond('foo', '>', 3), cond('foo', '!=', 10)),
+      cond: and(cond(['foo', 'foo'], '>', 3), cond(['foo', 'foo'], '!=', 10)),
       matches: [{}],
     },
     {
       name: 'OR inequalities',
-      cond: or(cond('foo', '>', 3), cond('foo', '!=', 10)),
+      cond: or(cond(['foo', 'foo'], '>', 3), cond(['foo', 'foo'], '!=', 10)),
       matches: [{}],
     },
     {
       name: 'equality',
-      cond: cond('foo', '=', 3),
+      cond: cond(['foo', 'foo'], '=', 3),
       matches: [{foo: 3}],
     },
     {
       name: 'AND equality',
       cond: and(
-        cond('foo', '=', 3),
-        cond('bar', '=', 'baz'),
-        cond('boo', '=', 'bonk'),
+        cond(['foo', 'foo'], '=', 3),
+        cond(['foo', 'bar'], '=', 'baz'),
+        cond(['foo', 'boo'], '=', 'bonk'),
       ),
       matches: [{bar: 'baz', boo: 'bonk', foo: 3}],
     },
     {
       name: 'AND equality, never match',
       cond: and(
-        cond('foo', '=', 3),
-        cond('bar', '=', 'baz'),
-        cond('foo', '=', 10),
+        cond(['foo', 'foo'], '=', 3),
+        cond(['foo', 'bar'], '=', 'baz'),
+        cond(['foo', 'foo'], '=', 10),
       ),
       matches: [],
     },
     {
       name: 'OR equality',
       cond: or(
-        cond('foo', '=', 3),
-        cond('bar', '=', 'baz'),
-        cond('boo', '=', 'bonk'),
+        cond(['foo', 'foo'], '=', 3),
+        cond(['foo', 'bar'], '=', 'baz'),
+        cond(['foo', 'boo'], '=', 'bonk'),
       ),
       matches: [{bar: 'baz'}, {boo: 'bonk'}, {foo: 3}],
     },
     {
       name: 'AND: mixed equality and inequality',
       cond: and(
-        cond('foo', '=', 3),
-        cond('bar', '>', 4),
-        cond('boo', '=', 'bonk'),
+        cond(['foo', 'foo'], '=', 3),
+        cond(['foo', 'bar'], '>', 4),
+        cond(['foo', 'boo'], '=', 'bonk'),
       ),
       matches: [{boo: 'bonk', foo: 3}],
     },
     {
       name: 'OR: mixed equality and inequality',
       cond: or(
-        cond('foo', '=', 3),
-        cond('bar', '>', 4),
-        cond('boo', '=', 'bonk'),
+        cond(['foo', 'foo'], '=', 3),
+        cond(['foo', 'bar'], '>', 4),
+        cond(['foo', 'boo'], '=', 'bonk'),
       ),
       matches: [{}],
     },
     {
       name: 'Nesting: OR of ANDs with subsumption',
       cond: or(
-        cond('foo', '=', 1),
-        and(cond('foo', '=', 3), cond('boo', '=', 'bonk')),
-        and(cond('foo', '=', 4), cond('boo', '=', 'bar')),
+        cond(['foo', 'foo'], '=', 1),
+        and(cond(['foo', 'foo'], '=', 3), cond(['foo', 'boo'], '=', 'bonk')),
+        and(cond(['foo', 'foo'], '=', 4), cond(['foo', 'boo'], '=', 'bar')),
         and(
-          cond('foo', '=', 4),
-          cond('boo', '=', 'bar'),
-          cond('should-be', '=', 'subsumed'),
+          cond(['foo', 'foo'], '=', 4),
+          cond(['foo', 'boo'], '=', 'bar'),
+          cond(['foo', 'should-be'], '=', 'subsumed'),
         ),
         and(
-          cond('foo', '=', 2),
-          cond('boo', '=', 'bar'),
-          cond('not', '=', 'subsumed'),
+          cond(['foo', 'foo'], '=', 2),
+          cond(['foo', 'boo'], '=', 'bar'),
+          cond(['foo', 'not'], '=', 'subsumed'),
         ),
       ),
       matches: [
@@ -114,12 +114,12 @@ describe('zql/invalidation matchers', () => {
     {
       name: 'Nesting: AND of ORs',
       cond: and(
-        cond('do', '=', 1),
-        or(cond('foo', '=', 3), cond('boo', '=', 'bonk')),
+        cond(['foo', 'do'], '=', 1),
+        or(cond(['foo', 'foo'], '=', 3), cond(['foo', 'boo'], '=', 'bonk')),
         or(
-          cond('food', '=', 2),
-          cond('bood', '=', 'bar'),
-          cond('bonk', '=', 'boom'),
+          cond(['foo', 'food'], '=', 2),
+          cond(['foo', 'bood'], '=', 'bar'),
+          cond(['foo', 'bonk'], '=', 'boom'),
         ),
       ),
       matches: [
@@ -134,8 +134,8 @@ describe('zql/invalidation matchers', () => {
     {
       name: 'Nesting: AND of ORs with never removal',
       cond: and(
-        or(cond('foo', '=', 3), cond('boo', '=', 'bonk')),
-        or(cond('foo', '=', 4), cond('boo', '=', 'bar')),
+        or(cond(['foo', 'foo'], '=', 3), cond(['foo', 'boo'], '=', 'bonk')),
+        or(cond(['foo', 'foo'], '=', 4), cond(['foo', 'boo'], '=', 'bar')),
       ),
       matches: [
         {foo: 3, boo: 'bar'},
@@ -145,12 +145,12 @@ describe('zql/invalidation matchers', () => {
     {
       name: 'Nesting: AND of ORs with never removal and subsumption',
       cond: and(
-        or(cond('foo', '=', 3), cond('boo', '=', 'bonk')),
-        or(cond('foo', '=', 4), cond('boo', '=', 'bar')),
+        or(cond(['foo', 'foo'], '=', 3), cond(['foo', 'boo'], '=', 'bonk')),
+        or(cond(['foo', 'foo'], '=', 4), cond(['foo', 'boo'], '=', 'bar')),
         or(
-          cond('foo', '=', 2),
-          cond('boo', '=', 'bar'),
-          cond('sometimes', '=', 'subsumed'),
+          cond(['foo', 'foo'], '=', 2),
+          cond(['foo', 'boo'], '=', 'bar'),
+          cond(['foo', 'sometimes'], '=', 'subsumed'),
         ),
       ),
       matches: [
@@ -162,10 +162,10 @@ describe('zql/invalidation matchers', () => {
     {
       name: 'Max depth successful', // MAX_DEPTH is set to 3 for the test.
       cond: and(
-        cond('foo', '=', 1),
+        cond(['foo', 'foo'], '=', 1),
         or(
-          cond('bar', '=', 3),
-          and(cond('boo', '=', 'bonk'), cond('do', '=', 4)),
+          cond(['foo', 'bar'], '=', 3),
+          and(cond(['foo', 'boo'], '=', 'bonk'), cond(['foo', 'do'], '=', 4)),
         ),
       ),
       matches: [
@@ -176,13 +176,13 @@ describe('zql/invalidation matchers', () => {
     {
       name: 'Max depth exceeded', // MAX_DEPTH is set to 3 for the test.
       cond: and(
-        cond('foo', '=', 1),
+        cond(['foo', 'foo'], '=', 1),
         or(
-          cond('bar', '=', 3),
+          cond(['foo', 'bar'], '=', 3),
           and(
-            cond('boo', '=', 'bonk'),
+            cond(['foo', 'boo'], '=', 'bonk'),
             // This OR is not traversed and represented by "match anything".
-            or(cond('bar', '=', 'baz'), cond('do', '=', 4)),
+            or(cond(['foo', 'bar'], '=', 'baz'), cond(['foo', 'do'], '=', 4)),
           ),
         ),
       ),
@@ -225,8 +225,8 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         schema: 'zero',
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
       },
       filters: [
         {
@@ -250,8 +250,10 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'aggregation with column',
       ast: {
         table: 'foo',
-        aggregate: [{aggregate: 'min', field: 'priority', alias: 'ignored'}],
-        orderBy: [['ignored'], 'asc'],
+        aggregate: [
+          {aggregate: 'min', field: ['foo', 'priority'], alias: 'ignored'},
+        ],
+        orderBy: [[['foo', 'ignored']], 'asc'],
       },
       filters: [
         {
@@ -276,7 +278,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         aggregate: [{aggregate: 'count', alias: 'ignored'}],
-        orderBy: [['ignored'], 'asc'],
+        orderBy: [[['foo', 'ignored']], 'asc'],
       },
       filters: [
         {
@@ -298,12 +300,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'AND filter',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: and(
-          cond('foo', '=', 'bar'),
-          cond('bar', '=', 2),
-          cond('a', '<', 3), // Ignored
+          cond(['foo', 'foo'], '=', 'bar'),
+          cond(['foo', 'bar'], '=', 2),
+          cond(['foo', 'a'], '<', 3), // Ignored
         ),
       },
       filters: [
@@ -329,13 +331,13 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'AND filter with selectors in fields',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: and(
-          cond('foo.foo', '=', 'bar'),
-          cond('join.alias.baz', '=', 3), // Ignored
-          cond('public.foo.bar', '=', 2),
-          cond('a', '<', 3), // Ignored
+          cond(['foo', 'foo.foo'], '=', 'bar'),
+          cond(['foo', 'join.alias.baz'], '=', 3), // Ignored
+          cond(['foo', 'public.foo.bar'], '=', 2),
+          cond(['foo', 'a'], '<', 3), // Ignored
         ),
       },
       filters: [
@@ -361,12 +363,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'OR filter',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: or(
-          cond('foo', '=', 'bar'),
-          cond('bar', '=', 2),
-          and(cond('foo', '=', 'boo'), cond('bar', '=', 3)),
+          cond(['foo', 'foo'], '=', 'bar'),
+          cond(['foo', 'bar'], '=', 2),
+          and(cond(['foo', 'foo'], '=', 'boo'), cond(['foo', 'bar'], '=', 3)),
         ),
       },
       filters: [
@@ -418,12 +420,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'OR filter (subsumption)',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: or(
-          cond('foo', '=', 'bar'),
-          cond('bar', '=', 2),
-          and(cond('foo', '=', 'bar'), cond('bar', '=', 3)),
+          cond(['foo', 'foo'], '=', 'bar'),
+          cond(['foo', 'bar'], '=', 2),
+          and(cond(['foo', 'foo'], '=', 'bar'), cond(['foo', 'bar'], '=', 3)),
         ),
       },
       filters: [
@@ -462,12 +464,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'OR filter on the same field (multiple tags for a filter)',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: or(
-          cond('foo', '=', 'bar'),
-          cond('foo', '=', 'baz'),
-          cond('foo', '=', 'boo'),
+          cond(['foo', 'foo'], '=', 'bar'),
+          cond(['foo', 'foo'], '=', 'baz'),
+          cond(['foo', 'foo'], '=', 'boo'),
         ),
       },
       filters: [
@@ -505,12 +507,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'AND with nested ORs (full outer product)',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: and(
-          or(cond('a', '=', 1), cond('b', '=', 2)),
-          or(cond('c', '=', 3), cond('d', '=', 4)),
-          or(cond('e', '=', 5), cond('f', '=', 6)),
+          or(cond(['foo', 'a'], '=', 1), cond(['foo', 'b'], '=', 2)),
+          or(cond(['foo', 'c'], '=', 3), cond(['foo', 'd'], '=', 4)),
+          or(cond(['foo', 'e'], '=', 5), cond(['foo', 'f'], '=', 6)),
         ),
       },
       filters: [
@@ -627,12 +629,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'AND with nested ORs (impossibilities pruned)',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: and(
-          or(cond('foo', '=', 'bar'), cond('bar', '=', 1)),
-          or(cond('bar', '=', 2), cond('do', '=', 'foo')),
-          or(cond('foo', '=', 'boo'), cond('do', '=', 'boo')),
+          or(cond(['foo', 'foo'], '=', 'bar'), cond(['foo', 'bar'], '=', 1)),
+          or(cond(['foo', 'bar'], '=', 2), cond(['foo', 'do'], '=', 'foo')),
+          or(cond(['foo', 'foo'], '=', 'boo'), cond(['foo', 'do'], '=', 'boo')),
         ),
       },
       filters: [
@@ -664,12 +666,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       name: 'impossibility',
       ast: {
         table: 'foo',
-        select: [['id', 'id']],
-        orderBy: [['id'], 'asc'],
+        select: [[['foo', 'id'], 'id']],
+        orderBy: [[['foo', 'id']], 'asc'],
         where: and(
-          cond('foo', '=', 'bar'),
-          cond('bar', '=', 2),
-          or(cond('foo', '=', 'boo'), cond('bar', '=', 3)),
+          cond(['foo', 'foo'], '=', 'bar'),
+          cond(['foo', 'bar'], '=', 2),
+          or(cond(['foo', 'foo'], '=', 'boo'), cond(['foo', 'bar'], '=', 3)),
         ),
       },
       filters: [],
@@ -680,12 +682,12 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: expandSelection(
         {
           table: 'foo',
-          select: [['id', 'id']],
-          orderBy: [['id'], 'asc'],
+          select: [[['foo', 'id'], 'id']],
+          orderBy: [[['foo', 'id']], 'asc'],
           where: and(
-            or(cond('a', '=', 1), cond('b', '=', 2)),
-            or(cond('c', '=', 3), cond('d', '=', 4)),
-            or(cond('e', '=', 5), cond('f', '=', 6)),
+            or(cond(['foo', 'a'], '=', 1), cond(['foo', 'b'], '=', 2)),
+            or(cond(['foo', 'c'], '=', 3), cond(['foo', 'd'], '=', 4)),
+            or(cond(['foo', 'e'], '=', 5), cond(['foo', 'f'], '=', 6)),
           ),
         },
         () => [],

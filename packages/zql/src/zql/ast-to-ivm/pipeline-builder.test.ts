@@ -8,11 +8,7 @@ import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {Materialite} from '../ivm/materialite.js';
 import * as agg from '../query/agg.js';
 import {conditionToString} from '../query/condition-to-string.js';
-import {
-  EntityQuery,
-  WhereCondition,
-  astForTesting as ast,
-} from '../query/entity-query.js';
+import {EntityQuery, astForTesting as ast} from '../query/entity-query.js';
 import {buildPipeline, getOperator} from './pipeline-builder.js';
 
 const e1 = z.object({
@@ -131,7 +127,7 @@ describe('OR', () => {
 
   type Case = {
     name?: string | undefined;
-    where: WhereCondition<{e1: E}>;
+    where: Condition;
     values?: (E | DeleteE)[] | undefined;
     expected: (E | [v: E, multiplicity: number])[];
   };
@@ -152,14 +148,14 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'b',
-            value: {type: 'literal', value: 2},
+            field: ['items', 'b'],
+            value: {type: 'value', value: 2},
           },
         ],
       },
@@ -177,8 +173,8 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
         ],
       },
@@ -195,20 +191,20 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'b',
-            value: {type: 'literal', value: 2},
+            field: ['items', 'b'],
+            value: {type: 'value', value: 2},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 2},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 2},
           },
         ],
       },
@@ -232,14 +228,14 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
         ],
       },
@@ -260,14 +256,14 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 1},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'b',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'b'],
+                value: {type: 'value', value: 1},
               },
             ],
           },
@@ -278,14 +274,14 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 2},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 2},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'b',
-                value: {type: 'literal', value: 2},
+                field: ['items', 'b'],
+                value: {type: 'value', value: 2},
               },
             ],
           },
@@ -309,14 +305,14 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 1},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'b',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'b'],
+                value: {type: 'value', value: 1},
               },
             ],
           },
@@ -327,14 +323,14 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 2},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 2},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'b',
-                value: {type: 'literal', value: 2},
+                field: ['items', 'b'],
+                value: {type: 'value', value: 2},
               },
             ],
           },
@@ -358,14 +354,14 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 1},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'b',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'b'],
+                value: {type: 'value', value: 1},
               },
             ],
           },
@@ -376,14 +372,14 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 1},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'b',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'b'],
+                value: {type: 'value', value: 1},
               },
             ],
           },
@@ -405,20 +401,20 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
         ],
       },
@@ -436,20 +432,20 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 3},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 3},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 4},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 4},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 5},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 5},
           },
         ],
       },
@@ -468,28 +464,28 @@ describe('OR', () => {
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 1},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 1},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 2},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 2},
               },
               {
                 type: 'simple',
                 op: '=',
-                field: 'a',
-                value: {type: 'literal', value: 3},
+                field: ['items', 'a'],
+                value: {type: 'value', value: 3},
               },
             ],
           },
           {
             type: 'simple',
             op: '=',
-            field: 'b',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'b'],
+            value: {type: 'value', value: 1},
           },
         ],
       },
@@ -514,14 +510,14 @@ describe('OR', () => {
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 1},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 1},
           },
           {
             type: 'simple',
             op: '=',
-            field: 'a',
-            value: {type: 'literal', value: 2},
+            field: ['items', 'a'],
+            value: {type: 'value', value: 2},
           },
         ],
       },
@@ -552,12 +548,12 @@ describe('OR', () => {
       const ast: AST = {
         table: 'items',
         select: [
-          ['id', 'id'],
-          ['a', 'a'],
-          ['b', 'b'],
+          [['items', 'id'], 'id'],
+          [['items', 'a'], 'a'],
+          [['items', 'b'], 'b'],
         ],
-        where: c.where as Condition,
-        orderBy: [['id'], 'asc'],
+        where: c.where,
+        orderBy: [[['items', 'id']], 'asc'],
       };
 
       const pipeline = buildPipeline(
@@ -756,9 +752,10 @@ describe('getOperator', () => {
   for (const c of cases) {
     test(`${c.left} ${c.op} ${c.right} === ${c.expected}`, () => {
       const condition = {
+        type: 'simple',
         op: c.op,
-        field: 'field',
-        value: {type: 'literal', value: c.right},
+        field: ['table', 'field'],
+        value: {type: 'value', value: c.right},
       } as SimpleCondition;
       expect(getOperator(condition)(c.left)).toBe(c.expected);
     });
@@ -766,9 +763,10 @@ describe('getOperator', () => {
     if (['LIKE', 'IN'].includes(c.op)) {
       test(`${c.left} NOT ${c.op} ${c.right} === ${!c.expected}`, () => {
         const condition = {
+          type: 'simple',
           op: 'NOT ' + c.op,
-          field: 'field',
-          value: {type: 'literal', value: c.right},
+          field: ['table', 'field'],
+          value: {type: 'value', value: c.right},
         } as SimpleCondition;
         expect(getOperator(condition)(c.left)).toBe(!c.expected);
       });
@@ -778,9 +776,10 @@ describe('getOperator', () => {
     if (c.op === 'LIKE' && c.expected) {
       test(`${c.left} ILIKE ${c.right}`, () => {
         const condition = {
+          type: 'simple',
           op: 'ILIKE',
-          field: 'field',
-          value: {type: 'literal', value: c.right},
+          field: ['table', 'field'],
+          value: {type: 'value', value: c.right},
         } as SimpleCondition;
         expect(getOperator(condition)(c.left)).toBe(c.expected);
       });
@@ -789,9 +788,10 @@ describe('getOperator', () => {
 
   expect(() =>
     getOperator({
+      type: 'simple',
       op: 'LIKE',
-      field: 'field',
-      value: {type: 'literal', value: '\\'},
+      field: ['table', 'field'],
+      value: {type: 'value', value: '\\'},
     } as SimpleCondition),
   ).toThrow('LIKE pattern must not end with escape character');
 });

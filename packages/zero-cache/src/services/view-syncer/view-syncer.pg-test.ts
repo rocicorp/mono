@@ -26,9 +26,9 @@ const EXPECTED_LMIDS_AST: AST = {
   schema: 'zero',
   table: 'clients',
   select: [
-    ['clientGroupID', 'clientGroupID'],
-    ['clientID', 'clientID'],
-    ['lastMutationID', 'lastMutationID'],
+    [['clients', 'clientGroupID'], 'clientGroupID'],
+    [['clients', 'clientID'], 'clientID'],
+    [['clients', 'lastMutationID'], 'lastMutationID'],
   ],
   where: {
     type: 'conjunction',
@@ -37,8 +37,8 @@ const EXPECTED_LMIDS_AST: AST = {
       {
         type: 'simple',
         op: '=',
-        field: 'clientGroupID',
-        value: {type: 'literal', value: '9876'},
+        field: ['clients', 'clientGroupID'],
+        value: {type: 'value', value: '9876'},
       },
       {
         type: 'conjunction',
@@ -47,8 +47,8 @@ const EXPECTED_LMIDS_AST: AST = {
           {
             type: 'simple',
             op: '=',
-            field: 'clientID',
-            value: {type: 'literal', value: 'foo'},
+            field: ['clients', 'clientID'],
+            value: {type: 'value', value: 'foo'},
           },
         ],
       },
@@ -156,17 +156,17 @@ describe('view-syncer/service', () => {
 
   const ISSUES_TITLE_QUERY: AST = {
     select: [
-      ['id', 'id'],
-      ['title', 'title'],
-      ['big', 'big'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'title'], 'title'],
+      [['issues', 'big'], 'big'],
     ],
     table: 'issues',
     where: {
       type: 'simple',
-      field: 'id',
+      field: ['issues', 'id'],
       op: 'IN',
       value: {
-        type: 'literal',
+        type: 'value',
         value: ['1', '2', '3', '4'],
       },
     },
@@ -174,8 +174,8 @@ describe('view-syncer/service', () => {
 
   const USERS_NAME_QUERY: AST = {
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['users', 'id'], 'id'],
+      [['users', 'name'], 'name'],
     ],
     table: 'users',
   };
@@ -540,7 +540,7 @@ describe('view-syncer/service', () => {
 
   const INVALID_QUERY: AST = {
     table: 'users',
-    select: [['non_existent_column', 'non_existent_column']],
+    select: [[['users', 'non_existent_column'], 'non_existent_column']],
   };
 
   test('rejects a bad initConnectionMessage', async () => {

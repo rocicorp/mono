@@ -14,25 +14,43 @@ test('asc and descComparator on Entities', () => {
   const s = materialite.newSetSource<Entity>((l, r) =>
     l.id.localeCompare(r.id),
   );
-  const orderBy = [['n', 'id'], 'asc'] as const;
+  const orderBy = [
+    [
+      ['x', 'n'],
+      ['x', 'id'],
+    ],
+    'asc',
+  ] as const;
   const view = new TreeView<Selected>(
     context,
     s.stream,
-    // eh... the comparator operates on the base type rather than the mapped
-    // type. So there's a disconnect between the type of the comparator and the
-    // type of the view.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    makeComparator(['n', 'id'] as any, 'asc'),
+    makeComparator(
+      [
+        ['x', 'n'],
+        ['x', 'id'],
+      ],
+      'asc',
+    ),
     orderBy,
   );
 
-  const orderBy2 = [['n', 'id'], 'desc'] as const;
+  const orderBy2 = [
+    [
+      ['x', 'n'],
+      ['x', 'id'],
+    ],
+    'desc',
+  ] as const;
   const descView = new TreeView<Selected>(
     context,
     s.stream,
-    // see above for why this is any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    makeComparator(['n', 'id'] as any, 'desc'),
+    makeComparator(
+      [
+        ['x', 'n'],
+        ['x', 'id'],
+      ],
+      'desc',
+    ),
     orderBy2,
   );
 
@@ -92,7 +110,7 @@ test('replace', async () => {
       const context = makeTestContext();
       const {materialite} = context;
       const source = materialite.newSetSource<{x: number}>((l, r) => l.x - r.x);
-      const orderBy = [['id'], 'asc'] as const;
+      const orderBy = [[['x', 'id']], 'asc'] as const;
       const view = new TreeView(
         context,
         source.stream,

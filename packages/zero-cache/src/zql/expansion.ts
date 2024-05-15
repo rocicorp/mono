@@ -1,4 +1,4 @@
-import type {AST, Condition} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 
@@ -228,15 +228,15 @@ export function expandSubqueries(
   const selected = new Set<string>();
   // Add all referenced fields / selectors.
   select?.forEach(([selector, alias]) => {
-    addSelector(selector);
+    addSelector(selector.join('.'));
     selected.add(alias);
   });
   selectors.get(defaultFrom)?.forEach(col => selected.add(col));
 
   getWhereColumns(where, new Set<string>()).forEach(addSelector);
-  joins?.forEach(({on}) => on.forEach(addSelector));
-  groupBy?.forEach(addSelector);
-  orderBy?.[0].forEach(addSelector);
+  joins?.forEach(({on}) => on.forEach(part => addSelector(part.join('.'))));
+  groupBy?.forEach(grouping => addSelector(grouping.join('.')));
+  orderBy?.[0].forEach(ordering => addSelector(ordering.join('.')));
 
   // Add primary keys
   requiredColumns(schema, table).forEach(addSelector);
@@ -254,7 +254,12 @@ export function expandSubqueries(
 
   return {
     ...ast,
-    select: expandedSelect,
+    select: expandedSelect.map(([maybeSelector, alias]) => [
+      typeof maybeSelector === 'string'
+        ? (maybeSelector.split('.') as unknown as Selector)
+        : maybeSelector,
+      alias,
+    ]),
     joins: joins?.map(join => ({
       ...join,
       other: expandSubqueries(
@@ -272,7 +277,7 @@ function getWhereColumns(
   cols: Set<string>,
 ): Set<string> {
   if (where?.type === 'simple') {
-    cols.add(where.field);
+    cols.add(where.field.join('.'));
   } else if (where?.type === 'conjunction') {
     where.conditions.forEach(condition => getWhereColumns(condition, cols));
   }
@@ -304,33 +309,33 @@ export function reAliasAndBubbleSelections(
   });
   const bubbleUp = [...reAliasMaps.entries()].flatMap(
     ([joinAlias, reAliasMap]) =>
-      [...reAliasMap.values()].map(colAlias => `${joinAlias}.${colAlias}`),
+      [...reAliasMap.values()].map(
+        colAlias => [joinAlias, colAlias] as Selector,
+      ),
   );
 
   // reAlias the columns selected from this AST's FROM table/alias.
   const defaultFrom = ast.table;
   const reAliasMap = new Map<string, string>();
   reAliasMaps.set(defaultFrom, reAliasMap);
-  select?.forEach(([selector, alias]) => {
-    const parts = selector.split('.'); // "issues.id" or just "id"
-    reAliasMap.set(alias, parts.length === 2 ? parts[1] : selector); // Use the original column name.
+  select?.forEach(([parts, alias]) => {
+    reAliasMap.set(alias, parts[1]); // Use the original column name.
 
     // Also map the column name to itself.
-    const column = parts.length === 2 ? parts[1] : selector;
+    const column = parts[1];
     reAliasMap.set(column, column);
   });
 
-  const renameSelector = (selector: string) => {
-    const parts = selector.split('.'); // "issues.id" or just "id"
-    const [from, col] = parts.length === 2 ? parts : [defaultFrom, selector];
+  const renameSelector = (parts: Selector): Selector => {
+    const [from, col] = parts;
     const newCol = reAliasMaps.get(from)?.get(col);
     assert(newCol, `New column not found for ${from}.${col}`);
     // Note: The absence of a schema is assumed to be the "public" schema. If
     //       non-public schemas and schema search paths are to be supported, this
     //       is where the logic would have to be to resolve the schema for the table.
     return from === ast.table
-      ? `${ast.schema ?? 'public'}.${from}.${newCol}`
-      : `${from}.${newCol}`;
+      ? [`${ast.schema ?? 'public'}.${from}`, newCol]
+      : [from, newCol];
   };
 
   // Return a modified AST with all selectors realiased (SELECT, ON, GROUP BY, ORDER BY),
@@ -339,19 +344,21 @@ export function reAliasAndBubbleSelections(
   return {
     ...ast,
     select: [
-      ...(select ?? []).map(([selector, alias]) => {
-        const newSelector = renameSelector(selector);
-        const newAlias = newSelector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
-        exports.set(alias, newAlias);
-        exported.add(newSelector);
-        return [newSelector, newAlias] as [string, string];
-      }),
+      ...(select ?? []).map(
+        ([selector, alias]): readonly [Selector, string] => {
+          const newSelector = renameSelector(selector);
+          const newAlias = newSelector.join(ALIAS_COMPONENT_SEPARATOR);
+          exports.set(alias, newAlias);
+          exported.add(newSelector.join('.'));
+          return [newSelector, newAlias] as const;
+        },
+      ),
       ...bubbleUp
-        .filter(selector => !exported.has(selector))
-        .map(selector => {
-          const alias = selector.replaceAll('.', ALIAS_COMPONENT_SEPARATOR);
+        .filter(selector => !exported.has(selector.join('.')))
+        .map((selector): readonly [Selector, string] => {
+          const alias = selector.join(ALIAS_COMPONENT_SEPARATOR);
           exports.set(alias, alias);
-          return [selector, alias] as [string, string];
+          return [selector, alias];
         }),
     ],
     joins: reAliasedJoins?.map(join => ({

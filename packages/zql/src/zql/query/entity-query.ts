@@ -10,6 +10,9 @@ import type {
   SetOps,
   SimpleOperator,
   Selector as ASTSelector,
+  Primitive,
+  PrimitiveArray,
+  HavingCondition,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -235,7 +238,7 @@ type SimpleCondition<
   op: SimpleOperator;
   field: SimpleSelector<From>;
   value: {
-    type: 'literal';
+    type: 'value';
     value: FieldAsOperatorInput<From, Selector, Op>;
   };
 };
@@ -351,7 +354,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
           type: 'left',
           other: other.#ast,
           as: alias,
-          on: [thisField, otherField],
+          on: [
+            qualifySelector(this.#ast, thisField),
+            qualifySelector(other.#ast, otherField, alias),
+          ],
         },
       ],
     });
@@ -360,14 +366,14 @@ export class EntityQuery<From extends FromSet, Return = []> {
   groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      groupBy: x as string[],
+      groupBy: x.map(x => qualifySelector(this.#ast, x)),
     });
   }
 
   distinct<Field extends SimpleSelector<From>>(field: Field) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      distinct: field,
+      distinct: qualifySelector(this.#ast, field),
     });
   }
 
@@ -423,27 +429,38 @@ export class EntityQuery<From extends FromSet, Return = []> {
       expr = exprOrField;
     }
 
+    let cond: Condition | HavingCondition;
     if (whereOrHaving === 'where') {
       // HAVING operates on the result of the query
       // so it does not qualify its accessors.
-      expr = qualify(this.#ast, expr);
+      cond = qualify(this.#ast, expr);
+    } else {
+      cond = qualifyHaving(expr);
     }
 
-    let cond: WhereCondition<From>;
-    const existingWhereOrHaving = this.#ast[whereOrHaving] as
-      | WhereCondition<From>
-      | undefined;
-    if (!existingWhereOrHaving) {
-      cond = expr;
-    } else if (existingWhereOrHaving.op === 'AND') {
-      const {conditions} = existingWhereOrHaving;
-      cond = flatten('AND', [...conditions, expr]);
-    } else {
-      cond = {
-        type: 'conjunction',
-        op: 'AND',
-        conditions: [existingWhereOrHaving, expr],
-      };
+    const existingWhereOrHaving = this.#ast[whereOrHaving];
+    if (existingWhereOrHaving) {
+      if (existingWhereOrHaving.op === 'AND') {
+        const {conditions} = existingWhereOrHaving;
+        cond = flattenCondition('AND', [...conditions, cond]);
+      } else {
+        if (whereOrHaving === 'where') {
+          cond = {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [existingWhereOrHaving as Condition, cond as Condition],
+          };
+        } else {
+          cond = {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              existingWhereOrHaving as HavingCondition,
+              cond as HavingCondition,
+            ],
+          };
+        }
+      }
     }
 
     return new EntityQuery<From, Return>(this.#context, this.#name, {
@@ -451,7 +468,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       // Can't use satisfies here because WhereCondition is recursive.
       // Tests ensure that the expected AST output satisfies the Condition
       // type.
-      [whereOrHaving]: cond as Condition,
+      [whereOrHaving]: cond,
     });
   }
 
@@ -533,6 +550,22 @@ function flatten<F extends FromSet>(
   return {type: 'conjunction', op, conditions: flattened};
 }
 
+function flattenCondition<T extends Condition | HavingCondition>(
+  op: 'AND' | 'OR',
+  conditions: T[],
+): T {
+  const flattened: T[] = [];
+  for (const c of conditions) {
+    if (c.op === op) {
+      flattened.push(...(c.conditions as T[]));
+    } else {
+      flattened.push(c);
+    }
+  }
+
+  return {type: 'conjunction', op, conditions: flattened} as unknown as T;
+}
+
 export function exp<
   From extends FromSet,
   Selector extends SimpleSelector<From>,
@@ -547,7 +580,7 @@ export function exp<
     op,
     field,
     value: {
-      type: 'literal',
+      type: 'value',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       value: value as any, // TODO
     },
@@ -621,24 +654,45 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
   }
 }
 
-// TODO: this should return AST condition types
 export function qualify<F extends FromSet>(
   ast: AST,
   expr: WhereCondition<F>,
-): WhereCondition<F> {
-  switch (expr.op) {
-    case 'AND':
-    case 'OR':
-      return {
-        ...expr,
-        conditions: expr.conditions.map(c => qualify(ast, c)),
-      };
-    default:
-      return {
-        ...expr,
-        field: qualifySelector(ast, expr.field),
-      };
+): Condition {
+  if (expr.type === 'simple') {
+    return {
+      type: expr.type,
+      op: expr.op,
+      field: qualifySelector(ast, expr.field),
+      value: {
+        type: expr.value.type,
+        value: expr.value.value as Primitive | PrimitiveArray,
+      },
+    };
   }
+  return {
+    ...expr,
+    conditions: expr.conditions.map(c => qualify(ast, c)),
+  };
+}
+
+export function qualifyHaving<F extends FromSet>(
+  expr: WhereCondition<F>,
+): HavingCondition {
+  if (expr.type === 'simple') {
+    return {
+      type: expr.type,
+      op: expr.op,
+      field: [null, expr.field],
+      value: {
+        type: expr.value.type,
+        value: expr.value.value as Primitive | PrimitiveArray,
+      },
+    };
+  }
+  return {
+    ...expr,
+    conditions: expr.conditions.map(c => qualifyHaving(c)),
+  };
 }
 
 function qualifySelector(
@@ -653,7 +707,7 @@ function qualifySelector(
     (alias && selector.startsWith(alias + '.')) ||
     (alias === undefined && selector.startsWith(ast.table + '.'))
   ) {
-    return selector.split('.') as ASTSelector;
+    return selector.split('.') as unknown as ASTSelector;
   }
 
   return [alias ?? ast.table, selector];

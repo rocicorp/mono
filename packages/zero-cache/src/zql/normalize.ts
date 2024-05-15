@@ -1,6 +1,7 @@
 import {
   Aggregate,
   normalizeAST,
+  Selector,
   type AST,
   type Condition,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
@@ -66,7 +67,9 @@ export class Normalized {
         // Aggregation aliases are ignored for normalization, and instead aliased
         // to the string representation of the aggregation, e.g.
         // 'SELECT COUNT(foo) AS "COUNT(foo)" WHERE ...'
-        const agg = `${aggFn(a.aggregate)}(${a.field ? ident(a.field) : '*'})`;
+        const agg = `${aggFn(a.aggregate)}(${
+          a.field ? selector(a.field) : '*'
+        })`;
         return `${agg} AS ${ident(agg)}`;
       }),
     ].join(', ');
@@ -116,7 +119,7 @@ export class Normalized {
       const {
         value: {type, value},
       } = cond;
-      assert(type === 'literal');
+      assert(type === 'value');
       if (!Array.isArray(value)) {
         this.#values.push(value);
         return `${selector(cond.field)} ${cond.op} $${this.#nextParam++}`;
@@ -162,9 +165,8 @@ export class Normalized {
   }
 }
 
-function selector(x: string): string {
-  const parts = x.split('.');
-  return parts.map(id => ident(id)).join('.');
+function selector(selector: Selector): string {
+  return selector.map(id => ident(id)).join('.');
 }
 
 const SEED = 0x34567890n;

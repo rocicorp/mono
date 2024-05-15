@@ -17,7 +17,7 @@ describe('zql/deaggregation', () => {
       name: 'nothing to deaggregate',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
+        select: [[['issues', 'title'], 'theTitle']],
       },
       original: `
       SELECT title AS "theTitle" FROM issues`,
@@ -26,9 +26,11 @@ describe('zql/deaggregation', () => {
       name: 'array in top-level select',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
-        aggregate: [{aggregate: 'array', field: 'label', alias: 'ignored'}],
-        groupBy: ['title'],
+        select: [[['issues', 'title'], 'theTitle']],
+        aggregate: [
+          {aggregate: 'array', field: ['issues', 'label'], alias: 'ignored'},
+        ],
+        groupBy: [['issues', 'title']],
       },
       original: `
       SELECT title AS "theTitle", array_agg(label) AS "array_agg(label)" 
@@ -41,21 +43,28 @@ describe('zql/deaggregation', () => {
       name: 'array in nested select',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
-        aggregate: [{aggregate: 'array', field: 'label', alias: 'ignored'}],
+        select: [[['issues', 'title'], 'theTitle']],
+        aggregate: [
+          {aggregate: 'array', field: ['issues', 'label'], alias: 'ignored'},
+        ],
         joins: [
           {
             type: 'inner',
             other: {
               table: 'users',
-              aggregate: [{aggregate: 'array', field: 'role', alias: 'igno'}],
-              groupBy: ['id'],
+              aggregate: [
+                {aggregate: 'array', field: ['users', 'role'], alias: 'igno'},
+              ],
+              groupBy: [['users', 'id']],
             },
             as: 'users',
-            on: ['issues.user_id', 'users.id'],
+            on: [
+              ['issues', 'user_id'],
+              ['users', 'id'],
+            ],
           },
         ],
-        groupBy: ['title'],
+        groupBy: [['issues', 'title']],
       },
       original: `
       SELECT title AS "theTitle", array_agg(label) AS "array_agg(label)" FROM issues

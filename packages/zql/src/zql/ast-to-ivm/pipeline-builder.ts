@@ -9,6 +9,8 @@ import type {
   SimpleCondition,
   Ordering,
   Selector,
+  HavingCondition,
+  SimpleHavingCondition,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {isJoinResult, StringOrNumber} from '../ivm/types.js';
@@ -117,7 +119,7 @@ export function applyJoins<T extends Entity, O extends Entity>(
 
 function applyWhere<T extends Entity>(
   stream: DifferenceStream<T>,
-  where: Condition,
+  where: Condition | HavingCondition,
 ) {
   // We'll handle `OR` and parentheticals like so:
   // OR: We'll create a new stream for the LHS and RHS of the OR then merge together.
@@ -149,7 +151,7 @@ function applyWhere<T extends Entity>(
 
 function applyAnd<T extends Entity>(
   stream: DifferenceStream<T>,
-  conditions: Condition[],
+  conditions: (Condition | HavingCondition)[],
 ) {
   for (const condition of conditions) {
     stream = applyWhere(stream, condition);
@@ -159,7 +161,7 @@ function applyAnd<T extends Entity>(
 
 function applyOr<T extends Entity>(
   stream: DifferenceStream<T>,
-  conditions: Condition[],
+  conditions: (Condition | HavingCondition)[],
 ): DifferenceStream<T> {
   // Or is done by branching the stream and then applying the conditions to each
   // branch. Then we merge the branches back together. At this point we need to
@@ -170,7 +172,7 @@ function applyOr<T extends Entity>(
 
 function applySimpleCondition<T extends Entity>(
   stream: DifferenceStream<T>,
-  condition: SimpleCondition,
+  condition: SimpleCondition | SimpleHavingCondition,
 ) {
   const operator = getOperator(condition);
   const {field: column} = condition;
@@ -338,8 +340,10 @@ function makeKeyFunction(qualifiedColumns: Selector[]) {
 
 // We're well-typed in the query builder so once we're down here
 // we can assume that the operator is valid.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getOperator(condition: SimpleCondition): (lhs: any) => boolean {
+export function getOperator(
+  condition: SimpleCondition | SimpleHavingCondition,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): (lhs: any) => boolean {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rhs = condition.value.value as any;
   const {op} = condition;
@@ -494,9 +498,9 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
 
 export function getValueFromEntity(
   entity: Record<string, unknown>,
-  qualifiedColumn: readonly [table: string | undefined, column: string],
+  qualifiedColumn: readonly [table: string | null, column: string],
 ) {
-  if (isJoinResult(entity) && qualifiedColumn[0] !== undefined) {
+  if (isJoinResult(entity) && qualifiedColumn[0] !== null) {
     if (qualifiedColumn[1] === '*') {
       return (entity as Record<string, unknown>)[qualifiedColumn[0]];
     }

@@ -4,7 +4,7 @@
 import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
 
-export type Selector = [table: string, column: string];
+export type Selector = readonly [table: string, column: string];
 
 // TODO: the chosen operator needs to constrain the allowed values for the value
 // input to the query builder.
@@ -45,7 +45,7 @@ export type AST = {
   readonly schema?: string | undefined;
   readonly table: string;
   readonly alias?: string | undefined;
-  readonly select?: [selector: Selector, alias: string][] | undefined;
+  readonly select?: readonly (readonly [selector: Selector, alias: string])[] | undefined;
   readonly distinct?: Selector | undefined;
   readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {
@@ -57,15 +57,21 @@ export type AST = {
   readonly limit?: number | undefined;
   readonly groupBy?: Selector[] | undefined;
   readonly orderBy?: Ordering | undefined;
-  readonly having?: Condition | undefined;
+  readonly having?: HavingCondition | undefined;
   // readonly after?: Primitive;
 };
 
 export type Condition = SimpleCondition | Conjunction;
+export type HavingCondition = SimpleHavingCondition | HavingConjunction;
 export type Conjunction = {
   type: 'conjunction';
   op: 'AND' | 'OR';
   conditions: Condition[];
+};
+export type HavingConjunction = {
+  type: 'conjunction';
+  op: 'AND' | 'OR';
+  conditions: HavingCondition[];
 };
 export type SimpleOperator = EqualityOps | OrderOps | InOps | LikeOps | SetOps;
 
@@ -85,6 +91,17 @@ export type SetOps =
   | 'INCONGRUENT'
   | 'SUBSET';
 
+export type SimpleHavingCondition = {
+  type: 'simple';
+  op: SimpleOperator;
+  // having operates against the selection set so there's no table prefix
+  // null since `[undefined, string]` won't json encode correctly? At least that is what TS tells me.
+  field: [null, string];
+  value: {
+    type: 'value';
+    value: Primitive | PrimitiveArray;
+  };
+};
 export type SimpleCondition = {
   type: 'simple';
   op: SimpleOperator;

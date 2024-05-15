@@ -28,7 +28,7 @@ describe('zql/expansion', () => {
       name: 'adds primary keys, preserved existing selects',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
+        select: [[['issues', 'title'], 'theTitle']],
       },
       original: `
       SELECT title AS "theTitle" FROM issues`,
@@ -52,7 +52,7 @@ describe('zql/expansion', () => {
       ast: {
         schema: 'zero',
         table: 'clients',
-        select: [['id', 'id']],
+        select: [[['clients', 'id'], 'id']],
       },
       original: `
       SELECT id AS id FROM zero.clients`,
@@ -75,12 +75,21 @@ describe('zql/expansion', () => {
       name: 'adds query-relevant fields',
       ast: {
         table: 'issues',
-        select: [['title', 'title']],
+        select: [[['issues', 'title'], 'title']],
         where: or(
-          cond('priority', '>', 3),
-          and(cond('owner_id', '=', 1234), cond('component_id', '=', 2345)),
+          cond(['issues', 'priority'], '>', 3),
+          and(
+            cond(['issues', 'owner_id'], '=', 1234),
+            cond(['issues', 'component_id'], '=', 2345),
+          ),
         ),
-        orderBy: [['date', 'priority'], 'asc'],
+        orderBy: [
+          [
+            ['issues', 'date'],
+            ['issues', 'priority'],
+          ],
+          'asc',
+        ],
       },
       original: `
       SELECT title AS title 
@@ -117,18 +126,21 @@ describe('zql/expansion', () => {
       ast: {
         table: 'issues',
         select: [
-          ['title', 'title'],
-          ['owner.name', 'owner_name'],
+          [['issues', 'title'], 'title'],
+          [['owner', 'name'], 'owner_name'],
         ],
         joins: [
           {
             type: 'inner',
             other: {table: 'users'},
             as: 'owner',
-            on: ['owner.id', 'owner_id'],
+            on: [
+              ['owner', 'id'],
+              ['issues', 'owner_id'],
+            ],
           },
         ],
-        orderBy: [['owner.level'], 'asc'],
+        orderBy: [[['owner', 'level']], 'asc'],
       },
       original: `
       SELECT 
@@ -181,19 +193,22 @@ describe('zql/expansion', () => {
       ast: {
         table: 'issues',
         select: [
-          ['title', 'title'],
-          ['owner.name', 'owner_name'],
+          [['issues', 'title'], 'title'],
+          [['owner', 'name'], 'owner_name'],
         ],
         joins: [
           {
             type: 'inner',
             other: {
-              select: [['name', 'name']],
+              select: [[['users', 'name'], 'name']],
               table: 'users',
-              where: cond('level', '>', 3),
+              where: cond(['users', 'level'], '>', 3),
             },
             as: 'owner',
-            on: ['owner.id', 'owner_id'],
+            on: [
+              ['owner', 'id'],
+              ['issues', 'owner_id'],
+            ],
           },
         ],
       },
@@ -248,8 +263,8 @@ describe('zql/expansion', () => {
       ast: {
         table: 'issue',
         select: [
-          ['issue.title', 'title'],
-          ['owner.name', 'name'],
+          [['issue', 'title'], 'title'],
+          [['owner', 'name'], 'name'],
         ],
         joins: [
           {
@@ -258,7 +273,10 @@ describe('zql/expansion', () => {
               table: 'users',
             },
             as: 'owner',
-            on: ['issue.user_id', 'owner.id'],
+            on: [
+              ['issue', 'user_id'],
+              ['owner', 'id'],
+            ],
           },
           {
             type: 'inner',
@@ -271,15 +289,21 @@ describe('zql/expansion', () => {
                     table: 'users',
                   },
                   as: 'owner',
-                  on: ['issue.user_id', 'owner.id'],
+                  on: [
+                    ['issue', 'user_id'],
+                    ['owner', 'id'],
+                  ],
                 },
               ],
             },
             as: 'parent',
-            on: ['issue.parent_id', 'parent.id'],
+            on: [
+              ['issue', 'parent_id'],
+              ['parent', 'id'],
+            ],
           },
         ],
-        orderBy: [['owner.awesomeness'], 'desc'],
+        orderBy: [[['owner', 'awesomeness']], 'desc'],
       },
       original: `
       SELECT 
@@ -368,11 +392,11 @@ describe('zql/expansion', () => {
       name: 'self join with aliased selects',
       ast: {
         select: [
-          ['issues.id', 'id'],
-          ['issues.title', 'title'],
-          ['owner.name', 'owner_name'],
-          ['parent.title', 'parent_title'],
-          ['parent.owner_name', 'parent_owner'],
+          [['issues', 'id'], 'id'],
+          [['issues', 'title'], 'title'],
+          [['owner', 'name'], 'owner_name'],
+          [['parent', 'title'], 'parent_title'],
+          [['parent', 'owner_name'], 'parent_owner'],
         ],
         table: 'issues',
         joins: [
@@ -380,15 +404,18 @@ describe('zql/expansion', () => {
             type: 'inner',
             other: {table: 'users'},
             as: 'owner',
-            on: ['issues.owner_id', 'owner.id'],
+            on: [
+              ['issues', 'owner_id'],
+              ['owner', 'id'],
+            ],
           },
           {
             type: 'inner',
             other: {
               select: [
-                ['issues.id', 'issues_id'],
-                ['title', 'title'],
-                ['owner.name', 'owner_name'],
+                [['issues', 'id'], 'issues_id'],
+                [['issues', 'title'], 'title'],
+                [['owner', 'name'], 'owner_name'],
               ],
               table: 'issues',
               joins: [
@@ -396,12 +423,18 @@ describe('zql/expansion', () => {
                   type: 'inner',
                   other: {table: 'users'},
                   as: 'owner',
-                  on: ['issues.owner_id', 'owner.id'],
+                  on: [
+                    ['issues', 'owner_id'],
+                    ['owner', 'id'],
+                  ],
                 },
               ],
             },
             as: 'parent',
-            on: ['issues.parent_id', 'parent.issues_id'],
+            on: [
+              ['issues', 'parent_id'],
+              ['parent', 'issues_id'],
+            ],
           },
         ],
       },
