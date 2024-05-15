@@ -38,7 +38,7 @@ export type WatchRequest = {
 
 export type QueryInvalidationUpdate = {
   /** The version of the database at the time the invalidations were processed. */
-  newVersion: LexiVersion;
+  version: LexiVersion;
 
   /**
    * The starting point (exclusive) from which invalidations were computed. This will be
@@ -269,7 +269,7 @@ export class InvalidationWatcherService
           // Since the update for the initial filter registration step may be out of order
           // with respect to incremental VersionChange updates, ensure that `curr` (and
           // importantly, its `reader`) is the one with the latest `newVersion`.
-          if (prev.newVersion > curr.newVersion) {
+          if (prev.version > curr.version) {
             const tmp = curr;
             curr = prev;
             prev = tmp;
@@ -279,7 +279,7 @@ export class InvalidationWatcherService
           this.#decrementRefCount(prev.reader);
 
           return {
-            newVersion: max(prev.newVersion, curr.newVersion),
+            version: max(prev.version, curr.version),
             fromVersion:
               prev.fromVersion === null || curr.fromVersion === null
                 ? null
@@ -440,15 +440,15 @@ export class InvalidationWatcherService
     reader.run(this.#replica).catch(e => lc.error?.(e));
 
     const snapshotQuery = await reader.processReadTask(queryStateVersion);
-    const newVersion = snapshotQuery[0].max ?? '00';
-    const update = {newVersion, fromVersion: fromVersion ?? null, reader};
+    const version = snapshotQuery[0].max ?? '00';
+    const update = {version, fromVersion: fromVersion ?? null, reader};
 
     if (!fromVersion) {
       // Brand new CVR. Invalidations are irrelevant and need not be looked up.
       return {update, hashes: new Set()};
     }
 
-    if (invalidations && atVersion === newVersion) {
+    if (invalidations && atVersion === version) {
       // Invalidations sent from the Replicator's VersionChange message can be used
       // directly if `atVersion` matches that of the `reader` snapshot.
       lc.debug?.(`using hashes from VersionChange`);
@@ -456,7 +456,7 @@ export class InvalidationWatcherService
       return {update, hashes};
     }
 
-    lc.debug?.(`looking up hashes at ${newVersion} from ${fromVersion}`);
+    lc.debug?.(`looking up hashes at ${version} from ${fromVersion}`);
     const rows = await reader.processReadTask(
       tx => tx<{hash: Buffer}[]>`
         SELECT "hash" FROM _zero."InvalidationIndex" WHERE "stateVersion" > ${fromVersion};

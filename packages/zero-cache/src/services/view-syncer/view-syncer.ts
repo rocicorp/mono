@@ -325,10 +325,10 @@ export class ViewSyncerService implements ViewSyncer, Service {
     assert(this.#cvr);
     const cvr = this.#cvr;
 
-    const {fromVersion, newVersion, invalidatedQueries, reader} = invalidation;
+    const {fromVersion, version, invalidatedQueries, reader} = invalidation;
     const lc = this.#lc
       .withContext('fromVersion', fromVersion)
-      .withContext('newVersion', newVersion);
+      .withContext('newVersion', version);
 
     const minCVRVersion = [...this.#clients.values()]
       .map(c => c.version())
@@ -357,7 +357,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     lc.info?.(`Executing ${queriesToExecute.length} queries`);
 
-    const updater = new CVRQueryDrivenUpdater(this.#storage, cvr, newVersion);
+    const updater = new CVRQueryDrivenUpdater(this.#storage, cvr, version);
     // Track which queries are being executed and removed.
     const cvrVersion = updater.trackQueries(
       lc,

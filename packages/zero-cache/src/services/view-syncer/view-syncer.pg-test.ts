@@ -220,7 +220,7 @@ describe('view-syncer/service', () => {
 
     await watcher.notify({
       fromVersion: null,
-      newVersion: '1xz',
+      version: '1xz',
       invalidatedQueries: new Set(),
     });
 
@@ -461,7 +461,7 @@ describe('view-syncer/service', () => {
 
     await watcher.notify({
       fromVersion: null,
-      newVersion: '1xz',
+      version: '1xz',
       invalidatedQueries: new Set(),
     });
 
@@ -626,7 +626,7 @@ describe('view-syncer/service', () => {
     await watcher.requests.dequeue();
     await watcher.notify({
       fromVersion: null,
-      newVersion: '1xz',
+      version: '1xz',
       invalidatedQueries: new Set(),
     });
 
@@ -803,7 +803,7 @@ describe('view-syncer/service', () => {
     await watcher.requests.dequeue();
     await watcher.notify({
       fromVersion: null,
-      newVersion: '1xz',
+      version: '1xz',
       invalidatedQueries: new Set(),
     });
 

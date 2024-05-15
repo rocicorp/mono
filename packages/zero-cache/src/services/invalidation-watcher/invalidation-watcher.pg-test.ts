@@ -1,8 +1,8 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {initDB, testDBs} from '../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {normalizeFilterSpec} from '../../types/invalidation.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
@@ -131,19 +131,19 @@ describe('invalidation-watcher', () => {
       ],
       expectedIncrementalUpdates: [
         {
-          newVersion: '0a',
+          version: '0a',
           fromVersion: null, // Initial update
           invalidatedQueries: new Set(),
         },
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
         },
       ],
       expectedCoalescedUpdates: [
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q2']),
         },
@@ -174,19 +174,19 @@ describe('invalidation-watcher', () => {
       ],
       expectedIncrementalUpdates: [
         {
-          newVersion: '0a',
+          version: '0a',
           fromVersion: null,
           invalidatedQueries: new Set(),
         },
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
         },
       ],
       expectedCoalescedUpdates: [
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q2']),
         },
@@ -223,19 +223,19 @@ describe('invalidation-watcher', () => {
       ],
       expectedIncrementalUpdates: [
         {
-          newVersion: '01',
+          version: '01',
           fromVersion: null,
           invalidatedQueries: new Set(),
         },
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: '01',
           invalidatedQueries: new Set(['q1', 'q2']),
         },
       ],
       expectedCoalescedUpdates: [
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q1', 'q2']),
         },
@@ -278,29 +278,29 @@ describe('invalidation-watcher', () => {
       ],
       expectedIncrementalUpdates: [
         {
-          newVersion: '00',
+          version: '00',
           fromVersion: null,
           invalidatedQueries: new Set(),
         },
         {
-          newVersion: '01',
+          version: '01',
           fromVersion: '00',
           invalidatedQueries: new Set(['q1']),
         },
         {
-          newVersion: '0a',
+          version: '0a',
           fromVersion: '01',
           invalidatedQueries: new Set(['q2']),
         },
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
         },
       ],
       expectedCoalescedUpdates: [
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q1', 'q2']),
         },
@@ -349,7 +349,7 @@ describe('invalidation-watcher', () => {
       ],
       expectedIncrementalUpdates: [
         {
-          newVersion: '0a',
+          version: '0a',
           fromVersion: '01',
           // Initial update invalidates:
           // - q1 as its FOO_SPEC2 was newly registered,
@@ -357,7 +357,7 @@ describe('invalidation-watcher', () => {
           invalidatedQueries: new Set(['q1', 'q3']),
         },
         {
-          newVersion: '101',
+          version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
         },
@@ -369,7 +369,7 @@ describe('invalidation-watcher', () => {
           // with the incremental update invalidating q2.
           // Note that q3 is *not* invalidated because its hash version ("01")
           // is less than or equal to fromVersion
-          newVersion: '101',
+          version: '101',
           fromVersion: '01',
           invalidatedQueries: new Set(['q1', 'q2']),
         },
