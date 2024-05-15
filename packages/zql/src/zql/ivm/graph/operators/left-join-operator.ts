@@ -1,7 +1,13 @@
 import type {Primitive} from '../../../ast/ast.js';
+import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import {isJoinResult, JoinResult, StringOrNumber} from '../../types.js';
-import {DifferenceIndex, joinType} from './difference-index.js';
+import {
+  isJoinResult,
+  JoinResult,
+  StringOrNumber,
+  Version,
+} from '../../types.js';
+import {combineRows, DifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
 import type {JoinArgs} from './join-operator.js';
 
@@ -28,8 +34,8 @@ export class LeftJoinOperator<
   > = new Map();
 
   constructor(joinArgs: JoinArgs<K, AValue, BValue, AAlias, BAlias>) {
-    super(joinArgs.a, joinArgs.b, joinArgs.output, (_, inputA, inputB) =>
-      this.#join(inputA, inputB),
+    super(joinArgs.a, joinArgs.b, joinArgs.output, (version, inputA, inputB) =>
+      this.#join(version, inputA, inputB),
     );
     this.#indexA = new DifferenceIndex<K | undefined, AValue>(
       joinArgs.getAPrimaryKey,
@@ -38,107 +44,168 @@ export class LeftJoinOperator<
     this.#joinArgs = joinArgs;
   }
 
+  #aKeysForCompaction = new Set<K | undefined>();
+  #bKeysForCompaction = new Set<K>();
+  #lastVersion = -1;
   #join(
+    version: Version,
     inputA: Multiset<AValue> | undefined,
     inputB: Multiset<BValue> | undefined,
   ) {
-    const {aAs, getAJoinKey, getAPrimaryKey, bAs, getBJoinKey, getBPrimaryKey} =
-      this.#joinArgs;
-    const aKeysForCompaction = new Set<K | undefined>();
-    const bKeysForCompaction = new Set<K>();
-    const deltaA = new DifferenceIndex<K | undefined, AValue>(getAPrimaryKey);
-
-    for (const entry of inputA || []) {
-      const aKey = getAJoinKey(entry[0]);
-      deltaA.add(aKey, entry);
-      aKeysForCompaction.add(aKey);
+    if (this.#lastVersion !== version) {
+      // TODO: all outstanding iterables _must_ be made invalid before processing a new version.
+      // We should add some invariant in `joinOne` that checks if the version is still valid
+      // and throws if not.
+      this.#indexA.compact(this.#aKeysForCompaction);
+      this.#indexB.compact(this.#bKeysForCompaction);
+      this.#aKeysForCompaction.clear();
+      this.#bKeysForCompaction.clear();
+      this.#lastVersion = version;
     }
 
-    const deltaB = new DifferenceIndex<K, BValue>(getBPrimaryKey);
-    for (const entry of inputB || []) {
-      const bKey = getBJoinKey(entry[0]);
-      if (bKey === undefined) {
-        continue;
-      }
-      deltaB.add(bKey, entry);
-      bKeysForCompaction.add(bKey);
+    const iterablesToReturn: Multiset<
+      JoinResult<AValue, BValue, AAlias, BAlias>
+    >[] = [];
+
+    if (inputA !== undefined) {
+      iterablesToReturn.push(
+        genFlatMap(inputA, entry => {
+          const key = this.#joinArgs.getAJoinKey(entry[0]);
+          const ret = this.#joinOneLeft(entry, key);
+          this.#indexA.add(key, entry);
+          this.#aKeysForCompaction.add(key);
+          return ret;
+        }),
+      );
     }
 
-    const result: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
-    let joinResult = deltaA.join(
-      joinType.left,
-      aAs,
-      this.#indexB,
-      bAs,
-      getBPrimaryKey,
-    );
-    let joinMultiset = joinResult[0];
-    let joinSourceRows = joinResult[1];
-    let i = 0;
-    for (const joinEntry of joinMultiset) {
-      const bRow = joinSourceRows[i][1];
-      const aRow = joinSourceRows[i][0];
-      ++i;
-      result.push(joinEntry);
+    if (inputB !== undefined) {
+      iterablesToReturn.push(
+        genFlatMap(inputB, entry => {
+          const key = this.#joinArgs.getBJoinKey(entry[0]);
+          const ret = this.#joinOneInner(entry, key);
+          if (key !== undefined) {
+            this.#indexB.add(key, entry);
+            this.#bKeysForCompaction.add(key);
+          }
+          return ret;
+        }),
+      );
+    }
 
-      const aPrimaryKey = isJoinResult(aRow)
-        ? aRow.id
-        : getAPrimaryKey(aRow as AValue);
-      if (bRow === undefined) {
-        this.#aMatches.set(aPrimaryKey, [joinEntry[0], 0]);
+    return genCached(genConcat(iterablesToReturn));
+  }
+
+  #joinOneLeft(
+    aEntry: Entry<AValue>,
+    aKey: K | undefined,
+  ): Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] {
+    const aValue = aEntry[0];
+    const aMult = aEntry[1];
+
+    const ret: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
+    const aPrimaryKey = isJoinResult(aValue)
+      ? aValue.id
+      : this.#joinArgs.getAPrimaryKey(aValue as AValue);
+
+    const bEntries = aKey !== undefined ? this.#indexB.get(aKey) : undefined;
+    // `undefined` cannot join with anything
+    if (bEntries === undefined || bEntries.length === 0) {
+      const joinEntry = [
+        combineRows(
+          aValue,
+          undefined,
+          this.#joinArgs.aAs,
+          this.#joinArgs.bAs,
+          this.#joinArgs.getAPrimaryKey,
+          this.#joinArgs.getBPrimaryKey,
+        ) as JoinResult<AValue, BValue, AAlias, BAlias>,
+        aMult,
+      ] as const;
+      ret.push(joinEntry);
+      this.#aMatches.set(aPrimaryKey, [joinEntry[0], 0]);
+      return ret;
+    }
+
+    for (const [bValue, bMult] of bEntries) {
+      const joinEntry = [
+        combineRows(
+          aValue,
+          bValue,
+          this.#joinArgs.aAs,
+          this.#joinArgs.bAs,
+          this.#joinArgs.getAPrimaryKey,
+          this.#joinArgs.getBPrimaryKey,
+        ) as JoinResult<AValue, BValue, AAlias, BAlias>,
+        aMult * bMult,
+      ] as const;
+
+      ret.push(joinEntry);
+
+      const existing = this.#aMatches.get(aPrimaryKey);
+      if (existing) {
+        existing[1] += joinEntry[1];
       } else {
-        const existing = this.#aMatches.get(aPrimaryKey);
-        if (existing) {
-          existing[1] += joinEntry[1];
-        } else {
-          this.#aMatches.set(aPrimaryKey, [joinEntry[0], joinEntry[1]]);
-        }
+        this.#aMatches.set(aPrimaryKey, [joinEntry[0], joinEntry[1]]);
       }
     }
-    this.#indexA.extend(deltaA);
 
-    joinResult = deltaB.join(
-      joinType.inner,
-      bAs,
-      this.#indexA,
-      aAs,
-      getAPrimaryKey,
-    );
-    joinMultiset = joinResult[0];
-    joinSourceRows = joinResult[1];
-    i = 0;
-    for (const joinEntry of joinMultiset) {
-      result.push(joinEntry);
+    return ret;
+  }
 
-      // TODO: aRow should be an entry so we can apply proper mult
-      const aRow = joinSourceRows[i][1];
-      ++i;
+  #joinOneInner(
+    bEntry: Entry<BValue>,
+    bKey: K | undefined,
+  ): Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] {
+    const bValue = bEntry[0];
+    const bMult = bEntry[1];
+    if (bKey === undefined) {
+      return [];
+    }
+
+    const aEntries = this.#indexA.get(bKey);
+    if (aEntries === undefined) {
+      return [];
+    }
+
+    const ret: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
+    for (const [aRow, aMult] of aEntries) {
+      const joinEntry = [
+        combineRows(
+          aRow,
+          bValue,
+          this.#joinArgs.aAs,
+          this.#joinArgs.bAs,
+          this.#joinArgs.getAPrimaryKey,
+          this.#joinArgs.getBPrimaryKey,
+        ) as JoinResult<AValue, BValue, AAlias, BAlias>,
+        aMult * bMult,
+      ] as const;
+      ret.push(joinEntry);
+
       const aPrimaryKey = isJoinResult(aRow)
         ? aRow.id
-        : getAPrimaryKey(aRow as AValue);
+        : this.#joinArgs.getAPrimaryKey(aRow as AValue);
 
       const existing = this.#aMatches.get(aPrimaryKey);
       if (joinEntry[1] > 0 && existing && existing[1] === 0) {
         // row `a` now has matches. Remove the un-match.
-        result.push([existing[0], -1]);
+        ret.push([existing[0], -1]);
       } else if (
         joinEntry[1] < 0 &&
         existing &&
         existing[1] + joinEntry[1] === 0
       ) {
         // We went back to row `a` being an unmatch. Send the un-match
-        result.push([existing[0], 1]);
+        ret.push([existing[0], 1]);
       }
 
       if (existing) {
         existing[1] += joinEntry[1];
       }
     }
-    this.#indexB.extend(deltaB);
 
-    this.#indexA.compact(aKeysForCompaction);
-    this.#indexB.compact(bKeysForCompaction);
-    return result;
+    return ret;
   }
 
   toString() {

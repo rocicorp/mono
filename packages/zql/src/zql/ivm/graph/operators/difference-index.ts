@@ -1,5 +1,5 @@
 import type {Primitive} from '../../../ast/ast.js';
-import type {Entry, Multiset} from '../../multiset.js';
+import type {Entry} from '../../multiset.js';
 import {
   JoinResult,
   StringOrNumber,
@@ -44,140 +44,6 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
 
   get(key: Key): Entry<V>[] {
     return this.#index.get(key) ?? [];
-  }
-
-  // TODO: make Ret return two collections:
-  // 1. the multiset of join results
-  // 2. a list of the original items that were joined
-  //
-  // This latter list is needed for left-join to retract un-matches when matches are found.
-  //
-  // TODO: Make join lazy rather than actually computing the join and creating intermediate arrays.
-  join<
-    VO,
-    AAlias extends string | undefined,
-    BAlias extends string | undefined,
-  >(
-    type: JoinType,
-    aAlias: AAlias | undefined,
-    other: DifferenceIndex<Key | undefined, VO>,
-    bAlias: BAlias | undefined,
-    getBValueIdentity: (v: VO) => StringOrNumber,
-  ): [
-    Multiset<JoinResult<V, VO, AAlias, BAlias>>,
-    (readonly [aValue: V | VO, bValue: V | VO | undefined])[],
-  ] {
-    const ret: (readonly [JoinResult<V, VO, AAlias, BAlias>, number])[] = [];
-    const sourceRows: (readonly [
-      aValue: V | VO,
-      bValue: V | VO | undefined,
-    ])[] = [];
-    let outerIndex;
-    let innerIndex;
-    let getOuterValueIdentity;
-    let getInnerValueIdentity;
-    let outerAlias;
-    let innerAlias;
-
-    // If we're a left-join we can't re-order the loop.
-    // We must use `this` as the outer index.
-    // This means that the `join-operator` MUST always be smart
-    // and use the `delta` set as the out loop and _never_ the `base` set.
-    if (this.#index.size < other.#index.size || type === joinType.left) {
-      outerIndex = this.#index;
-      innerIndex = other.#index;
-      getOuterValueIdentity = this.#getValueIdentity;
-      getInnerValueIdentity = getBValueIdentity;
-      outerAlias = aAlias;
-      innerAlias = bAlias;
-    } else {
-      outerIndex = other.#index;
-      innerIndex = this.#index;
-      getOuterValueIdentity = getBValueIdentity;
-      getInnerValueIdentity = this.#getValueIdentity;
-      outerAlias = bAlias;
-      innerAlias = aAlias;
-    }
-
-    for (const [key, outerEntry] of outerIndex) {
-      // we do not match on undefined keys. This is to mimic SQL NULL behavior.
-      const innerEntry = key !== undefined ? innerIndex.get(key) : undefined;
-      if (innerEntry === undefined) {
-        if (type !== joinType.left) {
-          continue;
-        }
-
-        for (const [outerValue, outerMult] of outerEntry) {
-          let value: JoinResult<V, VO, AAlias, BAlias>;
-          if (isJoinResult(outerValue)) {
-            value = outerValue as JoinResult<V, VO, AAlias, BAlias>;
-          } else {
-            value = {
-              [joinSymbol]: true,
-              id: getOuterValueIdentity(outerValue as unknown as V & VO),
-              [outerAlias!]: outerValue,
-            } as JoinResult<V, VO, AAlias, BAlias>;
-          }
-          ret.push([value, outerMult]);
-          sourceRows.push([outerValue, undefined]);
-        }
-        continue;
-      }
-      for (const [outerValue, outerMult] of outerEntry) {
-        for (const [innerValue, innerMult] of innerEntry) {
-          // TODO: is there an alternate formulation of JoinResult that requires fewer allocations?
-          let value: JoinResult<V, VO, AAlias, BAlias>;
-
-          // Flatten our join results so we don't
-          // end up arbitrarily deep after many joins.
-          // This handles the case of: A JOIN B JOIN C ...
-          // A JOIN B produces {a, b}
-          // A JOIN B JOIN C would produce {a_b: {a, b}, c} if we didn't flatten here.
-          if (isJoinResult(outerValue) && isJoinResult(innerValue)) {
-            value = {
-              ...outerValue,
-              ...innerValue,
-              id: concatIds(outerValue.id, innerValue.id),
-            } as JoinResult<V, VO, AAlias, BAlias>;
-          } else if (isJoinResult(outerValue)) {
-            value = {
-              ...outerValue,
-              [innerAlias!]: innerValue,
-              id: concatIds(
-                outerValue.id,
-                getInnerValueIdentity(innerValue as unknown as V & VO),
-              ),
-            } as JoinResult<V, VO, AAlias, BAlias>;
-          } else if (isJoinResult(innerValue)) {
-            value = {
-              ...innerValue,
-              [outerAlias!]: outerValue,
-              id: concatIds(
-                getOuterValueIdentity(outerValue as unknown as V & VO),
-                innerValue.id,
-              ),
-            } as JoinResult<V, VO, AAlias, BAlias>;
-          } else {
-            value = {
-              [joinSymbol]: true,
-              id: concatIds(
-                getOuterValueIdentity(outerValue as unknown as V & VO),
-                getInnerValueIdentity(innerValue as unknown as V & VO),
-              ),
-              [outerAlias!]: outerValue,
-              [innerAlias!]: innerValue,
-            } as JoinResult<V, VO, AAlias, BAlias>;
-          }
-          ret.push([value, outerMult * innerMult] as const);
-          if (outerIndex === this.#index) {
-            sourceRows.push([outerValue, innerValue]);
-          } else {
-            sourceRows.push([innerValue, outerValue]);
-          }
-        }
-      }
-    }
-    return [ret, sourceRows];
   }
 
   /**
@@ -254,7 +120,7 @@ export function combineRows<
   BAlias extends string,
 >(
   outerValue: AValue,
-  innerValue: BValue,
+  innerValue: BValue | undefined,
   outerAlias: AAlias | undefined,
   innerAlias: BAlias | undefined,
   getOuterValueIdentity: (value: AValue) => StringOrNumber,
@@ -265,7 +131,15 @@ export function combineRows<
   // This handles the case of: A JOIN B JOIN C ...
   // A JOIN B produces {a, b}
   // A JOIN B JOIN C would produce {a_b: {a, b}, c} if we didn't flatten here.
-  if (isJoinResult(outerValue) && isJoinResult(innerValue)) {
+  if (innerValue === undefined && isJoinResult(outerValue)) {
+    return outerValue as JoinResult<AValue, BValue, AAlias, BAlias>;
+  } else if (innerValue === undefined) {
+    return {
+      [joinSymbol]: true,
+      id: getOuterValueIdentity(outerValue as unknown as AValue & BValue),
+      [outerAlias!]: outerValue,
+    } as JoinResult<AValue, BValue, AAlias, BAlias>;
+  } else if (isJoinResult(outerValue) && isJoinResult(innerValue)) {
     return {
       ...outerValue,
       ...innerValue,
