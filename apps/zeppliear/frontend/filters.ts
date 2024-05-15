@@ -36,7 +36,7 @@ export function getIssueOrder(
   return parseResult.success ? parseResult.data : Order.Modified;
 }
 
-export function createEnumSetFilterHandler<T>(
+export function createToggleFilterHandler<T>(
   filters: Set<T> | null,
   setFilters: (f: Set<T> | null) => void,
 ) {

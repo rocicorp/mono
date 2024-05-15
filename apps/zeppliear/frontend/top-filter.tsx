@@ -11,7 +11,7 @@ import {
   usePriorityFilterState,
   useStatusFilterState,
 } from './hooks/query-state-hooks';
-import {createEnumSetFilterHandler} from './filters';
+import {createToggleFilterHandler} from './filters';
 
 interface Props {
   title: string;
@@ -107,15 +107,15 @@ function TopFilter({
             <span>{issuesCount}</span>
           )}
           <FilterMenu
-            onSelectPriority={createEnumSetFilterHandler(
+            onSelectPriority={createToggleFilterHandler(
               priorityFilters,
               setPriorityFilterByParam,
             )}
-            onSelectStatus={createEnumSetFilterHandler(
+            onSelectStatus={createToggleFilterHandler(
               statusFilters,
               setStatusFilterByParam,
             )}
-            onSelectLabel={createEnumSetFilterHandler(
+            onSelectLabel={createToggleFilterHandler(
               labelFilters,
               setLabelFilterByParam,
             )}
