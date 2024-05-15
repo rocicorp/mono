@@ -52,7 +52,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
   readonly #lc: LogContext;
   readonly #storage: DurableStorage;
   readonly #registry: InvalidationWatcherRegistry;
-  readonly #validatorDB: PostgresDB;
+  readonly #queryChecker: PostgresDB;
 
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
@@ -75,7 +75,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     clientGroupID: string,
     storage: DurableStorage,
     registry: InvalidationWatcherRegistry,
-    validatorDB: PostgresDB,
+    queryChecker: PostgresDB,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
@@ -83,7 +83,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
       .withContext('serviceID', this.id);
     this.#storage = storage;
     this.#registry = registry;
-    this.#validatorDB = validatorDB;
+    this.#queryChecker = queryChecker;
   }
 
   async run(): Promise<void> {
@@ -190,7 +190,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     // it must be added from within the lock, and only after the desired
     // queries have been processed.
     await this.#lock.withLock(async () => {
-      await this.#patchQueries(client, initConnectionMessage[1]);
+      await this.#patchQueries(lc, client, initConnectionMessage[1]);
 
       // Update #clients, close any previous connection.
       this.#clients.get(clientID)?.close();
@@ -208,14 +208,14 @@ export class ViewSyncerService implements ViewSyncer, Service {
     await this.#runInLockForClient<ChangeDesiredQueriesBody>(
       ctx,
       msg,
-      (client, body) => this.#patchQueries(client, body),
+      (lc, client, body) => this.#patchQueries(lc, client, body),
     );
   }
 
   async #runInLockForClient<B, M extends [cmd: string, B] = [string, B]>(
     ctx: SyncContext,
     msg: M,
-    fn: (client: ClientHandler, body: B) => Promise<void>,
+    fn: (lc: LogContext, client: ClientHandler, body: B) => Promise<void>,
   ): Promise<void> {
     const {clientID, wsID} = ctx;
     const lc = this.#lc
@@ -234,7 +234,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     }
 
     try {
-      await this.#lock.withLock(() => fn(client, body));
+      await this.#lock.withLock(() => fn(lc, client, body));
     } catch (e) {
       lc.error?.(`closing connection with error`, e);
       client.fail(e);
@@ -244,6 +244,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
   // Must be called from within #lock.
   async #patchQueries(
+    lc: LogContext,
     client: ClientHandler,
     {desiredQueriesPatch}: ChangeDesiredQueriesBody,
   ) {
@@ -269,9 +270,9 @@ export class ViewSyncerService implements ViewSyncer, Service {
           break;
       }
     }
-    await this.#validateQueries(added);
+    await this.#checkQueries(added);
 
-    this.#cvr = await updater.flush();
+    this.#cvr = await updater.flush(lc);
 
     // The client will not be up to date if it is old, or if the set of queries
     // changed. Cancel any current subscription to start a new one that takes the
@@ -382,12 +383,16 @@ export class ViewSyncerService implements ViewSyncer, Service {
       reader.processReadTask(async tx => {
         const {query, values} = q.transformedAST.query();
         const {queryIDs} = q;
+        const start = Date.now();
         lc.debug?.(`executing [${queryIDs}]: ${query}`);
 
         for await (const rows of tx
           .unsafe(query, values)
           .cursor(cursorPageSize)) {
-          lc.debug?.(`processing ${rows.length} for queries ${queryIDs}`);
+          const elapsed = Date.now() - start;
+          lc.debug?.(
+            `processing ${rows.length} result(s) for [${queryIDs}] (${elapsed} ms)`,
+          );
           const parsed = resultParser.parseResults(queryIDs, rows);
           const patches = await updater.received(lc, parsed);
           patches.forEach(patch =>
@@ -409,7 +414,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     }
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = await updater.flush();
+    this.#cvr = await updater.flush(lc);
 
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
@@ -433,7 +438,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     }
   }
 
-  async #validateQueries(queries: {id: string; ast: AST}[]): Promise<void> {
+  async #checkQueries(queries: {id: string; ast: AST}[]): Promise<void> {
     if (queries.length === 0) {
       return;
     }
@@ -443,33 +448,69 @@ export class ViewSyncerService implements ViewSyncer, Service {
     const queryHandler = new QueryHandler(tableSchemas);
     const transformed = queryHandler.transform(queries);
 
-    for (const {
-      transformedAST: ast,
-      invalidationInfo: {filters},
-    } of transformed.values()) {
-      const parameterized = ast.query();
-      this.#lc.debug?.('Validating query', parameterized.query);
-      const result = await this.#validatorDB
-        .unsafe(parameterized.query, parameterized.values)
-        .describe();
-      this.#lc.debug?.('Validated', result);
+    await Promise.all(
+      [...transformed].map(
+        async ([
+          id,
+          {
+            transformedAST: ast,
+            invalidationInfo: {filters},
+          },
+        ]) => {
+          const parameterized = ast.query();
+          if (isAlreadyChecked(parameterized.query)) {
+            this.#lc.debug?.(`query [${id}] has been checked`);
+            return;
+          }
+          const start = Date.now();
+          this.#lc.debug?.(`checking query [${id}]`, parameterized.query);
 
-      for (const filter of filters) {
-        const t = queryHandler.tableSpec(filter.schema, filter.table);
-        if (!t) {
-          throw new Error(`Invalid table ${filter.schema}.${filter.table}`);
-        }
-        for (const col of Object.keys(filter.filteredColumns)) {
-          if (!(col in t.columns)) {
-            throw new Error(`Column ${col} does not exist in ${filter.table}`);
+          const checked = this.#queryChecker
+            .unsafe(parameterized.query, parameterized.values)
+            .describe();
+
+          for (const filter of filters) {
+            const t = queryHandler.tableSpec(filter.schema, filter.table);
+            if (!t) {
+              throw new Error(`Invalid table ${filter.schema}.${filter.table}`);
+            }
+            for (const col of Object.keys(filter.filteredColumns)) {
+              if (!(col in t.columns)) {
+                throw new Error(
+                  `Column ${col} does not exist in ${filter.table}`,
+                );
+              }
+            }
+            for (const col of filter.selectedColumns ?? []) {
+              if (!(col in t.columns)) {
+                throw new Error(
+                  `Column ${col} does not exist in ${filter.table}`,
+                );
+              }
+            }
           }
-        }
-        for (const col of filter.selectedColumns ?? []) {
-          if (!(col in t.columns)) {
-            throw new Error(`Column ${col} does not exist in ${filter.table}`);
-          }
-        }
-      }
+
+          await checked;
+          this.#lc.debug?.(`checked [${id}] (${Date.now() - start} ms)`);
+          cacheCheckedQuery(parameterized.query);
+        },
+      ),
+    );
+  }
+}
+
+const MAX_CHECKED_QUERY_CACHE_SIZE = 100;
+const checkedQueryCache = new Set<string>();
+
+function isAlreadyChecked(query: string) {
+  return checkedQueryCache.has(query);
+}
+
+function cacheCheckedQuery(query: string) {
+  if (!checkedQueryCache.has(query)) {
+    if (checkedQueryCache.size >= MAX_CHECKED_QUERY_CACHE_SIZE) {
+      checkedQueryCache.delete(checkedQueryCache.values().next().value);
     }
+    checkedQueryCache.add(query);
   }
 }

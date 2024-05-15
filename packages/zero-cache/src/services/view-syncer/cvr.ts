@@ -58,7 +58,7 @@ export async function loadCVR(
   storage: Storage,
   id: string,
 ): Promise<CVRSnapshot> {
-  lc.debug?.('loading CVR');
+  const start = Date.now();
   const cvr: CVR = {
     id,
     version: {stateVersion: versionToLexi(0)},
@@ -72,7 +72,6 @@ export async function loadCVR(
     {prefix: paths.metaPrefix()},
     metaRecordSchema, // TODO: Consider an alternative API to union type + casting.
   );
-  lc.debug?.(`loaded ${metaRecords.size} meta entries`);
   for (const [key, value] of metaRecords) {
     if (key.endsWith('/version')) {
       cvr.version = value as CVRVersion;
@@ -86,6 +85,9 @@ export async function loadCVR(
       cvr.queries[query.id] = query;
     }
   }
+  lc.debug?.(
+    `loaded CVR (${Date.now() - start} ms), ${metaRecords.size} meta entries`,
+  );
   return cvr;
 }
 
@@ -167,10 +169,14 @@ export class CVRUpdater {
     void this._writes.put(this._paths.lastActive(), this._cvr.lastActive);
   }
 
-  async flush(lastActive = new Date()): Promise<CVRSnapshot> {
+  async flush(lc: LogContext, lastActive = new Date()): Promise<CVRSnapshot> {
+    const start = Date.now();
+
     this.#setLastActive(lastActive);
     await this._writes.flush(); // Calls put() and del() with a final `await`
     await this._directStorage.flush(); // DurableObjectStorage.sync();
+
+    lc.debug?.(`flushed CVR (${Date.now() - start} ms)`);
     return this._cvr;
   }
 }
@@ -322,9 +328,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
   }
 
-  flush(lastActive = new Date()): Promise<CVRSnapshot> {
+  flush(lc: LogContext, lastActive = new Date()): Promise<CVRSnapshot> {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lastActive);
+    return super.flush(lc, lastActive);
   }
 }
 
