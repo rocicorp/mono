@@ -3,11 +3,7 @@ import MenuIcon from './assets/icons/menu.svg';
 
 import {noop} from 'lodash';
 import FilterMenu from './filter-menu';
-import {
-  Order,
-  Priority,
-  Status,
-} from './issue';
+import {Order, Priority, Status} from './issue';
 import SortOrderMenu from './sort-order-menu';
 import {
   useLabelFilterState,
@@ -26,7 +22,7 @@ interface Props {
 }
 
 interface FilterStatusProps<Enum extends number | string> {
-  filter: Enum[] | null;
+  filter: Set<Enum> | null;
   displayStrings?: Record<Enum, string> | undefined;
   operator?: string | undefined;
   onDelete: () => void;
@@ -56,7 +52,7 @@ function FilterStatus<Enum extends number | string>({
   displayStrings,
   operator,
 }: FilterStatusProps<Enum>) {
-  if (!filter || filter.length === 0) return null;
+  if (!filter) return null;
   return (
     <div className="flex items-center pr-4 space-x-[1px]">
       <span className="px-1 text-gray-50 bg-gray-850 rounded-l">
@@ -64,8 +60,10 @@ function FilterStatus<Enum extends number | string>({
       </span>
       <span className="px-1 text-gray-50 bg-gray-850 ">
         {displayStrings !== undefined
-          ? filter.map(f => displayStrings[f]).join(', ')
-          : filter.join(', ')}
+          ? Array.from(filter)
+              .map(f => displayStrings[f])
+              .join(', ')
+          : Array.from(filter).join(', ')}
       </span>
       <span
         className="px-1 text-gray-50 bg-gray-850 rounded-r cursor-pointer"
@@ -134,24 +132,22 @@ function TopFilter({
           )}
         </div>
       </div>
-      {(statusFilters && statusFilters.size) ||
-      (priorityFilters && priorityFilters.size) ||
-      (labelFilters && labelFilters.size) ? (
+      {statusFilters || priorityFilters || labelFilters ? (
         <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
           <FilterStatus
-            filter={statusFilters ? Array.from(statusFilters) : null}
+            filter={statusFilters}
             displayStrings={statusDisplayStrings}
             onDelete={() => setStatusFilterByParam(null)}
             label="Status"
           />
           <FilterStatus
-            filter={priorityFilters ? Array.from(priorityFilters) : null}
+            filter={priorityFilters}
             displayStrings={priorityDisplayStrings}
             onDelete={() => setPriorityFilterByParam(null)}
             label="Priority"
           />
           <FilterStatus
-            filter={labelFilters ? Array.from(labelFilters) : null}
+            filter={labelFilters}
             onDelete={() => setLabelFilterByParam(null)}
             label="Label"
             operator="is any of"
