@@ -1,3 +1,4 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {
@@ -5,7 +6,6 @@ import {
   initStorage,
   runWithDurableObjectStorage,
 } from '../../test/do.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {rowIDHash} from '../../types/row-key.js';
 import {and, cond, or} from '../../zql/query-test-util.js';
 import type {PatchToVersion} from './client-handler.js';
@@ -45,6 +45,7 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       const flushed = await new CVRUpdater(storage, cvr).flush(
+        lc,
         new Date(Date.UTC(2024, 3, 20)),
       );
 
@@ -145,7 +146,7 @@ describe('view-syncer/cvr', () => {
       const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
       const updater = new CVRUpdater(new DurableStorage(storage), cvr);
 
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 24)));
+      const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
 
       expect(cvr).toEqual({
         id: 'abc123',
@@ -264,7 +265,7 @@ describe('view-syncer/cvr', () => {
       expect(updater.putDesiredQueries('bonkClient', {})).toEqual([]);
       updater.clearDesiredQueries('dooClient');
 
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 24)));
+      const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
 
       expect(cvr).toEqual({
         id: 'abc123',
@@ -480,7 +481,10 @@ describe('view-syncer/cvr', () => {
       ).toEqual([]);
 
       // Same last active day (no index change), but different hour.
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      const updated = await updater.flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 23, 1)),
+      );
       expect(updated).toEqual({
         ...cvr,
         lastActive: {epochMillis: 1713834000000},
@@ -771,7 +775,10 @@ describe('view-syncer/cvr', () => {
       ]);
 
       // Same last active day (no index change), but different hour.
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      const updated = await updater.flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 23, 1)),
+      );
       expect(updated).toEqual({
         ...cvr,
         version: newVersion,
@@ -1029,7 +1036,10 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
 
       // Same last active day (no index change), but different hour.
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      const updated = await updater.flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 23, 1)),
+      );
       expect(updated).toEqual({
         ...cvr,
         version: newVersion,
@@ -1347,7 +1357,10 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
 
       // Same last active day (no index change), but different hour.
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      const updated = await updater.flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 23, 1)),
+      );
       expect(updated).toEqual({
         ...cvr,
         version: newVersion,
@@ -1573,7 +1586,10 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]);
 
       // Same last active day (no index change), but different hour.
-      const updated = await updater.flush(new Date(Date.UTC(2024, 3, 23, 1)));
+      const updated = await updater.flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 23, 1)),
+      );
       expect(updated).toEqual({
         ...cvr,
         version: newVersion,
