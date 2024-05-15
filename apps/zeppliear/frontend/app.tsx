@@ -10,7 +10,6 @@ import {
   Issue,
   IssueUpdate,
   Order,
-  orderEnumSchema,
   IssueLabel,
   Label,
   putIssueComment,
@@ -34,15 +33,7 @@ import {
   useOrderByState,
   useViewState,
 } from './hooks/query-state-hooks';
-import {getViewStatuses} from './filters';
-
-function getIssueOrder(view: string | null, orderBy: string | null): Order {
-  if (view === 'board') {
-    return Order.Kanban;
-  }
-  const parseResult = orderEnumSchema.safeParse(orderBy);
-  return parseResult.success ? parseResult.data : Order.Modified;
-}
+import {getIssueOrder, getViewStatuses} from './filters';
 
 function getTitle(view: string | null) {
   switch (view?.toLowerCase()) {

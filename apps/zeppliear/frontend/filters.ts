@@ -1,4 +1,4 @@
-import {Order, Status} from './issue';
+import {Order, Status, orderEnumSchema} from './issue';
 
 export function hasNonViewFilters(
   viewStatuses: Set<Status>,
@@ -27,12 +27,13 @@ export function getViewStatuses(view: string | null): Set<Status> {
 
 export function getIssueOrder(
   view: string | null,
-  orderBy: Order | null,
+  orderBy: string | null,
 ): Order {
   if (view === 'board') {
     return Order.Kanban;
   }
-  return orderBy ?? Order.Modified;
+  const parseResult = orderEnumSchema.safeParse(orderBy);
+  return parseResult.success ? parseResult.data : Order.Modified;
 }
 
 export function createEnumSetFilterHandler<T>(
