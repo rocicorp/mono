@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
@@ -42,12 +42,13 @@ export type ReadTask<T> = (
  */
 export class TransactionPool {
   readonly #lc: LogContext;
-  readonly #init: Task | undefined;
-  readonly #cleanup: Task | undefined;
-  readonly #tasks = new Queue<Task | Error | 'done'>();
+  readonly #init: QueuedTask | undefined;
+  readonly #cleanup: QueuedTask | undefined;
+  readonly #tasks = new Queue<TaskTracker | Error | 'done'>();
   readonly #workers: Promise<unknown>[] = [];
   readonly #maxWorkers: number;
   #numWorkers: number;
+  #numWorking = 0;
   #db: PostgresDB | undefined; // set when running. stored to allow adaptive pool sizing.
 
   #done = false;
@@ -76,8 +77,8 @@ export class TransactionPool {
     assert(maxWorkers >= initialWorkers);
 
     this.#lc = lc;
-    this.#init = init;
-    this.#cleanup = cleanup;
+    this.#init = init ? queuedWrite(init) : undefined;
+    this.#cleanup = cleanup ? queuedWrite(cleanup) : undefined;
     this.#numWorkers = initialWorkers;
     this.#maxWorkers = maxWorkers;
   }
@@ -138,24 +139,47 @@ export class TransactionPool {
 
         const pending: Promise<unknown>[] = [];
 
-        const executeTask = async (task: Task) => {
-          const result = await task(tx, lc);
-          if (Array.isArray(result)) {
-            // Execute the statements (i.e. send to the db) immediately and add them to
-            // `pending` for the final await.
-            //
-            // Optimization: Fail immediately on rejections to prevent more tasks from
-            // queueing up. This can save a lot of time if an initial task fails before
-            // many subsequent tasks (e.g. transaction replay detection).
-            pending.push(
-              ...result.map(stmt => stmt.execute().catch(e => this.fail(e))),
+        const executeTask = async (taskTracker: TaskTracker) => {
+          const {task, resolver} = taskTracker;
+
+          task !== this.#init && this.#numWorking++;
+          let result;
+          try {
+            result = await task(tx, lc);
+            if (result instanceof WriteStatements) {
+              // Execute the statements (i.e. send to the db) immediately and add them to
+              // `pending` for the final await.
+              //
+              // Optimization: Fail immediately on rejections to prevent more tasks from
+              // queueing up. This can save a lot of time if an initial task fails before
+              // many subsequent tasks (e.g. transaction replay detection).
+              pending.push(
+                ...result.stmts.map(stmt =>
+                  stmt.execute().catch(e => this.fail(e)),
+                ),
+              );
+              if (result.stmts.length) {
+                lc.debug?.(`executed ${result.stmts.length} statement(s)`);
+              }
+            }
+          } catch (e) {
+            if (resolver) {
+              resolver.reject(e); // Reject the ReadTask only.
+            } else {
+              throw e; // Fail the pool for (write) Tasks.
+            }
+          } finally {
+            task !== this.#init && this.#numWorking--;
+            resolver?.resolve(
+              // Note: This must be a ReadResult because of the TaskTracker type.
+              result instanceof ReadResult ? result.result : result?.stmts,
             );
-            lc.debug?.(`executed ${result.length} statement(s)`);
           }
         };
 
-        let task: Task | Error | 'done' =
-          this.#init ?? (await this.#tasks.dequeue());
+        let task: TaskTracker | Error | 'done' = this.#init
+          ? {task: this.#init}
+          : await this.#tasks.dequeue();
 
         while (task !== 'done') {
           if (this.#failure || task instanceof Error) {
@@ -168,7 +192,7 @@ export class TransactionPool {
           task = await this.#tasks.dequeue();
         }
         if (this.#cleanup) {
-          await executeTask(this.#cleanup);
+          await executeTask({task: this.#cleanup});
         }
 
         lc.debug?.('worker done');
@@ -193,45 +217,37 @@ export class TransactionPool {
   }
 
   process(task: Task): void {
+    this.#trackAndProcess({task: queuedWrite(task)});
+  }
+
+  #trackAndProcess(taskTracker: TaskTracker): void {
     assert(!this.#done, 'already set done');
     if (this.#failure) {
+      taskTracker.resolver?.reject(this.#failure);
       return;
     }
 
-    void this.#tasks.enqueue(task);
+    void this.#tasks.enqueue(taskTracker);
 
     // Check if the pool size can and should be increased.
     if (this.#numWorkers < this.#maxWorkers) {
       const outstanding = this.#tasks.size();
 
-      if (
-        // Not running yet; the number of initial workers should be increased.
-        (!this.#db && outstanding > this.#numWorkers) ||
-        // Running but task was not picked up. Add a worker.
-        (this.#db && outstanding > 0)
-      ) {
+      if (outstanding > this.#numWorkers - this.#numWorking) {
         this.#db && this.#addWorker(this.#db);
         this.#numWorkers++;
-        this.#lc.info?.(`Increased pool size to: ${this.#numWorkers}`);
+        this.#lc.debug?.(`Increased pool size to: ${this.#numWorkers}`);
       }
     }
   }
 
   processReadTask<T>(readTask: ReadTask<T>): Promise<T> {
-    const {promise, resolve, reject} = resolver<T>();
-    if (this.#failure) {
-      reject(this.#failure);
-    } else {
-      this.process(async (tx, lc) => {
-        try {
-          resolve(await readTask(tx, lc));
-        } catch (e) {
-          reject(e);
-        }
-        return [];
-      });
-    }
-    return promise;
+    const r = resolver<T>();
+    this.#trackAndProcess({
+      task: queuedRead(readTask) as QueuedTask<ReadResult<unknown>>,
+      resolver: r as Resolver<unknown>,
+    });
+    return r.promise;
   }
 
   /**
@@ -414,3 +430,41 @@ function ensureError(err: unknown): Error {
   error.cause = err;
   return error;
 }
+
+// Internal classes for handling read and write tasks in the same queue.
+class WriteStatements {
+  readonly stmts: readonly Statement[];
+  constructor(stmts: readonly Statement[]) {
+    this.stmts = stmts;
+  }
+}
+
+class ReadResult<T> {
+  readonly result: T;
+  constructor(result: T) {
+    this.result = result;
+  }
+}
+
+function queuedWrite(task: Task): QueuedTask {
+  return async (tx, lc) => new WriteStatements(await task(tx, lc));
+}
+
+function queuedRead<T>(task: ReadTask<T>): QueuedTask<T> {
+  return async (tx, lc) => new ReadResult<T>(await task(tx, lc));
+}
+
+type QueuedTask<T = unknown> = (
+  tx: PostgresTransaction,
+  lc: LogContext,
+) => MaybePromise<WriteStatements | ReadResult<T>>;
+
+type TaskTracker<T = unknown> =
+  | {
+      task: QueuedTask;
+      resolver?: undefined;
+    }
+  | {
+      task: QueuedTask<ReadResult<T>>;
+      resolver: Resolver<T>;
+    };
