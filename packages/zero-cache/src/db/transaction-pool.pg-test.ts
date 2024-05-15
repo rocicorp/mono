@@ -1,10 +1,10 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../types/pg.js';
 import {
   TransactionPool,
@@ -193,6 +193,30 @@ describe('db/transaction-pool', () => {
       ['public.foo']: [],
       ['public.workers']: [],
       ['public.cleaned']: [],
+    });
+  });
+
+  test('pool resizing for sequential read readTasks', async () => {
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    const pool = new TransactionPool(lc, initTask, cleanupTask, 1, 3);
+    const done = pool.run(db);
+
+    const readTask = () => async (tx: postgres.TransactionSql) =>
+      (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
+    expect(await pool.processReadTask(readTask())).toEqual([1, 2, 3]);
+    expect(await pool.processReadTask(readTask())).toEqual([1, 2, 3]);
+    expect(await pool.processReadTask(readTask())).toEqual([1, 2, 3]);
+
+    pool.setDone();
+    await done;
+    await expectTables(db, {
+      ['public.workers']: [{id: 1}],
+      ['public.cleaned']: [{id: 1}],
     });
   });
 
