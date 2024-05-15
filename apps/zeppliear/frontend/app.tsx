@@ -318,10 +318,7 @@ function filterQuery(
   view: string | null,
   filters: FiltersState,
 ) {
-  console.log('view', view);
   const viewStatuses = getViewStatuses(view);
-
-  console.log('viewStatuses', viewStatuses);
   const viewStatusesQuery = viewStatuses
     ? q.where('issue.status', 'IN', [...viewStatuses])
     : q;

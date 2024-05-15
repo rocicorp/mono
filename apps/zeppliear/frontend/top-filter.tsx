@@ -2,18 +2,11 @@ import {memo} from 'react';
 import MenuIcon from './assets/icons/menu.svg';
 
 import {noop} from 'lodash';
-//import {queryTypes, useQueryState} from 'next-usequerystate';
 import FilterMenu from './filter-menu';
 import {
   Order,
   Priority,
-  // PriorityString,
   Status,
-  // StatusString,
-  // priorityFromString,
-  // priorityToPriorityString,
-  // statusFromString,
-  // statusToStatusString,
 } from './issue';
 import SortOrderMenu from './sort-order-menu';
 import {
