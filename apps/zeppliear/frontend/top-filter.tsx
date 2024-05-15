@@ -2,20 +2,26 @@ import {memo} from 'react';
 import MenuIcon from './assets/icons/menu.svg';
 
 import {noop} from 'lodash';
-import {queryTypes, useQueryState} from 'next-usequerystate';
+//import {queryTypes, useQueryState} from 'next-usequerystate';
 import FilterMenu from './filter-menu';
 import {
   Order,
   Priority,
-  PriorityString,
+  // PriorityString,
   Status,
-  StatusString,
-  priorityFromString,
-  priorityToPriorityString,
-  statusFromString,
-  statusToStatusString,
+  // StatusString,
+  // priorityFromString,
+  // priorityToPriorityString,
+  // statusFromString,
+  // statusToStatusString,
 } from './issue';
 import SortOrderMenu from './sort-order-menu';
+import {
+  useLabelFilterState,
+  useOrderByState,
+  usePriorityFilterState,
+  useStatusFilterState,
+} from './hooks/query-state-hooks';
 
 interface Props {
   title: string;
@@ -84,39 +90,10 @@ function TopFilter({
   issuesCount,
   showSortOrderMenu,
 }: Props) {
-  const [orderBy, setOrderByParam] = useQueryState(
-    'orderBy',
-    queryTypes
-      .stringEnum<Order>(Object.values(Order))
-      .withDefault(Order.Modified),
-  );
-  const [statusStringFilters, setStatusStringFilterByParam] = useQueryState(
-    'statusFilter',
-    queryTypes.array<StatusString>(
-      queryTypes.stringEnum<StatusString>(Object.values(StatusString)),
-    ),
-  );
-  const [priorityStringFilters, setPriorityStringFilterByParam] = useQueryState(
-    'priorityFilter',
-    queryTypes.array<PriorityString>(
-      queryTypes.stringEnum<PriorityString>(Object.values(PriorityString)),
-    ),
-  );
-  const [labelFilters, setLabelFilterByParam] = useQueryState(
-    'labelFilter',
-    queryTypes.array(queryTypes.string),
-  );
-
-  const statusFilters = statusStringFilters?.map(statusFromString) ?? null;
-  const setStatusFilterByParam = (value: Status[] | null) =>
-    setStatusStringFilterByParam(value && value.map(statusToStatusString));
-
-  const priorityFilters =
-    priorityStringFilters?.map(priorityFromString) ?? null;
-  const setPriorityFilterByParam = (value: Priority[] | null) =>
-    setPriorityStringFilterByParam(
-      value && value.map(priorityToPriorityString),
-    );
+  const [orderBy, setOrderByParam] = useOrderByState();
+  const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
+  const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();
+  const [labelFilters, setLabelFilterByParam] = useLabelFilterState();
 
   return (
     <>
@@ -138,35 +115,18 @@ function TopFilter({
             <span>{issuesCount}</span>
           )}
           <FilterMenu
-            onSelectPriority={async priority => {
-              const prioritySet = new Set(priorityFilters);
-              if (prioritySet.has(priority)) {
-                prioritySet.delete(priority);
-              } else {
-                prioritySet.add(priority);
-              }
-              await setPriorityFilterByParam(
-                prioritySet.size === 0 ? null : [...prioritySet],
-              );
-            }}
-            onSelectStatus={async status => {
-              const statusSet = new Set(statusFilters);
-              if (statusSet.has(status)) {
-                statusSet.delete(status);
-              } else {
-                statusSet.add(status);
-              }
-              await setStatusFilterByParam([...statusSet]);
-            }}
-            onSelectLabel={async label => {
-              const labelSet = new Set(labelFilters);
-              if (labelSet.has(label)) {
-                labelSet.delete(label);
-              } else {
-                labelSet.add(label);
-              }
-              await setLabelFilterByParam([...labelSet]);
-            }}
+            onSelectPriority={createEnumSetFilterHandler(
+              priorityFilters,
+              setPriorityFilterByParam,
+            )}
+            onSelectStatus={createEnumSetFilterHandler(
+              statusFilters,
+              setStatusFilterByParam,
+            )}
+            onSelectLabel={createEnumSetFilterHandler(
+              labelFilters,
+              setLabelFilterByParam,
+            )}
           />
         </div>
 
@@ -175,29 +135,29 @@ function TopFilter({
           {showSortOrderMenu && (
             <SortOrderMenu
               onSelect={orderBy => setOrderByParam(orderBy)}
-              order={orderBy}
+              order={orderBy ?? Order.Created}
             />
           )}
         </div>
       </div>
-      {(statusFilters && statusFilters.length) ||
-      (priorityFilters && priorityFilters.length) ||
-      (labelFilters && labelFilters.length) ? (
+      {(statusFilters && statusFilters.size) ||
+      (priorityFilters && priorityFilters.size) ||
+      (labelFilters && labelFilters.size) ? (
         <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
           <FilterStatus
-            filter={statusFilters}
+            filter={statusFilters ? Array.from(statusFilters) : null}
             displayStrings={statusDisplayStrings}
             onDelete={() => setStatusFilterByParam(null)}
             label="Status"
           />
           <FilterStatus
-            filter={priorityFilters}
+            filter={priorityFilters ? Array.from(priorityFilters) : null}
             displayStrings={priorityDisplayStrings}
-            onDelete={() => setPriorityStringFilterByParam(null)}
+            onDelete={() => setPriorityFilterByParam(null)}
             label="Priority"
           />
           <FilterStatus
-            filter={labelFilters}
+            filter={labelFilters ? Array.from(labelFilters) : null}
             onDelete={() => setLabelFilterByParam(null)}
             label="Label"
             operator="is any of"
@@ -206,6 +166,21 @@ function TopFilter({
       ) : null}
     </>
   );
+}
+
+function createEnumSetFilterHandler<T>(
+  filters: Set<T> | null,
+  setFilters: (f: Set<T> | null) => void,
+) {
+  return (e: T) => {
+    const set = new Set(filters);
+    if (set.has(e)) {
+      set.delete(e);
+    } else {
+      set.add(e);
+    }
+    setFilters(set.size === 0 ? null : set);
+  };
 }
 
 export default memo(TopFilter);
