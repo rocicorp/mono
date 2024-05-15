@@ -21,7 +21,7 @@ describe('zql/normalize-query-hash', () => {
           orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS id FROM issues ORDER BY id asc',
+      query: 'SELECT issues.id AS id FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'statement with schema',
@@ -31,7 +31,7 @@ describe('zql/normalize-query-hash', () => {
           table: 'clients',
           select: [
             [['clients', 'clientID'], 'clientID'],
-            [['clients', 'lastMutationID'], 'lastMutationID'],
+            [['zero.clients', 'lastMutationID'], 'lastMutationID'],
           ],
           orderBy: [[['clients', 'clientID']], 'asc'],
         },
@@ -39,7 +39,7 @@ describe('zql/normalize-query-hash', () => {
       query:
         'SELECT clients."clientID" AS "clientID", ' +
         'zero.clients."lastMutationID" AS "lastMutationID" ' +
-        'FROM zero.clients ORDER BY "clientID" asc',
+        'FROM zero.clients ORDER BY clients."clientID" asc',
     },
     {
       name: 'table alias',
@@ -51,7 +51,8 @@ describe('zql/normalize-query-hash', () => {
           orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS id FROM issues AS "Ishooz" ORDER BY id asc',
+      query:
+        'SELECT issues.id AS id FROM issues AS "Ishooz" ORDER BY issues.id asc',
     },
     {
       name: 'column selection',
@@ -73,7 +74,8 @@ describe('zql/normalize-query-hash', () => {
           orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS id, name AS name FROM issues ORDER BY id asc',
+      query:
+        'SELECT issues.id AS id, issues.name AS name FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'aggregation, aliases ignored',
@@ -84,7 +86,7 @@ describe('zql/normalize-query-hash', () => {
           orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT count(*) AS "count(*)" FROM issues ORDER BY id asc',
+      query: 'SELECT count(*) AS "count(*)" FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'multiple aggregates',
@@ -107,8 +109,8 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT count(*) AS "count(*)", max(priority) AS "max(priority)" ' +
-        'FROM issues ORDER BY id asc',
+        'SELECT count(*) AS "count(*)", max(issues.priority) AS "max(issues.priority)" ' +
+        'FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'group by',
@@ -139,7 +141,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues GROUP BY id, name ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues GROUP BY issues.id, issues.name ORDER BY issues.id asc',
     },
     {
       name: 'group by, order by',
@@ -164,7 +166,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues GROUP BY id, name ORDER BY id desc, name desc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues GROUP BY issues.id, issues.name ORDER BY issues.id desc, issues.name desc',
     },
     {
       name: 'group by, order by, limit',
@@ -191,8 +193,8 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY issues.id, name ORDER BY "dueDate" desc, priority desc LIMIT 10',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'GROUP BY issues.id, issues.name ORDER BY issues."dueDate" desc, issues.priority desc LIMIT 10',
     },
     {
       name: 'group by, order by (ordering preserved), limit',
@@ -219,8 +221,8 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY id, name ORDER BY priority desc, "dueDate" desc LIMIT 10',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'GROUP BY issues.id, issues.name ORDER BY issues.priority desc, issues."dueDate" desc LIMIT 10',
     },
     {
       name: 'quoted identifiers',
@@ -229,13 +231,13 @@ describe('zql/normalize-query-hash', () => {
           table: 'camelCaseTable',
           select: [
             [['camelCaseTable', 'userID'], 'u'],
-            [['issues', 'name'], 'n'],
+            [['camelCaseTable', 'name'], 'n'],
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['camelCaseTable', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT name AS n, "userID" AS u FROM "camelCaseTable" ORDER BY id asc',
+        'SELECT "camelCaseTable".name AS n, "camelCaseTable"."userID" AS u FROM "camelCaseTable" ORDER BY "camelCaseTable".id asc',
     },
     {
       name: 'quoted selector and alias',
@@ -247,7 +249,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT "camelCaseTable"."userID" AS id FROM "camelCaseTable" ORDER BY "userID" asc',
+        'SELECT "camelCaseTable"."userID" AS id FROM "camelCaseTable" ORDER BY "camelCaseTable"."userID" asc',
     },
     {
       name: 'join table',
@@ -270,7 +272,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS id FROM issues INNER JOIN users AS owner' +
+        'SELECT issues.id AS id FROM issues INNER JOIN users AS owner' +
         ' ON issues."ownerID" = users.id ORDER BY owner.id asc',
     },
     {
@@ -284,8 +286,8 @@ describe('zql/normalize-query-hash', () => {
               type: 'inner',
               other: {
                 select: [
-                  [['issues', 'id'], 'i'],
-                  [['issues', 'name'], 'n'],
+                  [['users', 'id'], 'i'],
+                  [['users', 'name'], 'n'],
                 ],
                 table: 'users',
               },
@@ -306,8 +308,8 @@ describe('zql/normalize-query-hash', () => {
               type: 'inner',
               other: {
                 select: [
-                  [['issues', 'name'], 'n'],
-                  [['issues', 'id'], 'i'],
+                  [['users', 'name'], 'n'],
+                  [['users', 'id'], 'i'],
                 ],
                 table: 'users',
               },
@@ -322,8 +324,8 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS id FROM issues INNER JOIN (SELECT id AS i, name AS n FROM users)' +
-        ' AS owner ON issues."ownerID" = users.id ORDER BY id asc',
+        'SELECT issues.id AS id FROM issues INNER JOIN (SELECT users.id AS i, users.name AS n FROM users)' +
+        ' AS owner ON issues."ownerID" = users.id ORDER BY issues.id asc',
     },
     {
       name: 'simple condition',
@@ -344,7 +346,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE id = $1 ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
       values: [1234],
     },
     {
@@ -366,7 +368,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE issues.id = $1 ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
       values: [1234],
     },
     {
@@ -388,7 +390,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE issues.id IN ($1, $2, $3) ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id IN ($1, $2, $3) ORDER BY issues.id asc',
       values: ['1234', '2345', '4567'],
     },
     {
@@ -410,7 +412,7 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE id = $1 ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
       values: ['1234'],
     },
     {
@@ -494,9 +496,9 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (id = $1 AND name = $2 AND priority < $3 AND priority > $4) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.id = $1 AND issues.name = $2 AND issues.priority < $3 AND issues.priority > $4) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 5, 2],
     },
     {
@@ -529,7 +531,8 @@ describe('zql/normalize-query-hash', () => {
           orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS i, priority AS p FROM issues ORDER BY id asc',
+      query:
+        'SELECT issues.id AS i, issues.priority AS p FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'multiple conditions with same fields and operator',
@@ -588,9 +591,9 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (priority < $1 AND priority < $2) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.priority < $1 AND issues.priority < $2) ' +
+        'ORDER BY issues.id asc',
       values: [3, 5],
     },
     {
@@ -674,9 +677,9 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (id = $1 AND (name = $2 OR priority > $3)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.id = $1 AND (issues.name = $2 OR issues.priority > $3)) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 2],
     },
     {
@@ -734,9 +737,9 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE ((name = $1 OR priority > $2) AND (name = $3 OR priority > $4)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE ((issues.name = $1 OR issues.priority > $2) AND (issues.name = $3 OR issues.priority > $4)) ' +
+        'ORDER BY issues.id asc',
       values: ['foobar', 2, 'foobar', 2],
     },
     {
@@ -844,9 +847,9 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE ((id = $1 OR name = $2) AND (id = $3 OR priority > $4)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE ((issues.id = $1 OR issues.name = $2) AND (issues.id = $3 OR issues.priority > $4)) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 1234, 2],
     },
     {
@@ -966,9 +969,9 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE ((id = $1 OR name = $2) AND (id = $3 OR name = $4 OR priority > $5)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE ((issues.id = $1 OR issues.name = $2) AND (issues.id = $3 OR issues.name = $4 OR issues.priority > $5)) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 1234, 'foobar', 2],
     },
     {
@@ -1228,10 +1231,10 @@ describe('zql/normalize-query-hash', () => {
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (bar > $1 AND foo = $2 AND id = $3 AND name = $4 AND priority > $5 AND ' +
-        '(a = $6 OR dah < $7 OR doo > $8) AND (ac > $9 OR (xyz != $10 AND zzz != $11))) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.bar > $1 AND issues.foo = $2 AND issues.id = $3 AND issues.name = $4 AND issues.priority > $5 AND ' +
+        '(issues.a = $6 OR issues.dah < $7 OR issues.doo > $8) AND (issues.ac > $9 OR (issues.xyz != $10 AND issues.zzz != $11))) ' +
+        'ORDER BY issues.id asc',
       values: [23, 'bar', 1234, 'foobar', 2, 'bc', '56', '23', 'dc', 488, 48],
     },
   ];

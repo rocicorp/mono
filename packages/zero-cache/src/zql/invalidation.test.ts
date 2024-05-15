@@ -197,7 +197,7 @@ describe('zql/invalidation matchers', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      const matches = computeMatchers(c.cond, col => col, MAX_DEPTH).map(m =>
+      const matches = computeMatchers(c.cond, col => col[1], MAX_DEPTH).map(m =>
         m.getMatch(),
       );
       expect(new Set(matches)).toEqual(new Set(c.matches));
@@ -334,9 +334,9 @@ describe('zql/invalidation hashes filters and hashes', () => {
         select: [[['foo', 'id'], 'id']],
         orderBy: [[['foo', 'id']], 'asc'],
         where: and(
-          cond(['foo', 'foo.foo'], '=', 'bar'),
-          cond(['foo', 'join.alias.baz'], '=', 3), // Ignored
-          cond(['foo', 'public.foo.bar'], '=', 2),
+          cond(['foo', 'foo'], '=', 'bar'),
+          cond(['join.alias', 'baz'], '=', 3), // Ignored
+          cond(['public.foo', 'bar'], '=', 2),
           cond(['foo', 'a'], '<', 3), // Ignored
         ),
       },
