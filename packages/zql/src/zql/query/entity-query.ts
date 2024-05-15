@@ -170,22 +170,34 @@ type ExtractFieldValue<
   ? NotUndefined<F[T]>[K]
   : ExtractNestedTypeByName<F, S>;
 
+type MergeRecords<T> = T extends Record<string, unknown>
+  ? {
+      [K in keyof T]: MergeRecords<T[K]>;
+    }
+  : T;
+
+type CombineFromSets<A, B> = MergeRecords<A & B>;
+
 type CombineSelections<
   From extends FromSet,
   Selections extends (Selector<From> | Aggregator<From>)[],
 > = Selections extends [infer First, ...infer Rest]
   ? First extends Selector<From>
-    ? CombineSelections<
-        From,
-        Rest extends (Selector<From> | Aggregator<From>)[] ? Rest : []
-      > &
+    ? CombineFromSets<
+        CombineSelections<
+          From,
+          Rest extends (Selector<From> | Aggregator<From>)[] ? Rest : []
+        >,
         ExtractFieldPiece<From, First>
+      >
     : First extends Aggregator<From>
-    ? CombineSelections<
-        From,
-        Rest extends (Selector<From> | Aggregator<From>)[] ? Rest : []
-      > &
+    ? CombineFromSets<
+        CombineSelections<
+          From,
+          Rest extends (Selector<From> | Aggregator<From>)[] ? Rest : []
+        >,
         ExtractAggregatePiece<From, First>
+      >
     : never
   : unknown;
 
@@ -229,6 +241,7 @@ type SimpleCondition<
 
 export class EntityQuery<From extends FromSet, Return = []> {
   readonly #ast: AST;
+  // TODO(arv): Remove #prefix. It is not used and dealt with in the context.
   readonly #prefix: string;
   readonly #name: string;
   readonly #context: Context;
@@ -292,9 +305,12 @@ export class EntityQuery<From extends FromSet, Return = []> {
     thisField: SimpleSelector<From>,
     otherField: SimpleSelector<OtherFromSet>,
   ): EntityQuery<
-    From & {
-      [K in Alias]: OtherFromSet[keyof OtherFromSet];
-    },
+    CombineFromSets<
+      From,
+      {
+        [K in Alias]: OtherFromSet[keyof OtherFromSet];
+      }
+    >,
     Return
   > {
     return new EntityQuery(this.#context, this.#name, this.#prefix, {
@@ -320,9 +336,12 @@ export class EntityQuery<From extends FromSet, Return = []> {
     thisField: SimpleSelector<From>,
     otherField: SimpleSelector<OtherFromSet>,
   ): EntityQuery<
-    From & {
-      [K in Alias]?: OtherFromSet[keyof OtherFromSet] | undefined;
-    },
+    CombineFromSets<
+      From,
+      {
+        [K in Alias]?: OtherFromSet[keyof OtherFromSet] | undefined;
+      }
+    >,
     Return
   > {
     return new EntityQuery(this.#context, this.#name, this.#prefix, {
