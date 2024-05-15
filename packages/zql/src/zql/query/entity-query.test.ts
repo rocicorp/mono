@@ -1,4 +1,4 @@
-import {describe, expect, expectTypeOf, test} from 'vitest';
+import {describe, expect, expectTypeOf, suite, test} from 'vitest';
 import {z} from 'zod';
 import type {AST, Condition, SimpleOperator} from '../ast/ast.js';
 import {makeTestContext} from '../context/test-context.js';
@@ -1394,4 +1394,103 @@ describe('all references to columns are always qualified', () => {
       expect(ast(q)).toEqual(expected);
     },
   );
+});
+
+suite('Return type for EntityQuery', () => {
+  type EntityQueryReturn<Q> = Q extends EntityQuery<never, infer R> ? R : never;
+
+  type Issue = {
+    id: string;
+    title: string;
+    ownerId: string;
+    creatorId: string;
+  };
+
+  type User = {
+    id: string;
+    name: string;
+  };
+
+  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue', 'e/');
+  const userQuery = new EntityQuery<{user: User}>(context, 'user', 'e/');
+
+  test('select', () => {
+    const s = issueQuery.select('issue.id', 'issue.title');
+
+    expectTypeOf<EntityQueryReturn<typeof s>>().toEqualTypeOf<
+      {title: string; id: string}[]
+    >();
+    expectTypeOf<EntityQueryReturn<typeof s>>().not.toEqualTypeOf<
+      ({title: string} & {id: string})[]
+    >();
+  });
+
+  test('join', () => {
+    const s = issueQuery
+      .join(userQuery, 'x', 'issue.creatorId', 'user.id')
+      .select('issue.id', 'issue.title', 'x.id', 'x.name');
+
+    type T = EntityQueryReturn<typeof s>;
+
+    expectTypeOf<T>().toEqualTypeOf<
+      {x: {id: string; name: string}; issue: {title: string; id: string}}[]
+    >();
+    expectTypeOf<T>().not.toEqualTypeOf<
+      ({
+        x: {
+          name: string;
+        };
+      } & {
+        x: {
+          id: string;
+        };
+      } & {
+        issue: {
+          title: string;
+        };
+      } & {
+        issue: {
+          id: string;
+        };
+      })[]
+    >();
+  });
+
+  test('leftJoin', () => {
+    const s = issueQuery
+      .leftJoin(userQuery, 'x', 'issue.creatorId', 'user.id')
+      .select('issue.id', 'issue.title', 'x.id', 'x.name');
+
+    type T = EntityQueryReturn<typeof s>;
+
+    expectTypeOf<T>().toEqualTypeOf<
+      {
+        x: {id: string; name: string} | undefined;
+        issue: {title: string; id: string};
+      }[]
+    >();
+    expectTypeOf<T>().not.toEqualTypeOf<
+      ({
+        x:
+          | {
+              name: string;
+            }
+          | undefined;
+      } & {
+        x:
+          | {
+              id: string;
+            }
+          | undefined;
+      } & {
+        issue: {
+          title: string;
+        };
+      } & {
+        issue: {
+          id: string;
+        };
+      })[]
+    >();
+  });
 });
