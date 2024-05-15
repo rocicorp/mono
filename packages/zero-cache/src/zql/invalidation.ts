@@ -1,6 +1,7 @@
 import type {
   Condition,
   Primitive,
+  Selector,
   SimpleCondition,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
@@ -26,27 +27,36 @@ export function computeInvalidationInfo(
 ): InvalidationInfo {
   const {schema = 'public', table, select, aggregate, where} = normalized.ast();
 
-  const sanitizeSelector = (selector: string) => {
-    const parts = selector.split('.');
-    if (parts.length >= 3 && parts.at(-3) !== schema) {
+  const sanitizeSelector = (selector: Selector | undefined) => {
+    if (selector === undefined) return undefined;
+
+    const prefix = selector[0];
+    const prefixParts = prefix.split('.');
+    if (prefixParts.length >= 2 && prefixParts.at(-2) !== schema) {
+      return undefined; // not the correct schema
+    }
+    if (selector[1] !== table) {
       return undefined; // not a column of this table. filtered in next step.
     }
-    if (parts.length >= 2 && parts.at(-2) !== table) {
-      return undefined; // not a column of this table. filtered in next step.
-    }
-    return parts.at(-1);
+    return selector;
   };
 
-  const selected = new Set<string>([
-    ...(select ?? []).map(([col]) => col),
-    ...(aggregate ?? []).map(agg => agg.field ?? '*'),
+  const selected = new Map<string, Selector | undefined>([
+    ...(select ?? []).map(([col]) => [col.join('.'), col] as const),
+    ...(aggregate ?? []).map(
+      agg =>
+        [
+          agg.field !== undefined ? agg.field.join('.') : '*',
+          agg.field,
+        ] as const,
+    ),
   ]);
-  const selectedColumns: readonly string[] | undefined = selected.has('*')
+  const selectedColumns: readonly Selector[] | undefined = selected.has('*')
     ? undefined
     : [...selected]
-        .map(col => sanitizeSelector(col) ?? '')
-        .filter(col => col.length)
-        .sort(compareUTF8);
+        .map(([_key, selector]) => sanitizeSelector(selector))
+        .filter((col): col is Selector => col !== undefined)
+        .sort((l, r) => compareUTF8(l[0], r[0]) || compareUTF8(l[1], r[1]));
 
   const hashes = new Set<string>();
   const filters = new Map<string, NormalizedInvalidationFilterSpec>();
@@ -217,7 +227,7 @@ export function computeInvalidationInfo(
  */
 export function computeMatchers(
   cond: Condition | undefined,
-  sanitize: (selector: string) => string | undefined,
+  sanitize: (selector: Selector) => Selector | undefined,
   maxDepth = 10,
   depth = 0,
 ): Matcher[] {
@@ -251,7 +261,7 @@ class Matcher {
 
   constructor(cond?: SimpleCondition) {
     if (cond?.op === '=' && !Array.isArray(cond.value.value)) {
-      this.#match.set(cond.field, cond.value.value);
+      this.#match.set(cond.field.join('.'), cond.value.value);
     }
     // For all other simple operators, or the absence of a condition,
     // the empty set matches any change to the table.
@@ -304,7 +314,7 @@ class Matcher {
     base: {
       schema: string;
       table: string;
-      selectedColumns: readonly string[] | undefined;
+      selectedColumns: readonly Selector[] | undefined;
     },
     hashes: Set<string>,
     filters: Map<string, NormalizedInvalidationFilterSpec>,
@@ -312,6 +322,7 @@ class Matcher {
     const filteredColumns = [...this.#match.keys()].sort(compareUTF8);
     const filterSpec: InvalidationFilterSpec = {
       ...base,
+      selectedColumns: base.selectedColumns?.map(col => col[1]),
       filteredColumns: Object.fromEntries(
         filteredColumns.map(col => [col, '=']),
       ),
@@ -321,6 +332,7 @@ class Matcher {
     //       @see InvalidationProcessor.#computeInvalidationHashes()
     const rowTag: RowTag = {
       ...base,
+      selectedColumns: base.selectedColumns?.map(col => col[1]),
       filteredColumns: Object.fromEntries(
         filteredColumns.map(col => [
           col,

@@ -1,7 +1,8 @@
+import type {Condition} from '../ast/ast.js';
 import type {FromSet, WhereCondition} from './entity-query.js';
 
-export function conditionToString<From extends FromSet>(
-  c: WhereCondition<From>,
+export function conditionToString<F extends FromSet>(
+  c: Condition | WhereCondition<F>,
   paren = false,
 ): string {
   if (c.op === 'AND' || c.op === 'OR') {
@@ -18,7 +19,11 @@ export function conditionToString<From extends FromSet>(
     }
     return s;
   }
-  return `${(c as {field: string}).field} ${c.op} ${
-    (c as {value: {value: unknown}}).value.value
-  }`;
+  return `${
+    c.type === 'simple'
+      ? typeof c.field === 'string'
+        ? c.field
+        : c.field.join('.')
+      : ''
+  } ${c.op} ${(c as {value: {value: unknown}}).value.value}`;
 }

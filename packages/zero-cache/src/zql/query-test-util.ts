@@ -2,6 +2,7 @@ import type {
   Condition,
   Conjunction,
   Primitive,
+  Selector,
   SimpleCondition,
   SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
@@ -24,7 +25,7 @@ export function or(...conditions: Condition[]): Conjunction {
 }
 
 export function cond(
-  field: string,
+  field: Selector,
   op: SimpleOperator,
   value: Primitive,
 ): SimpleCondition {
@@ -33,7 +34,7 @@ export function cond(
     field,
     op,
     value: {
-      type: 'literal',
+      type: 'value',
       value,
     },
   };
