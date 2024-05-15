@@ -2,6 +2,7 @@ import type {DurableObjectLocationHint} from '@cloudflare/workers-types';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {DurableStorage} from '../storage/durable-storage.js';
+import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {
   InvalidationWatcher,
@@ -138,5 +139,23 @@ export class ServiceRunner
         registry.delete(id);
       });
     return service;
+  }
+
+  async status(): Promise<JSONObject> {
+    // One ping to warm up the connections
+    await Promise.all([this.#replica`SELECT 1`, this.#upstream`SELECT 1`]);
+
+    const start = Date.now();
+    const replicaPingMs = this.#replica`SELECT 1`
+      .simple()
+      .then(() => Date.now() - start);
+    const upstreamPingMs = this.#upstream`SELECT 1`
+      .simple()
+      .then(() => Date.now() - start);
+    return {
+      status: 'OK',
+      replicaPingMs: await replicaPingMs,
+      upstreamPingMs: await upstreamPingMs,
+    };
   }
 }
