@@ -146,12 +146,12 @@ export class ServiceRunner
     await Promise.all([this.#replica`SELECT 1`, this.#upstream`SELECT 1`]);
 
     const start = Date.now();
-    const replicaPingMs = this.#replica`SELECT 1`.then(
-      () => Date.now() - start,
-    );
-    const upstreamPingMs = this.#upstream`SELECT 1`.then(
-      () => Date.now() - start,
-    );
+    const replicaPingMs = this.#replica`SELECT 1`
+      .simple()
+      .then(() => Date.now() - start);
+    const upstreamPingMs = this.#upstream`SELECT 1`
+      .simple()
+      .then(() => Date.now() - start);
     return {
       status: 'OK',
       replicaPingMs: await replicaPingMs,
