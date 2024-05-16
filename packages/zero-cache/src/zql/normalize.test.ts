@@ -340,14 +340,14 @@ describe('zql/normalize-query-hash', () => {
             type: 'simple',
             field: ['issues', 'id'],
             op: '=',
-            value: {type: 'value', value: 1234},
+            value: {type: 'value', value: 12345},
           },
           orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
         'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
-      values: [1234],
+      values: [12345],
     },
     {
       name: 'condition with selector',
