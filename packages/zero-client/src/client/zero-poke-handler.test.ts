@@ -9,6 +9,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 
 let rafStub: MockInstance<[FrameRequestCallback], number>;
@@ -971,10 +972,10 @@ test('mergePokes with all optionals defined', () => {
                 ast: {
                   table: 'labels',
                   select: [
-                    [['issues', 'id'], 'id'],
-                    [['issues', 'name'], 'name'],
+                    [['labels', 'id'], 'id'],
+                    [['labels', 'name'], 'name'],
                   ],
-                  orderBy: [[['issues', 'id']], 'asc'],
+                  orderBy: [[['labels', 'id']], 'asc'],
                 },
               },
             ],
@@ -986,10 +987,10 @@ test('mergePokes with all optionals defined', () => {
               ast: {
                 table: 'labels',
                 select: [
-                  [['issues', 'id'], 'id'],
-                  [['issues', 'name'], 'name'],
+                  [['labels', 'id'], 'id'],
+                  [['labels', 'name'], 'name'],
                 ],
-                orderBy: [[['issues', 'id']], 'asc'],
+                orderBy: [[['labels', 'id']], 'asc'],
               },
             },
           ],
@@ -1062,10 +1063,10 @@ test('mergePokes with all optionals defined', () => {
           value: {
             table: 'issues',
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
             ],
-            orderBy: [['id'], 'asc'],
+            orderBy: [[['issues', 'id']], 'asc'],
           },
         },
         {
@@ -1074,10 +1075,10 @@ test('mergePokes with all optionals defined', () => {
           value: {
             table: 'issues',
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
             ],
-            orderBy: [['id'], 'asc'],
+            orderBy: [[['issues', 'id']], 'asc'],
           },
         },
         {
@@ -1102,10 +1103,10 @@ test('mergePokes with all optionals defined', () => {
           value: {
             table: 'labels',
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['labels', 'id'], 'id'],
+              [['labels', 'name'], 'name'],
             ],
-            orderBy: [['id'], 'asc'],
+            orderBy: [[['labels', 'id']], 'asc'],
           },
         },
         {
@@ -1114,10 +1115,10 @@ test('mergePokes with all optionals defined', () => {
           value: {
             table: 'labels',
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['labels', 'id'], 'id'],
+              [['labels', 'name'], 'name'],
             ],
-            orderBy: [['id'], 'asc'],
+            orderBy: [[['labels', 'id']], 'asc'],
           },
         },
         {
@@ -1258,11 +1259,11 @@ test('mergePokes sparse', () => {
           value: {
             table: 'issues',
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
             ],
-            orderBy: [['id'], 'asc'],
-          },
+            orderBy: [[['issues', 'id']], 'asc'],
+          } satisfies AST,
         },
         {
           op: 'put',
@@ -1286,10 +1287,10 @@ test('mergePokes sparse', () => {
           value: {
             table: 'labels',
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
             ],
-            orderBy: [['id'], 'asc'],
+            orderBy: [[['issues', 'id']], 'asc'],
           },
         },
         {
