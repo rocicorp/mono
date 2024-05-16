@@ -2,7 +2,6 @@ import type {UndoManager} from '@rocicorp/undo';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {pickBy} from 'lodash';
-import {queryTypes, useQueryState} from 'next-usequerystate';
 import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
@@ -11,11 +10,6 @@ import {
   Issue,
   IssueUpdate,
   Order,
-  Priority,
-  Status,
-  orderEnumSchema,
-  priorityEnumSchema,
-  statusStringSchema,
   IssueLabel,
   Label,
   putIssueComment,
@@ -32,14 +26,14 @@ import LeftMenu from './left-menu';
 import TopFilter from './top-filter';
 import {useQuery} from './hooks/use-zql';
 import {useZero} from './hooks/use-zero';
-
-function getIssueOrder(view: string | null, orderBy: string | null): Order {
-  if (view === 'board') {
-    return Order.Kanban;
-  }
-  const parseResult = orderEnumSchema.safeParse(orderBy);
-  return parseResult.success ? parseResult.data : Order.Modified;
-}
+import {
+  FiltersState,
+  useFilters,
+  useIssueDetailState,
+  useOrderByState,
+  useViewState,
+} from './hooks/query-state-hooks';
+import {getIssueOrder, getViewStatuses} from './filters';
 
 function getTitle(view: string | null) {
   switch (view?.toLowerCase()) {
@@ -71,16 +65,10 @@ const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const App = ({undoManager}: AppProps) => {
-  const [view] = useQueryState('view');
-  const [priorityFilter] = useQueryState('priorityFilter');
-  const [statusFilter] = useQueryState('statusFilter');
-  const [labelFilter] = useQueryState('labelFilter');
-  const [labelFilterDecoded] = useQueryState(
-    'labelFilter',
-    queryTypes.array(queryTypes.string),
-  );
-  const [orderBy] = useQueryState('orderBy');
-  const [detailIssueID, setDetailIssueID] = useQueryState('iss');
+  const [view] = useViewState();
+  const filters = useFilters();
+  const [orderBy] = useOrderByState();
+  const [detailIssueID, setDetailIssueID] = useIssueDetailState();
   const [menuVisible, setMenuVisible] = useState(false);
   const zero = useZero<Collections>();
 
@@ -110,22 +98,11 @@ const App = ({undoManager}: AppProps) => {
     )
     .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
 
-  const {filteredQuery, hasNonViewFilters} = filterQuery(
-    issueListQuery,
-    view,
-    priorityFilter,
-    statusFilter,
-    labelFilterDecoded,
-  );
+  const {filteredQuery} = filterQuery(issueListQuery, view, filters);
+
   const issueOrder = getIssueOrder(view, orderBy);
   const filteredAndOrderedQuery = orderQuery(filteredQuery, issueOrder);
-  const deps = [
-    view,
-    priorityFilter,
-    statusFilter,
-    issueOrder,
-    labelFilter,
-  ] as const;
+  const deps = [view, filters, issueOrder] as const;
   const filteredIssues = useQuery(filteredAndOrderedQuery, deps);
   // const viewIssueCount = useQuery(viewCountQuery, deps)[0]?.count ?? 0;
   const viewIssueCount = 0;
@@ -172,7 +149,7 @@ const App = ({undoManager}: AppProps) => {
 
   const handleOpenDetail = useCallback(
     async (issue: Issue) => {
-      await setDetailIssueID(issue.id, {scroll: false, shallow: true});
+      await setDetailIssueID(issue.id);
     },
     [setDetailIssueID],
   );
@@ -205,7 +182,7 @@ const App = ({undoManager}: AppProps) => {
         isLoading={false}
         viewIssueCount={viewIssueCount}
         filteredIssues={filteredIssues}
-        hasNonViewFilters={hasNonViewFilters}
+        hasNonViewFilters={filters.hasNonViewFilters}
         zero={zero}
         userID={userID}
         onCloseMenu={handleCloseMenu}
@@ -330,62 +307,9 @@ function filterQuery(
   // TODO: having to know the `FromSet` is dumb.
   q: EntityQuery<{issue: Issue; label: Label}, []>,
   view: string | null,
-  priorityFilter: string | null,
-  statusFilter: string | null,
-  labelFilter: string[] | null,
+  filters: FiltersState,
 ) {
-  let viewStatuses: Set<Status> | undefined;
-  switch (view?.toLowerCase()) {
-    case 'active':
-      viewStatuses = new Set([Status.InProgress, Status.Todo]);
-      break;
-    case 'backlog':
-      viewStatuses = new Set([Status.Backlog]);
-      break;
-  }
-
-  let issuesStatuses: Set<Status> | undefined;
-  let issuesPriorities: Set<Priority> | undefined;
-  let issueLabels: Set<string> | undefined;
-  let hasNonViewFilters = false;
-  if (statusFilter) {
-    issuesStatuses = new Set<Status>();
-    for (const s of statusFilter.split(',')) {
-      const parseResult = statusStringSchema.safeParse(s);
-      if (parseResult.success) {
-        const {data} = parseResult;
-        if (!viewStatuses || viewStatuses.has(data)) {
-          hasNonViewFilters = true;
-          issuesStatuses.add(data);
-        }
-      }
-    }
-  }
-  if (!hasNonViewFilters) {
-    issuesStatuses = viewStatuses;
-  }
-
-  if (priorityFilter) {
-    issuesPriorities = new Set<Priority>();
-    for (const p of priorityFilter.split(',')) {
-      const parseResult = priorityEnumSchema.safeParse(p);
-      if (parseResult.success) {
-        hasNonViewFilters = true;
-        issuesPriorities.add(parseResult.data);
-      }
-    }
-    if (issuesPriorities.size === 0) {
-      issuesPriorities = undefined;
-    }
-  }
-
-  if (labelFilter) {
-    issueLabels = new Set<string>();
-    for (const label of labelFilter) {
-      issueLabels.add(label);
-    }
-  }
-
+  const viewStatuses = getViewStatuses(view);
   const viewStatusesQuery = viewStatuses
     ? q.where('issue.status', 'IN', [...viewStatuses])
     : q;
@@ -394,12 +318,12 @@ function filterQuery(
     .distinct('issue.id')
     .select(agg.count());
 
-  if (issuesStatuses) {
+  if (filters.statusFilter) {
     // Consider allowing Iterable<T> for IN
-    q = q.where('issue.status', 'IN', [...issuesStatuses]);
+    q = q.where('issue.status', 'IN', [...filters.statusFilter]);
   }
-  if (issuesPriorities) {
-    q = q.where('issue.priority', 'IN', [...issuesPriorities]);
+  if (filters.priorityFilter) {
+    q = q.where('issue.priority', 'IN', [...filters.priorityFilter]);
   }
 
   let filteredQuery = q
@@ -416,15 +340,15 @@ function filterQuery(
       'issue.title',
       agg.array('label.name', 'labels'),
     );
-  if (issueLabels) {
+  if (filters.labelFilter) {
     // TODO: if `having` has been applied then selection
     // set should not be updated to remove what `having` operates against.
     filteredQuery = filteredQuery.having('labels', 'INTERSECTS', [
-      ...issueLabels,
+      ...filters.labelFilter,
     ]);
   }
 
-  return {filteredQuery, hasNonViewFilters, viewCountQuery};
+  return {filteredQuery, viewCountQuery};
 }
 
 function orderQuery<R>(

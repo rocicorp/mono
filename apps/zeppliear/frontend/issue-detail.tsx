@@ -1,7 +1,6 @@
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import {nanoid} from 'nanoid';
-import {useQueryState} from 'next-usequerystate';
 import {useCallback, useEffect, useState} from 'react';
 import {Remark} from 'react-remark';
 import {timeAgo} from '../util/date';
@@ -23,6 +22,7 @@ import StatusMenu from './status-menu';
 import {useQuery} from './hooks/use-zql';
 import {useZero} from './hooks/use-zero';
 import ConfirmationModal from './confirm-modal';
+import {useIssueDetailState} from './hooks/query-state-hooks';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
@@ -70,9 +70,7 @@ export default function IssueDetail({
   isLoading,
   userID,
 }: Props) {
-  const [detailIssueID, setDetailIssueID] = useQueryState('iss', {
-    history: 'push',
-  });
+  const [detailIssueID, setDetailIssueID] = useIssueDetailState();
 
   const [editMode, setEditMode] = useState(false);
 
@@ -177,10 +175,7 @@ export default function IssueDetail({
         newIss = issues[currentIssueIdx + 1].issue.id;
       }
 
-      await setDetailIssueID(newIss, {
-        scroll: false,
-        shallow: true,
-      });
+      await setDetailIssueID(newIss);
     },
     [currentIssueIdx, issues, setDetailIssueID],
   );

@@ -20,6 +20,7 @@
     "@mui/icons-material": "^5.5.1",
     "@mui/material": "^5.5.2",
     "@mui/utils": "^5.4.4",
+    "@rocicorp/reflect": "0.39.202405110706+9cdeac",
     "@rocicorp/undo": "^0.2.0",
     "@tailwindcss/forms": "^0.5.0",
     "@tailwindcss/line-clamp": "^0.3.1",
@@ -29,7 +30,6 @@
     "lodash": "^4.17.21",
     "nanoid": "^4.0.2",
     "next": "13.5.6",
-    "next-usequerystate": "1.7.2",
     "react": ">=16.0 <19.0",
     "react-beautiful-dnd": "^13.1.0",
     "react-dom": ">=16.0 <19.0",
@@ -38,12 +38,12 @@
     "react-remark": "^2.1.0",
     "react-virtualized-auto-sizer": "^1.0.6",
     "react-window": "^1.8.6",
-    "@rocicorp/reflect": "0.39.202405110706+9cdeac",
-    "zero-client": "0.0.0",
     "replicache-react": "^4.0.1",
+    "zero-client": "0.0.0",
     "zod": "^3.21.4"
   },
   "devDependencies": {
+    "@rocicorp/zql": "0.0.0",
     "@svgr/webpack": "^6.2.1",
     "@types/chai": "^4.3.5",
     "@types/lodash": "^4.14.197",
@@ -64,8 +64,7 @@
     "prettier": "^3.0.3",
     "tailwindcss": "^3.0.23",
     "ts-node": "^10.9.1",
-    "typescript": "^5.4.2",
-    "@rocicorp/zql": "0.0.0"
+    "typescript": "^5.4.2"
   },
   "eslintConfig": {
     "extends": [
