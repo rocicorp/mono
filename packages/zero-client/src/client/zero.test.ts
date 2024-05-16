@@ -457,7 +457,7 @@ suite('initConnection', () => {
                 select: [[['e', '*'], '*']],
                 table: 'e',
               } satisfies AST,
-              hash: '23e18hp6ct82q',
+              hash: '2dytaxdo1gtrn',
               op: 'put',
             },
           ],
