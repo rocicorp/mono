@@ -97,7 +97,7 @@ export type SimpleHavingCondition = {
   op: SimpleOperator;
   // having operates against the selection set so there's no table prefix
   // null since `[undefined, string]` won't json encode correctly? At least that is what TS tells me.
-  field: [null, string];
+  field: readonly [string | null, string];
   value: {
     type: 'value';
     value: Primitive | PrimitiveArray;

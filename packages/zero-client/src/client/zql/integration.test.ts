@@ -477,13 +477,6 @@ test('join', async () => {
 
   expect(rows).toEqual([
     {
-      id: 'a_a-b_b',
-      issue: issues[0],
-      issueLabel: issueLabels[1],
-      label: labels[1],
-      [joinSymbol]: true,
-    },
-    {
       id: 'a_a_a-a',
       issue: issues[0],
       issueLabel: issueLabels[0],
@@ -491,10 +484,10 @@ test('join', async () => {
       [joinSymbol]: true,
     },
     {
-      id: 'b_b-c_c',
-      issue: issues[1],
-      issueLabel: issueLabels[3],
-      label: labels[2],
+      id: 'a_a-b_b',
+      issue: issues[0],
+      issueLabel: issueLabels[1],
+      label: labels[1],
       [joinSymbol]: true,
     },
     {
@@ -502,6 +495,13 @@ test('join', async () => {
       issue: issues[1],
       issueLabel: issueLabels[2],
       label: labels[1],
+      [joinSymbol]: true,
+    },
+    {
+      id: 'b_b-c_c',
+      issue: issues[1],
+      issueLabel: issueLabels[3],
+      label: labels[2],
       [joinSymbol]: true,
     },
     {

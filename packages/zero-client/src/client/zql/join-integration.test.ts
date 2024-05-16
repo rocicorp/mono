@@ -155,7 +155,7 @@ test('direct foreign key join: join a track to an album', async () => {
     },
     [joinSymbol]: true,
   };
-  expect(rows).toEqual([track2Album1, track4Album2, track3Album3]);
+  expect(rows).toEqual([track2Album1, track3Album3, track4Album2]);
 
   // add a second track to album 1
   await z.mutate.track.create({
@@ -183,9 +183,9 @@ test('direct foreign key join: join a track to an album', async () => {
   };
   expect(rows).toEqual([
     track2Album1,
-    track5Album1,
-    track4Album2,
     track3Album3,
+    track4Album2,
+    track5Album1,
   ]);
 
   // sort by track id

@@ -681,7 +681,9 @@ export function qualifyHaving<F extends FromSet>(
     return {
       type: expr.type,
       op: expr.op,
-      field: [null, expr.field],
+      field: expr.field.includes('.')
+        ? (expr.field.split('.') as unknown as ASTSelector)
+        : [null, expr.field],
       value: {
         type: expr.value.type,
         value: expr.value.value as Primitive | PrimitiveArray,
