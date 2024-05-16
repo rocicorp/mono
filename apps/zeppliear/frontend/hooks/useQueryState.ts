@@ -22,11 +22,6 @@ export function useQueryState<T>(
     return param === null ? null : decodeURIComponent(param);
   }, [key]);
 
-  // Memoize the processor functions to avoid unnecessary re-renders
-  const processQueryValue = useMemo(
-    () => (queryValue: string | null) => processor.fromString(queryValue),
-    [processor],
-  );
   // Initialize state from the current URL
   const [value, setValue] = useState<string | null>(getQueryValue);
 
@@ -79,7 +74,13 @@ export function useQueryState<T>(
     [setValue, processor],
   );
 
-  return [processQueryValue(value), setQueryState] as const;
+  // Memoize the processed query value to avoid rerenders
+  const processedQueryValue = useMemo(
+    () => processor.fromString(value),
+    [value, processor],
+  );
+
+  return [processedQueryValue, setQueryState] as const;
 }
 
 export default useQueryState;

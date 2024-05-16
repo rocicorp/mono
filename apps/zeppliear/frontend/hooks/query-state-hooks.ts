@@ -23,13 +23,11 @@ const processOrderBy: QueryStateProcessor<Order> = {
   fromString: (value: string | null) => (value ?? 'MODIFIED') as Order,
 };
 
-function makeStringSetProcessor(): QueryStateProcessor<Set<string>> {
-  return {
-    toString: (value: Set<string>) => [...value.values()].join(','),
-    fromString: (value: string | null) =>
-      value === null ? null : new Set(value.split(',')),
-  };
-}
+const stringSetProcessor = {
+  toString: (value: Set<string>) => [...value.values()].join(','),
+  fromString: (value: string | null) =>
+    value === null ? null : new Set(value.split(',')),
+};
 
 export function makeEnumSetProcessor<T>(
   toString: (value: T) => string,
@@ -57,26 +55,25 @@ export function useOrderByState() {
   return useQueryState('orderBy', processOrderBy);
 }
 
+const statusProcessor = makeEnumSetProcessor<Status>(
+  statusToStatusString,
+  data => statusStringSchema.safeParse(data),
+);
 export function useStatusFilterState() {
-  return useQueryState(
-    'statusFilter',
-    makeEnumSetProcessor<Status>(statusToStatusString, data =>
-      statusStringSchema.safeParse(data),
-    ),
-  );
+  return useQueryState('statusFilter', statusProcessor);
 }
 
+const priorityProcessor = makeEnumSetProcessor<Priority>(
+  priorityToPriorityString,
+  data => priorityEnumSchema.safeParse(data),
+);
+
 export function usePriorityFilterState() {
-  return useQueryState(
-    'priorityFilter',
-    makeEnumSetProcessor<Priority>(priorityToPriorityString, data =>
-      priorityEnumSchema.safeParse(data),
-    ),
-  );
+  return useQueryState('priorityFilter', priorityProcessor);
 }
 
 export function useLabelFilterState() {
-  return useQueryState('labelFilter', makeStringSetProcessor());
+  return useQueryState('labelFilter', stringSetProcessor);
 }
 
 export function useViewState() {
