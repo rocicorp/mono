@@ -196,7 +196,8 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
   pullHistoricalData(): void {
     this._materialite.tx(() => {
       this.stream.messageUpstream(
-        //this.#order
+        // this.#order will go in for `undefined` once we've completed handling `orderBy`
+        // optimizations.
         createPullMessage(undefined, 'select'),
         this._listener,
       );

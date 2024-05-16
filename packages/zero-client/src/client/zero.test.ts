@@ -39,6 +39,7 @@ import {
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -452,10 +453,10 @@ suite('initConnection', () => {
             {
               ast: {
                 aggregate: [],
-                orderBy: [['id'], 'asc'],
-                select: [['e.*', '*']],
+                orderBy: [[['e', 'id']], 'asc'],
+                select: [[['e', '*'], '*']],
                 table: 'e',
-              },
+              } satisfies AST,
               hash: '23e18hp6ct82q',
               op: 'put',
             },
