@@ -1307,13 +1307,7 @@ describe('all references to columns are always qualified', () => {
       test: 'order by',
       q: q.asc('a'),
       expected: {
-        orderBy: [
-          [
-            ['e1', 'a'],
-            ['e1', 'id'],
-          ],
-          'asc',
-        ],
+        orderBy: [[['e1', 'a']], 'asc'],
         table: 'e1',
       },
     },

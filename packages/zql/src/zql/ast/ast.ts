@@ -6,9 +6,8 @@ import {defined} from 'shared/src/arrays.js';
 
 export type Selector = readonly [table: string, column: string];
 
-// TODO: the chosen operator needs to constrain the allowed values for the value
-// input to the query builder.
 export type Ordering = readonly [
+  // TODO(mlaw): table being nullable is temporary until we fixup order-by application for joined tables
   fields: readonly Selector[],
   direction: 'asc' | 'desc',
 ];
@@ -45,7 +44,9 @@ export type AST = {
   readonly schema?: string | undefined;
   readonly table: string;
   readonly alias?: string | undefined;
-  readonly select?: readonly (readonly [selector: Selector, alias: string])[] | undefined;
+  readonly select?:
+    | readonly (readonly [selector: Selector, alias: string])[]
+    | undefined;
   readonly distinct?: Selector | undefined;
   readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {

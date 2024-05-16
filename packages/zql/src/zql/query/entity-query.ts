@@ -13,6 +13,7 @@ import type {
   Primitive,
   PrimitiveArray,
   HavingCondition,
+  Ordering,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -253,7 +254,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       table: tableName,
       // TODO(mlaw): this is wrong if we have joins.
       // We need to suffix the order-by as our final operation.
-      orderBy: [[[tableName, 'id']], 'asc'],
+      orderBy: [[[tableName, 'id']], 'asc'] as const,
     };
     this.#name = tableName;
     this.#context = context;
@@ -484,10 +485,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   asc(...x: SimpleSelector<From>[]) {
-    if (!x.includes('id')) {
-      x.push('id');
-    }
-
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'asc'],
@@ -495,10 +492,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   desc(...x: SimpleSelector<From>[]) {
-    if (!x.includes('id')) {
-      x.push('id');
-    }
-
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'desc'],
@@ -506,7 +499,13 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   prepare(): Statement<Return> {
-    return new Statement<Return>(this.#context, this.#ast);
+    return new Statement<Return>(this.#context, {
+      ...this.#ast,
+      orderBy:
+        this.#ast.orderBy !== undefined
+          ? makeOrderingDetereministic(this.#ast, this.#ast.orderBy)
+          : undefined,
+    });
   }
 
   toString() {
@@ -711,4 +710,55 @@ function qualifySelector(
   }
 
   return [alias ?? ast.table, selector];
+}
+
+// Primary keys of all joined tables _must_ exist in the `orderBy` to ensure we have
+// a deterministic ordering. As in, both client and server agree and we're not relying on undocumented
+// behavior with respect to how to order identical (wrt ordering) items.
+//
+// This also facilitates cursoring as the cursor will always point to a unique item.
+//
+// Because we do this it is also important to ensure we are only creating sources in a new order based on
+// the first key and not all the keys in `orderBy`. To prevent an explosion of sources
+// while also giving us a perf gain. If/when we allow cleaning up of new orderings we can revisit that choice.
+export function makeOrderingDetereministic(
+  ast: AST,
+  order: Ordering,
+): Ordering {
+  const required = getRequiredOrderFieldsForDeterministicOrdering(ast);
+
+  const selectors = [...order[0]];
+  for (const selector of selectors) {
+    const key = selector.join('.');
+    required.delete(key);
+  }
+
+  for (const selector of required.values()) {
+    selectors.push(selector);
+  }
+
+  return [selectors, order[1]];
+}
+
+function getRequiredOrderFieldsForDeterministicOrdering(
+  ast: AST,
+): Map<string, ASTSelector> {
+  const ret = new Map<string, ASTSelector>();
+
+  // If a group-by was used, we just need to append the group-by fields to the order-by.
+  if (ast.groupBy !== undefined) {
+    for (const group of ast.groupBy) {
+      ret.set(group.join('.'), group);
+    }
+    return ret;
+  }
+
+  // TODO(mlaw): this'll change with compound primary keys
+  ret.set(ast.table + '.id', [ast.table, 'id']);
+
+  for (const join of ast.joins || []) {
+    ret.set(join.as + '.id', [join.as, 'id']);
+  }
+
+  return ret;
 }

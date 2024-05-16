@@ -275,17 +275,17 @@ test('left-join through junction edge', async () => {
 
   expect(rows).toEqual([
     {
-      id: '1_1-2_2',
-      trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
-      track: {id: '1', albumId: '1', title: 'track 1', length: 1},
-      artists: {id: '2', name: 'artist 2'},
-      [joinSymbol]: true,
-    },
-    {
       id: '1_1_1-1',
       trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
       track: {id: '1', albumId: '1', title: 'track 1', length: 1},
       artists: {id: '1', name: 'artist 1'},
+      [joinSymbol]: true,
+    },
+    {
+      id: '1_1-2_2',
+      trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
+      track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      artists: {id: '2', name: 'artist 2'},
       [joinSymbol]: true,
     },
     {
