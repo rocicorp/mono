@@ -1,4 +1,4 @@
-import {useState, useEffect, useCallback} from 'react';
+import {useState, useEffect, useCallback, useMemo} from 'react';
 
 export type QueryStateProcessor<T> = {
   toString: (value: T) => string;
@@ -22,11 +22,13 @@ export function useQueryState<T>(
     return param === null ? null : decodeURIComponent(param);
   }, [key]);
 
-  function processQueryValue(queryValue: string | null) {
-    return queryValue === null ? null : processor.fromString(queryValue);
-  }
+  // Memoize the processor functions to avoid unnecessary re-renders
+  const processQueryValue = useMemo(
+    () => (queryValue: string | null) => processor.fromString(queryValue),
+    [processor],
+  );
   // Initialize state from the current URL
-  const [value, setValue] = useState(getQueryValue);
+  const [value, setValue] = useState<string | null>(getQueryValue);
 
   // Update URL when state changes
   useEffect(() => {
