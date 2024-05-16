@@ -176,10 +176,7 @@ class ResultParser {
         // Exclude the _0_version column from what is sent to the client.
         const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
         if (rowVersion === null) {
-          this.#lc.debug?.(
-            `skipping non-existent row ${rowAlias}`, // This can happen for LEFT JOINs
-            rowWithVersion,
-          );
+          // Non-existent rows result from non-INNER JOINs.
           continue;
         }
         if (typeof rowVersion !== 'string' || rowVersion.length === 0) {
