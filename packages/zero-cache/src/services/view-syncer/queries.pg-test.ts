@@ -115,10 +115,10 @@ describe('view-syncer/queries', () => {
         'issues.id AS id, issues.title AS title, owner.name AS owner, ' +
         'parent.owner AS parent_owner, parent.title AS parent_title FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
-        'INNER JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
+        'INNER JOIN (SELECT issues.id AS issues_id, issues.title AS title, owner.name AS owner FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
         'AS parent ON issues.parent_id = parent.issues_id ' +
-        'ORDER BY id desc, title desc',
+        'ORDER BY issues.id desc, issues.title desc',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
@@ -290,24 +290,25 @@ describe('view-syncer/queries', () => {
     //   executing on the client.
     const original = new Normalized(ast).query();
     expect(original.query).toBe(
-      'SELECT issues.id AS id, array_agg(title) AS "array_agg(title)" FROM issues GROUP BY id',
+      'SELECT issues.id AS id, array_agg(issues.title) AS "array_agg(issues.title)" ' +
+        'FROM issues GROUP BY issues.id',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
         id: '2',
-        ['array_agg(title)']: ['parent issue bar'],
+        ['array_agg(issues.title)']: ['parent issue bar'],
       },
       {
         id: '4',
-        ['array_agg(title)']: ['bar'],
+        ['array_agg(issues.title)']: ['bar'],
       },
       {
         id: '3',
-        ['array_agg(title)']: ['foo'],
+        ['array_agg(issues.title)']: ['foo'],
       },
       {
         id: '1',
-        ['array_agg(title)']: ['parent issue foo'],
+        ['array_agg(issues.title)']: ['parent issue foo'],
       },
     ]);
 
@@ -448,10 +449,10 @@ describe('view-syncer/queries', () => {
         'issues.id AS id, issues.title AS title, owner.name AS owner, ' +
         'parent.owner AS parent_owner, parent.title AS parent_title FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
-        'LEFT JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
+        'LEFT JOIN (SELECT issues.id AS issues_id, issues.title AS title, owner.name AS owner FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
         'AS parent ON issues.parent_id = parent.issues_id ' +
-        'ORDER BY id desc, title desc',
+        'ORDER BY issues.id desc, issues.title desc',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
@@ -649,24 +650,25 @@ describe('view-syncer/queries', () => {
     //   executing on the client.
     const original = new Normalized(ast).query();
     expect(original.query).toBe(
-      'SELECT issues.id AS id, array_agg(title) AS "array_agg(title)" FROM issues GROUP BY id',
+      'SELECT issues.id AS id, array_agg(issues.title) AS "array_agg(issues.title)" ' +
+        'FROM issues GROUP BY issues.id',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
         id: '2',
-        ['array_agg(title)']: ['parent issue bar'],
+        ['array_agg(issues.title)']: ['parent issue bar'],
       },
       {
         id: '4',
-        ['array_agg(title)']: ['bar'],
+        ['array_agg(issues.title)']: ['bar'],
       },
       {
         id: '3',
-        ['array_agg(title)']: ['foo'],
+        ['array_agg(issues.title)']: ['foo'],
       },
       {
         id: '1',
-        ['array_agg(title)']: ['parent issue foo'],
+        ['array_agg(issues.title)']: ['parent issue foo'],
       },
     ]);
 
