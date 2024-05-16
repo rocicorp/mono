@@ -15,7 +15,7 @@ import {
   getViewStatuses,
   hasNonViewFilters as doesHaveNonViewFilters,
 } from '../filters';
-import {useState} from 'react';
+import {useMemo} from 'react';
 import type {SafeParseReturnType} from 'zod/lib/types';
 
 const processOrderBy: QueryStateProcessor<Order> = {
@@ -88,49 +88,26 @@ export type FiltersState = {
   statusFilter: Set<Status> | null;
   priorityFilter: Set<Priority> | null;
   labelFilter: Set<string> | null;
-  filtersIdentity: string;
   hasNonViewFilters: boolean;
 };
 
-function setIdentity(filters: Set<unknown> | null) {
-  return filters ? Array.from(filters).join('') : '';
-}
 export function useFilters(): FiltersState {
   const [statusFilter] = useStatusFilterState();
   const [priorityFilter] = usePriorityFilterState();
   const [labelFilter] = useLabelFilterState();
-
-  const filtersIdentity = [statusFilter, priorityFilter, labelFilter]
-    .map(setIdentity)
-    .join('-');
-
-  const [prevIdentity, setPrevIdentity] = useState<string | null>(null);
   const [view] = useViewState();
-  const [prevView, setPrevView] = useState<string | null>(null);
-  const [state, setState] = useState<FiltersState>({
-    statusFilter,
-    priorityFilter,
-    labelFilter,
-    filtersIdentity,
-    hasNonViewFilters: false,
-  });
 
-  if (prevIdentity !== filtersIdentity || prevView !== view) {
-    setPrevIdentity(filtersIdentity);
-    setPrevView(view);
+  return useMemo(() => {
     const viewStatuses = getViewStatuses(view);
     const hasNonViewFilters = !!doesHaveNonViewFilters(
       viewStatuses,
       statusFilter,
     );
-    setState({
+    return {
       statusFilter,
       priorityFilter,
       labelFilter,
-      filtersIdentity,
       hasNonViewFilters,
-    });
-  }
-
-  return state;
+    };
+  }, [statusFilter, priorityFilter, labelFilter, view]);
 }
