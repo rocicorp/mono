@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+import {ErrorKind} from 'zero-protocol';
 import {
   MutationType,
   type CRUDMutation,
@@ -11,6 +12,7 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
+import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 
@@ -63,98 +65,90 @@ export async function processMutation(
   lc = lc?.withContext('mutationID', mutation.id);
   lc = lc?.withContext('processMutation');
   lc?.debug?.('Process mutation start', mutation);
+
+  let result: MutationError | undefined;
+
   const start = Date.now();
   try {
-    try {
-      await db.begin(tx =>
-        processMutationWithTx(lc, tx, clientGroupID, mutation, false),
-      );
-    } catch (firstError) {
-      // Mutations can fail for a variety of reasons:
-      //
-      // - application error
-      // - network/db error
-      // - zero bug
-      //
-      // For application errors what we want is to re-run the mutation in
-      // "error mode", which skips the actual mutation and just updates the
-      // lastMutationID. Then return the error to the app.
-      //
-      // However, it's hard to tell the difference between application errors
-      // and the other types.
-      //
-      // A reasonable policy ends up being to just retry every mutation once
-      // in error mode. If the error mode mutation succeeds then we assume it
-      // was an application error and return the error to the app. Otherwise,
-      // we know it was something internal and we log it.
-      //
-      // This is not 100% correct - there are theoretical cases where we
-      // return an internal error to the app that shouldn't have been. But it
-      // would have to be a crazy coincidence: we'd have to have a network
-      // error on the first attempt that resolves by the second attempt.
-      //
-      // One might ask why not try/catch just the calls to the mutators and
-      // consider those application errors. That is actually what we do in
-      // Replicache:
-      //
-      // https://github.com/rocicorp/todo-row-versioning/blob/9a0a79dc2d2de32c4fac61b5d1634bd9a9e66b7c/server/src/push.ts#L131
-      //
-      // We don't do it here because:
-      //
-      // 1. It's still not perfect. It's hard to isolate SQL errors in
-      //    mutators due to app developer mistakes from SQL errors due to
-      //    Zero mistakes.
-      // 2. It's not possible to do this with the pg library we're using in
-      //    Zero anyway: https://github.com/porsager/postgres/issues/455.
-      //
-      // Personally I think this simple retry policy is nice.
-      lc?.error?.(
-        'Got error running mutation, re-running in error mode',
-        firstError,
-      );
-      await db.begin(tx =>
-        processMutationWithTx(lc, tx, clientGroupID, mutation, true),
-      );
-      lc?.debug?.('Ran mutation successfully in error mode');
-      return String(firstError);
+    // Mutations can fail for a variety of reasons:
+    //
+    // - application error
+    // - network/db error
+    // - zero bug
+    //
+    // For application errors what we want is to re-run the mutation in
+    // "error mode", which skips the actual mutation and just updates the
+    // lastMutationID. Then return the error to the app.
+    //
+    // However, it's hard to tell the difference between application errors
+    // and the other types.
+    //
+    // A reasonable policy ends up being to just retry every mutation once
+    // in error mode. If the error mode mutation succeeds then we assume it
+    // was an application error and return the error to the app. Otherwise,
+    // we know it was something internal and we log it.
+    //
+    // This is not 100% correct - there are theoretical cases where we
+    // return an internal error to the app that shouldn't have been. But it
+    // would have to be a crazy coincidence: we'd have to have a network
+    // error on the first attempt that resolves by the second attempt.
+    //
+    // One might ask why not try/catch just the calls to the mutators and
+    // consider those application errors. That is actually what we do in
+    // Replicache:
+    //
+    // https://github.com/rocicorp/todo-row-versioning/blob/9a0a79dc2d2de32c4fac61b5d1634bd9a9e66b7c/server/src/push.ts#L131
+    //
+    // We don't do it here because:
+    //
+    // 1. It's still not perfect. It's hard to isolate SQL errors in
+    //    mutators due to app developer mistakes from SQL errors due to
+    //    Zero mistakes.
+    // 2. It's not possible to do this with the pg library we're using in
+    //    Zero anyway: https://github.com/porsager/postgres/issues/455.
+    //
+    // Personally I think this simple retry policy is nice.
+    for (const errorMode of [false, true]) {
+      try {
+        await db.begin(tx =>
+          processMutationWithTx(tx, clientGroupID, mutation, errorMode),
+        );
+        if (errorMode) {
+          lc?.debug?.('Ran mutation successfully in error mode');
+        }
+        break;
+      } catch (e) {
+        if (e instanceof MutationAlreadyProcessedError) {
+          lc?.debug?.(e.message);
+          return undefined;
+        }
+        if (e instanceof ErrorForClient || errorMode) {
+          lc?.error?.('Process mutation error', e);
+          throw e;
+        }
+
+        lc?.error?.('Got error running mutation, re-running in error mode', e);
+        result = String(e);
+      }
     }
-    return undefined;
-  } catch (e) {
-    lc?.error?.('Process mutation error', e);
-    throw e;
   } finally {
     lc?.debug?.('Process mutation complete in', Date.now() - start);
   }
+  return result;
 }
 
 async function processMutationWithTx(
-  lc: LogContext | undefined,
   tx: PostgresTransaction,
   clientGroupID: string,
   mutation: CRUDMutation,
   errorMode: boolean,
 ) {
-  const lastMutationID = await readLastMutationID(
-    tx,
-    clientGroupID,
-    mutation.clientID,
-  );
-  const expectedMutationID = lastMutationID + 1n;
-
-  if (mutation.id < expectedMutationID) {
-    lc?.debug?.(
-      `Ignoring mutation with ID ${mutation.id} as it was already processed. Expected: ${expectedMutationID}`,
-    );
-    return;
-  } else if (mutation.id > expectedMutationID) {
-    throw new Error(
-      `Mutation ID was out of order. Expected: ${expectedMutationID} received: ${mutation.id}`,
-    );
-  }
+  const queryPromises: Promise<unknown>[] = [
+    incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
+  ];
 
   if (!errorMode) {
     const {ops} = mutation.args[0];
-    const queryPromises: Promise<unknown>[] = [];
 
     for (const op of ops) {
       switch (op.op) {
@@ -174,18 +168,10 @@ async function processMutationWithTx(
           op satisfies never;
       }
     }
-
-    // All the CRUD operations were dispatched serially (above).
-    // Now wait for their completion and then update `lastMutationID`.
-    await Promise.all(queryPromises);
   }
 
-  await writeLastMutationID(
-    tx,
-    clientGroupID,
-    mutation.clientID,
-    expectedMutationID,
-  );
+  // Note: An error thrown from any Promise aborts the entire transaction.
+  await Promise.all(queryPromises);
 }
 
 export function getCreateSQL(
@@ -245,30 +231,41 @@ function getDeleteSQL(
   return tx`DELETE FROM ${tx(table)} WHERE ${conditions}`;
 }
 
-export async function readLastMutationID(
-  tx: postgres.TransactionSql,
-  clientGroupID: string,
-  clientID: string,
-): Promise<bigint> {
-  const rows = await tx`
-    SELECT "lastMutationID" FROM zero.clients 
-    WHERE "clientGroupID" = ${clientGroupID} AND "clientID" = ${clientID}`;
-  if (rows.length === 0) {
-    return 0n;
-  }
-  return rows[0].lastMutationID;
-}
-
-function writeLastMutationID(
+async function incrementLastMutationID(
   tx: PostgresTransaction,
   clientGroupID: string,
   clientID: string,
-  nextMutationID: bigint,
+  receivedMutationID: number,
 ) {
-  return tx`
-    INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID")
-    VALUES (${clientGroupID}, ${clientID}, ${nextMutationID})
+  const [{lastMutationID}] = await tx<{lastMutationID: bigint}[]>`
+    INSERT INTO zero.clients as current ("clientGroupID", "clientID", "lastMutationID")
+    VALUES (${clientGroupID}, ${clientID}, ${1})
     ON CONFLICT ("clientGroupID", "clientID")
-    DO UPDATE SET "lastMutationID" = ${nextMutationID}
+    DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
+    RETURNING "lastMutationID"
   `;
+
+  // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.
+  if (receivedMutationID < lastMutationID) {
+    throw new MutationAlreadyProcessedError(
+      clientID,
+      receivedMutationID,
+      lastMutationID,
+    );
+  } else if (receivedMutationID > lastMutationID) {
+    throw new ErrorForClient([
+      'error',
+      ErrorKind.InvalidPush,
+      `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
+    ]);
+  }
+}
+
+class MutationAlreadyProcessedError extends Error {
+  constructor(clientID: string, received: number, actual: bigint) {
+    super(
+      `Ignoring mutation from ${clientID} with ID ${received} as it was already processed. Expected: ${actual}`,
+    );
+    assert(received < actual);
+  }
 }
