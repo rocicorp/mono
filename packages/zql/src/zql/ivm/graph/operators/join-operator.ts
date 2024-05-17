@@ -95,28 +95,6 @@ export class InnerJoinOperator<
       JoinResult<AValue, BValue, AAlias, BAlias>
     >[] = [];
 
-    if (inputA !== undefined) {
-      iterablesToReturn.push(
-        genFlatMap(inputA, entry => {
-          const key = this.#joinArgs.getAJoinKey(entry[0]);
-          const ret = this.#joinOne(
-            entry,
-            key,
-            this.#indexB,
-            this.#joinArgs.aAs,
-            this.#joinArgs.bAs,
-            this.#joinArgs.getAPrimaryKey,
-            this.#joinArgs.getBPrimaryKey,
-          );
-          if (key !== undefined) {
-            this.#indexA.add(key, entry);
-            this.#aKeysForCompaction.add(key);
-          }
-          return ret;
-        }),
-      );
-    }
-
     if (inputB !== undefined) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
@@ -133,6 +111,28 @@ export class InnerJoinOperator<
           if (key !== undefined) {
             this.#indexB.add(key, entry);
             this.#bKeysForCompaction.add(key);
+          }
+          return ret;
+        }),
+      );
+    }
+
+    if (inputA !== undefined) {
+      iterablesToReturn.push(
+        genFlatMap(inputA, entry => {
+          const key = this.#joinArgs.getAJoinKey(entry[0]);
+          const ret = this.#joinOne(
+            entry,
+            key,
+            this.#indexB,
+            this.#joinArgs.aAs,
+            this.#joinArgs.bAs,
+            this.#joinArgs.getAPrimaryKey,
+            this.#joinArgs.getBPrimaryKey,
+          );
+          if (key !== undefined) {
+            this.#indexA.add(key, entry);
+            this.#aKeysForCompaction.add(key);
           }
           return ret;
         }),

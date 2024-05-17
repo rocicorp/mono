@@ -1,4 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
+import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import type {AST} from '../ast/ast.js';
 import {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -40,15 +41,16 @@ export class TestContext implements Context {
   }
 }
 
-export class InfiniteSourceContext<T extends Entity> implements Context {
+type Gen<T> = {
+  [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
+};
+export class InfiniteSourceContext implements Context {
   readonly materialite = new Materialite();
-  readonly #sources = new Map<string, Source<T>>();
-  readonly #generator;
+  readonly #sources = new Map<string, Source<object>>();
+  readonly #generators = new Map<string, Gen<object>>();
 
-  constructor(generator: {
-    [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
-  }) {
-    this.#generator = generator;
+  constructor(generators: Map<string, Gen<object>>) {
+    this.#generators = generators;
   }
 
   getSource<X extends Entity>(name: string): Source<X> {
@@ -57,9 +59,21 @@ export class InfiniteSourceContext<T extends Entity> implements Context {
       return existing as unknown as Source<X>;
     }
 
-    const source = this.materialite.constructSource(
-      internal => new InfiniteSuorce(internal, this.#generator, name),
-    );
+    let source: Source<object>;
+    if (this.#generators.has(name)) {
+      source = this.materialite.constructSource(
+        internal =>
+          new InfiniteSuorce(internal, must(this.#generators.get(name)), name),
+      );
+    } else {
+      source = this.materialite.newSetSource<X>(
+        (l: X, r: X) => compareUTF8(l.id, r.id),
+        [[[name, 'id']], 'asc'],
+        name,
+      ) as unknown as Source<object>;
+      source.seed([]);
+      this.#sources.set(name, source);
+    }
     this.#sources.set(name, source);
 
     return source as unknown as Source<X>;
@@ -74,10 +88,10 @@ export function makeTestContext(): TestContext {
   return new TestContext();
 }
 
-export function makeInfiniteSourceContext<T extends Entity>(generator: {
-  [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
-}): InfiniteSourceContext<T> {
-  return new InfiniteSourceContext(generator);
+export function makeInfiniteSourceContext(
+  generators: Map<string, Gen<object>>,
+): InfiniteSourceContext {
+  return new InfiniteSourceContext(generators);
 }
 
 class InfiniteSuorce<T extends object> implements Source<T> {
@@ -147,6 +161,9 @@ class InfiniteSuorce<T extends object> implements Source<T> {
 
   processMessage(message: Request): void {
     switch (message.type) {
+      // TODO: check for alternative order in the message.
+      // create the source in the new order.
+      // send from that source.
       case 'pull': {
         this.#materialite.addDirtySource(this.#internal);
         this.#stream.newDifference(

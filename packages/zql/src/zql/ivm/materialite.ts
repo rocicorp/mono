@@ -44,7 +44,7 @@ export class Materialite {
   newSetSource<T extends object>(
     comparator: Comparator<T>,
     order: Ordering,
-    name?: string | undefined,
+    name: string,
   ) {
     return new SetSource<T>(this.#internal, comparator, order, name);
   }

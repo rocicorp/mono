@@ -1,5 +1,5 @@
 import {must} from 'shared/src/must.js';
-import type {Ordering} from '../../ast/ast.js';
+import type {Ordering, Selector} from '../../ast/ast.js';
 import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
@@ -26,7 +26,7 @@ export class SetSource<T extends object> implements Source<T> {
   >();
   readonly #sorts = new Map<string, SetSource<T>>();
   readonly comparator: Comparator<T>;
-  readonly #name: string | undefined;
+  readonly #name: string;
   readonly #order: Ordering;
 
   protected readonly _materialite: MaterialiteForSourceInternal;
@@ -40,7 +40,7 @@ export class SetSource<T extends object> implements Source<T> {
     materialite: MaterialiteForSourceInternal,
     comparator: Comparator<T>,
     order: Ordering,
-    name?: string | undefined,
+    name: string,
   ) {
     this.#order = order;
     this._materialite = materialite;
@@ -107,7 +107,12 @@ export class SetSource<T extends object> implements Source<T> {
   }
 
   withNewOrdering(comp: Comparator<T>, ordering: Ordering): this {
-    const ret = new SetSource(this._materialite, comp, ordering) as this;
+    const ret = new SetSource(
+      this._materialite,
+      comp,
+      ordering,
+      this.#name,
+    ) as this;
     if (this.#seeded) {
       ret.seed(this.#tree.keys());
     }
@@ -231,15 +236,18 @@ export class SetSource<T extends object> implements Source<T> {
     if (ordering === undefined) {
       return [this, this.#order];
     }
-    const fields = ordering[0];
+    // only retain fields relevant to this source.
+    const firstField = ordering[0][0];
 
-    // If length is 1, we're sorted by ID.
-    // TODO(mlaw): update AST structure so we can validate this.
-    if (fields.length === 1) {
+    if (firstField[0] !== this.#name) {
       return [this, this.#order];
     }
 
-    const key = fields.join(',');
+    const key = firstField[1];
+    // this is the canoncial sort.
+    if (key === 'id') {
+      return [this, this.#order];
+    }
     const alternateSort = this.#sorts.get(key);
     if (alternateSort !== undefined) {
       return [alternateSort, ordering];
@@ -247,7 +255,9 @@ export class SetSource<T extends object> implements Source<T> {
 
     // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
     // We do not need a separate source.
-    const comparator = makeComparator(ordering[0], 'asc');
+    // Must append id for uniqueness.
+    const fields: Selector[] = [firstField, [this.#name, 'id']];
+    const comparator = makeComparator(fields, 'asc');
     const source = this.withNewOrdering(comparator, ordering);
 
     this.#sorts.set(key, source);

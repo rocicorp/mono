@@ -16,6 +16,7 @@ test('asc and descComparator on Entities', () => {
   const s = materialite.newSetSource<Entity>(
     (l, r) => l.id.localeCompare(r.id),
     ordering,
+    'x',
   );
   const orderBy = [
     [
@@ -87,6 +88,7 @@ test('add & remove', () => {
       const source = materialite.newSetSource<{x: number}>(
         (l, r) => l.x - r.x,
         [[['test', 'x']], 'asc'] as const,
+        'test',
       );
       const view = new TreeView(
         context,
@@ -117,6 +119,7 @@ test('replace', () => {
       const source = materialite.newSetSource<{x: number}>(
         (l, r) => l.x - r.x,
         orderBy,
+        'test',
       );
       const view = new TreeView(
         context,

@@ -305,6 +305,7 @@ describe('sorting and limiting with different query operations', async () => {
             ['track', 'title'],
             ['artist', 'name'],
             ['track', 'id'],
+            ['trackArtist', 'id'],
             ['artist', 'id'],
           ],
           'asc',

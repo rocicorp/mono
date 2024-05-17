@@ -168,7 +168,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     // e.g., [modified] vs [modified, created]
     // in which case we process until we hit the next thing after
     // the source order after we limit.
-    if (fields[0] !== this.#order[0][0]) {
+    if (!selectorsAreEqual(fields[0], this.#order[0][0])) {
       throw new Error(
         `Order must overlap on at least one field! Got: ${fields[0]} | ${
           this.#order[0][0]
