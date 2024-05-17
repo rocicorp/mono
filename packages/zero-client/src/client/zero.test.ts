@@ -1870,7 +1870,6 @@ suite('CRUD', () => {
       {id: 'b', issueID: '2', text: 'B text'},
     ]);
 
-    console.log('UPDATE...');
     // set allows updating
     await setComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(await z.query.comment.select('*').prepare().exec()).toEqual([

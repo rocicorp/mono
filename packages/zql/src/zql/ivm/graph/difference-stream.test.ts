@@ -236,7 +236,11 @@ test('replying to a message only notifies along the requesting path', () => {
 
   expect(notified).toEqual([]);
 
-  stream.newDifference(1, [], createPullResponseMessage(msg, undefined));
+  stream.newDifference(
+    1,
+    [],
+    createPullResponseMessage(msg, 'test', undefined),
+  );
 
   expect(notified).toEqual([2, 5]);
 });

@@ -1502,8 +1502,14 @@ export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
     newDifference() {},
   };
   output.messageUpstream(msg, listener);
-  const trackReply = createPullResponseMessage(msg, [[['track', 'id']], 'asc']);
-  const albumReply = createPullResponseMessage(msg, [[['title', 'id']], 'asc']);
+  const trackReply = createPullResponseMessage(msg, 'track', [
+    [['track', 'id']],
+    'asc',
+  ]);
+  const albumReply = createPullResponseMessage(msg, 'title', [
+    [['title', 'id']],
+    'asc',
+  ]);
 
   trackInput.newDifference(1, [], trackReply);
 
