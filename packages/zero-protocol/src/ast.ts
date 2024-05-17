@@ -20,32 +20,60 @@ import type {
   Ordering,
   Primitive,
   PrimitiveArray,
+  SetOps,
   SimpleCondition,
   SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
 import * as v from 'shared/src/valita.js';
 
-export const selectorSchema = v.tuple([v.string(), v.string()]);
+function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
+  return t as v.Type<Readonly<T>>;
+}
 
-export const orderingSchema: v.Type<Ordering> = v.tuple([
-  v.array(selectorSchema),
-  v.union(v.literal('asc'), v.literal('desc')),
-]);
+export const selectorSchema = readonly(v.tuple([v.string(), v.string()]));
 
-export const primitiveSchema: v.Type<Primitive> = v.union(
+export const orderingSchema = readonly(
+  v.tuple([
+    readonly(v.array(selectorSchema)),
+    v.union(v.literal('asc'), v.literal('desc')),
+  ]),
+);
+
+// The following ensures Ordering and orderingSchema
+// are kept in sync (each type satisfies the other).
+(t: Ordering, inferredT: v.Infer<typeof orderingSchema>) => {
+  t satisfies v.Infer<typeof orderingSchema>;
+  inferredT satisfies Ordering;
+};
+
+export const primitiveSchema = v.union(
   v.string(),
   v.number(),
   v.boolean(),
   v.null(),
 );
 
-export const primitiveArraySchema: v.Type<PrimitiveArray> = v.union(
+// The following ensures Primitive and primitiveSchema
+// are kept in sync (each type satisfies the other).
+(t: Primitive, inferredT: v.Infer<typeof primitiveSchema>) => {
+  t satisfies v.Infer<typeof primitiveSchema>;
+  inferredT satisfies Primitive;
+};
+
+export const primitiveArraySchema = v.union(
   v.array(v.string()),
   v.array(v.number()),
   v.array(v.boolean()),
 );
 
-export const aggregateSchema: v.Type<Aggregate> = v.union(
+// The following ensures PrimitiveArray and primitiveArraySchema
+// are kept in sync (each type satisfies the other).
+(t: PrimitiveArray, inferredT: v.Infer<typeof primitiveArraySchema>) => {
+  t satisfies v.Infer<typeof primitiveArraySchema>;
+  inferredT satisfies PrimitiveArray;
+};
+
+export const aggregateSchema = v.union(
   v.literal('sum'),
   v.literal('avg'),
   v.literal('min'),
@@ -53,11 +81,26 @@ export const aggregateSchema: v.Type<Aggregate> = v.union(
   v.literal('array'),
   v.literal('count'),
 );
-export const aggregationSchema: v.Type<Aggregation> = v.object({
+
+// The following ensures Aggregate and aggregateSchema
+// are kept in sync (each type satisfies the other).
+(t: Aggregate, inferredT: v.Infer<typeof aggregateSchema>) => {
+  t satisfies v.Infer<typeof aggregateSchema>;
+  inferredT satisfies Aggregate;
+};
+
+export const aggregationSchema = v.object({
   field: selectorSchema.optional(),
   alias: v.string(),
   aggregate: aggregateSchema,
 });
+
+// The following ensures Aggregation and aggregationSchema
+// are kept in sync (each type satisfies the other).
+(t: Aggregation, inferredT: v.Infer<typeof aggregationSchema>) => {
+  t satisfies v.Infer<typeof aggregationSchema>;
+  inferredT satisfies Aggregation;
+};
 
 export const joinSchema: v.Type<Join> = v.lazy(() =>
   v.object({
@@ -100,38 +143,84 @@ export const conjunctionSchema: v.Type<Conjunction> = v.lazy(() =>
   }),
 );
 
-export const equalityOpsSchema: v.Type<EqualityOps> = v.union(
-  v.literal('='),
-  v.literal('!='),
-);
+export const equalityOpsSchema = v.union(v.literal('='), v.literal('!='));
 
-export const orderOpsSchema: v.Type<OrderOps> = v.union(
+// The following ensures EqualityOps and equalityOpsSchema
+// are kept in sync (each type satisfies the other).
+(t: EqualityOps, inferredT: v.Infer<typeof equalityOpsSchema>) => {
+  t satisfies v.Infer<typeof equalityOpsSchema>;
+  inferredT satisfies EqualityOps;
+};
+
+export const orderOpsSchema = v.union(
   v.literal('<'),
   v.literal('>'),
   v.literal('<='),
   v.literal('>='),
 );
 
-export const inOpsSchema: v.Type<InOps> = v.union(
-  v.literal('IN'),
-  v.literal('NOT IN'),
-);
+// The following ensures OrderOps and orderOpsSchema
+// are kept in sync (each type satisfies the other).
+(t: OrderOps, inferredT: v.Infer<typeof orderOpsSchema>) => {
+  t satisfies v.Infer<typeof orderOpsSchema>;
+  inferredT satisfies OrderOps;
+};
 
-export const likeOpsSchema: v.Type<LikeOps> = v.union(
+export const inOpsSchema = v.union(v.literal('IN'), v.literal('NOT IN'));
+
+// The following ensures OrderOps and inOpsSchema
+// are kept in sync (each type satisfies the other).
+(t: InOps, inferredT: v.Infer<typeof inOpsSchema>) => {
+  t satisfies v.Infer<typeof inOpsSchema>;
+  inferredT satisfies InOps;
+};
+
+export const likeOpsSchema = v.union(
   v.literal('LIKE'),
   v.literal('NOT LIKE'),
   v.literal('ILIKE'),
   v.literal('NOT ILIKE'),
 );
 
-export const simpleOperatorSchema: v.Type<SimpleOperator> = v.union(
+// The following ensures LikeOps and likeOpsSchema
+// are kept in sync (each type satisfies the other).
+(t: LikeOps, inferredT: v.Infer<typeof likeOpsSchema>) => {
+  t satisfies v.Infer<typeof likeOpsSchema>;
+  inferredT satisfies LikeOps;
+};
+
+export const setOpsSchema = v.union(
+  v.literal('INTERSECTS'),
+  v.literal('DISJOINT'),
+  v.literal('SUPERSET'),
+  v.literal('CONGRUENT'),
+  v.literal('INCONGRUENT'),
+  v.literal('SUBSET'),
+);
+
+// The following ensures SetOps and setOpsSchema
+// are kept in sync (each type satisfies the other).
+(t: SetOps, inferredT: v.Infer<typeof setOpsSchema>) => {
+  t satisfies v.Infer<typeof setOpsSchema>;
+  inferredT satisfies SetOps;
+};
+
+export const simpleOperatorSchema = v.union(
   equalityOpsSchema,
   orderOpsSchema,
   inOpsSchema,
   likeOpsSchema,
+  setOpsSchema,
 );
 
-export const simpleConditionSchema: v.Type<SimpleCondition> = v.object({
+// The following ensures SimpleOperator and simpleOperatorSchema
+// are kept in sync (each type satisfies the other).
+(t: SimpleOperator, inferredT: v.Infer<typeof simpleOperatorSchema>) => {
+  t satisfies v.Infer<typeof simpleOperatorSchema>;
+  inferredT satisfies SimpleOperator;
+};
+
+export const simpleConditionSchema = v.object({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
   field: selectorSchema,
@@ -140,3 +229,10 @@ export const simpleConditionSchema: v.Type<SimpleCondition> = v.object({
     value: v.union(primitiveSchema, primitiveArraySchema),
   }),
 });
+
+// The following ensures SimpleCondition and simpleConditionSchema
+// are kept in sync (each type satisfies the other).
+(t: SimpleCondition, inferredT: v.Infer<typeof simpleConditionSchema>) => {
+  t satisfies v.Infer<typeof simpleConditionSchema>;
+  inferredT satisfies SimpleCondition;
+};

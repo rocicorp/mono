@@ -19,7 +19,7 @@ export enum ErrorKind {
   Internal = 'Internal',
 }
 
-export const errorKindSchema: v.Type<ErrorKind> = v.union(
+export const errorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),
   v.literal(ErrorKind.ClientNotFound),
   v.literal(ErrorKind.InvalidConnectionRequest),
@@ -33,6 +33,13 @@ export const errorKindSchema: v.Type<ErrorKind> = v.union(
   v.literal(ErrorKind.VersionNotSupported),
   v.literal(ErrorKind.Internal),
 );
+
+// The following ensures ErrorKind and errorKindSchema
+// are kept in sync (each type satisfies the other).
+(t: ErrorKind, inferredT: v.Infer<typeof errorKindSchema>) => {
+  t satisfies v.Infer<typeof errorKindSchema>;
+  inferredT satisfies ErrorKind;
+};
 
 export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([
   v.literal('error'),
