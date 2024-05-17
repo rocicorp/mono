@@ -67,18 +67,9 @@ export class LeftJoinOperator<
       JoinResult<AValue, BValue, AAlias, BAlias>
     >[] = [];
 
-    if (inputA !== undefined) {
-      iterablesToReturn.push(
-        genFlatMap(inputA, entry => {
-          const key = this.#joinArgs.getAJoinKey(entry[0]);
-          const ret = this.#joinOneLeft(entry, key);
-          this.#indexA.add(key, entry);
-          this.#aKeysForCompaction.add(key);
-          return ret;
-        }),
-      );
-    }
-
+    // fill the inner set first so we don't emit 2x the amount of data
+    // I.e., so we don't omit `null` values for each `a` value followed by
+    // the actual join results.
     if (inputB !== undefined) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
@@ -88,6 +79,18 @@ export class LeftJoinOperator<
             this.#indexB.add(key, entry);
             this.#bKeysForCompaction.add(key);
           }
+          return ret;
+        }),
+      );
+    }
+
+    if (inputA !== undefined) {
+      iterablesToReturn.push(
+        genFlatMap(inputA, entry => {
+          const key = this.#joinArgs.getAJoinKey(entry[0]);
+          const ret = this.#joinOneLeft(entry, key);
+          this.#indexA.add(key, entry);
+          this.#aKeysForCompaction.add(key);
           return ret;
         }),
       );

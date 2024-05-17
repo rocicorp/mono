@@ -1,3 +1,4 @@
+import {assert} from 'shared/src/asserts.js';
 import type {Multiset} from '../../multiset.js';
 import type {Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
@@ -5,81 +6,147 @@ import type {DifferenceStream, Listener} from '../difference-stream.js';
 import type {Reply, Request} from '../message.js';
 import {OperatorBase} from './operator.js';
 
-function convertReply(reply: Reply | undefined): Reply | undefined {
-  if (reply !== undefined) {
-    return {
-      ...reply,
-      // Join does not yet respect order coming from a source.
-      order: undefined,
-    };
-  }
-  return reply;
-}
-
 export class JoinOperatorBase<
-  I1 extends object,
-  I2 extends object,
+  AValue extends object,
+  BValue extends object,
   O extends object,
 > extends OperatorBase<O> {
-  readonly #listener1: Listener<I1>;
-  readonly #input1: DifferenceStream<I1>;
-  readonly #listener2: Listener<I2>;
-  readonly #input2: DifferenceStream<I2>;
+  readonly #listenerA: Listener<AValue>;
+  readonly #inputA: DifferenceStream<AValue>;
+  readonly #listenerB: Listener<BValue>;
+  readonly #inputB: DifferenceStream<BValue>;
+  readonly #fn: (
+    v: Version,
+    inputA: Multiset<AValue> | undefined,
+    inputB: Multiset<BValue> | undefined,
+  ) => Multiset<O>;
+  readonly #output: DifferenceStream<O>;
+  readonly #buffer: {
+    aMsg: Reply | undefined;
+    bMsg: Reply | undefined;
+    inputA: Multiset<AValue> | undefined;
+    inputB: Multiset<BValue> | undefined;
+  } = {
+    aMsg: undefined,
+    bMsg: undefined,
+    inputA: undefined,
+    inputB: undefined,
+  };
 
   constructor(
-    input1: DifferenceStream<I1>,
-    input2: DifferenceStream<I2>,
+    inputA: DifferenceStream<AValue>,
+    inputB: DifferenceStream<BValue>,
     output: DifferenceStream<O>,
     fn: (
       v: Version,
-      inputA: Multiset<I1> | undefined,
-      inputB: Multiset<I2> | undefined,
+      inputA: Multiset<AValue> | undefined,
+      inputB: Multiset<BValue> | undefined,
     ) => Multiset<O>,
   ) {
     super(output);
-    this.#listener1 = {
-      newDifference: (version, data, reply) => {
-        output.newDifference(
-          version,
-          fn(version, data, undefined),
-          convertReply(reply),
-        );
-      },
+    this.#fn = fn;
+    this.#output = output;
+    this.#listenerA = {
+      newDifference: this.#onInputADifference,
       commit: version => {
         this.commit(version);
       },
     };
-    this.#listener2 = {
-      newDifference: (version, data, reply) => {
-        output.newDifference(
-          version,
-          fn(version, undefined, data),
-          convertReply(reply),
-        );
-      },
+    this.#listenerB = {
+      newDifference: this.#onInputBDifference,
       commit: version => {
         this.commit(version);
       },
     };
-    input1.addDownstream(this.#listener1);
-    input2.addDownstream(this.#listener2);
-    this.#input1 = input1;
-    this.#input2 = input2;
+    inputA.addDownstream(this.#listenerA);
+    inputB.addDownstream(this.#listenerB);
+    this.#inputA = inputA;
+    this.#inputB = inputB;
+  }
+
+  #onInputADifference = (
+    version: Version,
+    data: Multiset<AValue>,
+    reply: Reply | undefined,
+  ) => {
+    if (reply !== undefined) {
+      if (this.#buffer.inputB !== undefined) {
+        this.#output.newDifference(
+          version,
+          this.#fn(version, data, this.#buffer.inputB),
+          // TODO: pick which `reply` message to send downstream
+          // based on what order the sub-class chooses to respect.
+          reply,
+        );
+        this.#buffer.inputB = undefined;
+        this.#buffer.bMsg = undefined;
+      } else {
+        this.#bufferA(data, reply);
+      }
+    } else {
+      this.#output.newDifference(
+        version,
+        this.#fn(version, data, undefined),
+        undefined,
+      );
+    }
+  };
+
+  #onInputBDifference = (
+    version: Version,
+    data: Multiset<BValue>,
+    reply: Reply | undefined,
+  ) => {
+    if (reply !== undefined) {
+      if (this.#buffer.inputA !== undefined) {
+        this.#output.newDifference(
+          version,
+          this.#fn(version, this.#buffer.inputA, data),
+          // TODO: pick which `reply` message to send downstream
+          // based on what order the sub-class chooses to respect.
+          this.#buffer.aMsg,
+        );
+        this.#buffer.inputA = undefined;
+        this.#buffer.aMsg = undefined;
+      } else {
+        this.#bufferB(data, reply);
+      }
+    } else {
+      this.#output.newDifference(
+        version,
+        this.#fn(version, undefined, data),
+        undefined,
+      );
+    }
+  };
+
+  #bufferA(inputA: Multiset<AValue> | undefined, aMsg: Reply) {
+    assert(inputA !== undefined, 'inputA must be defined');
+    assert(this.#buffer.inputA === undefined, 'a must not already be buffered');
+    this.#buffer.aMsg = aMsg;
+    this.#buffer.inputA = inputA;
+  }
+
+  #bufferB(inputB: Multiset<BValue> | undefined, bMsg: Reply) {
+    assert(inputB !== undefined, 'inputB must be defined');
+    assert(this.#buffer.inputB === undefined, 'b must not already be buffered');
+    this.#buffer.bMsg = bMsg;
+    this.#buffer.inputB = inputB;
   }
 
   messageUpstream(message: Request): void {
-    // join won't make use of the order yet
-    // so don't pass it on.
-    const newMessage: Request = {
+    // join will only make use of `inputA` ordering at the moment
+    // so strip order from `b` message.
+    const bMessage: Request = {
       ...message,
       order: undefined,
     };
-    this.#input1.messageUpstream(newMessage, this.#listener1);
-    this.#input2.messageUpstream(newMessage, this.#listener2);
+    this.#inputA.messageUpstream(message, this.#listenerA);
+    this.#inputB.messageUpstream(bMessage, this.#listenerB);
   }
 
   destroy() {
-    this.#input1.removeDownstream(this.#listener1);
-    this.#input2.removeDownstream(this.#listener2);
+    this.#inputA.removeDownstream(this.#listenerA);
+    this.#inputB.removeDownstream(this.#listenerB);
   }
 }
