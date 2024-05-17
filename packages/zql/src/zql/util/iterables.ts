@@ -1,3 +1,11 @@
+export function gen<T>(generator: () => Generator<T, void, unknown>) {
+  return {
+    [Symbol.iterator]() {
+      return generator();
+    },
+  };
+}
+
 export function genConcat<T>(iters: Iterable<T>[]) {
   return {
     *[Symbol.iterator]() {
@@ -8,28 +16,17 @@ export function genConcat<T>(iters: Iterable<T>[]) {
   };
 }
 
-export function genMap<T, U>(
-  s: Iterable<T>,
-  cb: (x: T) => U,
-  finallyCb?: () => void | undefined,
-) {
+export function genMap<T, U>(s: Iterable<T>, cb: (x: T) => U) {
   return {
     *[Symbol.iterator]() {
-      try {
-        for (const x of s) {
-          yield cb(x);
-        }
-      } finally {
-        finallyCb?.();
+      for (const x of s) {
+        yield cb(x);
       }
     },
   };
 }
 
-export function genCached<T>(
-  s: Iterable<T>,
-  finallyCb?: () => void | undefined,
-) {
+export function genCached<T>(s: Iterable<T>) {
   const cache: T[] = [];
 
   // we have to start it outside so it doesn't get re-started
@@ -50,7 +47,7 @@ export function genCached<T>(
           }
 
           lastIteratorResult = innerIterator.next();
-          if (lastIteratorResult?.done) {
+          if (lastIteratorResult.done) {
             return;
           }
 
@@ -60,7 +57,6 @@ export function genCached<T>(
         if (!lastIteratorResult?.done) {
           innerIterator.return?.();
         }
-        finallyCb?.();
       }
     },
   };
@@ -69,34 +65,27 @@ export function genCached<T>(
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   f: (x: T) => x is S,
-  finallyCb?: () => void | undefined,
 ): {
   [Symbol.iterator](): Generator<S, void, unknown>;
 };
 export function genFilter<T>(
   s: Iterable<T>,
   f: (x: T) => boolean,
-  finallyCb?: () => void | undefined,
 ): {
   [Symbol.iterator](): Generator<T, void, unknown>;
 };
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   cb: (x: T) => boolean,
-  finallyCb?: () => void | undefined,
 ): {
   [Symbol.iterator](): Generator<S, void, unknown>;
 } {
   return {
     *[Symbol.iterator]() {
-      try {
-        for (const x of s) {
-          if (cb(x)) {
-            yield x as S;
-          }
+      for (const x of s) {
+        if (cb(x)) {
+          yield x as S;
         }
-      } finally {
-        finallyCb?.();
       }
     },
   };
@@ -105,17 +94,12 @@ export function genFilter<S extends T, T>(
 export function genFlatMap<T, U>(
   iter: Iterable<T>,
   f: (t: T, index: number) => Iterable<U>,
-  finallyCb?: () => void | undefined,
 ) {
   return {
     *[Symbol.iterator]() {
-      try {
-        let index = 0;
-        for (const t of iter) {
-          yield* f(t, index++);
-        }
-      } finally {
-        finallyCb?.();
+      let index = 0;
+      for (const t of iter) {
+        yield* f(t, index++);
       }
     },
   };

@@ -169,7 +169,10 @@ class InfiniteSuorce<T extends object> implements Source<T> {
         this.#stream.newDifference(
           this.#materialite.getVersion(),
           this.#generator,
-          createPullResponseMessage(message, [[[this.#name, 'id']], 'asc']),
+          createPullResponseMessage(message, this.#name, [
+            [[this.#name, 'id']],
+            'asc',
+          ]),
         );
         break;
       }

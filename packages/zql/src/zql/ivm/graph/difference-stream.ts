@@ -89,6 +89,7 @@ export class DifferenceStream<T extends object> {
       for (const requestor of must(requestors)) {
         requestor.newDifference(version, data, reply);
       }
+      this.#requestors.delete(reply.replyingTo);
     } else {
       for (const listener of this.#downstreams) {
         listener.newDifference(version, data, reply);

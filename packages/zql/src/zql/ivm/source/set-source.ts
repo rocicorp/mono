@@ -221,7 +221,7 @@ export class SetSource<T extends object> implements Source<T> {
     this.#stream.newDifference(
       this._materialite.getVersion(),
       asEntries(newSort.#tree, request),
-      createPullResponseMessage(request, orderForReply),
+      createPullResponseMessage(request, this.#name, orderForReply),
     );
   }
 
