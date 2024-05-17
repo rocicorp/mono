@@ -15,6 +15,7 @@ export const errorKindSchema = v.union(
   v.literal('InvalidPush'),
   v.literal('MutationFailed'),
   v.literal('Unauthorized'),
+  v.literal('Unknown'),
   v.literal('VersionNotSupported'),
 );
 
