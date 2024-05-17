@@ -21,6 +21,7 @@ export const errorKindSchema = v.union(
   v.literal('RoomClosed'),
   v.literal('RoomNotFound'),
   v.literal('Unauthorized'),
+  v.literal('Unknown'),
   v.literal('VersionNotSupported'),
 );
 

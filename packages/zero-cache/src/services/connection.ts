@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import {
   ConnectedMessage,
@@ -8,11 +9,11 @@ import {
   PongMessage,
   upstreamSchema,
 } from 'zero-protocol';
-import type {ServiceRunner} from './service-runner.js';
-import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
+import {ProtocolError} from '../types/protocol-error.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
-import {assert} from 'shared/src/asserts.js';
+import type {ServiceRunner} from './service-runner.js';
+import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 
 export function handleConnection(
   lc: LogContext,
@@ -156,7 +157,7 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
-      this.#closeWithError('InvalidMessage', String(e));
+      this.#closeWithProtocolError('InvalidMessage', String(e));
       return;
     }
     try {
@@ -168,7 +169,7 @@ export class Connection {
         case 'push': {
           const {clientGroupID, mutations} = msg[1];
           if (clientGroupID !== this.#clientGroupID) {
-            this.#closeWithError(
+            this.#closeWithProtocolError(
               'InvalidPush',
               `clientGroupID in mutation "${clientGroupID}" does not match ` +
                 `clientGroupID of connection "${this.#clientGroupID}`,
@@ -204,8 +205,7 @@ export class Connection {
           msgType satisfies never;
       }
     } catch (e) {
-      // TODO: Determine the ErrorKind from a custom Error type for e.
-      this.#closeWithError('InvalidMessage', String(e));
+      this.#closeWithError(e);
     }
   };
 
@@ -227,12 +227,19 @@ export class Connection {
       this.#lc.info?.('downstream closed by ViewSyncer');
       this.close();
     } catch (e) {
-      // TODO: Determine the ErrorKind from a custom Error type for e.
-      this.#closeWithError('InvalidMessage', String(e));
+      this.#closeWithError(e);
     }
   }
 
-  #closeWithError(
+  #closeWithError(e: unknown) {
+    if (e instanceof ProtocolError) {
+      this.#closeWithProtocolError(e.kind, e.msg, 'info');
+    } else {
+      this.#closeWithProtocolError('Unknown', String(e), 'error');
+    }
+  }
+
+  #closeWithProtocolError(
     kind: ErrorKind,
     message = '',
     logLevel: 'info' | 'error' = 'info',
