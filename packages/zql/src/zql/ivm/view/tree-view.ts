@@ -7,6 +7,7 @@ import {createPullMessage, Reply} from '../graph/message.js';
 import type {Multiset} from '../multiset.js';
 import type {Comparator} from '../types.js';
 import {AbstractView} from './abstract-view.js';
+import {selectorsAreEqual} from '../source/util.js';
 
 /**
  * A sink that maintains the list of values in-order.
@@ -115,20 +116,6 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
       iterator = this.#getLimitedIterator(c, reply, this.#limit);
     }
 
-    // TODO: process with a limit if we have a limit and we're in source order.
-    // We're always in source order. At least to an extent.
-    // We need to know to what extent.
-    // I.e., all order by columns are present in source?
-    // Only the first?
-    // If only the first N, then we loop until we meet something beyond the first N and we're
-    // at limit.
-    // So source must reply with its order param(s).
-    // Then we can iterate correctly.
-    // Join will update the reply.
-    // Reply should also include contiguous groups or not.
-    //   If we're sorted by `modified` but we have contiguous `issue id` groups
-    //     this happens in the case of a join where the contiguous grouping can be something
-    //     we are not sorted by. The sort drives the join order but the join key drives the grouping.
     while (!(next = iterator.next()).done) {
       const entry = next.value;
       const [value, mult] = entry;
@@ -162,10 +149,6 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
    * Limits the iterator to only pull `limit` items from the stream.
    * This is only used in cases where we're processing history
    * for initial query run.
-   *
-   * In those cases:
-   * 1. We're in partially overlapping order with the source
-   * 2. There are no deletes, only adds
    */
   #getLimitedIterator(data: Multiset<T>, reply: Reply, limit: number) {
     const {order} = reply;
@@ -195,7 +178,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     // source order may be a subset of desired order
     // e.g., [modified] vs [modified, created]
     // in which case we process until we hit the next thing after
-    // the source order after we hit the limit.
+    // the source order after we limit.
     if (fields[0] !== this.#order[0][0]) {
       throw new Error(
         `Order must overlap on at least one field! Got: ${fields[0]} | ${
@@ -243,8 +226,6 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     };
   }
 
-  // TODO: if we're not in source order --
-  // We should create a source in the order we need so we can always be in source order.
   #limitedAdd(data: BTree<T, undefined>, value: T) {
     const limit = this.#limit || 0;
     // Under limit? We can just add.
@@ -259,7 +240,6 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     }
 
     // at limit? We can only add if the value is under max
-    // TODO(mlaw): asc/desc matters here.
     const comp = this.#comparator(value, this.#max!);
     if (comp > 0) {
       return data;
@@ -348,6 +328,10 @@ function remove<T>(data: BTree<T, undefined>, value: T) {
   return data;
 }
 
+/**
+ * Orderings only need to be partially compatible.
+ * As in, a prefix of sourceOrder matches a prefix of destOrder.
+ */
 function orderingsAreCompatible(
   sourceOrder: Ordering | undefined,
   destOrder: Ordering | undefined,
@@ -371,7 +355,7 @@ function orderingsAreCompatible(
   const destFields = destOrder[0];
 
   // If at least the left most field is the same, we're compatible.
-  if (sourceFields[0] === destFields[0]) {
+  if (selectorsAreEqual(sourceFields[0], destFields[0])) {
     return true;
   }
 

@@ -74,7 +74,7 @@ class ZeroSource {
   constructor(materialite: Materialite, name: string, addWatch: AddWatch) {
     this.#canonicalSource = materialite.newSetSource<Entity>(
       canonicalComparator,
-      canonicalOrdering,
+      [[[name, 'id']], 'asc'],
       name,
     );
     addWatch(name, this.#handleDiff);
@@ -126,6 +126,5 @@ class ZeroSource {
   }
 }
 
-export const canonicalOrdering = [['id'], 'asc'] as const;
 export const canonicalComparator = (l: Entity, r: Entity) =>
   compareUTF8(l.id, r.id);

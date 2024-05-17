@@ -108,33 +108,11 @@ describe('a limited window is correctly maintained over differences', () => {
 
     stmt.destroy();
   });
-
-  // This doesn't work yet. The window does not re-fill when data drops out.
-  // The plan is to do the simple thing:
-  // 1. over-fetch the window so we don't often under-run it
-  // 2. when we do under-run, re-run the query from scratch
-  // test('removing values inside the established window', async () => {
-  //   const stmt = q.select('id').limit(5).prepare();
-  //   const data = await stmt.exec();
-
-  //   expect(data.map(x => x.id)).toEqual(['d', 'f', 'h', 'j', 'l']);
-
-  //   source.delete({id: 'h'});
-  //   const newData = await stmt.exec();
-
-  //   // if we are limited and in ASC order, things inside the window are removed
-  //   expect(newData.map(x => x.id)).toEqual(['d', 'f', 'j', 'l', 'n']);
-
-  //   stmt.destroy();
-  // });
 });
 
 /**
  * To make sure `limit` is actually `limiting` the amount of data we're processing
  * from a source, we need to test it with an infinite source.
- *
- * There are some forms of queries which are not supported with an infinite source
- * but here we test all those that we expect to work.
  */
 describe('pulling from an infinite source is possible if we set a limit', () => {
   type E = {
@@ -170,21 +148,4 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
 
     stmt.destroy();
   });
-
-  // TODO(mlaw): test select with alternate ordering. differing fields and same fields but differing direction
-  // TODO(mlaw): test cases for when `withNewOrdering` should or should not be invoked. e.g., join should drop order rn
-
-  // test when the view is sorted by a superset of the fields used to sort the source
-
-  // join currently tries to consume the entire source. This is fixed and tested in later commits.
-  // test('join 2 tables', () => {});
-  // test('join 3 tables', () => {});
-
-  // need the `contiguous groups` optimization
-  // test('group-by', () => {});
-
-  // test:
-  // - concat (or)
-  // - distinct
-  // - concat + distinct (or)
 });

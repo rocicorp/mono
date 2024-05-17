@@ -5,8 +5,8 @@ import {Materialite} from '../materialite.js';
 
 type E = {id: number};
 
-const ordering = [['id'], 'asc'] as const;
-const descOrdering = [['id'], 'desc'] as const;
+const ordering = [[['test', 'id']], 'asc'] as const;
+const descOrdering = [[['test', 'id']], 'desc'] as const;
 const comparator = (l: E, r: E) => l.id - r.id;
 const numberComparator = (l: number, r: number) => l - r;
 
@@ -253,9 +253,4 @@ test('history requests with an alternate ordering are fulfilled by that ordering
   expect(items).toEqual(
     baseItems.concat({id: 4, x: 'd'}).sort((l, r) => l.x.localeCompare(r.x)),
   );
-});
-
-test('alternate ordering creations', () => {
-  // is created for an ordering
-  // is not created for undefined
 });

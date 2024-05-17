@@ -151,9 +151,3 @@ test('replace', async () => {
     }),
   );
 });
-
-test('limit maintenance', () => {
-  // asc
-  // desc
-  // delete & re-fetch
-});

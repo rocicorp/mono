@@ -1,15 +1,3 @@
-// test alternative sorts and limits
-// test internal size of view
-// test inequality on order-by
-// join with order and limit
-// join with just order
-// join with order and inequality on order field
-// group by go thru same things
-// full table aggregations?
-// rather than infinite limit test, just check the view is not greater than limit.
-// of course it'll be greater than limit with inequality filter given we don't hoist that yet.
-// test overlapping but non-identical order
-// TODO(mlaw): test select with alternate ordering. differing fields and same fields but differing direction
 import {describe, expect, test} from 'vitest';
 import {canonicalComparator} from '@rocicorp/zql/src/zql/context/zero-context.js';
 import {
@@ -43,13 +31,6 @@ describe('sorting and limiting with different query operations', async () => {
     },
     {} as Record<string, Artist>,
   );
-  // const indexedAlbums = albums.reduce(
-  //   (acc, a) => {
-  //     acc[a.id] = a;
-  //     return acc;
-  //   },
-  //   {} as Record<string, Album>,
-  // );
   const indexedTrackArtists = trackArtists.reduce(
     (acc, a) => {
       acc[a.trackId] = acc[a.trackId] || [];
@@ -117,13 +98,33 @@ describe('sorting and limiting with different query operations', async () => {
       name: 'Select with a limit and orderBy, asc',
       query: () => z.query.artist.asc('artist.name').limit(10),
       expected: () =>
-        artists.sort(makeComparator(['name', 'id'], 'asc')).slice(0, 10),
+        artists
+          .sort(
+            makeComparator(
+              [
+                ['artist', 'name'],
+                ['artist', 'id'],
+              ],
+              'asc',
+            ),
+          )
+          .slice(0, 10),
     },
     {
       name: 'Select with a limit and orderBy, desc',
       query: () => z.query.artist.desc('artist.name').limit(10),
       expected: () =>
-        artists.sort(makeComparator(['name', 'id'], 'desc')).slice(0, 10),
+        artists
+          .sort(
+            makeComparator(
+              [
+                ['artist', 'name'],
+                ['artist', 'id'],
+              ],
+              'desc',
+            ),
+          )
+          .slice(0, 10),
     },
     {
       name: 'Select with limit, orderBy and constraint on orderBy field',
@@ -135,7 +136,15 @@ describe('sorting and limiting with different query operations', async () => {
       expected: () =>
         tracks
           .filter(t => t.title > 'F')
-          .sort(makeComparator(['title', 'id'], 'asc'))
+          .sort(
+            makeComparator(
+              [
+                ['track', 'title'],
+                ['tracl', 'id'],
+              ],
+              'asc',
+            ),
+          )
           .slice(0, 3),
     },
     {
@@ -145,11 +154,20 @@ describe('sorting and limiting with different query operations', async () => {
           .join(z.query.artist, 'artist', 'artistId', 'id')
           .limit(10),
       expected: (): {artist: Artist; album: Album}[] =>
-        albums.map(joinAlbumToArtist).sort(canonicalComparator).slice(0, 10),
+        albums
+          .map(joinAlbumToArtist)
+          .sort(
+            makeComparator(
+              [
+                ['album', 'id'],
+                ['artist', 'id'],
+              ],
+              'asc',
+            ),
+          )
+          .slice(0, 10),
     },
     {
-      // TODO(mlaw): for asc/desc swap, should we just find and use an existing view?
-      // Same exact query we're just iterating in the opposite direction (well if there are no limits).
       name: 'Select with a join, no limit. ID order, desc',
       query: () =>
         z.query.album
@@ -170,7 +188,16 @@ describe('sorting and limiting with different query operations', async () => {
       expected: (): {artist: Artist; album: Album}[] =>
         albums
           .map(joinAlbumToArtist)
-          .sort(makeComparator(['album.title', 'id'], 'asc'))
+          .sort(
+            makeComparator(
+              [
+                ['album', 'title'],
+                ['album', 'id'],
+                ['artist', 'id'],
+              ],
+              'asc',
+            ),
+          )
           .slice(0, 10),
     },
     {
@@ -181,7 +208,13 @@ describe('sorting and limiting with different query operations', async () => {
           .desc('album.title')
           .limit(10),
       expected: (): {artist: Artist; album: Album}[] => {
-        const c = makeComparator(['album.title', 'id'], 'desc');
+        const c = makeComparator(
+          [
+            ['album', 'title'],
+            ['album', 'id'],
+          ],
+          'desc',
+        );
         return albums.map(joinAlbumToArtist).sort(c).slice(0, 10);
       },
     },
@@ -193,7 +226,14 @@ describe('sorting and limiting with different query operations', async () => {
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
           .asc('track.title', 'artist.name'),
       expected: () => {
-        const c = makeComparator(['track.title', 'artist.name', 'id'], 'asc');
+        const c = makeComparator(
+          [
+            ['track', 'title'],
+            ['artist', 'name'],
+            ['track', 'id'],
+          ],
+          'asc',
+        );
         return tracks.flatMap(joinTrackToArtists).sort(c);
       },
     },
@@ -205,7 +245,14 @@ describe('sorting and limiting with different query operations', async () => {
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
           .desc('track.title', 'artist.name'),
       expected: () => {
-        const c = makeComparator(['track.title', 'artist.name', 'id'], 'desc');
+        const c = makeComparator(
+          [
+            ['track', 'title'],
+            ['artist', 'name'],
+            ['track', 'id'],
+          ],
+          'desc',
+        );
         return tracks.flatMap(joinTrackToArtists).sort(c);
       },
     },
@@ -224,8 +271,24 @@ describe('sorting and limiting with different query operations', async () => {
       query: () =>
         z.query.track.groupBy('track.albumId').desc('track.title').limit(10),
       expected: () =>
-        groupTracksByAlbum(makeComparator(['title', 'id'], 'desc'))
-          .sort(makeComparator(['title', 'id'], 'desc'))
+        groupTracksByAlbum(
+          makeComparator(
+            [
+              ['track', 'title'],
+              ['track', 'albumId'],
+            ],
+            'desc',
+          ),
+        )
+          .sort(
+            makeComparator(
+              [
+                ['track', 'title'],
+                ['track', 'albumId'],
+              ],
+              'desc',
+            ),
+          )
           .slice(0, 10),
     },
     {
@@ -237,7 +300,15 @@ describe('sorting and limiting with different query operations', async () => {
           .limit(10)
           .asc('track.title', 'artist.name'),
       expected: () => {
-        const c = makeComparator(['track.title', 'artist.name', 'id'], 'asc');
+        const c = makeComparator(
+          [
+            ['track', 'title'],
+            ['artist', 'name'],
+            ['track', 'id'],
+            ['artist', 'id'],
+          ],
+          'asc',
+        );
         return tracks.flatMap(joinTrackToArtists).sort(c).slice(0, 10);
       },
     },
@@ -250,18 +321,19 @@ describe('sorting and limiting with different query operations', async () => {
           .desc('track.title', 'artist.name')
           .limit(10),
       expected: () => {
-        const c = makeComparator(['track.title', 'artist.name', 'id'], 'desc');
+        const c = makeComparator(
+          [
+            ['track', 'title'],
+            ['artist', 'name'],
+            ['track', 'id'],
+            ['trackArtist', 'id'],
+            ['artist', 'id'],
+          ],
+          'desc',
+        );
         return tracks.flatMap(joinTrackToArtists).sort(c).slice(0, 10);
       },
     },
-    // 3 way join unlimited w/ group-by and aggregation against group
-    // TODO(mlaw): test full table aggregations
-    // TODO(mlaw): test group-by with aggregation
-    // TODO(mlaw): test left join for same cases as join
-    // TODO(mlaw): test removing things to cause us to come under the limit re-fills the window
-    // ^ this should be a unit test against the view.
-    // TODO(mlaw): test adding thins maintains the window correctly. E.g., `desc` logic is probably wrong rn.
-    // ^ this should be a unit test against the view.
   ])('$name', async ({query, expected}) => {
     const stmt = query().prepare();
     const rows = await stmt.exec();
@@ -272,13 +344,3 @@ describe('sorting and limiting with different query operations', async () => {
     expect(rows).toEqual(e);
   });
 });
-
-// TODO(mlaw): test cases for when `withNewOrdering` should or should not be invoked. e.g., join should drop order rn
-// TOOD(mlaw): test partial overlap of order. We shoudl actually only ever generate
-// a partial ordering overlap. We can even create a custom comparator in the view
-// for the set of overlapping fields until the first divergence.
-
-// test('select with 3-way join, limit, orderBy', async () => {});
-// should be outer loop id. . .
-// we don't specify this rn
-// test('select with 3-way join, limit, default order', async () => {});

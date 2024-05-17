@@ -23,7 +23,7 @@ type E1 = z.infer<typeof e1>;
 const context = makeTestContext();
 
 const comparator = (l: E1, r: E1) => compareUTF8(l.id, r.id);
-const ordering = [['id'], 'asc'] as const;
+const ordering = [[['e1', 'id']], 'asc'] as const;
 test('A simple select', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
@@ -544,7 +544,7 @@ describe('OR', () => {
     test((c.name ? c.name + ': ' : '') + conditionToString(c.where), () => {
       const {values = defaultValues} = c;
       const m = new Materialite();
-      const s = m.newSetSource<E>(comparator, [['id'], 'asc']);
+      const s = m.newSetSource<E>(comparator, [[['items', 'id']], 'asc']);
 
       const ast: AST = {
         table: 'items',

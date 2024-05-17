@@ -1435,9 +1435,17 @@ test('two tracks, only 1 is linked to artists', () => {
 });
 
 test('order is removed from request', () => {
+  orderIsRemovedFromRequest('leftJoin');
+});
+
+test('order is removed from reply', () => {
+  orderIsRemovedFromReply('leftJoin');
+});
+
+export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
-  const output = trackInput.leftJoin({
+  const output = trackInput[join]({
     aAs: 'track',
     getAJoinKey: x => x.albumId,
     getAPrimaryKey: x => x.id,
@@ -1454,7 +1462,7 @@ test('order is removed from request', () => {
     id: 1,
     hoistedConditions: [],
     type: 'pull',
-    order: [['x'], 'asc'],
+    order: [[['intentional-nonsense', 'x']], 'asc'],
   } as const;
   const listener = {
     commit() {},
@@ -1467,12 +1475,12 @@ test('order is removed from request', () => {
 
   expect(trackInputSpy.mock.calls[0][0]).toEqual({...msg, order: undefined});
   expect(albumInputSpy.mock.calls[0][0]).toEqual({...msg, order: undefined});
-});
+}
 
-test('order is removed from reply', () => {
+export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
-  const output = trackInput.leftJoin({
+  const output = trackInput[join]({
     aAs: 'track',
     getAJoinKey: x => x.albumId,
     getAPrimaryKey: x => x.id,
@@ -1487,28 +1495,33 @@ test('order is removed from reply', () => {
     id: 1,
     hoistedConditions: [],
     type: 'pull',
-    order: [['x'], 'asc'],
+    order: [[['intentional-nonsense', 'x']], 'asc'],
   } as const;
   const listener = {
     commit() {},
     newDifference() {},
   };
   output.messageUpstream(msg, listener);
-  const reply = createPullResponseMessage(msg, [['id'], 'asc']);
+  const trackReply = createPullResponseMessage(msg, [[['track', 'id']], 'asc']);
+  const albumReply = createPullResponseMessage(msg, [[['title', 'id']], 'asc']);
 
-  trackInput.newDifference(1, [], reply);
+  trackInput.newDifference(1, [], trackReply);
 
   expect(outputSpy).toHaveBeenCalledTimes(1);
-  expect(outputSpy).toBeCalledWith(1, [], {
-    ...reply,
+  expect(outputSpy.mock.calls[0][0]).toEqual(1);
+  expect([...outputSpy.mock.calls[0][1]]).toEqual([]);
+  expect(outputSpy.mock.calls[0][2]).toEqual({
+    ...trackReply,
     order: undefined,
   });
 
-  albumInput.newDifference(1, [], reply);
+  albumInput.newDifference(1, [], albumReply);
 
   expect(outputSpy).toHaveBeenCalledTimes(2);
-  expect(outputSpy).toHaveBeenNthCalledWith(2, 1, [], {
-    ...reply,
+  expect(outputSpy.mock.calls[1][0]).toEqual(1);
+  expect([...outputSpy.mock.calls[1][1]]).toEqual([]);
+  expect(outputSpy.mock.calls[1][2]).toEqual({
+    ...albumReply,
     order: undefined,
   });
-});
+}

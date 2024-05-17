@@ -130,7 +130,7 @@ test('cleaning up the only user of a stream cleans up the entire pipeline', () =
   const materialite = new Materialite();
   const set = materialite.newSetSource<Elem>(
     (l, r) => l.x - r.x,
-    [['x'], 'asc'],
+    [[['elem', 'x']], 'asc'],
   );
 
   let notifyCount = 0;
@@ -152,7 +152,7 @@ test('cleaning up the only user of a stream cleans up the entire pipeline but st
   const materialite = new Materialite();
   const set = materialite.newSetSource<Elem>(
     (l, r) => l.x - r.x,
-    [['x'], 'asc'],
+    [[['elem', 'x']], 'asc'],
   );
 
   let notifyCount = 0;
