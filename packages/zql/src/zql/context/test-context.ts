@@ -22,7 +22,8 @@ export class TestContext implements Context {
     if (!this.#sources.has(name)) {
       const source = this.materialite.newSetSource(
         (l: T, r: T) => compareUTF8(l.id, r.id),
-        [['id'], 'asc'],
+        [[[name, 'id']], 'asc'],
+        name,
       ) as unknown as Source<object>;
       source.seed([]);
       this.#sources.set(name, source);
@@ -41,18 +42,27 @@ export class TestContext implements Context {
 
 export class InfiniteSourceContext<T extends Entity> implements Context {
   readonly materialite = new Materialite();
-  readonly #source: Source<T>;
+  readonly #sources = new Map<string, Source<T>>();
+  readonly #generator;
 
   constructor(generator: {
     [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
   }) {
-    this.#source = this.materialite.constructSource(
-      internal => new InfiniteSuorce(internal, generator),
-    );
+    this.#generator = generator;
   }
 
-  getSource<X extends Entity>(_name: string): Source<X> {
-    return this.#source as unknown as Source<X>;
+  getSource<X extends Entity>(name: string): Source<X> {
+    const existing = this.#sources.get(name);
+    if (existing) {
+      return existing as unknown as Source<X>;
+    }
+
+    const source = this.materialite.constructSource(
+      internal => new InfiniteSuorce(internal, this.#generator, name),
+    );
+    this.#sources.set(name, source);
+
+    return source as unknown as Source<X>;
   }
 
   subscriptionAdded(_ast: AST): void {}
@@ -77,13 +87,16 @@ class InfiniteSuorce<T extends object> implements Source<T> {
   readonly #generator: {
     [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
   };
+  readonly #name;
 
   constructor(
     materialite: MaterialiteForSourceInternal,
     generator: {
       [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
     },
+    name: string,
   ) {
+    this.#name = name;
     this.#materialite = materialite;
     this.#generator = generator;
     this.#stream = new DifferenceStream<T>();
@@ -134,15 +147,12 @@ class InfiniteSuorce<T extends object> implements Source<T> {
 
   processMessage(message: Request): void {
     switch (message.type) {
-      // TODO: check for alternative order in the message.
-      // create the source in the new order.
-      // send from that source.
       case 'pull': {
         this.#materialite.addDirtySource(this.#internal);
         this.#stream.newDifference(
           this.#materialite.getVersion(),
           this.#generator,
-          createPullResponseMessage(message, [['id'], 'asc']),
+          createPullResponseMessage(message, [[[this.#name, 'id']], 'asc']),
         );
         break;
       }
