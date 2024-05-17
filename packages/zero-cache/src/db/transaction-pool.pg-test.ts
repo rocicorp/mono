@@ -24,6 +24,7 @@ describe('db/transaction-pool', () => {
       val text
     );
     CREATE TABLE workers (id SERIAL);
+    CREATE TABLE keepalive (id SERIAL);
     CREATE TABLE cleaned (id SERIAL);
     `.simple();
   });
@@ -41,6 +42,7 @@ describe('db/transaction-pool', () => {
 
   const initTask = task(`INSERT INTO workers (id) VALUES (DEFAULT);`);
   const cleanupTask = task(`INSERT INTO cleaned (id) VALUES (DEFAULT);`);
+  const keepaliveTask = task(`INSERT INTO keepalive (id) VALUES (DEFAULT);`);
 
   test('single transaction, serialized processing', async () => {
     const single = new TransactionPool(lc, initTask, cleanupTask, 1, 1);
@@ -168,6 +170,137 @@ describe('db/transaction-pool', () => {
       ],
       ['public.workers']: [{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}],
       ['public.cleaned']: [{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}],
+    });
+  });
+
+  test('pool resizing and idle/keepalive timeouts', async () => {
+    const pool = new TransactionPool(lc, initTask, cleanupTask, 2, 5, {
+      forInitialWorkers: {
+        timeoutMs: 100,
+        task: keepaliveTask,
+      },
+      forExtraWorkers: {
+        timeoutMs: 50,
+        task: 'done',
+      },
+    });
+
+    const processing = new Queue<boolean>();
+    const canProceed = new Queue<boolean>();
+
+    const blockingTask =
+      (stmt: string) => async (tx: postgres.TransactionSql) => {
+        void processing.enqueue(true);
+        await canProceed.dequeue();
+        return task(stmt)(tx);
+      };
+
+    const done = pool.run(db);
+
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+
+    for (let i = 0; i < 2; i++) {
+      await processing.dequeue();
+    }
+
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+
+    // Ensure all tasks get a worker.
+    for (let i = 2; i < 5; i++) {
+      await processing.dequeue();
+    }
+    // Let all 5 tasks proceed.
+    for (let i = 0; i < 5; i++) {
+      void canProceed.enqueue(true);
+    }
+
+    // Let the extra workers hit their 50ms idle timeout.
+    await sleep(75);
+
+    await expectTables(db, {
+      ['public.cleaned']: [{id: 1}, {id: 2}, {id: 3}],
+      ['public.keepalive']: [],
+    });
+
+    // Repeat to spawn more workers.
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (10)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (60, 'foo')`));
+
+    for (let i = 0; i < 2; i++) {
+      await processing.dequeue();
+    }
+
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (30)`));
+    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (20)`));
+    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (80, 'foo')`));
+
+    for (let i = 2; i < 5; i++) {
+      await processing.dequeue();
+    }
+
+    // Let all 5 tasks proceed.
+    for (let i = 0; i < 5; i++) {
+      void canProceed.enqueue(true);
+    }
+
+    // Let the new extra workers hit their 50ms idle timeout.
+    await sleep(75);
+
+    await expectTables(db, {
+      ['public.cleaned']: [
+        {id: 1},
+        {id: 2},
+        {id: 3},
+        {id: 4},
+        {id: 5},
+        {id: 6},
+      ],
+      ['public.keepalive']: [],
+    });
+
+    // Let the initial workers hit their 100ms keepalive timeout.
+    await sleep(50);
+
+    pool.setDone();
+    await done;
+
+    await expectTables(db, {
+      ['public.foo']: [
+        {id: 1, val: null},
+        {id: 2, val: null},
+        {id: 3, val: null},
+        {id: 6, val: 'foo'},
+        {id: 8, val: 'foo'},
+        {id: 10, val: null},
+        {id: 20, val: null},
+        {id: 30, val: null},
+        {id: 60, val: 'foo'},
+        {id: 80, val: 'foo'},
+      ],
+      ['public.workers']: [
+        {id: 1},
+        {id: 2},
+        {id: 3},
+        {id: 4},
+        {id: 5},
+        {id: 6},
+        {id: 7},
+        {id: 8},
+      ],
+      ['public.keepalive']: [{id: 1}, {id: 2}],
+      ['public.cleaned']: [
+        {id: 1},
+        {id: 2},
+        {id: 3},
+        {id: 4},
+        {id: 5},
+        {id: 6},
+        {id: 7},
+        {id: 8},
+      ],
     });
   });
 

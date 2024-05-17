@@ -53,6 +53,23 @@ describe('Queue', () => {
     expect(await val3).toBe('c');
   });
 
+  test('dequeues timed out value', async () => {
+    const q = new Queue<string>();
+    const val1 = q.dequeue();
+    const val2 = q.dequeue('timed out', 5);
+    const val3 = q.dequeue();
+    expect(q.size()).toBe(0);
+
+    expect(await val2).toBe('timed out');
+
+    await q.enqueue('a');
+    await q.enqueue('b');
+
+    expect(await val1).toBe('a');
+    expect(await val3).toBe('b');
+    expect(q.size()).toBe(0);
+  });
+
   test('supports mixed order', async () => {
     const q = new Queue<string>();
     expect(q.size()).toBe(0);
