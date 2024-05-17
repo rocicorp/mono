@@ -116,7 +116,7 @@ export class ServiceRunner
       this.#warmedUpConnections = true;
       const start = Date.now();
       void Promise.all([
-        // Warm up 1 upstream connection for mutage, and 2 replica connections for view syncing.
+        // Warm up 1 upstream connection for mutagen, and 2 replica connections for view syncing.
         // Note: These can be much larger when not limited to 6 TCP connections per DO.
         this.#upstream`SELECT 1`.simple().execute(),
         ...Array.from({length: 2}, () =>
