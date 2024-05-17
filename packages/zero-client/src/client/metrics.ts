@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ErrorKind as ServerErrorKind} from 'reflect-protocol';
+import type {ErrorKind as ServerErrorKind} from 'zero-protocol';
 import type {MaybePromise} from 'shared/src/types.js';
 
 export enum MetricName {

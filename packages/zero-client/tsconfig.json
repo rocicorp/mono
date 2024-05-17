@@ -6,7 +6,6 @@
       "@rocicorp/zql": ["../zql/src/mod.ts"],
       "@rocicorp/zql/src/*": ["../zql/src/*"],
       "datadog": ["../datadog/src/mod.ts"],
-      "reflect-protocol": ["../reflect-protocol/src/mod.ts"],
       "replicache": ["../replicache/src/mod.ts"],
       "replicache/src/*": ["../replicache/src/*"],
       "shared/src/*": ["../shared/src/*"],

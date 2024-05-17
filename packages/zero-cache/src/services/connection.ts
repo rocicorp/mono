@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import {
   ConnectedMessage,
@@ -9,9 +8,9 @@ import {
   PongMessage,
   upstreamSchema,
 } from 'zero-protocol';
-import {ProtocolError} from '../types/protocol-error.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
+import {findErrorForClient} from '../types/error-for-client.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 
@@ -33,7 +32,11 @@ export function handleConnection(
   const {params, error} = getConnectParams(url);
 
   if (error !== null) {
-    sendError(lc, serverWS, 'InvalidConnectionRequest', error);
+    sendError(lc, serverWS, [
+      'error',
+      ErrorKind.InvalidConnectionRequest,
+      error,
+    ]);
   } else {
     const {clientID} = params;
     const existing = clientConnections.get(clientID);
@@ -105,6 +108,7 @@ export class Connection {
     this.#clientGroupID = clientGroupID;
     this.#syncContext = {clientID, wsID, baseCookie};
     this.#lc = lc
+      .withContext('connection')
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
@@ -128,6 +132,7 @@ export class Connection {
     if (this.#closed) {
       return;
     }
+    this.#lc.debug?.('close');
     this.#closed = true;
     this.#ws.removeEventListener('message', this.#handleMessage);
     this.#ws.removeEventListener('close', this.#handleClose);
@@ -157,7 +162,7 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
-      this.#closeWithProtocolError('InvalidMessage', String(e));
+      this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)]);
       return;
     }
     try {
@@ -169,16 +174,17 @@ export class Connection {
         case 'push': {
           const {clientGroupID, mutations} = msg[1];
           if (clientGroupID !== this.#clientGroupID) {
-            this.#closeWithProtocolError(
-              'InvalidPush',
+            this.#closeWithError([
+              'error',
+              ErrorKind.InvalidPush,
               `clientGroupID in mutation "${clientGroupID}" does not match ` +
                 `clientGroupID of connection "${this.#clientGroupID}`,
-            );
+            ]);
           }
           for (const mutation of mutations) {
             const errorDesc = await this.#mutagen.processMutation(mutation);
             if (errorDesc !== undefined) {
-              this.sendError('MutationFailed', errorDesc);
+              this.sendError(['error', ErrorKind.MutationFailed, errorDesc]);
             }
           }
           break;
@@ -197,15 +203,18 @@ export class Connection {
             this.#syncContext,
             msg,
           );
-
-          void this.#proxyOutbound(this.#outboundStream);
+          if (this.#closed) {
+            this.#outboundStream.cancel();
+          } else {
+            void this.#proxyOutbound(this.#outboundStream);
+          }
           break;
         }
         default:
           msgType satisfies never;
       }
     } catch (e) {
-      this.#closeWithError(e);
+      this.#closeWithThrown(e);
     }
   };
 
@@ -227,24 +236,24 @@ export class Connection {
       this.#lc.info?.('downstream closed by ViewSyncer');
       this.close();
     } catch (e) {
-      this.#closeWithError(e);
+      this.#closeWithThrown(e);
     }
   }
 
-  #closeWithError(e: unknown) {
-    if (e instanceof ProtocolError) {
-      this.#closeWithProtocolError(e.kind, e.msg, 'info');
-    } else {
-      this.#closeWithProtocolError('Unknown', String(e), 'error');
-    }
+  #closeWithThrown(e: unknown) {
+    const errorMessage = findErrorForClient(e)?.errorMessage ?? [
+      'error',
+      ErrorKind.Internal,
+      String(e),
+    ];
+    this.#closeWithError(errorMessage);
   }
 
-  #closeWithProtocolError(
-    kind: ErrorKind,
-    message = '',
+  #closeWithError(
+    errorMessage: ErrorMessage,
     logLevel: 'info' | 'error' = 'info',
   ) {
-    this.sendError(kind, message, logLevel);
+    this.sendError(errorMessage, logLevel);
     this.close();
   }
 
@@ -252,12 +261,8 @@ export class Connection {
     send(this.#ws, data);
   }
 
-  sendError(
-    kind: ErrorKind,
-    message = '',
-    logLevel: 'info' | 'error' = 'info',
-  ) {
-    sendError(this.#lc, this.#ws, kind, message, logLevel);
+  sendError(errorMessage: ErrorMessage, logLevel: 'info' | 'error' = 'info') {
+    sendError(this.#lc, this.#ws, errorMessage, logLevel);
   }
 }
 
@@ -268,15 +273,11 @@ export function send(ws: WebSocket, data: Downstream) {
 export function sendError(
   lc: LogContext,
   ws: WebSocket,
-  kind: ErrorKind,
-  message = '',
+  errorMessage: ErrorMessage,
   logLevel: 'info' | 'error' = 'info',
 ) {
-  lc[logLevel]?.('Sending error on socket', {
-    kind,
-    message,
-  });
-  const errorMessage: ErrorMessage = ['error', kind, message];
+  lc = lc.withContext('errorKind', errorMessage[1]);
+  lc[logLevel]?.('Sending error on WebSocket', errorMessage);
   send(ws, errorMessage);
 }
 
@@ -358,11 +359,9 @@ function getConnectParams(url: URL):
       error: null,
     };
   } catch (e) {
-    assert(e instanceof Error);
-
     return {
       params: null,
-      error: e.message,
+      error: e instanceof Error ? e.message : String(e),
     };
   }
 }

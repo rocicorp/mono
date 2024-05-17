@@ -1,4 +1,4 @@
-import type {Mutation} from 'reflect-protocol';
+import type {Mutation} from 'zero-protocol';
 
 export type ClientID = string;
 

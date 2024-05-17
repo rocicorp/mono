@@ -11,6 +11,7 @@ import {
   Series,
   State,
 } from './metrics.js';
+import {ErrorKind} from 'zero-protocol';
 
 afterEach(() => {
   sinon.restore();
@@ -406,7 +407,7 @@ test('MetricManager v2 connect metrics', async () => {
     {
       name: 'lce server Unauthorized',
       reportMetrics: metricsManager => {
-        metricsManager.setConnectError({server: 'Unauthorized'});
+        metricsManager.setConnectError({server: ErrorKind.Unauthorized});
       },
       expected: [
         {
