@@ -49,11 +49,7 @@ async function init() {
       </div>
     );
   }
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <Home />
-    </React.StrictMode>,
-  );
+  ReactDOM.createRoot(document.getElementById('root')!).render(<Home />);
 }
 
 await init();

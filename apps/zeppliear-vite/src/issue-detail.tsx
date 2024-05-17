@@ -262,7 +262,7 @@ export default function IssueDetail({
                     onMouseDown={() => handleFwdPrev('prev')}
                     disabled={currentIssueIdx === 0}
                   >
-                    <ArrowIcon style={{transform: 'rotate(180deg)'}} />
+                    <ArrowIcon style={{transform: 'rotate(180deg)'}} className="" />
                   </button>
                 </div>
                 <div
@@ -275,7 +275,7 @@ export default function IssueDetail({
                     onMouseDown={() => handleFwdPrev('fwd')}
                     disabled={currentIssueIdx === issues.length - 1}
                   >
-                    <ArrowIcon />
+                    <ArrowIcon className="" />
                   </button>
                 </div>
               </>
