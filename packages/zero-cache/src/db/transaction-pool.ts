@@ -175,9 +175,6 @@ export class TransactionPool {
                   stmt.execute().catch(e => this.fail(e)),
                 ),
               );
-              if (result.stmts.length) {
-                lc.debug?.(`executed ${result.stmts.length} statement(s)`);
-              }
             }
           } catch (e) {
             if (resolver) {
@@ -215,6 +212,7 @@ export class TransactionPool {
         lc.debug?.('worker done');
         return Promise.all(pending);
       } catch (e) {
+        lc.error?.('error from worker', e);
         this.fail(e); // A failure in any worker should fail the pool.
         throw e;
       }
