@@ -7,5 +7,5 @@ export default defineConfig({
   plugins: [svgr(), react()],
   build: {
     target: 'esnext',
-  }
+  },
 });

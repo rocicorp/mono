@@ -1,4 +1,4 @@
-import React, {ChangeEventHandler, useState, RefObject, useRef} from 'react';
+import {ChangeEventHandler, useState, RefObject, useRef} from 'react';
 import SearchIcon from './assets/icons/search.svg?react';
 import classnames from 'classnames';
 import {usePopper} from 'react-popper';

@@ -1,4 +1,4 @@
-import React, {RefObject, useRef, useState} from 'react';
+import {RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
 import {Filter, Priority, Status} from './issue';
 import {useClickOutside} from './hooks/use-click-outside';

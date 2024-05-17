@@ -1,4 +1,4 @@
-import React, {RefObject, useRef, useState} from 'react';
+import {RefObject, useRef, useState} from 'react';
 import AddIcon from './assets/icons/add.svg?react';
 import HelpIcon from './assets/icons/help.svg?react';
 import MenuIcon from './assets/icons/menu.svg?react';

@@ -1,6 +1,4 @@
-//import CloseIcon from './assets/icons/close.svg';
 import Modal from './modal';
-import React from 'react';
 import classNames from 'classnames';
 
 interface Props {

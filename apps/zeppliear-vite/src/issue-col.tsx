@@ -1,5 +1,5 @@
 import StatusIcon from './status-icon';
-import React, {CSSProperties, memo, useMemo} from 'react';
+import {CSSProperties, memo, useMemo} from 'react';
 import {
   Draggable,
   DraggableProvided,

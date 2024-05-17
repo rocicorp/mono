@@ -1,6 +1,5 @@
 import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
 import ArrowRight from '@mui/icons-material/ArrowRight';
-import * as React from 'react';
 import {useState} from 'react';
 
 interface Props {

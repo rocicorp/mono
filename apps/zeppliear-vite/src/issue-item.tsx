@@ -1,4 +1,4 @@
-import React, {memo, useCallback} from 'react';
+import {memo, useCallback} from 'react';
 import type {Issue, Priority} from './issue';
 import classnames from 'classnames';
 import PriorityMenu from './priority-menu';

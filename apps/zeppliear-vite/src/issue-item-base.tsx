@@ -1,5 +1,5 @@
 import type {Issue, Priority} from './issue';
-import React, {memo} from 'react';
+import {memo} from 'react';
 import PriorityMenu from './priority-menu';
 import classNames from 'classnames';
 
