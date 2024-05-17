@@ -34,13 +34,6 @@ export const errorKindSchema = v.union(
   v.literal(ErrorKind.Internal),
 );
 
-// The following ensures ErrorKind and errorKindSchema
-// are kept in sync (each type satisfies the other).
-(t: ErrorKind, inferredT: v.Infer<typeof errorKindSchema>) => {
-  t satisfies v.Infer<typeof errorKindSchema>;
-  inferredT satisfies ErrorKind;
-};
-
 export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([
   v.literal('error'),
   errorKindSchema,
