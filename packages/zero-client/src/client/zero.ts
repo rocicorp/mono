@@ -31,6 +31,7 @@ import {
   ConnectedMessage,
   CustomMutation,
   Downstream,
+  ErrorKind,
   MutationType,
   NullableVersion,
   PingMessage,
@@ -691,7 +692,7 @@ export class Zero<QD extends QueryDefs> {
   ): Promise<void> {
     const [, kind, message] = downMessage;
 
-    if (kind === 'VersionNotSupported') {
+    if (kind === ErrorKind.VersionNotSupported) {
       this.onUpdateNeeded?.({type: kind});
     }
 

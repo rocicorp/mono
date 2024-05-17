@@ -34,7 +34,7 @@ export const errorKindSchema: v.Type<ErrorKind> = v.union(
   v.literal(ErrorKind.Internal),
 );
 
-export const errorMessageSchema = v.tuple([
+export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([
   v.literal('error'),
   errorKindSchema,
   v.string(),

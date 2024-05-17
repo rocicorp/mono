@@ -10,7 +10,7 @@ import {
 } from 'zero-protocol';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
-import {findErrorForClient} from './error.js';
+import {findErrorForClient} from '../types/error-for-client.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 

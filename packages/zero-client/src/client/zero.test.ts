@@ -6,7 +6,7 @@ import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
-import {initConnectionMessageSchema} from 'zero-protocol';
+import {ErrorKind, initConnectionMessageSchema} from 'zero-protocol';
 import {
   Mutation,
   MutationType,
@@ -123,7 +123,7 @@ test('onOnlineChange callback', async () => {
     // Now testing with an error that causes the connection to close. This should
     // trigger the callback.
     onlineCount = offlineCount = 0;
-    await r.triggerError('InvalidMessage', 'aaa');
+    await r.triggerError(ErrorKind.InvalidMessage, 'aaa');
     await r.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
     expect(r.online).false;
@@ -143,7 +143,7 @@ test('onOnlineChange callback', async () => {
   {
     // Now test with an auth error. This should not trigger the callback on the first error.
     onlineCount = offlineCount = 0;
-    await r.triggerError('Unauthorized', 'bbb');
+    await r.triggerError(ErrorKind.Unauthorized, 'bbb');
     await r.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
     expect(r.online).true;
@@ -162,7 +162,7 @@ test('onOnlineChange callback', async () => {
   {
     // Now test with two auth error. This should trigger the callback on the second error.
     onlineCount = offlineCount = 0;
-    await r.triggerError('Unauthorized', 'ccc');
+    await r.triggerError(ErrorKind.Unauthorized, 'ccc');
     await r.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
     expect(r.online).true;
@@ -170,7 +170,7 @@ test('onOnlineChange callback', async () => {
     expect(offlineCount).to.equal(0);
 
     await r.waitForConnectionState(ConnectionState.Connecting);
-    await r.triggerError('Unauthorized', 'ddd');
+    await r.triggerError(ErrorKind.Unauthorized, 'ddd');
     await r.waitForConnectionState(ConnectionState.Disconnected);
     await tickAFewTimes(clock, RUN_LOOP_INTERVAL_MS);
     await clock.tickAsync(0);
@@ -207,7 +207,7 @@ test('onOnlineChange callback', async () => {
     // Now clear onOnlineChange and test that it doesn't get called.
     onlineCount = offlineCount = 0;
     r.onOnlineChange = null;
-    await r.triggerError('InvalidMessage', 'eee');
+    await r.triggerError(ErrorKind.InvalidMessage, 'eee');
     await r.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
     expect(r.online).false;
@@ -1001,7 +1001,7 @@ test('Authentication', async () => {
     expectedTimeOfCall: number,
   ) => {
     expect((await r.socket).protocol).equal(expectedAuthToken);
-    await r.triggerError('Unauthorized', 'auth error ' + authCounter);
+    await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
     expect(r.connectionState).equal(ConnectionState.Disconnected);
     await clock.tickAsync(tickMS);
     expect(log).length(1);
@@ -1056,7 +1056,7 @@ test('Authentication', async () => {
   }
 });
 
-test('AuthInvalidated', async () => {
+test(ErrorKind.AuthInvalidated, async () => {
   // In steady state we can get an AuthInvalidated error if the tokens expire on the server.
   // At this point we should disconnect and reconnect with a new auth token.
 
@@ -1069,7 +1069,7 @@ test('AuthInvalidated', async () => {
   await r.triggerConnected();
   expect((await r.socket).protocol).equal('auth-token-1');
 
-  await r.triggerError('AuthInvalidated', 'auth error');
+  await r.triggerError(ErrorKind.AuthInvalidated, 'auth error');
   await r.waitForConnectionState(ConnectionState.Disconnected);
 
   await r.waitForConnectionState(ConnectionState.Connecting);
@@ -1080,7 +1080,7 @@ test('Disconnect on error', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
-  await r.triggerError('ClientNotFound', 'client not found');
+  await r.triggerError(ErrorKind.ClientNotFound, 'client not found');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
@@ -1090,7 +1090,7 @@ test('No backoff on errors', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
   const step = async (delta: number, message: string) => {
-    await r.triggerError('ClientNotFound', message);
+    await r.triggerError(ErrorKind.ClientNotFound, message);
     expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
     await clock.tickAsync(delta - 1);
@@ -1234,7 +1234,7 @@ test('socketOrigin', async () => {
 
 test('Logs errors in connect', async () => {
   const r = zeroForTest({});
-  await r.triggerError('ClientNotFound', 'client-id-a');
+  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
 
@@ -1292,7 +1292,7 @@ async function testWaitsForConnection(
 
   const log: ('resolved' | 'rejected')[] = [];
 
-  await r.triggerError('ClientNotFound', 'client-id-a');
+  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   fn(r).then(
@@ -1308,7 +1308,7 @@ async function testWaitsForConnection(
   await clock.tickAsync(RUN_LOOP_INTERVAL_MS);
   expect(r.connectionState).to.equal(ConnectionState.Connecting);
 
-  await r.triggerError('ClientNotFound', 'client-id-a');
+  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
   await tickAFewTimes(clock);
   expect(log).to.deep.equal(['rejected']);
 }
@@ -1344,11 +1344,13 @@ test('Protocol mismatch', async () => {
   const r = zeroForTest();
   r.onUpdateNeeded = fake;
 
-  await r.triggerError('VersionNotSupported', 'prot mismatch');
+  await r.triggerError(ErrorKind.VersionNotSupported, 'prot mismatch');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   expect(fake.calledOnce).true;
-  expect(fake.firstCall.args).deep.equal([{type: 'VersionNotSupported'}]);
+  expect(fake.firstCall.args).deep.equal([
+    {type: ErrorKind.VersionNotSupported},
+  ]);
 
   fake.resetHistory();
   r.onUpdateNeeded = null;
@@ -1364,13 +1366,13 @@ test('server ahead', async () => {
   r.reload = resolve;
 
   await r.triggerError(
-    'InvalidConnectionRequestBaseCookie',
+    ErrorKind.InvalidConnectionRequestBaseCookie,
     'unexpected BaseCookie',
   );
   await promise;
 
   expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    serverAheadReloadReason('InvalidConnectionRequestBaseCookie'),
+    serverAheadReloadReason(ErrorKind.InvalidConnectionRequestBaseCookie),
   );
 });
 
@@ -1591,9 +1593,9 @@ suite('Disconnect on hide', () => {
   }
 });
 
-test('InvalidConnectionRequest', async () => {
+test(ErrorKind.InvalidConnectionRequest, async () => {
   const r = zeroForTest({});
-  await r.triggerError('InvalidConnectionRequest', 'test');
+  await r.triggerError(ErrorKind.InvalidConnectionRequest, 'test');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
   const msg = r.testLogSink.messages.at(-1);
