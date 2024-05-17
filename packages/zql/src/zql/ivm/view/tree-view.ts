@@ -1,11 +1,11 @@
+import BTree from 'sorted-btree-roci';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage} from '../graph/message.js';
 import type {Multiset} from '../multiset.js';
-import {AbstractView} from './abstract-view.js';
-import BTree from 'sorted-btree-roci';
 import type {Comparator} from '../types.js';
+import {AbstractView} from './abstract-view.js';
 
 /**
  * A sink that maintains the list of values in-order.
@@ -167,11 +167,11 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     const minComp = this.#min && this.#comparator(value, this.#min);
     const maxComp = this.#max && this.#comparator(value, this.#max);
 
-    if (minComp && minComp < 0) {
+    if (minComp !== undefined && minComp < 0) {
       return data;
     }
 
-    if (maxComp && maxComp > 0) {
+    if (maxComp !== undefined && maxComp > 0) {
       return data;
     }
 
@@ -183,10 +183,10 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     data = data.without(value);
     // TODO: since we deleted we need to send a request upstream for more data!
 
-    if (minComp && minComp === 0) {
+    if (minComp === 0) {
       this.#min = value;
     }
-    if (maxComp && maxComp === 0) {
+    if (maxComp === 0) {
       this.#max = value;
     }
 
