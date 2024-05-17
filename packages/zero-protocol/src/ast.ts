@@ -20,6 +20,7 @@ import type {
   Ordering,
   Primitive,
   PrimitiveArray,
+  Selector,
   SetOps,
   SimpleCondition,
   SimpleOperator,
@@ -31,6 +32,13 @@ function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
 }
 
 export const selectorSchema = readonly(v.tuple([v.string(), v.string()]));
+
+// The following ensures Selector and selectorSchema
+// are kept in sync (each type satisfies the other).
+(t: Selector, inferredT: v.Infer<typeof selectorSchema>) => {
+  t satisfies v.Infer<typeof selectorSchema>;
+  inferredT satisfies Selector;
+};
 
 export const orderingSchema = readonly(
   v.tuple([
@@ -116,32 +124,44 @@ export const joinSchema: v.Type<Join> = v.lazy(() =>
   }),
 );
 
-export const astSchema: v.Type<AST> = v.lazy(() =>
-  v.object({
-    schema: v.string().optional(),
-    table: v.string(),
-    alias: v.string().optional(),
-    select: v.array(v.tuple([selectorSchema, v.string()])).optional(),
-    aggregate: v.array(aggregationSchema).optional(),
-    where: conditionSchema.optional(),
-    joins: v.array(joinSchema).optional(),
-    limit: v.number().optional(),
-    groupBy: v.array(selectorSchema).optional(),
-    orderBy: orderingSchema.optional(),
-  }),
-);
-
 export const conditionSchema: v.Type<Condition> = v.lazy(() =>
   v.union(simpleConditionSchema, conjunctionSchema),
 );
 
-export const conjunctionSchema: v.Type<Conjunction> = v.lazy(() =>
-  v.object({
-    type: v.literal('conjunction'),
-    op: v.union(v.literal('AND'), v.literal('OR')),
-    conditions: v.array(conditionSchema),
-  }),
-);
+export const conjunctionSchema = v.object({
+  type: v.literal('conjunction'),
+  op: v.union(v.literal('AND'), v.literal('OR')),
+  conditions: v.array(conditionSchema),
+});
+
+// The following ensures Conjunction and conjunctionSchema
+// are kept in sync (each type satisfies the other).
+(t: Conjunction, inferredT: v.Infer<typeof conjunctionSchema>) => {
+  t satisfies v.Infer<typeof conjunctionSchema>;
+  inferredT satisfies Conjunction;
+};
+
+export const astSchema = v.object({
+  schema: v.string().optional(),
+  table: v.string(),
+  alias: v.string().optional(),
+  select: readonly(
+    v.array(readonly(v.tuple([selectorSchema, v.string()]))),
+  ).optional(),
+  aggregate: v.array(aggregationSchema).optional(),
+  where: conditionSchema.optional(),
+  joins: v.array(joinSchema).optional(),
+  limit: v.number().optional(),
+  groupBy: v.array(selectorSchema).optional(),
+  orderBy: orderingSchema.optional(),
+});
+
+// The following ensures AST and astSchema
+// are kept in sync (each type satisfies the other).
+(t: AST, inferredT: v.Infer<typeof astSchema>) => {
+  t satisfies v.Infer<typeof astSchema>;
+  inferredT satisfies AST;
+};
 
 export const equalityOpsSchema = v.union(v.literal('='), v.literal('!='));
 
