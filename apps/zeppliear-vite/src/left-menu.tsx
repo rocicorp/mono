@@ -7,7 +7,7 @@ import {useClickOutside} from './hooks/use-click-outside';
 import classnames from 'classnames';
 import SearchBox from './searchbox';
 import IssueModal from './issue-modal';
-import ReactLogo from './assets/images/logo.svg';
+import ReactLogo from './assets/images/logo.svg?react';
 import type {IssueCreationPartial} from './issue';
 import AboutModal from './about-modal';
 import {noop} from 'lodash';

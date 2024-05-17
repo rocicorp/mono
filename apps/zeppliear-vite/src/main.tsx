@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App, {Collections} from './app';
-import '../styles/index.css';
+import './index.css';
 import {UndoManager} from '@rocicorp/undo';
 import {useEffect, useRef, useState} from 'react';
 import {Zero} from 'zero-client';
