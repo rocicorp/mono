@@ -11,6 +11,8 @@ import {
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 import {findErrorForClient} from './error.js';
+import type {ServiceRunner} from './service-runner.js';
+import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 
 export function handleConnection(
   lc: LogContext,

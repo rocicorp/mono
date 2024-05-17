@@ -4,22 +4,6 @@ import * as v from 'shared/src/valita.js';
 // so if you add or change on here a corresponding dashboard
 // change will likely be needed.
 
-<<<<<<< HEAD
-export const errorKindSchema = v.union(
-  v.literal('AuthInvalidated'),
-  v.literal('ClientNotFound'),
-  v.literal('InvalidConnectionRequest'),
-  v.literal('InvalidConnectionRequestBaseCookie'),
-  v.literal('InvalidConnectionRequestLastMutationID'),
-  v.literal('InvalidConnectionRequestClientDeleted'),
-  v.literal('InvalidMessage'),
-  v.literal('InvalidPush'),
-  v.literal('MutationFailed'),
-  v.literal('Unauthorized'),
-  v.literal('Unknown'),
-  v.literal('VersionNotSupported'),
-);
-=======
 export enum ErrorKind {
   AuthInvalidated = 'AuthInvalidated',
   ClientNotFound = 'ClientNotFound',
@@ -34,7 +18,6 @@ export enum ErrorKind {
   VersionNotSupported = 'VersionNotSupported',
   Internal = 'Internal',
 }
->>>>>>> 58871f74e (feat(zero-cache): ErrorForClient for throwing errors that the client should be informed of)
 
 export const errorKindSchema: v.Type<ErrorKind> = v.union(
   v.literal(ErrorKind.AuthInvalidated),
