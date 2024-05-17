@@ -2,7 +2,7 @@ import type {ErrorMessage} from 'zero-protocol';
 
 export class ErrorForClient extends Error {
   readonly errorMessage;
-  constructor(errorMessage: ErrorMessage, options: ErrorOptions) {
+  constructor(errorMessage: ErrorMessage, options?: ErrorOptions) {
     super(JSON.stringify(errorMessage), options);
     this.errorMessage = errorMessage;
   }
