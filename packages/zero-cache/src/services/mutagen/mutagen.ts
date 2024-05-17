@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+import {ErrorKind} from 'zero-protocol';
 import {
   MutationType,
   type CRUDMutation,
@@ -254,7 +255,7 @@ async function incrementLastMutationID(
   } else if (receivedMutationID > lastMutationID) {
     throw new ErrorForClient([
       'error',
-      'InvalidPush',
+      ErrorKind.InvalidPush,
       `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
     ]);
   }
