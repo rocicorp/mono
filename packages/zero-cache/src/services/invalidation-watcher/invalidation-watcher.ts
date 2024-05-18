@@ -157,7 +157,6 @@ export class InvalidationWatcherService
   readonly #replica: PostgresDB;
 
   #latestReader: ReaderAtVersion | undefined;
-  readonly #readers = new Map<TransactionPool, number>();
   readonly #hashSubscriptions = new HashSubscriptions();
 
   #started = false;
@@ -224,8 +223,9 @@ export class InvalidationWatcherService
     this.#versionChangeSubscription = undefined;
 
     if (this.#latestReader) {
-      this.#decrementRefCount(this.#latestReader);
-      await this.#latestReader.reader.done();
+      const {reader} = this.#latestReader;
+      reader.unref();
+      await reader.done();
     }
   }
 
@@ -282,7 +282,7 @@ export class InvalidationWatcherService
           }
           // The Subscription will not call `consumed()` on coalesced `prev` messages.
           // cleanup must be done explicitly when coalescing.
-          this.#decrementRefCount(prev);
+          prev.reader.unref();
 
           return {
             version: max(prev.version, curr.version),
@@ -298,13 +298,11 @@ export class InvalidationWatcherService
           };
         },
 
-        consumed: prev => {
-          this.#decrementRefCount(prev);
-        },
+        consumed: prev => prev.reader.unref(),
 
         cleanup: unconsumed => {
           for (const update of unconsumed) {
-            this.#decrementRefCount(update);
+            update.reader.unref();
           }
           this.#hashSubscriptions.remove(subscription, request);
           if (this.#hashSubscriptions.empty()) {
@@ -385,7 +383,7 @@ export class InvalidationWatcherService
       );
     }
 
-    this.#incrementRefCount(update, 1);
+    update.reader.ref();
     subscription.push({...update, invalidatedQueries});
   }
 
@@ -417,7 +415,7 @@ export class InvalidationWatcherService
     }
     lc.info?.(`${numUpdates} view updates for ${hashes.size} hashes`);
 
-    this.#incrementRefCount(update, numUpdates); // Reference counting to close the pool.
+    update.reader.ref(numUpdates);
     for (const [subscription, queryIDs] of updates) {
       subscription.push({...update, invalidatedQueries: queryIDs});
     }
@@ -442,6 +440,7 @@ export class InvalidationWatcherService
 
     const snapshotQuery = await reader.processReadTask(queryStateVersion);
     const version = snapshotQuery[0].max ?? '00';
+    reader.addLoggingContext('version', version);
     lc.debug?.(`Created reader @${version}`);
 
     if (this.#latestReader) {
@@ -453,10 +452,9 @@ export class InvalidationWatcherService
         return this.#latestReader;
       }
       // Allow it to be cleaned up if no one else is referencing it.
-      this.#decrementRefCount(this.#latestReader);
+      this.#latestReader.reader.unref();
     }
     this.#latestReader = {reader, version};
-    this.#incrementRefCount(this.#latestReader, 1); // Track the #latestReader cache reference.
 
     // Remove the reader if a transaction fails.
     // TODO: Figure out the connection / transaction timeout issue and handle this better.
@@ -476,9 +474,9 @@ export class InvalidationWatcherService
    * The update will not contain the `invalidatedQueries` field, as those are Subscription
    * specific and are left to the caller to supply based on the returned invalidated `hashes`.
    *
-   * It is the responsibility of the caller to properly clean up the {@link TransactionPool}
-   * `reader` field by calling {@link TransactionPool.setDone setDone()} when it is no longer
-   * needed (e.g. via `#trackRefCount()` and `#decrementRefCount()`).
+   * It is the responsibility of the caller to properly track the references to
+   * the {@link TransactionPool} `reader` field by calling {@link TransactionPool.ref ref()}
+   * and {@link TransactionPool.unref unref()} so that it is properly cleaned up.
    *
    * @param fromVersion The version after which to query invalidated `hashes`, or unspecified
    *                    to skip hash querying (e.g. for new CVRs).
@@ -528,30 +526,6 @@ export class InvalidationWatcherService
       hashes = new Set(rows.map(row => row.hash.toString('hex')));
     }
     return {update, hashes};
-  }
-
-  #incrementRefCount(r: ReaderAtVersion, subscribers: number) {
-    const {reader} = r;
-    // TODO: Consider adding timeout logic to handle the hypothetical
-    //       pathological scenario in which a Subscription is orphaned
-    //       and never canceled.
-    const curr = this.#readers.get(reader) ?? 0;
-    this.#readers.set(reader, curr + subscribers);
-  }
-
-  #decrementRefCount(r: ReaderAtVersion) {
-    const {reader, version} = r;
-
-    const count = this.#readers.get(reader);
-    assert(count && count > 0, `invalid reader count ${count}`);
-
-    if (count > 1) {
-      this.#readers.set(reader, count - 1);
-    } else {
-      this.#lc.debug?.(`closing TransactionPool at ${version}`);
-      reader.setDone();
-      this.#readers.delete(reader);
-    }
   }
 }
 
