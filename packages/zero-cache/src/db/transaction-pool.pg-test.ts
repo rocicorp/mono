@@ -47,13 +47,18 @@ describe('db/transaction-pool', () => {
   test('single transaction, serialized processing', async () => {
     const single = new TransactionPool(lc, initTask, cleanupTask, 1, 1);
 
+    expect(single.isRunning()).toBe(false);
+    single.run(db);
+    expect(single.isRunning()).toBe(true);
+
     single.process(task(`INSERT INTO foo (id) VALUES (1)`));
     single.process(task(`INSERT INTO foo (id) VALUES (6)`));
     single.process(task(`UPDATE foo SET val = 'foo' WHERE id < 5`));
     single.process(task(`INSERT INTO foo (id) VALUES (3)`));
     single.setDone();
+    expect(single.isRunning()).toBe(false);
 
-    await single.run(db);
+    await single.done();
 
     await expectTables(db, {
       ['public.foo']: [
@@ -66,8 +71,43 @@ describe('db/transaction-pool', () => {
     });
   });
 
+  test('ref counting', async () => {
+    const single = new TransactionPool(lc, initTask, cleanupTask, 1, 1);
+
+    expect(single.isRunning()).toBe(false);
+    single.run(db);
+    expect(single.isRunning()).toBe(true);
+
+    // 1 -> 2 -> 3
+    single.ref();
+    expect(single.isRunning()).toBe(true);
+    single.ref();
+    expect(single.isRunning()).toBe(true);
+
+    // 3 -> 2 -> 1
+    single.unref();
+    expect(single.isRunning()).toBe(true);
+    single.unref();
+    expect(single.isRunning()).toBe(true);
+
+    // 1 -> 0
+    single.unref();
+    expect(single.isRunning()).toBe(false);
+
+    await single.done();
+
+    await expectTables(db, {
+      ['public.workers']: [{id: 1}],
+      ['public.cleaned']: [{id: 1}],
+    });
+  });
+
   test('multiple transactions', async () => {
     const pool = new TransactionPool(lc, initTask, cleanupTask, 3, 3);
+
+    expect(pool.isRunning()).toBe(false);
+    pool.run(db);
+    expect(pool.isRunning()).toBe(true);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -77,7 +117,8 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.setDone();
 
-    await pool.run(db);
+    expect(pool.isRunning()).toBe(false);
+    await pool.done();
 
     await expectTables(db, {
       ['public.foo']: [
@@ -321,6 +362,8 @@ describe('db/transaction-pool', () => {
     const result = await pool.run(db).catch(e => e);
     expect(result).toBeInstanceOf(Error);
 
+    expect(pool.isRunning()).toBe(false);
+
     // Nothing should have succeeded.
     await expectTables(db, {
       ['public.foo']: [],
@@ -416,6 +459,8 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'oof')`));
 
     const result = await pool.run(db).catch(e => e);
+
+    expect(pool.isRunning()).toBe(false);
 
     // Ensure that the postgres error is surfaced.
     expect(result).toBeInstanceOf(postgres.PostgresError);
@@ -638,8 +683,12 @@ describe('db/transaction-pool', () => {
       (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
     expect(await pool.processReadTask(readTask())).toEqual([1, 2, 3]);
 
+    expect(pool.isRunning()).toBe(true);
+
     const error = new Error('oh nose');
     pool.fail(error);
+
+    expect(pool.isRunning()).toBe(false);
 
     const result = await pool.processReadTask(readTask()).catch(e => e);
     expect(result).toBe(error);
