@@ -50,17 +50,26 @@ export const aggregationSchema = v.object({
   aggregate: aggregateSchema,
 });
 
+// Split out so that its inferred type can be checked against
+// Omit<Join, 'other'> in ast-type-test.ts.
+// The mutually-recursive reference of the 'other' field to astSchema
+// is the only thing added in v.lazy.  The v.lazy is necessary due to the
+// mutually-recursive types, but v.lazy prevents inference of the resulting
+// type.
+export const joinOmitOther = v.object({
+  type: v.union(
+    v.literal('inner'),
+    v.literal('left'),
+    v.literal('right'),
+    v.literal('full'),
+  ),
+  as: v.string(),
+  on: v.tuple([selectorSchema, selectorSchema]),
+});
+
 export const joinSchema: v.Type<Join> = v.lazy(() =>
-  v.object({
-    type: v.union(
-      v.literal('inner'),
-      v.literal('left'),
-      v.literal('right'),
-      v.literal('full'),
-    ),
+  joinOmitOther.extend({
     other: astSchema,
-    as: v.string(),
-    on: v.tuple([selectorSchema, selectorSchema]),
   }),
 );
 

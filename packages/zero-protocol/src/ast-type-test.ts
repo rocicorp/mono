@@ -7,6 +7,7 @@ import type {
   Conjunction,
   EqualityOps,
   InOps,
+  Join,
   LikeOps,
   OrderOps,
   Ordering,
@@ -24,6 +25,7 @@ import type {
   conjunctionSchema,
   equalityOpsSchema,
   inOpsSchema,
+  joinOmitOther,
   likeOpsSchema,
   orderOpsSchema,
   orderingSchema,
@@ -68,6 +70,11 @@ import type * as v from 'shared/src/valita.js';
 (t: Aggregation, inferredT: v.Infer<typeof aggregationSchema>) => {
   t satisfies v.Infer<typeof aggregationSchema>;
   inferredT satisfies Aggregation;
+};
+
+(t: Omit<Join, 'other'>, inferredT: v.Infer<typeof joinOmitOther>) => {
+  t satisfies v.Infer<typeof joinOmitOther>;
+  inferredT satisfies Omit<Join, 'other'>;
 };
 
 (t: Conjunction, inferredT: v.Infer<typeof conjunctionSchema>) => {
