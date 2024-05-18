@@ -231,6 +231,10 @@ export class InvalidationWatcherService
 
   async getTableSchemas(): Promise<readonly TableSpec[]> {
     if (!this.#cachedTableSchemas) {
+      // Ensure that the Replicator is running. This is what kicks of the creation of the
+      // upstream zero.clients table and the replication to the replica.
+      void this.#registry.getReplicator();
+
       let published: PublicationInfo;
       for (
         let delay = INITIAL_RETRY_DELAY_MS;
