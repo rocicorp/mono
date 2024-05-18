@@ -1,6 +1,6 @@
 module.exports = {
   darkMode: 'media',
-  content: ['./pages/**/*.{js,ts,jsx,tsx}', './frontend/**/*.{js,ts,jsx,tsx}'],
+  content: ['./src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     screens: {
       'sm': '640px',
