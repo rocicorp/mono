@@ -196,8 +196,8 @@ export class InvalidationWatcherService
     // Ensure that the Replicator is running. This is what kicks of the creation of the
     // upstream zero.clients table and the replication to the replica. Note that even though
     // the Replicator is queried from within the `while` loop, it should be proactively called
-    // before that, because ViewSyncers will call to getTableSchema(), which also relies on
-    // replication having initialized) before sending a watch request.
+    // before that, because ViewSyncers will call getTableSchema(), which also relies on
+    // replication having initialized, before sending a watch request.
     void this.#registry.getReplicator();
 
     this.#lc.info?.('started');
