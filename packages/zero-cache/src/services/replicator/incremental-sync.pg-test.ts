@@ -1,5 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import {assert} from 'shared/src/asserts.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
@@ -8,7 +9,6 @@ import {
   initDB,
   testDBs,
 } from '../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {
   invalidationHash,
   normalizeFilterSpec,
@@ -618,6 +618,13 @@ describe('replicator/incremental-sync', () => {
           primaryKey: ['orgID', 'issueID'],
         },
       },
+      invalidationFilters: [
+        {
+          schema: 'public',
+          table: 'issues',
+          filteredColumns: {issueID: '=', orgID: '='},
+        },
+      ],
       writeUpstream: [
         `
       INSERT INTO issues ("orgID", "issueID") VALUES (1, 123);
@@ -631,13 +638,74 @@ describe('replicator/incremental-sync', () => {
       ],
       expectedTransactions: 2,
       expectedVersionChanges: [
-        {prevVersion: '00', newVersion: '01', invalidations: {}},
-        {prevVersion: '01', newVersion: '02', invalidations: {}},
+        {
+          prevVersion: '00',
+          newVersion: '01',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '123', orgID: '1'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '456', orgID: '1'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '789', orgID: '2'},
+            })]: '01',
+          },
+        },
+        {
+          prevVersion: '01',
+          newVersion: '02',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '123', orgID: '1'},
+            })]: '02',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '123', orgID: '2'},
+            })]: '02',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '456', orgID: '1'},
+            })]: '02',
+          },
+        },
       ],
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '02',
-        invalidations: {},
+        invalidations: {
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '123', orgID: '1'},
+          })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '123', orgID: '2'},
+          })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '456', orgID: '1'},
+          })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '789', orgID: '2'},
+          })]: '01',
+        },
       },
       data: {
         ['public.issues']: [
@@ -692,6 +760,52 @@ describe('replicator/incremental-sync', () => {
               description: 'bar',
               ['_0_version']: '02',
             },
+          },
+        ],
+        ['_zero.InvalidationIndex']: [
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '123', orgID: '1'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '123', orgID: '2'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '456', orgID: '1'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '789', orgID: '2'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
           },
         ],
       },
@@ -750,6 +864,13 @@ describe('replicator/incremental-sync', () => {
           primaryKey: ['orgID', 'issueID'],
         },
       },
+      invalidationFilters: [
+        {
+          schema: 'public',
+          table: 'issues',
+          filteredColumns: {issueID: '=', orgID: '='},
+        },
+      ],
       writeUpstream: [
         `
       INSERT INTO issues ("orgID", "issueID") VALUES (1, 123);
@@ -764,15 +885,127 @@ describe('replicator/incremental-sync', () => {
       ],
       expectedTransactions: 2,
       expectedVersionChanges: [
-        {prevVersion: '00', newVersion: '01', invalidations: {}},
-        {prevVersion: '01', newVersion: '02', invalidations: {}},
+        {
+          prevVersion: '00',
+          newVersion: '01',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '123', orgID: '1'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '456', orgID: '1'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '789', orgID: '2'},
+            })]: '01',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '987', orgID: '2'},
+            })]: '01',
+          },
+        },
+        {
+          prevVersion: '01',
+          newVersion: '02',
+          invalidations: {
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '123', orgID: '1'},
+            })]: '02',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '456', orgID: '1'},
+            })]: '02',
+            [invalidationHash({
+              schema: 'public',
+              table: 'issues',
+              filteredColumns: {issueID: '987', orgID: '2'},
+            })]: '02',
+          },
+        },
       ],
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '02',
-        invalidations: {},
+        invalidations: {
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '123', orgID: '1'},
+          })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '456', orgID: '1'},
+          })]: '02',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '789', orgID: '2'},
+          })]: '01',
+          [invalidationHash({
+            schema: 'public',
+            table: 'issues',
+            filteredColumns: {issueID: '987', orgID: '2'},
+          })]: '02',
+        },
       },
       data: {
+        ['_zero.InvalidationIndex']: [
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '123', orgID: '1'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '456', orgID: '1'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '789', orgID: '2'},
+              }),
+              'hex',
+            ),
+            stateVersion: '01',
+          },
+          {
+            hash: Buffer.from(
+              invalidationHash({
+                schema: 'public',
+                table: 'issues',
+                filteredColumns: {issueID: '987', orgID: '2'},
+              }),
+              'hex',
+            ),
+            stateVersion: '02',
+          },
+        ],
         ['public.issues']: [
           {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
         ],
