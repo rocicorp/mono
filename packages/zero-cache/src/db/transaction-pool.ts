@@ -188,9 +188,19 @@ export class TransactionPool {
               // Optimization: Fail immediately on rejections to prevent more tasks from
               // queueing up. This can save a lot of time if an initial task fails before
               // many subsequent tasks (e.g. transaction replay detection).
+              const start = Date.now();
               pending.push(
                 ...result.stmts.map(stmt =>
-                  stmt.execute().catch(e => this.fail(e)),
+                  stmt
+                    .execute()
+                    .then(
+                      () =>
+                        lc.debug?.(
+                          `Executed statement (${Date.now() - start} ms)`,
+                          (stmt as unknown as Stmt).strings,
+                        ),
+                    )
+                    .catch(e => this.fail(e)),
                 ),
               );
             }
@@ -574,3 +584,7 @@ const TIMEOUT_TASKS: TimeoutTasks = {
     task: 'done',
   },
 };
+
+// The slice of information from the Query object in Postgres.js that gets logged for debugging.
+// https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/query.js#L6
+type Stmt = {strings: string[]};

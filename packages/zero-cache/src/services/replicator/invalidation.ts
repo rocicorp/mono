@@ -369,10 +369,14 @@ async function lookupUnknownPreValues(
     return new Map();
   }
 
-  lc.debug?.(`Looking up ${keys.length} pre-tx values from ${schema}.${table}`);
-
   const keyCols = Object.keys(rowKeyType);
+  const start = Date.now();
   const rows = await lookupRowsWithKeys(tx, schema, table, rowKeyType, keys);
+  lc.debug?.(
+    `Looked up ${keys.length} pre-tx values from ${schema}.${table} (${
+      Date.now() - start
+    } ms)`,
+  );
   return new Map(
     rows.map(row => [
       rowKeyString(Object.fromEntries(keyCols.map(col => [col, row[col]]))),
