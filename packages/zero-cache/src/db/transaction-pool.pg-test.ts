@@ -48,7 +48,7 @@ describe('db/transaction-pool', () => {
     const single = new TransactionPool(lc, initTask, cleanupTask, 1, 1);
 
     expect(single.isRunning()).toBe(false);
-    single.run(db);
+    void single.run(db);
     expect(single.isRunning()).toBe(true);
 
     single.process(task(`INSERT INTO foo (id) VALUES (1)`));
@@ -75,7 +75,7 @@ describe('db/transaction-pool', () => {
     const single = new TransactionPool(lc, initTask, cleanupTask, 1, 1);
 
     expect(single.isRunning()).toBe(false);
-    single.run(db);
+    void single.run(db);
     expect(single.isRunning()).toBe(true);
 
     // 1 -> 2 -> 3
@@ -106,7 +106,7 @@ describe('db/transaction-pool', () => {
     const pool = new TransactionPool(lc, initTask, cleanupTask, 3, 3);
 
     expect(pool.isRunning()).toBe(false);
-    pool.run(db);
+    void pool.run(db);
     expect(pool.isRunning()).toBe(true);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
