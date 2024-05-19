@@ -51,7 +51,6 @@ import type {
 } from 'zero-protocol/src/pull.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
-import {checkConnectivity} from './connect-checks.js';
 import {
   MakeCRUDMutate,
   WithCRUD,
@@ -1456,22 +1455,24 @@ export class Zero<QD extends QueryDefs> {
     void this.#checkConnectivityAsync(reason);
   }
 
-  async #checkConnectivityAsync(reason: string) {
-    assert(this.#server);
-    if (this.closed) {
-      return;
-    }
-    try {
-      await checkConnectivity(
-        reason,
-        this.#server,
-        this.#lc,
-        this.#closeAbortController.signal,
-        this.#enableAnalytics,
-      );
-    } catch (e) {
-      this.#lc.info?.('Error checking connectivity for', reason, e);
-    }
+  #checkConnectivityAsync(_reason: string) {
+    // skipping connectivity checks for now - the server doesn't respond to
+    // them so it just creates noise.
+    // assert(this.#server);
+    // if (this.closed) {
+    //   return;
+    // }
+    // try {
+    //   await checkConnectivity(
+    //     reason,
+    //     this.#server,
+    //     this.#lc,
+    //     this.#closeAbortController.signal,
+    //     this.#enableAnalytics,
+    //   );
+    // } catch (e) {
+    //   this.#lc.info?.('Error checking connectivity for', reason, e);
+    // }
   }
 
   #registerQueries(
