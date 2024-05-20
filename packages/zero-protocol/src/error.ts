@@ -19,7 +19,7 @@ export enum ErrorKind {
   Internal = 'Internal',
 }
 
-export const errorKindSchema: v.Type<ErrorKind> = v.union(
+export const errorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),
   v.literal(ErrorKind.ClientNotFound),
   v.literal(ErrorKind.InvalidConnectionRequest),
