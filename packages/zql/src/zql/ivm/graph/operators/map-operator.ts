@@ -1,11 +1,12 @@
 import {genMap} from '../../../util/iterables.js';
 import type {Multiset} from '../../multiset.js';
+import type {PipelineEntity} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {LinearUnaryOperator} from './linear-unary-operator.js';
 
 export class MapOperator<
-  I extends object,
-  O extends object,
+  I extends PipelineEntity,
+  O extends PipelineEntity,
 > extends LinearUnaryOperator<I, O> {
   constructor(
     input: DifferenceStream<I>,

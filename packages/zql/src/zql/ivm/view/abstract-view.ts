@@ -3,10 +3,12 @@ import type {DifferenceStream, Listener} from '../graph/difference-stream.js';
 import type {Reply} from '../graph/message.js';
 import type {Materialite} from '../materialite.js';
 import type {Multiset} from '../multiset.js';
-import type {Version} from '../types.js';
+import type {PipelineEntity, Version} from '../types.js';
 import type {View} from './view.js';
 
-export abstract class AbstractView<T extends object, CT> implements View<CT> {
+export abstract class AbstractView<T extends PipelineEntity, CT>
+  implements View<CT>
+{
   readonly #context: Context;
   readonly #stream;
   protected readonly _listener: Listener<T>;

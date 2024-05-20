@@ -1,8 +1,8 @@
 import type {DifferenceStream} from '../graph/difference-stream.js';
-import type {Version} from '../types.js';
+import type {PipelineEntity, Version} from '../types.js';
 import type {Request} from '../graph/message.js';
 
-export interface Source<T extends object> {
+export interface Source<T extends PipelineEntity> {
   readonly stream: DifferenceStream<T>;
   add(value: T): this;
   delete(value: T): this;

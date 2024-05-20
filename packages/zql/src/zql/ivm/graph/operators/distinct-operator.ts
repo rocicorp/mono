@@ -1,7 +1,7 @@
 import type {Entity} from '../../../../entity.js';
 import {genCached, genFilter, genMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import type {StringOrNumber, Version} from '../../types.js';
+import type {PipelineEntity, StringOrNumber, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import type {Request} from '../message.js';
 import {UnaryOperator} from './unary-operator.js';
@@ -103,7 +103,9 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
   }
 }
 
-export class DistinctAllOperator<T extends object> extends UnaryOperator<T, T> {
+export class DistinctAllOperator<
+  T extends PipelineEntity,
+> extends UnaryOperator<T, T> {
   #entriesCache = new Map<StringOrNumber, Entry<T>>();
   #keyFn;
 
