@@ -20,7 +20,7 @@
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rocicorp/rails": "^0.10.0",
-    "fast-check": "^3.16.0",
+    "fast-check": "^3.18.0",
     "nanoid": "^4.0.2",
     "playwright": "^1.43.1",
     "replicache": "15.0.0",

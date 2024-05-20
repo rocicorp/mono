@@ -1,16 +1,7 @@
-import {Base64Decoder, Base64Encoder, urlAlphabet} from './base64.js';
+import {assert} from './asserts.js';
+import {parseBigInt} from './parse-big-int.js';
 
-const buffer = new ArrayBuffer(8);
-const view = new DataView(buffer);
-const u8 = new Uint8Array(buffer);
-
-/**
- * This is the URL safe base64 encoding but sorted lexicographically.
- */
-const alphabet = urlAlphabet.split('').sort().join('');
-
-const encoder = new Base64Encoder(alphabet);
-const decoder = new Base64Decoder(alphabet);
+const view = new DataView(new ArrayBuffer(8));
 
 export function encodeFloat64AsString(n: number) {
   view.setFloat64(0, n);
@@ -30,11 +21,14 @@ export function encodeFloat64AsString(n: number) {
     view.setUint32(0, high ^ (1 << 31));
   }
 
-  return encoder.encode(u8);
+  const bigint = view.getBigUint64(0);
+  return bigint.toString(36).padStart(13, '0');
 }
 
 export function decodeFloat64AsString(s: string): number {
-  decoder.decodeInto(s, u8);
+  assert(s.length === 13, `Invalid encoded float64: ${s}`);
+  const bigint = parseBigInt(s, 36);
+  view.setBigUint64(0, bigint);
 
   const high = view.getUint32(0);
   const low = view.getUint32(4);
