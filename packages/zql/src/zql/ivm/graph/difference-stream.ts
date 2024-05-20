@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Selector} from '../../ast/ast.js';
+import type {Selector, SimpleOperator} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
 import type {
   JoinResult,
@@ -140,12 +140,14 @@ export class DifferenceStream<T extends PipelineEntity> {
     return stream.setUpstream(new MapOperator<T, O>(this, stream, f));
   }
 
-  filter<S extends T>(f: (x: T) => x is S): DifferenceStream<S>;
-  filter(f: (x: T) => boolean): DifferenceStream<T>;
-  filter<S extends T>(f: (x: T) => boolean): DifferenceStream<S> {
-    const stream = new DifferenceStream<S>();
+  filter(
+    selector: readonly [string | null, string],
+    operator: SimpleOperator,
+    value: unknown,
+  ): DifferenceStream<T> {
+    const stream = new DifferenceStream<T>();
     return stream.setUpstream(
-      new FilterOperator<T>(this, stream as unknown as DifferenceStream<T>, f),
+      new FilterOperator<T>(this, stream, selector, operator, value),
     );
   }
 
