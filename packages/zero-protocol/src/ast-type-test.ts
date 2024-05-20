@@ -1,6 +1,4 @@
-// The following ensures Selector and selectorSchema
-
-import type {
+\import type {
   AST,
   Aggregate,
   Aggregation,
