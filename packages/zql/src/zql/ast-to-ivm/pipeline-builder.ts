@@ -13,7 +13,8 @@ import type {
   SimpleHavingCondition,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
-import {isJoinResult, StringOrNumber} from '../ivm/types.js';
+import {getValueFromEntity} from '../ivm/source/util.js';
+import type {StringOrNumber} from '../ivm/types.js';
 
 function getId(e: Entity) {
   return e.id;
@@ -494,36 +495,4 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
     }
   }
   return new RegExp(pattern + '$', flags);
-}
-
-export function getValueFromEntity(
-  entity: Record<string, unknown>,
-  qualifiedColumn: readonly [table: string | null, column: string],
-) {
-  if (isJoinResult(entity) && qualifiedColumn[0] !== null) {
-    if (qualifiedColumn[1] === '*') {
-      return (entity as Record<string, unknown>)[qualifiedColumn[0]];
-    }
-    return getOrLiftValue(
-      (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
-        string,
-        unknown
-      >,
-      qualifiedColumn[1],
-    );
-  }
-  return getOrLiftValue(entity, qualifiedColumn[1]);
-}
-
-export function getOrLiftValue(
-  containerOrValue:
-    | Record<string, unknown>
-    | Array<Record<string, unknown>>
-    | undefined,
-  field: string,
-) {
-  if (Array.isArray(containerOrValue)) {
-    return containerOrValue.map(x => x?.[field]);
-  }
-  return containerOrValue?.[field];
 }

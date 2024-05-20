@@ -1,6 +1,6 @@
-import {getValueFromEntity} from '../../../ast-to-ivm/pipeline-builder.js';
 import type {Selector} from '../../../ast/ast.js';
 import type {Multiset} from '../../multiset.js';
+import {getValueFromEntity} from '../../source/util.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {LinearUnaryOperator} from './linear-unary-operator.js';
 

@@ -1,14 +1,12 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../entity.js';
-import {
-  buildPipeline,
-  getValueFromEntity,
-} from '../ast-to-ivm/pipeline-builder.js';
+import {buildPipeline} from '../ast-to-ivm/pipeline-builder.js';
 import type {AST, Ordering, Selector} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import type {Source} from '../ivm/source/source.js';
+import {getValueFromEntity} from '../ivm/source/util.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
