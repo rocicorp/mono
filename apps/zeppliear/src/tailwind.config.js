@@ -1,4 +1,6 @@
-module.exports = {
+const tailwindForms = import('@tailwindcss/forms');
+/** @type {import('tailwindcss').Config} */
+export default {
   darkMode: 'media',
   content: ['./src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -102,5 +104,5 @@ module.exports = {
       borderColor: ['checked'],
     },
   },
-  plugins: [require('@tailwindcss/forms')],
+  plugins: [tailwindForms],
 };
