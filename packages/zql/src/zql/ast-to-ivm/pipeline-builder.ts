@@ -8,9 +8,13 @@ import type {
   Primitive,
   SimpleCondition,
   Ordering,
+  Selector,
+  HavingCondition,
+  SimpleHavingCondition,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
-import {isJoinResult, StringOrNumber} from '../ivm/types.js';
+import {getValueFromEntity} from '../ivm/source/util.js';
+import type {StringOrNumber} from '../ivm/types.js';
 
 function getId(e: Entity) {
   return e.id;
@@ -82,8 +86,8 @@ export function applyJoins<T extends Entity, O extends Entity>(
   for (const join of joins) {
     const bPipeline = buildPipeline(sourceStreamProvider, join.other);
 
-    const aQualifiedColumn = selectorToQualifiedColumn(join.on[0]);
-    const bQualifiedColumn = selectorToQualifiedColumn(join.on[1]);
+    const aQualifiedColumn = join.on[0];
+    const bQualifiedColumn = join.on[1];
     const joinArgs = {
       aAs: sourceTableOrAlias,
       getAJoinKey(e: Entity) {
@@ -116,7 +120,7 @@ export function applyJoins<T extends Entity, O extends Entity>(
 
 function applyWhere<T extends Entity>(
   stream: DifferenceStream<T>,
-  where: Condition,
+  where: Condition | HavingCondition,
 ) {
   // We'll handle `OR` and parentheticals like so:
   // OR: We'll create a new stream for the LHS and RHS of the OR then merge together.
@@ -148,7 +152,7 @@ function applyWhere<T extends Entity>(
 
 function applyAnd<T extends Entity>(
   stream: DifferenceStream<T>,
-  conditions: Condition[],
+  conditions: (Condition | HavingCondition)[],
 ) {
   for (const condition of conditions) {
     stream = applyWhere(stream, condition);
@@ -158,7 +162,7 @@ function applyAnd<T extends Entity>(
 
 function applyOr<T extends Entity>(
   stream: DifferenceStream<T>,
-  conditions: Condition[],
+  conditions: (Condition | HavingCondition)[],
 ): DifferenceStream<T> {
   // Or is done by branching the stream and then applying the conditions to each
   // branch. Then we merge the branches back together. At this point we need to
@@ -169,19 +173,17 @@ function applyOr<T extends Entity>(
 
 function applySimpleCondition<T extends Entity>(
   stream: DifferenceStream<T>,
-  condition: SimpleCondition,
+  condition: SimpleCondition | SimpleHavingCondition,
 ) {
   const operator = getOperator(condition);
-  const {field: selector} = condition;
-  const column = selectorToQualifiedColumn(selector);
+  const {field: column} = condition;
   return stream.filter(x => operator(getValueFromEntity(x, column)));
 }
 
 function applyDistinct<T extends Entity>(
   stream: DifferenceStream<T>,
-  distinct: string,
+  column: Selector,
 ) {
-  const column = selectorToQualifiedColumn(distinct);
   return stream.distinctAll(
     x => getValueFromEntity(x, column) as StringOrNumber,
   );
@@ -189,12 +191,12 @@ function applyDistinct<T extends Entity>(
 
 function applyGroupBy<T extends Entity>(
   stream: DifferenceStream<T>,
-  columns: string[],
+  columns: Selector[],
   aggregations: Aggregation[],
 ) {
   const keyFunction = makeKeyFunction(columns);
   const qualifiedColumns = aggregations.map(q =>
-    q.field === undefined ? undefined : selectorToQualifiedColumn(q.field),
+    q.field === undefined ? undefined : q.field,
   );
 
   return stream.reduce(
@@ -311,13 +313,13 @@ function applyFullTableAggregation<T extends Entity>(
           `${agg.aggregate} not yet supported outside of group-by`,
         );
       case 'avg':
-        ret = ret.average(agg.field as string, agg.alias);
+        ret = ret.average(must(agg.field), agg.alias);
         break;
       case 'count':
         ret = ret.count(agg.alias);
         break;
       case 'sum':
-        ret = ret.sum(agg.field as string, agg.alias);
+        ret = ret.sum(must(agg.field), agg.alias);
         break;
     }
   }
@@ -325,8 +327,7 @@ function applyFullTableAggregation<T extends Entity>(
   return ret;
 }
 
-function makeKeyFunction(selectors: string[]) {
-  const qualifiedColumns = selectorsToQualifiedColumns(selectors);
+function makeKeyFunction(qualifiedColumns: Selector[]) {
   return (x: Record<string, unknown>) => {
     const ret: unknown[] = [];
     for (const qualifiedColumn of qualifiedColumns) {
@@ -340,8 +341,10 @@ function makeKeyFunction(selectors: string[]) {
 
 // We're well-typed in the query builder so once we're down here
 // we can assume that the operator is valid.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getOperator(condition: SimpleCondition): (lhs: any) => boolean {
+export function getOperator(
+  condition: SimpleCondition | SimpleHavingCondition,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): (lhs: any) => boolean {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rhs = condition.value.value as any;
   const {op} = condition;
@@ -492,51 +495,4 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
     }
   }
   return new RegExp(pattern + '$', flags);
-}
-
-export function selectorsToQualifiedColumns(
-  selectors: string[],
-): (readonly [string | undefined, string])[] {
-  return selectors.map(selectorToQualifiedColumn);
-}
-
-export function selectorToQualifiedColumn(
-  x: string,
-): readonly [string | undefined, string] {
-  if (x.includes('.')) {
-    return x.split('.') as [string, string];
-  }
-  return [undefined, x];
-}
-
-export function getValueFromEntity(
-  entity: Record<string, unknown>,
-  qualifiedColumn: readonly [table: string | undefined, column: string],
-) {
-  if (isJoinResult(entity) && qualifiedColumn[0] !== undefined) {
-    if (qualifiedColumn[1] === '*') {
-      return (entity as Record<string, unknown>)[qualifiedColumn[0]];
-    }
-    return getOrLiftValue(
-      (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
-        string,
-        unknown
-      >,
-      qualifiedColumn[1],
-    );
-  }
-  return getOrLiftValue(entity, qualifiedColumn[1]);
-}
-
-export function getOrLiftValue(
-  containerOrValue:
-    | Record<string, unknown>
-    | Array<Record<string, unknown>>
-    | undefined,
-  field: string,
-) {
-  if (Array.isArray(containerOrValue)) {
-    return containerOrValue.map(x => x?.[field]);
-  }
-  return containerOrValue?.[field];
 }

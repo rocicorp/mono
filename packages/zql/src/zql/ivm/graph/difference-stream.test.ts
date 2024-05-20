@@ -128,7 +128,11 @@ test('map, filter, linearCount', () => {
 
 test('cleaning up the only user of a stream cleans up the entire pipeline', () => {
   const materialite = new Materialite();
-  const set = materialite.newSetSource<Elem>((l, r) => l.x - r.x);
+  const set = materialite.newSetSource<Elem>(
+    (l, r) => l.x - r.x,
+    [[['elem', 'x']], 'asc'],
+    'elem',
+  );
 
   let notifyCount = 0;
   const final = set.stream
@@ -147,7 +151,11 @@ test('cleaning up the only user of a stream cleans up the entire pipeline', () =
 
 test('cleaning up the only user of a stream cleans up the entire pipeline but stops at a used fork', () => {
   const materialite = new Materialite();
-  const set = materialite.newSetSource<Elem>((l, r) => l.x - r.x);
+  const set = materialite.newSetSource<Elem>(
+    (l, r) => l.x - r.x,
+    [[['elem', 'x']], 'asc'],
+    'elem',
+  );
 
   let notifyCount = 0;
   const stream1 = set.stream.effect(_ => notifyCount++);
@@ -219,7 +227,7 @@ test('replying to a message only notifies along the requesting path', () => {
   x.setUpstream(s2Dbg);
   s3.debug(() => notified.push(6));
 
-  const msg = createPullMessage([[], 'asc'], 'select');
+  const msg = createPullMessage([[], 'asc']);
 
   x.messageUpstream(msg, {
     commit: () => {},
@@ -228,7 +236,11 @@ test('replying to a message only notifies along the requesting path', () => {
 
   expect(notified).toEqual([]);
 
-  stream.newDifference(1, [], createPullResponseMessage(msg));
+  stream.newDifference(
+    1,
+    [],
+    createPullResponseMessage(msg, 'test', undefined),
+  );
 
   expect(notified).toEqual([2, 5]);
 });

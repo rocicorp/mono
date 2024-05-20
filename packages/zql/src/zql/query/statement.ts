@@ -1,15 +1,12 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../entity.js';
-import {
-  buildPipeline,
-  getValueFromEntity,
-  selectorsToQualifiedColumns,
-} from '../ast-to-ivm/pipeline-builder.js';
-import type {AST, Ordering} from '../ast/ast.js';
+import {buildPipeline} from '../ast-to-ivm/pipeline-builder.js';
+import type {AST, Ordering, Selector} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {compareEntityFields} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import type {Source} from '../ivm/source/source.js';
+import {getValueFromEntity} from '../ivm/source/util.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
@@ -124,12 +121,9 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
 }
 
 export function makeComparator<T extends object>(
-  sortKeys: readonly string[],
+  qualifiedColumns: readonly Selector[],
   direction: 'asc' | 'desc',
 ): (l: T, r: T) => number {
-  const qualifiedColumns = selectorsToQualifiedColumns(
-    sortKeys as unknown as string[],
-  );
   const comparator = (l: T, r: T) => {
     let comp = 0;
     for (const qualifiedColumn of qualifiedColumns) {
@@ -146,4 +140,17 @@ export function makeComparator<T extends object>(
   };
 
   return direction === 'asc' ? comparator : (l, r) => comparator(r, l);
+}
+
+export function fieldsMatch(
+  left: readonly Selector[],
+  right: readonly Selector[],
+) {
+  return (
+    left.length === right.length &&
+    left.every(
+      (leftItem, i) =>
+        leftItem[0] === right[i][0] && leftItem[1] === right[i][1],
+    )
+  );
 }

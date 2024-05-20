@@ -1,5 +1,6 @@
 import type {Context} from '../../context/context.js';
 import type {DifferenceStream, Listener} from '../graph/difference-stream.js';
+import type {Reply} from '../graph/message.js';
 import type {Materialite} from '../materialite.js';
 import type {Multiset} from '../multiset.js';
 import type {Version} from '../types.js';
@@ -33,12 +34,16 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
     this.name = name;
     this.#stream = stream;
     this._listener = {
-      newDifference: (version: Version, data: Multiset<T>) => {
+      newDifference: (
+        version: Version,
+        data: Multiset<T>,
+        reply?: Reply | undefined,
+      ) => {
         if (version > this.#lastSeenVersion) {
           this.#lastSeenVersion = version;
           this.#didVersionChange = false;
         }
-        const changed = this._newDifference(data);
+        const changed = this._newDifference(data, reply);
         if (changed) {
           this.#didVersionChange = true;
         }
@@ -101,5 +106,8 @@ export abstract class AbstractView<T extends object, CT> implements View<CT> {
     this.#stream.removeDownstream(this._listener);
   }
 
-  protected abstract _newDifference(data: Multiset<T>): boolean;
+  protected abstract _newDifference(
+    data: Multiset<T>,
+    reply?: Reply | undefined,
+  ): boolean;
 }

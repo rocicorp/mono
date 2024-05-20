@@ -17,55 +17,64 @@ describe('zql/deaggregation', () => {
       name: 'nothing to deaggregate',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
+        select: [[['issues', 'title'], 'theTitle']],
       },
       original: `
-      SELECT title AS "theTitle" FROM issues`,
+      SELECT issues.title AS "theTitle" FROM issues`,
     },
     {
       name: 'array in top-level select',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
-        aggregate: [{aggregate: 'array', field: 'label', alias: 'ignored'}],
-        groupBy: ['title'],
+        select: [[['issues', 'title'], 'theTitle']],
+        aggregate: [
+          {aggregate: 'array', field: ['issues', 'label'], alias: 'ignored'},
+        ],
+        groupBy: [['issues', 'title']],
       },
       original: `
-      SELECT title AS "theTitle", array_agg(label) AS "array_agg(label)" 
-        FROM issues GROUP BY title`,
+      SELECT issues.title AS "theTitle", array_agg(issues.label) AS "array_agg(issues.label)" 
+        FROM issues GROUP BY issues.title`,
       afterDeaggregation: `
-      SELECT label AS label, title AS "theTitle" FROM issues
+      SELECT issues.label AS label, issues.title AS "theTitle" FROM issues
       `,
     },
     {
       name: 'array in nested select',
       ast: {
         table: 'issues',
-        select: [['title', 'theTitle']],
-        aggregate: [{aggregate: 'array', field: 'label', alias: 'ignored'}],
+        select: [[['issues', 'title'], 'theTitle']],
+        aggregate: [
+          {aggregate: 'array', field: ['issues', 'label'], alias: 'ignored'},
+        ],
         joins: [
           {
             type: 'inner',
             other: {
               table: 'users',
-              aggregate: [{aggregate: 'array', field: 'role', alias: 'igno'}],
-              groupBy: ['id'],
+              aggregate: [
+                {aggregate: 'array', field: ['users', 'role'], alias: 'igno'},
+              ],
+              groupBy: [['users', 'id']],
             },
             as: 'users',
-            on: ['issues.user_id', 'users.id'],
+            on: [
+              ['issues', 'user_id'],
+              ['users', 'id'],
+            ],
           },
         ],
-        groupBy: ['title'],
+        groupBy: [['issues', 'title']],
       },
       original: `
-      SELECT title AS "theTitle", array_agg(label) AS "array_agg(label)" FROM issues
-        INNER JOIN SELECT array_agg(role) AS "array_agg(role)" FROM users GROUP BY id
+      SELECT issues.title AS "theTitle", array_agg(issues.label) AS "array_agg(issues.label)" FROM issues
+        INNER JOIN SELECT array_agg(users.role) AS "array_agg(users.role)" FROM users GROUP BY users.id
         AS users ON issues.user_id = users.id
-      GROUP BY title      
+      GROUP BY issues.title      
       `,
       afterDeaggregation: `
-      SELECT label AS label, title AS "theTitle" FROM issues
-        INNER JOIN (SELECT role AS role FROM users) AS users 
+      SELECT issues.label AS label, issues.title AS "theTitle" FROM issues
+        INNER JOIN (SELECT users.role AS role FROM users) AS users 
       ON issues.user_id = users.id
       `,
     },

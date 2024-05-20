@@ -2,7 +2,7 @@
 
 A test-bed app for Zero based on Repliear a Replicache based high-performance issue tracker in the style of [Linear](https://linear.app/).
 
-Built with Zero and [Next.js](https://nextjs.org/),).
+Built with Zero and [Vite](https://vitejs.dev/),).
 
 Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
@@ -26,7 +26,7 @@ npx wrangler dev --ip 0.0.0.0
 
 ```
 npm install
-NEXT_PUBLIC_SERVER='http://localhost:8787' npm run dev
+VITE_PUBLIC_SERVER='http://localhost:8787' npm run dev
 ```
 
 # To reset clear local postgres dbs and docker volumes

@@ -3,36 +3,58 @@ import {expect, test} from 'vitest';
 import type {Entity} from '../../../entity.js';
 import {makeTestContext} from '../../context/test-context.js';
 import {makeComparator} from '../../query/statement.js';
+import type {Comparator} from '../types.js';
 import {TreeView} from './tree-view.js';
 
 const numberComparator = (l: number, r: number) => l - r;
+const ordering = [[['x', 'id']], 'asc'] as const;
 
 type Selected = {id: string};
 test('asc and descComparator on Entities', () => {
   const context = makeTestContext();
   const {materialite} = context;
-  const s = materialite.newSetSource<Entity>((l, r) =>
-    l.id.localeCompare(r.id),
+  const s = materialite.newSetSource<Entity>(
+    (l, r) => l.id.localeCompare(r.id),
+    ordering,
+    'x',
   );
-  const orderBy = [['n', 'id'], 'asc'] as const;
+  const orderBy = [
+    [
+      ['x', 'n'],
+      ['x', 'id'],
+    ],
+    'asc',
+  ] as const;
   const view = new TreeView<Selected>(
     context,
     s.stream,
-    // eh... the comparator operates on the base type rather than the mapped
-    // type. So there's a disconnect between the type of the comparator and the
-    // type of the view.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    makeComparator(['n', 'id'] as any, 'asc'),
+    makeComparator(
+      [
+        ['x', 'n'],
+        ['x', 'id'],
+      ],
+      'asc',
+    ),
     orderBy,
   );
 
-  const orderBy2 = [['n', 'id'], 'desc'] as const;
+  const orderBy2 = [
+    [
+      ['x', 'n'],
+      ['x', 'id'],
+    ],
+    'desc',
+  ] as const;
   const descView = new TreeView<Selected>(
     context,
     s.stream,
-    // see above for why this is any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    makeComparator(['n', 'id'] as any, 'desc'),
+    makeComparator(
+      [
+        ['x', 'n'],
+        ['x', 'id'],
+      ],
+      'desc',
+    ),
     orderBy2,
   );
 
@@ -58,12 +80,16 @@ test('asc and descComparator on Entities', () => {
   ]);
 });
 
-test('add & remove', async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
+test('add & remove', () => {
+  fc.assert(
+    fc.property(fc.uniqueArray(fc.integer()), arr => {
       const context = makeTestContext();
       const {materialite} = context;
-      const source = materialite.newSetSource<{x: number}>((l, r) => l.x - r.x);
+      const source = materialite.newSetSource<{x: number}>(
+        (l, r) => l.x - r.x,
+        [[['test', 'x']], 'asc'] as const,
+        'test',
+      );
       const view = new TreeView(
         context,
         source.stream,
@@ -74,25 +100,27 @@ test('add & remove', async () => {
       materialite.tx(() => {
         arr.forEach(x => source.add({x}));
       });
-      await Promise.resolve();
       expect(view.value).toEqual(arr.sort(numberComparator).map(x => ({x})));
 
       materialite.tx(() => {
         arr.forEach(x => source.delete({x}));
       });
-      await Promise.resolve();
       expect(view.value).toEqual([]);
     }),
   );
 });
 
-test('replace', async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
+test('replace', () => {
+  fc.assert(
+    fc.property(fc.uniqueArray(fc.integer()), arr => {
       const context = makeTestContext();
       const {materialite} = context;
-      const source = materialite.newSetSource<{x: number}>((l, r) => l.x - r.x);
-      const orderBy = [['id'], 'asc'] as const;
+      const orderBy = [[['test', 'x']], 'asc'] as const;
+      const source = materialite.newSetSource<{x: number}>(
+        (l, r) => l.x - r.x,
+        orderBy,
+        'test',
+      );
       const view = new TreeView(
         context,
         source.stream,
@@ -103,7 +131,6 @@ test('replace', async () => {
       materialite.tx(() => {
         arr.forEach(x => source.add({x}));
       });
-      await Promise.resolve();
       expect(view.value).toEqual(arr.sort(numberComparator).map(x => ({x})));
       materialite.tx(() => {
         arr.forEach(x => {
@@ -114,14 +141,60 @@ test('replace', async () => {
           source.add({x});
         });
       });
-      await Promise.resolve();
       expect(view.value).toEqual(arr.sort(numberComparator).map(x => ({x})));
 
       materialite.tx(() => {
         arr.forEach(x => source.delete({x}));
       });
-      await Promise.resolve();
       expect(view.value).toEqual([]);
     }),
   );
+});
+
+test('replace outside viewport', () => {
+  type Item = {id: number; s: string};
+  const context = makeTestContext();
+  const {materialite} = context;
+  const orderBy = [[['test', 'x']], 'asc'] as const;
+  const comparator: Comparator<Item> = (l, r) => l.id - r.id;
+  const source = materialite.newSetSource<Item>(comparator, orderBy, 'test');
+  const view = new TreeView(context, source.stream, comparator, orderBy, 5);
+
+  materialite.tx(() => {
+    for (let i = 0; i < 5; i++) {
+      source.add({id: i, s: String(i)});
+    }
+  });
+  expect(view.value).toEqual([
+    {id: 0, s: '0'},
+    {id: 1, s: '1'},
+    {id: 2, s: '2'},
+    {id: 3, s: '3'},
+    {id: 4, s: '4'},
+  ]);
+
+  // add outside of viewport
+  materialite.tx(() => {
+    source.add({id: 10, s: '10'});
+  });
+  expect(view.value).toEqual([
+    {id: 0, s: '0'},
+    {id: 1, s: '1'},
+    {id: 2, s: '2'},
+    {id: 3, s: '3'},
+    {id: 4, s: '4'},
+  ]);
+
+  // change outside of viewport
+  materialite.tx(() => {
+    source.delete({id: 10, s: '10'});
+    source.add({id: 10, s: '11'});
+  });
+  expect(view.value).toEqual([
+    {id: 0, s: '0'},
+    {id: 1, s: '1'},
+    {id: 2, s: '2'},
+    {id: 3, s: '3'},
+    {id: 4, s: '4'},
+  ]);
 });

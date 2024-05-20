@@ -214,9 +214,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         schema: 'zero',
         table: 'clients',
         select: [
-          ['clientGroupID', 'clientGroupID'],
-          ['clientID', 'clientID'],
-          ['lastMutationID', 'lastMutationID'],
+          [['clients', 'clientGroupID'], 'clientGroupID'],
+          [['clients', 'clientID'], 'clientID'],
+          [['clients', 'lastMutationID'], 'lastMutationID'],
         ],
         where: {
           type: 'conjunction',
@@ -224,10 +224,10 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
           conditions: [
             {
               type: 'simple',
-              field: 'clientGroupID',
+              field: ['clients', 'clientGroupID'],
               op: '=',
               value: {
-                type: 'literal',
+                type: 'value',
                 value: this._cvr.id,
               },
             },
@@ -236,10 +236,10 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
               op: 'OR',
               conditions: Object.keys(this._cvr.clients).map(clientID => ({
                 type: 'simple',
-                field: 'clientID',
+                field: ['clients', 'clientID'],
                 op: '=',
                 value: {
-                  type: 'literal',
+                  type: 'value',
                   value: clientID,
                 },
               })),

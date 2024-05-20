@@ -41,16 +41,19 @@ export type ReadTask<T> = (
  * multiple connections at the same snapshot (e.g. read only snapshot transactions).
  */
 export class TransactionPool {
-  readonly #lc: LogContext;
+  #lc: LogContext;
   readonly #init: QueuedTask | undefined;
   readonly #cleanup: QueuedTask | undefined;
   readonly #tasks = new Queue<TaskTracker | Error | 'done'>();
   readonly #workers: Promise<unknown>[] = [];
+  readonly #initialWorkers: number;
   readonly #maxWorkers: number;
+  readonly #timeoutTask: TimeoutTasks;
   #numWorkers: number;
   #numWorking = 0;
   #db: PostgresDB | undefined; // set when running. stored to allow adaptive pool sizing.
 
+  #refCount = 1;
   #done = false;
   #failure: Error | undefined;
 
@@ -60,10 +63,13 @@ export class TransactionPool {
    *             mode, export/set snapshots, etc.
    * @param cleanup A {@link Task} that is run in each Transaction before it closes.
    *                This may be skipped if {@link fail} is called.
-   * @param initialWorkers The number of transaction workers to process tasks.
+   * @param initialWorkers The initial number of transaction workers to process tasks.
+   *                       This is the steady state number of workers that will be kept
+   *                       alive if the TransactionPool is long lived.
    *                       This must be greater than 0. Defaults to 1.
    * @param maxWorkers When specified, allows the pool to grow to `maxWorkers`. This
-   *                   must be greater than or equal to `initialWorkers`.
+   *                   must be greater than or equal to `initialWorkers`. On-demand
+   *                   workers will be shut down after an idle timeout of 5 seconds.
    */
   constructor(
     lc: LogContext,
@@ -71,16 +77,19 @@ export class TransactionPool {
     cleanup?: Task,
     initialWorkers = 1,
     maxWorkers?: number,
+    timeoutTasks = TIMEOUT_TASKS, // Overridden for tests.
   ) {
     maxWorkers ??= initialWorkers;
     assert(initialWorkers > 0);
     assert(maxWorkers >= initialWorkers);
 
     this.#lc = lc;
-    this.#init = init ? queuedWrite(init) : undefined;
-    this.#cleanup = cleanup ? queuedWrite(cleanup) : undefined;
+    this.#init = init ? queuedStmt(init) : undefined;
+    this.#cleanup = cleanup ? queuedStmt(cleanup) : undefined;
+    this.#initialWorkers = initialWorkers;
     this.#numWorkers = initialWorkers;
     this.#maxWorkers = maxWorkers;
+    this.#timeoutTask = timeoutTasks;
   }
 
   /**
@@ -100,10 +109,27 @@ export class TransactionPool {
   }
 
   /**
+   * Adds context parameters to internal LogContext. This is useful for context values that
+   * are not known when the TransactionPool is constructed (e.g. determined after a database
+   * call when the pool is running).
+   *
+   * Returns an object that can be used to add more parameters.
+   */
+  addLoggingContext(key: string, value: string) {
+    this.#lc = this.#lc.withContext(key, value);
+
+    return {
+      addLoggingContext: (key: string, value: string) =>
+        this.addLoggingContext(key, value),
+    };
+  }
+
+  /**
    * Returns a promise that:
    *
-   * * resolves after {@link setDone} has been called, once all added tasks have
-   *   been processed and all transactions have been committed or closed.
+   * * resolves after {@link setDone} has been called (or the the pool as been {@link unref}ed
+   *   to a 0 ref count), once all added tasks have been processed and all transactions have been
+   *   committed or closed.
    *
    * * rejects if processing was aborted with {@link fail} or if processing any of
    *   the tasks resulted in an error. All uncommitted transactions will have been
@@ -133,6 +159,15 @@ export class TransactionPool {
 
   #addWorker(db: PostgresDB) {
     const lc = this.#lc.withContext('worker', `#${this.#workers.length + 1}`);
+
+    const tt: TimeoutTask =
+      this.#workers.length < this.#initialWorkers
+        ? this.#timeoutTask.forInitialWorkers
+        : this.#timeoutTask.forExtraWorkers;
+    const {timeoutMs} = tt;
+    const timeoutTask =
+      tt.task === 'done' ? 'done' : {task: queuedStmt(tt.task)};
+
     const worker = async (tx: PostgresTransaction) => {
       try {
         lc.debug?.('started worker');
@@ -146,21 +181,28 @@ export class TransactionPool {
           let result;
           try {
             result = await task(tx, lc);
-            if (result instanceof WriteStatements) {
+            if (result instanceof Statements) {
               // Execute the statements (i.e. send to the db) immediately and add them to
               // `pending` for the final await.
               //
               // Optimization: Fail immediately on rejections to prevent more tasks from
               // queueing up. This can save a lot of time if an initial task fails before
               // many subsequent tasks (e.g. transaction replay detection).
+              const start = Date.now();
               pending.push(
                 ...result.stmts.map(stmt =>
-                  stmt.execute().catch(e => this.fail(e)),
+                  stmt
+                    .execute()
+                    .then(
+                      () =>
+                        lc.debug?.(
+                          `Executed statement (${Date.now() - start} ms)`,
+                          (stmt as unknown as Stmt).strings,
+                        ),
+                    )
+                    .catch(e => this.fail(e)),
                 ),
               );
-              if (result.stmts.length) {
-                lc.debug?.(`executed ${result.stmts.length} statement(s)`);
-              }
             }
           } catch (e) {
             if (resolver) {
@@ -179,7 +221,7 @@ export class TransactionPool {
 
         let task: TaskTracker | Error | 'done' = this.#init
           ? {task: this.#init}
-          : await this.#tasks.dequeue();
+          : await this.#tasks.dequeue(timeoutTask, timeoutMs);
 
         while (task !== 'done') {
           if (this.#failure || task instanceof Error) {
@@ -189,7 +231,7 @@ export class TransactionPool {
           await executeTask(task);
 
           // await the next task.
-          task = await this.#tasks.dequeue();
+          task = await this.#tasks.dequeue(timeoutTask, timeoutMs);
         }
         if (this.#cleanup) {
           await executeTask({task: this.#cleanup});
@@ -198,12 +240,13 @@ export class TransactionPool {
         lc.debug?.('worker done');
         return Promise.all(pending);
       } catch (e) {
+        lc.error?.('error from worker', e);
         this.fail(e); // A failure in any worker should fail the pool.
         throw e;
       }
     };
 
-    this.#workers.push(db.begin(worker));
+    this.#workers.push(db.begin(worker).finally(() => this.#numWorkers--));
 
     // After adding the worker, enqueue a terminal signal if we are in either of the
     // terminal states (both of which prevent more tasks from being enqueued), to ensure
@@ -217,7 +260,7 @@ export class TransactionPool {
   }
 
   process(task: Task): void {
-    this.#trackAndProcess({task: queuedWrite(task)});
+    this.#trackAndProcess({task: queuedStmt(task)});
   }
 
   #trackAndProcess(taskTracker: TaskTracker): void {
@@ -236,7 +279,7 @@ export class TransactionPool {
       if (outstanding > this.#numWorkers - this.#numWorking) {
         this.#db && this.#addWorker(this.#db);
         this.#numWorkers++;
-        this.#lc.debug?.(`Increased pool size to: ${this.#numWorkers}`);
+        this.#lc.debug?.(`Increased pool size to ${this.#numWorkers}`);
       }
     }
   }
@@ -261,6 +304,48 @@ export class TransactionPool {
     for (let i = 0; i < this.#workers.length; i++) {
       void this.#tasks.enqueue('done');
     }
+  }
+
+  /**
+   * An alternative to explicitly calling {@link setDone}, `ref()` increments an internal reference
+   * count, and {@link unref} decrements it. When the reference count reaches 0, {@link setDone} is
+   * automatically called. A TransactionPool is initialized with a reference count of 1.
+   *
+   * `ref()` should be called before sharing the pool with another component, and only after the
+   * pool has been started with {@link run()}. It must not be called on a TransactionPool that is
+   * already done (either via {@link unref()} or {@link setDone()}. (Doing so indicates a logical
+   * error in the code.)
+   *
+   * It follows that:
+   * * The creator of the TransactionPool is responsible for running it.
+   * * The TransactionPool should be ref'ed before being sharing.
+   * * The receiver of the TransactionPool is only responsible for unref'ing it.
+   *
+   * On the other hand, a transaction pool that fails with a runtime error can still be ref'ed;
+   * attempts to use the pool will result in the runtime error as expected.
+   */
+  ref(count = 1) {
+    assert(
+      this.#db !== undefined && !this.#done,
+      `Cannot ref() a TransactionPool that is not running`,
+    );
+    this.#refCount += count;
+  }
+
+  /**
+   * Decrements the internal reference count, automatically invoking {@link setDone} when it reaches 0.
+   */
+  unref(count = 1) {
+    assert(count <= this.#refCount);
+
+    this.#refCount -= count;
+    if (this.#refCount === 0) {
+      this.setDone();
+    }
+  }
+
+  isRunning(): boolean {
+    return this.#db !== undefined && !this.#done && this.#failure === undefined;
   }
 
   /**
@@ -432,7 +517,7 @@ function ensureError(err: unknown): Error {
 }
 
 // Internal classes for handling read and write tasks in the same queue.
-class WriteStatements {
+class Statements {
   readonly stmts: readonly Statement[];
   constructor(stmts: readonly Statement[]) {
     this.stmts = stmts;
@@ -446,8 +531,8 @@ class ReadResult<T> {
   }
 }
 
-function queuedWrite(task: Task): QueuedTask {
-  return async (tx, lc) => new WriteStatements(await task(tx, lc));
+function queuedStmt(task: Task): QueuedTask {
+  return async (tx, lc) => new Statements(await task(tx, lc));
 }
 
 function queuedRead<T>(task: ReadTask<T>): QueuedTask<T> {
@@ -457,7 +542,7 @@ function queuedRead<T>(task: ReadTask<T>): QueuedTask<T> {
 type QueuedTask<T = unknown> = (
   tx: PostgresTransaction,
   lc: LogContext,
-) => MaybePromise<WriteStatements | ReadResult<T>>;
+) => MaybePromise<Statements | ReadResult<T>>;
 
 type TaskTracker<T = unknown> =
   | {
@@ -468,3 +553,38 @@ type TaskTracker<T = unknown> =
       task: QueuedTask<ReadResult<T>>;
       resolver: Resolver<T>;
     };
+
+const IDLE_TIMEOUT_MS = 5_000;
+
+const KEEPALIVE_TIMEOUT_MS = 60_000;
+
+const KEEPALIVE_TASK: Task = (tx, lc) => {
+  lc.debug?.('sending keepalive');
+  return [tx`SELECT 1`.simple()];
+};
+
+type TimeoutTask = {
+  timeoutMs: number;
+  task: Task | 'done';
+};
+
+type TimeoutTasks = {
+  forInitialWorkers: TimeoutTask;
+  forExtraWorkers: TimeoutTask;
+};
+
+// Production timeout tasks. Overridden in tests.
+const TIMEOUT_TASKS: TimeoutTasks = {
+  forInitialWorkers: {
+    timeoutMs: KEEPALIVE_TIMEOUT_MS,
+    task: KEEPALIVE_TASK,
+  },
+  forExtraWorkers: {
+    timeoutMs: IDLE_TIMEOUT_MS,
+    task: 'done',
+  },
+};
+
+// The slice of information from the Query object in Postgres.js that gets logged for debugging.
+// https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/query.js#L6
+type Stmt = {strings: string[]};

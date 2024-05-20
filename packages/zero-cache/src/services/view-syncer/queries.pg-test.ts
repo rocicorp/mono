@@ -52,28 +52,37 @@ describe('view-syncer/queries', () => {
 
     const ast: AST = {
       select: [
-        ['issues.id', 'id'],
-        ['issues.title', 'title'],
-        ['owner.name', 'owner'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'id'],
+        [['issues', 'title'], 'title'],
+        [['owner', 'name'], 'owner'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
-      orderBy: [['id', 'title'], 'desc'],
+      orderBy: [
+        [
+          ['issues', 'id'],
+          ['issues', 'title'],
+        ],
+        'desc',
+      ],
       table: 'issues',
       joins: [
         {
           type: 'inner',
           other: {table: 'users'},
           as: 'owner',
-          on: ['issues.owner_id', 'owner.id'],
+          on: [
+            ['issues', 'owner_id'],
+            ['owner', 'id'],
+          ],
         },
         {
           type: 'inner',
           other: {
             select: [
-              ['issues.id', 'issues_id'],
-              ['title', 'title'],
-              ['owner.name', 'owner'],
+              [['issues', 'id'], 'issues_id'],
+              [['issues', 'title'], 'title'],
+              [['owner', 'name'], 'owner'],
             ],
             table: 'issues',
             joins: [
@@ -81,12 +90,18 @@ describe('view-syncer/queries', () => {
                 type: 'inner',
                 other: {table: 'users'},
                 as: 'owner',
-                on: ['issues.owner_id', 'owner.id'],
+                on: [
+                  ['issues', 'owner_id'],
+                  ['owner', 'id'],
+                ],
               },
             ],
           },
           as: 'parent',
-          on: ['issues.parent_id', 'parent.issues_id'],
+          on: [
+            ['issues', 'parent_id'],
+            ['parent', 'issues_id'],
+          ],
         },
       ],
     };
@@ -100,10 +115,10 @@ describe('view-syncer/queries', () => {
         'issues.id AS id, issues.title AS title, owner.name AS owner, ' +
         'parent.owner AS parent_owner, parent.title AS parent_title FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
-        'INNER JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
+        'INNER JOIN (SELECT issues.id AS issues_id, issues.title AS title, owner.name AS owner FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
         'AS parent ON issues.parent_id = parent.issues_id ' +
-        'ORDER BY id desc, title desc',
+        'ORDER BY issues.id desc, issues.title desc',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
@@ -125,11 +140,11 @@ describe('view-syncer/queries', () => {
     const equivalentAST: AST = {
       ...ast,
       select: [
-        ['issues.id', 'different_id_alias'],
-        ['issues.title', 'different_title_alias'],
-        ['owner.name', 'different_owner_alias'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'different_id_alias'],
+        [['issues', 'title'], 'different_title_alias'],
+        [['owner', 'name'], 'different_owner_alias'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
     };
 
@@ -262,9 +277,11 @@ describe('view-syncer/queries', () => {
     const queryHandler = new QueryHandler(published.tables);
 
     const ast: AST = {
-      select: [['issues.id', 'id']],
-      aggregate: [{aggregate: 'array', field: 'title', alias: 'ignored'}],
-      groupBy: ['id'],
+      select: [[['issues', 'id'], 'id']],
+      aggregate: [
+        {aggregate: 'array', field: ['issues', 'title'], alias: 'ignored'},
+      ],
+      groupBy: [['issues', 'id']],
       table: 'issues',
     };
 
@@ -273,24 +290,25 @@ describe('view-syncer/queries', () => {
     //   executing on the client.
     const original = new Normalized(ast).query();
     expect(original.query).toBe(
-      'SELECT issues.id AS id, array_agg(title) AS "array_agg(title)" FROM issues GROUP BY id',
+      'SELECT issues.id AS id, array_agg(issues.title) AS "array_agg(issues.title)" ' +
+        'FROM issues GROUP BY issues.id',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
         id: '2',
-        ['array_agg(title)']: ['parent issue bar'],
+        ['array_agg(issues.title)']: ['parent issue bar'],
       },
       {
         id: '4',
-        ['array_agg(title)']: ['bar'],
+        ['array_agg(issues.title)']: ['bar'],
       },
       {
         id: '3',
-        ['array_agg(title)']: ['foo'],
+        ['array_agg(issues.title)']: ['foo'],
       },
       {
         id: '1',
-        ['array_agg(title)']: ['parent issue foo'],
+        ['array_agg(issues.title)']: ['parent issue foo'],
       },
     ]);
 
@@ -368,28 +386,37 @@ describe('view-syncer/queries', () => {
 
     const ast: AST = {
       select: [
-        ['issues.id', 'id'],
-        ['issues.title', 'title'],
-        ['owner.name', 'owner'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'id'],
+        [['issues', 'title'], 'title'],
+        [['owner', 'name'], 'owner'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
-      orderBy: [['id', 'title'], 'desc'],
+      orderBy: [
+        [
+          ['issues', 'id'],
+          ['issues', 'title'],
+        ],
+        'desc',
+      ],
       table: 'issues',
       joins: [
         {
           type: 'inner',
           other: {table: 'users'},
           as: 'owner',
-          on: ['issues.owner_id', 'owner.id'],
+          on: [
+            ['issues', 'owner_id'],
+            ['owner', 'id'],
+          ],
         },
         {
           type: 'left',
           other: {
             select: [
-              ['issues.id', 'issues_id'],
-              ['title', 'title'],
-              ['owner.name', 'owner'],
+              [['issues', 'id'], 'issues_id'],
+              [['issues', 'title'], 'title'],
+              [['owner', 'name'], 'owner'],
             ],
             table: 'issues',
             joins: [
@@ -397,12 +424,18 @@ describe('view-syncer/queries', () => {
                 type: 'inner',
                 other: {table: 'users'},
                 as: 'owner',
-                on: ['issues.owner_id', 'owner.id'],
+                on: [
+                  ['issues', 'owner_id'],
+                  ['owner', 'id'],
+                ],
               },
             ],
           },
           as: 'parent',
-          on: ['issues.parent_id', 'parent.issues_id'],
+          on: [
+            ['issues', 'parent_id'],
+            ['parent', 'issues_id'],
+          ],
         },
       ],
     };
@@ -416,10 +449,10 @@ describe('view-syncer/queries', () => {
         'issues.id AS id, issues.title AS title, owner.name AS owner, ' +
         'parent.owner AS parent_owner, parent.title AS parent_title FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id ' +
-        'LEFT JOIN (SELECT issues.id AS issues_id, owner.name AS owner, title AS title FROM issues ' +
+        'LEFT JOIN (SELECT issues.id AS issues_id, issues.title AS title, owner.name AS owner FROM issues ' +
         'INNER JOIN users AS owner ON issues.owner_id = owner.id) ' +
         'AS parent ON issues.parent_id = parent.issues_id ' +
-        'ORDER BY id desc, title desc',
+        'ORDER BY issues.id desc, issues.title desc',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
@@ -455,11 +488,11 @@ describe('view-syncer/queries', () => {
     const equivalentAST: AST = {
       ...ast,
       select: [
-        ['issues.id', 'different_id_alias'],
-        ['issues.title', 'different_title_alias'],
-        ['owner.name', 'different_owner_alias'],
-        ['parent.title', 'parent_title'],
-        ['parent.owner', 'parent_owner'],
+        [['issues', 'id'], 'different_id_alias'],
+        [['issues', 'title'], 'different_title_alias'],
+        [['owner', 'name'], 'different_owner_alias'],
+        [['parent', 'title'], 'parent_title'],
+        [['parent', 'owner'], 'parent_owner'],
       ],
     };
 
@@ -604,9 +637,11 @@ describe('view-syncer/queries', () => {
     const queryHandler = new QueryHandler(published.tables);
 
     const ast: AST = {
-      select: [['issues.id', 'id']],
-      aggregate: [{aggregate: 'array', field: 'title', alias: 'ignored'}],
-      groupBy: ['id'],
+      select: [[['issues', 'id'], 'id']],
+      aggregate: [
+        {aggregate: 'array', field: ['issues', 'title'], alias: 'ignored'},
+      ],
+      groupBy: [['issues', 'id']],
       table: 'issues',
     };
 
@@ -615,24 +650,25 @@ describe('view-syncer/queries', () => {
     //   executing on the client.
     const original = new Normalized(ast).query();
     expect(original.query).toBe(
-      'SELECT issues.id AS id, array_agg(title) AS "array_agg(title)" FROM issues GROUP BY id',
+      'SELECT issues.id AS id, array_agg(issues.title) AS "array_agg(issues.title)" ' +
+        'FROM issues GROUP BY issues.id',
     );
     expect(await db.unsafe(original.query, original.values)).toEqual([
       {
         id: '2',
-        ['array_agg(title)']: ['parent issue bar'],
+        ['array_agg(issues.title)']: ['parent issue bar'],
       },
       {
         id: '4',
-        ['array_agg(title)']: ['bar'],
+        ['array_agg(issues.title)']: ['bar'],
       },
       {
         id: '3',
-        ['array_agg(title)']: ['foo'],
+        ['array_agg(issues.title)']: ['foo'],
       },
       {
         id: '1',
-        ['array_agg(title)']: ['parent issue foo'],
+        ['array_agg(issues.title)']: ['parent issue foo'],
       },
     ]);
 

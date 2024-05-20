@@ -1,4 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
+import {must} from 'shared/src/must.js';
 import type {Entity} from '../../entity.js';
 import type {AST} from '../ast/ast.js';
 import {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -20,8 +21,10 @@ export class TestContext implements Context {
 
   getSource<T extends Entity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {
-      const source = this.materialite.newSetSource((l: T, r: T) =>
-        compareUTF8(l.id, r.id),
+      const source = this.materialite.newSetSource(
+        (l: T, r: T) => compareUTF8(l.id, r.id),
+        [[[name, 'id']], 'asc'],
+        name,
       ) as unknown as Source<object>;
       source.seed([]);
       this.#sources.set(name, source);
@@ -38,20 +41,42 @@ export class TestContext implements Context {
   }
 }
 
-export class InfiniteSourceContext<T extends Entity> implements Context {
+type Gen<T> = {
+  [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
+};
+export class InfiniteSourceContext implements Context {
   readonly materialite = new Materialite();
-  readonly #source: Source<T>;
+  readonly #sources = new Map<string, Source<object>>();
+  readonly #generators = new Map<string, Gen<object>>();
 
-  constructor(generator: {
-    [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
-  }) {
-    this.#source = this.materialite.constructSource(
-      internal => new InfiniteSuorce(internal, generator),
-    );
+  constructor(generators: Map<string, Gen<object>>) {
+    this.#generators = generators;
   }
 
-  getSource<X extends Entity>(_name: string): Source<X> {
-    return this.#source as unknown as Source<X>;
+  getSource<X extends Entity>(name: string): Source<X> {
+    const existing = this.#sources.get(name);
+    if (existing) {
+      return existing as unknown as Source<X>;
+    }
+
+    let source: Source<object>;
+    if (this.#generators.has(name)) {
+      source = this.materialite.constructSource(
+        internal =>
+          new InfiniteSuorce(internal, must(this.#generators.get(name)), name),
+      );
+    } else {
+      source = this.materialite.newSetSource<X>(
+        (l: X, r: X) => compareUTF8(l.id, r.id),
+        [[[name, 'id']], 'asc'],
+        name,
+      ) as unknown as Source<object>;
+      source.seed([]);
+      this.#sources.set(name, source);
+    }
+    this.#sources.set(name, source);
+
+    return source as unknown as Source<X>;
   }
 
   subscriptionAdded(_ast: AST): void {}
@@ -63,6 +88,12 @@ export function makeTestContext(): TestContext {
   return new TestContext();
 }
 
+export function makeInfiniteSourceContext(
+  generators: Map<string, Gen<object>>,
+): InfiniteSourceContext {
+  return new InfiniteSourceContext(generators);
+}
+
 class InfiniteSuorce<T extends object> implements Source<T> {
   readonly #materialite: MaterialiteForSourceInternal;
   readonly #stream: DifferenceStream<T>;
@@ -70,13 +101,16 @@ class InfiniteSuorce<T extends object> implements Source<T> {
   readonly #generator: {
     [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
   };
+  readonly #name;
 
   constructor(
     materialite: MaterialiteForSourceInternal,
     generator: {
       [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
     },
+    name: string,
   ) {
+    this.#name = name;
     this.#materialite = materialite;
     this.#generator = generator;
     this.#stream = new DifferenceStream<T>();
@@ -89,11 +123,11 @@ class InfiniteSuorce<T extends object> implements Source<T> {
     });
 
     this.#internal = {
-      onCommitEnqueue() {},
-      onRollback() {},
+      onCommitEnqueue: (_: Version) => {},
       onCommitted: (version: Version) => {
         this.#stream.commit(version);
       },
+      onRollback: () => {},
     };
   }
 
@@ -127,12 +161,18 @@ class InfiniteSuorce<T extends object> implements Source<T> {
 
   processMessage(message: Request): void {
     switch (message.type) {
+      // TODO: check for alternative order in the message.
+      // create the source in the new order.
+      // send from that source.
       case 'pull': {
         this.#materialite.addDirtySource(this.#internal);
         this.#stream.newDifference(
           this.#materialite.getVersion(),
           this.#generator,
-          createPullResponseMessage(message),
+          createPullResponseMessage(message, this.#name, [
+            [[this.#name, 'id']],
+            'asc',
+          ]),
         );
         break;
       }

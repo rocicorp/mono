@@ -3,6 +3,7 @@
 import type {Comparator} from './types.js';
 import {must} from 'shared/src/must.js';
 import {SetSource} from './source/set-source.js';
+import type {Ordering} from '../ast/ast.js';
 import type {Source, SourceInternal} from './source/source.js';
 import type {Version} from './types.js';
 
@@ -42,9 +43,10 @@ export class Materialite {
 
   newSetSource<T extends object>(
     comparator: Comparator<T>,
-    name?: string | undefined,
+    order: Ordering,
+    name: string,
   ) {
-    return new SetSource<T>(this.#internal, comparator, name);
+    return new SetSource<T>(this.#internal, comparator, order, name);
   }
 
   constructSource<T extends object>(

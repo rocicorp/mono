@@ -9,6 +9,11 @@ import type {
   OrderOps,
   SetOps,
   SimpleOperator,
+  Selector as ASTSelector,
+  Primitive,
+  PrimitiveArray,
+  HavingCondition,
+  Ordering,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -234,7 +239,7 @@ type SimpleCondition<
   op: SimpleOperator;
   field: SimpleSelector<From>;
   value: {
-    type: 'literal';
+    type: 'value';
     value: FieldAsOperatorInput<From, Selector, Op>;
   };
 };
@@ -247,7 +252,9 @@ export class EntityQuery<From extends FromSet, Return = []> {
   constructor(context: Context, tableName: string, ast?: AST) {
     this.#ast = ast ?? {
       table: tableName,
-      orderBy: [['id'], 'asc'],
+      // TODO(mlaw): this is wrong if we have joins.
+      // We need to suffix the order-by as our final operation.
+      orderBy: [[[tableName, 'id']], 'asc'] as const,
     };
     this.#name = tableName;
     this.#context = context;
@@ -348,7 +355,10 @@ export class EntityQuery<From extends FromSet, Return = []> {
           type: 'left',
           other: other.#ast,
           as: alias,
-          on: [thisField, otherField],
+          on: [
+            qualifySelector(this.#ast, thisField),
+            qualifySelector(other.#ast, otherField, alias),
+          ],
         },
       ],
     });
@@ -357,14 +367,14 @@ export class EntityQuery<From extends FromSet, Return = []> {
   groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      groupBy: x as string[],
+      groupBy: x.map(x => qualifySelector(this.#ast, x)),
     });
   }
 
   distinct<Field extends SimpleSelector<From>>(field: Field) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      distinct: field,
+      distinct: qualifySelector(this.#ast, field),
     });
   }
 
@@ -420,27 +430,38 @@ export class EntityQuery<From extends FromSet, Return = []> {
       expr = exprOrField;
     }
 
+    let cond: Condition | HavingCondition;
     if (whereOrHaving === 'where') {
       // HAVING operates on the result of the query
       // so it does not qualify its accessors.
-      expr = qualify(this.#ast, expr);
+      cond = qualify(this.#ast, expr);
+    } else {
+      cond = qualifyHaving(expr);
     }
 
-    let cond: WhereCondition<From>;
-    const existingWhereOrHaving = this.#ast[whereOrHaving] as
-      | WhereCondition<From>
-      | undefined;
-    if (!existingWhereOrHaving) {
-      cond = expr;
-    } else if (existingWhereOrHaving.op === 'AND') {
-      const {conditions} = existingWhereOrHaving;
-      cond = flatten('AND', [...conditions, expr]);
-    } else {
-      cond = {
-        type: 'conjunction',
-        op: 'AND',
-        conditions: [existingWhereOrHaving, expr],
-      };
+    const existingWhereOrHaving = this.#ast[whereOrHaving];
+    if (existingWhereOrHaving) {
+      if (existingWhereOrHaving.op === 'AND') {
+        const {conditions} = existingWhereOrHaving;
+        cond = flattenCondition('AND', [...conditions, cond]);
+      } else {
+        if (whereOrHaving === 'where') {
+          cond = {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [existingWhereOrHaving as Condition, cond as Condition],
+          };
+        } else {
+          cond = {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              existingWhereOrHaving as HavingCondition,
+              cond as HavingCondition,
+            ],
+          };
+        }
+      }
     }
 
     return new EntityQuery<From, Return>(this.#context, this.#name, {
@@ -448,7 +469,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       // Can't use satisfies here because WhereCondition is recursive.
       // Tests ensure that the expected AST output satisfies the Condition
       // type.
-      [whereOrHaving]: cond as Condition,
+      [whereOrHaving]: cond,
     });
   }
 
@@ -464,10 +485,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   asc(...x: SimpleSelector<From>[]) {
-    if (!x.includes('id')) {
-      x.push('id');
-    }
-
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'asc'],
@@ -475,10 +492,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   desc(...x: SimpleSelector<From>[]) {
-    if (!x.includes('id')) {
-      x.push('id');
-    }
-
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'desc'],
@@ -486,7 +499,13 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   prepare(): Statement<Return> {
-    return new Statement<Return>(this.#context, this.#ast);
+    return new Statement<Return>(this.#context, {
+      ...this.#ast,
+      orderBy:
+        this.#ast.orderBy !== undefined
+          ? makeOrderingDetereministic(this.#ast, this.#ast.orderBy)
+          : undefined,
+    });
   }
 
   toString() {
@@ -530,6 +549,22 @@ function flatten<F extends FromSet>(
   return {type: 'conjunction', op, conditions: flattened};
 }
 
+function flattenCondition<T extends Condition | HavingCondition>(
+  op: 'AND' | 'OR',
+  conditions: T[],
+): T {
+  const flattened: T[] = [];
+  for (const c of conditions) {
+    if (c.op === op) {
+      flattened.push(...(c.conditions as T[]));
+    } else {
+      flattened.push(c);
+    }
+  }
+
+  return {type: 'conjunction', op, conditions: flattened} as unknown as T;
+}
+
 export function exp<
   From extends FromSet,
   Selector extends SimpleSelector<From>,
@@ -544,7 +579,7 @@ export function exp<
     op,
     field,
     value: {
-      type: 'literal',
+      type: 'value',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       value: value as any, // TODO
     },
@@ -621,27 +656,51 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
 export function qualify<F extends FromSet>(
   ast: AST,
   expr: WhereCondition<F>,
-): WhereCondition<F> {
-  switch (expr.op) {
-    case 'AND':
-    case 'OR':
-      return {
-        ...expr,
-        conditions: expr.conditions.map(c => qualify(ast, c)),
-      };
-    default:
-      return {
-        ...expr,
-        field: qualifySelector(ast, expr.field),
-      };
+): Condition {
+  if (expr.type === 'simple') {
+    return {
+      type: expr.type,
+      op: expr.op,
+      field: qualifySelector(ast, expr.field),
+      value: {
+        type: expr.value.type,
+        value: expr.value.value as Primitive | PrimitiveArray,
+      },
+    };
   }
+  return {
+    ...expr,
+    conditions: expr.conditions.map(c => qualify(ast, c)),
+  };
+}
+
+export function qualifyHaving<F extends FromSet>(
+  expr: WhereCondition<F>,
+): HavingCondition {
+  if (expr.type === 'simple') {
+    return {
+      type: expr.type,
+      op: expr.op,
+      field: expr.field.includes('.')
+        ? (expr.field.split('.') as unknown as ASTSelector)
+        : [null, expr.field],
+      value: {
+        type: expr.value.type,
+        value: expr.value.value as Primitive | PrimitiveArray,
+      },
+    };
+  }
+  return {
+    ...expr,
+    conditions: expr.conditions.map(c => qualifyHaving(c)),
+  };
 }
 
 function qualifySelector(
   ast: AST,
   selector: string,
   alias?: string | undefined,
-): string {
+): ASTSelector {
   // if there are joins then the type system
   // will have ensured that the selector is already qualified
   if (
@@ -649,8 +708,59 @@ function qualifySelector(
     (alias && selector.startsWith(alias + '.')) ||
     (alias === undefined && selector.startsWith(ast.table + '.'))
   ) {
-    return selector;
+    return selector.split('.') as unknown as ASTSelector;
   }
 
-  return `${alias ?? ast.table}.${selector}`;
+  return [alias ?? ast.table, selector];
+}
+
+// Primary keys of all joined tables _must_ exist in the `orderBy` to ensure we have
+// a deterministic ordering. As in, both client and server agree and we're not relying on undocumented
+// behavior with respect to how to order identical (wrt ordering) items.
+//
+// This also facilitates cursoring as the cursor will always point to a unique item.
+//
+// Because we do this it is also important to ensure we are only creating sources in a new order based on
+// the first key and not all the keys in `orderBy`. To prevent an explosion of sources
+// while also giving us a perf gain. If/when we allow cleaning up of new orderings we can revisit that choice.
+export function makeOrderingDetereministic(
+  ast: AST,
+  order: Ordering,
+): Ordering {
+  const required = getRequiredOrderFieldsForDeterministicOrdering(ast);
+
+  const selectors = [...order[0]];
+  for (const selector of selectors) {
+    const key = selector.join('.');
+    required.delete(key);
+  }
+
+  for (const selector of required.values()) {
+    selectors.push(selector);
+  }
+
+  return [selectors, order[1]];
+}
+
+function getRequiredOrderFieldsForDeterministicOrdering(
+  ast: AST,
+): Map<string, ASTSelector> {
+  const ret = new Map<string, ASTSelector>();
+
+  // If a group-by was used, we just need to append the group-by fields to the order-by.
+  if (ast.groupBy !== undefined) {
+    for (const group of ast.groupBy) {
+      ret.set(group.join('.'), group);
+    }
+    return ret;
+  }
+
+  // TODO(mlaw): this'll change with compound primary keys
+  ret.set(ast.table + '.id', [ast.table, 'id']);
+
+  for (const join of ast.joins || []) {
+    ret.set(join.as + '.id', [join.as, 'id']);
+  }
+
+  return ret;
 }

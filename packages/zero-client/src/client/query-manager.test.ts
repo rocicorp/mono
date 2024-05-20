@@ -20,10 +20,10 @@ test('add', () => {
   const ast: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'asc'],
+    orderBy: [[['issues', 'id']], 'asc'],
   };
   queryManager.add(ast);
   expect(send).toBeCalledTimes(1);
@@ -33,21 +33,22 @@ test('add', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3m39m3xhe8uxg',
+          hash: '3o852oxdcga5g',
           ast: {
             table: 'issues',
             alias: undefined,
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
             ],
             aggregate: undefined,
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [['id'], 'asc'],
+            orderBy: [[['issues', 'id']], 'asc'],
             limit: undefined,
-          },
+            schema: undefined,
+          } satisfies AST,
         },
       ],
     },
@@ -63,10 +64,10 @@ test('remove', () => {
   const ast: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'asc'],
+    orderBy: [[['issues', 'id']], 'asc'],
   };
 
   expect(queryManager.remove(ast)).toBe(false);
@@ -79,21 +80,22 @@ test('remove', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3m39m3xhe8uxg',
+          hash: '3o852oxdcga5g',
           ast: {
             table: 'issues',
             alias: undefined,
             select: [
-              ['id', 'id'],
-              ['name', 'name'],
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
             ],
             aggregate: undefined,
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [['id'], 'asc'],
+            schema: undefined,
+            orderBy: [[['issues', 'id']], 'asc'],
             limit: undefined,
-          },
+          } satisfies AST,
         },
       ],
     },
@@ -112,7 +114,7 @@ test('remove', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '3m39m3xhe8uxg',
+          hash: '3o852oxdcga5g',
         },
       ],
     },
@@ -178,26 +180,26 @@ test('getQueriesPatch', async () => {
   const ast1: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'asc'],
+    orderBy: [[['issues', 'id']], 'asc'],
   };
   queryManager.add(ast1);
   // hash 1wpmhwzkyaqrd
   const ast2: AST = {
     table: 'issues',
     select: [
-      ['id', 'id'],
-      ['name', 'name'],
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
     ],
-    orderBy: [['id'], 'desc'],
+    orderBy: [[['issues', 'id']], 'desc'],
   };
   queryManager.add(ast2);
 
   const testReadTransaction = new TestTransaction();
   testReadTransaction.scanEntries = [
-    ['d/client1/3m39m3xhe8uxg', 'unused'],
+    ['d/client1/3o852oxdcga5g', 'unused'],
     ['d/client1/shouldBeDeleted', 'unused'],
   ];
 
@@ -209,21 +211,22 @@ test('getQueriesPatch', async () => {
     },
     {
       op: 'put',
-      hash: '1wpmhwzkyaqrd',
+      hash: '1ld7py8mkar54',
       ast: {
         table: 'issues',
         alias: undefined,
         select: [
-          ['id', 'id'],
-          ['name', 'name'],
+          [['issues', 'id'], 'id'],
+          [['issues', 'name'], 'name'],
         ],
         aggregate: undefined,
         where: undefined,
         joins: undefined,
         groupBy: undefined,
-        orderBy: [['id'], 'desc'],
+        orderBy: [[['issues', 'id']], 'desc'],
         limit: undefined,
-      },
+        schema: undefined,
+      } satisfies AST,
     },
   ]);
   expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);

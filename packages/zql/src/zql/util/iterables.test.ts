@@ -4,8 +4,10 @@ import {
   genFilter,
   genFlatMap,
   genMap,
+  iterInOrder,
   mapIter,
 } from './iterables.js';
+import fc from 'fast-check';
 
 test('mapIter', () => {
   const iterable = [1, 2, 3];
@@ -22,85 +24,21 @@ test('genFlatMap', () => {
   expect([...flatMapper]).toEqual([1, 2, 3, 4, 5, 6]);
 });
 
-test('genMap finally handling', () => {
-  // iterate manually
-  // iterate with a loop construct
-
-  const iterable = [1, 2, 3];
-  let finallyCalled = false;
-  const mappedIterable = genMap(
-    iterable,
-    x => x + 1,
-    () => {
-      finallyCalled = true;
-    },
+test('iterInOrder', () => {
+  fc.assert(
+    fc.property(
+      fc.array(fc.array(fc.integer()), {minLength: 1, maxLength: 3}),
+      arrays => {
+        const sorted = arrays
+          .reduce((acc, cur) => acc.concat(cur), [])
+          .sort((l, r) => l - r);
+        // iterInOrder assumes inputs are ordered
+        arrays.forEach(a => a.sort((l, r) => l - r));
+        const result = [...iterInOrder(arrays, (l, r) => l - r)];
+        expect(result).toEqual(sorted);
+      },
+    ),
   );
-
-  expect(finallyCalled).toBe(false);
-
-  for (const _ of mappedIterable) {
-    // do nothing
-  }
-
-  expect(finallyCalled).toBe(true);
-
-  finallyCalled = false;
-  const manualIter = mappedIterable[Symbol.iterator]();
-  manualIter.next();
-  manualIter.return();
-  expect(finallyCalled).toBe(true);
-});
-
-test('genFilter finally handling', () => {
-  const iterable = [1, 2, 3];
-  let finallyCalled = false;
-  const filteredIterable = genFilter(
-    iterable,
-    x => x > 1,
-    () => {
-      finallyCalled = true;
-    },
-  );
-
-  expect(finallyCalled).toBe(false);
-
-  for (const _ of filteredIterable) {
-    // do nothing
-  }
-
-  expect(finallyCalled).toBe(true);
-
-  finallyCalled = false;
-  const manualIter = filteredIterable[Symbol.iterator]();
-  manualIter.next();
-  manualIter.return();
-  expect(finallyCalled).toBe(true);
-});
-
-test('genFlatMap finally handling', () => {
-  const iterable = [[1], [2, 3], [4, 5, 6]];
-  let finallyCalled = false;
-  const flatMapper = genFlatMap(
-    iterable,
-    x => x,
-    () => {
-      finallyCalled = true;
-    },
-  );
-
-  expect(finallyCalled).toBe(false);
-
-  for (const _ of flatMapper) {
-    // do nothing
-  }
-
-  expect(finallyCalled).toBe(true);
-
-  finallyCalled = false;
-  const manualIter = flatMapper[Symbol.iterator]();
-  manualIter.next();
-  manualIter.return();
-  expect(finallyCalled).toBe(true);
 });
 
 test('multiple iterations over a genMapCached will return the exact same results', () => {

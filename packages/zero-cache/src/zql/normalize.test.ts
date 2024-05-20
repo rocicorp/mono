@@ -15,9 +15,13 @@ describe('zql/normalize-query-hash', () => {
     {
       name: 'simplest statement',
       asts: [
-        {table: 'issues', select: [['id', 'id']], orderBy: [['id'], 'asc']},
+        {
+          table: 'issues',
+          select: [[['issues', 'id'], 'id']],
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
       ],
-      query: 'SELECT id AS id FROM issues ORDER BY id asc',
+      query: 'SELECT issues.id AS id FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'statement with schema',
@@ -26,16 +30,16 @@ describe('zql/normalize-query-hash', () => {
           schema: 'zero',
           table: 'clients',
           select: [
-            ['clients.clientID', 'clientID'],
-            ['zero.clients.lastMutationID', 'lastMutationID'],
+            [['clients', 'clientID'], 'clientID'],
+            [['zero.clients', 'lastMutationID'], 'lastMutationID'],
           ],
-          orderBy: [['clientID'], 'asc'],
+          orderBy: [[['clients', 'clientID']], 'asc'],
         },
       ],
       query:
         'SELECT clients."clientID" AS "clientID", ' +
         'zero.clients."lastMutationID" AS "lastMutationID" ' +
-        'FROM zero.clients ORDER BY "clientID" asc',
+        'FROM zero.clients ORDER BY clients."clientID" asc',
     },
     {
       name: 'table alias',
@@ -43,11 +47,12 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           alias: 'Ishooz',
-          select: [['id', 'id']],
-          orderBy: [['id'], 'asc'],
+          select: [[['issues', 'id'], 'id']],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS id FROM issues AS "Ishooz" ORDER BY id asc',
+      query:
+        'SELECT issues.id AS id FROM issues AS "Ishooz" ORDER BY issues.id asc',
     },
     {
       name: 'column selection',
@@ -55,21 +60,22 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'id'],
-            ['name', 'name'],
+            [['issues', 'id'], 'id'],
+            [['issues', 'name'], 'name'],
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['name', 'name'],
-            ['id', 'id'],
+            [['issues', 'name'], 'name'],
+            [['issues', 'id'], 'id'],
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS id, name AS name FROM issues ORDER BY id asc',
+      query:
+        'SELECT issues.id AS id, issues.name AS name FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'aggregation, aliases ignored',
@@ -77,10 +83,10 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           aggregate: [{aggregate: 'count', alias: 'num'}],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT count(*) AS "count(*)" FROM issues ORDER BY id asc',
+      query: 'SELECT count(*) AS "count(*)" FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'multiple aggregates',
@@ -89,22 +95,22 @@ describe('zql/normalize-query-hash', () => {
           table: 'issues',
           aggregate: [
             {aggregate: 'count', alias: 'num'},
-            {aggregate: 'max', field: 'priority', alias: 'maxPri'},
+            {aggregate: 'max', field: ['issues', 'priority'], alias: 'maxPri'},
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           aggregate: [
-            {aggregate: 'max', field: 'priority', alias: 'maxPri'},
+            {aggregate: 'max', field: ['issues', 'priority'], alias: 'maxPri'},
             {aggregate: 'count', alias: 'num'},
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT count(*) AS "count(*)", max(priority) AS "max(priority)" ' +
-        'FROM issues ORDER BY id asc',
+        'SELECT count(*) AS "count(*)", max(issues.priority) AS "max(issues.priority)" ' +
+        'FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'group by',
@@ -112,24 +118,30 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
-          groupBy: ['id', 'name'],
-          orderBy: [['id'], 'asc'],
+          groupBy: [
+            ['issues', 'id'],
+            ['issues', 'name'],
+          ],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
-          groupBy: ['name', 'id'],
-          orderBy: [['id'], 'asc'],
+          groupBy: [
+            ['issues', 'name'],
+            ['issues', 'id'],
+          ],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues GROUP BY id, name ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues GROUP BY issues.id, issues.name ORDER BY issues.id asc',
     },
     {
       name: 'group by, order by',
@@ -137,15 +149,24 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
-          groupBy: ['id', 'name'],
-          orderBy: [['id', 'name'], 'desc'],
+          groupBy: [
+            ['issues', 'id'],
+            ['issues', 'name'],
+          ],
+          orderBy: [
+            [
+              ['issues', 'id'],
+              ['issues', 'name'],
+            ],
+            'desc',
+          ],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues GROUP BY id, name ORDER BY id desc, name desc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues GROUP BY issues.id, issues.name ORDER BY issues.id desc, issues.name desc',
     },
     {
       name: 'group by, order by, limit',
@@ -153,18 +174,27 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
-          groupBy: ['name', 'issues.id'],
+          groupBy: [
+            ['issues', 'name'],
+            ['issues', 'id'],
+          ],
           // ORDER BY expression order must be preserved.
-          orderBy: [['dueDate', 'priority'], 'desc'],
+          orderBy: [
+            [
+              ['issues', 'dueDate'],
+              ['issues', 'priority'],
+            ],
+            'desc',
+          ],
           limit: 10,
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY issues.id, name ORDER BY "dueDate" desc, priority desc LIMIT 10',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'GROUP BY issues.id, issues.name ORDER BY issues."dueDate" desc, issues.priority desc LIMIT 10',
     },
     {
       name: 'group by, order by (ordering preserved), limit',
@@ -172,18 +202,27 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
-          groupBy: ['name', 'id'],
+          groupBy: [
+            ['issues', 'name'],
+            ['issues', 'id'],
+          ],
           // ORDER BY expression order must be preserved.
-          orderBy: [['priority', 'dueDate'], 'desc'],
+          orderBy: [
+            [
+              ['issues', 'priority'],
+              ['issues', 'dueDate'],
+            ],
+            'desc',
+          ],
           limit: 10,
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'GROUP BY id, name ORDER BY priority desc, "dueDate" desc LIMIT 10',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'GROUP BY issues.id, issues.name ORDER BY issues.priority desc, issues."dueDate" desc LIMIT 10',
     },
     {
       name: 'quoted identifiers',
@@ -191,46 +230,49 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'camelCaseTable',
           select: [
-            ['userID', 'u'],
-            ['name', 'n'],
+            [['camelCaseTable', 'userID'], 'u'],
+            [['camelCaseTable', 'name'], 'n'],
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['camelCaseTable', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT name AS n, "userID" AS u FROM "camelCaseTable" ORDER BY id asc',
+        'SELECT "camelCaseTable".name AS n, "camelCaseTable"."userID" AS u FROM "camelCaseTable" ORDER BY "camelCaseTable".id asc',
     },
     {
       name: 'quoted selector and alias',
       asts: [
         {
           table: 'camelCaseTable',
-          select: [['camelCaseTable.userID', 'id']],
-          orderBy: [['userID'], 'asc'],
+          select: [[['camelCaseTable', 'userID'], 'id']],
+          orderBy: [[['camelCaseTable', 'userID']], 'asc'],
         },
       ],
       query:
-        'SELECT "camelCaseTable"."userID" AS id FROM "camelCaseTable" ORDER BY "userID" asc',
+        'SELECT "camelCaseTable"."userID" AS id FROM "camelCaseTable" ORDER BY "camelCaseTable"."userID" asc',
     },
     {
       name: 'join table',
       asts: [
         {
           table: 'issues',
-          select: [['id', 'id']],
+          select: [[['issues', 'id'], 'id']],
           joins: [
             {
               type: 'inner',
               other: {table: 'users'},
               as: 'owner',
-              on: ['issues.ownerID', 'users.id'],
+              on: [
+                ['issues', 'ownerID'],
+                ['users', 'id'],
+              ],
             },
           ],
-          orderBy: [['owner.id'], 'asc'],
+          orderBy: [[['owner', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS id FROM issues INNER JOIN users AS owner' +
+        'SELECT issues.id AS id FROM issues INNER JOIN users AS owner' +
         ' ON issues."ownerID" = users.id ORDER BY owner.id asc',
     },
     {
@@ -238,46 +280,52 @@ describe('zql/normalize-query-hash', () => {
       asts: [
         {
           table: 'issues',
-          select: [['id', 'id']],
+          select: [[['issues', 'id'], 'id']],
           joins: [
             {
               type: 'inner',
               other: {
                 select: [
-                  ['id', 'i'],
-                  ['name', 'n'],
+                  [['users', 'id'], 'i'],
+                  [['users', 'name'], 'n'],
                 ],
                 table: 'users',
               },
               as: 'owner',
-              on: ['issues.ownerID', 'users.id'],
+              on: [
+                ['issues', 'ownerID'],
+                ['users', 'id'],
+              ],
             },
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
-          select: [['id', 'id']],
+          select: [[['issues', 'id'], 'id']],
           joins: [
             {
               type: 'inner',
               other: {
                 select: [
-                  ['name', 'n'],
-                  ['id', 'i'],
+                  [['users', 'name'], 'n'],
+                  [['users', 'id'], 'i'],
                 ],
                 table: 'users',
               },
               as: 'owner',
-              on: ['issues.ownerID', 'users.id'],
+              on: [
+                ['issues', 'ownerID'],
+                ['users', 'id'],
+              ],
             },
           ],
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS id FROM issues INNER JOIN (SELECT id AS i, name AS n FROM users)' +
-        ' AS owner ON issues."ownerID" = users.id ORDER BY id asc',
+        'SELECT issues.id AS id FROM issues INNER JOIN (SELECT users.id AS i, users.name AS n FROM users)' +
+        ' AS owner ON issues."ownerID" = users.id ORDER BY issues.id asc',
     },
     {
       name: 'simple condition',
@@ -285,21 +333,21 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'simple',
-            field: 'id',
+            field: ['issues', 'id'],
             op: '=',
-            value: {type: 'literal', value: 1234},
+            value: {type: 'value', value: 12345},
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE id = $1 ORDER BY id asc',
-      values: [1234],
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
+      values: [12345],
     },
     {
       name: 'condition with selector',
@@ -307,20 +355,20 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'simple',
-            field: 'issues.id',
+            field: ['issues', 'id'],
             op: '=',
-            value: {type: 'literal', value: 1234},
+            value: {type: 'value', value: 1234},
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE issues.id = $1 ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
       values: [1234],
     },
     {
@@ -329,20 +377,20 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'simple',
-            field: 'issues.id',
+            field: ['issues', 'id'],
             op: 'IN',
-            value: {type: 'literal', value: ['1234', '2345', '4567']},
+            value: {type: 'value', value: ['1234', '2345', '4567']},
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE issues.id IN ($1, $2, $3) ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id IN ($1, $2, $3) ORDER BY issues.id asc',
       values: ['1234', '2345', '4567'],
     },
     {
@@ -351,20 +399,20 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'simple',
-            field: 'id',
+            field: ['issues', 'id'],
             op: '=',
-            value: {type: 'literal', value: '1234'},
+            value: {type: 'value', value: '1234'},
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues WHERE id = $1 ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues WHERE issues.id = $1 ORDER BY issues.id asc',
       values: ['1234'],
     },
     {
@@ -373,8 +421,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -382,37 +430,37 @@ describe('zql/normalize-query-hash', () => {
             conditions: [
               {
                 type: 'simple',
-                field: 'id',
+                field: ['issues', 'id'],
                 op: '=',
-                value: {type: 'literal', value: 1234},
+                value: {type: 'value', value: 1234},
               },
               {
                 type: 'simple',
-                field: 'name',
+                field: ['issues', 'name'],
                 op: '=',
-                value: {type: 'literal', value: 'foobar'},
+                value: {type: 'value', value: 'foobar'},
               },
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '<',
-                value: {type: 'literal', value: 5},
+                value: {type: 'value', value: 5},
               },
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '>',
-                value: {type: 'literal', value: 2},
+                value: {type: 'value', value: 2},
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -420,37 +468,37 @@ describe('zql/normalize-query-hash', () => {
             conditions: [
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '>',
-                value: {type: 'literal', value: 2},
+                value: {type: 'value', value: 2},
               },
               {
                 type: 'simple',
-                field: 'id',
+                field: ['issues', 'id'],
                 op: '=',
-                value: {type: 'literal', value: 1234},
+                value: {type: 'value', value: 1234},
               },
               {
                 type: 'simple',
-                field: 'name',
+                field: ['issues', 'name'],
                 op: '=',
-                value: {type: 'literal', value: 'foobar'},
+                value: {type: 'value', value: 'foobar'},
               },
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '<',
-                value: {type: 'literal', value: 5},
+                value: {type: 'value', value: 5},
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (id = $1 AND name = $2 AND priority < $3 AND priority > $4) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.id = $1 AND issues.name = $2 AND issues.priority < $3 AND issues.priority > $4) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 5, 2],
     },
     {
@@ -459,31 +507,32 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['priority', 'p'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'priority'], 'p'],
           ],
           where: {
             type: 'conjunction',
             op: 'AND',
             conditions: [],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['priority', 'p'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'priority'], 'p'],
           ],
           where: {
             type: 'conjunction',
             op: 'OR',
             conditions: [],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
-      query: 'SELECT id AS i, priority AS p FROM issues ORDER BY id asc',
+      query:
+        'SELECT issues.id AS i, issues.priority AS p FROM issues ORDER BY issues.id asc',
     },
     {
       name: 'multiple conditions with same fields and operator',
@@ -491,8 +540,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -500,25 +549,25 @@ describe('zql/normalize-query-hash', () => {
             conditions: [
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '<',
-                value: {type: 'literal', value: 5},
+                value: {type: 'value', value: 5},
               },
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '<',
-                value: {type: 'literal', value: 3},
+                value: {type: 'value', value: 3},
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -526,25 +575,25 @@ describe('zql/normalize-query-hash', () => {
             conditions: [
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '<',
-                value: {type: 'literal', value: 3},
+                value: {type: 'value', value: 3},
               },
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '<',
-                value: {type: 'literal', value: 5},
+                value: {type: 'value', value: 5},
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (priority < $1 AND priority < $2) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.priority < $1 AND issues.priority < $2) ' +
+        'ORDER BY issues.id asc',
       values: [3, 5],
     },
     {
@@ -553,8 +602,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -562,9 +611,9 @@ describe('zql/normalize-query-hash', () => {
             conditions: [
               {
                 type: 'simple',
-                field: 'id',
+                field: ['issues', 'id'],
                 op: '=',
-                value: {type: 'literal', value: 1234},
+                value: {type: 'value', value: 1234},
               },
               {
                 type: 'conjunction',
@@ -572,27 +621,27 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -604,33 +653,33 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
               {
                 type: 'simple',
-                field: 'id',
+                field: ['issues', 'id'],
                 op: '=',
-                value: {type: 'literal', value: 1234},
+                value: {type: 'value', value: 1234},
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (id = $1 AND (name = $2 OR priority > $3)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.id = $1 AND (issues.name = $2 OR issues.priority > $3)) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 2],
     },
     {
@@ -639,8 +688,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -652,15 +701,15 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
@@ -670,27 +719,27 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE ((name = $1 OR priority > $2) AND (name = $3 OR priority > $4)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE ((issues.name = $1 OR issues.priority > $2) AND (issues.name = $3 OR issues.priority > $4)) ' +
+        'ORDER BY issues.id asc',
       values: ['foobar', 2, 'foobar', 2],
     },
     {
@@ -699,8 +748,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -712,15 +761,15 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                 ],
               },
@@ -730,27 +779,27 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -762,15 +811,15 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                 ],
               },
@@ -780,27 +829,27 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                 ],
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE ((id = $1 OR name = $2) AND (id = $3 OR priority > $4)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE ((issues.id = $1 OR issues.name = $2) AND (issues.id = $3 OR issues.priority > $4)) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 1234, 2],
     },
     {
@@ -809,8 +858,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -822,21 +871,21 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
@@ -846,27 +895,27 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                 ],
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -878,15 +927,15 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                 ],
               },
@@ -896,33 +945,33 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'id',
+                    field: ['issues', 'id'],
                     op: '=',
-                    value: {type: 'literal', value: 1234},
+                    value: {type: 'value', value: 1234},
                   },
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                 ],
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE ((id = $1 OR name = $2) AND (id = $3 OR name = $4 OR priority > $5)) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE ((issues.id = $1 OR issues.name = $2) AND (issues.id = $3 OR issues.name = $4 OR issues.priority > $5)) ' +
+        'ORDER BY issues.id asc',
       values: [1234, 'foobar', 1234, 'foobar', 2],
     },
     {
@@ -931,8 +980,8 @@ describe('zql/normalize-query-hash', () => {
         {
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -944,15 +993,15 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'simple',
-                    field: 'priority',
+                    field: ['issues', 'priority'],
                     op: '>',
-                    value: {type: 'literal', value: 2},
+                    value: {type: 'value', value: 2},
                   },
                   {
                     type: 'conjunction',
@@ -960,9 +1009,9 @@ describe('zql/normalize-query-hash', () => {
                     conditions: [
                       {
                         type: 'simple',
-                        field: 'a',
+                        field: ['issues', 'a'],
                         op: '=',
-                        value: {type: 'literal', value: 'bc'},
+                        value: {type: 'value', value: 'bc'},
                       },
                       {
                         type: 'conjunction',
@@ -970,15 +1019,15 @@ describe('zql/normalize-query-hash', () => {
                         conditions: [
                           {
                             type: 'simple',
-                            field: 'doo',
+                            field: ['issues', 'doo'],
                             op: '>',
-                            value: {type: 'literal', value: '23'},
+                            value: {type: 'value', value: '23'},
                           },
                           {
                             type: 'simple',
-                            field: 'dah',
+                            field: ['issues', 'dah'],
                             op: '<',
-                            value: {type: 'literal', value: '56'},
+                            value: {type: 'value', value: '56'},
                           },
                         ],
                       },
@@ -988,9 +1037,9 @@ describe('zql/normalize-query-hash', () => {
               },
               {
                 type: 'simple',
-                field: 'id',
+                field: ['issues', 'id'],
                 op: '=',
-                value: {type: 'literal', value: 1234},
+                value: {type: 'value', value: 1234},
               },
               {
                 type: 'conjunction',
@@ -998,15 +1047,15 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'foo',
+                    field: ['issues', 'foo'],
                     op: '=',
-                    value: {type: 'literal', value: 'bar'},
+                    value: {type: 'value', value: 'bar'},
                   },
                   {
                     type: 'simple',
-                    field: 'bar',
+                    field: ['issues', 'bar'],
                     op: '>',
-                    value: {type: 'literal', value: 23},
+                    value: {type: 'value', value: 23},
                   },
                   {
                     type: 'conjunction',
@@ -1018,23 +1067,23 @@ describe('zql/normalize-query-hash', () => {
                         conditions: [
                           {
                             type: 'simple',
-                            field: 'zzz',
+                            field: ['issues', 'zzz'],
                             op: '!=',
-                            value: {type: 'literal', value: 48},
+                            value: {type: 'value', value: 48},
                           },
                           {
                             type: 'simple',
-                            field: 'xyz',
+                            field: ['issues', 'xyz'],
                             op: '!=',
-                            value: {type: 'literal', value: 488},
+                            value: {type: 'value', value: 488},
                           },
                         ],
                       },
                       {
                         type: 'simple',
-                        field: 'ac',
+                        field: ['issues', 'ac'],
                         op: '>',
-                        value: {type: 'literal', value: 'dc'},
+                        value: {type: 'value', value: 'dc'},
                       },
                     ],
                   },
@@ -1042,14 +1091,14 @@ describe('zql/normalize-query-hash', () => {
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
           // AST with different but equivalent nesting of AND's and OR's
           table: 'issues',
           select: [
-            ['id', 'i'],
-            ['name', 'n'],
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
           ],
           where: {
             type: 'conjunction',
@@ -1061,9 +1110,9 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'name',
+                    field: ['issues', 'name'],
                     op: '=',
-                    value: {type: 'literal', value: 'foobar'},
+                    value: {type: 'value', value: 'foobar'},
                   },
                   {
                     type: 'conjunction',
@@ -1071,9 +1120,9 @@ describe('zql/normalize-query-hash', () => {
                     conditions: [
                       {
                         type: 'simple',
-                        field: 'dah',
+                        field: ['issues', 'dah'],
                         op: '<',
-                        value: {type: 'literal', value: '56'},
+                        value: {type: 'value', value: '56'},
                       },
                       {
                         type: 'conjunction',
@@ -1081,15 +1130,15 @@ describe('zql/normalize-query-hash', () => {
                         conditions: [
                           {
                             type: 'simple',
-                            field: 'doo',
+                            field: ['issues', 'doo'],
                             op: '>',
-                            value: {type: 'literal', value: '23'},
+                            value: {type: 'value', value: '23'},
                           },
                           {
                             type: 'simple',
-                            field: 'a',
+                            field: ['issues', 'a'],
                             op: '=',
-                            value: {type: 'literal', value: 'bc'},
+                            value: {type: 'value', value: 'bc'},
                           },
                         ],
                       },
@@ -1112,9 +1161,9 @@ describe('zql/normalize-query-hash', () => {
                         conditions: [
                           {
                             type: 'simple',
-                            field: 'id',
+                            field: ['issues', 'id'],
                             op: '=',
-                            value: {type: 'literal', value: 1234},
+                            value: {type: 'value', value: 1234},
                           },
                         ],
                       },
@@ -1122,17 +1171,17 @@ describe('zql/normalize-query-hash', () => {
                   },
                   {
                     type: 'simple',
-                    field: 'bar',
+                    field: ['issues', 'bar'],
                     op: '>',
-                    value: {type: 'literal', value: 23},
+                    value: {type: 'value', value: 23},
                   },
                 ],
               },
               {
                 type: 'simple',
-                field: 'priority',
+                field: ['issues', 'priority'],
                 op: '>',
-                value: {type: 'literal', value: 2},
+                value: {type: 'value', value: 2},
               },
               {
                 type: 'conjunction',
@@ -1140,9 +1189,9 @@ describe('zql/normalize-query-hash', () => {
                 conditions: [
                   {
                     type: 'simple',
-                    field: 'foo',
+                    field: ['issues', 'foo'],
                     op: '=',
-                    value: {type: 'literal', value: 'bar'},
+                    value: {type: 'value', value: 'bar'},
                   },
                   {
                     type: 'conjunction',
@@ -1150,9 +1199,9 @@ describe('zql/normalize-query-hash', () => {
                     conditions: [
                       {
                         type: 'simple',
-                        field: 'ac',
+                        field: ['issues', 'ac'],
                         op: '>',
-                        value: {type: 'literal', value: 'dc'},
+                        value: {type: 'value', value: 'dc'},
                       },
                       {
                         type: 'conjunction',
@@ -1160,15 +1209,15 @@ describe('zql/normalize-query-hash', () => {
                         conditions: [
                           {
                             type: 'simple',
-                            field: 'zzz',
+                            field: ['issues', 'zzz'],
                             op: '!=',
-                            value: {type: 'literal', value: 48},
+                            value: {type: 'value', value: 48},
                           },
                           {
                             type: 'simple',
-                            field: 'xyz',
+                            field: ['issues', 'xyz'],
                             op: '!=',
-                            value: {type: 'literal', value: 488},
+                            value: {type: 'value', value: 488},
                           },
                         ],
                       },
@@ -1178,14 +1227,14 @@ describe('zql/normalize-query-hash', () => {
               },
             ],
           },
-          orderBy: [['id'], 'asc'],
+          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       query:
-        'SELECT id AS i, name AS n FROM issues ' +
-        'WHERE (bar > $1 AND foo = $2 AND id = $3 AND name = $4 AND priority > $5 AND ' +
-        '(a = $6 OR dah < $7 OR doo > $8) AND (ac > $9 OR (xyz != $10 AND zzz != $11))) ' +
-        'ORDER BY id asc',
+        'SELECT issues.id AS i, issues.name AS n FROM issues ' +
+        'WHERE (issues.bar > $1 AND issues.foo = $2 AND issues.id = $3 AND issues.name = $4 AND issues.priority > $5 AND ' +
+        '(issues.a = $6 OR issues.dah < $7 OR issues.doo > $8) AND (issues.ac > $9 OR (issues.xyz != $10 AND issues.zzz != $11))) ' +
+        'ORDER BY issues.id asc',
       values: [23, 'bar', 1234, 'foobar', 2, 'bc', '56', '23', 'dc', 488, 48],
     },
   ];

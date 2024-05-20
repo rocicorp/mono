@@ -6,7 +6,7 @@ import {resolver, type Resolver} from '@rocicorp/resolver';
  */
 export class Queue<T> {
   // Consumers waiting for entries to be produced.
-  readonly #consumers: Resolver<T>[] = [];
+  readonly #consumers: Consumer<T>[] = [];
   // Produced entries waiting to be consumed.
   readonly #produced: {value: Promise<T>; consumed: () => void}[] = [];
 
@@ -14,7 +14,8 @@ export class Queue<T> {
   enqueue(value: T): Promise<void> {
     const consumer = this.#consumers.shift();
     if (consumer) {
-      consumer.resolve(value);
+      consumer.resolver.resolve(value);
+      clearTimeout(consumer.timeoutID);
       return Promise.resolve();
     }
     return this.#enqueueProduced(Promise.resolve(value));
@@ -24,7 +25,8 @@ export class Queue<T> {
   enqueueRejection(reason?: unknown): Promise<void> {
     const consumer = this.#consumers.shift();
     if (consumer) {
-      consumer.reject(reason);
+      consumer.resolver.reject(reason);
+      clearTimeout(consumer.timeoutID);
       return Promise.resolve();
     }
     return this.#enqueueProduced(Promise.reject(reason));
@@ -36,16 +38,31 @@ export class Queue<T> {
     return promise;
   }
 
-  /** @returns A Promise that resolves to the next enqueued value. */
-  dequeue(): Promise<T> {
+  /**
+   * @param timeoutValue An optional value to resolve if `timeoutMs` is reached.
+   * @param timeoutMs The milliseconds after which the `timeoutValue` is resolved
+   *                  if nothing is produced for the consumer.
+   * @returns A Promise that resolves to the next enqueued value.
+   */
+  dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> {
     const produced = this.#produced.shift();
     if (produced) {
       produced.consumed();
       return produced.value;
     }
-    const consumer = resolver<T>();
-    this.#consumers.push(consumer);
-    return consumer.promise;
+    const r = resolver<T>();
+    const timeoutID =
+      timeoutValue === undefined
+        ? undefined
+        : setTimeout(() => {
+            const i = this.#consumers.findIndex(c => c.resolver === r);
+            if (i >= 0) {
+              const [consumer] = this.#consumers.splice(i, 1);
+              consumer.resolver.resolve(timeoutValue);
+            }
+          }, timeoutMs);
+    this.#consumers.push({resolver: r, timeoutID});
+    return r.promise;
   }
 
   /**
@@ -82,3 +99,8 @@ export class Queue<T> {
 }
 
 const NOOP = () => {};
+
+type Consumer<T> = {
+  resolver: Resolver<T>;
+  timeoutID: ReturnType<typeof setTimeout> | undefined;
+};

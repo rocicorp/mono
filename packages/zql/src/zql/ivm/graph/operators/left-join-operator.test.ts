@@ -1,7 +1,8 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {normalize} from '../../multiset.js';
 import {JoinResult, joinSymbol} from '../../types.js';
 import {DifferenceStream} from '../difference-stream.js';
+import {createPullResponseMessage} from '../message.js';
 
 export type Track = {
   id: string;
@@ -1432,3 +1433,93 @@ test('two tracks, only 1 is linked to artists', () => {
     ],
   ]);
 });
+
+test('order is removed from request', () => {
+  orderIsRemovedFromRequest('leftJoin');
+});
+
+test('order is removed from reply', () => {
+  orderIsRemovedFromReply('leftJoin');
+});
+
+export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
+  const trackInput = new DifferenceStream<Track>();
+  const albumInput = new DifferenceStream<Album>();
+  const output = trackInput[join]({
+    aAs: 'track',
+    getAJoinKey: x => x.albumId,
+    getAPrimaryKey: x => x.id,
+    b: albumInput,
+    bAs: 'album',
+    getBJoinKey: x => x.id,
+    getBPrimaryKey: x => x.id,
+  });
+
+  const trackInputSpy = vi.spyOn(trackInput, 'messageUpstream');
+  const albumInputSpy = vi.spyOn(albumInput, 'messageUpstream');
+
+  const msg = {
+    id: 1,
+    hoistedConditions: [],
+    type: 'pull',
+    order: [[['intentional-nonsense', 'x']], 'asc'],
+  } as const;
+  const listener = {
+    commit() {},
+    newDifference() {},
+  };
+  output.messageUpstream(msg, listener);
+
+  expect(trackInputSpy).toHaveBeenCalledOnce();
+  expect(albumInputSpy).toHaveBeenCalledOnce();
+
+  expect(trackInputSpy.mock.calls[0][0]).toEqual(msg);
+  expect(albumInputSpy.mock.calls[0][0]).toEqual({...msg, order: undefined});
+}
+
+export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
+  const trackInput = new DifferenceStream<Track>();
+  const albumInput = new DifferenceStream<Album>();
+  const output = trackInput[join]({
+    aAs: 'track',
+    getAJoinKey: x => x.albumId,
+    getAPrimaryKey: x => x.id,
+    b: albumInput,
+    bAs: 'album',
+    getBJoinKey: x => x.id,
+    getBPrimaryKey: x => x.id,
+  });
+
+  const outputSpy = vi.spyOn(output, 'newDifference');
+  const msg = {
+    id: 1,
+    hoistedConditions: [],
+    type: 'pull',
+    order: [[['intentional-nonsense', 'x']], 'asc'],
+  } as const;
+  const listener = {
+    commit() {},
+    newDifference() {},
+  };
+  output.messageUpstream(msg, listener);
+  const trackReply = createPullResponseMessage(msg, 'track', [
+    [['track', 'id']],
+    'asc',
+  ]);
+  const albumReply = createPullResponseMessage(msg, 'title', [
+    [['title', 'id']],
+    'asc',
+  ]);
+
+  trackInput.newDifference(1, [], trackReply);
+
+  // join buffers until both replies are received.
+  expect(outputSpy).toHaveBeenCalledTimes(0);
+
+  albumInput.newDifference(1, [], albumReply);
+
+  expect(outputSpy).toHaveBeenCalledTimes(1);
+  expect(outputSpy.mock.calls[0][0]).toEqual(1);
+  expect([...outputSpy.mock.calls[0][1]]).toEqual([]);
+  expect(outputSpy.mock.calls[0][2]).toEqual(trackReply);
+}

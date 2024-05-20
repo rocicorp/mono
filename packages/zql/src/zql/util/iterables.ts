@@ -1,3 +1,13 @@
+import {assert} from 'shared/src/asserts.js';
+
+export function gen<T>(generator: () => Generator<T, void, unknown>) {
+  return {
+    [Symbol.iterator]() {
+      return generator();
+    },
+  };
+}
+
 export function genConcat<T>(iters: Iterable<T>[]) {
   return {
     *[Symbol.iterator]() {
@@ -8,28 +18,17 @@ export function genConcat<T>(iters: Iterable<T>[]) {
   };
 }
 
-export function genMap<T, U>(
-  s: Iterable<T>,
-  cb: (x: T) => U,
-  finallyCb?: () => void | undefined,
-) {
+export function genMap<T, U>(s: Iterable<T>, cb: (x: T) => U) {
   return {
     *[Symbol.iterator]() {
-      try {
-        for (const x of s) {
-          yield cb(x);
-        }
-      } finally {
-        finallyCb?.();
+      for (const x of s) {
+        yield cb(x);
       }
     },
   };
 }
 
-export function genCached<T>(
-  s: Iterable<T>,
-  finallyCb?: () => void | undefined,
-) {
+export function genCached<T>(s: Iterable<T>) {
   const cache: T[] = [];
 
   // we have to start it outside so it doesn't get re-started
@@ -50,7 +49,7 @@ export function genCached<T>(
           }
 
           lastIteratorResult = innerIterator.next();
-          if (lastIteratorResult?.done) {
+          if (lastIteratorResult.done) {
             return;
           }
 
@@ -60,7 +59,6 @@ export function genCached<T>(
         if (!lastIteratorResult?.done) {
           innerIterator.return?.();
         }
-        finallyCb?.();
       }
     },
   };
@@ -69,34 +67,27 @@ export function genCached<T>(
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   f: (x: T) => x is S,
-  finallyCb?: () => void | undefined,
 ): {
   [Symbol.iterator](): Generator<S, void, unknown>;
 };
 export function genFilter<T>(
   s: Iterable<T>,
   f: (x: T) => boolean,
-  finallyCb?: () => void | undefined,
 ): {
   [Symbol.iterator](): Generator<T, void, unknown>;
 };
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   cb: (x: T) => boolean,
-  finallyCb?: () => void | undefined,
 ): {
   [Symbol.iterator](): Generator<S, void, unknown>;
 } {
   return {
     *[Symbol.iterator]() {
-      try {
-        for (const x of s) {
-          if (cb(x)) {
-            yield x as S;
-          }
+      for (const x of s) {
+        if (cb(x)) {
+          yield x as S;
         }
-      } finally {
-        finallyCb?.();
       }
     },
   };
@@ -105,17 +96,12 @@ export function genFilter<S extends T, T>(
 export function genFlatMap<T, U>(
   iter: Iterable<T>,
   f: (t: T, index: number) => Iterable<U>,
-  finallyCb?: () => void | undefined,
 ) {
   return {
     *[Symbol.iterator]() {
-      try {
-        let index = 0;
-        for (const t of iter) {
-          yield* f(t, index++);
-        }
-      } finally {
-        finallyCb?.();
+      let index = 0;
+      for (const t of iter) {
+        yield* f(t, index++);
       }
     },
   };
@@ -128,5 +114,37 @@ export function* mapIter<T, U>(
   let index = 0;
   for (const t of iter) {
     yield f(t, index++);
+  }
+}
+
+export function* iterInOrder<T>(
+  iterables: Iterable<T>[],
+  comparator: (l: T, r: T) => number,
+) {
+  const iterators = iterables.map(i => i[Symbol.iterator]());
+  try {
+    const current = iterators.map(i => i.next());
+    while (current.some(c => !c.done)) {
+      const min = current.reduce(
+        (acc: [T, number] | undefined, c, i): [T, number] | undefined => {
+          if (c.done) {
+            return acc;
+          }
+          if (acc === undefined || comparator(c.value, acc[0]) < 0) {
+            return [c.value, i];
+          }
+          return acc;
+        },
+        undefined,
+      );
+
+      assert(min !== undefined, 'min is undefined');
+      yield min[0];
+      current[min[1]] = iterators[min[1]].next();
+    }
+  } finally {
+    for (const it of iterators) {
+      it.return?.();
+    }
   }
 }

@@ -79,3 +79,6 @@ test('Test with single input', () => {
     ],
   ]);
 });
+
+// test pulling on the output of concat many times
+// test ordering when all inputs to concat are identical

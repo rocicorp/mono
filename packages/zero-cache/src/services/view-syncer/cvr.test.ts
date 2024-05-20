@@ -331,15 +331,15 @@ describe('view-syncer/cvr', () => {
               schema: 'zero',
               table: 'clients',
               select: [
-                ['clientGroupID', 'clientGroupID'],
-                ['clientID', 'clientID'],
-                ['lastMutationID', 'lastMutationID'],
+                [['clients', 'clientGroupID'], 'clientGroupID'],
+                [['clients', 'clientID'], 'clientID'],
+                [['clients', 'lastMutationID'], 'lastMutationID'],
               ],
               where: and(
-                cond('clientGroupID', '=', 'abc123'),
+                cond(['clients', 'clientGroupID'], '=', 'abc123'),
                 or(
                   ...['dooClient', 'fooClient', 'barClient', 'bonkClient'].map(
-                    id => cond('clientID', '=', id),
+                    id => cond(['clients', 'clientID'], '=', id),
                   ),
                 ),
               ),

@@ -48,6 +48,8 @@ export class ServiceRunner
   readonly #replica: PostgresDB;
   readonly #lc: LogContext;
 
+  #warmedUpConnections = false;
+
   constructor(
     logSink: LogSink,
     logLevel: LogLevel,
@@ -68,9 +70,6 @@ export class ServiceRunner
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
     });
-
-    // start the replicator
-    void this.getReplicator();
   }
 
   getInvalidationWatcher(): Promise<InvalidationWatcher> {
@@ -102,6 +101,7 @@ export class ServiceRunner
   }
 
   getViewSyncer(clientGroupID: string): ViewSyncer {
+    this.#warmUpConnections();
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
@@ -109,6 +109,28 @@ export class ServiceRunner
         new ViewSyncerService(this.#lc, id, this.#storage, this, this.#replica),
       'ViewSyncer',
     );
+  }
+
+  #warmUpConnections() {
+    if (!this.#warmedUpConnections) {
+      this.#warmedUpConnections = true;
+      const start = Date.now();
+      void Promise.all([
+        // Warm up 1 upstream connection for mutagen, and 2 replica connections for view syncing.
+        // Note: These can be much larger when not limited to 6 TCP connections per DO.
+        this.#upstream`SELECT 1`.simple().execute(),
+        ...Array.from({length: 2}, () =>
+          this.#replica`SELECT 1`.simple().execute(),
+        ),
+      ])
+        .then(
+          () =>
+            this.#lc.info?.(
+              `warmed up db connections (${Date.now() - start} ms)`,
+            ),
+        )
+        .catch(e => this.#lc.error?.(`error warming up db connections`, e));
+    }
   }
 
   getMutagen(clientGroupID: string): Mutagen {

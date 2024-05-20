@@ -1,7 +1,9 @@
 import type {
   Condition,
   Primitive,
+  Selector,
   SimpleCondition,
+  SimpleOperator,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
@@ -26,26 +28,37 @@ export function computeInvalidationInfo(
 ): InvalidationInfo {
   const {schema = 'public', table, select, aggregate, where} = normalized.ast();
 
-  const sanitizeSelector = (selector: string) => {
-    const parts = selector.split('.');
-    if (parts.length >= 3 && parts.at(-3) !== schema) {
+  const sanitizeSelector = (selector: Selector | undefined) => {
+    if (selector === undefined) {
+      return undefined;
+    }
+
+    const prefix = selector[0];
+    const prefixParts = prefix.split('.');
+    if (prefixParts.length >= 2 && prefixParts[0] !== schema) {
+      return undefined; // not the correct schema
+    }
+    if (selector[0] !== table && prefixParts[1] !== table) {
       return undefined; // not a column of this table. filtered in next step.
     }
-    if (parts.length >= 2 && parts.at(-2) !== table) {
-      return undefined; // not a column of this table. filtered in next step.
-    }
-    return parts.at(-1);
+    return selector[1];
   };
 
-  const selected = new Set<string>([
-    ...(select ?? []).map(([col]) => col),
-    ...(aggregate ?? []).map(agg => agg.field ?? '*'),
+  const selected = new Map<string, Selector | undefined>([
+    ...(select ?? []).map(([col]) => [col.join('.'), col] as const),
+    ...(aggregate ?? []).map(
+      agg =>
+        [
+          agg.field !== undefined ? agg.field.join('.') : '*',
+          agg.field,
+        ] as const,
+    ),
   ]);
   const selectedColumns: readonly string[] | undefined = selected.has('*')
     ? undefined
     : [...selected]
-        .map(col => sanitizeSelector(col) ?? '')
-        .filter(col => col.length)
+        .map(([_key, selector]) => sanitizeSelector(selector))
+        .filter((col): col is string => col !== undefined)
         .sort(compareUTF8);
 
   const hashes = new Set<string>();
@@ -217,7 +230,7 @@ export function computeInvalidationInfo(
  */
 export function computeMatchers(
   cond: Condition | undefined,
-  sanitize: (selector: string) => string | undefined,
+  sanitize: (selector: Selector) => string | undefined,
   maxDepth = 10,
   depth = 0,
 ): Matcher[] {
@@ -249,7 +262,11 @@ export function computeMatchers(
 class Matcher {
   readonly #match = new Map<string, Primitive>();
 
-  constructor(cond?: SimpleCondition) {
+  constructor(cond?: {
+    field: string;
+    op: SimpleOperator;
+    value: SimpleCondition['value'];
+  }) {
     if (cond?.op === '=' && !Array.isArray(cond.value.value)) {
       this.#match.set(cond.field, cond.value.value);
     }

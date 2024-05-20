@@ -1,8 +1,8 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {processMutation, readLastMutationID} from './mutagen.js';
 import {MutationType, type CRUDMutation} from 'zero-protocol';
+import {expectTables, testDBs} from '../../test/db.js';
+import type {PostgresDB} from '../../types/pg.js';
+import {processMutation} from './mutagen.js';
 
 async function createTables(db: PostgresDB) {
   await db.unsafe(`
@@ -45,9 +45,9 @@ describe('processMutation', () => {
   });
 
   test('new client with no last mutation id', async () => {
-    await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, 'abc', '123');
-      expect(mid).toBe(0n);
+    await expectTables(db, {
+      idonly: [],
+      ['zero.clients']: [],
     });
 
     const error = await processMutation(undefined, db, 'abc', {
@@ -72,21 +72,63 @@ describe('processMutation', () => {
 
     expect(error).undefined;
 
-    await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, 'abc', '123');
-      expect(mid).toBe(1n);
+    await expectTables(db, {
+      idonly: [{id: '1'}],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
     });
-
-    const rows = await db`SELECT * FROM idonly`;
-    expect(rows).toEqual([{id: '1'}]);
   });
 
   test('next sequential mutation for previously seen client', async () => {
-    await db.begin(async tx => {
-      await tx`
+    await db`
       INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
-         VALUES ('abc', '123', 1)`;
+         VALUES ('abc', '123', 2)`;
+
+    const error = await processMutation(undefined, db, 'abc', {
+      type: MutationType.CRUD,
+      id: 3,
+      clientID: '123',
+      name: '_zero_crud',
+      args: [
+        {
+          ops: [
+            {
+              op: 'create',
+              entityType: 'idonly',
+              id: {id: '1'},
+              value: {},
+            },
+          ],
+        },
+      ],
+      timestamp: Date.now(),
     });
+
+    expect(error).undefined;
+
+    await expectTables(db, {
+      idonly: [{id: '1'}],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 3n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
+  test('old mutations are skipped', async () => {
+    await db`
+      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 2)`;
 
     const error = await processMutation(undefined, db, 'abc', {
       type: MutationType.CRUD,
@@ -110,25 +152,29 @@ describe('processMutation', () => {
 
     expect(error).undefined;
 
-    await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, 'abc', '123');
-      expect(mid).toBe(2n);
+    await expectTables(db, {
+      idonly: [],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 2n,
+          userID: null,
+        },
+      ],
     });
-
-    const rows = await db`SELECT * FROM idonly`;
-    expect(rows).toEqual([{id: '1'}]);
   });
 
-  test('old mutations are skipped', async () => {
-    await db.begin(async tx => {
-      await tx`
-      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('abc', '123', 2)`;
-    });
+  test('old mutations that would have errored are skipped', async () => {
+    await db`
+      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID")
+        VALUES ('abc', '123', 2);
+      INSERT INTO idonly (id) VALUES ('1');
+      `.simple();
 
     const error = await processMutation(undefined, db, 'abc', {
       type: MutationType.CRUD,
-      id: 1,
+      id: 2,
       clientID: '123',
       name: '_zero_crud',
       args: [
@@ -137,7 +183,7 @@ describe('processMutation', () => {
             {
               op: 'create',
               entityType: 'idonly',
-              id: {id: '1'},
+              id: {id: '1'}, // This would result in a duplicate key value if applied.
               value: {},
             },
           ],
@@ -148,21 +194,23 @@ describe('processMutation', () => {
 
     expect(error).undefined;
 
-    await db.begin(async tx => {
-      const mid = await readLastMutationID(tx, 'abc', '123');
-      expect(mid).toBe(2n);
+    await expectTables(db, {
+      idonly: [{id: '1'}],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 2n,
+          userID: null,
+        },
+      ],
     });
-
-    const rows = await db`SELECT * FROM idonly`;
-    expect(rows).toEqual([]);
   });
 
   test('mutation id too far in the future throws', async () => {
-    await db.begin(async tx => {
-      await tx`
+    await db`
       INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
         VALUES ('abc', '123', 1)`;
-    });
 
     await expect(
       processMutation(undefined, db, 'abc', {
@@ -184,7 +232,21 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       }),
-    ).rejects.toThrow('Mutation ID was out of order');
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: ["error","InvalidPush","Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."]]`,
+    );
+
+    await expectTables(db, {
+      idonly: [],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
   });
 
   test('process create, set, update, delete all at once', async () => {
@@ -243,14 +305,23 @@ describe('processMutation', () => {
 
     expect(error).undefined;
 
-    const rows = await db`SELECT * FROM id_and_cols`;
-    expect(rows).toEqual([
-      {
-        id: '1',
-        col1: 'update',
-        col2: 'set',
-      },
-    ]);
+    await expectTables(db, {
+      ['id_and_cols']: [
+        {
+          id: '1',
+          col1: 'update',
+          col2: 'set',
+        },
+      ],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
   });
 
   test('fk failure', async () => {
@@ -281,17 +352,16 @@ describe('processMutation', () => {
     );
     console.log(error);
 
-    const rows = await db`SELECT * FROM fk_ref`;
-    expect(rows).toEqual([]);
-
-    const clients = await db`SELECT * FROM zero.clients`;
-    expect(clients).toEqual([
-      {
-        clientGroupID: 'abc',
-        clientID: '123',
-        lastMutationID: 1n,
-        userID: null,
-      },
-    ]);
+    await expectTables(db, {
+      ['fk_ref']: [],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
   });
 });

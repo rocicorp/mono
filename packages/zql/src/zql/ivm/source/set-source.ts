@@ -1,4 +1,5 @@
 import {must} from 'shared/src/must.js';
+import type {Ordering, Selector} from '../../ast/ast.js';
 import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
@@ -25,7 +26,8 @@ export class SetSource<T extends object> implements Source<T> {
   >();
   readonly #sorts = new Map<string, SetSource<T>>();
   readonly comparator: Comparator<T>;
-  readonly #name: string | undefined;
+  readonly #name: string;
+  readonly #order: Ordering;
 
   protected readonly _materialite: MaterialiteForSourceInternal;
   #id = id++;
@@ -37,8 +39,10 @@ export class SetSource<T extends object> implements Source<T> {
   constructor(
     materialite: MaterialiteForSourceInternal,
     comparator: Comparator<T>,
-    name?: string | undefined,
+    order: Ordering,
+    name: string,
   ) {
+    this.#order = order;
     this._materialite = materialite;
     this.#stream = new DifferenceStream<T>();
     this.#name = name;
@@ -102,8 +106,13 @@ export class SetSource<T extends object> implements Source<T> {
     };
   }
 
-  withNewOrdering(comp: Comparator<T>): this {
-    const ret = new SetSource(this._materialite, comp) as this;
+  withNewOrdering(comp: Comparator<T>, ordering: Ordering): this {
+    const ret = new SetSource(
+      this._materialite,
+      comp,
+      ordering,
+      this.#name,
+    ) as this;
     if (this.#seeded) {
       ret.seed(this.#tree.keys());
     }
@@ -206,13 +215,13 @@ export class SetSource<T extends object> implements Source<T> {
   }
 
   #sendHistoryTo(request: PullMsg) {
-    const newSort = this.#getOrCreateAndMaintainNewSort(request);
+    const [newSort, orderForReply] =
+      this.#getOrCreateAndMaintainNewSort(request);
 
     this.#stream.newDifference(
       this._materialite.getVersion(),
-      // TODO(mlaw): check asc/desc and iterate in correct direction
       asEntries(newSort.#tree, request),
-      createPullResponseMessage(request),
+      createPullResponseMessage(request, this.#name, orderForReply),
     );
   }
 
@@ -220,32 +229,39 @@ export class SetSource<T extends object> implements Source<T> {
   // is compatible with the source. I.e., it doesn't contain columns from other sources.
   // The latter can happen if the user is sorting on joined columns.
   // Join should do this for us when a `PullMsg` passes through it.
-  #getOrCreateAndMaintainNewSort(request: PullMsg) {
+  #getOrCreateAndMaintainNewSort(
+    request: PullMsg,
+  ): [SetSource<T>, Ordering | undefined] {
     const ordering = request.order;
     if (ordering === undefined) {
-      return this;
+      return [this, this.#order];
     }
-    const fields = ordering[0];
+    // only retain fields relevant to this source.
+    const firstField = ordering[0][0];
 
-    // If length is 1, we're sorted by ID.
-    // TODO(mlaw): update AST structure so we can validate this.
-    if (fields.length === 1) {
-      return this;
+    if (firstField[0] !== this.#name) {
+      return [this, this.#order];
     }
 
-    const key = fields.join(',');
+    const key = firstField[1];
+    // this is the canoncial sort.
+    if (key === 'id') {
+      return [this, this.#order];
+    }
     const alternateSort = this.#sorts.get(key);
+    const fields: Selector[] = [firstField, [this.#name, 'id']];
     if (alternateSort !== undefined) {
-      return alternateSort;
+      return [alternateSort, [fields, ordering[1]]];
     }
 
     // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
     // We do not need a separate source.
-    const comparator = makeComparator(ordering[0], 'asc');
-    const source = this.withNewOrdering(comparator);
+    // Must append id for uniqueness.
+    const newComparator = makeComparator(fields, 'asc');
+    const source = this.withNewOrdering(newComparator, [fields, 'asc']);
 
     this.#sorts.set(key, source);
-    return source;
+    return [source, [fields, ordering[1]]];
   }
 
   awaitSeeding(): PromiseLike<void> {
@@ -276,8 +292,8 @@ export class SetSource<T extends object> implements Source<T> {
 }
 
 function asEntries<T>(
-  m: ISortedMap<T, undefined>,
-  _message?: Request | undefined,
+  m: BTree<T, undefined>,
+  message?: Request | undefined,
 ): Multiset<T> {
   // message will contain hoisted expressions so we can do relevant
   // index selection against the source.
@@ -293,6 +309,17 @@ function asEntries<T>(
   // 1. if it compares on a unique field by equality, just send the single row
   // 2. if the view is in the same order as the source, start the iterator at the where clause
   // which matches this position in the source. (e.g., where id > x)
+
+  if (message?.order) {
+    if (message.order[1] === 'desc') {
+      return {
+        [Symbol.iterator]() {
+          return genFromEntries(m.entriesReversed());
+        },
+      };
+    }
+  }
+
   return {
     [Symbol.iterator]() {
       return gen(m.keys());
@@ -303,5 +330,11 @@ function asEntries<T>(
 function* gen<T>(m: Iterable<T>) {
   for (const v of m) {
     yield [v, 1] as const;
+  }
+}
+
+function* genFromEntries<T>(m: Iterable<[T, undefined]>) {
+  for (const pair of m) {
+    yield [pair[0], 1] as const;
   }
 }

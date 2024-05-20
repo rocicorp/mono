@@ -1,6 +1,10 @@
 import {expect, test} from 'vitest';
 import {JoinResult, joinSymbol} from '../../types.js';
 import {DifferenceStream} from '../difference-stream.js';
+import {
+  orderIsRemovedFromReply,
+  orderIsRemovedFromRequest,
+} from './left-join-operator.test.js';
 
 type Track = {
   id: number;
@@ -752,4 +756,12 @@ test('add many items to the same source as separate calls in the same tick', () 
       1,
     ],
   ]);
+});
+
+test('order is removed from request', () => {
+  orderIsRemovedFromRequest('join');
+});
+
+test('order is removed from reply', () => {
+  orderIsRemovedFromReply('join');
 });
