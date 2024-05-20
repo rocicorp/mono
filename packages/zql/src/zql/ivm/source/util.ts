@@ -1,4 +1,3 @@
-import {must} from 'shared/src/must.js';
 import type {Ordering, Selector} from '../../ast/ast.js';
 import {isJoinResult} from '../types.js';
 
@@ -37,13 +36,13 @@ export function getValueFromEntity(
     if (qualifiedColumn[1] === '*') {
       return (entity as Record<string, unknown>)[qualifiedColumn[0]];
     }
-    return getOrLiftValue(
-      (entity as Record<string, unknown>)[must(qualifiedColumn[0])] as Record<
-        string,
-        unknown
-      >,
-      qualifiedColumn[1],
-    );
+
+    const row = (entity as Record<string, unknown>)[qualifiedColumn[0]];
+    if (row === undefined) {
+      return undefined;
+    }
+
+    return getOrLiftValue(row as Record<string, unknown>, qualifiedColumn[1]);
   }
   return getOrLiftValue(entity, qualifiedColumn[1]);
 }
@@ -59,4 +58,21 @@ export function getOrLiftValue(
     return containerOrValue.map(x => x?.[field]);
   }
   return containerOrValue?.[field];
+}
+
+export function getPrimaryKeyValuesAsStringUnqualified(
+  entity: Record<string, unknown>,
+  primaryKey: readonly string[],
+) {
+  let ret = '';
+  let first = true;
+  for (const col of primaryKey) {
+    if (!first) {
+      ret += '-';
+    } else {
+      first = false;
+    }
+    ret += entity[col];
+  }
+  return ret;
 }

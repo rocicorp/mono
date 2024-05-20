@@ -1,6 +1,9 @@
-import type {Primitive} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
+import {
+  getPrimaryKeyValuesAsStringUnqualified,
+  getValueFromEntity,
+} from '../../source/util.js';
 import {
   isJoinResult,
   JoinResult,
@@ -13,10 +16,9 @@ import {JoinOperatorBase} from './join-operator-base.js';
 import type {JoinArgs} from './join-operator.js';
 
 export class LeftJoinOperator<
-  K extends Primitive,
   AValue extends PipelineEntity,
   BValue extends PipelineEntity,
-  AAlias extends string | undefined,
+  ATable extends string | undefined,
   BAlias extends string | undefined,
 > extends JoinOperatorBase<
   AValue,
@@ -24,29 +26,53 @@ export class LeftJoinOperator<
   // If AValue or BValue are join results
   // then they should be lifted and need no aliasing
   // since they're already aliased
-  JoinResult<AValue, BValue, AAlias, BAlias>
+  JoinResult<AValue, BValue, ATable, BAlias>
 > {
-  readonly #indexA: DifferenceIndex<K | undefined, AValue>;
-  readonly #indexB: DifferenceIndex<K, BValue>;
-  readonly #joinArgs;
+  readonly #indexA: DifferenceIndex<StringOrNumber | undefined, AValue>;
+  readonly #indexB: DifferenceIndex<StringOrNumber, BValue>;
   readonly #aMatches: Map<
     StringOrNumber,
-    [JoinResult<AValue, BValue, AAlias, BAlias>, number]
+    [JoinResult<AValue, BValue, ATable, BAlias>, number]
   > = new Map();
+  readonly #getAPrimaryKey;
+  readonly #getBPrimaryKey;
+  readonly #getAJoinKey;
+  readonly #getBJoinKey;
+  readonly #joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>;
 
-  constructor(joinArgs: JoinArgs<K, AValue, BValue, AAlias, BAlias>) {
+  constructor(joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>) {
     super(joinArgs.a, joinArgs.b, joinArgs.output, (version, inputA, inputB) =>
       this.#join(version, inputA, inputB),
     );
-    this.#indexA = new DifferenceIndex<K | undefined, AValue>(
-      joinArgs.getAPrimaryKey,
+
+    this.#getAPrimaryKey = (value: AValue) =>
+      getPrimaryKeyValuesAsStringUnqualified(
+        value,
+        joinArgs.aPrimaryKeyColumns,
+      );
+    this.#getBPrimaryKey = (value: BValue) =>
+      getPrimaryKeyValuesAsStringUnqualified(
+        value,
+        joinArgs.bPrimaryKeyColumns,
+      );
+
+    this.#getAJoinKey = (value: AValue) =>
+      getValueFromEntity(value, joinArgs.aJoinColumn) as StringOrNumber;
+    this.#getBJoinKey = (value: BValue) =>
+      getValueFromEntity(value, joinArgs.bJoinColumn) as StringOrNumber;
+
+    this.#indexA = new DifferenceIndex<StringOrNumber, AValue>(
+      this.#getAPrimaryKey,
     );
-    this.#indexB = new DifferenceIndex<K, BValue>(joinArgs.getBPrimaryKey);
+    this.#indexB = new DifferenceIndex<StringOrNumber, BValue>(
+      this.#getBPrimaryKey,
+    );
+
     this.#joinArgs = joinArgs;
   }
 
-  #aKeysForCompaction = new Set<K | undefined>();
-  #bKeysForCompaction = new Set<K>();
+  #aKeysForCompaction = new Set<StringOrNumber | undefined>();
+  #bKeysForCompaction = new Set<StringOrNumber>();
   #lastVersion = -1;
   #join(
     version: Version,
@@ -65,7 +91,7 @@ export class LeftJoinOperator<
     }
 
     const iterablesToReturn: Multiset<
-      JoinResult<AValue, BValue, AAlias, BAlias>
+      JoinResult<AValue, BValue, ATable, BAlias>
     >[] = [];
 
     // fill the inner set first so we don't emit 2x the amount of data
@@ -74,7 +100,7 @@ export class LeftJoinOperator<
     if (inputB !== undefined) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
-          const key = this.#joinArgs.getBJoinKey(entry[0]);
+          const key = this.#getBJoinKey(entry[0]);
           const ret = this.#joinOneInner(entry, key);
           if (key !== undefined) {
             this.#indexB.add(key, entry);
@@ -88,7 +114,7 @@ export class LeftJoinOperator<
     if (inputA !== undefined) {
       iterablesToReturn.push(
         genFlatMap(inputA, entry => {
-          const key = this.#joinArgs.getAJoinKey(entry[0]);
+          const key = this.#getAJoinKey(entry[0]);
           const ret = this.#joinOneLeft(entry, key);
           this.#indexA.add(key, entry);
           this.#aKeysForCompaction.add(key);
@@ -102,15 +128,15 @@ export class LeftJoinOperator<
 
   #joinOneLeft(
     aEntry: Entry<AValue>,
-    aKey: K | undefined,
-  ): Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] {
+    aKey: StringOrNumber | undefined,
+  ): Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] {
     const aValue = aEntry[0];
     const aMult = aEntry[1];
 
-    const ret: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
+    const ret: Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] = [];
     const aPrimaryKey = isJoinResult(aValue)
       ? aValue.id
-      : this.#joinArgs.getAPrimaryKey(aValue as AValue);
+      : this.#getAPrimaryKey(aValue as AValue);
 
     const bEntries = aKey !== undefined ? this.#indexB.get(aKey) : undefined;
     // `undefined` cannot join with anything
@@ -119,11 +145,11 @@ export class LeftJoinOperator<
         combineRows(
           aValue,
           undefined,
-          this.#joinArgs.aAs,
+          this.#joinArgs.aTable,
           this.#joinArgs.bAs,
-          this.#joinArgs.getAPrimaryKey,
-          this.#joinArgs.getBPrimaryKey,
-        ) as JoinResult<AValue, BValue, AAlias, BAlias>,
+          this.#getAPrimaryKey,
+          this.#getBPrimaryKey,
+        ) as JoinResult<AValue, BValue, ATable, BAlias>,
         aMult,
       ] as const;
       ret.push(joinEntry);
@@ -136,11 +162,11 @@ export class LeftJoinOperator<
         combineRows(
           aValue,
           bValue,
-          this.#joinArgs.aAs,
+          this.#joinArgs.aTable,
           this.#joinArgs.bAs,
-          this.#joinArgs.getAPrimaryKey,
-          this.#joinArgs.getBPrimaryKey,
-        ) as JoinResult<AValue, BValue, AAlias, BAlias>,
+          this.#getAPrimaryKey,
+          this.#getBPrimaryKey,
+        ) as JoinResult<AValue, BValue, ATable, BAlias>,
         aMult * bMult,
       ] as const;
 
@@ -159,8 +185,8 @@ export class LeftJoinOperator<
 
   #joinOneInner(
     bEntry: Entry<BValue>,
-    bKey: K | undefined,
-  ): Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] {
+    bKey: StringOrNumber | undefined,
+  ): Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] {
     const bValue = bEntry[0];
     const bMult = bEntry[1];
     if (bKey === undefined) {
@@ -172,24 +198,24 @@ export class LeftJoinOperator<
       return [];
     }
 
-    const ret: Entry<JoinResult<AValue, BValue, AAlias, BAlias>>[] = [];
+    const ret: Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] = [];
     for (const [aRow, aMult] of aEntries) {
       const joinEntry = [
         combineRows(
           aRow,
           bValue,
-          this.#joinArgs.aAs,
+          this.#joinArgs.aTable,
           this.#joinArgs.bAs,
-          this.#joinArgs.getAPrimaryKey,
-          this.#joinArgs.getBPrimaryKey,
-        ) as JoinResult<AValue, BValue, AAlias, BAlias>,
+          this.#getAPrimaryKey,
+          this.#getBPrimaryKey,
+        ) as JoinResult<AValue, BValue, ATable, BAlias>,
         aMult * bMult,
       ] as const;
       ret.push(joinEntry);
 
       const aPrimaryKey = isJoinResult(aRow)
         ? aRow.id
-        : this.#joinArgs.getAPrimaryKey(aRow as AValue);
+        : this.#getAPrimaryKey(aRow as AValue);
 
       const existing = this.#aMatches.get(aPrimaryKey);
       if (joinEntry[1] > 0 && existing && existing[1] === 0) {

@@ -5,7 +5,6 @@ import type {
   Aggregation,
   Condition,
   Join,
-  Primitive,
   SimpleCondition,
   Ordering,
   Selector,
@@ -15,10 +14,6 @@ import type {
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {getValueFromEntity} from '../ivm/source/util.js';
 import type {StringOrNumber} from '../ivm/types.js';
-
-function getId(e: Entity) {
-  return e.id;
-}
 
 export function buildPipeline(
   sourceStreamProvider: (
@@ -89,22 +84,16 @@ export function applyJoins<T extends Entity, O extends Entity>(
     const aQualifiedColumn = join.on[0];
     const bQualifiedColumn = join.on[1];
     const joinArgs = {
-      aAs: sourceTableOrAlias,
-      getAJoinKey(e: Entity) {
-        // TODO: runtime validation?
-        const ret = getValueFromEntity(e, aQualifiedColumn) as Primitive;
-        return ret;
-      },
-      getAPrimaryKey: getId,
+      aTable: sourceTableOrAlias,
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: aQualifiedColumn,
 
       b: bPipeline,
       bAs: join.as,
-      getBJoinKey(e: Entity) {
-        // TODO: runtime validation?
-        const ret = getValueFromEntity(e, bQualifiedColumn) as Primitive;
-        return ret;
-      },
-      getBPrimaryKey: getId,
+      bTable: join.other.table,
+      // TODO(mlaw): either disallow joining against queries or test this for that case.
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: bQualifiedColumn,
     } as const;
     switch (join.type) {
       case 'inner':
