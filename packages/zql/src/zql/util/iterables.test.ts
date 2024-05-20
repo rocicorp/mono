@@ -4,8 +4,10 @@ import {
   genFilter,
   genFlatMap,
   genMap,
+  iterInOrder,
   mapIter,
 } from './iterables.js';
+import fc from 'fast-check';
 
 test('mapIter', () => {
   const iterable = [1, 2, 3];
@@ -20,6 +22,23 @@ test('genFlatMap', () => {
   expect([...flatMapper]).toEqual([1, 2, 3, 4, 5, 6]);
   // can iterate it a second time
   expect([...flatMapper]).toEqual([1, 2, 3, 4, 5, 6]);
+});
+
+test('iterInOrder', () => {
+  fc.assert(
+    fc.property(
+      fc.array(fc.array(fc.integer()), {minLength: 1, maxLength: 3}),
+      arrays => {
+        const sorted = arrays
+          .reduce((acc, cur) => acc.concat(cur), [])
+          .sort((l, r) => l - r);
+        // iterInOrder assumes inputs are ordered
+        arrays.forEach(a => a.sort((l, r) => l - r));
+        const result = [...iterInOrder(arrays, (l, r) => l - r)];
+        expect(result).toEqual(sorted);
+      },
+    ),
+  );
 });
 
 test('multiple iterations over a genMapCached will return the exact same results', () => {
