@@ -45,13 +45,15 @@ test('left join', () => {
   const albumInput = new DifferenceStream<Album>();
 
   const output = trackInput.leftJoin({
-    aAs: 'track',
-    getAJoinKey: track => track.albumId,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'albumId'],
+
     b: albumInput,
+    bTable: 'album',
     bAs: 'album',
-    getBJoinKey: album => album.id,
-    getBPrimaryKey: album => album.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['album', 'id'],
   });
 
   const items: [JoinResult<Track, Album, 'track', 'album'>, number][] = [];
@@ -287,23 +289,27 @@ test('junction table left join', () => {
   const artistInput = new DifferenceStream<Artist>();
 
   const trackTrackArtist = trackInput.leftJoin({
-    aAs: 'track',
-    getAJoinKey: track => track.id,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'id'],
+
     b: trackArtistInput,
+    bTable: 'trackArtist',
     bAs: 'trackArtist',
-    getBJoinKey: trackArtist => trackArtist.trackId,
-    getBPrimaryKey: trackArtist => trackArtist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['trackArtist', 'trackId'],
   });
 
   const output = trackTrackArtist.leftJoin({
-    aAs: undefined,
-    getAJoinKey: x => x.trackArtist?.artistId,
-    getAPrimaryKey: x => x?.id,
+    aTable: undefined,
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['trackArtist', 'artistId'],
+
     b: artistInput,
+    bTable: 'artist',
     bAs: 'artist',
-    getBJoinKey: artist => artist.id,
-    getBPrimaryKey: artist => artist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['artist', 'id'],
   });
 
   const items: [
@@ -796,23 +802,27 @@ test('repro 1', () => {
   const artistInput = new DifferenceStream<Artist>();
 
   const trackTrackArtist = trackInput.leftJoin({
-    aAs: 'track',
-    getAJoinKey: track => track.id,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'id'],
+
     b: trackArtistInput,
+    bTable: 'trackArtist',
     bAs: 'trackArtist',
-    getBJoinKey: trackArtist => trackArtist.trackId,
-    getBPrimaryKey: trackArtist => trackArtist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['trackArtist', 'trackId'],
   });
 
   const output = trackTrackArtist.leftJoin({
-    aAs: undefined,
-    getAJoinKey: x => x.trackArtist?.artistId,
-    getAPrimaryKey: x => x?.id,
+    aTable: undefined,
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['trackArtist', 'artistId'],
+
     b: artistInput,
+    bTable: 'artist',
     bAs: 'artist',
-    getBJoinKey: artist => artist.id,
-    getBPrimaryKey: artist => artist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['artist', 'id'],
   });
 
   const items: [
@@ -982,13 +992,15 @@ test('add track & album, then remove album', () => {
   const albumInput = new DifferenceStream<Album>();
 
   const output = trackInput.leftJoin({
-    aAs: 'track',
-    getAJoinKey: track => track.albumId,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'albumId'],
+
     b: albumInput,
+    bTable: 'album',
     bAs: 'album',
-    getBJoinKey: album => album.id,
-    getBPrimaryKey: album => album.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['album', 'id'],
   });
 
   const items: [JoinResult<Track, Album, 'track', 'album'>, number][] = [];
@@ -1104,13 +1116,15 @@ test('one to many, remove the one, add the one', () => {
   const trackArtistInput = new DifferenceStream<TrackArtist>();
 
   const output = trackInput.leftJoin({
-    aAs: 'track',
-    getAJoinKey: track => track.id,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'id'],
+
     b: trackArtistInput,
+    bTable: 'trackArtist',
     bAs: 'trackArtist',
-    getBJoinKey: trackArtist => trackArtist.trackId,
-    getBPrimaryKey: trackArtist => trackArtist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['trackArtist', 'trackId'],
   });
 
   const items: [
@@ -1288,23 +1302,27 @@ test('two tracks, only 1 is linked to artists', () => {
   const artistInput = new DifferenceStream<Artist>();
 
   const trackTrackArtist = trackInput.leftJoin({
-    aAs: 'track',
-    getAJoinKey: track => track.id,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'id'],
+
     b: trackArtistInput,
+    bTable: 'trackArtist',
     bAs: 'trackArtist',
-    getBJoinKey: trackArtist => trackArtist.trackId,
-    getBPrimaryKey: trackArtist => trackArtist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['trackArtist', 'trackId'],
   });
 
   const output = trackTrackArtist.leftJoin({
-    aAs: undefined,
-    getAJoinKey: x => x.trackArtist?.artistId,
-    getAPrimaryKey: x => x?.id,
+    aTable: undefined,
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['trackArtist', 'artistId'],
+
     b: artistInput,
+    bTable: 'artist',
     bAs: 'artist',
-    getBJoinKey: artist => artist.id,
-    getBPrimaryKey: artist => artist.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['artist', 'id'],
   });
 
   const items: [
@@ -1446,13 +1464,15 @@ export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
   const output = trackInput[join]({
-    aAs: 'track',
-    getAJoinKey: x => x.albumId,
-    getAPrimaryKey: x => x.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'albumId'],
+
     b: albumInput,
+    bTable: 'album',
     bAs: 'album',
-    getBJoinKey: x => x.id,
-    getBPrimaryKey: x => x.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['album', 'id'],
   });
 
   const trackInputSpy = vi.spyOn(trackInput, 'messageUpstream');
@@ -1481,13 +1501,15 @@ export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
   const output = trackInput[join]({
-    aAs: 'track',
-    getAJoinKey: x => x.albumId,
-    getAPrimaryKey: x => x.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'albumId'],
+
     b: albumInput,
+    bTable: 'album',
     bAs: 'album',
-    getBJoinKey: x => x.id,
-    getBPrimaryKey: x => x.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['album', 'id'],
   });
 
   const outputSpy = vi.spyOn(output, 'newDifference');
