@@ -1,8 +1,8 @@
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {makeComparator} from '../../../query/statement.js';
-import {gen} from '../../../util/iterables.js';
-import type {Entry, Multiset} from '../../multiset.js';
+import {gen, iterInOrder} from '../../../util/iterables.js';
+import type {Multiset} from '../../multiset.js';
 import {sourcesAreIdentical} from '../../source/util.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
 import type {PullMsg, Reply} from '../message.js';
@@ -77,7 +77,7 @@ export class ConcatOperator<T extends object> implements Operator {
     } else {
       this.#output.newDifference(
         this.#replyVersion,
-        gen(() => genInOrder(this.#replyBuffer)),
+        gen(() => inOrder(this.#replyBuffer)),
         first[1],
       );
     }
@@ -107,41 +107,13 @@ export class ConcatOperator<T extends object> implements Operator {
   }
 }
 
-export function* genInOrder<T extends object>(
+export function inOrder<T extends object>(
   buffer: [multiset: Multiset<T>, reply: Reply][],
 ) {
   const first = buffer[0];
   const order = must(first[1].order);
   const comparator = makeComparator(order[0], order[1]);
 
-  const iterators = buffer.map(r => r[0][Symbol.iterator]());
-  try {
-    const current = iterators.map(it => it.next());
-    while (current.some(c => !c.done)) {
-      const min = current.reduce(
-        (
-          acc: [Entry<T>, number] | undefined,
-          c,
-          i,
-        ): [Entry<T>, number] | undefined => {
-          if (c.done) {
-            return acc;
-          }
-          if (acc === undefined || comparator(c.value[0], acc[0]) < 0) {
-            return [c.value, i];
-          }
-          return acc;
-        },
-        undefined,
-      );
-
-      assert(min !== undefined, 'min is undefined');
-      yield min[0];
-      current[min[1]] = iterators[min[1]].next();
-    }
-  } finally {
-    for (const it of iterators) {
-      it.return?.();
-    }
-  }
+  const iterables = buffer.map(r => r[0]);
+  return iterInOrder(iterables, (l, r) => comparator(l[0], r[0]));
 }

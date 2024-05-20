@@ -1,3 +1,5 @@
+import {assert} from 'shared/src/asserts.js';
+
 export function gen<T>(generator: () => Generator<T, void, unknown>) {
   return {
     [Symbol.iterator]() {
@@ -112,5 +114,37 @@ export function* mapIter<T, U>(
   let index = 0;
   for (const t of iter) {
     yield f(t, index++);
+  }
+}
+
+export function* iterInOrder<T>(
+  iterables: Iterable<T>[],
+  comparator: (l: T, r: T) => number,
+) {
+  const iterators = iterables.map(i => i[Symbol.iterator]());
+  try {
+    const current = iterators.map(i => i.next());
+    while (current.some(c => !c.done)) {
+      const min = current.reduce(
+        (acc: [T, number] | undefined, c, i): [T, number] | undefined => {
+          if (c.done) {
+            return acc;
+          }
+          if (acc === undefined || comparator(c.value, acc[0]) < 0) {
+            return [c.value, i];
+          }
+          return acc;
+        },
+        undefined,
+      );
+
+      assert(min !== undefined, 'min is undefined');
+      yield min[0];
+      current[min[1]] = iterators[min[1]].next();
+    }
+  } finally {
+    for (const it of iterators) {
+      it.return?.();
+    }
   }
 }
