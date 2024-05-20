@@ -6,46 +6,36 @@
  * are also required for recursive schema definitions.)
  */
 
-import type {
-  AST,
-  Aggregate,
-  Aggregation,
-  Condition,
-  Conjunction,
-  EqualityOps,
-  InOps,
-  Join,
-  LikeOps,
-  OrderOps,
-  Ordering,
-  Primitive,
-  PrimitiveArray,
-  SimpleCondition,
-  SimpleOperator,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {Condition, Join} from '@rocicorp/zql/src/zql/ast/ast.js';
 import * as v from 'shared/src/valita.js';
 
-export const selectorSchema = v.tuple([v.string(), v.string()]);
+function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
+  return t as v.Type<Readonly<T>>;
+}
 
-export const orderingSchema: v.Type<Ordering> = v.tuple([
-  v.array(selectorSchema),
-  v.union(v.literal('asc'), v.literal('desc')),
-]);
+export const selectorSchema = readonly(v.tuple([v.string(), v.string()]));
 
-export const primitiveSchema: v.Type<Primitive> = v.union(
+export const orderingSchema = readonly(
+  v.tuple([
+    readonly(v.array(selectorSchema)),
+    v.union(v.literal('asc'), v.literal('desc')),
+  ]),
+);
+
+export const primitiveSchema = v.union(
   v.string(),
   v.number(),
   v.boolean(),
   v.null(),
 );
 
-export const primitiveArraySchema: v.Type<PrimitiveArray> = v.union(
+export const primitiveArraySchema = v.union(
   v.array(v.string()),
   v.array(v.number()),
   v.array(v.boolean()),
 );
 
-export const aggregateSchema: v.Type<Aggregate> = v.union(
+export const aggregateSchema = v.union(
   v.literal('sum'),
   v.literal('avg'),
   v.literal('min'),
@@ -53,38 +43,33 @@ export const aggregateSchema: v.Type<Aggregate> = v.union(
   v.literal('array'),
   v.literal('count'),
 );
-export const aggregationSchema: v.Type<Aggregation> = v.object({
+
+export const aggregationSchema = v.object({
   field: selectorSchema.optional(),
   alias: v.string(),
   aggregate: aggregateSchema,
 });
 
-export const joinSchema: v.Type<Join> = v.lazy(() =>
-  v.object({
-    type: v.union(
-      v.literal('inner'),
-      v.literal('left'),
-      v.literal('right'),
-      v.literal('full'),
-    ),
-    other: astSchema,
-    as: v.string(),
-    on: v.tuple([selectorSchema, selectorSchema]),
-  }),
-);
+// Split out so that its inferred type can be checked against
+// Omit<Join, 'other'> in ast-type-test.ts.
+// The mutually-recursive reference of the 'other' field to astSchema
+// is the only thing added in v.lazy.  The v.lazy is necessary due to the
+// mutually-recursive types, but v.lazy prevents inference of the resulting
+// type.
+export const joinOmitOther = v.object({
+  type: v.union(
+    v.literal('inner'),
+    v.literal('left'),
+    v.literal('right'),
+    v.literal('full'),
+  ),
+  as: v.string(),
+  on: v.tuple([selectorSchema, selectorSchema]),
+});
 
-export const astSchema: v.Type<AST> = v.lazy(() =>
-  v.object({
-    schema: v.string().optional(),
-    table: v.string(),
-    alias: v.string().optional(),
-    select: v.array(v.tuple([selectorSchema, v.string()])).optional(),
-    aggregate: v.array(aggregationSchema).optional(),
-    where: conditionSchema.optional(),
-    joins: v.array(joinSchema).optional(),
-    limit: v.number().optional(),
-    groupBy: v.array(selectorSchema).optional(),
-    orderBy: orderingSchema.optional(),
+export const joinSchema: v.Type<Join> = v.lazy(() =>
+  joinOmitOther.extend({
+    other: astSchema,
   }),
 );
 
@@ -92,46 +77,63 @@ export const conditionSchema: v.Type<Condition> = v.lazy(() =>
   v.union(simpleConditionSchema, conjunctionSchema),
 );
 
-export const conjunctionSchema: v.Type<Conjunction> = v.lazy(() =>
-  v.object({
-    type: v.literal('conjunction'),
-    op: v.union(v.literal('AND'), v.literal('OR')),
-    conditions: v.array(conditionSchema),
-  }),
-);
+export const conjunctionSchema = v.object({
+  type: v.literal('conjunction'),
+  op: v.union(v.literal('AND'), v.literal('OR')),
+  conditions: v.array(conditionSchema),
+});
 
-export const equalityOpsSchema: v.Type<EqualityOps> = v.union(
-  v.literal('='),
-  v.literal('!='),
-);
+export const astSchema = v.object({
+  schema: v.string().optional(),
+  table: v.string(),
+  alias: v.string().optional(),
+  select: readonly(
+    v.array(readonly(v.tuple([selectorSchema, v.string()]))),
+  ).optional(),
+  aggregate: v.array(aggregationSchema).optional(),
+  where: conditionSchema.optional(),
+  joins: v.array(joinSchema).optional(),
+  limit: v.number().optional(),
+  groupBy: v.array(selectorSchema).optional(),
+  orderBy: orderingSchema.optional(),
+});
 
-export const orderOpsSchema: v.Type<OrderOps> = v.union(
+export const equalityOpsSchema = v.union(v.literal('='), v.literal('!='));
+
+export const orderOpsSchema = v.union(
   v.literal('<'),
   v.literal('>'),
   v.literal('<='),
   v.literal('>='),
 );
 
-export const inOpsSchema: v.Type<InOps> = v.union(
-  v.literal('IN'),
-  v.literal('NOT IN'),
-);
+export const inOpsSchema = v.union(v.literal('IN'), v.literal('NOT IN'));
 
-export const likeOpsSchema: v.Type<LikeOps> = v.union(
+export const likeOpsSchema = v.union(
   v.literal('LIKE'),
   v.literal('NOT LIKE'),
   v.literal('ILIKE'),
   v.literal('NOT ILIKE'),
 );
 
-export const simpleOperatorSchema: v.Type<SimpleOperator> = v.union(
+export const setOpsSchema = v.union(
+  v.literal('INTERSECTS'),
+  v.literal('DISJOINT'),
+  v.literal('SUPERSET'),
+  v.literal('CONGRUENT'),
+  v.literal('INCONGRUENT'),
+  v.literal('SUBSET'),
+);
+
+export const simpleOperatorSchema = v.union(
   equalityOpsSchema,
   orderOpsSchema,
   inOpsSchema,
   likeOpsSchema,
+  setOpsSchema,
 );
 
-export const simpleConditionSchema: v.Type<SimpleCondition> = v.object({
+export const simpleConditionSchema = v.object({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
   field: selectorSchema,
