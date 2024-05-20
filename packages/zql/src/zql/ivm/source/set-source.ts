@@ -215,13 +215,13 @@ export class SetSource<T extends object> implements Source<T> {
   }
 
   #sendHistoryTo(request: PullMsg) {
-    const [newSort, order] = this.#getOrCreateAndMaintainNewSort(request);
+    const [newSort, orderForReply] =
+      this.#getOrCreateAndMaintainNewSort(request);
 
     this.#stream.newDifference(
       this._materialite.getVersion(),
-      // TODO(mlaw): check asc/desc and iterate in correct direction
       asEntries(newSort.#tree, request),
-      createPullResponseMessage(request, order),
+      createPullResponseMessage(request, orderForReply),
     );
   }
 
@@ -249,19 +249,19 @@ export class SetSource<T extends object> implements Source<T> {
       return [this, this.#order];
     }
     const alternateSort = this.#sorts.get(key);
+    const fields: Selector[] = [firstField, [this.#name, 'id']];
     if (alternateSort !== undefined) {
-      return [alternateSort, ordering];
+      return [alternateSort, [fields, ordering[1]]];
     }
 
     // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
     // We do not need a separate source.
     // Must append id for uniqueness.
-    const fields: Selector[] = [firstField, [this.#name, 'id']];
-    const comparator = makeComparator(fields, 'asc');
-    const source = this.withNewOrdering(comparator, ordering);
+    const newComparator = makeComparator(fields, 'asc');
+    const source = this.withNewOrdering(newComparator, [fields, 'asc']);
 
     this.#sorts.set(key, source);
-    return [source, ordering];
+    return [source, [fields, ordering[1]]];
   }
 
   awaitSeeding(): PromiseLike<void> {

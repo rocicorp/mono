@@ -157,7 +157,7 @@ test('replace outside viewport', () => {
   const {materialite} = context;
   const orderBy = [[['test', 'x']], 'asc'] as const;
   const comparator: Comparator<Item> = (l, r) => l.id - r.id;
-  const source = materialite.newSetSource<Item>(comparator, orderBy);
+  const source = materialite.newSetSource<Item>(comparator, orderBy, 'test');
   const view = new TreeView(context, source.stream, comparator, orderBy, 5);
 
   materialite.tx(() => {
