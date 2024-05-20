@@ -10,12 +10,12 @@ import {
 } from '../ivm/materialite.js';
 import type {Entry} from '../ivm/multiset.js';
 import type {Source, SourceInternal} from '../ivm/source/source.js';
-import type {Version} from '../ivm/types.js';
+import type {PipelineEntity, Version} from '../ivm/types.js';
 import type {Context} from './context.js';
 
 export class TestContext implements Context {
   readonly materialite = new Materialite();
-  readonly #sources = new Map<string, Source<object>>();
+  readonly #sources = new Map<string, Source<PipelineEntity>>();
 
   subscriptionsChangedLog: {type: 'added' | 'removed'; ast: AST}[] = [];
 
@@ -25,7 +25,7 @@ export class TestContext implements Context {
         (l: T, r: T) => compareUTF8(l.id, r.id),
         [[[name, 'id']], 'asc'],
         name,
-      ) as unknown as Source<object>;
+      ) as unknown as Source<PipelineEntity>;
       source.seed([]);
       this.#sources.set(name, source);
     }
@@ -46,10 +46,10 @@ type Gen<T> = {
 };
 export class InfiniteSourceContext implements Context {
   readonly materialite = new Materialite();
-  readonly #sources = new Map<string, Source<object>>();
-  readonly #generators = new Map<string, Gen<object>>();
+  readonly #sources = new Map<string, Source<PipelineEntity>>();
+  readonly #generators = new Map<string, Gen<PipelineEntity>>();
 
-  constructor(generators: Map<string, Gen<object>>) {
+  constructor(generators: Map<string, Gen<PipelineEntity>>) {
     this.#generators = generators;
   }
 
@@ -59,7 +59,7 @@ export class InfiniteSourceContext implements Context {
       return existing as unknown as Source<X>;
     }
 
-    let source: Source<object>;
+    let source: Source<PipelineEntity>;
     if (this.#generators.has(name)) {
       source = this.materialite.constructSource(
         internal =>
@@ -70,7 +70,7 @@ export class InfiniteSourceContext implements Context {
         (l: X, r: X) => compareUTF8(l.id, r.id),
         [[[name, 'id']], 'asc'],
         name,
-      ) as unknown as Source<object>;
+      ) as unknown as Source<PipelineEntity>;
       source.seed([]);
       this.#sources.set(name, source);
     }
@@ -89,12 +89,12 @@ export function makeTestContext(): TestContext {
 }
 
 export function makeInfiniteSourceContext(
-  generators: Map<string, Gen<object>>,
+  generators: Map<string, Gen<PipelineEntity>>,
 ): InfiniteSourceContext {
   return new InfiniteSourceContext(generators);
 }
 
-class InfiniteSuorce<T extends object> implements Source<T> {
+class InfiniteSuorce<T extends PipelineEntity> implements Source<T> {
   readonly #materialite: MaterialiteForSourceInternal;
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;

@@ -5,7 +5,7 @@ import {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
-import type {Comparator, Version} from '../types.js';
+import type {Comparator, PipelineEntity, Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
 import type {ISortedMap} from 'sorted-btree-roci';
 import BTree from 'sorted-btree-roci';
@@ -18,7 +18,7 @@ import BTree from 'sorted-btree-roci';
  *
  */
 let id = 0;
-export class SetSource<T extends object> implements Source<T> {
+export class SetSource<T extends PipelineEntity> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
   readonly #listeners = new Set<

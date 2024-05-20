@@ -1,5 +1,5 @@
 import type {Multiset} from '../../multiset.js';
-import type {Version} from '../../types.js';
+import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
@@ -7,7 +7,10 @@ import {UnaryOperator} from './unary-operator.js';
  * Allows someone to observe all data flowing through a spot
  * in a pipeline. Forwards the data with no changes made to it.
  */
-export class DebugOperator<T extends object> extends UnaryOperator<T, T> {
+export class DebugOperator<T extends PipelineEntity> extends UnaryOperator<
+  T,
+  T
+> {
   constructor(
     input: DifferenceStream<T>,
     output: DifferenceStream<T>,

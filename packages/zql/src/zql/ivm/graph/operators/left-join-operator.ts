@@ -4,6 +4,7 @@ import type {Entry, Multiset} from '../../multiset.js';
 import {
   isJoinResult,
   JoinResult,
+  PipelineEntity,
   StringOrNumber,
   Version,
 } from '../../types.js';
@@ -13,8 +14,8 @@ import type {JoinArgs} from './join-operator.js';
 
 export class LeftJoinOperator<
   K extends Primitive,
-  AValue extends object,
-  BValue extends object,
+  AValue extends PipelineEntity,
+  BValue extends PipelineEntity,
   AAlias extends string | undefined,
   BAlias extends string | undefined,
 > extends JoinOperatorBase<

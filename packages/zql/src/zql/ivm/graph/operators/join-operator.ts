@@ -1,15 +1,20 @@
 import type {Primitive} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import type {JoinResult, StringOrNumber, Version} from '../../types.js';
+import type {
+  JoinResult,
+  PipelineEntity,
+  StringOrNumber,
+  Version,
+} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {combineRows, DifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
 
 export type JoinArgs<
   Key extends Primitive,
-  AValue extends object,
-  BValue extends object,
+  AValue extends PipelineEntity,
+  BValue extends PipelineEntity,
   AAlias extends string | undefined,
   BAlias extends string | undefined,
 > = {
@@ -47,8 +52,8 @@ export type JoinArgs<
  */
 export class InnerJoinOperator<
   K extends Primitive,
-  AValue extends object,
-  BValue extends object,
+  AValue extends PipelineEntity,
+  BValue extends PipelineEntity,
   AAlias extends string | undefined,
   BAlias extends string | undefined,
 > extends JoinOperatorBase<

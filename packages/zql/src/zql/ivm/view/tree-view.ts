@@ -6,7 +6,7 @@ import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage, Reply} from '../graph/message.js';
 import type {Entry, Multiset} from '../multiset.js';
 import {selectorsAreEqual} from '../source/util.js';
-import type {Comparator} from '../types.js';
+import type {Comparator, PipelineEntity} from '../types.js';
 import {AbstractView} from './abstract-view.js';
 import {must} from 'shared/src/must.js';
 
@@ -20,7 +20,7 @@ import {must} from 'shared/src/must.js';
  * of the tree.
  */
 let id = 0;
-export class TreeView<T extends object> extends AbstractView<T, T[]> {
+export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
   #data: BTree<T, undefined>;
 
   #jsSlice: T[] = [];

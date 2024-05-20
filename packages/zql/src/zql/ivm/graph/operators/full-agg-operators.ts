@@ -5,14 +5,14 @@ import type {DifferenceStream} from '../difference-stream.js';
 import {LinearUnaryOperator} from './linear-unary-operator.js';
 
 export type AggregateOut<
-  V extends object,
+  V extends Record<string, unknown>,
   AggregateResult extends [string, unknown][],
 > = V & {
   [K in AggregateResult[number][0]]: AggregateResult[number][1];
 };
 
 class FullAggregateOperator<
-  V extends object,
+  V extends Record<string, unknown>,
   AggregateResult extends [string, unknown][],
 > extends LinearUnaryOperator<V, AggregateOut<V, AggregateResult>> {
   #lastOutput: AggregateOut<V, AggregateResult> | undefined;
@@ -60,7 +60,7 @@ class FullAggregateOperator<
 }
 
 export class FullCountOperator<
-  V extends object,
+  V extends Record<string, unknown>,
   Alias extends string,
 > extends FullAggregateOperator<V, [[Alias, number]]> {
   #count = 0;
@@ -90,7 +90,7 @@ export class FullCountOperator<
 }
 
 export class FullAvgOperator<
-  V extends object,
+  V extends Record<string, unknown>,
   Alias extends string,
 > extends FullAggregateOperator<V, [[Alias, number]]> {
   #numElements = 0;
@@ -139,7 +139,7 @@ export class FullAvgOperator<
 }
 
 export class FullSumOperator<
-  V extends object,
+  V extends Record<string, unknown>,
   Alias extends string,
 > extends FullAggregateOperator<V, [[Alias, number]]> {
   #sum = 0;

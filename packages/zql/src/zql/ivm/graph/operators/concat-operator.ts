@@ -4,6 +4,7 @@ import {makeComparator} from '../../../query/statement.js';
 import {gen, iterInOrder} from '../../../util/iterables.js';
 import type {Multiset} from '../../multiset.js';
 import {sourcesAreIdentical} from '../../source/util.js';
+import type {PipelineEntity} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
 import type {PullMsg, Reply} from '../message.js';
 import type {Operator} from './operator.js';
@@ -15,7 +16,7 @@ let id = 0;
  * one outgoing edge (write handle). It just sends all the input messages from
  * all the incoming operator to the output operators.
  */
-export class ConcatOperator<T extends object> implements Operator {
+export class ConcatOperator<T extends PipelineEntity> implements Operator {
   readonly #listener: Listener<T>;
   readonly #inputs: DifferenceStream<T>[];
   readonly #output: DifferenceStream<T>;

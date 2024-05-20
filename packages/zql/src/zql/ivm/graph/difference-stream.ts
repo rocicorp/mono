@@ -2,7 +2,12 @@ import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
 import type {Primitive, Selector} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
-import type {JoinResult, StringOrNumber, Version} from '../types.js';
+import type {
+  JoinResult,
+  PipelineEntity,
+  StringOrNumber,
+  Version,
+} from '../types.js';
 import type {Reply, Request} from './message.js';
 import {ConcatOperator} from './operators/concat-operator.js';
 import {DebugOperator} from './operators/debug-operator.js';
@@ -58,7 +63,7 @@ export type Listener<T> = {
  */
 // T extends object: I believe in the context of ZQL we only deal with object.
 let id = 0;
-export class DifferenceStream<T extends object> {
+export class DifferenceStream<T extends PipelineEntity> {
   /**
    * Operators that are listening to this stream.
    */
@@ -130,7 +135,7 @@ export class DifferenceStream<T extends object> {
     }
   }
 
-  map<O extends object>(f: (value: T) => O): DifferenceStream<O> {
+  map<O extends PipelineEntity>(f: (value: T) => O): DifferenceStream<O> {
     const stream = new DifferenceStream<O>();
     return stream.setUpstream(new MapOperator<T, O>(this, stream, f));
   }
@@ -159,7 +164,7 @@ export class DifferenceStream<T extends object> {
     return stream.setUpstream(new DistinctAllOperator<T>(this, stream, keyFn));
   }
 
-  reduce<K extends Primitive, O extends object>(
+  reduce<K extends Primitive, O extends PipelineEntity>(
     getKey: (value: T) => K,
     getIdentity: (value: T) => string,
     f: (input: Iterable<T>) => O,
@@ -172,7 +177,7 @@ export class DifferenceStream<T extends object> {
 
   leftJoin<
     Key extends Primitive,
-    BValue extends object,
+    BValue extends PipelineEntity,
     AAlias extends string | undefined,
     BAlias extends string | undefined,
   >(
@@ -192,7 +197,7 @@ export class DifferenceStream<T extends object> {
 
   join<
     Key extends Primitive,
-    BValue extends object,
+    BValue extends PipelineEntity,
     AAlias extends string | undefined,
     BAlias extends string | undefined,
   >(
@@ -279,7 +284,7 @@ export class DifferenceStream<T extends object> {
   }
 }
 
-export function concat<T extends object>(
+export function concat<T extends PipelineEntity>(
   streams: DifferenceStream<T>[],
 ): DifferenceStream<T> {
   const stream = new DifferenceStream<T>();

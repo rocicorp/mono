@@ -1,5 +1,5 @@
 import type {Multiset} from '../../multiset.js';
-import type {Version} from '../../types.js';
+import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
@@ -16,8 +16,8 @@ import {UnaryOperator} from './unary-operator.js';
  * computations.
  */
 export class LinearUnaryOperator<
-  I extends object,
-  O extends object,
+  I extends PipelineEntity,
+  O extends PipelineEntity,
 > extends UnaryOperator<I, O> {
   constructor(
     input: DifferenceStream<I>,

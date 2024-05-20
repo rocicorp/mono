@@ -2,7 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {Primitive} from '../../../ast/ast.js';
 import {genCached, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import type {StringOrNumber} from '../../types.js';
+import type {PipelineEntity, StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
@@ -20,8 +20,8 @@ import {UnaryOperator} from './unary-operator.js';
  */
 export class ReduceOperator<
   K extends Primitive,
-  V extends object,
-  O extends object = V,
+  V extends PipelineEntity,
+  O extends PipelineEntity = V,
 > extends UnaryOperator<V, O> {
   /**
    * The set of all values that have been seen for a given key.
