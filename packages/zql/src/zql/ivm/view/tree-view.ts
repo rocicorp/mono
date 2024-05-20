@@ -4,10 +4,10 @@ import type {Context} from '../../context/context.js';
 import {fieldsMatch} from '../../query/statement.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage, Reply} from '../graph/message.js';
-import type {Multiset} from '../multiset.js';
+import type {Entry, Multiset} from '../multiset.js';
+import {selectorsAreEqual} from '../source/util.js';
 import type {Comparator} from '../types.js';
 import {AbstractView} from './abstract-view.js';
-import {selectorsAreEqual} from '../source/util.js';
 
 /**
  * A sink that maintains the list of values in-order.
@@ -92,54 +92,36 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     needsUpdate: boolean,
     reply?: Reply | undefined,
   ): [boolean, BTree<T, undefined>] {
-    let next;
-
     const process = (value: T, mult: number) => {
+      let newData: BTree<T, undefined>;
       if (mult > 0) {
-        needsUpdate = true;
-        data = this.#add(data, value);
+        newData = this.#add(data, value);
       } else if (mult < 0) {
+        newData = this.#remove(data, value);
+      } else {
+        return;
+      }
+      if (newData !== data) {
+        data = newData;
         needsUpdate = true;
-        data = this.#remove(data, value);
       }
     };
 
-    let iterator;
+    let iterator: Iterable<Entry<T>>;
     if (
       reply === undefined ||
       this.#limit === undefined ||
       !orderingsAreCompatible(reply.order, this.#order)
     ) {
-      iterator = c[Symbol.iterator]();
+      iterator = c;
     } else {
       // We only get the limited iterator if we're receiving historical data.
       iterator = this.#getLimitedIterator(c, reply, this.#limit);
     }
 
-    while (!(next = iterator.next()).done) {
-      const entry = next.value;
+    for (const entry of iterator) {
       const [value, mult] = entry;
-
-      const nextNext = iterator.next();
-      if (!nextNext.done) {
-        const [nextValue, nextMult] = nextNext.value;
-        if (
-          Math.abs(mult) === 1 &&
-          mult === -nextMult &&
-          this.#comparator(nextValue, value) === 0
-        ) {
-          needsUpdate = true;
-          // The tree doesn't allow dupes -- so this is a replace.
-          data = data.with(nextMult > 0 ? nextValue : value, undefined, true);
-          continue;
-        }
-      }
-
       process(value, mult);
-      if (!nextNext.done) {
-        const [value, mult] = nextNext.value;
-        process(value, mult);
-      }
     }
 
     return [needsUpdate, data];
@@ -150,7 +132,11 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
    * This is only used in cases where we're processing history
    * for initial query run.
    */
-  #getLimitedIterator(data: Multiset<T>, reply: Reply, limit: number) {
+  #getLimitedIterator(
+    data: Multiset<T>,
+    reply: Reply,
+    limit: number,
+  ): IterableIterator<Entry<T>> {
     const {order} = reply;
     const fields = (order && order[0]) || [];
     const iterator = data[Symbol.iterator]();
@@ -160,6 +146,9 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
 
     if (this.#order === undefined || fieldsMatch(fields, this.#order[0])) {
       return {
+        [Symbol.iterator]() {
+          return this;
+        },
         next() {
           if (i >= limit) {
             return {done: true, value: undefined} as const;
@@ -189,6 +178,9 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
 
     // Partial order overlap
     return {
+      [Symbol.iterator]() {
+        return this;
+      },
       next() {
         if (i >= limit) {
           // keep processing until `next` is greater than `last`
