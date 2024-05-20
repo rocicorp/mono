@@ -10,7 +10,9 @@
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "publish-worker-prod": "npm run wrangler-prod -- publish",
+    "wrangler-prod": "npx wrangler --config wrangler.toml"
   },
   "dependencies": {
     "@emotion/react": "^11.8.2",
