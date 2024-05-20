@@ -1,13 +1,14 @@
 import BTree from 'sorted-btree-roci';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
-import {fieldsMatch} from '../../query/statement.js';
+import {fieldsMatch, makeComparator} from '../../query/statement.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import {createPullMessage, Reply} from '../graph/message.js';
 import type {Entry, Multiset} from '../multiset.js';
 import {selectorsAreEqual} from '../source/util.js';
 import type {Comparator} from '../types.js';
 import {AbstractView} from './abstract-view.js';
+import {must} from 'shared/src/must.js';
 
 /**
  * A sink that maintains the list of values in-order.
@@ -137,12 +138,11 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     reply: Reply,
     limit: number,
   ): IterableIterator<Entry<T>> {
-    const {order} = reply;
+    const order = must(reply.order);
     const fields = (order && order[0]) || [];
     const iterator = data[Symbol.iterator]();
     let i = 0;
     let last: T | undefined = undefined;
-    const comparator = this.#comparator;
 
     if (this.#order === undefined || fieldsMatch(fields, this.#order[0])) {
       return {
@@ -177,6 +177,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
     }
 
     // Partial order overlap
+    const responseComparator = makeComparator(order[0], order[1]);
     return {
       [Symbol.iterator]() {
         return this;
@@ -184,6 +185,7 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
       next() {
         if (i >= limit) {
           // keep processing until `next` is greater than `last`
+          // via the message's comparator.
           const next = iterator.next();
           if (next.done) {
             return next;
@@ -197,12 +199,13 @@ export class TreeView<T extends object> extends AbstractView<T, T[]> {
             } as const;
           }
 
-          if (comparator(entry[0], last) > 0) {
+          if (responseComparator(entry[0], last) > 0) {
             return {
               done: true,
               value: undefined,
             } as const;
           }
+
           return next;
         }
 
