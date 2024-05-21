@@ -1,37 +1,20 @@
-import {
-  CSSProperties,
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from 'react';
-import IssueRow from './issue-row';
+import {CSSProperties, memo, useCallback, useEffect, useRef} from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
-import type {
-  Issue,
-  IssueUpdate,
-  IssueWithLabels,
-  Priority,
-  Status,
-} from './issue';
+import type {Issue, IssueUpdate, Priority, Status} from './issue';
+import IssueRow from './issue-row';
+import type {IssuesProps} from './issues-props.js';
+import {ListData, useListData} from './list-data.js';
 
 interface Props {
+  issuesProps: IssuesProps;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
-  issues: IssueWithLabels[];
   view: string | null;
 }
 
-type ListData = {
-  issues: IssueWithLabels[];
-  handleChangePriority: (issue: Issue, priority: Priority) => void;
-  handleChangeStatus: (issue: Issue, status: Status) => void;
-  onOpenDetail: (issue: Issue) => void;
-};
-
-const itemKey = (index: number, data: ListData) => data.issues[index].issue.id;
+const itemKey = (index: number, data: ListData) =>
+  data.getIssue(index).issue.id;
 
 function RawRow({
   data,
@@ -45,9 +28,9 @@ function RawRow({
   return (
     <div style={style}>
       <IssueRow
-        row={data.issues[index]}
-        onChangePriority={data.handleChangePriority}
-        onChangeStatus={data.handleChangeStatus}
+        row={data.getIssue(index)}
+        onChangePriority={data.onChangePriority}
+        onChangeStatus={data.onChangeStatus}
         onOpenDetail={data.onOpenDetail}
       />
     </div>
@@ -57,7 +40,7 @@ function RawRow({
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const Row = memo(RawRow);
 
-function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
+function IssueList({issuesProps, onUpdateIssues, onOpenDetail, view}: Props) {
   const fixedSizeListRef = useRef<FixedSizeList>(null);
   useEffect(() => {
     fixedSizeListRef.current?.scrollTo(0);
@@ -87,10 +70,12 @@ function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
     [onUpdateIssues],
   );
 
-  const itemData = useMemo(
-    () => ({issues, handleChangePriority, handleChangeStatus, onOpenDetail}),
-    [issues, handleChangePriority, handleChangeStatus, onOpenDetail],
-  );
+  const itemData = useListData({
+    issuesProps,
+    onChangePriority: handleChangePriority,
+    onChangeStatus: handleChangeStatus,
+    onOpenDetail,
+  });
 
   return (
     <div className="flex flex-col flex-grow overflow-auto">
@@ -99,7 +84,7 @@ function IssueList({onUpdateIssues, onOpenDetail, issues, view}: Props) {
           <FixedSizeList
             ref={fixedSizeListRef}
             height={height}
-            itemCount={issues.length}
+            itemCount={itemData.count}
             itemSize={43}
             itemData={itemData}
             itemKey={itemKey}

@@ -5,27 +5,7 @@ import {pickBy} from 'lodash';
 import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
-import {
-  Comment,
-  Issue,
-  IssueUpdate,
-  Order,
-  IssueLabel,
-  Label,
-  putIssueComment,
-  deleteIssueComment,
-  updateIssues,
-  Member,
-  createIssue,
-  IssueCreationPartial,
-} from './issue';
-import IssueBoard from './issue-board';
-import IssueDetail from './issue-detail';
-import IssueList from './issue-list';
-import LeftMenu from './left-menu';
-import TopFilter from './top-filter';
-import {useQuery} from './hooks/use-zql';
-import {useZero} from './hooks/use-zero';
+import {getIssueOrder, getViewStatuses} from './filters';
 import {
   FiltersState,
   useFilters,
@@ -33,7 +13,27 @@ import {
   useOrderByState,
   useViewState,
 } from './hooks/query-state-hooks';
-import {getIssueOrder, getViewStatuses} from './filters';
+import {useZero} from './hooks/use-zero';
+import {useQuery} from './hooks/use-zql';
+import {
+  Comment,
+  Issue,
+  IssueCreationPartial,
+  IssueLabel,
+  IssueUpdate,
+  Label,
+  Member,
+  createIssue,
+  deleteIssueComment,
+  putIssueComment,
+  updateIssues,
+} from './issue';
+import IssueBoard from './issue-board';
+import IssueDetail from './issue-detail';
+import IssueList from './issue-list';
+import {useIssuesProps, type IssuesProps} from './issues-props.js';
+import LeftMenu from './left-menu';
+import TopFilter from './top-filter';
 
 function getTitle(view: string | null) {
   switch (view?.toLowerCase()) {
@@ -88,8 +88,8 @@ const App = ({undoManager}: AppProps) => {
 
   // TODO: fix kanban
   //const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
+
   const issueListQuery = issueQuery
-    .limit(200)
     .leftJoin(
       zero.query.issueLabel,
       'issueLabel',
@@ -97,15 +97,13 @@ const App = ({undoManager}: AppProps) => {
       'issueLabel.issueID',
     )
     .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
-
   const {filteredQuery} = filterQuery(issueListQuery, view, filters);
 
   const issueOrder = getIssueOrder(view, orderBy);
-  const filteredAndOrderedQuery = orderQuery(filteredQuery, issueOrder);
-  const deps = [view, filters, issueOrder] as const;
-  const filteredIssues = useQuery(filteredAndOrderedQuery, deps);
-  // const viewIssueCount = useQuery(viewCountQuery, deps)[0]?.count ?? 0;
+  const issueQueryDeps = [view, filters, issueOrder] as const;
   const viewIssueCount = 0;
+
+  const issuesProps = useIssuesProps(filteredQuery, issueQueryDeps, issueOrder);
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
@@ -148,9 +146,7 @@ const App = ({undoManager}: AppProps) => {
   );
 
   const handleOpenDetail = useCallback(
-    async (issue: Issue) => {
-      await setDetailIssueID(issue.id);
-    },
+    (issue: Issue) => setDetailIssueID(issue.id),
     [setDetailIssueID],
   );
   const handleCloseMenu = useCallback(
@@ -181,7 +177,7 @@ const App = ({undoManager}: AppProps) => {
         // TODO: base on whether initial sync is done
         isLoading={false}
         viewIssueCount={viewIssueCount}
-        filteredIssues={filteredIssues}
+        issuesProps={issuesProps}
         hasNonViewFilters={filters.hasNonViewFilters}
         zero={zero}
         userID={userID}
@@ -207,7 +203,7 @@ interface LayoutProps {
   detailIssueID: string | null;
   isLoading: boolean;
   viewIssueCount: number;
-  filteredIssues: {issue: Issue; labels: string[]}[];
+  issuesProps: IssuesProps;
   hasNonViewFilters: boolean;
   zero: Zero<Collections>;
   userID: string;
@@ -225,7 +221,7 @@ function RawLayout({
   detailIssueID,
   isLoading,
   viewIssueCount,
-  filteredIssues,
+  issuesProps,
   hasNonViewFilters,
   userID,
   onCloseMenu,
@@ -253,7 +249,9 @@ function RawLayout({
               onToggleMenu={onToggleMenu}
               title={getTitle(view)}
               filteredIssuesCount={
-                hasNonViewFilters ? filteredIssues.length : undefined
+                // TODO(arv): This is wrong. We need to know the count of the filtered issues
+                // hasNonViewFilters ? filteredIssues.length : undefined
+                hasNonViewFilters ? 123456 : undefined
               }
               issuesCount={viewIssueCount}
               showSortOrderMenu={view !== 'board'}
@@ -262,7 +260,7 @@ function RawLayout({
           <div className="relative flex flex-1 min-h-0">
             {detailIssueID && (
               <IssueDetail
-                issues={filteredIssues}
+                issuesProps={issuesProps}
                 onUpdateIssues={onUpdateIssues}
                 onAddComment={onCreateComment}
                 isLoading={isLoading}
@@ -278,16 +276,16 @@ function RawLayout({
             >
               {view === 'board' ? (
                 <IssueBoard
-                  issues={filteredIssues}
+                  issuesProps={issuesProps}
                   onUpdateIssues={onUpdateIssues}
                   onOpenDetail={onOpenDetail}
                 />
               ) : (
                 <IssueList
-                  issues={filteredIssues}
                   onUpdateIssues={onUpdateIssues}
                   onOpenDetail={onOpenDetail}
                   view={view}
+                  issuesProps={issuesProps}
                 />
               )}
             </div>
@@ -349,26 +347,6 @@ function filterQuery(
   }
 
   return {filteredQuery, viewCountQuery};
-}
-
-function orderQuery<R>(
-  // TODO: having to know the return type of the query to take it in as an arg is...
-  // confusing at best.
-  issueQuery: EntityQuery<{issue: Issue; label: Label}, R>,
-  order: Order,
-) {
-  switch (order) {
-    case Order.Created:
-      return issueQuery.desc('issue.created');
-    case Order.Modified:
-      return issueQuery.desc('issue.modified');
-    case Order.Status:
-      return issueQuery.desc('issue.status', 'issue.modified');
-    case Order.Priority:
-      return issueQuery.desc('issue.priority', 'issue.modified');
-    case Order.Kanban:
-      return issueQuery.asc('issue.kanbanOrder');
-  }
 }
 
 export default App;

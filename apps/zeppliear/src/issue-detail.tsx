@@ -1,33 +1,42 @@
-import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import {
+  WhereCondition,
+  and,
+  exp,
+} from '@rocicorp/zql/src/zql/query/entity-query';
 import {nanoid} from 'nanoid';
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
-import {timeAgo} from './util/date';
+import type {EntityQuery} from 'zero-client';
 import type {Collections} from './app.jsx';
 import ArrowIcon from './assets/icons/arrow.svg?react';
 import DefaultAvatarIcon from './assets/icons/avatar.svg?react';
 import CloseIcon from './assets/icons/close.svg?react';
+import ConfirmationModal from './confirm-modal';
+import {useIssueDetailState} from './hooks/query-state-hooks';
 import {useKeyPressed} from './hooks/use-key-pressed';
+import {useZero} from './hooks/use-zero';
+import {useQuery} from './hooks/use-zql';
 import {
   Comment,
   Issue,
   IssueUpdate,
-  IssueWithLabels,
+  Label,
+  Order,
   Priority,
   Status,
+  orderQuery,
 } from './issue';
+import type {IssuesProps} from './issues-props.js';
 import PriorityMenu from './priority-menu';
 import StatusMenu from './status-menu';
-import {useQuery} from './hooks/use-zql';
-import {useZero} from './hooks/use-zero';
-import ConfirmationModal from './confirm-modal';
-import {useIssueDetailState} from './hooks/query-state-hooks';
+import {timeAgo} from './util/date.js';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onAddComment: (comment: Comment) => void;
-  issues: IssueWithLabels[];
+  issuesProps: IssuesProps;
   isLoading: boolean;
   userID: string;
 }
@@ -66,7 +75,7 @@ function CommentsList(
 export default function IssueDetail({
   onUpdateIssues,
   onAddComment,
-  issues,
+  issuesProps,
   isLoading,
   userID,
 }: Props) {
@@ -74,44 +83,41 @@ export default function IssueDetail({
 
   const [editMode, setEditMode] = useState(false);
 
-  const [currentIssueIdx, setCurrentIssueIdx] = useState<number>(-1);
-
   const [commentText, setCommentText] = useState('');
   const [titleText, setTitleText] = useState('');
   const [descriptionText, setDescriptionText] = useState('');
 
-  useEffect(() => {
-    if (detailIssueID) {
-      const index = issues.findIndex(issue => issue.issue.id === detailIssueID);
-      setCurrentIssueIdx(index);
-    }
-  }, [issues, detailIssueID]);
-
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
   const zero = useZero<Collections>();
-  const issueQuery = zero.query.issue;
-  const commentQuery = zero.query.comment;
 
-  const issue =
-    useQuery(
-      issueQuery
-        .select(
-          'issue.created',
-          'issue.creatorID',
-          'issue.description',
-          'issue.id',
-          'issue.kanbanOrder',
-          'issue.priority',
-          'issue.modified',
-          'issue.status',
-          'issue.title',
-        )
-        .where('id', '=', detailIssueID ?? ''),
-      [detailIssueID],
-    )[0] ?? null;
+  const issueSelectQuery = zero.query.issue.select(
+    'issue.created',
+    'issue.creatorID',
+    'issue.description',
+    'issue.id',
+    'issue.kanbanOrder',
+    'issue.priority',
+    'issue.modified',
+    'issue.status',
+    'issue.title',
+  );
+  const issue: Issue | null =
+    useQuery(issueSelectQuery.where('id', '=', detailIssueID ?? ''), [
+      detailIssueID,
+    ])[0] ?? null;
+
+  const {query, queryDeps, order} = issuesProps;
+  const nextIssues = useQuery(
+    getNextIssueQuery(query, issue, order, 'fwd'),
+    queryDeps.concat(issue),
+  );
+  const previousIssues = useQuery(
+    getNextIssueQuery(query, issue, order, 'prev'),
+    queryDeps.concat(issue),
+  );
 
   const comments = useQuery(
-    commentQuery
+    zero.query.comment
       .where('issueID', '=', detailIssueID ?? '')
       .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
       .select(
@@ -126,8 +132,8 @@ export default function IssueDetail({
     [detailIssueID],
   );
 
-  const handleClose = useCallback(async () => {
-    await setDetailIssueID(null);
+  const handleClose = useCallback(() => {
+    setDetailIssueID(null);
   }, [setDetailIssueID]);
 
   const handleChangePriority = useCallback(
@@ -158,34 +164,31 @@ export default function IssueDetail({
   }, [onAddComment, commentText, issue, userID]);
 
   const handleFwdPrev = useCallback(
-    async (direction: 'prev' | 'fwd') => {
-      if (currentIssueIdx === undefined) {
-        return;
-      }
-      let newIss = undefined;
-      if (direction === 'prev') {
-        if (currentIssueIdx === 0) {
+    (direction: 'prev' | 'fwd') => {
+      let gotoIssue: {issue: Issue};
+      if (direction === 'fwd') {
+        if (nextIssues.length < 2) {
           return;
         }
-        newIss = issues[currentIssueIdx - 1].issue.id;
+        gotoIssue = nextIssues[1];
       } else {
-        if (currentIssueIdx === issues.length - 1) {
+        if (previousIssues.length < 2) {
           return;
         }
-        newIss = issues[currentIssueIdx + 1].issue.id;
+        gotoIssue = previousIssues[1];
       }
-
-      await setDetailIssueID(newIss);
+      setDetailIssueID(gotoIssue.issue.id);
     },
-    [currentIssueIdx, issues, setDetailIssueID],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nextIssues[0], previousIssues[0], setDetailIssueID],
   );
 
-  const handleFwd = useCallback(async () => {
-    await handleFwdPrev('fwd');
+  const handleFwd = useCallback(() => {
+    handleFwdPrev('fwd');
   }, [handleFwdPrev]);
 
-  const handlePrev = useCallback(async () => {
-    await handleFwdPrev('prev');
+  const handlePrev = useCallback(() => {
+    handleFwdPrev('prev');
   }, [handleFwdPrev]);
 
   useKeyPressed('j', handleFwd);
@@ -227,7 +230,7 @@ export default function IssueDetail({
   const handleDeleteConfirm = async () => {
     await zero.mutate.issue.delete({id: detailIssueID});
     handleDismiss();
-    await handleClose();
+    handleClose();
   };
 
   const handleDismiss = () => {
@@ -253,14 +256,14 @@ export default function IssueDetail({
             >
               <CloseIcon className="w-4" />
             </div>
-            {currentIssueIdx >= 0 && (
+            {issue && (
               <>
                 <div className="flex flex-row flex-initial select-none cursor-pointer">
                   <button
                     className="h-6 px-2 rounded border-solid border inline-flex items-center justify-center flex-shrink-0 font-medium m-0 select-none whitespace-no-wrap ml-2  hover:bg-gray-400 disabled:opacity-25"
                     type="button"
                     onMouseDown={() => handleFwdPrev('prev')}
-                    disabled={currentIssueIdx === 0}
+                    disabled={previousIssues.length < 2}
                   >
                     <ArrowIcon
                       style={{transform: 'rotate(180deg)'}}
@@ -276,7 +279,7 @@ export default function IssueDetail({
                     className="h-6 px-2 rounded border-solid border inline-flex items-center justify-center flex-shrink-0 font-medium m-0 select-none whitespace-no-wrap ml-2  hover:bg-gray-400 disabled:opacity-50"
                     type="button"
                     onMouseDown={() => handleFwdPrev('fwd')}
-                    disabled={currentIssueIdx === issues.length - 1}
+                    disabled={nextIssues.length < 2}
                   >
                     <ArrowIcon className="" />
                   </button>
@@ -411,4 +414,64 @@ export default function IssueDetail({
       </div>
     </div>
   );
+}
+
+type FS = {
+  issue: Issue;
+  label: Label;
+};
+
+type Q = EntityQuery<FS, {issue: Issue; labels: string[]}[]>;
+
+function getNextIssueQuery(
+  issueSelectQuery: Q,
+  issue: Issue | null,
+  order: Order,
+  direction: 'fwd' | 'prev',
+): Q {
+  if (issue === null) {
+    return issueSelectQuery.where('issue.id', '<', '').limit(0);
+  }
+
+  const filteredAndOrderedQuery = orderQuery(
+    issueSelectQuery,
+    order,
+    direction === 'prev',
+  );
+
+  let op: '<=' | '>=' = direction === 'fwd' ? '<=' : '>=';
+
+  let primary: 'created' | 'modified' | 'status' | 'priority' | 'kanbanOrder';
+  switch (order) {
+    case Order.Created:
+      primary = 'created';
+      break;
+    case Order.Modified:
+      primary = 'modified';
+      break;
+    case Order.Status:
+      primary = 'status';
+      break;
+    case Order.Priority:
+      primary = 'priority';
+      break;
+    case Order.Kanban:
+      primary = 'kanbanOrder';
+      // also flip op for kanban order
+      op = direction === 'fwd' ? '>=' : '<=';
+      break;
+  }
+
+  let whereClause: WhereCondition<FS> = exp(
+    `issue.${primary}`,
+    op,
+    issue[primary],
+  );
+
+  if (order === Order.Status || order === Order.Priority) {
+    // These needs a secondary order
+    whereClause = and(whereClause, exp(`issue.modified`, op, issue.modified));
+  }
+
+  return filteredAndOrderedQuery.where(whereClause).limit(2);
 }
