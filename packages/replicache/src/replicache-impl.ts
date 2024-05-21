@@ -1325,15 +1325,20 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   async #clientStateNotFoundOnServer() {
     const clientGroupID = await this.#clientGroupIDPromise;
+    this.#lc.error?.(
+      `Client state not found on server, clientGroupID: ${clientGroupID}`,
+    );
+    await this.disableClientGroup();
+    this.#fireOnClientStateNotFound();
+  }
+
+  async disableClientGroup(): Promise<void> {
+    const clientGroupID = await this.#clientGroupIDPromise;
     assert(clientGroupID);
     this.isClientGroupDisabled = true;
     await withWrite(this.perdag, dagWrite =>
       disableClientGroup(clientGroupID, dagWrite),
     );
-    this.#lc.error?.(
-      `Client state not found on server, clientGroupID: ${clientGroupID}`,
-    );
-    this.#fireOnClientStateNotFound();
   }
 
   #fireOnUpdateNeeded(reason: UpdateNeededReason) {
