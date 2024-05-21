@@ -1,5 +1,5 @@
 import type {Multiset} from '../../multiset.js';
-import type {Version} from '../../types.js';
+import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
 
@@ -10,10 +10,9 @@ import {UnaryOperator} from './unary-operator.js';
  * to be run on changes to a query without having to materialize the query
  * results.
  */
-export class DifferenceEffectOperator<T extends object> extends UnaryOperator<
-  T,
-  T
-> {
+export class DifferenceEffectOperator<
+  T extends PipelineEntity,
+> extends UnaryOperator<T, T> {
   readonly #f: (input: T, mult: number) => void;
   #collected: Multiset<T>[] = [];
 

@@ -40,6 +40,12 @@ service.on('data', (lsn, log) => {
   );
 });
 
+service.on('heartbeat', (_lsn, _timestamp, shouldRespond) => {
+  if (shouldRespond) {
+    service.acknowledge('0/0');
+  }
+});
+
 service.on('error', err => {
   console.error('On error', err);
 });

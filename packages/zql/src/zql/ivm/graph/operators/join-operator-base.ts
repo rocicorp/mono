@@ -1,15 +1,15 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Multiset} from '../../multiset.js';
-import type {Version} from '../../types.js';
+import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
 
 import type {Reply, Request} from '../message.js';
 import {OperatorBase} from './operator.js';
 
 export class JoinOperatorBase<
-  AValue extends object,
-  BValue extends object,
-  O extends object,
+  AValue extends PipelineEntity,
+  BValue extends PipelineEntity,
+  O extends PipelineEntity,
 > extends OperatorBase<O> {
   readonly #listenerA: Listener<AValue>;
   readonly #inputA: DifferenceStream<AValue>;

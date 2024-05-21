@@ -12,6 +12,7 @@ import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {
   ControlFlowError,
+  Mode,
   Statement,
   TransactionPool,
   synchronizedSnapshots,
@@ -485,11 +486,13 @@ class TransactionProcessor {
       synchronizedSnapshots();
     this.#writer = new TransactionPool(
       this.#lc.withContext('pool', 'writer'),
+      Mode.SERIALIZABLE,
       exportSnapshot,
       cleanupExport,
     );
     this.#readers = new TransactionPool(
       this.#lc.withContext('pool', 'readers'),
+      Mode.READONLY,
       setSnapshot,
       undefined,
       1,

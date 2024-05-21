@@ -1,12 +1,13 @@
 import {Lock} from '@rocicorp/lock';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {randInt} from 'shared/src/rand.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
+  Mode,
   TransactionPool,
   synchronizedSnapshots,
 } from '../../db/transaction-pool.js';
 import {expectTables, initDB, testDBs} from '../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {
   NormalizedInvalidationFilterSpec,
   invalidationHash,
@@ -542,11 +543,13 @@ describe('replicator/invalidation', () => {
           synchronizedSnapshots();
         const writer = new TransactionPool(
           lc.withContext('pool', 'writer'),
+          Mode.SERIALIZABLE,
           exportSnapshot,
           cleanupExport,
         );
         const readers = new TransactionPool(
           lc.withContext('pool', 'readers'),
+          Mode.READONLY,
           setSnapshot,
           undefined,
           1, // start with 1 worker

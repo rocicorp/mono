@@ -1,13 +1,13 @@
 import type {Multiset} from '../../multiset.js';
-import type {Version} from '../../types.js';
+import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
 import type {Request} from '../message.js';
 import {OperatorBase} from './operator.js';
 
 export class BinaryOperator<
-  I1 extends object,
-  I2 extends object,
-  O extends object,
+  I1 extends PipelineEntity,
+  I2 extends PipelineEntity,
+  O extends PipelineEntity,
 > extends OperatorBase<O> {
   readonly #listener1: Listener<I1>;
   readonly #input1: DifferenceStream<I1>;

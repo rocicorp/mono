@@ -4,7 +4,7 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Downstream, PokePartBody} from 'zero-protocol';
-import {TransactionPool} from '../../db/transaction-pool.js';
+import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';
 import {FakeDurableObjectStorage} from '../../test/fake-do.js';
@@ -841,7 +841,7 @@ describe('view-syncer/service', () => {
     }
 
     async notify(invalidation: Omit<QueryInvalidationUpdate, 'reader'>) {
-      const reader = new TransactionPool(lc);
+      const reader = new TransactionPool(lc, Mode.READONLY);
       const readerDone = reader.run(db);
 
       assert(this.subscription, 'no subscription');

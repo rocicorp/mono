@@ -1,4 +1,4 @@
-import type {Version} from '../../types.js';
+import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import type {Request} from '../message.js';
 
@@ -23,7 +23,9 @@ export class NoOp implements Operator {
  * A dataflow operator (node) that has many incoming edges (stream) and one outgoing edge (stream).
  */
 let id = 0;
-export abstract class OperatorBase<O extends object> implements Operator {
+export abstract class OperatorBase<O extends PipelineEntity>
+  implements Operator
+{
   // downstream output
   readonly #output: DifferenceStream<O>;
   #lastCommit = -1;
