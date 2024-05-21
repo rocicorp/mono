@@ -48,6 +48,8 @@ import type {MutatorDefs, Poke} from './types.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {withRead} from './with-transactions.js';
+import {getClientGroup} from './persist/client-groups.js';
 
 const {fail} = chaiAssert;
 
@@ -2381,6 +2383,36 @@ suite('check for client not found in visibilitychange', () => {
 
   t('hidden', false);
   t('visible', true);
+});
+
+test('disableClientGroup', async () => {
+  const rep = await replicacheForTesting('disable-client-group', {
+    mutators: {
+      noop: () => undefined,
+    },
+    ...disableAllBackgroundProcesses,
+  });
+  const clientGroupID = await rep.clientGroupID;
+
+  expect(rep.isClientGroupDisabled).false;
+  expect(
+    (
+      await withRead(rep.perdag, dagRead =>
+        getClientGroup(clientGroupID, dagRead),
+      )
+    )?.disabled,
+  ).false;
+
+  await rep.impl.disableClientGroup();
+
+  expect(rep.isClientGroupDisabled).true;
+  expect(
+    (
+      await withRead(rep.perdag, dagRead =>
+        getClientGroup(clientGroupID, dagRead),
+      )
+    )?.disabled,
+  ).true;
 });
 
 test('scan in write transaction', async () => {
