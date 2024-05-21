@@ -8,11 +8,11 @@ import {
 } from 'react-beautiful-dnd';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
-import type {Issue, IssueWithLabels, Priority, Status} from './issue';
+import type {Issue, Priority, Status} from './issue';
 import IssueItem from './issue-item';
 import {IssueItemByID} from './issue-item-by-id';
 import {IssuesProps, useIssuesProps} from './issues-props.js';
-import {useListData} from './list-data.js';
+import {ListData, useListData} from './list-data.js';
 import StatusIcon from './status-icon';
 
 interface Props {
@@ -21,23 +21,13 @@ interface Props {
   title: string;
   onChangePriority: (issue: Issue, priority: Priority) => void;
   onOpenDetail: (issue: Issue) => void;
+  // This is used to update the list data in the parent component.
+  onListData: (status: Status, listData: ListData) => void;
 }
-
-type ListData = {
-  getIssue(index: number): IssueWithLabels;
-  readonly onChangePriority: (issue: Issue, priority: Priority) => void;
-  readonly onChangeStatus: (issue: Issue, status: Status) => void;
-  readonly onOpenDetail: (issue: Issue) => void;
-};
 
 interface RowProps {
   index: number;
   data: ListData;
-  // data: {
-  //   issues: Array<IssueWithLabels>;
-  //   onChangePriority: (issue: Issue, priority: Priority) => void;
-  //   onOpenDetail: (issue: Issue) => void;
-  // };
   style: CSSProperties;
 }
 
@@ -82,18 +72,20 @@ function IssueCol({
   status,
   onChangePriority,
   onOpenDetail,
+  onListData,
 }: Props) {
   const issuesProps = useIssuesProps(
     query.where('issue.status', '=', status),
     queryDeps.concat(status),
     order,
   );
-  const itemData = useListData({
+  const listData = useListData({
     issuesProps,
     onChangePriority,
     onChangeStatus: () => void 0,
     onOpenDetail,
   });
+  onListData(status, listData);
 
   const statusIcon = <StatusIcon className="flex-shrink-0" status={status} />;
   return (
@@ -102,7 +94,7 @@ function IssueCol({
       <div className="flex items-center pb-3 text-sm whitespace-nowrap overflow-hidden">
         {statusIcon}
         <div className="ml-3 mr-3 font-medium">{title}</div>
-        <div className="mr-3 font-normal text-gray-400">{itemData.count}</div>
+        <div className="mr-3 font-normal text-gray-400">{listData.count}</div>
       </div>
 
       {/* list of issues */}
@@ -130,7 +122,7 @@ function IssueCol({
             // Usually the DroppableProvided.placeholder does this, but that won't
             // work in a virtual list
             const itemCount =
-              itemData.count + (snapshot.isUsingPlaceholder ? 1 : 0);
+              listData.count + (snapshot.isUsingPlaceholder ? 1 : 0);
 
             return (
               <AutoSizer>
@@ -141,7 +133,7 @@ function IssueCol({
                     itemSize={100}
                     width={width}
                     outerRef={provided.innerRef}
-                    itemData={itemData}
+                    itemData={listData}
                   >
                     {Row}
                   </FixedSizeList>

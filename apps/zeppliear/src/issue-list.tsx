@@ -14,7 +14,7 @@ interface Props {
 }
 
 const itemKey = (index: number, data: ListData) =>
-  data.getIssue(index).issue.id;
+  data.mustGetIssue(index).issue.id;
 
 function RawRow({
   data,
@@ -28,7 +28,7 @@ function RawRow({
   return (
     <div style={style}>
       <IssueRow
-        row={data.getIssue(index)}
+        row={data.mustGetIssue(index)}
         onChangePriority={data.onChangePriority}
         onChangeStatus={data.onChangeStatus}
         onOpenDetail={data.onOpenDetail}
