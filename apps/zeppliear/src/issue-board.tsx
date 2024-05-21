@@ -23,7 +23,7 @@ function getKanbanOrderIssueUpdates(
 ): {issue: Issue; update: IssueUpdate}[] {
   let beforeKey: string | null = null;
 
-  for (const issue of listData.iterateIssuesBefore(issueToInsertBefore.id)) {
+  for (const issue of listData.iterateIssuesBefore(issueToInsertBefore)) {
     beforeKey = issue.issue.kanbanOrder;
     break;
   }
@@ -33,7 +33,7 @@ function getKanbanOrderIssueUpdates(
   // If the issues we are trying to move between
   // have identical kanbanOrder values, we need to fix up the
   // collision by re-keying the issues.
-  for (const issue of listData.iterateIssuesAfter(issueToInsertBefore.id)) {
+  for (const issue of listData.iterateIssuesAfter(issueToInsertBefore)) {
     if (issue.issue.kanbanOrder !== beforeKey) {
       afterKey = issue.issue.kanbanOrder;
       break;
