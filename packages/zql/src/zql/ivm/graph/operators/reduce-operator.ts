@@ -1,10 +1,12 @@
 import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import type {Selector} from '../../../ast/ast.js';
 import {genCached, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
-import {getValueFromEntity} from '../../source/util.js';
+import {getValueFromEntity, selectorArraysAreEqual} from '../../source/util.js';
 import type {PipelineEntity, StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
+import type {Reply} from '../message.js';
 import {UnaryOperator} from './unary-operator.js';
 
 /**
@@ -45,6 +47,7 @@ export class ReduceOperator<
   readonly #outIndex = new Map<StringOrNumber, O>();
   readonly #getValueIdentity;
   readonly #getGroupKey: (value: V) => StringOrNumber;
+  readonly #keyColumns: Selector[];
 
   constructor(
     input: DifferenceStream<V>,
@@ -53,13 +56,27 @@ export class ReduceOperator<
     keyColumns: Selector[],
     f: (input: Iterable<V>) => O,
   ) {
-    super(input, output, (_version, data) => this.#inner(data, f));
+    super(input, output, (_version, data, reply) =>
+      this.#inner(data, f, reply),
+    );
     this.#getValueIdentity = getValueIdentity;
+    this.#keyColumns = keyColumns;
     this.#getGroupKey = makeKeyFunction(keyColumns);
   }
 
-  #inner = (data: Multiset<V>, f: (input: Iterable<V>) => O) => {
+  #inner = (
+    data: Multiset<V>,
+    f: (input: Iterable<V>) => O,
+    reply: Reply | undefined,
+  ) => {
     const keysToProcess = new Set<StringOrNumber>();
+
+    if (
+      reply !== undefined &&
+      this.#replyGroupingMatchesReduceGrouping(reply)
+    ) {
+      return this.#reduceOverContiguousGroups(data, f);
+    }
 
     for (const [value, mult] of data) {
       const key = this.#getGroupKey(value);
@@ -99,12 +116,82 @@ export class ReduceOperator<
     );
   };
 
-  #addToIndex(key: StringOrNumber, value: V, mult: number) {
+  #replyGroupingMatchesReduceGrouping(reply: Reply): boolean {
+    return (
+      reply.contiguousGroup !== undefined &&
+      selectorArraysAreEqual(reply.contiguousGroup, this.#keyColumns)
+    );
+  }
+
+  *#reduceOverContiguousGroups(
+    data: Multiset<V>,
+    f: (input: Iterable<V>) => O,
+  ) {
+    // The data coming in is contiguous on the key columns.
+    // Which means each group is in a chunk.
+    //
+    // So we can iterate over the data until the key changes
+    // which will make the end of a group.
+    //
+    // Once that group is done, we can reduce it and emit the result.
+    //
+    // We still need to maintain our indices so we can respond to deltas later / in a steady state.
+    let lastKey: StringOrNumber | undefined;
+    let havePendingReduction = false;
+
+    const doReduction = () => {
+      const key = must(lastKey);
+      // We've removed the last item from the group.
+      // So we can reduce the group and emit the result.
+      const dataIn = this.#inIndex.get(key);
+      assert(dataIn !== undefined, 'dataIn must be defined');
+      const reduction = f(
+        genFlatMap(dataIn, function* (mapEntry) {
+          for (let i = 0; i < mapEntry[1][1]; i++) {
+            yield mapEntry[1][0];
+          }
+        }),
+      );
+      const existingOut = this.#outIndex.get(key);
+      const ret: Entry<O>[] = [];
+      if (existingOut !== undefined) {
+        // modified reduction
+        ret.push([existingOut, -1]);
+      }
+      ret.push([reduction, 1]);
+      this.#outIndex.set(key, reduction);
+      lastKey = undefined;
+      havePendingReduction = false;
+      return ret;
+    };
+
+    for (const entry of data) {
+      const [value, mult] = entry;
+      const key = this.#getGroupKey(value);
+      const hadExisting = this.#addToIndex(key, value, mult);
+      havePendingReduction = true;
+      if (!hadExisting && lastKey !== undefined) {
+        yield* doReduction();
+      }
+      havePendingReduction = lastKey !== key || havePendingReduction;
+      lastKey = key;
+    }
+
+    if (havePendingReduction) {
+      yield* doReduction();
+    }
+  }
+
+  #addToIndex(key: StringOrNumber, value: V, mult: number): boolean {
+    let hadExisting = false;
     let existing = this.#inIndex.get(key);
     if (existing === undefined) {
       existing = new Map<string, [V, number]>();
       this.#inIndex.set(key, existing);
+    } else {
+      hadExisting = true;
     }
+
     const valueIdentity = this.#getValueIdentity(value);
     const prev = existing.get(valueIdentity);
     if (prev === undefined) {
@@ -120,14 +207,14 @@ export class ReduceOperator<
         existing.delete(valueIdentity);
         if (existing.size === 0) {
           this.#inIndex.delete(key);
-          return undefined;
+          return hadExisting;
         }
       } else {
         existing.set(valueIdentity, [v, newMult]);
       }
     }
 
-    return existing;
+    return hadExisting;
   }
 }
 

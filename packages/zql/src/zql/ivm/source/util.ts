@@ -28,6 +28,16 @@ export function selectorsAreEqual(l: Selector, r: Selector) {
   return l[0] === r[0] && l[1] === r[1];
 }
 
+export function selectorArraysAreEqual(
+  l: readonly Selector[],
+  r: readonly Selector[],
+) {
+  if (l.length !== r.length) {
+    return false;
+  }
+  return l.every((sel, i) => selectorsAreEqual(sel, r[i]));
+}
+
 export function getValueFromEntity(
   entity: Record<string, unknown>,
   qualifiedColumn: readonly [table: string | null, column: string],
