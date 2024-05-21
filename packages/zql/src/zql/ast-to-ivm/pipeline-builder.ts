@@ -183,13 +183,12 @@ function applyGroupBy<T extends Entity>(
   columns: Selector[],
   aggregations: Aggregation[],
 ) {
-  const keyFunction = makeKeyFunction(columns);
   const qualifiedColumns = aggregations.map(q =>
     q.field === undefined ? undefined : q.field,
   );
 
   return stream.reduce(
-    keyFunction,
+    columns,
     value => value.id as string,
     values => {
       const first = values[Symbol.iterator]().next().value;
@@ -314,18 +313,6 @@ function applyFullTableAggregation<T extends Entity>(
   }
 
   return ret;
-}
-
-function makeKeyFunction(qualifiedColumns: Selector[]) {
-  return (x: Record<string, unknown>) => {
-    const ret: unknown[] = [];
-    for (const qualifiedColumn of qualifiedColumns) {
-      ret.push(getValueFromEntity(x, qualifiedColumn));
-    }
-    // Would it be better to come up with some hash function
-    // which can handle complex types?
-    return JSON.stringify(ret);
-  };
 }
 
 // We're well-typed in the query builder so once we're down here

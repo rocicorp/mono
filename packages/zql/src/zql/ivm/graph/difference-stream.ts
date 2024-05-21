@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Entity} from '../../../entity.js';
-import type {Primitive, Selector} from '../../ast/ast.js';
+import type {Selector} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
 import type {
   JoinResult,
@@ -164,14 +164,14 @@ export class DifferenceStream<T extends PipelineEntity> {
     return stream.setUpstream(new DistinctAllOperator<T>(this, stream, keyFn));
   }
 
-  reduce<K extends Primitive, O extends PipelineEntity>(
-    getKey: (value: T) => K,
+  reduce<O extends PipelineEntity>(
+    keyColumns: Selector[],
     getIdentity: (value: T) => string,
     f: (input: Iterable<T>) => O,
   ): DifferenceStream<O> {
     const stream = new DifferenceStream<O>();
     return stream.setUpstream(
-      new ReduceOperator<K, T, O>(this, stream, getIdentity, getKey, f),
+      new ReduceOperator<T, O>(this, stream, getIdentity, keyColumns, f),
     );
   }
 

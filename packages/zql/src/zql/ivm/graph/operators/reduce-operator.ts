@@ -1,7 +1,8 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Primitive} from '../../../ast/ast.js';
+import type {Selector} from '../../../ast/ast.js';
 import {genCached, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
+import {getValueFromEntity} from '../../source/util.js';
 import type {PipelineEntity, StringOrNumber} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {UnaryOperator} from './unary-operator.js';
@@ -19,7 +20,6 @@ import {UnaryOperator} from './unary-operator.js';
  * In future iterations the reduction could also be made incremental.
  */
 export class ReduceOperator<
-  K extends Primitive,
   V extends PipelineEntity,
   O extends PipelineEntity = V,
 > extends UnaryOperator<V, O> {
@@ -30,7 +30,10 @@ export class ReduceOperator<
    * If a negative multiplicity comes through the pipeline,
    * it reduces the multiplicity of the existing value in the map.
    */
-  readonly #inIndex = new Map<K, Map<StringOrNumber, [V, number]>>();
+  readonly #inIndex = new Map<
+    StringOrNumber,
+    Map<StringOrNumber, [V, number]>
+  >();
   /**
    * Our prior reduction for a given key.
    *
@@ -39,29 +42,27 @@ export class ReduceOperator<
    * then they'd need to know when a given reduction is no longer valid
    * so they can remove it from their count.
    */
-  readonly #outIndex = new Map<K, O>();
+  readonly #outIndex = new Map<StringOrNumber, O>();
   readonly #getValueIdentity;
+  readonly #getGroupKey: (value: V) => StringOrNumber;
 
   constructor(
     input: DifferenceStream<V>,
     output: DifferenceStream<O>,
     getValueIdentity: (value: V) => StringOrNumber,
-    getGroupKey: (value: V) => K,
+    keyColumns: Selector[],
     f: (input: Iterable<V>) => O,
   ) {
-    super(input, output, (_version, data) => this.#inner(data, getGroupKey, f));
+    super(input, output, (_version, data) => this.#inner(data, f));
     this.#getValueIdentity = getValueIdentity;
+    this.#getGroupKey = makeKeyFunction(keyColumns);
   }
 
-  #inner = (
-    data: Multiset<V>,
-    getGroupKey: (value: V) => K,
-    f: (input: Iterable<V>) => O,
-  ) => {
-    const keysToProcess = new Set<K>();
+  #inner = (data: Multiset<V>, f: (input: Iterable<V>) => O) => {
+    const keysToProcess = new Set<StringOrNumber>();
 
     for (const [value, mult] of data) {
-      const key = getGroupKey(value);
+      const key = this.#getGroupKey(value);
       keysToProcess.add(key);
       this.#addToIndex(key, value, mult);
     }
@@ -98,7 +99,7 @@ export class ReduceOperator<
     );
   };
 
-  #addToIndex(key: K, value: V, mult: number) {
+  #addToIndex(key: StringOrNumber, value: V, mult: number) {
     let existing = this.#inIndex.get(key);
     if (existing === undefined) {
       existing = new Map<string, [V, number]>();
@@ -128,4 +129,24 @@ export class ReduceOperator<
 
     return existing;
   }
+}
+
+function makeKeyFunction(qualifiedColumns: Selector[]) {
+  return (x: Record<string, unknown>) => {
+    if (qualifiedColumns.length === 1) {
+      const ret = getValueFromEntity(x, qualifiedColumns[0]);
+      if (typeof ret === 'string' || typeof ret === 'number') {
+        return ret;
+      }
+      return JSON.stringify(ret);
+    }
+
+    const ret: unknown[] = [];
+    for (const qualifiedColumn of qualifiedColumns) {
+      ret.push(getValueFromEntity(x, qualifiedColumn));
+    }
+    // Would it be better to come up with some hash function
+    // which can handle complex types?
+    return JSON.stringify(ret);
+  };
 }
