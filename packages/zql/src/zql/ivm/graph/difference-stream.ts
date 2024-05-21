@@ -176,12 +176,11 @@ export class DifferenceStream<T extends PipelineEntity> {
   }
 
   leftJoin<
-    Key extends Primitive,
     BValue extends PipelineEntity,
     AAlias extends string | undefined,
     BAlias extends string | undefined,
   >(
-    args: Omit<JoinArgs<Key, T, BValue, AAlias, BAlias>, 'a' | 'output'>,
+    args: Omit<JoinArgs<T, BValue, AAlias, BAlias>, 'a' | 'output'>,
   ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
     const stream = new DifferenceStream<
       JoinResult<T, BValue, AAlias, BAlias>
@@ -196,12 +195,11 @@ export class DifferenceStream<T extends PipelineEntity> {
   }
 
   join<
-    Key extends Primitive,
     BValue extends PipelineEntity,
     AAlias extends string | undefined,
     BAlias extends string | undefined,
   >(
-    args: Omit<JoinArgs<Key, T, BValue, AAlias, BAlias>, 'a' | 'output'>,
+    args: Omit<JoinArgs<T, BValue, AAlias, BAlias>, 'a' | 'output'>,
   ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
     const stream = new DifferenceStream<
       JoinResult<T, BValue, AAlias, BAlias>

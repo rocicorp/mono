@@ -33,13 +33,15 @@ test('unbalanced input', () => {
   const albumInput = new DifferenceStream<Album>();
 
   const output = trackInput.join({
-    aAs: 'track',
-    getAJoinKey: track => track.albumId,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'albumId'],
+
     b: albumInput,
+    bTable: 'album',
     bAs: 'album',
-    getBJoinKey: album => album.id,
-    getBPrimaryKey: album => album.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['album', 'id'],
   });
 
   const items: [JoinResult<Track, Album, 'track', 'album'>, number][] = [];
@@ -185,13 +187,15 @@ test('basic join', () => {
   const albumInput = new DifferenceStream<Album>();
 
   const output = trackInput.join({
-    aAs: 'track',
-    getAJoinKey: track => track.albumId,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'albumId'],
+
     b: albumInput,
+    bTable: 'album',
     bAs: 'album',
-    getBJoinKey: album => album.id,
-    getBPrimaryKey: album => album.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['album', 'id'],
   });
 
   const items: [JoinResult<Track, Album, 'track', 'album'>, number][] = [];
@@ -264,24 +268,27 @@ test('join through a junction table', () => {
   const artistInput = new DifferenceStream<Artist>();
 
   const trackAndTrackArtistOutput = trackInput.join({
-    aAs: 'track',
-    getAJoinKey: track => track.id,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'id'],
+
     b: trackArtistInput,
+    bTable: 'trackArtist',
     bAs: 'trackArtist',
-    getBJoinKey: trackArtist => trackArtist.trackId,
-    getBPrimaryKey: trackArtist =>
-      trackArtist.trackId + '-' + trackArtist.artistId,
+    bPrimaryKeyColumns: ['trackId', 'artistId'],
+    bJoinColumn: ['trackArtist', 'trackId'],
   });
 
   const output = trackAndTrackArtistOutput.join({
-    aAs: undefined,
-    getAJoinKey: x => x.trackArtist.artistId,
-    getAPrimaryKey: x => x.id,
+    aTable: undefined,
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['trackArtist', 'artistId'],
+
     b: artistInput,
+    bTable: 'artist',
     bAs: 'artist',
-    getBJoinKey: x => x.id,
-    getBPrimaryKey: x => x.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['artist', 'id'],
   });
 
   const items: [
@@ -618,24 +625,27 @@ test('add many items to the same source as separate calls in the same tick', () 
   const artistInput = new DifferenceStream<Artist>();
 
   const trackAndTrackArtistOutput = trackInput.join({
-    aAs: 'track',
-    getAJoinKey: track => track.id,
-    getAPrimaryKey: track => track.id,
+    aTable: 'track',
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['track', 'id'],
+
     b: trackArtistInput,
+    bTable: 'trackArtist',
     bAs: 'trackArtist',
-    getBJoinKey: trackArtist => trackArtist.trackId,
-    getBPrimaryKey: trackArtist =>
-      trackArtist.trackId + '-' + trackArtist.artistId,
+    bPrimaryKeyColumns: ['trackId', 'artistId'],
+    bJoinColumn: ['trackArtist', 'trackId'],
   });
 
   const output = trackAndTrackArtistOutput.join({
-    aAs: undefined,
-    getAJoinKey: x => x.trackArtist.artistId,
-    getAPrimaryKey: x => x.id,
+    aTable: undefined,
+    aPrimaryKeyColumns: ['id'],
+    aJoinColumn: ['trackArtist', 'artistId'],
+
     b: artistInput,
+    bTable: 'artist',
     bAs: 'artist',
-    getBJoinKey: x => x.id,
-    getBPrimaryKey: x => x.id,
+    bPrimaryKeyColumns: ['id'],
+    bJoinColumn: ['artist', 'id'],
   });
 
   const items: [
