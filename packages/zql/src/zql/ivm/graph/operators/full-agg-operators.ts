@@ -1,8 +1,9 @@
 import type {Selector} from '../../../ast/ast.js';
 import type {Multiset} from '../../multiset.js';
 import {getValueFromEntity} from '../../source/util.js';
+import type {Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
-import {LinearUnaryOperator} from './linear-unary-operator.js';
+import {UnaryOperator} from './unary-operator.js';
 
 export type AggregateOut<
   V extends Record<string, unknown>,
@@ -14,7 +15,7 @@ export type AggregateOut<
 class FullAggregateOperator<
   V extends Record<string, unknown>,
   AggregateResult extends [string, unknown][],
-> extends LinearUnaryOperator<V, AggregateOut<V, AggregateResult>> {
+> extends UnaryOperator<V, AggregateOut<V, AggregateResult>> {
   #lastOutput: AggregateOut<V, AggregateResult> | undefined;
 
   constructor(
@@ -26,6 +27,7 @@ class FullAggregateOperator<
     ) => AggregateOut<V, AggregateResult>,
   ) {
     const inner = (
+      _version: Version,
       collection: Multiset<V>,
     ): Multiset<AggregateOut<V, AggregateResult>> => {
       let last: V | AggregateOut<V, AggregateResult>;
