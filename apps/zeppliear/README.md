@@ -8,7 +8,7 @@ Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
 # To run wrangler worker locally
 
-update .dev.vars URIs to point to your internal ip adress (169._._._ or 192._._._) do not use the 127.0.0.1 address
+update .dev.vars URIs to point to your internal ip address (169._._._ or 192._._._) do not use the 127.0.0.1 address
 
 ```
 UPSTREAM_URI = "postgresql://user:password@add.your.host.ip:6432/postgres"

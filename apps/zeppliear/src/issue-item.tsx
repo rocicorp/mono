@@ -1,12 +1,12 @@
+import classnames from 'classnames';
 import {memo, useCallback} from 'react';
 import type {Issue, Priority} from './issue';
-import classnames from 'classnames';
 import PriorityMenu from './priority-menu';
 
 interface Props {
   issue: Issue;
-  onChangePriority?: (issue: Issue, priority: Priority) => void;
-  onOpenDetail?: (issue: Issue) => void;
+  onChangePriority?: ((issue: Issue, priority: Priority) => void) | undefined;
+  onOpenDetail?: ((issue: Issue) => void) | undefined;
 }
 
 function IssueItem({issue, onChangePriority, onOpenDetail}: Props) {

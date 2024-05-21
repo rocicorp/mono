@@ -1,14 +1,15 @@
+import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import BTree from 'sorted-btree-roci';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
 import {fieldsMatch, makeComparator} from '../../query/statement.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
-import {createPullMessage, Reply} from '../graph/message.js';
+import {Reply, createPullMessage} from '../graph/message.js';
 import type {Entry, Multiset} from '../multiset.js';
 import {selectorsAreEqual} from '../source/util.js';
 import type {Comparator, PipelineEntity} from '../types.js';
 import {AbstractView} from './abstract-view.js';
-import {must} from 'shared/src/must.js';
 
 /**
  * A sink that maintains the list of values in-order.
@@ -25,12 +26,12 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
 
   #jsSlice: T[] = [];
 
-  #limit?: number | undefined;
-  #min?: T | undefined;
-  #max?: T | undefined;
+  #limit: number | undefined;
+  #min: T | undefined = undefined;
+  #max: T | undefined = undefined;
   readonly #order;
   readonly id = id++;
-  readonly #comparator;
+  readonly #comparator: Comparator<T>;
 
   constructor(
     context: Context,
@@ -67,7 +68,7 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     data: Multiset<T>,
     reply?: Reply | undefined,
   ): boolean {
-    let needsUpdate = false || this.hydrated === false;
+    let needsUpdate = this.hydrated === false;
 
     let newData = this.#data;
     [needsUpdate, newData] = this.#sink(data, newData, needsUpdate, reply);
@@ -226,8 +227,7 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     // Under limit? We can just add.
     if (data.size < limit) {
       this.#updateMinMax(value);
-      data = data.with(value, undefined, true);
-      return data;
+      return data.with(value, undefined, true);
     }
 
     if (data.size > limit) {
@@ -235,10 +235,12 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     }
 
     // at limit? We can only add if the value is under max
-    const comp = this.#comparator(value, this.#max!);
+    assert(this.#max !== undefined);
+    const comp = this.#comparator(value, this.#max);
     if (comp > 0) {
       return data;
     }
+
     // <= max we add.
     data = data.with(value, undefined, true);
     // and then remove the max since we were at limit
@@ -247,7 +249,8 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     this.#max = data.maxKey() || undefined;
 
     // and what if the value was under min? We update our min.
-    if (this.#comparator(value, this.#min!) <= 0) {
+    assert(this.#min !== undefined);
+    if (this.#comparator(value, this.#min) <= 0) {
       this.#min = value;
     }
     return data;
@@ -313,14 +316,12 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
 
 function add<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
-  data = data.with(value, undefined, true);
-  return data;
+  return data.with(value, undefined, true);
 }
 
 function remove<T>(data: BTree<T, undefined>, value: T) {
   // A treap can't have dupes so we can ignore `mult`
-  data = data.without(value);
-  return data;
+  return data.without(value);
 }
 
 /**

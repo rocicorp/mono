@@ -1,5 +1,5 @@
 import type {Immutable} from 'shared/src/immutable';
-import type {Zero} from 'zero-client';
+import type {EntityQuery, Zero} from 'zero-client';
 import {z} from 'zod';
 import type {Collections} from './app';
 
@@ -286,4 +286,47 @@ function getModifiedDate() {
   // Shift to 33 years in the future.
   d.setFullYear(d.getFullYear() + 33);
   return d.getTime();
+}
+
+export type IssueQuery = EntityQuery<
+  {
+    issue: Issue;
+    label: Label;
+  },
+  {
+    labels: string[];
+    issue: Issue;
+  }[]
+>;
+
+export function orderQuery<R>(
+  // TODO: having to know the return type of the query to take it in as an arg is...
+  // confusing at best.
+  issueQuery: EntityQuery<{issue: Issue; label: Label}, R>,
+  order: Order,
+  reverse: boolean,
+) {
+  const methodName = (d: 'asc' | 'desc') => {
+    if (!reverse) {
+      return d;
+    }
+    return d === 'asc' ? 'desc' : 'asc';
+  };
+
+  type F = (typeof issueQuery)['desc' | 'asc'];
+  const desc: F = (...cols) => issueQuery[methodName('desc')](...cols);
+  const asc: F = (...cols) => issueQuery[methodName('asc')](...cols);
+
+  switch (order) {
+    case Order.Created:
+      return desc('issue.created');
+    case Order.Modified:
+      return desc('issue.modified');
+    case Order.Status:
+      return desc('issue.status', 'issue.modified');
+    case Order.Priority:
+      return desc('issue.priority', 'issue.modified');
+    case Order.Kanban:
+      return asc('issue.kanbanOrder');
+  }
 }

@@ -1,10 +1,19 @@
 import {generateNKeysBetween} from 'fractional-indexing';
-import {groupBy, findIndex} from 'lodash';
+import {findIndex, groupBy} from 'lodash';
 import {memo, useCallback} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
-import {Issue, IssueUpdate, IssueWithLabels, Priority, Status} from './issue';
+import {useQuery} from './hooks/use-zql.js';
+import {
+  Issue,
+  IssueUpdate,
+  IssueWithLabels,
+  Priority,
+  Status,
+  orderQuery,
+} from './issue';
 import IssueCol from './issue-col';
+import type {IssuesProps} from './issues-props.js';
 
 export type IssuesByStatusType = {
   [Status.Backlog]: IssueWithLabels[];
@@ -76,12 +85,17 @@ export function getKanbanOrderIssueUpdates(
 }
 
 interface Props {
-  issues: IssueWithLabels[];
+  issuesProps: IssuesProps;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
 }
 
-function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
+function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
+  const {query, order, queryDeps} = issuesProps;
+  const issueQueryOrdered = orderQuery(query, order, false);
+  const issues = useQuery(issueQueryOrdered, queryDeps);
+
+  // TODO(arv): Use ZQL group by
   const issuesByType = getIssueByType(issues);
 
   const handleDragEnd = useCallback(
@@ -138,35 +152,35 @@ function IssueBoard({issues, onUpdateIssues, onOpenDetail}: Props) {
         <IssueCol
           title={'Backlog'}
           status={Status.Backlog}
-          issues={issuesByType[Status.Backlog]}
+          issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
           title={'Todo'}
           status={Status.Todo}
-          issues={issuesByType[Status.Todo]}
+          issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
           title={'In Progress'}
           status={Status.InProgress}
-          issues={issuesByType[Status.InProgress]}
+          issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
           title={'Done'}
           status={Status.Done}
-          issues={issuesByType[Status.Done]}
+          issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
         <IssueCol
           title={'Canceled'}
           status={Status.Canceled}
-          issues={issuesByType[Status.Canceled]}
+          issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
         />
