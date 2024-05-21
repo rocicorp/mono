@@ -32,6 +32,11 @@ export type ReadTask<T> = (
   lc: LogContext,
 ) => MaybePromise<T>;
 
+export enum Mode {
+  SERIALIZABLE = 'ISOLATION LEVEL SERIALIZABLE',
+  READONLY = 'ISOLATION LEVEL REPEATABLE READ READ ONLY',
+}
+
 /**
  * A TransactionPool is a pool of one or more {@link postgres.TransactionSql}
  * objects that participate in processing a dynamic queue of tasks.
@@ -42,6 +47,7 @@ export type ReadTask<T> = (
  */
 export class TransactionPool {
   #lc: LogContext;
+  readonly #mode: Mode;
   readonly #init: QueuedTask | undefined;
   readonly #cleanup: QueuedTask | undefined;
   readonly #tasks = new Queue<TaskTracker | Error | 'done'>();
@@ -73,6 +79,7 @@ export class TransactionPool {
    */
   constructor(
     lc: LogContext,
+    mode: Mode,
     init?: Task,
     cleanup?: Task,
     initialWorkers = 1,
@@ -84,6 +91,7 @@ export class TransactionPool {
     assert(maxWorkers >= initialWorkers);
 
     this.#lc = lc;
+    this.#mode = mode;
     this.#init = init ? queuedStmt(init) : undefined;
     this.#cleanup = cleanup ? queuedStmt(cleanup) : undefined;
     this.#initialWorkers = initialWorkers;
@@ -246,7 +254,9 @@ export class TransactionPool {
       }
     };
 
-    this.#workers.push(db.begin(worker).finally(() => this.#numWorkers--));
+    this.#workers.push(
+      db.begin(this.#mode, worker).finally(() => this.#numWorkers--),
+    );
 
     // After adding the worker, enqueue a terminal signal if we are in either of the
     // terminal states (both of which prevent more tasks from being enqueued), to ensure
@@ -423,10 +433,7 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
 
     setSnapshot: tx =>
       snapshotExported.then(snapshotID => {
-        const stmt = tx.unsafe(`
-        SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
-        SET TRANSACTION SNAPSHOT '${snapshotID}';
-        `);
+        const stmt = tx.unsafe(`SET TRANSACTION SNAPSHOT '${snapshotID}'`);
         // Intercept the promise to propagate the information to `cleanupExport`.
         stmt.then(captureSnapshot, failCapture);
         return [stmt];
@@ -468,19 +475,14 @@ export function sharedReadOnlySnapshot(): {
     init: (tx, lc) => {
       if (!firstWorkerRun) {
         firstWorkerRun = true;
-        const stmt = tx.unsafe(`
-          SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
-          SELECT pg_export_snapshot() AS snapshot;`);
+        const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
         // Intercept the promise to propagate the information to `snapshotExported`.
-        stmt.then(result => exportSnapshot(result[1][0].snapshot), failExport);
+        stmt.then(result => exportSnapshot(result[0].snapshot), failExport);
         return [stmt]; // Also return the stmt so that it gets awaited (and errors handled).
       }
       if (!firstWorkerDone) {
         return snapshotExported.then(snapshotID => [
-          tx.unsafe(`
-          SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
-          SET TRANSACTION SNAPSHOT '${snapshotID}';
-        `),
+          tx.unsafe(`SET TRANSACTION SNAPSHOT '${snapshotID}'`),
         ]);
       }
       lc.debug?.('All work is done. No need to set snapshot');

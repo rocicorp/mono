@@ -4,6 +4,7 @@ import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 import {sleep} from 'shared/src/sleep.js';
 import {
+  Mode,
   TransactionPool,
   sharedReadOnlySnapshot,
 } from '../../db/transaction-pool.js';
@@ -442,7 +443,7 @@ export class InvalidationWatcherService
       return this.#latestReader;
     }
     const {init, cleanup} = sharedReadOnlySnapshot();
-    const reader = new TransactionPool(lc, init, cleanup, 1, 4); // TODO: Choose maxWorkers more intelligently / dynamically.
+    const reader = new TransactionPool(lc, Mode.READONLY, init, cleanup, 1, 4); // TODO: Choose maxWorkers more intelligently / dynamically.
     reader.run(this.#replica).catch(e => lc.error?.(e));
 
     const snapshotQuery = await reader.processReadTask(queryStateVersion);
