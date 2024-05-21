@@ -41,8 +41,12 @@ export class LeftJoinOperator<
   readonly #joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>;
 
   constructor(joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>) {
-    super(joinArgs.a, joinArgs.b, joinArgs.output, (version, inputA, inputB) =>
-      this.#join(version, inputA, inputB),
+    super(
+      joinArgs.a,
+      joinArgs.b,
+      joinArgs.output,
+      (version, inputA, inputB) => this.#join(version, inputA, inputB),
+      joinArgs.aJoinColumn,
     );
 
     this.#getAPrimaryKey = (value: AValue) =>

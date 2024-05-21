@@ -1,7 +1,7 @@
 import type {Multiset} from '../../multiset.js';
 import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
-import type {Request} from '../message.js';
+import type {Reply, Request} from '../message.js';
 import type {Operator} from './operator.js';
 import {OperatorBase} from './operator.js';
 
@@ -18,12 +18,16 @@ export class UnaryOperator<I extends PipelineEntity, O extends PipelineEntity>
   constructor(
     input: DifferenceStream<I>,
     output: DifferenceStream<O>,
-    fn: (version: Version, data: Multiset<I>) => Multiset<O>,
+    fn: (
+      version: Version,
+      data: Multiset<I>,
+      reply: Reply | undefined,
+    ) => Multiset<O>,
   ) {
     super(output);
     this.#listener = {
       newDifference: (version, data, reply) => {
-        output.newDifference(version, fn(version, data), reply);
+        output.newDifference(version, fn(version, data, reply), reply);
       },
       commit: version => {
         this.commit(version);

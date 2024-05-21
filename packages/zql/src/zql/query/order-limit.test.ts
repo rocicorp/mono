@@ -6,6 +6,7 @@ import {
 } from '../context/test-context.js';
 import type {Source} from '../ivm/source/source.js';
 import {EntityQuery, exp, or} from './entity-query.js';
+import * as agg from './agg.js';
 
 describe('a limited window is correctly maintained over differences', () => {
   type E = {
@@ -282,6 +283,7 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
     context,
     'issueLabel',
   );
+  const labelQuery = new EntityQuery<{label: Label}>(context, 'label');
   test('bare select with a join', async () => {
     const limit = 50;
     const stmt = issueQuery
@@ -368,6 +370,39 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
       id: x.issue.id,
       labels: x.issueLabel ? x.issueLabel.labelId : 'none',
     }));
+    expect(result).toEqual(expected);
+    stmt.destroy();
+  });
+
+  test('agg_array with a join', async () => {
+    const limit = 10;
+    const stmt = issueQuery
+      .leftJoin(issueLabelQuery, 'issueLabel', 'id', 'issueId')
+      .leftJoin(labelQuery, 'label', 'issueLabel.labelId', 'label.id')
+      .groupBy('issue.id')
+      .limit(limit)
+      .select('issue.id', agg.array('label.name', 'labels'))
+      .prepare();
+
+    const data = await stmt.exec();
+
+    let j = 0;
+    const expected = Array.from({length: limit}, (_, i) => ({
+      id: numToPaddedString(i + 1),
+      labels:
+        i % 2 === 0
+          ? []
+          : [
+              'Label ' + numToPaddedString((j++ % numLabels) + 1),
+              'Label ' + numToPaddedString((j++ % numLabels) + 1),
+              'Label ' + numToPaddedString((j++ % numLabels) + 1),
+            ],
+    }));
+    const result = data.map(x => ({
+      id: x.issue.id,
+      labels: x.labels,
+    }));
+
     expect(result).toEqual(expected);
     stmt.destroy();
   });

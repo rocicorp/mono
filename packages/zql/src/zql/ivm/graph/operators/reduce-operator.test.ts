@@ -16,14 +16,11 @@ type Reduction = {
 test('collects all things with the same key', () => {
   const input = new DifferenceStream<Thing>();
   let version = 0;
-  function getGroupKey(t: Thing) {
-    return t.groupKey;
-  }
   function getValueIdentity(t: Thing) {
     return t.id;
   }
   const output = input.reduce(
-    getGroupKey,
+    [['t', 'groupKey']],
     getValueIdentity,
     (group: Iterable<Thing>) => {
       let sum = 0;
@@ -178,14 +175,11 @@ test('collects all things with the same key', () => {
 test('reduce is lazy', () => {
   const input = new DifferenceStream<Thing>();
   let called = false;
-  function getGroupKey(t: Thing) {
-    return t.groupKey;
-  }
   function getValueIdentity(t: Thing) {
     return t.id;
   }
   const output = input.reduce(
-    getGroupKey,
+    [['t', 'groupKey']],
     getValueIdentity,
     (group: Iterable<Thing>) => {
       called = true;
@@ -246,14 +240,11 @@ test('reduce is lazy', () => {
 test('re-pulling the same iterable more than once yields the same data', () => {
   const input = new DifferenceStream<Thing>();
   let called = 0;
-  function getGroupKey(t: Thing) {
-    return t.groupKey;
-  }
   function getValueIdentity(t: Thing) {
     return t.id;
   }
   const output = input.reduce(
-    getGroupKey,
+    [['t', 'groupKey']],
     getValueIdentity,
     (group: Iterable<Thing>) => {
       ++called;
