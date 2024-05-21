@@ -4,11 +4,12 @@ import type {Multiset} from '../../multiset.js';
 import {getValueFromEntity} from '../../source/util.js';
 import type {PipelineEntity} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
-import {LinearUnaryOperator} from './linear-unary-operator.js';
+import {UnaryOperator} from './unary-operator.js';
 
-export class FilterOperator<
-  I extends PipelineEntity,
-> extends LinearUnaryOperator<I, I> {
+export class FilterOperator<I extends PipelineEntity> extends UnaryOperator<
+  I,
+  I
+> {
   #column: readonly [string | null, string];
   #operator: (lhs: unknown) => boolean;
 
@@ -19,7 +20,7 @@ export class FilterOperator<
     operator: SimpleOperator,
     value: unknown,
   ) {
-    super(input, output, (data: Multiset<I>) => this.#filter(data));
+    super(input, output, (_v, data: Multiset<I>) => this.#filter(data));
     this.#operator = getOperator(operator, value);
     this.#column = selector;
   }
