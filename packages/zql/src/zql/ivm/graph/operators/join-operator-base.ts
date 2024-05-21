@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import type {Selector} from '../../../ast/ast.js';
 import type {Multiset} from '../../multiset.js';
 import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
@@ -32,6 +33,7 @@ export class JoinOperatorBase<
     inputA: undefined,
     inputB: undefined,
   };
+  readonly #aJoinColumn;
 
   constructor(
     inputA: DifferenceStream<AValue>,
@@ -42,10 +44,12 @@ export class JoinOperatorBase<
       inputA: Multiset<AValue> | undefined,
       inputB: Multiset<BValue> | undefined,
     ) => Multiset<O>,
+    aJoinColumn: Selector,
   ) {
     super(output);
     this.#fn = fn;
     this.#output = output;
+    this.#aJoinColumn = aJoinColumn;
     this.#listenerA = {
       newDifference: this.#onInputADifference,
       commit: version => {
@@ -74,9 +78,7 @@ export class JoinOperatorBase<
         this.#output.newDifference(
           version,
           this.#fn(version, data, this.#buffer.inputB),
-          // TODO: pick which `reply` message to send downstream
-          // based on what order the sub-class chooses to respect.
-          reply,
+          this.#getReply(reply),
         );
         this.#buffer.inputB = undefined;
         this.#buffer.bMsg = undefined;
@@ -102,9 +104,7 @@ export class JoinOperatorBase<
         this.#output.newDifference(
           version,
           this.#fn(version, this.#buffer.inputA, data),
-          // TODO: pick which `reply` message to send downstream
-          // based on what order the sub-class chooses to respect.
-          this.#buffer.aMsg,
+          this.#getReply(),
         );
         this.#buffer.inputA = undefined;
         this.#buffer.aMsg = undefined;
@@ -119,6 +119,31 @@ export class JoinOperatorBase<
       );
     }
   };
+
+  // This is a current short-cut.
+  // In reality, we should allow the implementation of `join` to re-order
+  // the loop and pick the correct `reply` message based on the re-ordering.
+  // Currently we always place input `a` as the outer loop.
+  #getReply(aMsg?: Reply | undefined): Reply {
+    let msg = aMsg ?? this.#buffer.aMsg;
+
+    assert(msg !== undefined, 'aMsg must be defined');
+
+    // This is a current short-cut.
+    // In reality, we would assign `aJoinColumn` as a contiguous group
+    // whenever it is represents a unique key.
+    //
+    // Joins against joins against joins... can only add rows to an already
+    // contiguous group so we don't have to worry about that.
+    if (this.#aJoinColumn[1] === 'id') {
+      msg = {
+        ...msg,
+        contiguousGroup: [this.#aJoinColumn],
+      };
+    }
+
+    return msg;
+  }
 
   #bufferA(inputA: Multiset<AValue> | undefined, aMsg: Reply) {
     assert(inputA !== undefined, 'inputA must be defined');
