@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import {parseBigInt} from 'shared/src/parse-big-int.js';
 
 /**
  * A LexiVersion is a lexicographically sortable representation of
@@ -38,17 +39,6 @@ export function versionToLexi(v: number | bigint): LexiVersion {
     `Value is too large to be encoded as a LexiVersion: ${v.toString()}`,
   );
   return `${length}${base36Version}`;
-}
-
-// Until there's BigInt.fromString(val, radix) ... https://github.com/tc39/proposal-number-fromstring
-function parseBigInt(val: string, radix: number): bigint {
-  const base = BigInt(radix);
-  let result = 0n;
-  for (let i = 0; i < val.length; i++) {
-    result *= base;
-    result += BigInt(parseInt(val[i], radix));
-  }
-  return result;
 }
 
 export function versionFromLexi(lexiVersion: LexiVersion): bigint {
