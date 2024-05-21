@@ -104,6 +104,49 @@ const App = ({undoManager}: AppProps) => {
   const viewIssueCount = 0;
 
   const issuesProps = useIssuesProps(filteredQuery, issueQueryDeps, issueOrder);
+  // ========= Ghetto pre-loads
+  const fields = [
+    'created',
+    'creatorID',
+    'description',
+    'id',
+    'kanbanOrder',
+    'priority',
+    'modified',
+    'status',
+    'title',
+  ] as const;
+  const preloadIssueLimit = 10_000;
+  const createdPreloadQuery = issueQuery
+    .select(...fields)
+    .limit(preloadIssueLimit)
+    .desc('created');
+  const modifiedPreloadQuery = issueQuery
+    .select(...fields)
+    .limit(preloadIssueLimit)
+    .desc('modified');
+  const statusPreloadQuery = issueQuery
+    .select(...fields)
+    .limit(preloadIssueLimit)
+    .desc('status', 'modified');
+  const priorityPreloadQuery = issueQuery
+    .select(...fields)
+    .limit(preloadIssueLimit)
+    .desc('priority', 'modified');
+
+  const allLabelPreloadQuery = zero.query.label.select('id', 'name');
+  const allIssueLabelPreloadQuery = zero.query.issueLabel.select(
+    'id',
+    'issueID',
+    'labelID',
+  );
+  useQuery(createdPreloadQuery);
+  useQuery(modifiedPreloadQuery);
+  useQuery(statusPreloadQuery);
+  useQuery(priorityPreloadQuery);
+  useQuery(allIssueLabelPreloadQuery);
+  useQuery(allLabelPreloadQuery);
+  // ========= Ghetto pre-loads
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
