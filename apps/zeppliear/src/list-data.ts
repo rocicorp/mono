@@ -10,7 +10,10 @@ import {
 import type {IssuesProps} from './issues-props.js';
 
 export type ListData = {
-  getIssue(index: number): IssueWithLabels;
+  getIssue(index: number): IssueWithLabels | undefined;
+  mustGetIssue(index: number): IssueWithLabels;
+  iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels>;
+  iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels>;
   readonly onChangePriority: (issue: Issue, priority: Priority) => void;
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
   readonly onOpenDetail: (issue: Issue) => void;
@@ -62,7 +65,36 @@ class ListDataImpl implements ListData {
     this.count = issues.length;
   }
 
-  getIssue(index: number): IssueWithLabels {
+  getIssue(index: number): IssueWithLabels | undefined {
     return this.#issues[index];
+  }
+
+  mustGetIssue(index: number): IssueWithLabels {
+    if (index < 0 || index >= this.#issues.length) {
+      throw new Error(`Invalid index: ${index}`);
+    }
+    return this.#issues[index];
+  }
+
+  #findIndex(issue: Issue): number {
+    const issueID = issue.id;
+    return this.#issues.findIndex(issue => issue.issue.id === issueID);
+  }
+
+  *iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels> {
+    const index = this.#findIndex(issue);
+    if (index === -1) {
+      return;
+    }
+    for (let i = index + 1; i < this.#issues.length; i++) {
+      yield this.#issues[i];
+    }
+  }
+
+  *iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels> {
+    const index = this.#findIndex(issue);
+    for (let i = index - 1; i >= 0; i--) {
+      yield this.#issues[i];
+    }
   }
 }

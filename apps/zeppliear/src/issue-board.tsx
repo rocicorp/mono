@@ -1,19 +1,12 @@
 import {generateNKeysBetween} from 'fractional-indexing';
-import {findIndex, groupBy} from 'lodash';
-import {memo, useCallback} from 'react';
+import {memo, useCallback, useMemo} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 
-import {useQuery} from './hooks/use-zql.js';
-import {
-  Issue,
-  IssueUpdate,
-  IssueWithLabels,
-  Priority,
-  Status,
-  orderQuery,
-} from './issue';
+import {Issue, IssueUpdate, IssueWithLabels, Priority, Status} from './issue';
 import IssueCol from './issue-col';
 import type {IssuesProps} from './issues-props.js';
+import type {ListData} from './list-data.js';
+import {assert} from './util/asserts.js';
 
 export type IssuesByStatusType = {
   [Status.Backlog]: IssueWithLabels[];
@@ -23,45 +16,29 @@ export type IssuesByStatusType = {
   [Status.Canceled]: IssueWithLabels[];
 };
 
-export const getIssueByType = (
-  allIssues: IssueWithLabels[],
-): IssuesByStatusType => {
-  const issuesBySType = groupBy(allIssues, i => i.issue.status);
-  const defaultIssueByType = {
-    [Status.Backlog]: [],
-    [Status.Todo]: [],
-    [Status.InProgress]: [],
-    [Status.Done]: [],
-    [Status.Canceled]: [],
-  };
-  const result = {...defaultIssueByType, ...issuesBySType};
-  return result;
-};
-
-export function getKanbanOrderIssueUpdates(
+function getKanbanOrderIssueUpdates(
   issueToMove: Issue,
   issueToInsertBefore: Issue,
-  issues: IssueWithLabels[],
+  listData: ListData,
 ): {issue: Issue; update: IssueUpdate}[] {
-  const indexInKanbanOrder = findIndex(
-    issues,
-    i => i.issue.id === issueToInsertBefore.id,
-  );
   let beforeKey: string | null = null;
-  if (indexInKanbanOrder > 0) {
-    beforeKey = issues[indexInKanbanOrder - 1].issue.kanbanOrder;
+
+  for (const issue of listData.iterateIssuesBefore(issueToInsertBefore)) {
+    beforeKey = issue.issue.kanbanOrder;
+    break;
   }
+
   let afterKey: string | null = null;
   const issuesToReKey: Issue[] = [];
   // If the issues we are trying to move between
   // have identical kanbanOrder values, we need to fix up the
   // collision by re-keying the issues.
-  for (let i = indexInKanbanOrder; i < issues.length; i++) {
-    if (issues[i].issue.kanbanOrder !== beforeKey) {
-      afterKey = issues[i].issue.kanbanOrder;
+  for (const issue of listData.iterateIssuesAfter(issueToInsertBefore)) {
+    if (issue.issue.kanbanOrder !== beforeKey) {
+      afterKey = issue.issue.kanbanOrder;
       break;
     }
-    issuesToReKey.push(issues[i].issue);
+    issuesToReKey.push(issue.issue);
   }
   const newKanbanOrderKeys = generateNKeysBetween(
     beforeKey,
@@ -91,12 +68,13 @@ interface Props {
 }
 
 function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
-  const {query, order, queryDeps} = issuesProps;
-  const issueQueryOrdered = orderQuery(query, order, false);
-  const issues = useQuery(issueQueryOrdered, queryDeps);
-
-  // TODO(arv): Use ZQL group by
-  const issuesByType = getIssueByType(issues);
+  const listDataMap = useMemo(() => new Map<Status, ListData>(), []);
+  const onListData = useCallback(
+    (status: Status, listData: ListData) => {
+      listDataMap.set(status, listData);
+    },
+    [listDataMap],
+  );
 
   const handleDragEnd = useCallback(
     ({source, destination}: DropResult) => {
@@ -104,34 +82,46 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
         return;
       }
       const sourceStatus = parseInt(source.droppableId) as Status;
-      const draggedIssue = issuesByType[sourceStatus][source.index]?.issue;
+
+      const sourceListData = listDataMap.get(sourceStatus);
+      assert(sourceListData);
+
+      const draggedIssue = sourceListData.getIssue(source.index)?.issue;
       if (!draggedIssue) {
         return;
       }
-      const newStatus = parseInt(destination.droppableId) as Status;
-      const newIndex =
-        sourceStatus === newStatus && source.index < destination.index
+      const destinationStatus = parseInt(destination.droppableId) as Status;
+      const destinationIndex =
+        sourceStatus === destinationStatus && source.index < destination.index
           ? destination.index + 1
           : destination.index;
-      const issueToInsertBefore = issuesByType[newStatus][newIndex]?.issue;
+
+      const destinationListData = listDataMap.get(destinationStatus);
+      assert(destinationListData);
+      const issueToInsertBefore =
+        destinationListData.getIssue(destinationIndex)?.issue;
       if (draggedIssue === issueToInsertBefore) {
         return;
       }
       const issueUpdates = issueToInsertBefore
-        ? getKanbanOrderIssueUpdates(draggedIssue, issueToInsertBefore, issues)
+        ? getKanbanOrderIssueUpdates(
+            draggedIssue,
+            issueToInsertBefore,
+            destinationListData,
+          )
         : [{issue: draggedIssue, update: {id: draggedIssue.id}}];
-      if (newStatus !== sourceStatus) {
+      if (destinationStatus !== sourceStatus) {
         issueUpdates[0] = {
           ...issueUpdates[0],
           update: {
             ...issueUpdates[0].update,
-            status: newStatus,
+            status: destinationStatus,
           },
         };
       }
       onUpdateIssues(issueUpdates);
     },
-    [issues, issuesByType, onUpdateIssues],
+    [listDataMap, onUpdateIssues],
   );
 
   const handleChangePriority = useCallback(
@@ -155,6 +145,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
           issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
+          onListData={onListData}
         />
         <IssueCol
           title={'Todo'}
@@ -162,6 +153,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
           issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
+          onListData={onListData}
         />
         <IssueCol
           title={'In Progress'}
@@ -169,6 +161,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
           issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
+          onListData={onListData}
         />
         <IssueCol
           title={'Done'}
@@ -176,6 +169,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
           issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
+          onListData={onListData}
         />
         <IssueCol
           title={'Canceled'}
@@ -183,6 +177,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
           issuesProps={issuesProps}
           onChangePriority={handleChangePriority}
           onOpenDetail={onOpenDetail}
+          onListData={onListData}
         />
       </div>
     </DragDropContext>
