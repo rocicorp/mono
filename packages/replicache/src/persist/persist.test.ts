@@ -900,6 +900,7 @@ async function setupPersistTest() {
       mutatorNames,
       {},
       formatVersion,
+      true,
     );
     assert(clientGroupID === undefined || c.clientGroupID === clientGroupID);
     clientGroupID = c.clientGroupID;

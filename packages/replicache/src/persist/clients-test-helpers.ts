@@ -110,6 +110,7 @@ export async function initClientWithClientID(
       mutatorNames,
       indexes,
       formatVersion,
+      true,
     );
   } else {
     const [generatedClientID, client, clientMap] = await initClientV4(dagStore);
