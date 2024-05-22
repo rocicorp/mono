@@ -308,12 +308,14 @@ export class MessageProcessor {
     lc: LogContext,
     commitLsn: string,
   ): TransactionProcessor {
+    const start = Date.now();
     const txProcessor = new TransactionProcessor(
       lc,
       commitLsn,
       this.#invalidationFilters,
     );
     void this.#txSerializer.withLock(async () => {
+      const inLock = Date.now();
       try {
         if (this.#failure) {
           // If a preceding transaction failed, all subsequent transactions must also fail.
@@ -322,7 +324,11 @@ export class MessageProcessor {
         const versionChange = await txProcessor.execute(this.#replica);
         this.#acknowledge(commitLsn);
         this.#emitVersion(versionChange);
-        lc.debug?.(`Committed tx`);
+        lc.debug?.(
+          `Committed tx (queued: ${inLock - start} ms) (${
+            Date.now() - start
+          } ms)`,
+        );
       } catch (e) {
         if (
           // A unique violation on the TxLog means that the transaction has already been
