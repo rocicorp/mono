@@ -165,6 +165,20 @@ const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
   lc,
 ) => new SubscriptionsManagerImpl(queryInternal, lc);
 
+export interface ReplicacheImplOptions {
+  /**
+   * Default is `defaultMakeSubscriptionsManager`.
+   */
+  makeSubscriptionsManager?: MakeSubscriptionsManager | undefined;
+
+  /**
+   * Default is `true`.  If `false` if an exact match client group
+   * is not found, a new client group is always made instead of forking
+   * from an existing client group.
+   */
+  enableClientGroupForking?: boolean | undefined;
+}
+
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The URL to use when doing a pull request. */
@@ -365,7 +379,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   constructor(
     options: ReplicacheOptions<MD> & ReplicacheInternalOptions,
-    makeSubscriptionsManager: MakeSubscriptionsManager = defaultMakeSubscriptionsManager,
+    implOptions: ReplicacheImplOptions = {},
   ) {
     const {
       name,
@@ -391,6 +405,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
       enablePullAndPushInOpen = true,
     } = options;
+    const {
+      makeSubscriptionsManager = defaultMakeSubscriptionsManager,
+      enableClientGroupForking = true,
+    } = implOptions;
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
@@ -494,6 +512,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     void this.#open(
       indexes,
+      enableClientGroupForking,
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
@@ -504,6 +523,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   async #open(
     indexes: IndexDefinitions,
+    enableClientGroupForking: boolean,
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
     resolveReady: () => void,
@@ -523,6 +543,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       Object.keys(this.#mutatorRegistry),
       indexes,
       FormatVersion.Latest,
+      enableClientGroupForking,
     );
 
     resolveClientGroupID(client.clientGroupID);
