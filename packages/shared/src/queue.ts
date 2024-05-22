@@ -8,7 +8,11 @@ export class Queue<T> {
   // Consumers waiting for entries to be produced.
   readonly #consumers: Consumer<T>[] = [];
   // Produced entries waiting to be consumed.
-  readonly #produced: {value: Promise<T>; consumed: () => void}[] = [];
+  readonly #produced: {
+    produced: Promise<T>;
+    value?: T | undefined;
+    consumed: () => void;
+  }[] = [];
 
   /** @returns A Promise that resolves when the value is consumed. */
   enqueue(value: T): Promise<void> {
@@ -18,7 +22,7 @@ export class Queue<T> {
       clearTimeout(consumer.timeoutID);
       return Promise.resolve();
     }
-    return this.#enqueueProduced(Promise.resolve(value));
+    return this.#enqueueProduced(Promise.resolve(value), value);
   }
 
   /** @returns A Promise that resolves when the rejection is consumed. */
@@ -32,10 +36,26 @@ export class Queue<T> {
     return this.#enqueueProduced(Promise.reject(reason));
   }
 
-  #enqueueProduced(value: Promise<T>): Promise<void> {
+  #enqueueProduced(produced: Promise<T>, value?: T): Promise<void> {
     const {promise, resolve: consumed} = resolver<void>();
-    this.#produced.push({value, consumed});
+    this.#produced.push({produced, value, consumed});
     return promise;
+  }
+
+  /**
+   * Deletes an enqueued value from anywhere in the queue, based on identity equality.
+   * The consumed callback is resolved if the value was in the queue.
+   *
+   * @returns `true` if the value was deleted, `false` if it was not in the queue.
+   */
+  delete(value: T): boolean {
+    const pos = this.#produced.findIndex(p => p.value === value);
+    if (pos >= 0) {
+      const [produced] = this.#produced.splice(pos, 1);
+      produced.consumed();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -48,7 +68,7 @@ export class Queue<T> {
     const produced = this.#produced.shift();
     if (produced) {
       produced.consumed();
-      return produced.value;
+      return produced.produced;
     }
     const r = resolver<T>();
     const timeoutID =
