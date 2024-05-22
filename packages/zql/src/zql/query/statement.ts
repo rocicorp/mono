@@ -36,6 +36,13 @@ export class Statement<Return> implements IStatement<Return> {
     return this.#materialization;
   }
 
+  preload() {
+    this.#context.subscriptionAdded(this.#ast);
+    return () => {
+      this.#context.subscriptionAdded(this.#ast);
+    };
+  }
+
   subscribe(
     cb: (value: MakeHumanReadable<Return>) => void,
     initialData = true,
