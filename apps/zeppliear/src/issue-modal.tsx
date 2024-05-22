@@ -1,10 +1,10 @@
 import {nanoid} from 'nanoid';
 import {useState} from 'react';
 import CloseIcon from './assets/icons/close.svg?react';
-import {IssueCreationPartial, Priority, Status} from './issue';
-import Modal from './modal';
-import PriorityMenu from './priority-menu';
-import StatusMenu from './status-menu';
+import {IssueCreationPartial, Priority, Status} from './issue.js';
+import Modal from './modal.jsx';
+import PriorityMenu from './priority-menu.jsx';
+import StatusMenu from './status-menu.jsx';
 
 interface Props {
   isOpen: boolean;

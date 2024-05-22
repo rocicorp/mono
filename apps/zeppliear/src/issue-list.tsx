@@ -1,8 +1,8 @@
 import {CSSProperties, memo, useCallback, useEffect, useRef} from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
-import type {Issue, IssueUpdate, Priority, Status} from './issue';
-import IssueRow from './issue-row';
+import IssueRow from './issue-row.jsx';
+import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
 

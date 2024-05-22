@@ -1,4 +1,4 @@
-import Modal from './modal';
+import Modal from './modal.jsx';
 
 interface Props {
   isOpen: boolean;

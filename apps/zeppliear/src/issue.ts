@@ -1,7 +1,7 @@
-import type {Immutable} from 'shared/src/immutable';
+import type {Immutable} from 'shared/src/immutable.js';
 import type {EntityQuery, Zero} from 'zero-client';
 import {z} from 'zod';
-import type {Collections} from './app';
+import type {Collections} from './app.jsx';
 
 export type M = Record<string, never>;
 

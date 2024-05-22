@@ -1,10 +1,9 @@
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
+import {Delete as DeleteIcon, Edit as EditIcon} from '@mui/icons-material';
 import {
   WhereCondition,
   and,
   exp,
-} from '@rocicorp/zql/src/zql/query/entity-query';
+} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
@@ -13,11 +12,11 @@ import type {Collections} from './app.jsx';
 import ArrowIcon from './assets/icons/arrow.svg?react';
 import DefaultAvatarIcon from './assets/icons/avatar.svg?react';
 import CloseIcon from './assets/icons/close.svg?react';
-import ConfirmationModal from './confirm-modal';
-import {useIssueDetailState} from './hooks/query-state-hooks';
-import {useKeyPressed} from './hooks/use-key-pressed';
-import {useZero} from './hooks/use-zero';
-import {useQuery} from './hooks/use-query';
+import ConfirmationModal from './confirm-modal.jsx';
+import {useIssueDetailState} from './hooks/query-state-hooks.js';
+import {useKeyPressed} from './hooks/use-key-pressed.js';
+import {useQuery} from './hooks/use-query.js';
+import {useZero} from './hooks/use-zero.js';
 import {
   Comment,
   Issue,
@@ -27,10 +26,10 @@ import {
   Priority,
   Status,
   orderQuery,
-} from './issue';
+} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
-import PriorityMenu from './priority-menu';
-import StatusMenu from './status-menu';
+import PriorityMenu from './priority-menu.jsx';
+import StatusMenu from './status-menu.jsx';
 import {timeAgo} from './util/date.js';
 
 interface Props {

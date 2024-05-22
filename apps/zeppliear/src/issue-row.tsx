@@ -1,8 +1,8 @@
 import React from 'react';
-import {formatDate} from './util/date';
-import {getLabelColor, Issue, Priority, Status} from './issue';
-import PriorityMenu from './priority-menu';
-import StatusMenu from './status-menu';
+import {getLabelColor, Issue, Priority, Status} from './issue.js';
+import PriorityMenu from './priority-menu.jsx';
+import StatusMenu from './status-menu.jsx';
+import {formatDate} from './util/date.js';
 
 interface Props {
   row: {issue: Issue; labels: string[]};

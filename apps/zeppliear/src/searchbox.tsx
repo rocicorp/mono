@@ -1,9 +1,9 @@
-import {ChangeEventHandler, useState, RefObject, useRef} from 'react';
-import SearchIcon from './assets/icons/search.svg?react';
 import classnames from 'classnames';
-import {usePopper} from 'react-popper';
-import {useClickOutside} from './hooks/use-click-outside';
 import {noop} from 'lodash';
+import {ChangeEventHandler, RefObject, useRef, useState} from 'react';
+import {usePopper} from 'react-popper';
+import SearchIcon from './assets/icons/search.svg?react';
+import {useClickOutside} from './hooks/use-click-outside.js';
 
 interface Props {
   placeholder: string;

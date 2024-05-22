@@ -5,17 +5,20 @@ import {pickBy} from 'lodash';
 import {memo, useCallback, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
-import {getIssueOrder, getViewStatuses} from './filters';
+import {getIssueOrder, getViewStatuses} from './filters.js';
 import {
   FiltersState,
   useFilters,
   useIssueDetailState,
   useOrderByState,
   useViewState,
-} from './hooks/query-state-hooks';
-import {useZero} from './hooks/use-zero';
-import {useQuery} from './hooks/use-query';
-import {usePreloadQuery} from './hooks/use-preload-query';
+} from './hooks/query-state-hooks.js';
+import {usePreloadQuery} from './hooks/use-preload-query.js';
+import {useQuery} from './hooks/use-query.js';
+import {useZero} from './hooks/use-zero.js';
+import IssueBoard from './issue-board.jsx';
+import IssueDetail from './issue-detail.jsx';
+import IssueList from './issue-list.jsx';
 import {
   Comment,
   Issue,
@@ -28,13 +31,10 @@ import {
   deleteIssueComment,
   putIssueComment,
   updateIssues,
-} from './issue';
-import IssueBoard from './issue-board';
-import IssueDetail from './issue-detail';
-import IssueList from './issue-list';
+} from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
-import LeftMenu from './left-menu';
-import TopFilter from './top-filter';
+import LeftMenu from './left-menu.jsx';
+import TopFilter from './top-filter.jsx';
 
 function getTitle(view: string | null) {
   switch (view?.toLowerCase()) {

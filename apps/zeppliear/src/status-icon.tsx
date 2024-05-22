@@ -1,10 +1,10 @@
+import classNames from 'classnames';
 import CancelIcon from './assets/icons/cancel.svg?react';
 import BacklogIcon from './assets/icons/circle-dot.svg?react';
 import TodoIcon from './assets/icons/circle.svg?react';
 import DoneIcon from './assets/icons/done.svg?react';
 import InProgressIcon from './assets/icons/half-circle.svg?react';
-import classNames from 'classnames';
-import {Status} from './issue';
+import {Status} from './issue.js';
 
 interface Props {
   status: Status;

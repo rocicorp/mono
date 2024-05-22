@@ -2,16 +2,16 @@ import {memo} from 'react';
 import MenuIcon from './assets/icons/menu.svg?react';
 
 import {noop} from 'lodash';
-import FilterMenu from './filter-menu';
-import {Order, Priority, Status} from './issue';
-import SortOrderMenu from './sort-order-menu';
+import FilterMenu from './filter-menu.js';
+import {createToggleFilterHandler} from './filters.js';
 import {
   useLabelFilterState,
   useOrderByState,
   usePriorityFilterState,
   useStatusFilterState,
-} from './hooks/query-state-hooks';
-import {createToggleFilterHandler} from './filters';
+} from './hooks/query-state-hooks.js';
+import {Order, Priority, Status} from './issue.js';
+import SortOrderMenu from './sort-order-menu.jsx';
 
 interface Props {
   title: string;

@@ -1,4 +1,4 @@
-import {Order, Status, orderEnumSchema} from './issue';
+import {Order, Status, orderEnumSchema} from './issue.js';
 
 export function hasNonViewFilters(
   viewStatuses: Set<Status>,

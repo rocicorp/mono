@@ -5,9 +5,9 @@ import UrgentPriorityIcon from './assets/icons/rounded-claim.svg?react';
 import MediumPriorityIcon from './assets/icons/signal-medium.svg?react';
 import HighPriorityIcon from './assets/icons/signal-strong.svg?react';
 import LowPriorityIcon from './assets/icons/signal-weak.svg?react';
-import {useClickOutside} from './hooks/use-click-outside';
-import {Priority} from './issue';
-import PriorityIcon from './priority-icon';
+import {useClickOutside} from './hooks/use-click-outside.js';
+import {Priority} from './issue.js';
+import PriorityIcon from './priority-icon.jsx';
 
 interface Props {
   labelVisible?: boolean;

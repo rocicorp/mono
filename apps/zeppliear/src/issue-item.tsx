@@ -1,7 +1,7 @@
 import classnames from 'classnames';
 import {memo, useCallback} from 'react';
-import type {Issue, Priority} from './issue';
-import PriorityMenu from './priority-menu';
+import type {Issue, Priority} from './issue.js';
+import PriorityMenu from './priority-menu.jsx';
 
 interface Props {
   issue: Issue;
