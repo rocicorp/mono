@@ -1,6 +1,6 @@
 import {expect, vi} from 'vitest';
 import {DifferenceStream} from '../difference-stream.js';
-import {createPullResponseMessage} from '../message.js';
+import {createPullResponseMessage, PullMsg} from '../message.js';
 
 export type Track = {
   id: string;
@@ -56,12 +56,12 @@ export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
   const trackInputSpy = vi.spyOn(trackInput, 'messageUpstream');
   const albumInputSpy = vi.spyOn(albumInput, 'messageUpstream');
 
-  const msg = {
+  const msg: PullMsg = {
     id: 1,
     hoistedConditions: [],
     type: 'pull',
     order: [[['intentional-nonsense', 'x']], 'asc'],
-  } as const;
+  };
   const listener = {
     commit() {},
     newDifference() {},
@@ -91,12 +91,12 @@ export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
   });
 
   const outputSpy = vi.spyOn(output, 'newDifference');
-  const msg = {
+  const msg: PullMsg = {
     id: 1,
     hoistedConditions: [],
     type: 'pull',
     order: [[['intentional-nonsense', 'x']], 'asc'],
-  } as const;
+  };
   const listener = {
     commit() {},
     newDifference() {},

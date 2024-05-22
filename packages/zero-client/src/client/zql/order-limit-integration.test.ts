@@ -12,7 +12,7 @@ import {
   Track,
   TrackArtist,
 } from './integration-test-util.js';
-import {makeComparator} from '@rocicorp/zql/src/zql/query/statement.js';
+import {makeComparator} from '@rocicorp/zql/src/zql/ivm/compare.js';
 import {must} from '../../../../shared/src/must.js';
 import {Comparator, joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
 
