@@ -6,6 +6,7 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
   expectTables,
+  getConnectionURI,
   initDB,
   testDBs,
 } from '../../test/db.js';
@@ -39,7 +40,7 @@ describe('replicator/incremental-sync', () => {
     const txSerializer = new Lock();
     const invalidationFilters = new InvalidationFilters();
     syncer = new IncrementalSyncer(
-      'postgres:///incremental_sync_test_upstream',
+      getConnectionURI(upstream, 'external'),
       REPLICA_ID,
       replica,
       txSerializer,
@@ -1495,17 +1496,14 @@ describe('replicator/incremental-sync', () => {
       await initDB(replica, c.setupReplica);
 
       const lc = createSilentLogContext();
-      await setupUpstream(
-        lc,
-        'postgresql:///incremental_sync_test_upstream',
-        replicationSlot(REPLICA_ID),
-      );
+      await setupUpstream(lc, upstream, replicationSlot(REPLICA_ID));
       await replica.begin(tx =>
         setupReplicationTables(
           lc,
           REPLICA_ID,
           tx,
-          'postgresql:///incremental_sync_test_upstream',
+          upstream,
+          getConnectionURI(upstream),
         ),
       );
 

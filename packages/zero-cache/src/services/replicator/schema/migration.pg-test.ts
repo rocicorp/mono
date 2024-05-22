@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {
   SyncSchemaVersions,
   VersionMigrationMap,
@@ -198,6 +198,7 @@ describe('schema/migration', () => {
           createSilentLogContext(),
           'foo-bar-replica-id',
           db,
+          null as unknown as postgres.Sql, // Not used in the test.
           'postgres://upstream',
           c.migrations,
         );

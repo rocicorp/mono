@@ -101,6 +101,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
+  readonly #upstream: PostgresDB;
   readonly #syncReplica: PostgresDB;
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #invalidator: Invalidator;
@@ -110,6 +111,7 @@ export class ReplicatorService implements Replicator, Service {
     lc: LogContext,
     replicaID: string,
     upstreamUri: string,
+    upstream: PostgresDB,
     syncReplica: PostgresDB,
   ) {
     this.id = replicaID;
@@ -117,6 +119,7 @@ export class ReplicatorService implements Replicator, Service {
       .withContext('component', 'Replicator')
       .withContext('serviceID', this.id);
     this.#upstreamUri = upstreamUri;
+    this.#upstream = upstream;
     this.#syncReplica = syncReplica;
 
     // This lock ensures that transactions are processed serially, even
@@ -143,6 +146,7 @@ export class ReplicatorService implements Replicator, Service {
       this.#lc,
       this.id,
       this.#syncReplica,
+      this.#upstream,
       this.#upstreamUri,
     );
 

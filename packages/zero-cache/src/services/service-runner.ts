@@ -93,6 +93,7 @@ export class ServiceRunner
             this.#lc,
             id,
             this.#env.UPSTREAM_URI,
+            this.#upstream,
             this.#replica,
           ),
         'ReplicatorService',

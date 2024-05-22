@@ -1,12 +1,13 @@
 import type postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
   expectTables,
+  getConnectionURI,
   initDB,
   testDBs,
 } from '../../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {replicationSlot} from '../initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 
@@ -115,7 +116,8 @@ describe('replicator/sync-schema', () => {
           createSilentLogContext(),
           REPLICA_ID,
           replica,
-          `postgres:///${upstream.options.database}`,
+          upstream,
+          getConnectionURI(upstream),
         );
 
         await expectTables(upstream, c.upstreamPostState);

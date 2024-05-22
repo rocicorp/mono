@@ -1,10 +1,10 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import type {Pgoutput} from 'pg-logical-replication';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {MessageProcessor} from './incremental-sync.js';
 import {InvalidationFilters} from './invalidation.js';
@@ -29,6 +29,7 @@ describe('replicator/message-processor', () => {
         createSilentLogContext(),
         'unused_id',
         tx,
+        replica, // unused
         'postgres:///unused_upstream',
       ),
     );

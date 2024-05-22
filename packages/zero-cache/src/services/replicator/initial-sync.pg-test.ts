@@ -1,12 +1,13 @@
 import type postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
   expectTables,
+  getConnectionURI,
   initDB,
   testDBs,
 } from '../../test/db.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {
   handoffPostgresReplication,
   replicationSlot,
@@ -235,7 +236,8 @@ describe('replicator/initial-sync', () => {
           lc,
           REPLICA_ID,
           tx,
-          'postgres:///initial_sync_upstream',
+          upstream,
+          getConnectionURI(upstream),
           SUB,
         ),
       );
@@ -267,6 +269,7 @@ describe('replicator/initial-sync', () => {
         lc,
         REPLICA_ID,
         replica,
+        upstream,
         'postgres:///initial_sync_upstream',
         SUB,
       );
@@ -278,6 +281,7 @@ describe('replicator/initial-sync', () => {
           lc,
           REPLICA_ID,
           tx,
+          upstream,
           'postgres:///initial_sync_upstream',
           SUB,
         ),
@@ -375,7 +379,8 @@ describe('replicator/initial-sync', () => {
               createSilentLogContext(),
               REPLICA_ID,
               tx,
-              'postgres:///initial_sync_upstream',
+              upstream,
+              getConnectionURI(upstream),
               SUB,
             ),
           )
