@@ -42,23 +42,27 @@ export class Queue<T> {
   }
 
   /**
-   * Deletes an enqueued value from anywhere in the queue, based on identity equality.
-   * The consumed callback is resolved if the value was in the queue.
+   * Deletes all unconsumed entries matching the specified `value` based on identity equality.
+   * The consumed callback(s) are resolved as if the values were dequeued.
    *
-   * Note: deletion of `undefined` values is not supported. This method will asserts
+   * Note: deletion of `undefined` values is not supported. This method will assert
    * if `value` is undefined.
    *
-   * @returns `true` if the value was deleted, `false` if it was not in the queue.
+   * @returns The number of entries deleted.
    */
-  delete(value: T): boolean {
+  delete(value: T): number {
     assert(value !== undefined);
-    const pos = this.#produced.findIndex(p => p.value === value);
-    if (pos >= 0) {
-      const [produced] = this.#produced.splice(pos, 1);
-      produced.consumed();
-      return true;
+
+    let count = 0;
+    for (let i = this.#produced.length - 1; i >= 0; i--) {
+      const p = this.#produced[i];
+      if (p.value === value) {
+        this.#produced.splice(i, 1);
+        p.consumed();
+        count++;
+      }
     }
-    return false;
+    return count;
   }
 
   /**
