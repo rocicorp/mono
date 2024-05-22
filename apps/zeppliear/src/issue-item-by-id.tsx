@@ -1,4 +1,4 @@
-import {useQuery} from './hooks/use-zql.js';
+import {useQuery} from './hooks/use-query.js';
 import IssueItem from './issue-item.js';
 import type {Issue, Priority} from './issue.js';
 import type {IssuesProps} from './issues-props.js';

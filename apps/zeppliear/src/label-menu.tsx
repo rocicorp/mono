@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import type {Collections} from './app';
 import {useZero} from './hooks/use-zero';
-import {useQuery} from './hooks/use-zql';
+import {useQuery} from './hooks/use-query';
 import {getLabelColor} from './issue';
 import {LabelTypeahead} from './label-typeahead';
 

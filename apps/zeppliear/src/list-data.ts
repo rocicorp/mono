@@ -1,5 +1,5 @@
 import {useMemo} from 'react';
-import {useQuery} from './hooks/use-zql.js';
+import {useQuery} from './hooks/use-query.js';
 import {
   orderQuery,
   type Issue,
