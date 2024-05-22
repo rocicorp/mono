@@ -8,6 +8,10 @@ import {sleep} from 'shared/src/sleep.js';
 import {afterAll, expect} from 'vitest';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
+// TODO: Pass this in an ENV variable to run tests
+//       with different versions of Postgres.
+const PG_IMAGE = 'postgres:16.3-alpine3.19';
+
 class TestDBs {
   #sql: PostgresDB | undefined;
   #container: StartedPostgreSqlContainer | undefined;
@@ -18,10 +22,7 @@ class TestDBs {
     sql: PostgresDB;
   }> {
     if (!this.#container) {
-      this.#container = await new PostgreSqlContainer(
-        // TODO: Test with different versions of postgres
-        'postgres:16.3-alpine3.19',
-      )
+      this.#container = await new PostgreSqlContainer(PG_IMAGE)
         .withCommand(['postgres', '-c', 'wal_level=logical'])
         .start();
     }

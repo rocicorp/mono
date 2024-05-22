@@ -29,7 +29,7 @@ export default defineConfig({
     poolOptions: {
       threads: {
         minThreads: 1,
-        // Testcontainers can sometime seg fault.
+        // Testcontainers can sometimes seg fault.
         // Try `VITEST_MAX_THREADS=1 npm run pg-test` to mitigate.
       },
     },

@@ -270,7 +270,7 @@ describe('replicator/initial-sync', () => {
         REPLICA_ID,
         replica,
         upstream,
-        'postgres:///initial_sync_upstream',
+        getConnectionURI(upstream),
         SUB,
       );
 
@@ -282,7 +282,7 @@ describe('replicator/initial-sync', () => {
           REPLICA_ID,
           tx,
           upstream,
-          'postgres:///initial_sync_upstream',
+          getConnectionURI(upstream),
           SUB,
         ),
       );

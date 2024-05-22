@@ -29,7 +29,7 @@ describe('replicator/message-processor', () => {
         createSilentLogContext(),
         'unused_id',
         tx,
-        replica, // unused
+        null as unknown as PostgresDB, // unused
         'postgres:///unused_upstream',
       ),
     );
