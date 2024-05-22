@@ -1,4 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {assert} from './asserts.js';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,
@@ -8,14 +9,15 @@ export class Queue<T> {
   // Consumers waiting for entries to be produced.
   readonly #consumers: Consumer<T>[] = [];
   // Produced entries waiting to be consumed.
-  readonly #produced: {
-    produced: Promise<T>;
-    value?: T | undefined;
-    consumed: () => void;
-  }[] = [];
+  readonly #produced: Produced<T>[] = [];
 
-  /** @returns A Promise that resolves when the value is consumed. */
+  /**
+   * Enqueues a new value, which must not be `undefined`.
+   *
+   * @returns A Promise that resolves when the value is consumed.
+   */
   enqueue(value: T): Promise<void> {
+    assert(value !== undefined);
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolver.resolve(value);
@@ -46,9 +48,12 @@ export class Queue<T> {
    * Deletes an enqueued value from anywhere in the queue, based on identity equality.
    * The consumed callback is resolved if the value was in the queue.
    *
+   * Asserts if `value` is undefined.
+   *
    * @returns `true` if the value was deleted, `false` if it was not in the queue.
    */
   delete(value: T): boolean {
+    assert(value !== undefined);
     const pos = this.#produced.findIndex(p => p.value === value);
     if (pos >= 0) {
       const [produced] = this.#produced.splice(pos, 1);
@@ -123,4 +128,10 @@ const NOOP = () => {};
 type Consumer<T> = {
   resolver: Resolver<T>;
   timeoutID: ReturnType<typeof setTimeout> | undefined;
+};
+
+type Produced<T> = {
+  produced: Promise<T>;
+  value: T | undefined;
+  consumed: () => void;
 };
