@@ -1,54 +1,37 @@
-import {
-  PostgreSqlContainer,
-  StartedPostgreSqlContainer,
-} from '@testcontainers/postgresql';
 import postgres from 'postgres';
-import {assert} from 'shared/src/asserts.js';
+import {assert, assertString} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterAll, expect} from 'vitest';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
-// TODO: Pass this in an ENV variable to run tests
-//       with different versions of Postgres.
-const PG_IMAGE = 'postgres:16.3-alpine3.19';
+// Set by ./test/pg-container-setup.ts
+assertString(process.env.PG_CONTAINER_CONNECTION_URI);
+const CONNECTION_URI: string = process.env.PG_CONTAINER_CONNECTION_URI;
+assert(
+  CONNECTION_URI.length > 0,
+  'pg-container-setup.ts must be executed to setup the PG_CONTAINER_CONNECTION_URI',
+);
 
 class TestDBs {
-  #sql: PostgresDB | undefined;
-  #container: StartedPostgreSqlContainer | undefined;
+  readonly #sql = postgres(CONNECTION_URI, {
+    onnotice: () => {},
+    ...postgresTypeConfig(),
+  });
   readonly #dbs: Record<string, postgres.Sql> = {};
-
-  async #initDB(): Promise<{
-    container: StartedPostgreSqlContainer;
-    sql: PostgresDB;
-  }> {
-    if (!this.#container) {
-      this.#container = await new PostgreSqlContainer(PG_IMAGE)
-        .withCommand(['postgres', '-c', 'wal_level=logical'])
-        .start();
-    }
-    if (!this.#sql) {
-      this.#sql = postgres(this.#container.getConnectionUri(), {
-        onnotice: () => {},
-        ...postgresTypeConfig(),
-      });
-    }
-    return {container: this.#container, sql: this.#sql};
-  }
 
   async create(database: string): Promise<PostgresDB> {
     assert(!(database in this.#dbs), `${database} has already been created`);
 
-    const {container, sql} = await this.#initDB();
-
+    const sql = this.#sql;
     await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
-
     await sql`CREATE DATABASE ${sql(database)}`;
 
+    const {host, port, user: username, pass} = sql.options;
     const db = postgres({
-      host: container.getHost(),
-      port: container.getPort(),
-      username: container.getUsername(),
-      password: container.getPassword(),
+      host: host[0],
+      port: port[0],
+      username,
+      password: pass ?? undefined,
       database,
       onnotice: () => {},
       ...postgresTypeConfig(),
@@ -78,12 +61,7 @@ class TestDBs {
    * it manually.
    */
   async end() {
-    if (this.#sql) {
-      await this.#sql.end();
-    }
-    if (this.#container) {
-      await this.#container.stop();
-    }
+    await this.#sql.end();
   }
 }
 
