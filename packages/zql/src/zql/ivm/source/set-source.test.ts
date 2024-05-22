@@ -254,3 +254,27 @@ test('history requests with an alternate ordering are fulfilled by that ordering
     baseItems.concat({id: 4, x: 'd'}).sort((l, r) => l.x.localeCompare(r.x)),
   );
 });
+
+test('history request that is a primary key lookup', () => {
+  // test that the debug operator is only called with a multiset of length 1
+  // or an empty multiset of the PK does not exist in the collection
+});
+
+test('history request that is a primary key lookup and has an order by', () => {
+  // test that the order-by is ignored and we just do the PK lookup
+});
+
+test('history request that is a range of primary keys', () => {
+  // test bottom, asc
+  // test bottom and top, asc
+  // test top, asc
+  // test bottom, desc
+  // test bottom and top, desc
+  // test top, desc
+});
+
+test('history request that is a range over an alternate sort', () => {});
+
+test('sorted on many fields but range inequality is only against the single left most field', () => {});
+
+test('sorted by many fields, inequalities against non-prefix', () => {});

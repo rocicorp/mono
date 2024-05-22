@@ -2,13 +2,19 @@ import {must} from 'shared/src/must.js';
 import type {Ordering, Selector} from '../../ast/ast.js';
 import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
-import {createPullResponseMessage, PullMsg, Request} from '../graph/message.js';
+import {
+  createPullResponseMessage,
+  HoistedCondition,
+  PullMsg,
+  Request,
+} from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
 import type {Comparator, PipelineEntity, Version} from '../types.js';
 import type {Source, SourceInternal} from './source.js';
 import type {ISortedMap} from 'sorted-btree-roci';
 import BTree from 'sorted-btree-roci';
+import {gen} from '../../util/iterables.js';
 
 /**
  * A source that remembers what values it contains.
@@ -191,7 +197,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     this.#seeded = true;
     // Notify views that requested history, if any.
     for (const request of this.#historyRequests) {
-      this.#sendHistoryTo(request);
+      this.#sendHistory(request);
     }
     this.#historyRequests = [];
 
@@ -205,7 +211,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
         this._materialite.addDirtySource(this.#internal);
         if (this.#seeded) {
           // Already seeded? Immediately reply with history.
-          this.#sendHistoryTo(message);
+          this.#sendHistory(message);
         } else {
           this.#historyRequests.push(message);
         }
@@ -214,9 +220,70 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     }
   }
 
-  #sendHistoryTo(request: PullMsg) {
+  #sendHistory(request: PullMsg) {
+    const hoistedConditions = request?.hoistedConditions;
+    const conditionsForThisSource = (hoistedConditions || []).filter(
+      c => c.selector[0] === this.#name,
+    );
+    const primaryKeyEquality = getPrimaryKeyEquality(conditionsForThisSource);
+
+    // Primary key lookup.
+    if (primaryKeyEquality !== undefined) {
+      const key = primaryKeyEquality.selector[1];
+      const entry = this.#tree.get({
+        id: key,
+      } as unknown as T);
+      this.#stream.newDifference(
+        this._materialite.getVersion(),
+        entry === undefined ? [] : [entry],
+        createPullResponseMessage(request, this.#name, this.#order),
+      );
+      return;
+    }
+
     const [newSort, orderForReply] =
       this.#getOrCreateAndMaintainNewSort(request);
+
+    // Is there a range constraint against the ordered field?
+    if (orderForReply !== undefined) {
+      const range = getRange(conditionsForThisSource, orderForReply);
+      if (request.order === undefined || request.order[1] === 'asc') {
+        // TODO: will this work without all the require fields for the sort?
+        // e.g., status, modified, id... if we just give status.
+        // May just be a matter of fixing comparators.
+        this.#stream.newDifference(
+          this._materialite.getVersion(),
+          gen(() =>
+            genFromBTreeEntries(
+              newSort.#tree.entries(maybeKey(range.field, range.bottom)),
+              createEndPredicateAsc(
+                newSort.comparator,
+                range.field[1],
+                range.top,
+              ),
+            ),
+          ),
+          createPullResponseMessage(request, this.#name, orderForReply),
+        );
+        return;
+      }
+
+      this.#stream.newDifference(
+        this._materialite.getVersion(),
+        gen(() =>
+          genFromBTreeEntries(
+            newSort.#tree.entriesReversed(maybeKey(range.field, range.top)),
+            createEndPredicateDesc(
+              newSort.comparator,
+              range.field[1],
+              range.bottom,
+            ),
+          ),
+        ),
+        createPullResponseMessage(request, this.#name, orderForReply),
+      );
+      return;
+    }
 
     this.#stream.newDifference(
       this._materialite.getVersion(),
@@ -225,10 +292,6 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     );
   }
 
-  // TODO(mlaw): we need to validate that this ordering
-  // is compatible with the source. I.e., it doesn't contain columns from other sources.
-  // The latter can happen if the user is sorting on joined columns.
-  // Join should do this for us when a `PullMsg` passes through it.
   #getOrCreateAndMaintainNewSort(
     request: PullMsg,
   ): [SetSource<T>, Ordering | undefined] {
@@ -295,44 +358,107 @@ function asEntries<T>(
   m: BTree<T, undefined>,
   message?: Request | undefined,
 ): Multiset<T> {
-  // message will contain hoisted expressions so we can do relevant
-  // index selection against the source.
-  // const after = hoisted.expressions.filter((e) => e._tag === "after")[0];
-  // if (after && after.comparator === comparator) {
-  //   return {
-  //     [Symbol.iterator]() {
-  //       return gen(m.iteratorAfter(after.cursor));
-  //     },
-  //   };
-  // }
-  // Optimizations we can do:
-  // 1. if it compares on a unique field by equality, just send the single row
-  // 2. if the view is in the same order as the source, start the iterator at the where clause
-  // which matches this position in the source. (e.g., where id > x)
+  if (message?.order) {
+    if (message.order[1] === 'desc') {
+      return gen(() => genFromBTreeEntries(m.entriesReversed()));
+    }
+  }
 
-  if (message?.order?.[1] === 'desc') {
-    return {
-      [Symbol.iterator]() {
-        return genFromEntries(m.entriesReversed());
-      },
-    };
+  return gen<Entry<T>>(() => genFromBTreeEntries(m.entries()));
+}
+
+function* genFromBTreeEntries<T>(
+  m: Iterable<[T, undefined]>,
+  end?: ((t: T) => boolean) | undefined,
+): Iterator<Entry<T>> {
+  for (const pair of m) {
+    if (end !== undefined) {
+      if (end(pair[0]) === false) {
+        yield [pair[0], 1];
+      } else {
+        return false;
+      }
+    }
+    yield [pair[0], 1];
+  }
+}
+
+// TODO(mlaw): `getPrimaryKeyEqualities` to support `IN`
+function getPrimaryKeyEquality(
+  conditions: HoistedCondition[],
+): HoistedCondition | undefined {
+  for (const c of conditions) {
+    if (c.op === '=' && c.selector[1] === 'id') {
+      return c;
+    }
+  }
+  return undefined;
+}
+
+function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
+  // > inequality is bottom of range
+  // where(foo, '>', 1) => (1, ∞)
+  // < inequality is top of range
+  // where(foo, '<', 1) => (-∞, 1)
+  // if both are present we have a bounded range
+
+  // loop through and find conditions that are inequalitied on the first field of the `sourceOrder`
+
+  let top: unknown | undefined;
+  let bottom: unknown | undefined;
+  const sourceOrderFields = sourceOrder[0];
+  const firstOrderField = sourceOrderFields[0];
+
+  for (const c of conditions) {
+    if (c.selector[1] === firstOrderField[1]) {
+      if (c.op === '>' || c.op === '>=') {
+        bottom = c.value;
+      } else if (c.op === '<' || c.op === '<=') {
+        top = c.value;
+      }
+    }
   }
 
   return {
-    [Symbol.iterator]() {
-      return gen(m.keys());
-    },
+    field: firstOrderField,
+    bottom,
+    top,
   };
 }
 
-function* gen<T>(m: Iterable<T>) {
-  for (const v of m) {
-    yield [v, 1] as const;
+function createEndPredicateAsc<T>(
+  comp: Comparator<T>,
+  field: string,
+  end: unknown,
+): ((t: T) => boolean) | undefined {
+  if (end === undefined) {
+    return undefined;
   }
+  return t => {
+    const cmp = comp(t, {[field]: end} as T);
+    return cmp > 0;
+  };
 }
 
-function* genFromEntries<T>(m: Iterable<[T, undefined]>) {
-  for (const pair of m) {
-    yield [pair[0], 1] as const;
+function createEndPredicateDesc<T>(
+  comp: Comparator<T>,
+  field: string,
+  end: unknown,
+): ((t: T) => boolean) | undefined {
+  if (end === undefined) {
+    return undefined;
   }
+  return t => {
+    const cmp = comp(t, {[field]: end} as T);
+    return cmp < 0;
+  };
+}
+
+function maybeKey<T>(field: Selector, value: unknown): T | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return {
+    [field[1]]: value,
+  } as T;
 }

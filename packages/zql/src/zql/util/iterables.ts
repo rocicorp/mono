@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 
-export function gen<T>(generator: () => Generator<T, void, unknown>) {
+export function gen<T>(generator: () => Iterator<T>) {
   return {
     [Symbol.iterator]() {
       return generator();
