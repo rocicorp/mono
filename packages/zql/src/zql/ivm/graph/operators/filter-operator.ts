@@ -11,8 +11,10 @@ export class FilterOperator<I extends PipelineEntity> extends OperatorBase<I> {
   readonly #listener: Listener<I>;
   readonly #input: DifferenceStream<I>;
 
-  #column: readonly [string | null, string];
-  #operator: (lhs: unknown) => boolean;
+  readonly #column: readonly [string | null, string];
+  readonly #fn: (lhs: unknown) => boolean;
+  readonly #op;
+  readonly #value: unknown;
 
   constructor(
     input: DifferenceStream<I>,
@@ -32,17 +34,24 @@ export class FilterOperator<I extends PipelineEntity> extends OperatorBase<I> {
     };
     input.addDownstream(this.#listener);
     this.#input = input;
-    this.#operator = getOperator(operator, value);
+    this.#fn = getOperator(operator, value);
     this.#column = selector;
+    this.#op = operator;
+    this.#value = value;
   }
 
   #filter(data: Multiset<I>) {
     return genFilter(data, e =>
-      this.#operator(getValueFromEntity(e[0], this.#column)),
+      this.#fn(getValueFromEntity(e[0], this.#column)),
     );
   }
 
   messageUpstream(message: Request): void {
+    message.hoistedConditions.push({
+      selector: this.#column,
+      op: this.#op,
+      value: this.#value,
+    });
     this.#input.messageUpstream(message, this.#listener);
   }
 

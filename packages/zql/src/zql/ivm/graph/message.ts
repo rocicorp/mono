@@ -1,4 +1,4 @@
-import type {Ordering, Selector, SimpleCondition} from '../../ast/ast.js';
+import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
 
 export type Request = PullMsg;
 
@@ -39,7 +39,12 @@ export type PullMsg = {
   readonly type: 'pull';
   // undefined means that the data does not need to be ordered in the reply.
   readonly order?: Ordering | undefined;
-  readonly hoistedConditions: readonly SimpleCondition[];
+  readonly hoistedConditions: HoistedCondition[];
+};
+export type HoistedCondition = {
+  selector: readonly [string | null, string];
+  op: SimpleOperator;
+  value: unknown;
 };
 
 export type Reply = PullReplyMsg;
