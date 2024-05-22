@@ -1,23 +1,23 @@
+import classnames from 'classnames';
+import {noop} from 'lodash';
 import {RefObject, useRef, useState} from 'react';
+import AboutModal from './about-modal.jsx';
 import AddIcon from './assets/icons/add.svg?react';
 import HelpIcon from './assets/icons/help.svg?react';
 import MenuIcon from './assets/icons/menu.svg?react';
-import ItemGroup from './item-group';
-import {useClickOutside} from './hooks/use-click-outside';
-import classnames from 'classnames';
-import SearchBox from './searchbox';
-import IssueModal from './issue-modal';
 import ReactLogo from './assets/images/logo.svg?react';
-import type {IssueCreationPartial} from './issue';
-import AboutModal from './about-modal';
-import {noop} from 'lodash';
+import {getViewStatuses} from './filters.js';
 import {
   useIssueDetailState,
   useStatusFilterState,
   useViewState,
-} from './hooks/query-state-hooks';
-import useQueryState, {identityProcessor} from './hooks/useQueryState';
-import {getViewStatuses} from './filters';
+} from './hooks/query-state-hooks.js';
+import {useClickOutside} from './hooks/use-click-outside.js';
+import useQueryState, {identityProcessor} from './hooks/useQueryState.js';
+import IssueModal from './issue-modal.jsx';
+import type {IssueCreationPartial} from './issue.js';
+import ItemGroup from './item-group.js';
+import SearchBox from './searchbox.js';
 
 interface Props {
   // Show menu (for small screen only)

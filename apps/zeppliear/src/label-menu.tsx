@@ -1,9 +1,9 @@
 import {useState} from 'react';
-import type {Collections} from './app';
-import {useZero} from './hooks/use-zero';
-import {useQuery} from './hooks/use-query';
-import {getLabelColor} from './issue';
-import {LabelTypeahead} from './label-typeahead';
+import type {Collections} from './app.jsx';
+import {useQuery} from './hooks/use-query.js';
+import {useZero} from './hooks/use-zero.js';
+import {getLabelColor} from './issue.js';
+import {LabelTypeahead} from './label-typeahead.jsx';
 
 export function LabelMenu({
   onSelectLabel,

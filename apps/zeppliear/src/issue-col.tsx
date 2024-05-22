@@ -8,12 +8,12 @@ import {
 } from 'react-beautiful-dnd';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
-import type {Issue, Priority, Status} from './issue';
-import IssueItem from './issue-item';
-import {IssueItemByID} from './issue-item-by-id';
+import {IssueItemByID} from './issue-item-by-id.jsx';
+import IssueItem from './issue-item.jsx';
+import type {Issue, Priority, Status} from './issue.js';
 import {IssuesProps, useIssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
-import StatusIcon from './status-icon';
+import StatusIcon from './status-icon.jsx';
 
 interface Props {
   issuesProps: IssuesProps;

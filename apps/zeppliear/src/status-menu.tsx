@@ -5,9 +5,9 @@ import BacklogIcon from './assets/icons/circle-dot.svg?react';
 import TodoIcon from './assets/icons/circle.svg?react';
 import DoneIcon from './assets/icons/done.svg?react';
 import InProgressIcon from './assets/icons/half-circle.svg?react';
-import {useClickOutside} from './hooks/use-click-outside';
-import {Status} from './issue';
-import StatusIcon from './status-icon';
+import {useClickOutside} from './hooks/use-click-outside.js';
+import {Status} from './issue.js';
+import StatusIcon from './status-icon.jsx';
 
 interface Props {
   labelVisible?: boolean;

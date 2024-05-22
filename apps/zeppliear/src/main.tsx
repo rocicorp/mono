@@ -1,10 +1,10 @@
-import ReactDOM from 'react-dom/client';
-import App, {Collections} from './app';
-import './index.css';
 import {UndoManager} from '@rocicorp/undo';
 import {useEffect, useRef, useState} from 'react';
+import ReactDOM from 'react-dom/client';
 import {Zero} from 'zero-client';
-import {ZeroProvider} from './hooks/use-zero';
+import App, {Collections} from './app.jsx';
+import {ZeroProvider} from './hooks/use-zero.jsx';
+import './index.css';
 import type {Comment, Issue, IssueLabel, Label, Member} from './issue.js';
 
 async function init() {

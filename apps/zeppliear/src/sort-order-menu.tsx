@@ -1,9 +1,9 @@
+import {SortOutlined as SortOutlinedIcon} from '@mui/icons-material';
+import classNames from 'classnames';
 import {RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
-import {Order} from './issue';
-import {useClickOutside} from './hooks/use-click-outside';
-import SortOutlinedIcon from '@mui/icons-material/SortOutlined';
-import classNames from 'classnames';
+import {useClickOutside} from './hooks/use-click-outside.js';
+import {Order} from './issue.js';
 
 interface Props {
   onSelect: (orderBy: Order) => void;

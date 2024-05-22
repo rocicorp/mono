@@ -4,7 +4,7 @@ import SignalNoPriorityIcon from './assets/icons/dots.svg?react';
 import SignalMediumIcon from './assets/icons/signal-medium.svg?react';
 import SignalStrongIcon from './assets/icons/signal-strong.svg?react';
 import SignalWeakIcon from './assets/icons/signal-weak.svg?react';
-import {Priority} from './issue';
+import {Priority} from './issue.js';
 
 interface Props {
   priority: Priority;

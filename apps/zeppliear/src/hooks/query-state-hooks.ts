@@ -1,22 +1,22 @@
-import useQueryState, {
-  identityProcessor,
-  QueryStateProcessor,
-} from './useQueryState';
+import {useMemo} from 'react';
+import type {SafeParseReturnType} from 'zod';
+import {
+  hasNonViewFilters as doesHaveNonViewFilters,
+  getViewStatuses,
+} from '../filters.js';
 import {
   Priority,
+  Status,
   priorityEnumSchema,
   priorityToPriorityString,
-  Status,
   statusStringSchema,
   statusToStatusString,
   type Order,
-} from '../issue';
-import {
-  getViewStatuses,
-  hasNonViewFilters as doesHaveNonViewFilters,
-} from '../filters';
-import {useMemo} from 'react';
-import type {SafeParseReturnType} from 'zod/lib/types';
+} from '../issue.js';
+import useQueryState, {
+  QueryStateProcessor,
+  identityProcessor,
+} from './useQueryState.js';
 
 const processOrderBy: QueryStateProcessor<Order> = {
   toString: (value: Order) => value,

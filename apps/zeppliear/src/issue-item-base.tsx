@@ -1,7 +1,7 @@
-import type {Issue, Priority} from './issue';
-import {memo} from 'react';
-import PriorityMenu from './priority-menu';
 import classNames from 'classnames';
+import {memo} from 'react';
+import type {Issue, Priority} from './issue.js';
+import PriorityMenu from './priority-menu.jsx';
 
 interface IssueItemBaseProps {
   issue: Issue;

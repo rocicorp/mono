@@ -1,13 +1,13 @@
 import {RefObject, useRef, useState} from 'react';
 import {usePopper} from 'react-popper';
-import {Filter, Priority, Status} from './issue';
-import {useClickOutside} from './hooks/use-click-outside';
-import SignalStrongIcon from './assets/icons/signal-strong.svg?react';
 import TodoIcon from './assets/icons/circle.svg?react';
-import {statusOpts} from './priority-menu';
-import {statuses} from './status-menu';
 import LabelIcon from './assets/icons/label.svg?react';
-import {LabelMenu} from './label-menu';
+import SignalStrongIcon from './assets/icons/signal-strong.svg?react';
+import {useClickOutside} from './hooks/use-click-outside.js';
+import {Filter, Priority, Status} from './issue.js';
+import {LabelMenu} from './label-menu.jsx';
+import {statusOpts} from './priority-menu.jsx';
+import {statuses} from './status-menu.jsx';
 
 interface Props {
   onSelectStatus: (filter: Status) => void;

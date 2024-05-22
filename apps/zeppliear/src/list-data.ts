@@ -6,7 +6,7 @@ import {
   type IssueWithLabels,
   type Priority,
   type Status,
-} from './issue';
+} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 
 export type ListData = {
