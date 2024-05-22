@@ -12,7 +12,7 @@
     "miniflare-test:watch": "vitest --config vitest.config.miniflare.ts",
     "node-test:watch": "vitest --config vitest.config.node.ts",
     "pg-test:watch": "vitest --config vitest.config.pg.ts",
-    "test": "npm run miniflare-test && npm run node-test",
+    "test": "npm run miniflare-test && npm run node-test && npm run pg-test",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
