@@ -12,12 +12,9 @@ export class Queue<T> {
   readonly #produced: Produced<T>[] = [];
 
   /**
-   * Enqueues a new value, which must not be `undefined`.
-   *
    * @returns A Promise that resolves when the value is consumed.
    */
   enqueue(value: T): Promise<void> {
-    assert(value !== undefined);
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolver.resolve(value);
@@ -48,7 +45,8 @@ export class Queue<T> {
    * Deletes an enqueued value from anywhere in the queue, based on identity equality.
    * The consumed callback is resolved if the value was in the queue.
    *
-   * Asserts if `value` is undefined.
+   * Note: deletion of `undefined` values is not supported. This method will asserts
+   * if `value` is undefined.
    *
    * @returns `true` if the value was deleted, `false` if it was not in the queue.
    */
