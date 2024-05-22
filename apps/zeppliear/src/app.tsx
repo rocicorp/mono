@@ -14,7 +14,7 @@ import {
   useViewState,
 } from './hooks/query-state-hooks';
 import {useZero} from './hooks/use-zero';
-import {useQuery} from './hooks/use-zql';
+import {useQuery} from './hooks/use-query';
 import {
   Comment,
   Issue,
