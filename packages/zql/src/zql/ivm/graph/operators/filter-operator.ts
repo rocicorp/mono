@@ -3,13 +3,14 @@ import {genFilter} from '../../../util/iterables.js';
 import type {Multiset} from '../../multiset.js';
 import {getValueFromEntity} from '../../source/util.js';
 import type {PipelineEntity} from '../../types.js';
-import type {DifferenceStream} from '../difference-stream.js';
-import {UnaryOperator} from './unary-operator.js';
+import type {DifferenceStream, Listener} from '../difference-stream.js';
+import type {Request} from '../message.js';
+import {OperatorBase} from './operator.js';
 
-export class FilterOperator<I extends PipelineEntity> extends UnaryOperator<
-  I,
-  I
-> {
+export class FilterOperator<I extends PipelineEntity> extends OperatorBase<I> {
+  readonly #listener: Listener<I>;
+  readonly #input: DifferenceStream<I>;
+
   #column: readonly [string | null, string];
   #operator: (lhs: unknown) => boolean;
 
@@ -20,7 +21,17 @@ export class FilterOperator<I extends PipelineEntity> extends UnaryOperator<
     operator: SimpleOperator,
     value: unknown,
   ) {
-    super(input, output, (_v, data: Multiset<I>) => this.#filter(data));
+    super(output);
+    this.#listener = {
+      newDifference: (version, data, reply) => {
+        output.newDifference(version, this.#filter(data), reply);
+      },
+      commit: version => {
+        this.commit(version);
+      },
+    };
+    input.addDownstream(this.#listener);
+    this.#input = input;
     this.#operator = getOperator(operator, value);
     this.#column = selector;
   }
@@ -29,6 +40,14 @@ export class FilterOperator<I extends PipelineEntity> extends UnaryOperator<
     return genFilter(data, e =>
       this.#operator(getValueFromEntity(e[0], this.#column)),
     );
+  }
+
+  messageUpstream(message: Request): void {
+    this.#input.messageUpstream(message, this.#listener);
+  }
+
+  destroy() {
+    this.#input.removeDownstream(this.#listener);
   }
 }
 

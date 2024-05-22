@@ -2,16 +2,15 @@ import type {Multiset} from '../../multiset.js';
 import type {PipelineEntity, Version} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
 import type {Reply, Request} from '../message.js';
-import type {Operator} from './operator.js';
 import {OperatorBase} from './operator.js';
 
 /**
  * Operator that only takes a single argument
  */
-export class UnaryOperator<I extends PipelineEntity, O extends PipelineEntity>
-  extends OperatorBase<O>
-  implements Operator
-{
+export class UnaryOperator<
+  I extends PipelineEntity,
+  O extends PipelineEntity,
+> extends OperatorBase<O> {
   readonly #listener: Listener<I>;
   readonly #input: DifferenceStream<I>;
 
