@@ -27,6 +27,16 @@ export default defineConfig({
     include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
     retry: 2,
     globalSetup: ['./test/pg-container-setup.ts'],
+    onConsoleLog(log: string) {
+      if (
+        log.includes(
+          'insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
+        )
+      ) {
+        return false;
+      }
+      return undefined;
+    },
   },
   plugins: [inlineWASM()],
 });
