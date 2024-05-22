@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import postgres from 'postgres';
+import type postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
-import {postgresTypeConfig} from '../../types/pg.js';
 import {id, idList} from '../../types/sql.js';
 import {ZERO_VERSION_COLUMN_NAME} from './schema/replication.js';
 import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
@@ -39,12 +38,13 @@ export async function startPostgresReplication(
   lc: LogContext,
   replicaID: string,
   tx: postgres.TransactionSql,
+  upstream: postgres.Sql,
   upstreamUri: string,
   subName = 'zero_sync',
 ) {
   lc.info?.(`Starting initial data synchronization from ${upstreamUri}`);
   const slotName = replicationSlot(replicaID);
-  const published = await setupUpstream(lc, upstreamUri, slotName);
+  const published = await setupUpstream(lc, upstream, slotName);
 
   lc.info?.(`Upstream is setup for publishing`, published);
 
@@ -162,6 +162,7 @@ export async function waitForInitialDataSynchronization(
   lc: LogContext,
   _replicaID: string,
   sql: postgres.Sql,
+  _upstream: postgres.Sql,
   upstreamUri: string,
   subName = 'zero_sync',
 ) {
@@ -222,6 +223,7 @@ export async function handoffPostgresReplication(
   lc: LogContext,
   _replicaID: string,
   tx: postgres.TransactionSql,
+  _upstream: postgres.Sql,
   upstreamUri: string,
   subName = 'zero_sync',
 ) {
@@ -241,12 +243,9 @@ export async function handoffPostgresReplication(
 // Exported for testing
 export async function setupUpstream(
   lc: LogContext,
-  upstreamUri: string,
+  upstreamDB: postgres.Sql,
   slotName: string,
 ): Promise<PublicationInfo> {
-  const upstreamDB = postgres(upstreamUri, {
-    ...postgresTypeConfig(),
-  });
   const [_, published] = await Promise.all([
     // Ensure that the replication slot exists. This must be done in its own
     // transaction, or else Postgres will complain with:

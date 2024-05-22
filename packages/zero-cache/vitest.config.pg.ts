@@ -25,7 +25,14 @@ export default defineConfig({
   test: {
     name: 'pg',
     include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
-    retry: 3,
+    retry: 2,
+    poolOptions: {
+      threads: {
+        minThreads: 1,
+        // Testcontainers can sometimes seg fault.
+        // Try `VITEST_MAX_THREADS=1 npm run pg-test` to mitigate.
+      },
+    },
   },
   plugins: [inlineWASM()],
 });

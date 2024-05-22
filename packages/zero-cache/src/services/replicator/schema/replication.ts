@@ -68,6 +68,7 @@ export async function setupReplicationTables(
   lc: LogContext,
   _replicaID: string,
   tx: postgres.TransactionSql,
+  _upstream: postgres.Sql,
   upstreamUri: string,
 ) {
   lc.info?.(`Setting up replication tables for ${upstreamUri}`);

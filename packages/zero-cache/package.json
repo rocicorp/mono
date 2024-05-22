@@ -43,6 +43,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rollup/plugin-node-resolve": "^15.0.1",
+    "@testcontainers/postgresql": "^10.9.0",
     "@types/pg": "^8.11.2",
     "@types/pg-format": "^1.0.5",
     "@types/xxhashjs": "^0.2.4",

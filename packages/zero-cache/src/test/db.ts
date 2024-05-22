@@ -1,34 +1,54 @@
+import {
+  PostgreSqlContainer,
+  StartedPostgreSqlContainer,
+} from '@testcontainers/postgresql';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterAll, expect} from 'vitest';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
+// TODO: Pass this in an ENV variable to run tests
+//       with different versions of Postgres.
+const PG_IMAGE = 'postgres:16.3-alpine3.19';
+
 class TestDBs {
-  // Connects to the main "postgres" DB of the local Postgres cluster.
-  //
-  // Note: In order to run all of the tests successfully, the following
-  // configuration needs to be set in postgresql.conf:
-  //
-  // wal_level = logical                    # default is replica
-  // max_logical_replication_workers = 20   # default is 4
-  readonly #sql = postgres({
-    database: 'postgres',
-    onnotice: () => {},
-    ...postgresTypeConfig(),
-  });
+  #sql: PostgresDB | undefined;
+  #container: StartedPostgreSqlContainer | undefined;
   readonly #dbs: Record<string, postgres.Sql> = {};
+
+  async #initDB(): Promise<{
+    container: StartedPostgreSqlContainer;
+    sql: PostgresDB;
+  }> {
+    if (!this.#container) {
+      this.#container = await new PostgreSqlContainer(PG_IMAGE)
+        .withCommand(['postgres', '-c', 'wal_level=logical'])
+        .start();
+    }
+    if (!this.#sql) {
+      this.#sql = postgres(this.#container.getConnectionUri(), {
+        onnotice: () => {},
+        ...postgresTypeConfig(),
+      });
+    }
+    return {container: this.#container, sql: this.#sql};
+  }
 
   async create(database: string): Promise<PostgresDB> {
     assert(!(database in this.#dbs), `${database} has already been created`);
 
-    await this.#sql`
-    DROP DATABASE IF EXISTS ${this.#sql(database)} WITH (FORCE)`;
+    const {container, sql} = await this.#initDB();
 
-    await this.#sql`
-    CREATE DATABASE ${this.#sql(database)}`;
+    await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
+
+    await sql`CREATE DATABASE ${sql(database)}`;
 
     const db = postgres({
+      host: container.getHost(),
+      port: container.getPort(),
+      username: container.getUsername(),
+      password: container.getPassword(),
       database,
       onnotice: () => {},
       ...postgresTypeConfig(),
@@ -44,8 +64,10 @@ class TestDBs {
   async #drop(db: postgres.Sql) {
     const {database} = db.options;
     await db.end();
-    await this.#sql`
-    DROP DATABASE IF EXISTS ${this.#sql(database)} WITH (FORCE)`;
+    const sql = this.#sql;
+    if (sql) {
+      await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
+    }
 
     delete this.#dbs[database];
   }
@@ -56,8 +78,12 @@ class TestDBs {
    * it manually.
    */
   async end() {
-    await this.drop(...[...Object.values(this.#dbs)]);
-    return this.#sql.end();
+    if (this.#sql) {
+      await this.#sql.end();
+    }
+    if (this.#container) {
+      await this.#container.stop();
+    }
   }
 }
 
@@ -66,6 +92,26 @@ export const testDBs = new TestDBs();
 afterAll(async () => {
   await testDBs.end();
 });
+
+/**
+ * Constructs a `postgres://` uri for connecting to the specified `db`.
+ * @param scope `external` for a connection uri from outside of the Testcontainer,
+ *               and `internal` for a connection uri between databases
+ *               running within the Testcontainer (e.g. pg-to-pg replication).
+ * @returns
+ */
+export function getConnectionURI(
+  db: postgres.Sql,
+  scope: 'internal' | 'external' = 'internal',
+) {
+  const {user, pass, host, port, database} = db.options;
+  return scope === 'external'
+    ? `postgres://${user}:${pass}@${host}:${port}/${database}`
+    : // The internal uri is used for communication between databases
+      // running in the testcontainer, and thus omits the exported port.
+      // Instead, the default postgres port is used for intra-container connections.
+      `postgres://${user}:${pass}@${host}/${database}`;
+}
 
 export async function initDB(
   db: postgres.Sql,
