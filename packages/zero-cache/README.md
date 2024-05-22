@@ -13,9 +13,7 @@ npm run test
 
 ### Postgres-dependent Tests
 
-This requires a local Postgres instance (e.g. https://postgres.app).
-
-> TODO: Replace this requirement with [Testcontainers](https://testcontainers.com/modules/postgresql/).
+These require Docker, and are run with [Testcontainers](https://testcontainers.com/modules/postgresql/).
 
 ```bash
 npm run pg-test
