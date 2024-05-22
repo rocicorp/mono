@@ -490,7 +490,7 @@ test('FieldValue type', () => {
 const e1 = z.object({
   id: z.string(),
   a: z.number(),
-  b: z.bigint(),
+  b: z.number(),
   c: z.string().optional(),
   d: z.boolean(),
 });
@@ -499,7 +499,7 @@ type E1 = z.infer<typeof e1>;
 const dummyObject: E1 = {
   id: 'a',
   a: 1,
-  b: 1n,
+  b: 1,
   c: '',
   d: true,
 };

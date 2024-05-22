@@ -1,5 +1,4 @@
 import {must} from 'shared/src/must.js';
-import type {Entity} from '../../entity.js';
 import type {
   AST,
   Aggregation,
@@ -14,6 +13,7 @@ import type {
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import {getValueFromEntity} from '../ivm/source/util.js';
 import type {StringOrNumber} from '../ivm/types.js';
+import type {Entity} from '../schema/entity-schema.js';
 
 export function buildPipeline(
   sourceStreamProvider: (
@@ -239,7 +239,7 @@ function applyGroupBy<T extends Entity>(
               if (newValue === undefined) {
                 continue;
               }
-              if (min === undefined || (min as T[keyof T]) > newValue) {
+              if (min === undefined || min === null || min > newValue) {
                 min = newValue;
               }
             }
@@ -256,7 +256,7 @@ function applyGroupBy<T extends Entity>(
               if (newValue === undefined) {
                 continue;
               }
-              if (max === undefined || (max as T[keyof T]) < newValue) {
+              if (max === undefined || max === null || max < newValue) {
                 max = newValue;
               }
             }

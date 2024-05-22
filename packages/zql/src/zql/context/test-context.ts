@@ -1,6 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
 import {must} from 'shared/src/must.js';
-import type {Entity} from '../../entity.js';
 import type {AST} from '../ast/ast.js';
 import {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {createPullResponseMessage, Request} from '../ivm/graph/message.js';
@@ -11,6 +10,7 @@ import {
 import type {Entry} from '../ivm/multiset.js';
 import type {Source, SourceInternal} from '../ivm/source/source.js';
 import type {PipelineEntity, Version} from '../ivm/types.js';
+import type {Entity} from '../schema/entity-schema.js';
 import type {Context} from './context.js';
 
 export class TestContext implements Context {

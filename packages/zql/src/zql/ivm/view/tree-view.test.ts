@@ -1,8 +1,8 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import type {Entity} from '../../../entity.js';
 import {makeTestContext} from '../../context/test-context.js';
 import {makeComparator} from '../../query/statement.js';
+import type {Entity} from '../../schema/entity-schema.js';
 import type {Comparator} from '../types.js';
 import {TreeView} from './tree-view.js';
 

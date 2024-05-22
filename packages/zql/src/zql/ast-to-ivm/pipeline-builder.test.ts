@@ -1,7 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import {describe, expect, test} from 'vitest';
 import {z} from 'zod';
-import type {Entity} from '../../entity.js';
 import type {AST, Condition, SimpleCondition} from '../ast/ast.js';
 import {makeTestContext} from '../context/test-context.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -9,6 +8,7 @@ import {Materialite} from '../ivm/materialite.js';
 import * as agg from '../query/agg.js';
 import {conditionToString} from '../query/condition-to-string.js';
 import {EntityQuery, astForTesting as ast} from '../query/entity-query.js';
+import type {Entity} from '../schema/entity-schema.js';
 import {buildPipeline, getOperator} from './pipeline-builder.js';
 
 const e1 = z.object({

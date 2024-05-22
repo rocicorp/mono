@@ -1,11 +1,11 @@
 import {compareUTF8} from 'compare-utf8';
 import type {ExperimentalNoIndexDiff} from 'replicache';
 import {assert} from 'shared/src//asserts.js';
-import type {Entity} from '../../entity.js';
 import type {AST} from '../ast/ast.js';
 import type {Materialite} from '../ivm/materialite.js';
 import type {SetSource} from '../ivm/source/set-source.js';
 import type {Source} from '../ivm/source/source.js';
+import type {Entity} from '../schema/entity-schema.js';
 import {mapIter} from '../util/iterables.js';
 import type {Context, SubscriptionDelegate} from './context.js';
 

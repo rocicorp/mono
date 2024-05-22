@@ -1,4 +1,4 @@
-import type {Entity} from '@rocicorp/zql/src/entity.js';
+import type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
 import type {MutatorDefs, WriteTransaction} from 'reflect-shared/src/types.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
