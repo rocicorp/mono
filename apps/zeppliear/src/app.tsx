@@ -15,6 +15,7 @@ import {
 } from './hooks/query-state-hooks';
 import {useZero} from './hooks/use-zero';
 import {useQuery} from './hooks/use-query';
+import {usePreloadQuery} from './hooks/use-preload-query';
 import {
   Comment,
   Issue,
@@ -104,7 +105,7 @@ const App = ({undoManager}: AppProps) => {
   const viewIssueCount = 0;
 
   const issuesProps = useIssuesProps(filteredQuery, issueQueryDeps, issueOrder);
-  // ========= Ghetto pre-loads
+  // ========= pre-loads
   const fields = [
     'created',
     'creatorID',
@@ -140,13 +141,13 @@ const App = ({undoManager}: AppProps) => {
     'issueID',
     'labelID',
   );
-  useQuery(createdPreloadQuery);
-  useQuery(modifiedPreloadQuery);
-  useQuery(statusPreloadQuery);
-  useQuery(priorityPreloadQuery);
-  useQuery(allIssueLabelPreloadQuery);
-  useQuery(allLabelPreloadQuery);
-  // ========= Ghetto pre-loads
+  usePreloadQuery(createdPreloadQuery);
+  usePreloadQuery(modifiedPreloadQuery);
+  usePreloadQuery(statusPreloadQuery);
+  usePreloadQuery(priorityPreloadQuery);
+  usePreloadQuery(allIssueLabelPreloadQuery);
+  usePreloadQuery(allLabelPreloadQuery);
+  // ========= end pre-loads
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
