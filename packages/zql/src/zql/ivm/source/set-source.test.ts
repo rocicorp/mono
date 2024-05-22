@@ -1,6 +1,7 @@
 import fc from 'fast-check';
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import type {Listener} from '../graph/difference-stream.js';
+import type {PullMsg} from '../graph/message.js';
 import {Materialite} from '../materialite.js';
 
 type E = {id: number};
@@ -255,26 +256,310 @@ test('history requests with an alternate ordering are fulfilled by that ordering
   );
 });
 
-test('history request that is a primary key lookup', () => {
-  // test that the debug operator is only called with a multiset of length 1
-  // or an empty multiset of the PK does not exist in the collection
+describe('history requests with hoisted filters', () => {
+  const m = new Materialite();
+  const source = m.newSetSource(comparator, ordering, 'e');
+
+  const baseItems = [
+    {id: 1, x: 'a', y: 'q'},
+    {id: 2, x: 'b', y: 'q'},
+    {id: 3, x: 'c', y: 'q'},
+    {id: 4, x: 'd', y: 'r'},
+    {id: 5, x: 'e', y: 'r'},
+  ];
+  m.tx(() => {
+    source.seed(baseItems);
+  });
+
+  test.each([
+    {
+      name: 'pk lookup',
+      requests: [1, 2, 3].map(id => ({
+        id,
+        type: 'pull',
+        order: undefined,
+        hoistedConditions: [
+          {
+            selector: ['e', 'id'],
+            op: '=',
+            value: id,
+          },
+        ],
+      })),
+      expected: baseItems.map(item => [item]),
+    },
+    {
+      name: 'pk lookup w/ order-by',
+      requests: [1, 2, 3].map(id => ({
+        id,
+        type: 'pull',
+        order: [
+          [
+            ['e', 'x'],
+            ['e', 'id'],
+          ],
+          'asc',
+        ],
+        hoistedConditions: [
+          {
+            selector: ['e', 'id'],
+            op: '=',
+            value: id,
+          },
+        ],
+      })),
+      expected: baseItems.map(item => [item]),
+    },
+    {
+      name: 'pk asc w/ lower bound',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: undefined,
+          hoistedConditions: [
+            {
+              selector: ['e', 'id'],
+              // yes, it is `>` but we treat it the same as `>=` in the source
+              // since downstream filters will remove the off by one.
+              op: '>',
+              value: 2,
+            },
+          ],
+        },
+      ],
+      expected: [[baseItems[1], baseItems[2], baseItems[3], baseItems[4]]],
+    },
+    {
+      name: 'pk w/ lower and upper bound. asc.',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: undefined,
+          hoistedConditions: [
+            {
+              selector: ['e', 'id'],
+              op: '>',
+              value: 2,
+            },
+            {
+              selector: ['e', 'id'],
+              op: '<',
+              value: 3,
+            },
+          ],
+        },
+      ],
+      expected: [[baseItems[1], baseItems[2]]],
+    },
+    {
+      name: 'pk w/ upper bound. asc.',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: undefined,
+          hoistedConditions: [
+            {
+              selector: ['e', 'id'],
+              // yes, it is `<` but we treat it the same as `<=` in the source
+              // since downstream filters will remove the off by one.
+              op: '<',
+              value: 3,
+            },
+          ],
+        },
+      ],
+      expected: [[baseItems[0], baseItems[1], baseItems[2]]],
+    },
+    {
+      name: 'just a naked request',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: undefined,
+          hoistedConditions: [],
+        },
+      ],
+      expected: [baseItems],
+    },
+    {
+      name: 'pk w/ lower bound. desc.',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [[['e', 'id']], 'desc'],
+          hoistedConditions: [
+            {
+              selector: ['e', 'id'],
+              op: '>',
+              value: 3,
+            },
+          ],
+        },
+      ],
+      expected: [[baseItems[4], baseItems[3], baseItems[2]]],
+    },
+    {
+      name: 'pk w/ upper bound. desc.',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [[['e', 'id']], 'desc'],
+          hoistedConditions: [
+            {
+              selector: ['e', 'id'],
+              op: '<',
+              value: 3,
+            },
+          ],
+        },
+      ],
+      expected: [[baseItems[2], baseItems[1], baseItems[0]]],
+    },
+    {
+      name: 'pk w/ lower and upper bound. desc.',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [[['e', 'id']], 'desc'],
+          hoistedConditions: [
+            {
+              selector: ['e', 'id'],
+              op: '>',
+              value: 2,
+            },
+            {
+              selector: ['e', 'id'],
+              op: '<',
+              value: 4,
+            },
+          ],
+        },
+      ],
+      expected: [[baseItems[3], baseItems[2], baseItems[1]]],
+    },
+    {
+      name: 'x lookup w/ order-by x',
+      requests: ['a', 'b', 'c'].map(x => ({
+        id: 1,
+        type: 'pull',
+        order: [
+          [
+            ['e', 'x'],
+            ['e', 'id'],
+          ],
+          'asc',
+        ],
+        hoistedConditions: [
+          {
+            selector: ['e', 'x'],
+            op: '=',
+            value: x,
+          },
+        ],
+      })),
+      // we constrained on `x` so only 1 item is processed.
+      expected: [[baseItems[0]], [baseItems[1]], [baseItems[2]]],
+    },
+    {
+      name: 'x lookup w/ order-by y',
+      requests: ['a', 'b', 'c'].map(x => ({
+        id: 1,
+        type: 'pull',
+        order: [
+          [
+            ['e', 'y'],
+            ['e', 'id'],
+          ],
+          'asc',
+        ],
+        hoistedConditions: [
+          {
+            selector: ['e', 'x'],
+            op: '=',
+            value: x,
+          },
+        ],
+      })),
+      // we can't constrain on `x` so all baseItems are processed.
+      expected: [baseItems, baseItems, baseItems],
+    },
+    {
+      name: 'x asc w/ lower bound on x',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [
+              ['e', 'x'],
+              ['e', 'id'],
+            ],
+            'asc',
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>',
+              value: 'c',
+            },
+          ],
+        },
+      ],
+      // we only process items >= c. Yes, >=. Downstream filters will remove the off by one.
+      expected: [[baseItems[2], baseItems[3], baseItems[4]]],
+    },
+    {
+      name: 'lookup on y w/ order-by y',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [
+              ['e', 'y'],
+              ['e', 'id'],
+            ],
+            'asc',
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'y'],
+              op: '=',
+              value: 'q',
+            },
+          ],
+        },
+      ],
+      // only y values with `q` will be processed.
+      expected: [baseItems.slice(0, 3)],
+    },
+  ] satisfies {
+    name: string;
+    requests: PullMsg[];
+    expected: E[][];
+  }[])('$name', ({requests, expected}) => {
+    const items: E[] = [];
+    const listener: Listener<E> = {
+      commit(_version) {},
+      newDifference(_version, multiset, _reply) {
+        for (const item of multiset) {
+          items.push(item[0]);
+        }
+      },
+    };
+    requests.forEach((request, i) => {
+      m.tx(() => {
+        source.stream.messageUpstream(request, listener);
+      });
+      expect(items).toEqual(expected[i]);
+      items.length = 0;
+    });
+  });
 });
-
-test('history request that is a primary key lookup and has an order by', () => {
-  // test that the order-by is ignored and we just do the PK lookup
-});
-
-test('history request that is a range of primary keys', () => {
-  // test bottom, asc
-  // test bottom and top, asc
-  // test top, asc
-  // test bottom, desc
-  // test bottom and top, desc
-  // test top, desc
-});
-
-test('history request that is a range over an alternate sort', () => {});
-
-test('sorted on many fields but range inequality is only against the single left most field', () => {});
-
-test('sorted by many fields, inequalities against non-prefix', () => {});

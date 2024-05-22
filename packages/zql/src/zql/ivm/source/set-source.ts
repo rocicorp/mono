@@ -1,6 +1,5 @@
 import {must} from 'shared/src/must.js';
 import type {Ordering, Selector} from '../../ast/ast.js';
-import {makeComparator} from '../../query/statement.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {
   createPullResponseMessage,
@@ -15,6 +14,7 @@ import type {Source, SourceInternal} from './source.js';
 import type {ISortedMap} from 'sorted-btree-roci';
 import BTree from 'sorted-btree-roci';
 import {gen} from '../../util/iterables.js';
+import {makeComparator} from '../compare.js';
 
 /**
  * A source that remembers what values it contains.
@@ -229,13 +229,17 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     // Primary key lookup.
     if (primaryKeyEquality !== undefined) {
-      const key = primaryKeyEquality.selector[1];
-      const entry = this.#tree.get({
-        id: key,
+      const {value} = primaryKeyEquality;
+      const entry = this.#tree.getPairOrNextHigher({
+        id: value,
       } as unknown as T);
       this.#stream.newDifference(
         this._materialite.getVersion(),
-        entry === undefined ? [] : [entry],
+        entry !== undefined
+          ? entry[0].id !== value
+            ? []
+            : [[entry[0], 1]]
+          : [],
         createPullResponseMessage(request, this.#name, this.#order),
       );
       return;
@@ -248,19 +252,12 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     if (orderForReply !== undefined) {
       const range = getRange(conditionsForThisSource, orderForReply);
       if (request.order === undefined || request.order[1] === 'asc') {
-        // TODO: will this work without all the require fields for the sort?
-        // e.g., status, modified, id... if we just give status.
-        // May just be a matter of fixing comparators.
         this.#stream.newDifference(
           this._materialite.getVersion(),
           gen(() =>
             genFromBTreeEntries(
               newSort.#tree.entries(maybeKey(range.field, range.bottom)),
-              createEndPredicateAsc(
-                newSort.comparator,
-                range.field[1],
-                range.top,
-              ),
+              createEndPredicateAsc(range.field, range.top),
             ),
           ),
           createPullResponseMessage(request, this.#name, orderForReply),
@@ -273,11 +270,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
         gen(() =>
           genFromBTreeEntries(
             newSort.#tree.entriesReversed(maybeKey(range.field, range.top)),
-            createEndPredicateDesc(
-              newSort.comparator,
-              range.field[1],
-              range.bottom,
-            ),
+            createEndPredicateDesc(range.field, range.bottom),
           ),
         ),
         createPullResponseMessage(request, this.#name, orderForReply),
@@ -378,12 +371,13 @@ function* genFromBTreeEntries<T>(
       } else {
         return false;
       }
+    } else {
+      yield [pair[0], 1];
     }
-    yield [pair[0], 1];
   }
 }
 
-// TODO(mlaw): `getPrimaryKeyEqualities` to support `IN`
+// TODO(mlaw): update `getPrimaryKeyEqualities` to support `IN`
 function getPrimaryKeyEquality(
   conditions: HoistedCondition[],
 ): HoistedCondition | undefined {
@@ -396,14 +390,6 @@ function getPrimaryKeyEquality(
 }
 
 function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
-  // > inequality is bottom of range
-  // where(foo, '>', 1) => (1, ∞)
-  // < inequality is top of range
-  // where(foo, '<', 1) => (-∞, 1)
-  // if both are present we have a bounded range
-
-  // loop through and find conditions that are inequalitied on the first field of the `sourceOrder`
-
   let top: unknown | undefined;
   let bottom: unknown | undefined;
   const sourceOrderFields = sourceOrder[0];
@@ -411,9 +397,10 @@ function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
 
   for (const c of conditions) {
     if (c.selector[1] === firstOrderField[1]) {
-      if (c.op === '>' || c.op === '>=') {
+      if (c.op === '>' || c.op === '>=' || c.op === '=') {
         bottom = c.value;
-      } else if (c.op === '<' || c.op === '<=') {
+      }
+      if (c.op === '<' || c.op === '<=' || c.op === '=') {
         top = c.value;
       }
     }
@@ -426,30 +413,30 @@ function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
   };
 }
 
-function createEndPredicateAsc<T>(
-  comp: Comparator<T>,
-  field: string,
+function createEndPredicateAsc<T extends object>(
+  field: Selector,
   end: unknown,
 ): ((t: T) => boolean) | undefined {
   if (end === undefined) {
     return undefined;
   }
+  const comp = makeComparator<T>([field], 'asc');
   return t => {
-    const cmp = comp(t, {[field]: end} as T);
+    const cmp = comp(t, {[field[1]]: end} as T);
     return cmp > 0;
   };
 }
 
-function createEndPredicateDesc<T>(
-  comp: Comparator<T>,
-  field: string,
+function createEndPredicateDesc<T extends object>(
+  field: Selector,
   end: unknown,
 ): ((t: T) => boolean) | undefined {
   if (end === undefined) {
     return undefined;
   }
+  const comp = makeComparator<T>([field], 'asc');
   return t => {
-    const cmp = comp(t, {[field]: end} as T);
+    const cmp = comp(t, {[field[1]]: end} as T);
     return cmp < 0;
   };
 }

@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
 import {z} from 'zod';
 import {makeTestContext} from '../context/test-context.js';
+import {makeComparator} from '../ivm/compare.js';
 import {EntityQuery, astForTesting as ast} from './entity-query.js';
-import {makeComparator} from './statement.js';
 
 const e1 = z.object({
   id: z.string(),
