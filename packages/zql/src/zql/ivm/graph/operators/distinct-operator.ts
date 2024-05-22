@@ -1,4 +1,4 @@
-import type {Entity} from '../../../../entity.js';
+import type {Entity} from '../../../schema/entity-schema.js';
 import {genCached, genFilter, genMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {PipelineEntity, StringOrNumber, Version} from '../../types.js';

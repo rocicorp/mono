@@ -1,5 +1,4 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Entity} from '../../entity.js';
 import {buildPipeline} from '../ast-to-ivm/pipeline-builder.js';
 import type {AST, Ordering, Selector} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
@@ -9,6 +8,7 @@ import type {Source} from '../ivm/source/source.js';
 import {getValueFromEntity} from '../ivm/source/util.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
+import type {Entity} from '../schema/entity-schema.js';
 import type {MakeHumanReadable} from './entity-query.js';
 
 export interface IStatement<TReturn> {

@@ -1,6 +1,6 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import type {Entity} from '@rocicorp/zql/src/entity.js';
+import type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
 import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
 import {ZeroContext} from '@rocicorp/zql/src/zql/context/zero-context.js';
 import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';

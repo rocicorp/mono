@@ -17,7 +17,7 @@ import type {
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
-import type {EntitySchema} from '../schema/entity-schema.js';
+import type {Entity} from '../schema/entity-schema.js';
 import {AggArray, Aggregate, Max, Min, isAggregate} from './agg.js';
 import {Statement} from './statement.js';
 
@@ -52,7 +52,7 @@ export type FieldAsOperatorInput<
   : ValueAsOperatorInput<ExtractNestedTypeByName<F, S>, Op>;
 
 export type FromSet = {
-  [tableOrAlias: string]: EntitySchema;
+  [tableOrAlias: string]: Entity;
 };
 
 type NestedKeys<T> = {

@@ -1,7 +1,7 @@
-import type {Entity} from '../../entity.js';
 import type {AST, Ordering} from '../ast/ast.js';
 import type {Materialite} from '../ivm/materialite.js';
 import type {Source} from '../ivm/source/source.js';
+import type {Entity} from '../schema/entity-schema.js';
 
 export type SubscriptionDelegate = {
   subscriptionAdded(ast: AST): void;

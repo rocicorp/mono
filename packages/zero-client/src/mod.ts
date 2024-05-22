@@ -1,4 +1,4 @@
-export type {Entity} from '@rocicorp/zql/src/entity.js';
+export type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
 export type {EntityQuery} from '@rocicorp/zql/src/zql/query/entity-query.js';
 export {
   IDBNotFoundError,

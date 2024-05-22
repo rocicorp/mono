@@ -1,5 +1,4 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Entity} from '../../../entity.js';
 import type {Selector} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
 import type {
@@ -29,6 +28,7 @@ import {MapOperator} from './operators/map-operator.js';
 import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
 import {must} from 'shared/src/must.js';
+import type {Entity} from '../../schema/entity-schema.js';
 
 export type Listener<T> = {
   newDifference: (
