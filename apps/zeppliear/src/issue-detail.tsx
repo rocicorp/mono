@@ -17,7 +17,7 @@ import ConfirmationModal from './confirm-modal';
 import {useIssueDetailState} from './hooks/query-state-hooks';
 import {useKeyPressed} from './hooks/use-key-pressed';
 import {useZero} from './hooks/use-zero';
-import {useQuery} from './hooks/use-zql';
+import {useQuery} from './hooks/use-query';
 import {
   Comment,
   Issue,
