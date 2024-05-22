@@ -21,11 +21,9 @@ export enum ErrorKind {
 
 export const errorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),
-  v.literal(ErrorKind.ClientNotFound),
   v.literal(ErrorKind.InvalidConnectionRequest),
   v.literal(ErrorKind.InvalidConnectionRequestBaseCookie),
   v.literal(ErrorKind.InvalidConnectionRequestLastMutationID),
-  v.literal(ErrorKind.InvalidConnectionRequestClientDeleted),
   v.literal(ErrorKind.InvalidMessage),
   v.literal(ErrorKind.InvalidPush),
   v.literal(ErrorKind.MutationFailed),

@@ -403,8 +403,11 @@ export class Zero<QD extends QueryDefs> {
         ...replicacheOptions,
         ...replicacheInternalOptions,
       },
-      (queryInternal, lc) =>
-        new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
+      {
+        makeSubscriptionsManager: (queryInternal, lc) =>
+          new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
+        enableClientGroupForking: false,
+      },
     );
     this.#rep = rep;
 

@@ -296,6 +296,7 @@ export function initClientV6(
   mutatorNames: string[],
   indexes: IndexDefinitions,
   formatVersion: FormatVersion,
+  enableClientGroupForking: boolean,
 ): Promise<InitClientV6Result> {
   return withWriteNoImplicitCommit(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(
@@ -368,7 +369,10 @@ export function initClientV6(
       return [newClient, headHash, newClients, false];
     }
 
-    if (res.type === FIND_MATCHING_CLIENT_TYPE_NEW) {
+    if (
+      !enableClientGroupForking ||
+      res.type === FIND_MATCHING_CLIENT_TYPE_NEW
+    ) {
       // No client group to fork from. Create empty snapshot.
       const emptyBTreeChunk = dagWrite.createChunk(emptyDataNode, []);
       await dagWrite.putChunk(emptyBTreeChunk);

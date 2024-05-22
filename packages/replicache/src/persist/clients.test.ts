@@ -348,6 +348,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     [],
     {},
     formatVersion,
+    true /* enableClientGroupForking */,
   );
 
   expect(clients).to.deep.equal(
@@ -521,8 +522,9 @@ suite('findMatchingClient', () => {
     await withRead(perdag, async read => {
       const mutatorNames: string[] = [];
       const indexes = {};
-      const res = await findMatchingClient(read, mutatorNames, indexes);
-      expect(res).deep.equal({type: FIND_MATCHING_CLIENT_TYPE_NEW});
+      expect(await findMatchingClient(read, mutatorNames, indexes)).deep.equal({
+        type: FIND_MATCHING_CLIENT_TYPE_NEW,
+      });
     });
   });
 
@@ -668,277 +670,344 @@ suite('findMatchingClient', () => {
 });
 
 suite('initClientV6', () => {
-  test('new client for empty db', async () => {
-    const formatVersion = FormatVersion.Latest;
-    const lc = new LogContext();
-    const perdag = new TestStore();
-    const mutatorNames: string[] = [];
-    const indexes: IndexDefinitions = {};
+  function makeSuite(enableClientGroupForking: boolean) {
+    suite(`enableClientGroupForking: ${enableClientGroupForking}`, () => {
+      test('new client for empty db', async () => {
+        const formatVersion = FormatVersion.Latest;
+        const lc = new LogContext();
+        const perdag = new TestStore();
+        const mutatorNames: string[] = [];
+        const indexes: IndexDefinitions = {};
 
-    const clientID = uuid();
-    const [client, , clientMap] = await initClientV6(
-      clientID,
-      lc,
-      perdag,
-      mutatorNames,
-      indexes,
-      formatVersion,
-    );
-    expect(clientID).to.be.a('string');
-    assertClientV6(client);
-    expect(clientMap.size).to.equal(1);
-    expect(clientMap.get(clientID)).to.equal(client);
-    expect(client.persistHash).to.be.null;
-  });
+        const clientID = uuid();
+        const [client, , clientMap, newClientGroup] = await initClientV6(
+          clientID,
+          lc,
+          perdag,
+          mutatorNames,
+          indexes,
+          formatVersion,
+          enableClientGroupForking,
+        );
+        expect(clientID).to.be.a('string');
+        assertClientV6(client);
+        expect(newClientGroup).true;
+        expect(clientMap.size).to.equal(1);
+        expect(clientMap.get(clientID)).to.equal(client);
+        expect(client.persistHash).to.be.null;
 
-  test('reuse head', async () => {
-    const formatVersion = FormatVersion.Latest;
-    const lc = new LogContext();
+        await withRead(perdag, async read => {
+          const clientGroup = await getClientGroup(client.clientGroupID, read);
+          console.error(clientGroup);
+        });
+      });
 
-    const perdag = new TestStore();
-    const clientID1 = 'client-id-1';
-    const clientGroupID = 'client-group-id';
-    const b = new ChainBuilder(perdag);
-    await b.addGenesis(clientID1);
-    await b.addLocal(clientID1, []);
-    const headHash = b.chain[1].chunk.hash;
-    const mutatorNames: string[] = ['x'];
-    const indexes: IndexDefinitions = {};
+      test('reuse head', async () => {
+        const formatVersion = FormatVersion.Latest;
+        const lc = new LogContext();
 
-    clock.setSystemTime(10);
+        const perdag = new TestStore();
+        const clientID1 = 'client-id-1';
+        const clientGroupID = 'client-group-id';
+        const b = new ChainBuilder(perdag);
+        await b.addGenesis(clientID1);
+        await b.addLocal(clientID1, []);
+        const headHash = b.chain[1].chunk.hash;
+        const mutatorNames: string[] = ['x'];
+        const indexes: IndexDefinitions = {};
 
-    const client1: ClientV5 = {
-      clientGroupID,
-      headHash,
-      heartbeatTimestampMs: 1,
-      tempRefreshHash: null,
-    };
-    const clientGroup1: ClientGroup = {
-      headHash: b.chain[1].chunk.hash,
-      lastServerAckdMutationIDs: {[clientID1]: 0},
-      mutationIDs: {[clientID1]: 1},
-      indexes,
-      mutatorNames,
-      disabled: false,
-    };
+        clock.setSystemTime(10);
 
-    await withWriteNoImplicitCommit(perdag, async write => {
-      await setClient(clientID1, client1, write);
-      await setClientGroup(clientGroupID, clientGroup1, write);
-      await write.commit();
+        const client1: ClientV5 = {
+          clientGroupID,
+          headHash,
+          heartbeatTimestampMs: 1,
+          tempRefreshHash: null,
+        };
+        const clientGroup1: ClientGroup = {
+          headHash: b.chain[1].chunk.hash,
+          lastServerAckdMutationIDs: {[clientID1]: 0},
+          mutationIDs: {[clientID1]: 1},
+          indexes,
+          mutatorNames,
+          disabled: false,
+        };
+
+        await withWriteNoImplicitCommit(perdag, async write => {
+          await setClient(clientID1, client1, write);
+          await setClientGroup(clientGroupID, clientGroup1, write);
+          await write.commit();
+        });
+
+        const clientID2 = uuid();
+        const [client2, client2HeadHash, clientMap, newClientGroup] =
+          await initClientV6(
+            clientID2,
+            lc,
+            perdag,
+            mutatorNames,
+            indexes,
+            formatVersion,
+            enableClientGroupForking,
+          );
+        expect(clientID2).to.not.equal(clientID1);
+        expect(newClientGroup).false;
+        expect(clientMap.size).to.equal(2);
+        expect(client2).to.deep.equal({
+          clientGroupID,
+          refreshHashes: [client2HeadHash],
+          heartbeatTimestampMs: 10,
+          persistHash: null,
+        });
+        expect(client2HeadHash).to.equal(clientGroup1.headHash);
+
+        const clientGroup2 = await withRead(perdag, read =>
+          getClientGroup(clientGroupID, read),
+        );
+        expect(clientGroup2).to.deep.equal({
+          ...clientGroup1,
+          lastServerAckdMutationIDs: {
+            [clientID1]: 0,
+          },
+          mutationIDs: {
+            [clientID1]: 1,
+          },
+        });
+      });
+
+      test('fork snapshot due to incompatible defs', async () => {
+        const formatVersion = FormatVersion.Latest;
+        const lc = new LogContext();
+
+        const perdag = new TestStore();
+        const clientID1 = 'client-id-1';
+        const clientGroupID1 = 'client-group-id-1';
+        const b = new ChainBuilder(perdag);
+        await b.addGenesis(clientID1);
+        const clientGroup1Snapshot = await b.addSnapshot(
+          [
+            ['a', 'b'],
+            ['c', 'd'],
+          ],
+          clientID1,
+          1,
+          {[clientID1]: 10},
+        );
+        await b.addLocal(clientID1, []);
+        const headHash = b.chain[1].chunk.hash;
+        const initialMutatorNames: string[] = ['x'];
+        const initialIndexes: IndexDefinitions = {};
+        const newMutatorNames = ['y'];
+        const newIndexes: IndexDefinitions = {};
+
+        clock.setSystemTime(10);
+
+        const client1: ClientV5 = {
+          clientGroupID: clientGroupID1,
+          headHash,
+          heartbeatTimestampMs: 1,
+          tempRefreshHash: null,
+        };
+        const clientGroup1: ClientGroup = {
+          headHash,
+          lastServerAckdMutationIDs: {[clientID1]: 0},
+          mutationIDs: {[clientID1]: 1},
+          indexes: initialIndexes,
+          mutatorNames: initialMutatorNames,
+          disabled: false,
+        };
+
+        await withWriteNoImplicitCommit(perdag, async write => {
+          await setClient(clientID1, client1, write);
+          await setClientGroup(clientGroupID1, clientGroup1, write);
+          await write.commit();
+        });
+
+        const clientID2 = uuid();
+        const [client2, client2HeadHash, clientMap] = await initClientV6(
+          clientID2,
+          lc,
+          perdag,
+          newMutatorNames,
+          newIndexes,
+          formatVersion,
+          enableClientGroupForking,
+        );
+        expect(clientID2).to.not.equal(clientID1);
+        assertClientV6(client2);
+        const clientGroupID2 = client2.clientGroupID;
+        expect(clientGroupID2).to.not.equal(clientGroupID1);
+        expect(clientMap.size).to.equal(2);
+
+        expect(client2HeadHash).to.not.equal(
+          clientGroup1.headHash,
+          'Forked so we need a new head',
+        );
+        expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
+        expect(client2.heartbeatTimestampMs).to.equal(10);
+        expect(client2.persistHash).to.be.null;
+
+        await withRead(perdag, async read => {
+          const clientGroup2 = await getClientGroup(clientGroupID2, read);
+          expect(clientGroup2).to.deep.equal({
+            headHash: client2HeadHash,
+            indexes: newIndexes,
+            mutatorNames: newMutatorNames,
+            lastServerAckdMutationIDs: {},
+            mutationIDs: {},
+            disabled: false,
+          });
+          const clientGroup2HeadCommit = await commitFromHash(
+            client2HeadHash,
+            read,
+          );
+          if (enableClientGroupForking) {
+            expect(clientGroup2HeadCommit.valueHash).to.equal(
+              clientGroup1Snapshot.valueHash,
+            );
+            expect(clientGroup2HeadCommit.meta.basisHash).to.equal(
+              clientGroup1Snapshot.meta.basisHash,
+            );
+          } else {
+            expect(clientGroup2HeadCommit.valueHash).to.not.equal(
+              clientGroup1Snapshot.valueHash,
+            );
+            expect(clientGroup2HeadCommit.meta.basisHash).to.not.equal(
+              clientGroup1Snapshot.meta.basisHash,
+            );
+            expect(
+              await new BTreeRead(
+                read,
+                formatVersion,
+                clientGroup2HeadCommit.valueHash,
+              ).isEmpty(),
+            ).to.be.true;
+          }
+        });
+      });
+
+      test('fork snapshot due to incompatible index names - reuse index maps', async () => {
+        const formatVersion = FormatVersion.Latest;
+        const lc = new LogContext();
+
+        const perdag = new TestStore();
+        const clientID1 = 'client-id-1';
+        const clientGroupID1 = 'client-group-id-1';
+        const b = new ChainBuilder(perdag);
+
+        const initialIndexes: IndexDefinitions = {
+          a1: {jsonPointer: '', prefix: 'a'},
+        };
+        await b.addGenesis(clientID1, initialIndexes);
+        const newMutatorNames = ['x'];
+        const newIndexes: IndexDefinitions = {
+          a2: {jsonPointer: '', prefix: 'a'},
+          b: {jsonPointer: ''},
+        };
+
+        const clientGroup1Snapshot = await b.addSnapshot(
+          [
+            ['a', 'b'],
+            ['c', 'd'],
+          ],
+          clientID1,
+          1,
+          {[clientID1]: 10},
+        );
+        await b.addLocal(clientID1, []);
+        const headHash = b.chain[2].chunk.hash;
+        const initialMutatorNames = ['x'];
+
+        clock.setSystemTime(10);
+
+        const client1: ClientV5 = {
+          clientGroupID: clientGroupID1,
+          headHash,
+          heartbeatTimestampMs: 1,
+          tempRefreshHash: null,
+        };
+        const clientGroup1: ClientGroup = {
+          headHash,
+          lastServerAckdMutationIDs: {[clientID1]: 0},
+          mutationIDs: {[clientID1]: 1},
+          indexes: initialIndexes,
+          mutatorNames: initialMutatorNames,
+          disabled: false,
+        };
+
+        await withWriteNoImplicitCommit(perdag, async write => {
+          await setClient(clientID1, client1, write);
+          await setClientGroup(clientGroupID1, clientGroup1, write);
+          await write.commit();
+        });
+
+        const clientID2 = uuid();
+        const [client2, client2HeadHash, clientMap] = await initClientV6(
+          clientID2,
+          lc,
+          perdag,
+          newMutatorNames,
+          newIndexes,
+          formatVersion,
+          enableClientGroupForking,
+        );
+        expect(clientID2).to.not.equal(clientID1);
+        assertClientV6(client2);
+        const clientGroupID2 = client2.clientGroupID;
+        expect(clientGroupID2).to.not.equal(clientGroupID1);
+        expect(clientMap.size).to.equal(2);
+
+        expect(client2HeadHash).to.not.equal(
+          client1.headHash,
+          'Forked so we need a new head',
+        );
+        expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
+        expect(client2.heartbeatTimestampMs).to.equal(10);
+        expect(client2.persistHash).to.be.null;
+
+        const clientGroup2 = await withRead(perdag, read =>
+          getClientGroup(clientGroupID2, read),
+        );
+        expect(clientGroup2).to.deep.equal({
+          headHash: client2HeadHash,
+          indexes: newIndexes,
+          mutatorNames: newMutatorNames,
+          lastServerAckdMutationIDs: {},
+          mutationIDs: {},
+          disabled: false,
+        });
+
+        await withRead(perdag, async read => {
+          const c1 = await commitFromHash(client1.headHash, read);
+          expect(c1.chunk.data.indexes).length(1);
+
+          const c2 = await commitFromHash(client2HeadHash, read);
+          expect(c2.chunk.data.indexes).length(2);
+
+          if (enableClientGroupForking) {
+            expect(c2.valueHash).to.equal(clientGroup1Snapshot.valueHash);
+            expect(c2.meta.basisHash).to.equal(
+              clientGroup1Snapshot.meta.basisHash,
+            );
+            expect(c1.chunk.data.indexes[0].valueHash).to.equal(
+              c2.chunk.data.indexes[0].valueHash,
+            );
+            expect(c1.chunk.data.indexes[0].valueHash).to.not.equal(
+              c2.chunk.data.indexes[1].valueHash,
+            );
+          } else {
+            expect(c2.valueHash).to.not.equal(clientGroup1Snapshot.valueHash);
+            expect(c2.meta.basisHash).to.not.equal(
+              clientGroup1Snapshot.meta.basisHash,
+            );
+            expect(
+              await new BTreeRead(read, formatVersion, c2.valueHash).isEmpty(),
+            ).to.be.true;
+          }
+        });
+      });
     });
-
-    const clientID2 = uuid();
-    const [client2, client2HeadHash, clientMap] = await initClientV6(
-      clientID2,
-      lc,
-      perdag,
-      mutatorNames,
-      indexes,
-      formatVersion,
-    );
-    expect(clientID2).to.not.equal(clientID1);
-    expect(clientMap.size).to.equal(2);
-    expect(client2).to.deep.equal({
-      clientGroupID,
-      refreshHashes: [client2HeadHash],
-      heartbeatTimestampMs: 10,
-      persistHash: null,
-    });
-    expect(client2HeadHash).to.equal(clientGroup1.headHash);
-
-    const clientGroup2 = await withRead(perdag, read =>
-      getClientGroup(clientGroupID, read),
-    );
-    expect(clientGroup2).to.deep.equal({
-      ...clientGroup1,
-      lastServerAckdMutationIDs: {
-        [clientID1]: 0,
-      },
-      mutationIDs: {
-        [clientID1]: 1,
-      },
-    });
-  });
-
-  test('fork snapshot due to incompatible defs', async () => {
-    const formatVersion = FormatVersion.Latest;
-    const lc = new LogContext();
-
-    const perdag = new TestStore();
-    const clientID1 = 'client-id-1';
-    const clientGroupID1 = 'client-group-id-1';
-    const b = new ChainBuilder(perdag);
-    await b.addGenesis(clientID1);
-    await b.addLocal(clientID1, []);
-    const headHash = b.chain[1].chunk.hash;
-    const initialMutatorNames: string[] = ['x'];
-    const initialIndexes: IndexDefinitions = {};
-    const newMutatorNames = ['y'];
-    const newIndexes: IndexDefinitions = {};
-
-    clock.setSystemTime(10);
-
-    const client1: ClientV5 = {
-      clientGroupID: clientGroupID1,
-      headHash,
-      heartbeatTimestampMs: 1,
-      tempRefreshHash: null,
-    };
-    const clientGroup1: ClientGroup = {
-      headHash,
-      lastServerAckdMutationIDs: {[clientID1]: 0},
-      mutationIDs: {[clientID1]: 1},
-      indexes: initialIndexes,
-      mutatorNames: initialMutatorNames,
-      disabled: false,
-    };
-
-    await withWriteNoImplicitCommit(perdag, async write => {
-      await setClient(clientID1, client1, write);
-      await setClientGroup(clientGroupID1, clientGroup1, write);
-      await write.commit();
-    });
-
-    const clientID2 = uuid();
-    const [client2, client2HeadHash, clientMap] = await initClientV6(
-      clientID2,
-      lc,
-      perdag,
-      newMutatorNames,
-      newIndexes,
-      formatVersion,
-    );
-    expect(clientID2).to.not.equal(clientID1);
-    assertClientV6(client2);
-    const clientGroupID2 = client2.clientGroupID;
-    expect(clientGroupID2).to.not.equal(clientGroupID1);
-    expect(clientMap.size).to.equal(2);
-
-    expect(client2HeadHash).to.not.equal(
-      clientGroup1.headHash,
-      'Forked so we need a new head',
-    );
-    expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
-    expect(client2.heartbeatTimestampMs).to.equal(10);
-    expect(client2.persistHash).to.be.null;
-
-    const clientGroup2 = await withRead(perdag, read =>
-      getClientGroup(clientGroupID2, read),
-    );
-    expect(clientGroup2).to.deep.equal({
-      headHash: client2HeadHash,
-      indexes: newIndexes,
-      mutatorNames: newMutatorNames,
-      lastServerAckdMutationIDs: {},
-      mutationIDs: {},
-      disabled: false,
-    });
-  });
-
-  test('fork snapshot due to incompatible index names - reuse index maps', async () => {
-    const formatVersion = FormatVersion.Latest;
-    const lc = new LogContext();
-
-    const perdag = new TestStore();
-    const clientID1 = 'client-id-1';
-    const clientGroupID1 = 'client-group-id-1';
-    const b = new ChainBuilder(perdag);
-
-    const initialIndexes: IndexDefinitions = {
-      a1: {jsonPointer: '', prefix: 'a'},
-    };
-    await b.addGenesis(clientID1, initialIndexes);
-    const newMutatorNames = ['x'];
-    const newIndexes: IndexDefinitions = {
-      a2: {jsonPointer: '', prefix: 'a'},
-      b: {jsonPointer: ''},
-    };
-
-    await b.addSnapshot(
-      [
-        ['a', 'b'],
-        ['c', 'd'],
-      ],
-      clientID1,
-      1,
-      {[clientID1]: 10},
-    );
-    await b.addLocal(clientID1, []);
-    const headHash = b.chain[2].chunk.hash;
-    const initialMutatorNames = ['x'];
-
-    clock.setSystemTime(10);
-
-    const client1: ClientV5 = {
-      clientGroupID: clientGroupID1,
-      headHash,
-      heartbeatTimestampMs: 1,
-      tempRefreshHash: null,
-    };
-    const clientGroup1: ClientGroup = {
-      headHash,
-      lastServerAckdMutationIDs: {[clientID1]: 0},
-      mutationIDs: {[clientID1]: 1},
-      indexes: initialIndexes,
-      mutatorNames: initialMutatorNames,
-      disabled: false,
-    };
-
-    await withWriteNoImplicitCommit(perdag, async write => {
-      await setClient(clientID1, client1, write);
-      await setClientGroup(clientGroupID1, clientGroup1, write);
-      await write.commit();
-    });
-
-    const clientID2 = uuid();
-    const [client2, client2HeadHash, clientMap] = await initClientV6(
-      clientID2,
-      lc,
-      perdag,
-      newMutatorNames,
-      newIndexes,
-      formatVersion,
-    );
-    expect(clientID2).to.not.equal(clientID1);
-    assertClientV6(client2);
-    const clientGroupID2 = client2.clientGroupID;
-    expect(clientGroupID2).to.not.equal(clientGroupID1);
-    expect(clientMap.size).to.equal(2);
-
-    expect(client2HeadHash).to.not.equal(
-      client1.headHash,
-      'Forked so we need a new head',
-    );
-    expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
-    expect(client2.heartbeatTimestampMs).to.equal(10);
-    expect(client2.persistHash).to.be.null;
-
-    const clientGroup2 = await withRead(perdag, read =>
-      getClientGroup(clientGroupID2, read),
-    );
-    expect(clientGroup2).to.deep.equal({
-      headHash: client2HeadHash,
-      indexes: newIndexes,
-      mutatorNames: newMutatorNames,
-      lastServerAckdMutationIDs: {},
-      mutationIDs: {},
-      disabled: false,
-    });
-
-    await withRead(perdag, async read => {
-      const c1 = await commitFromHash(client1.headHash, read);
-      expect(c1.chunk.data.indexes).length(1);
-
-      const c2 = await commitFromHash(client2HeadHash, read);
-      expect(c2.chunk.data.indexes).length(2);
-
-      expect(c1.chunk.data.indexes[0].valueHash).to.equal(
-        c2.chunk.data.indexes[0].valueHash,
-      );
-      expect(c1.chunk.data.indexes[0].valueHash).to.not.equal(
-        c2.chunk.data.indexes[1].valueHash,
-      );
-    });
-  });
+  }
+  makeSuite(true);
+  makeSuite(false);
 });
