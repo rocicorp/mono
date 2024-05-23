@@ -4,12 +4,14 @@ import {z} from 'zod';
 import type {AST, Condition, SimpleCondition} from '../ast/ast.js';
 import {makeTestContext} from '../context/test-context.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
+import {getOperator} from '../ivm/graph/operators/filter-operator.js';
 import {Materialite} from '../ivm/materialite.js';
 import * as agg from '../query/agg.js';
 import {conditionToString} from '../query/condition-to-string.js';
 import {EntityQuery, astForTesting as ast} from '../query/entity-query.js';
 import type {Entity} from '../schema/entity-schema.js';
-import {buildPipeline, getOperator} from './pipeline-builder.js';
+
+import {buildPipeline} from './pipeline-builder.js';
 
 const e1 = z.object({
   id: z.string(),
@@ -762,7 +764,9 @@ describe('getOperator', () => {
         field: ['table', 'field'],
         value: {type: 'value', value: c.right},
       } as SimpleCondition;
-      expect(getOperator(condition)(c.left)).toBe(c.expected);
+      expect(getOperator(condition.op, condition.value.value)(c.left)).toBe(
+        c.expected,
+      );
     });
 
     if (['LIKE', 'IN'].includes(c.op)) {
@@ -773,7 +777,9 @@ describe('getOperator', () => {
           field: ['table', 'field'],
           value: {type: 'value', value: c.right},
         } as SimpleCondition;
-        expect(getOperator(condition)(c.left)).toBe(!c.expected);
+        expect(getOperator(condition.op, condition.value.value)(c.left)).toBe(
+          !c.expected,
+        );
       });
     }
 
@@ -786,19 +792,16 @@ describe('getOperator', () => {
           field: ['table', 'field'],
           value: {type: 'value', value: c.right},
         } as SimpleCondition;
-        expect(getOperator(condition)(c.left)).toBe(c.expected);
+        expect(getOperator(condition.op, condition.value.value)(c.left)).toBe(
+          c.expected,
+        );
       });
     }
   }
 
-  expect(() =>
-    getOperator({
-      type: 'simple',
-      op: 'LIKE',
-      field: ['table', 'field'],
-      value: {type: 'value', value: '\\'},
-    } as SimpleCondition),
-  ).toThrow('LIKE pattern must not end with escape character');
+  expect(() => getOperator('LIKE', '\\')).toThrow(
+    'LIKE pattern must not end with escape character',
+  );
 });
 
 // order-by and limit are properties of the materialize view

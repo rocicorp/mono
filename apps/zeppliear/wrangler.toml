@@ -7,11 +7,7 @@ logpush = true
 durable_objects.bindings = [
   { name = "runnerDO", class_name = "RunnerDO" },
 ]
-
-[vars]
-LOG_LEVEL = "debug"
-DO_LOCATION_HINT = "wnam"
-DATADOG_SERVICE_LABEL = "zeppliear"
+vars = { DATADOG_SERVICE_LABEL = "zeppliear", LOG_LEVEL = "debug", DO_LOCATION_HINT = "wnam" }
 
 #[secrets]
 #DATADOG_LOGS_API_KEY
@@ -26,3 +22,10 @@ new_classes = ["RunnerDO"]
 # don't watch all resources because we want to run without --persist when
 # possible, so restarts delete data.
 watch_dir = "../../packages/zero-cache/src/services"
+
+[env.sandbox]
+name = "zeppliear-sandbox-service-runner"
+durable_objects.bindings = [
+  { name = "runnerDO", class_name = "RunnerDO" },
+]
+vars = { DATADOG_SERVICE_LABEL = "zeppliear-sandbox", LOG_LEVEL = "debug", DO_LOCATION_HINT = "enam" }

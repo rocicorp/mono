@@ -32,7 +32,7 @@ test('map', () => {
 test('filter', () => {
   const s = new DifferenceStream<Elem>();
   let expectRan = 0;
-  s.filter(x => x.x % 2 === 0).effect(x => {
+  s.filter([null, 'x'], '=', 2).effect(x => {
     expectRan++;
     expect(x).toEqual({x: 2});
   });
@@ -98,7 +98,7 @@ test('map, filter, linearCount', () => {
   s.map(x => ({
     x: x.x * 2,
   }))
-    .filter(x => x.x % 2 === 0)
+    .filter([null, 'x'], '>', 0)
     .count('count')
     .effect((x, mult) => {
       if (mult > 0) {
