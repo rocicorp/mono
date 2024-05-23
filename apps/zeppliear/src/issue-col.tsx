@@ -134,6 +134,8 @@ function IssueCol({
                     width={width}
                     outerRef={provided.innerRef}
                     itemData={listData}
+                    onItemsRendered={listData.onItemsRendered}
+                    overscanCount={10}
                   >
                     {Row}
                   </FixedSizeList>

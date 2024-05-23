@@ -1,4 +1,5 @@
-import {useMemo} from 'react';
+import {useCallback, useMemo, useState} from 'react';
+import type {ListOnItemsRenderedProps} from 'react-window';
 import {useQuery} from './hooks/use-query.js';
 import {
   orderQuery,
@@ -14,6 +15,7 @@ export type ListData = {
   mustGetIssue(index: number): IssueWithLabels;
   iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels>;
   iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels>;
+  onItemsRendered: (props: ListOnItemsRenderedProps) => void;
   readonly onChangePriority: (issue: Issue, priority: Priority) => void;
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
   readonly onOpenDetail: (issue: Issue) => void;
@@ -25,23 +27,39 @@ export function useListData({
   onChangePriority,
   onChangeStatus,
   onOpenDetail,
-  limit = 200,
 }: {
   issuesProps: IssuesProps;
-
   onChangePriority: (issue: Issue, priority: Priority) => void;
   onChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;
-  limit?: number;
 }): ListData {
+  const pageSize = 500;
   const {query, queryDeps, order} = issuesProps;
   const issueQueryOrdered = orderQuery(query, order, false);
-  const issues = useQuery(issueQueryOrdered.limit(limit), queryDeps);
+  const [limit, setLimit] = useState(pageSize);
+  const issues = useQuery(
+    issueQueryOrdered.limit(limit),
+    queryDeps.concat(limit),
+  );
+  const onItemsRendered = useCallback(
+    ({overscanStopIndex}: ListOnItemsRenderedProps) => {
+      if (overscanStopIndex > limit - pageSize / 2) {
+        setLimit(Math.ceil(overscanStopIndex / pageSize + 1) * pageSize);
+      }
+    },
+    [limit],
+  );
 
   return useMemo(
     () =>
-      new ListDataImpl(issues, onChangePriority, onChangeStatus, onOpenDetail),
-    [issues, onChangePriority, onChangeStatus, onOpenDetail],
+      new ListDataImpl(
+        issues,
+        onChangePriority,
+        onChangeStatus,
+        onOpenDetail,
+        onItemsRendered,
+      ),
+    [issues, onChangePriority, onChangeStatus, onItemsRendered, onOpenDetail],
   );
 }
 
@@ -51,18 +69,22 @@ class ListDataImpl implements ListData {
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
   readonly onOpenDetail: (issue: Issue) => void;
   readonly count: number;
+  readonly onItemsRendered: (props: ListOnItemsRenderedProps) => void;
 
   constructor(
     issues: IssueWithLabels[],
     onChangePriority: (issue: Issue, priority: Priority) => void,
     onChangeStatus: (issue: Issue, status: Status) => void,
     onOpenDetail: (issue: Issue) => void,
+    onItemsRendered: (props: ListOnItemsRenderedProps) => void,
   ) {
+    const overscan = 0;
     this.#issues = issues;
     this.onChangePriority = onChangePriority;
     this.onChangeStatus = onChangeStatus;
     this.onOpenDetail = onOpenDetail;
-    this.count = issues.length;
+    this.count = issues.length + overscan;
+    this.onItemsRendered = onItemsRendered;
   }
 
   getIssue(index: number): IssueWithLabels | undefined {
