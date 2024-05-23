@@ -5,7 +5,6 @@ import AboutModal from './about-modal.jsx';
 import AddIcon from './assets/icons/add.svg?react';
 import HelpIcon from './assets/icons/help.svg?react';
 import MenuIcon from './assets/icons/menu.svg?react';
-import ReactLogo from './assets/images/logo.svg?react';
 import {getViewStatuses} from './filters.js';
 import {
   useIssueDetailState,
@@ -65,22 +64,6 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
 
         {/* Top menu*/}
         <div className="flex flex-col flex-grow-0 flex-shrink-0 px-5 py-3">
-          <div className="flex items-center justify-between">
-            {/* Project selection */}
-            <div
-              className="flex items-center p-2 pr-3 rounded cursor-pointer hover:bg-gray-850"
-              onMouseDown={async () => {
-                await Promise.all([setView(null), setIss(null)]);
-                onCloseMenu && onCloseMenu();
-              }}
-            >
-              <div className="w-8 text-white">
-                <ReactLogo />
-              </div>
-              <div className="text-sm font-medium">React</div>
-            </div>
-          </div>
-
           {/* Create issue btn */}
           <button
             className="inline-flex items-center px-2 py-2 mt-3 bg-gray-850  hover:bg-gray-900 border border-gray rounded focus:outline-none h-7"
