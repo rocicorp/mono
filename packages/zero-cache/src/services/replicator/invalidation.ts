@@ -121,7 +121,7 @@ export class Invalidator {
 
 export type CachedFilters = {
   readonly specs: InvalidationFilterSpec[];
-  readonly version: LexiVersion;
+  readonly version: LexiVersion | null;
 };
 
 /**
@@ -159,9 +159,7 @@ export class InvalidationFilters {
       specs: results[0].map((row: {spec: unknown}) =>
         parseFilterSpec(row.spec),
       ),
-      version: results[1].length
-        ? results[1][0].stateVersionAtLastSpecChange
-        : '00',
+      version: results[1][0].stateVersionAtLastSpecChange,
     };
     lc.info?.(
       `Loaded ${loaded.specs.length} filters at version ${loaded.version}`,
