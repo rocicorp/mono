@@ -63,7 +63,7 @@ export class InfiniteSourceContext implements Context {
     if (this.#generators.has(name)) {
       source = this.materialite.constructSource(
         internal =>
-          new InfiniteSuorce(internal, must(this.#generators.get(name)), name),
+          new InfiniteSource(internal, must(this.#generators.get(name)), name),
       );
     } else {
       source = this.materialite.newSetSource<X>(
@@ -94,19 +94,19 @@ export function makeInfiniteSourceContext(
   return new InfiniteSourceContext(generators);
 }
 
-class InfiniteSuorce<T extends PipelineEntity> implements Source<T> {
+class InfiniteSource<T extends PipelineEntity> implements Source<T> {
   readonly #materialite: MaterialiteForSourceInternal;
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
   readonly #generator: {
-    [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
+    [Symbol.iterator](): Iterator<Entry<T>>;
   };
   readonly #name;
 
   constructor(
     materialite: MaterialiteForSourceInternal,
     generator: {
-      [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
+      [Symbol.iterator](): Iterator<Entry<T>>;
     },
     name: string,
   ) {
