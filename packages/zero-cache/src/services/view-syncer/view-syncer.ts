@@ -144,6 +144,26 @@ export class ViewSyncerService implements ViewSyncer, Service {
     }
   }
 
+  #deleteClient(
+    lc: LogContext,
+    clientID: string,
+    client: ClientHandler,
+  ): Promise<void> {
+    return this.#lock.withLock(() => {
+      const c = this.#clients.get(clientID);
+      if (c === client) {
+        this.#clients.delete(clientID);
+
+        if (this.#clients.size === 0) {
+          lc.info?.('no more clients. closing invalidation subscription');
+          this.#invalidationSubscription?.cancel();
+          this.#invalidationSubscription = undefined;
+          this.#hasSyncRequests = resolver<true>();
+        }
+      }
+    });
+  }
+
   async initConnection(
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
@@ -157,22 +177,10 @@ export class ViewSyncerService implements ViewSyncer, Service {
     // Setup the downstream connection.
     const downstream = new Subscription<Downstream>({
       cleanup: (_, err) => {
-        if (err) {
-          lc.error?.(`client closed with error`, err);
-        } else {
-          lc.info?.('client closed');
-        }
-        const c = this.#clients.get(clientID);
-        if (c === client) {
-          this.#clients.delete(clientID);
-
-          if (this.#clients.size === 0) {
-            lc.info?.('no more clients. closing invalidation subscription');
-            this.#invalidationSubscription?.cancel();
-            this.#invalidationSubscription = undefined;
-            this.#hasSyncRequests = resolver<true>();
-          }
-        }
+        err
+          ? lc.error?.(`client closed with error`, err)
+          : lc.info?.('client closed');
+        void this.#deleteClient(lc, clientID, client);
       },
     });
 
