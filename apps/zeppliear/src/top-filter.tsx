@@ -75,13 +75,7 @@ function FilterStatus<Enum extends number | string>({
   );
 }
 
-function TopFilter({
-  title,
-  onToggleMenu = noop,
-  filteredIssuesCount,
-  issuesCount,
-  showSortOrderMenu,
-}: Props) {
+function TopFilter({title, onToggleMenu = noop, showSortOrderMenu}: Props) {
   const [orderBy, setOrderByParam] = useOrderByState();
   const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
   const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();

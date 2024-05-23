@@ -16,7 +16,6 @@ import useQueryState, {identityProcessor} from './hooks/useQueryState.js';
 import IssueModal from './issue-modal.jsx';
 import type {IssueCreationPartial} from './issue.js';
 import ItemGroup from './item-group.js';
-import SearchBox from './searchbox.js';
 
 interface Props {
   // Show menu (for small screen only)
@@ -76,12 +75,9 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
           </button>
         </div>
 
-        {/* Search box */}
+        {/* actions */}
         <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-4">
-          <SearchBox placeholder="Search" className="mt-5" />
-          {/* actions */}
-
-          <ItemGroup title="React Issues">
+          <ItemGroup title="Views">
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
               onMouseDown={async () => {
