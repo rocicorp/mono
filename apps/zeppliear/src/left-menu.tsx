@@ -5,7 +5,6 @@ import AboutModal from './about-modal.jsx';
 import AddIcon from './assets/icons/add.svg?react';
 import HelpIcon from './assets/icons/help.svg?react';
 import MenuIcon from './assets/icons/menu.svg?react';
-import {getViewStatuses} from './filters.js';
 import {
   useIssueDetailState,
   useStatusFilterState,
@@ -97,7 +96,7 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
               onMouseDown={async () => {
                 await Promise.all([
                   setView('active'),
-                  setStatusFilter(getViewStatuses('active')),
+                  setStatusFilter(null),
                   setIss(null),
                 ]);
                 onCloseMenu && onCloseMenu();
@@ -111,7 +110,7 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
               onMouseDown={async () => {
                 await Promise.all([
                   setView('backlog'),
-                  setStatusFilter(getViewStatuses('backlog')),
+                  setStatusFilter(null),
                   setIss(null),
                 ]);
                 onCloseMenu && onCloseMenu();

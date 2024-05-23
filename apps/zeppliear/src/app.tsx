@@ -36,19 +36,6 @@ import {useIssuesProps, type IssuesProps} from './issues-props.js';
 import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
 
-function getTitle(view: string | null) {
-  switch (view?.toLowerCase()) {
-    case 'active':
-      return 'Active issues';
-    case 'backlog':
-      return 'Backlog issues';
-    case 'board':
-      return 'Board';
-    default:
-      return 'All issues';
-  }
-}
-
 export type Collections = {
   member: Member;
   issue: Issue;
@@ -98,7 +85,7 @@ const App = ({undoManager}: AppProps) => {
       'issueLabel.issueID',
     )
     .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
-  const {filteredQuery} = filterQuery(issueListQuery, view, filters);
+  const filteredQuery = filterQuery(issueListQuery, view, filters);
 
   const issueOrder = getIssueOrder(view, orderBy);
   const issueQueryDeps = [view, filters, issueOrder] as const;
@@ -216,7 +203,7 @@ const App = ({undoManager}: AppProps) => {
     >
       <Layout
         menuVisible={menuVisible}
-        view={view}
+        view={view!}
         detailIssueID={detailIssueID}
         // TODO: base on whether initial sync is done
         isLoading={false}
@@ -243,7 +230,7 @@ const keyMap = {
 
 interface LayoutProps {
   menuVisible: boolean;
-  view: string | null;
+  view: string;
   detailIssueID: string | null;
   isLoading: boolean;
   viewIssueCount: number;
@@ -291,7 +278,7 @@ function RawLayout({
           >
             <TopFilter
               onToggleMenu={onToggleMenu}
-              title={getTitle(view)}
+              view={view}
               filteredIssuesCount={
                 // TODO(arv): This is wrong. We need to know the count of the filtered issues
                 // hasNonViewFilters ? filteredIssues.length : undefined
@@ -352,16 +339,11 @@ function filterQuery(
   filters: FiltersState,
 ) {
   const viewStatuses = getViewStatuses(view);
-  const viewStatusesQuery = viewStatuses
-    ? q.where('issue.status', 'IN', [...viewStatuses])
-    : q;
 
-  const viewCountQuery = viewStatusesQuery
-    .distinct('issue.id')
-    .select(agg.count());
+  // Apply view filter
+  q = q.where('issue.status', 'IN', [...viewStatuses]);
 
   if (filters.statusFilter) {
-    // Consider allowing Iterable<T> for IN
     q = q.where('issue.status', 'IN', [...filters.statusFilter]);
   }
   if (filters.priorityFilter) {
@@ -390,7 +372,7 @@ function filterQuery(
     ]);
   }
 
-  return {filteredQuery, viewCountQuery};
+  return filteredQuery;
 }
 
 export default App;
