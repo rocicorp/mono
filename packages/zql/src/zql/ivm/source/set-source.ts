@@ -310,14 +310,12 @@ function asEntries<T>(
   // 2. if the view is in the same order as the source, start the iterator at the where clause
   // which matches this position in the source. (e.g., where id > x)
 
-  if (message?.order) {
-    if (message.order[1] === 'desc') {
-      return {
-        [Symbol.iterator]() {
-          return genFromEntries(m.entriesReversed());
-        },
-      };
-    }
+  if (message?.order?.[1] === 'desc') {
+    return {
+      [Symbol.iterator]() {
+        return genFromEntries(m.entriesReversed());
+      },
+    };
   }
 
   return {

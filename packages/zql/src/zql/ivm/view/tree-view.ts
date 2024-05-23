@@ -131,8 +131,8 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
 
   /**
    * Limits the iterator to only pull `limit` items from the stream.
-   * This is only used in cases where we're processing history
-   * for initial query run.
+   * This is only used in cases where we're processing initial data
+   * for initial query run. Initial data will never contain removes, only adds.
    */
   #getLimitedIterator(
     data: Multiset<T>,
@@ -140,7 +140,7 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     limit: number,
   ): IterableIterator<Entry<T>> {
     const order = must(reply.order);
-    const fields = (order && order[0]) || [];
+    const fields = order?.[0] ?? [];
     const iterator = data[Symbol.iterator]();
     let i = 0;
     let last: T | undefined = undefined;
@@ -159,7 +159,7 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
             return next;
           }
           const entry = next.value;
-          i += Math.abs(entry[1]);
+          i += entry[1];
           return next;
         },
       };

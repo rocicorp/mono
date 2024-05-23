@@ -4,7 +4,7 @@ import {DifferenceStream} from '../difference-stream.js';
 import {
   orderIsRemovedFromReply,
   orderIsRemovedFromRequest,
-} from './left-join-operator.test.js';
+} from './join-operator-test-util.js';
 
 type Track = {
   id: number;
