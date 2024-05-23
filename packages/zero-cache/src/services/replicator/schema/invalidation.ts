@@ -47,7 +47,8 @@ CREATE INDEX "InvalidationRegistry_fromStateVersion_btree"
   // A single-row table that tracks the "stateVersion" at which the last change
   // to the InvalidationRegistry's set of `spec`s happened. This is updated, for
   // example, when a new spec is added (with the value being equal to the new spec's
-  // `fromStateVersion` column), or when specs are deleted for cleanup.
+  // `fromStateVersion` column), or when specs are deleted for cleanup. The value
+  // is NULL if there are no registered filters.
   //
   // The Invalidator caches this version along with the set of invalidation filter specs,
   // checking the version on every transaction to ensure that it's cache is consistent
@@ -57,12 +58,13 @@ CREATE INDEX "InvalidationRegistry_fromStateVersion_btree"
   // Note: The `lock` column transparently ensures that at most one row exists.
   `
 CREATE TABLE _zero."InvalidationRegistryVersion" (
-  "stateVersionAtLastSpecChange" VARCHAR(38) NOT NULL,
+  "stateVersionAtLastSpecChange" VARCHAR(38),
 
   lock char(1) NOT NULL CONSTRAINT "DF_InvalidationRegistryVersion" DEFAULT 'v',
   CONSTRAINT "PK_InvalidationRegistryVersion" PRIMARY KEY (lock),
   CONSTRAINT "CK_InvalidationRegistryVersion" CHECK (lock='v')
 );
+INSERT INTO _zero."InvalidationRegistryVersion" ("stateVersionAtLastSpecChange") VALUES (NULL);
 ` +
   // Invalidation index.
   //
