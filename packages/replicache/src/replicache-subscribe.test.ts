@@ -650,12 +650,15 @@ test('subscribe with error', async () => {
 test('subscribe pull and index update', async () => {
   const pullURL = 'https://pull.com/rep';
   const indexName = 'idx1';
-  const rep = await replicacheForTesting('subscribe-pull-and-index-update', {
-    pullURL,
-    mutators: {addData},
-    indexes: {[indexName]: {jsonPointer: '/id'}},
-    ...disableAllBackgroundProcesses,
-  });
+  const rep = await replicacheForTesting(
+    'subscribe-pull-and-index-update',
+    {
+      pullURL,
+      mutators: {addData},
+      indexes: {[indexName]: {jsonPointer: '/id'}},
+    },
+    disableAllBackgroundProcesses,
+  );
 
   const log: ReadonlyJSONValue[] = [];
   let queryCallCount = 0;
@@ -820,11 +823,16 @@ test('subscribe pull and index update', async () => {
 });
 
 test('subscription coalescing', async () => {
-  const rep = await replicacheForTesting('subscription-coalescing', {
-    mutators: {addData},
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+  const rep = await replicacheForTesting(
+    'subscription-coalescing',
+    {
+      mutators: {addData},
+    },
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   const store = sinon.spy(rep.memdag);
   const resetCounters = () => {

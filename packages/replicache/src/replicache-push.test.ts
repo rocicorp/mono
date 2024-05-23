@@ -200,6 +200,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
         },
       },
     },
+    undefined,
     {useDefaultURLs: false},
   );
 
@@ -275,12 +276,15 @@ test('Version not supported on server', async () => {
     response: VersionNotSupportedResponse,
     reason: UpdateNeededReason,
   ) => {
-    const rep = await replicacheForTesting('version-not-supported-push', {
-      mutators: {
-        noop: () => undefined,
+    const rep = await replicacheForTesting(
+      'version-not-supported-push',
+      {
+        mutators: {
+          noop: () => undefined,
+        },
       },
-      ...disableAllBackgroundProcesses,
-    });
+      disableAllBackgroundProcesses,
+    );
 
     const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
 
@@ -315,13 +319,16 @@ test('Version not supported on server', async () => {
 
 test('ClientStateNotFound on server', async () => {
   const onClientStateNotFound = sinon.stub();
-  const rep = await replicacheForTesting('client-state-not-found-push', {
-    mutators: {
-      noop: () => undefined,
+  const rep = await replicacheForTesting(
+    'client-state-not-found-push',
+    {
+      mutators: {
+        noop: () => undefined,
+      },
+      onClientStateNotFound,
     },
-    onClientStateNotFound,
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
 
   const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
 

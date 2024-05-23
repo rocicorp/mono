@@ -14,6 +14,7 @@ suite('onUpdateNeeded', () => {
       {
         mutators: {test1: () => undefined},
       },
+      undefined,
       {useUniqueName: false},
     );
     let onUpdateNeededReason;
@@ -26,6 +27,7 @@ suite('onUpdateNeeded', () => {
       {
         mutators: {test2: () => undefined},
       },
+      undefined,
       {useUniqueName: false},
     );
 
@@ -43,6 +45,7 @@ suite('onUpdateNeeded', () => {
         mutators: {test1: () => undefined},
         schemaVersion: '1',
       },
+      undefined,
       {useUniqueName: false},
     );
     let onUpdateNeededReason;
@@ -55,6 +58,7 @@ suite('onUpdateNeeded', () => {
         mutators: {test1: () => undefined},
         schemaVersion: '2',
       },
+      undefined,
       {useUniqueName: false},
     );
     expect(onUpdateNeededReason).to.deep.equal({

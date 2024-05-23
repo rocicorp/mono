@@ -29,28 +29,33 @@ initReplicacheTesting();
 test('pull', async () => {
   const pullURL = 'https://diff.com/pull';
 
-  const rep = await replicacheForTesting('pull', {
-    auth: '1',
-    pullURL,
-    mutators: {
-      createTodo: async <A extends {id: number}>(
-        tx: WriteTransaction,
-        args: A,
-      ) => {
-        createCount++;
-        await tx.set(`/todo/${args.id}`, args);
-      },
-      deleteTodo: async <A extends {id: number}>(
-        tx: WriteTransaction,
-        args: A,
-      ) => {
-        deleteCount++;
-        await tx.del(`/todo/${args.id}`);
+  const rep = await replicacheForTesting(
+    'pull',
+    {
+      auth: '1',
+      pullURL,
+      mutators: {
+        createTodo: async <A extends {id: number}>(
+          tx: WriteTransaction,
+          args: A,
+        ) => {
+          createCount++;
+          await tx.set(`/todo/${args.id}`, args);
+        },
+        deleteTodo: async <A extends {id: number}>(
+          tx: WriteTransaction,
+          args: A,
+        ) => {
+          deleteCount++;
+          await tx.del(`/todo/${args.id}`);
+        },
       },
     },
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   let createCount = 0;
   let deleteCount = 0;
@@ -182,12 +187,17 @@ test('pull', async () => {
 test('reauth pull', async () => {
   const pullURL = 'https://diff.com/pull';
 
-  const rep = await replicacheForTesting('reauth', {
-    pullURL,
-    auth: 'wrong',
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+  const rep = await replicacheForTesting(
+    'reauth',
+    {
+      pullURL,
+      auth: 'wrong',
+    },
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   fetchMock.post(pullURL, {body: 'xxx', status: httpStatusUnauthorized});
 
@@ -237,6 +247,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
       auth: '1',
       pushURL: 'https://diff.com/push',
     },
+    undefined,
     {useDefaultURLs: false},
   );
 
@@ -318,11 +329,16 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 test('Client Group not found on server', async () => {
   const onClientStateNotFound = sinon.stub();
 
-  const rep = await replicacheForTesting('client-group-not-found-pull', {
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-    onClientStateNotFound,
-  });
+  const rep = await replicacheForTesting(
+    'client-group-not-found-pull',
+    {
+      onClientStateNotFound,
+    },
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   // eslint-disable-next-line require-await
   const puller: Puller = async () => ({
@@ -349,9 +365,11 @@ test('Version not supported on server', async () => {
     response: VersionNotSupportedResponse,
     reason: UpdateNeededReason,
   ) => {
-    const rep = await replicacheForTesting('version-not-supported-pull', {
-      ...disableAllBackgroundProcesses,
-    });
+    const rep = await replicacheForTesting(
+      'version-not-supported-pull',
+      undefined,
+      disableAllBackgroundProcesses,
+    );
 
     const {resolve, promise} = resolver();
     const onUpdateNeededStub = (rep.onUpdateNeeded = sinon

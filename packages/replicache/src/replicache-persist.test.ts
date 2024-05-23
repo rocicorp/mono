@@ -135,6 +135,7 @@ test('basic persist & load', async () => {
     {
       pullURL,
     },
+    undefined,
     {useUniqueName: false},
   );
   await rep2.query(async tx => {
@@ -182,10 +183,13 @@ suite('onClientStateNotFound', () => {
     const mutators = {
       addData,
     };
-    const rep = await replicacheForTesting(name, {
-      mutators,
-      ...disableAllBackgroundProcesses,
-    });
+    const rep = await replicacheForTesting(
+      name,
+      {
+        mutators,
+      },
+      disableAllBackgroundProcesses,
+    );
 
     await rep.mutate.addData({foo: 'bar'});
     await rep.persist();
@@ -202,10 +206,12 @@ suite('onClientStateNotFound', () => {
       rep.name,
       {
         mutators,
-        ...disableAllBackgroundProcesses,
+      },
+      {
         // To ensure query has to go to perdag, prevent pull from happening and
         // populating the lazy store cache.
         enablePullAndPushInOpen: false,
+        ...disableAllBackgroundProcesses,
       },
       // Use same idb and client group as above rep.
       {useUniqueName: false},
@@ -249,10 +255,13 @@ suite('onClientStateNotFound', () => {
       },
     };
 
-    const rep = await replicacheForTesting(name, {
-      mutators,
-      ...disableAllBackgroundProcesses,
-    });
+    const rep = await replicacheForTesting(
+      name,
+      {
+        mutators,
+      },
+      disableAllBackgroundProcesses,
+    );
 
     await rep.mutate.addData({foo: 'bar'});
     await rep.persist();
@@ -264,6 +273,8 @@ suite('onClientStateNotFound', () => {
       rep.name,
       {
         mutators,
+      },
+      {
         ...disableAllBackgroundProcesses,
         // To ensure mutate has to go to perdag, prevent pull from happening and
         // populating the lazy store cache.
@@ -306,8 +317,8 @@ test('Persist throws if idb dropped', async () => {
     'called-in-persist-dropped',
     {
       mutators: {addData},
-      ...disableAllBackgroundProcesses,
     },
+    disableAllBackgroundProcesses,
     {useUniqueName: false},
   );
 

@@ -1516,6 +1516,7 @@ suite('DD31', () => {
       {
         pullURL: 'https://diff.com/pull',
       },
+      undefined,
       {
         useDefaultURLs: false,
       },
@@ -1528,10 +1529,13 @@ suite('DD31', () => {
   });
 
   test('mutation recovery returns early when internal option enableMutationRecovery is false', async () => {
-    const rep = await replicacheForTesting('mutation-recovery-startup', {
-      pullURL: 'https://diff.com/pull',
-      ...disableAllBackgroundProcesses,
-    });
+    const rep = await replicacheForTesting(
+      'mutation-recovery-startup',
+      {
+        pullURL: 'https://diff.com/pull',
+      },
+      disableAllBackgroundProcesses,
+    );
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
     expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(
       false,
@@ -1574,9 +1578,13 @@ suite('DD31', () => {
   });
 
   test('mutation recovery is invoked on 5 minute interval', async () => {
-    const rep = await replicacheForTesting('mutation-recovery-startup-dd31-4', {
-      enableLicensing: false,
-    });
+    const rep = await replicacheForTesting(
+      'mutation-recovery-startup-dd31-4',
+      undefined,
+      {
+        enableLicensing: false,
+      },
+    );
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
     await clock.tickAsync(5 * 60 * 1000);
     expect(rep.recoverMutationsFake.callCount).to.equal(2);

@@ -15,23 +15,25 @@ import {
   teardownForTest as teardownIDBDatabasesStoreForTest,
 } from './persist/idb-databases-store-db-name.js';
 import type {PullResponseV1} from './puller.js';
-import type {
-  ReplicacheInternalOptions,
-  ReplicacheOptions,
-} from './replicache-options.js';
-import {Replicache, getImpl} from './replicache.js';
+import type {ReplicacheOptions} from './replicache-options.js';
+import {
+  Replicache,
+  restoreMakeImplForTest,
+  setMakeImplForTest,
+} from './replicache.js';
 import type {DiffComputationConfig} from './sync/diff.js';
 import type {ClientID} from './sync/ids.js';
 import type {WriteTransaction} from './transactions.js';
 import type {BeginPullResult, MutatorDefs} from './types.js';
 import {uuid} from './uuid.js';
+import {must} from 'shared/src/must.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
-import type {ReplicacheImpl} from './replicache-impl.js';
+import {ReplicacheImpl, ReplicacheImplOptions} from './replicache-impl.js';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
@@ -40,9 +42,19 @@ export class ReplicacheTest<
   readonly #impl: ReplicacheImpl<MD>;
   recoverMutationsFake: sinon.SinonSpy<[r: Promise<boolean>], Promise<boolean>>;
 
-  constructor(options: ReplicacheOptions<MD>) {
+  constructor(
+    options: ReplicacheOptions<MD>,
+    implOptions?: ReplicacheImplOptions | undefined,
+  ) {
+    let impl: ReplicacheImpl<MD> | undefined = undefined;
+    setMakeImplForTest(<M extends MutatorDefs>(ops: ReplicacheOptions<M>) => {
+      const repImpl = new ReplicacheImpl<M>(ops, implOptions);
+      impl = repImpl as unknown as ReplicacheImpl<MD>;
+      return repImpl;
+    });
     super(options);
-    this.#impl = getImpl(this);
+    restoreMakeImplForTest();
+    this.#impl = must<ReplicacheImpl<MD>>(impl);
     this.recoverMutationsFake = this.onRecoverMutations = sinon.fake(r => r);
   }
 
@@ -156,7 +168,7 @@ type ReplicacheTestOptions<MD extends MutatorDefs> = Omit<
 > & {
   onClientStateNotFound?: (() => void) | null | undefined;
   licenseKey?: string | undefined;
-} & ReplicacheInternalOptions;
+};
 
 export async function replicacheForTesting<
   // eslint-disable-next-line @typescript-eslint/ban-types
@@ -164,6 +176,7 @@ export async function replicacheForTesting<
 >(
   name: string,
   options: ReplicacheTestOptions<MD> = {},
+  implOptions: ReplicacheImplOptions = {},
   testOptions: {
     useDefaultURLs?: boolean | undefined; // default true
     useUniqueName?: boolean | undefined; // default true
@@ -189,14 +202,17 @@ export async function replicacheForTesting<
     ? {...defaultURLs, ...options}
     : options;
 
-  const rep = new ReplicacheTest<MD>({
-    pullURL,
-    pushDelay,
-    pushURL,
-    name: useUniqueName ? `${uuid()}:${name}` : name,
-    licenseKey: licenseKey ?? TEST_LICENSE_KEY,
-    ...rest,
-  });
+  const rep = new ReplicacheTest<MD>(
+    {
+      pullURL,
+      pushDelay,
+      pushURL,
+      name: useUniqueName ? `${uuid()}:${name}` : name,
+      licenseKey: licenseKey ?? TEST_LICENSE_KEY,
+      ...rest,
+    },
+    implOptions,
+  );
   dbsToDrop.add(rep.idbName);
   reps.add(rep);
 
@@ -222,6 +238,7 @@ export function initReplicacheTesting(): void {
   });
 
   teardown(async () => {
+    restoreMakeImplForTest();
     clock.restore();
     fetchMock.restore();
     sinon.restore();

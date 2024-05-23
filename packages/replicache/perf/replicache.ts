@@ -12,7 +12,10 @@ import {
   TEST_LICENSE_KEY,
   WriteTransaction,
 } from '../src/mod.js';
-import {ReplicacheImpl as Replicache} from '../src/replicache-impl.js';
+import {
+  ReplicacheImpl as Replicache,
+  ReplicacheImpl,
+} from '../src/replicache-impl.js';
 import {uuid} from '../src/uuid.js';
 import {
   TestDataObject,
@@ -21,6 +24,7 @@ import {
   jsonObjectTestData,
 } from './data.js';
 import type {Bencher, Benchmark} from './perf.js';
+import {restoreMakeImplForTest, setMakeImplForTest} from '../src/replicache.js';
 
 const valSize = 1024;
 
@@ -322,14 +326,20 @@ export function benchmarkRebase(opts: {
 
 class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
+    setMakeImplForTest(
+      <M extends MutatorDefs>(ops: ReplicacheOptions<M>) =>
+        new ReplicacheImpl<M>(ops, {
+          enableLicensing: false,
+          enableMutationRecovery: false,
+          enableScheduledRefresh: false,
+          enableScheduledPersist: false,
+        }),
+    );
     super({
       ...options,
       licenseKey: TEST_LICENSE_KEY,
-      enableLicensing: false,
-      enableMutationRecovery: false,
-      enableScheduledRefresh: false,
-      enableScheduledPersist: false,
     });
+    restoreMakeImplForTest();
   }
 }
 

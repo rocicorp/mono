@@ -154,13 +154,16 @@ test('watch with prefix', async () => {
 });
 
 test('watch and initial callback with no data', async () => {
-  const rep = await replicacheForTesting('watch-no-data', {
-    mutators: {
-      addData,
-      del: (tx: WriteTransaction, key: string) => tx.del(key),
+  const rep = await replicacheForTesting(
+    'watch-no-data',
+    {
+      mutators: {
+        addData,
+        del: (tx: WriteTransaction, key: string) => tx.del(key),
+      },
     },
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
 
   const spy = sinon.spy();
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
@@ -173,13 +176,16 @@ test('watch and initial callback with no data', async () => {
 });
 
 test('watch and initial callback with data', async () => {
-  const rep = await replicacheForTesting('watch-with-data', {
-    mutators: {
-      addData,
-      del: (tx: WriteTransaction, key: string) => tx.del(key),
+  const rep = await replicacheForTesting(
+    'watch-with-data',
+    {
+      mutators: {
+        addData,
+        del: (tx: WriteTransaction, key: string) => tx.del(key),
+      },
     },
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
 
   await rep.mutate.addData({a: 1, b: 2});
 
@@ -418,14 +424,17 @@ test('watch on index with prefix', async () => {
 });
 
 test('watch with index and initial callback with no data', async () => {
-  const rep = await replicacheForTesting('watch-with-index-initial-no-data', {
-    mutators: {
-      addData,
-      del: (tx: WriteTransaction, key: string) => tx.del(key),
+  const rep = await replicacheForTesting(
+    'watch-with-index-initial-no-data',
+    {
+      mutators: {
+        addData,
+        del: (tx: WriteTransaction, key: string) => tx.del(key),
+      },
+      indexes: {id1: {jsonPointer: '/id'}},
     },
-    indexes: {id1: {jsonPointer: '/id'}},
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
 
   const spy = sinon.spy();
   const unwatch = rep.experimentalWatch(spy, {

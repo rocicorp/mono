@@ -37,9 +37,13 @@ test('collect IDB databases', async () => {
   await clock.tickAsync(ONE_WEEK);
 
   // Open one more database and keep it open long enough to trigger the collection.
-  const rep3 = await replicacheForTesting('collect-idb-databases-3', {
-    enableLicensing: false,
-  });
+  const rep3 = await replicacheForTesting(
+    'collect-idb-databases-3',
+    undefined,
+    {
+      enableLicensing: false,
+    },
+  );
   await clock.tickAsync(FIVE_MINUTES);
   await rep3.close();
 
