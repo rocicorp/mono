@@ -14,7 +14,7 @@ import {Order, Priority, Status} from './issue.js';
 import SortOrderMenu from './sort-order-menu.jsx';
 
 interface Props {
-  title: string;
+  view: string;
   onToggleMenu?: (() => void) | undefined;
   filteredIssuesCount?: number | undefined;
   issuesCount: number;
@@ -75,11 +75,25 @@ function FilterStatus<Enum extends number | string>({
   );
 }
 
-function TopFilter({title, onToggleMenu = noop, showSortOrderMenu}: Props) {
+function getTitle(view: string | null) {
+  switch (view?.toLowerCase()) {
+    case 'active':
+      return 'Active issues';
+    case 'backlog':
+      return 'Backlog issues';
+    case 'board':
+      return 'Board';
+    default:
+      return 'All issues';
+  }
+}
+
+function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
   const [orderBy, setOrderByParam] = useOrderByState();
   const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
   const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();
   const [labelFilters, setLabelFilterByParam] = useLabelFilterState();
+  const title = getTitle(view);
 
   return (
     <>
@@ -103,6 +117,7 @@ function TopFilter({title, onToggleMenu = noop, showSortOrderMenu}: Props) {
           )}
           */}
           <FilterMenu
+            view={view}
             onSelectPriority={createToggleFilterHandler(
               priorityFilters,
               setPriorityFilterByParam,

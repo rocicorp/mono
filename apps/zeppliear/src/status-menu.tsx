@@ -24,20 +24,9 @@ export const statuses = [
 ] as const;
 
 const getStatusString = (status: Status) => {
-  switch (status) {
-    case Status.Backlog:
-      return 'Backlog';
-    case Status.Todo:
-      return 'Todo';
-    case Status.InProgress:
-      return 'In Progress';
-    case Status.Done:
-      return 'Done';
-    case Status.Canceled:
-      return 'Canceled';
-    default:
-      return 'Backlog';
-  }
+  const arr = statuses.find(([, s]) => s === status);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  return arr![2];
 };
 
 function StatusMenu({labelVisible = false, onSelect, status}: Props) {
