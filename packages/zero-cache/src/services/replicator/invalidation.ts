@@ -106,14 +106,10 @@ export class Invalidator {
           row.fromStateVersion = fromStateVersion;
         }
 
-        // UPSERT the latest version into the InvalidationRegistryVersion.
-        void tx`
-        INSERT INTO _zero."InvalidationRegistryVersion" ${tx({
+        // UPDATE the InvalidationRegistryVersion.
+        void tx`UPDATE _zero."InvalidationRegistryVersion" SET ${tx({
           stateVersionAtLastSpecChange: fromStateVersion,
-        })}
-          ON CONFLICT ON CONSTRAINT "PK_InvalidationRegistryVersion"
-          DO UPDATE SET "stateVersionAtLastSpecChange" = EXCLUDED."stateVersionAtLastSpecChange";
-          `.execute();
+        })}`.execute();
 
         await this.#filters.ensureCachedFilters(lc, tx, fromStateVersion);
 

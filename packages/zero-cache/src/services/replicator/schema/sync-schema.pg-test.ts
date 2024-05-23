@@ -28,7 +28,7 @@ describe('replicator/sync-schema', () => {
 
   const cases: Case[] = [
     {
-      name: 'sync schema versions',
+      name: 'initial tables',
       upstreamPostState: {
         ['zero.clients']: [],
       },
@@ -41,6 +41,12 @@ describe('replicator/sync-schema', () => {
             maxVersion: 4,
             minSafeRollbackVersion: 1,
             lock: 'v', // Internal column, always 'v'
+          },
+        ],
+        ['_zero.InvalidationRegistryVersion']: [
+          {
+            lock: 'v',
+            stateVersionAtLastSpecChange: null,
           },
         ],
       },

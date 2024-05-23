@@ -79,6 +79,7 @@ describe('replicator/invalidation', () => {
       specs: NormalizedInvalidationFilterSpec[];
       response: RegisterInvalidationFiltersResponse;
       setup?: Record<string, Record<string, unknown>[]>;
+      setupStmts?: string;
       expected?: Record<string, Record<string, unknown>[]>;
     };
 
@@ -156,9 +157,6 @@ describe('replicator/invalidation', () => {
           ['_zero.TxLog']: [
             {stateVersion: '04', lsn: '0/023', time: DATE2, xid: 123},
           ],
-          ['_zero.InvalidationRegistryVersion']: [
-            {stateVersionAtLastSpecChange: '02', lock: 'v'},
-          ],
           ['_zero.InvalidationRegistry']: [
             {
               id: FOO_SPEC2.id,
@@ -168,6 +166,7 @@ describe('replicator/invalidation', () => {
             },
           ],
         },
+        setupStmts: `UPDATE _zero."InvalidationRegistryVersion" SET "stateVersionAtLastSpecChange" = '02'`,
         specs: [FOO_SPEC1, FOO_SPEC2],
         response: {
           specs: [
@@ -205,7 +204,7 @@ describe('replicator/invalidation', () => {
 
     for (const c of regCases) {
       test(c.name, async () => {
-        await initDB(db, undefined, c.setup);
+        await initDB(db, c.setupStmts, c.setup);
 
         const lc = createSilentLogContext();
         const resp = await invalidator.registerInvalidationFilters(
