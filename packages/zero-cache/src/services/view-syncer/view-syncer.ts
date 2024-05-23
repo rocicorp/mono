@@ -115,14 +115,15 @@ export class ViewSyncerService implements ViewSyncer, Service {
           // sleep(IDLE_TIMEOUT_MS),
         ])
       ) {
-        const {subscription, handleInvalidations} = await this.#lock.withLock(
-          () => this.#watchInvalidations(),
+        const watching = await this.#lock.withLock(() =>
+          this.#watchInvalidations(),
         );
-        if (this.#stopped) {
+        if (!watching || this.#stopped) {
           // Cancel the subscription that started concurrently with stop().
           await this.stop();
           break;
         }
+        const {subscription, handleInvalidations} = watching;
         for await (const update of subscription) {
           await this.#lock.withLock(async () => {
             if (!this.#invalidationSubscription) {
@@ -296,12 +297,19 @@ export class ViewSyncerService implements ViewSyncer, Service {
     assert(this.#started);
     assert(this.#cvr);
 
-    this.#lc.info?.('subscribing to invalidations');
-
-    const watcher = await this.#registry.getInvalidationWatcher();
+    if (this.#clients.size === 0) {
+      // A client may have immediately disconnected before the watch could be started.
+      return null;
+    }
     const minVersion = [...this.#clients.values()]
       .map(c => c.version())
       .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b));
+
+    this.#lc.info?.(
+      `subscribing to invalidations ${minVersion ? 'since ' + minVersion : ''}`,
+    );
+
+    const watcher = await this.#registry.getInvalidationWatcher();
     const tableSchemas = await watcher.getTableSchemas();
     const queryHandler = new QueryHandler(tableSchemas);
 
