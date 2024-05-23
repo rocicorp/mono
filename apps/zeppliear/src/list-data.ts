@@ -37,7 +37,6 @@ export function useListData({
   const {query, queryDeps, order} = issuesProps;
   const issueQueryOrdered = orderQuery(query, order, false);
   const [limit, setLimit] = useState(pageSize);
-  console.log('limit', limit);
   const issues = useQuery(
     issueQueryOrdered.limit(limit),
     queryDeps.concat(limit),
