@@ -12,7 +12,11 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
     "publish-worker-prod": "npm run wrangler-prod -- publish",
-    "wrangler-prod": "npx wrangler --config wrangler.toml"
+    "publish-worker-sandbox": "npm run wrangler-sandbox -- publish",
+    "wrangler-prod": "npx wrangler --config wrangler.toml",
+    "wrangler-sandbox": "npx wrangler --config wrangler.toml --env=sandbox",
+    "worker-logs-sandbox": "npm run wrangler-sandbox -- tail",
+    "worker-logs-prod": "npm run wrangler-prod -- tail"
   },
   "dependencies": {
     "@emotion/react": "^11.8.2",
