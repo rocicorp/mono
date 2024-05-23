@@ -12,10 +12,7 @@ import {
   TEST_LICENSE_KEY,
   WriteTransaction,
 } from '../src/mod.js';
-import {
-  ReplicacheImpl as Replicache,
-  ReplicacheImpl,
-} from '../src/replicache-impl.js';
+import {ReplicacheImpl} from '../src/replicache-impl.js';
 import {uuid} from '../src/uuid.js';
 import {
   TestDataObject,
@@ -24,7 +21,6 @@ import {
   jsonObjectTestData,
 } from './data.js';
 import type {Bencher, Benchmark} from './perf.js';
-import {restoreMakeImplForTest, setMakeImplForTest} from '../src/replicache.js';
 
 const valSize = 1024;
 
@@ -72,7 +68,7 @@ export function benchmarkPersist(opts: {
   numKeys: number;
   indexes?: number;
 }): Benchmark {
-  let repToClose: Replicache | undefined;
+  let repToClose: ReplicacheImpl | undefined;
   return {
     name: `persist ${valSize}x${opts.numKeys} (${`indexes: ${
       opts.indexes || 0
@@ -101,7 +97,7 @@ export function benchmarkRefreshSimple(opts: {
   indexes?: number;
 }): Benchmark {
   const repName = makeRepName();
-  let repToClose: Replicache;
+  let repToClose: ReplicacheImpl;
   return {
     name: `refresh simple ${valSize}x${opts.numKeys} (${`indexes: ${
       opts.indexes ?? 0
@@ -149,7 +145,7 @@ export function benchmarkRefresh(opts: {
 }): Benchmark {
   assert(opts.numKeysPerMutation < opts.numKeysPersisted);
   const repName = makeRepName();
-  const repsToClose: Replicache[] = [];
+  const repsToClose: ReplicacheImpl[] = [];
   return {
     name: `refresh, ${valSize}x${opts.numKeysPersisted} (${`indexes: ${
       opts.indexes || 0
@@ -231,7 +227,7 @@ export function benchmarkRebase(opts: {
   targetSizePerKey?: number;
 }): Benchmark {
   const repName = makeRepName();
-  let repToClose: Replicache;
+  let repToClose: ReplicacheImpl;
   const {
     mutations,
     targetSizePerMutation,
@@ -324,22 +320,20 @@ export function benchmarkRebase(opts: {
   };
 }
 
-class ReplicachePerfTest<MD extends MutatorDefs> extends Replicache<MD> {
+class ReplicachePerfTest<MD extends MutatorDefs> extends ReplicacheImpl<MD> {
   constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
-    setMakeImplForTest(
-      <M extends MutatorDefs>(ops: ReplicacheOptions<M>) =>
-        new ReplicacheImpl<M>(ops, {
-          enableLicensing: false,
-          enableMutationRecovery: false,
-          enableScheduledRefresh: false,
-          enableScheduledPersist: false,
-        }),
+    super(
+      {
+        ...options,
+        licenseKey: TEST_LICENSE_KEY,
+      },
+      {
+        enableLicensing: false,
+        enableMutationRecovery: false,
+        enableScheduledRefresh: false,
+        enableScheduledPersist: false,
+      },
     );
-    super({
-      ...options,
-      licenseKey: TEST_LICENSE_KEY,
-    });
-    restoreMakeImplForTest();
   }
 }
 
@@ -398,7 +392,7 @@ export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
   numKeysToRead: number;
 }): Benchmark {
   const repName = makeRepName();
-  let repToClose: Replicache | undefined;
+  let repToClose: ReplicacheImpl | undefined;
   return {
     name: `startup read ${valSize}x${opts.numKeysToRead} from ${valSize}x${opts.numKeysPersisted} stored`,
     group: 'replicache',
@@ -442,7 +436,7 @@ export function benchmarkStartupUsingScanFromPersistedData(opts: {
   numKeysToRead: number;
 }): Benchmark {
   const repName = makeRepName();
-  let repToClose: Replicache | undefined;
+  let repToClose: ReplicacheImpl | undefined;
   return {
     name: `startup scan ${valSize}x${opts.numKeysToRead} from ${valSize}x${opts.numKeysPersisted} stored`,
     group: 'replicache',
@@ -562,7 +556,7 @@ export function benchmarkCreateIndex(opts: {numKeys: number}): Benchmark {
   // populate the instance with persisted data. We then create a Replicache
   // instance without an index and one with an index. We then subtract the time
   // it took to create the instance without the index.
-  let rep: Replicache | undefined;
+  let rep: ReplicacheImpl | undefined;
   const repName = makeRepName();
   return {
     name: `create index with definition ${valSize}x${opts.numKeys}`,
@@ -621,7 +615,7 @@ export function benchmarkWriteSubRead(opts: {
   const kbReadPerSub = (keysWatchedPerSub * valueSize) / 1024;
   const makeKey = (index: number) => `key${index}`;
 
-  let repToClose: Replicache | undefined;
+  let repToClose: ReplicacheImpl | undefined;
   return {
     name: `writeSubRead ${cacheSizeMB}MB total, ${numSubsTotal} subs total, ${numSubsDirty} subs dirty, ${kbReadPerSub}kb read per sub`,
     group: 'replicache',
@@ -704,7 +698,7 @@ export function benchmarkWriteSubRead(opts: {
 
 // This benchmark is based on a reduced test case from Tom McWright
 function benchmarkTmcw(kind: 'populate' | 'persist'): Benchmark {
-  let repToClose: Replicache | undefined;
+  let repToClose: ReplicacheImpl | undefined;
   let updates: JSONValue[] | undefined;
 
   return {
@@ -808,7 +802,9 @@ function createIndexDefinitions(numIndexes: number): IndexDefinitions {
   return indexes;
 }
 
-async function closeAndCleanupRep(rep: Replicache | undefined): Promise<void> {
+async function closeAndCleanupRep(
+  rep: ReplicacheImpl | undefined,
+): Promise<void> {
   if (rep) {
     await rep.close();
     await dropIDBStoreWithMemFallback(rep.idbName);
