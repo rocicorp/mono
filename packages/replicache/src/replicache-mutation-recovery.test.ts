@@ -1068,6 +1068,7 @@ suite('SDD', () => {
       {
         pullURL: 'https://diff.com/pull',
       },
+      undefined,
       {useDefaultURLs: false},
     );
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
@@ -1082,8 +1083,8 @@ suite('SDD', () => {
       'mutation-recovery-startup',
       {
         pullURL: 'https://diff.com/pull',
-        ...disableAllBackgroundProcesses,
       },
+      disableAllBackgroundProcesses,
       {useDefaultURLs: false},
     );
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
@@ -1128,9 +1129,13 @@ suite('SDD', () => {
   });
 
   test('mutation recovery is invoked on 5 minute interval', async () => {
-    const rep = await replicacheForTesting('mutation-recovery-startup', {
-      enableLicensing: false,
-    });
+    const rep = await replicacheForTesting(
+      'mutation-recovery-startup',
+      undefined,
+      {
+        enableLicensing: false,
+      },
+    );
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
     await clock.tickAsync(5 * 60 * 1000);
     expect(rep.recoverMutationsFake.callCount).to.equal(2);

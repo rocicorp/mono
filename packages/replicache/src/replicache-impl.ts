@@ -70,10 +70,7 @@ import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
 import type {Puller} from './puller.js';
 import {Pusher, PushError} from './pusher.js';
-import type {
-  ReplicacheInternalOptions,
-  ReplicacheOptions,
-} from './replicache-options.js';
+import type {ReplicacheOptions} from './replicache-options.js';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
@@ -166,6 +163,32 @@ const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
 ) => new SubscriptionsManagerImpl(queryInternal, lc);
 
 export interface ReplicacheImplOptions {
+  /**
+   * Defaults to true.
+   * Does not use a symbol because it is used by reflect.
+   */
+  enableLicensing?: boolean | undefined;
+
+  /**
+   * Defaults to true.
+   */
+  enableMutationRecovery?: boolean | undefined;
+
+  /**
+   * Defaults to true.
+   */
+  enableScheduledPersist?: boolean | undefined;
+
+  /**
+   * Defaults to true.
+   */
+  enableScheduledRefresh?: boolean | undefined;
+
+  /**
+   * Defaults to true.
+   */
+  enablePullAndPushInOpen?: boolean | undefined;
+
   /**
    * Default is `defaultMakeSubscriptionsManager`.
    */
@@ -378,7 +401,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onRecoverMutations = (r: Promise<boolean>) => r;
 
   constructor(
-    options: ReplicacheOptions<MD> & ReplicacheInternalOptions,
+    options: ReplicacheOptions<MD>,
     implOptions: ReplicacheImplOptions = {},
   ) {
     const {
@@ -397,15 +420,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       pusher,
       licenseKey,
       indexes = {},
+    } = options;
+    const {
       enableMutationRecovery = true,
       enableLicensing = true,
       enableScheduledPersist = true,
-
       enableScheduledRefresh = true,
-
       enablePullAndPushInOpen = true,
-    } = options;
-    const {
       makeSubscriptionsManager = defaultMakeSubscriptionsManager,
       enableClientGroupForking = true,
     } = implOptions;

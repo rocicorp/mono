@@ -217,31 +217,3 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    */
   readonly indexes?: IndexDefinitions | undefined;
 }
-
-export type ReplicacheInternalOptions = {
-  /**
-   * Defaults to true.
-   * Does not use a symbol because it is used by reflect.
-   */
-  enableLicensing?: boolean | undefined;
-
-  /**
-   * Defaults to true.
-   */
-  enableMutationRecovery?: boolean | undefined;
-
-  /**
-   * Defaults to true.
-   */
-  enableScheduledPersist?: boolean | undefined;
-
-  /**
-   * Defaults to true.
-   */
-  enableScheduledRefresh?: boolean | undefined;
-
-  /**
-   * Defaults to true.
-   */
-  enablePullAndPushInOpen?: boolean | undefined;
-};

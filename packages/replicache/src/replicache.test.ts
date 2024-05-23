@@ -711,14 +711,19 @@ test('index in options', async () => {
 });
 
 test('allow redefinition of indexes', async () => {
-  const rep = await replicacheForTesting('index-redefinition', {
-    mutators: {addData},
-    indexes: {
-      aIndex: {jsonPointer: '/a'},
+  const rep = await replicacheForTesting(
+    'index-redefinition',
+    {
+      mutators: {addData},
+      indexes: {
+        aIndex: {jsonPointer: '/a'},
+      },
     },
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   await populateDataUsingPull(rep, {
     'a/0': {a: '0'},
@@ -743,6 +748,8 @@ test('allow redefinition of indexes', async () => {
       indexes: {
         aIndex: {jsonPointer: '/a', prefix: 'b'},
       },
+    },
+    {
       enablePullAndPushInOpen: false,
     },
     {useUniqueName: false},
@@ -757,13 +764,16 @@ test('allow redefinition of indexes', async () => {
 });
 
 test('add more indexes', async () => {
-  const rep = await replicacheForTesting('index-add-more', {
-    mutators: {addData},
-    indexes: {
-      aIndex: {jsonPointer: '/a'},
+  const rep = await replicacheForTesting(
+    'index-add-more',
+    {
+      mutators: {addData},
+      indexes: {
+        aIndex: {jsonPointer: '/a'},
+      },
     },
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
 
   await populateDataUsingPull(rep, {
     'a/0': {a: '0'},
@@ -789,6 +799,7 @@ test('add more indexes', async () => {
         bIndex: {jsonPointer: '/b'},
       },
     },
+    undefined,
     {useUniqueName: false},
   );
 
@@ -804,11 +815,16 @@ test('add more indexes', async () => {
 });
 
 test('add index definition with prefix', async () => {
-  const rep = await replicacheForTesting('index-add-more', {
-    mutators: {addData},
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+  const rep = await replicacheForTesting(
+    'index-add-more',
+    {
+      mutators: {addData},
+    },
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   await populateDataUsingPull(rep, {
     'a/0': {a: '0'},
@@ -826,6 +842,8 @@ test('add index definition with prefix', async () => {
       indexes: {
         aIndex: {jsonPointer: '/a', prefix: 'a'},
       },
+    },
+    {
       enablePullAndPushInOpen: false,
     },
     {useUniqueName: false},
@@ -837,14 +855,17 @@ test('add index definition with prefix', async () => {
 });
 
 test('rename indexes', async () => {
-  const rep = await replicacheForTesting('index-add-more', {
-    mutators: {addData},
-    indexes: {
-      aIndex: {jsonPointer: '/a'},
-      bIndex: {jsonPointer: '/b'},
+  const rep = await replicacheForTesting(
+    'index-add-more',
+    {
+      mutators: {addData},
+      indexes: {
+        aIndex: {jsonPointer: '/a'},
+        bIndex: {jsonPointer: '/b'},
+      },
     },
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
   await populateDataUsingPull(rep, {
     'a/0': {a: '0'},
     'b/1': {a: '1'},
@@ -871,6 +892,7 @@ test('rename indexes', async () => {
         aIndex: {jsonPointer: '/b'},
       },
     },
+    undefined,
     {useUniqueName: false},
   );
 
@@ -1297,13 +1319,18 @@ test('onSync', async () => {
   const pullURL = 'https://pull.com/pull';
   const pushURL = 'https://push.com/push';
 
-  const rep = await replicacheForTesting('onSync', {
-    pullURL,
-    pushURL,
-    pushDelay: 5,
-    mutators: {addData},
-    enablePullAndPushInOpen: false,
-  });
+  const rep = await replicacheForTesting(
+    'onSync',
+    {
+      pullURL,
+      pushURL,
+      pushDelay: 5,
+      mutators: {addData},
+    },
+    {
+      enablePullAndPushInOpen: false,
+    },
+  );
   const add = rep.mutate.addData;
 
   const onSync = sinon.fake();
@@ -1431,13 +1458,18 @@ test('push and pull concurrently', async () => {
   const pushURL = 'https://push.com/push';
   const pullURL = 'https://pull.com/pull';
 
-  const rep = await replicacheForTesting('concurrently', {
-    pullURL,
-    pushURL,
-    pushDelay: 10,
-    mutators: {addData},
-    enablePullAndPushInOpen: false,
-  });
+  const rep = await replicacheForTesting(
+    'concurrently',
+    {
+      pullURL,
+      pushURL,
+      pushDelay: 10,
+      mutators: {addData},
+    },
+    {
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   const onBeginPull = (rep.onBeginPull = sinon.fake());
   const commitSpy = sinon.spy(Write.prototype, 'commitWithDiffs');
@@ -1712,12 +1744,17 @@ async function tickUntilTimeIs(time: number, tick = 10) {
 
 test('pull mutate options', async () => {
   const pullURL = 'https://diff.com/pull';
-  const rep = await replicacheForTesting('pull-mutate-options', {
-    pullURL,
-    pushURL: '',
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+  const rep = await replicacheForTesting(
+    'pull-mutate-options',
+    {
+      pullURL,
+      pushURL: '',
+    },
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
   const {clientID} = rep;
   const log: number[] = [];
 
@@ -1838,12 +1875,10 @@ async function licenseKeyCheckTest(tc: LicenseKeyCheckTestCase) {
 
   const rep = await replicacheForTesting(
     name,
+    {licenseKey: tc.licenseKey},
     tc.enableLicensing !== undefined
-      ? {
-          licenseKey: tc.licenseKey,
-          enableLicensing: tc.enableLicensing,
-        }
-      : {licenseKey: tc.licenseKey},
+      ? {enableLicensing: tc.enableLicensing}
+      : undefined,
   );
 
   expect(await rep.licenseValid()).to.equal(tc.expectValid);
@@ -1996,12 +2031,10 @@ async function licenseActiveTest(tc: LicenseActiveTestCase) {
   fetchMock.catch();
   const rep = await replicacheForTesting(
     'license-active-test',
+    {licenseKey: tc.licenseKey},
     tc.enableLicensing !== undefined
-      ? {
-          licenseKey: tc.licenseKey,
-          enableLicensing: tc.enableLicensing,
-        }
-      : {licenseKey: tc.licenseKey},
+      ? {enableLicensing: tc.enableLicensing}
+      : undefined,
   );
   const licenseActive = await rep.licenseActive();
   expect(licenseActive).to.equal(tc.expectActive);
@@ -2150,27 +2183,30 @@ async function testMemStoreWithCounters<MD extends MutatorDefs>(
 test('Create KV Store', async () => {
   let store: MemStoreWithCounters | undefined;
 
-  const rep = await replicacheForTesting('kv-store', {
-    kvStore: {
-      create: name => {
-        if (!store && name.includes('kv-store')) {
-          store = new MemStoreWithCounters(name);
-          return store;
-        }
+  const rep = await replicacheForTesting(
+    'kv-store',
+    {
+      kvStore: {
+        create: name => {
+          if (!store && name.includes('kv-store')) {
+            store = new MemStoreWithCounters(name);
+            return store;
+          }
 
-        return new MemStoreWithCounters(name);
-      },
-      drop: (_name: string) => {
-        if (store) {
-          store = undefined;
+          return new MemStoreWithCounters(name);
+        },
+        drop: (_name: string) => {
+          if (store) {
+            store = undefined;
+            return promiseVoid;
+          }
           return promiseVoid;
-        }
-        return promiseVoid;
+        },
       },
+      mutators: {addData},
     },
-    mutators: {addData},
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
 
   expect(store).instanceOf(MemStoreWithCounters);
   assert(store);
@@ -2386,12 +2422,15 @@ suite('check for client not found in visibilitychange', () => {
 });
 
 test('disableClientGroup', async () => {
-  const rep = await replicacheForTesting('disable-client-group', {
-    mutators: {
-      noop: () => undefined,
+  const rep = await replicacheForTesting(
+    'disable-client-group',
+    {
+      mutators: {
+        noop: () => undefined,
+      },
     },
-    ...disableAllBackgroundProcesses,
-  });
+    disableAllBackgroundProcesses,
+  );
   const clientGroupID = await rep.clientGroupID;
 
   expect(rep.isClientGroupDisabled).false;

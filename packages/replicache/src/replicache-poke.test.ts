@@ -84,13 +84,18 @@ test('poke', async () => {
 });
 
 test('overlapped pokes not supported', async () => {
-  const rep = await replicacheForTesting('multiple-pokes', {
-    mutators: {
-      addData,
+  const rep = await replicacheForTesting(
+    'multiple-pokes',
+    {
+      mutators: {
+        addData,
+      },
     },
-    ...disableAllBackgroundProcesses,
-    enablePullAndPushInOpen: false,
-  });
+    {
+      ...disableAllBackgroundProcesses,
+      enablePullAndPushInOpen: false,
+    },
+  );
 
   const {clientID} = rep;
   const poke: Poke = {
@@ -173,9 +178,11 @@ test('Version not supported on server', async () => {
     response: VersionNotSupportedResponse,
     reason: UpdateNeededReason,
   ) => {
-    const rep = await replicacheForTesting('version-not-supported-poke', {
-      ...disableAllBackgroundProcesses,
-    });
+    const rep = await replicacheForTesting(
+      'version-not-supported-poke',
+      undefined,
+      disableAllBackgroundProcesses,
+    );
 
     const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
 

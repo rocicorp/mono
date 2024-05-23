@@ -10,7 +10,10 @@ import type {MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
-import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
+import {
+  ReplicacheImpl,
+  ReplicacheImplOptions,
+} from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
 import type {WatchCallback} from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
@@ -393,21 +396,14 @@ export class Zero<QD extends QueryDefs> {
       licenseKey: 'zero-client-static-key',
       kvStore,
     };
-    const replicacheInternalOptions = {
+    const replicacheImplOptions: ReplicacheImplOptions = {
       enableLicensing: false,
+      makeSubscriptionsManager: (queryInternal, lc) =>
+        new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
+      enableClientGroupForking: false,
     };
 
-    const rep = new ReplicacheImpl(
-      {
-        ...replicacheOptions,
-        ...replicacheInternalOptions,
-      },
-      {
-        makeSubscriptionsManager: (queryInternal, lc) =>
-          new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
-        enableClientGroupForking: false,
-      },
-    );
+    const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
     this.#rep = rep;
 
     if (TESTING) {

@@ -359,14 +359,11 @@ export class Reflect<MD extends MutatorDefs> {
       licenseKey: 'reflect-client-static-key',
       kvStore,
     };
-    const replicacheInternalOptions = {
+    const replicacheImplOptions = {
       enableLicensing: false,
     };
 
-    this.#rep = new ReplicacheImpl({
-      ...replicacheOptions,
-      ...replicacheInternalOptions,
-    });
+    this.#rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
 
     this.#rep.getAuth = this.#getAuthToken;
     this.#onUpdateNeeded = this.#rep.onUpdateNeeded; // defaults to reload.

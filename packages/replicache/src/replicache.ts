@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {must} from 'shared/src/must.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import {FormatVersion} from './format-version.js';
 import {
@@ -28,14 +27,21 @@ import type {
   UpdateNeededReason,
 } from './types.js';
 
-type WeakKey = object;
+type MakeImpl = <MD extends MutatorDefs>(
+  options: ReplicacheOptions<MD>,
+) => ReplicacheImpl<MD>;
 
-const repToImpl = new WeakMap<WeakKey, ReplicacheImpl>();
+const defaultMakeImpl: MakeImpl = <MD extends MutatorDefs>(
+  options: ReplicacheOptions<MD>,
+) => new ReplicacheImpl<MD>(options);
+let makeImpl: MakeImpl = defaultMakeImpl;
 
-export function getImpl<MD extends MutatorDefs>(
-  rep: WeakKey,
-): ReplicacheImpl<MD> {
-  return must(repToImpl.get(rep)) as ReplicacheImpl<MD>;
+export function setMakeImplForTest(testMakeImpl: MakeImpl) {
+  makeImpl = testMakeImpl;
+}
+
+export function restoreMakeImplForTest() {
+  makeImpl = defaultMakeImpl;
 }
 
 export const httpStatusUnauthorized = 401;
@@ -66,10 +72,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   readonly #impl: ReplicacheImpl<MD>;
 
   constructor(options: ReplicacheOptions<MD>) {
-    this.#impl = new ReplicacheImpl<MD>(options);
-    // Store this in a WeakMap so we can get it back if we have access to the
-    // WeakMap (tests, zero, reflect etc).
-    repToImpl.set(this, this.#impl);
+    this.#impl = makeImpl(options);
   }
 
   /** The URL to use when doing a pull request. */
