@@ -341,7 +341,9 @@ function filterQuery(
   const viewStatuses = getViewStatuses(view);
 
   // Apply view filter
-  q = q.where('issue.status', 'IN', [...viewStatuses]);
+  if (viewStatuses && viewStatuses.size > 0) {
+    q = q.where('issue.status', 'IN', [...viewStatuses]);
+  }
 
   if (filters.statusFilter) {
     q = q.where('issue.status', 'IN', [...filters.statusFilter]);
