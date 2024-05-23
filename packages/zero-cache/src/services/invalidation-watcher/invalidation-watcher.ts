@@ -443,7 +443,7 @@ export class InvalidationWatcherService
       return this.#latestReader;
     }
     const {init, cleanup} = sharedReadOnlySnapshot();
-    const reader = new TransactionPool(lc, Mode.READONLY, init, cleanup, 1, 4); // TODO: Choose maxWorkers more intelligently / dynamically.
+    const reader = new TransactionPool(lc, Mode.READONLY, init, cleanup, 1, 3); // TODO: Choose maxWorkers more intelligently / dynamically.
     reader.run(this.#replica).catch(e => lc.error?.(e));
 
     const snapshotQuery = await reader.processReadTask(queryStateVersion);
