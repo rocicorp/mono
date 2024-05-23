@@ -47,11 +47,14 @@ export class FilterOperator<I extends PipelineEntity> extends OperatorBase<I> {
   }
 
   messageUpstream(message: Request): void {
-    message.hoistedConditions.push({
-      selector: this.#column,
-      op: this.#op,
-      value: this.#value,
-    });
+    message = {
+      ...message,
+      hoistedConditions: message.hoistedConditions.concat({
+        selector: this.#column,
+        op: this.#op,
+        value: this.#value,
+      }),
+    };
     this.#input.messageUpstream(message, this.#listener);
   }
 

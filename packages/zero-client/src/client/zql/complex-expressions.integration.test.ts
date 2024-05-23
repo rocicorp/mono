@@ -67,7 +67,7 @@ describe('complex expressions', async () => {
       expected: tracks.slice(3),
     },
     {
-      name: 'cursor style, desc',
+      name: 'cursor style, desc with dupes',
       // attempt to get the page before id003.
       query: () =>
         z.query.track
@@ -92,6 +92,12 @@ describe('complex expressions', async () => {
             ),
           ),
       expected: tracks.slice(0, 3).reverse(),
+    },
+    {
+      name: 'two or equalities',
+      query: () =>
+        z.query.track.where(or(exp('id', '=', '001'), exp('id', '=', '002'))),
+      expected: tracks.slice(0, 2),
     },
   ])('$name', async ({query, expected}) => {
     const stmt = query().prepare();
