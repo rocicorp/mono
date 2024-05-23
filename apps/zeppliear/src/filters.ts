@@ -20,7 +20,7 @@ export function getViewStatuses(view: string | null): Set<Status> {
       return new Set([Status.InProgress, Status.Todo]);
     case 'backlog':
       return new Set([Status.Backlog]);
-    case 'all':
+    default:
       return new Set([
         Status.Backlog,
         Status.Todo,
@@ -28,8 +28,6 @@ export function getViewStatuses(view: string | null): Set<Status> {
         Status.Done,
         Status.Canceled,
       ]);
-    default:
-      return new Set();
   }
 }
 
