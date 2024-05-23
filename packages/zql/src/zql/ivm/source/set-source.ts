@@ -185,7 +185,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
    * has history available, we need to wait for the seed to come in.
    *
    * This can happen since `experimentalWatch` will asynchronously call us
-   * back with the seed/inital values.
+   * back with the seed/initial values.
    */
   seed(values: Iterable<T>): this {
     // TODO: invariant to ensure we are in a tx.
@@ -256,7 +256,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
           this._materialite.getVersion(),
           gen(() =>
             genFromBTreeEntries(
-              newSort.#tree.entries(maybeKey(range.field, range.bottom)),
+              newSort.#tree.entries(maybeGetKey(range.field, range.bottom)),
               createEndPredicateAsc(range.field, range.top),
             ),
           ),
@@ -265,16 +265,40 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
         return;
       }
 
-      this.#stream.newDifference(
-        this._materialite.getVersion(),
-        gen(() =>
-          genFromBTreeEntries(
-            newSort.#tree.entriesReversed(maybeKey(range.field, range.top)),
-            createEndPredicateDesc(range.field, range.bottom),
+      const maybeKey = maybeGetKey<T>(range.field, range.top);
+      if (maybeKey !== undefined && newSort.#order[0].length > 1) {
+        const entriesBelow = newSort.#tree.entries(maybeKey);
+        let key: T | undefined;
+        const specialComparator = makeComparator<T>([range.field], 'asc');
+        for (const entry of entriesBelow) {
+          if (specialComparator(entry[0], maybeKey) > 0) {
+            key = entry[0];
+            break;
+          }
+        }
+        this.#stream.newDifference(
+          this._materialite.getVersion(),
+          gen(() =>
+            genFromBTreeEntries(
+              newSort.#tree.entriesReversed(key),
+              createEndPredicateDesc(range.field, range.bottom),
+            ),
           ),
-        ),
-        createPullResponseMessage(request, this.#name, orderForReply),
-      );
+          createPullResponseMessage(request, this.#name, orderForReply),
+        );
+      } else {
+        this.#stream.newDifference(
+          this._materialite.getVersion(),
+          gen(() =>
+            genFromBTreeEntries(
+              newSort.#tree.entriesReversed(maybeKey),
+              createEndPredicateDesc(range.field, range.bottom),
+            ),
+          ),
+          createPullResponseMessage(request, this.#name, orderForReply),
+        );
+      }
+
       return;
     }
 
@@ -300,7 +324,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     }
 
     const key = firstField[1];
-    // this is the canoncial sort.
+    // this is the canonical sort.
     if (key === 'id') {
       return [this, this.#order];
     }
@@ -441,7 +465,7 @@ function createEndPredicateDesc<T extends object>(
   };
 }
 
-function maybeKey<T>(field: Selector, value: unknown): T | undefined {
+function maybeGetKey<T>(field: Selector, value: unknown): T | undefined {
   if (value === undefined) {
     return undefined;
   }

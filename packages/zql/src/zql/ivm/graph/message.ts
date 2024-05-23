@@ -39,7 +39,7 @@ export type PullMsg = {
   readonly type: 'pull';
   // undefined means that the data does not need to be ordered in the reply.
   readonly order?: Ordering | undefined;
-  readonly hoistedConditions: HoistedCondition[];
+  readonly hoistedConditions: readonly HoistedCondition[];
 };
 export type HoistedCondition = {
   selector: readonly [string | null, string];
@@ -66,7 +66,7 @@ export type PullReplyMsg = {
 
 let messageID = 0;
 
-export function nextMessageID() {
+function nextMessageID() {
   return messageID++;
 }
 
@@ -86,6 +86,13 @@ export function createPullMessage(order: Ordering | undefined): Request {
     type: 'pull',
     order,
     hoistedConditions: [],
+  };
+}
+
+export function forkPullMessage(original: Request): Request {
+  return {
+    ...original,
+    id: nextMessageID(),
   };
 }
 
