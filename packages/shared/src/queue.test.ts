@@ -70,6 +70,30 @@ describe('Queue', () => {
     expect(q.size()).toBe(0);
   });
 
+  test('deletes enqueued values', async () => {
+    const q = new Queue<string>();
+    const c0 = q.enqueue('b');
+    const c1 = q.enqueue('a');
+    const c2 = q.enqueue('c');
+    const c3 = q.enqueue('b');
+    const c4 = q.enqueue('b');
+    const c5 = q.enqueue('d');
+    const c6 = q.enqueue('b');
+    expect(q.size()).toBe(7);
+
+    expect(q.delete('b')).toBe(4);
+    expect(q.size()).toBe(3);
+    expect(q.delete('b')).toBe(0);
+    expect(q.size()).toBe(3);
+
+    expect(await q.dequeue()).toBe('a');
+    expect(await q.dequeue()).toBe('c');
+    expect(await q.dequeue()).toBe('d');
+    expect(q.size()).toBe(0);
+
+    await Promise.all([c0, c1, c2, c3, c4, c5, c6]);
+  });
+
   test('supports mixed order', async () => {
     const q = new Queue<string>();
     expect(q.size()).toBe(0);

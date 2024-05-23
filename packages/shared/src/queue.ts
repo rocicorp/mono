@@ -1,4 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {assert} from './asserts.js';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,
@@ -8,9 +9,11 @@ export class Queue<T> {
   // Consumers waiting for entries to be produced.
   readonly #consumers: Consumer<T>[] = [];
   // Produced entries waiting to be consumed.
-  readonly #produced: {value: Promise<T>; consumed: () => void}[] = [];
+  readonly #produced: Produced<T>[] = [];
 
-  /** @returns A Promise that resolves when the value is consumed. */
+  /**
+   * @returns A Promise that resolves when the value is consumed.
+   */
   enqueue(value: T): Promise<void> {
     const consumer = this.#consumers.shift();
     if (consumer) {
@@ -18,7 +21,7 @@ export class Queue<T> {
       clearTimeout(consumer.timeoutID);
       return Promise.resolve();
     }
-    return this.#enqueueProduced(Promise.resolve(value));
+    return this.#enqueueProduced(Promise.resolve(value), value);
   }
 
   /** @returns A Promise that resolves when the rejection is consumed. */
@@ -32,10 +35,34 @@ export class Queue<T> {
     return this.#enqueueProduced(Promise.reject(reason));
   }
 
-  #enqueueProduced(value: Promise<T>): Promise<void> {
+  #enqueueProduced(produced: Promise<T>, value?: T): Promise<void> {
     const {promise, resolve: consumed} = resolver<void>();
-    this.#produced.push({value, consumed});
+    this.#produced.push({produced, value, consumed});
     return promise;
+  }
+
+  /**
+   * Deletes all unconsumed entries matching the specified `value` based on identity equality.
+   * The consumed callback(s) are resolved as if the values were dequeued.
+   *
+   * Note: deletion of `undefined` values is not supported. This method will assert
+   * if `value` is undefined.
+   *
+   * @returns The number of entries deleted.
+   */
+  delete(value: T): number {
+    assert(value !== undefined);
+
+    let count = 0;
+    for (let i = this.#produced.length - 1; i >= 0; i--) {
+      const p = this.#produced[i];
+      if (p.value === value) {
+        this.#produced.splice(i, 1);
+        p.consumed();
+        count++;
+      }
+    }
+    return count;
   }
 
   /**
@@ -48,7 +75,7 @@ export class Queue<T> {
     const produced = this.#produced.shift();
     if (produced) {
       produced.consumed();
-      return produced.value;
+      return produced.produced;
     }
     const r = resolver<T>();
     const timeoutID =
@@ -103,4 +130,10 @@ const NOOP = () => {};
 type Consumer<T> = {
   resolver: Resolver<T>;
   timeoutID: ReturnType<typeof setTimeout> | undefined;
+};
+
+type Produced<T> = {
+  produced: Promise<T>;
+  value: T | undefined;
+  consumed: () => void;
 };
