@@ -99,6 +99,7 @@ function TopFilter({
             <MenuIcon className="w-3.5 text-white hover:text-gray-50" />
           </button>
           <div className="p-1 font-semibold cursor-default">{title}</div>
+          {/*
           {filteredIssuesCount ? (
             <span>
               {filteredIssuesCount} / {issuesCount}
@@ -106,6 +107,7 @@ function TopFilter({
           ) : (
             <span>{issuesCount}</span>
           )}
+          */}
           <FilterMenu
             onSelectPriority={createToggleFilterHandler(
               priorityFilters,
