@@ -89,6 +89,7 @@ function IssueList({issuesProps, onUpdateIssues, onOpenDetail, view}: Props) {
             itemData={itemData}
             itemKey={itemKey}
             overscanCount={10}
+            onItemsRendered={itemData.onItemsRendered}
             width={width}
           >
             {Row}
