@@ -112,8 +112,7 @@ describe('a limited window is correctly maintained over differences', () => {
 });
 
 function numToPaddedString(i: number) {
-  const str = String(i);
-  return '0'.repeat(10 - str.length) + str;
+  return String(i).padStart(10, '0');
 }
 
 /**
@@ -124,7 +123,7 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
   type E = {
     id: string;
   };
-  const infiniteGenerator = {
+  const infiniteIterable = {
     *[Symbol.iterator]() {
       let i = 0;
       while (true) {
@@ -134,7 +133,7 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
   };
   const numUsers = 20;
   const numLabels = 10;
-  const infiniteIssueGenerator = {
+  const infiniteIssueIterable = {
     *[Symbol.iterator]() {
       let i = 0;
       while (true) {
@@ -150,9 +149,9 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
     },
   };
 
-  const generators = new Map([
-    ['e', infiniteGenerator],
-    ['issue', infiniteIssueGenerator],
+  const iterables = new Map([
+    ['e', infiniteIterable],
+    ['issue', infiniteIssueIterable],
   ]);
 
   type Issue = {
@@ -171,13 +170,13 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
   };
   type User = Label;
 
-  const context = makeInfiniteSourceContext(generators);
+  const context = makeInfiniteSourceContext(iterables);
   const issueLabelSource = context.getSource<IssueLabel>('issueLabel');
   const labelSource = context.getSource<Label>('label');
-  // We can't do inifnite users or comments yet
+  // We can't do infinite users or comments yet
   // or anything that appears on the right side of a join (yet).
   // We'd need to register a foreign key index for those sources so
-  // we don't have to scan inifinitely.
+  // we don't have to scan infinitely.
   const userSource = context.getSource<User>('user');
 
   context.materialite.tx(() => {

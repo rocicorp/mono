@@ -41,16 +41,13 @@ export class TestContext implements Context {
   }
 }
 
-type Gen<T> = {
-  [Symbol.iterator](): Generator<Entry<T>, void, unknown>;
-};
 export class InfiniteSourceContext implements Context {
   readonly materialite = new Materialite();
   readonly #sources = new Map<string, Source<PipelineEntity>>();
-  readonly #generators = new Map<string, Gen<PipelineEntity>>();
+  readonly #iterables = new Map<string, Iterable<Entry<PipelineEntity>>>();
 
-  constructor(generators: Map<string, Gen<PipelineEntity>>) {
-    this.#generators = generators;
+  constructor(iterables: Map<string, Iterable<Entry<PipelineEntity>>>) {
+    this.#iterables = iterables;
   }
 
   getSource<X extends Entity>(name: string): Source<X> {
@@ -60,10 +57,10 @@ export class InfiniteSourceContext implements Context {
     }
 
     let source: Source<PipelineEntity>;
-    if (this.#generators.has(name)) {
+    if (this.#iterables.has(name)) {
       source = this.materialite.constructSource(
         internal =>
-          new InfiniteSource(internal, must(this.#generators.get(name)), name),
+          new InfiniteSource(internal, must(this.#iterables.get(name)), name),
       );
     } else {
       source = this.materialite.newSetSource<X>(
@@ -89,9 +86,9 @@ export function makeTestContext(): TestContext {
 }
 
 export function makeInfiniteSourceContext(
-  generators: Map<string, Gen<PipelineEntity>>,
+  iterables: Map<string, Iterable<Entry<PipelineEntity>>>,
 ): InfiniteSourceContext {
-  return new InfiniteSourceContext(generators);
+  return new InfiniteSourceContext(iterables);
 }
 
 class InfiniteSource<T extends PipelineEntity> implements Source<T> {
@@ -105,9 +102,7 @@ class InfiniteSource<T extends PipelineEntity> implements Source<T> {
 
   constructor(
     materialite: MaterialiteForSourceInternal,
-    generator: {
-      [Symbol.iterator](): Iterator<Entry<T>>;
-    },
+    generator: Iterable<Entry<T>>,
     name: string,
   ) {
     this.#name = name;
