@@ -5,6 +5,7 @@ import {IssueCreationPartial, Priority, Status} from './issue.js';
 import Modal from './modal.jsx';
 import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
+import {useKeyPressed} from './hooks/use-key-pressed.js';
 
 interface Props {
   isOpen: boolean;
@@ -44,6 +45,8 @@ export default function IssueModal({isOpen, onDismiss, onCreateIssue}: Props) {
   const handleClickCloseBtn = () => {
     if (onDismiss) onDismiss();
   };
+
+  useKeyPressed('Escape', handleClickCloseBtn);
 
   const body = (
     <div className="flex flex-col w-full py-4">
