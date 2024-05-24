@@ -35,7 +35,10 @@ export class SourceHashIndexBackedDifferenceIndex<
   get(key: Key): Entry<V>[] {
     const overlayResult = this.#overlayIndex.get(key) ?? [];
     const sourceResult = this.#sourceIndex.get(key) ?? [];
-    const ret = sourceResult.map((v): Entry<V> => [v, 1]);
+    const ret: Entry<V>[] = [];
+    for (const value of sourceResult) {
+      ret.push([value, 1]);
+    }
     ret.push(...overlayResult);
     return ret;
   }
