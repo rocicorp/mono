@@ -1,11 +1,11 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
 import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
 import {ZeroContext} from '@rocicorp/zql/src/zql/context/zero-context.js';
 import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
 import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {EntityQuery} from '@rocicorp/zql/src/zql/query/entity-query.js';
+import type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
 import type {MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
@@ -344,7 +344,7 @@ export class Zero<QD extends QueryDefs> {
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-      kvStore = 'mem',
+      kvStore = 'idb',
       queries = {} as QueryParseDefs<QD>,
     } = options;
     if (!userID) {
