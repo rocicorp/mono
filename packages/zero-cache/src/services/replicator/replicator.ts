@@ -167,5 +167,7 @@ export class ReplicatorService implements Replicator, Service {
     return this.#incrementalSyncer.versionChanges();
   }
 
-  async stop() {}
+  async stop() {
+    await this.#incrementalSyncer.stop(this.#lc);
+  }
 }

@@ -732,11 +732,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): {id: RowID; columns?: string[]} | null {
     const received = this.#receivedRows.get(rowRecordPath);
 
-    const newQueriedColumns = mergeQueriedColumns(
-      existing.queriedColumns,
-      received,
-      this.#removedOrExecutedQueryIDs,
-    );
+    const newQueriedColumns =
+      received ?? // optimization: already merged in received()
+      mergeQueriedColumns(
+        existing.queriedColumns,
+        undefined,
+        this.#removedOrExecutedQueryIDs,
+      );
     if (
       existing.queriedColumns &&
       Object.keys(existing.queriedColumns).every(col => newQueriedColumns[col])
