@@ -6,10 +6,10 @@ import {makeTestContext} from '../context/test-context.js';
 import {getOperator} from '../ivm/graph/operators/filter-operator.js';
 import {Materialite} from '../ivm/materialite.js';
 import type {Source} from '../ivm/source/source.js';
+import type {PipelineEntity} from '../ivm/types.js';
 import * as agg from '../query/agg.js';
 import {conditionToString} from '../query/condition-to-string.js';
 import {EntityQuery, astForTesting as ast} from '../query/entity-query.js';
-import type {Entity} from '../schema/entity-schema.js';
 
 import {buildPipeline} from './pipeline-builder.js';
 
@@ -31,7 +31,7 @@ test('A simple select', () => {
   const m = new Materialite();
   let s = m.newSetSource<E1>(comparator, ordering, 'e1');
   let pipeline = buildPipeline(
-    () => s as unknown as Source<Entity>,
+    () => s as unknown as Source<PipelineEntity>,
     ast(q.select('id', 'a', 'b', 'c', 'd')),
   );
 
@@ -51,7 +51,7 @@ test('A simple select', () => {
 
   s = m.newSetSource(comparator, ordering, 'e1');
   pipeline = buildPipeline(
-    () => s as unknown as Source<Entity>,
+    () => s as unknown as Source<PipelineEntity>,
     ast(q.select('a', 'd')),
   );
   effectRunCount = 0;
@@ -70,7 +70,7 @@ test('Count', () => {
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator, ordering, 'e1');
   const pipeline = buildPipeline(
-    () => s as unknown as Source<Entity>,
+    () => s as unknown as Source<PipelineEntity>,
     ast(q.select(agg.count())),
   );
 
@@ -100,7 +100,7 @@ test('Where', () => {
   const m = new Materialite();
   const s = m.newSetSource<E1>(comparator, ordering, 'e1');
   const pipeline = buildPipeline(
-    () => s as unknown as Source<Entity>,
+    () => s as unknown as Source<PipelineEntity>,
     ast(q.select('id').where('a', '>', 1).where('b', '<', 2)),
   );
 
@@ -563,7 +563,10 @@ describe('OR', () => {
         orderBy: [[['items', 'id']], 'asc'],
       };
 
-      const pipeline = buildPipeline(() => s as unknown as Source<Entity>, ast);
+      const pipeline = buildPipeline(
+        () => s as unknown as Source<PipelineEntity>,
+        ast,
+      );
 
       const log: unknown[] = [];
       pipeline.effect((value, multiplicity) => {

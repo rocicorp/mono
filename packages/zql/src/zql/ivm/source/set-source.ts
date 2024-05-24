@@ -202,6 +202,11 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     for (const v of values) {
       this.#tree = this.#tree.with(v, undefined, true);
     }
+    for (const hash of this.#hashes.values()) {
+      for (const v of this.#tree.keys()) {
+        hash.add(v);
+      }
+    }
     this._materialite.addDirtySource(this.#internal);
 
     this.#seeded = true;
@@ -356,13 +361,18 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
   // TODO: in the future we should collapse hash and sorted indices
   // so one can stand in for the other and we don't need to maintain both.
-  getOrCreateAndMaintainNewHashIndex(column: Selector) {
+  getOrCreateAndMaintainNewHashIndex<K extends Primitive>(
+    column: Selector,
+  ): SourceHashIndex<K, T> {
     const existing = this.#hashes.get(column[1]);
     if (existing !== undefined) {
-      return existing;
+      return existing as SourceHashIndex<K, T>;
     }
-    const index = new SourceHashIndex<Primitive, T>(column);
+    const index = new SourceHashIndex<K, T>(column);
     this.#hashes.set(column[1], index);
+    for (const v of this.#tree.keys()) {
+      index.add(v);
+    }
     return index;
   }
 

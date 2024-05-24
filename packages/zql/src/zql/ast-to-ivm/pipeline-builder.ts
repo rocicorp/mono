@@ -13,14 +13,14 @@ import type {
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
 import type {Source} from '../ivm/source/source.js';
 import {getValueFromEntity} from '../ivm/source/util.js';
-import type {StringOrNumber} from '../ivm/types.js';
+import type {PipelineEntity, StringOrNumber} from '../ivm/types.js';
 import type {Entity} from '../schema/entity-schema.js';
 
 export function buildPipeline(
   sourceProvider: (
     sourceName: string,
     order: Ordering | undefined,
-  ) => Source<Entity>,
+  ) => Source<PipelineEntity>,
   ast: AST,
 ) {
   let {stream} = sourceProvider(
@@ -38,19 +38,19 @@ export function buildPipeline(
     stream = applyWhere(stream, ast.where);
   }
 
-  let ret: DifferenceStream<Entity> = stream;
+  let ret: DifferenceStream<PipelineEntity> = stream;
   // groupBy also applies aggregations
   if (ast.groupBy) {
     ret = applyGroupBy(
-      ret as DifferenceStream<Entity>,
+      ret as DifferenceStream<PipelineEntity>,
       ast.groupBy,
       ast.aggregate ?? [],
-    ) as unknown as DifferenceStream<Entity>;
+    ) as unknown as DifferenceStream<PipelineEntity>;
   }
   // if there was no group-by then we could be aggregating the entire table
   else if (ast.aggregate) {
     ret = applyFullTableAggregation(
-      ret as DifferenceStream<Entity>,
+      ret as DifferenceStream<PipelineEntity>,
       ast.aggregate,
     );
   }
@@ -68,11 +68,11 @@ export function buildPipeline(
   return ret;
 }
 
-export function applyJoins<T extends Entity, O extends Entity>(
+export function applyJoins<T extends PipelineEntity, O extends PipelineEntity>(
   sourceProvider: (
     sourceName: string,
     order: Ordering | undefined,
-  ) => Source<Entity>,
+  ) => Source<PipelineEntity>,
   sourceTableOrAlias: string,
   stream: DifferenceStream<T>,
   joins: Join[],
@@ -101,14 +101,17 @@ export function applyJoins<T extends Entity, O extends Entity>(
         ret = ret.join(joinArgs) as unknown as DifferenceStream<Entity>;
         break;
       case 'left':
-        ret = ret.leftJoin(joinArgs) as unknown as DifferenceStream<Entity>;
+        ret = ret.leftJoin(
+          joinArgs,
+          sourceProvider,
+        ) as unknown as DifferenceStream<Entity>;
         break;
     }
   }
   return ret as unknown as DifferenceStream<O>;
 }
 
-function applyWhere<T extends Entity>(
+function applyWhere<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   where: Condition | HavingCondition,
 ) {
@@ -140,7 +143,7 @@ function applyWhere<T extends Entity>(
   }
 }
 
-function applyAnd<T extends Entity>(
+function applyAnd<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   conditions: (Condition | HavingCondition)[],
 ) {
@@ -150,7 +153,7 @@ function applyAnd<T extends Entity>(
   return stream;
 }
 
-function applyOr<T extends Entity>(
+function applyOr<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   conditions: (Condition | HavingCondition)[],
 ): DifferenceStream<T> {
@@ -161,14 +164,14 @@ function applyOr<T extends Entity>(
   return concat(branches).distinct();
 }
 
-function applySimpleCondition<T extends Entity>(
+function applySimpleCondition<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   condition: SimpleCondition | SimpleHavingCondition,
 ) {
   return stream.filter(condition.field, condition.op, condition.value.value);
 }
 
-function applyDistinct<T extends Entity>(
+function applyDistinct<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   column: Selector,
 ) {
@@ -177,7 +180,7 @@ function applyDistinct<T extends Entity>(
   );
 }
 
-function applyGroupBy<T extends Entity>(
+function applyGroupBy<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   columns: Selector[],
   aggregations: Aggregation[],
@@ -285,7 +288,7 @@ function applyGroupBy<T extends Entity>(
   );
 }
 
-function applyFullTableAggregation<T extends Entity>(
+function applyFullTableAggregation<T extends PipelineEntity>(
   stream: DifferenceStream<T>,
   aggregations: Aggregation[],
 ) {

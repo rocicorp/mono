@@ -1,7 +1,7 @@
 import type {AST, Ordering} from '../ast/ast.js';
 import type {Materialite} from '../ivm/materialite.js';
 import type {Source} from '../ivm/source/source.js';
-import type {Entity} from '../schema/entity-schema.js';
+import type {PipelineEntity} from '../ivm/types.js';
 
 export type SubscriptionDelegate = {
   subscriptionAdded(ast: AST): void;
@@ -17,7 +17,7 @@ export type SubscriptionDelegate = {
  */
 export type Context = SubscriptionDelegate & {
   materialite: Materialite;
-  getSource: <T extends Entity>(
+  getSource: <T extends PipelineEntity>(
     name: string,
     ordering: Ordering | undefined,
   ) => Source<T>;

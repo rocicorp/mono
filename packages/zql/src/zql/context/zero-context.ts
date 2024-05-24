@@ -5,6 +5,7 @@ import type {AST} from '../ast/ast.js';
 import type {Materialite} from '../ivm/materialite.js';
 import type {SetSource} from '../ivm/source/set-source.js';
 import type {Source} from '../ivm/source/source.js';
+import type {PipelineEntity} from '../ivm/types.js';
 import type {Entity} from '../schema/entity-schema.js';
 import {mapIter} from '../util/iterables.js';
 import type {Context, SubscriptionDelegate} from './context.js';
@@ -28,7 +29,7 @@ export class ZeroContext implements Context {
     this.#subscriptionDelegate = subscriptionDelegate;
   }
 
-  getSource<T extends Entity>(name: string): Source<T> {
+  getSource<T extends PipelineEntity>(name: string): Source<T> {
     // TODO(mlaw): we should eventually evict sources that are no longer used.
     return this.#sourceStore.getSource(name) as unknown as Source<T>;
   }
