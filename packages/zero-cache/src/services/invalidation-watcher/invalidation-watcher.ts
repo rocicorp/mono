@@ -464,14 +464,16 @@ export class InvalidationWatcherService
     }
     this.#latestReader = {reader, version};
 
-    // Remove the reader if a transaction fails.
-    // TODO: Figure out the connection / transaction timeout issue and handle this better.
-    reader.done().catch(e => {
-      if (this.#latestReader?.reader === reader) {
-        lc.error?.(`Error from reader @${version}. Removing from cache.`, e);
-        this.#latestReader = undefined;
-      }
-    });
+    // Remove the reader if it finishes unexpectedly.
+    reader
+      .done()
+      .catch(e => lc.error?.(`Error from reader @${version}.`, e))
+      .finally(() => {
+        if (this.#latestReader?.reader === reader) {
+          lc.info?.(`Removing reader @${version} from cache`);
+          this.#latestReader = undefined;
+        }
+      });
 
     return this.#latestReader;
   }
