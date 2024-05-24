@@ -146,13 +146,8 @@ export class LeftJoinOperator<
     // I.e., so we don't omit `null` values for each `a` value followed by
     // the actual join results.
     //
-    // Don't iterate over `inputB`
-    // ever?
-    // `inputB` could be a legit delta.
-    // Right. Don't iterate over `inputB` in history mode.
-    // It is already full-up. The join from `a` will get everything.
-    // Why iterate in non-history? To get the deletes.
-    // And to overlay the index for A to pick things up next time?
+    // Don't iterate over `inputB` in history mode.
+    // It is already filled in that case and the join from `a` will get everything.
     if (inputB !== undefined && !isHistory) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
