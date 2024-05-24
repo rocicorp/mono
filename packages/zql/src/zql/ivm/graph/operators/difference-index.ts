@@ -34,14 +34,6 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
     existing.push(value);
   }
 
-  extend(index: DifferenceIndex<Key, V>) {
-    for (const [key, value] of index.#index) {
-      for (const entry of value) {
-        this.add(key, entry);
-      }
-    }
-  }
-
   get(key: Key): Entry<V>[] {
     return this.#index.get(key) ?? [];
   }

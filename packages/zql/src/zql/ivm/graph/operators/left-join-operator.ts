@@ -120,8 +120,10 @@ export class LeftJoinOperator<
         genFlatMap(inputA, entry => {
           const key = this.#getAJoinKey(entry[0]);
           const ret = this.#joinOneLeft(entry, key);
-          this.#indexA.add(key, entry);
-          this.#aKeysForCompaction.add(key);
+          if (key !== undefined) {
+            this.#indexA.add(key, entry);
+            this.#aKeysForCompaction.add(key);
+          }
           return ret;
         }),
       );
