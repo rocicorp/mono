@@ -6,6 +6,7 @@ node_compat = true
 logpush = true
 durable_objects.bindings = [
   { name = "runnerDO", class_name = "RunnerDO" },
+  { name = "replicatorDO", class_name = "ReplicatorDO" },
 ]
 vars = { DATADOG_SERVICE_LABEL = "zeppliear", LOG_LEVEL = "debug", DO_LOCATION_HINT = "wnam" }
 
@@ -18,6 +19,10 @@ vars = { DATADOG_SERVICE_LABEL = "zeppliear", LOG_LEVEL = "debug", DO_LOCATION_H
 tag = "v1"
 new_classes = ["RunnerDO"]
 
+[[migrations]]
+tag = "v2"
+new_classes = ["ReplicatorDO"]
+
 [build]
 # don't watch all resources because we want to run without --persist when
 # possible, so restarts delete data.
@@ -27,5 +32,6 @@ watch_dir = "../../packages/zero-cache/src/services"
 name = "zeppliear-sandbox-service-runner"
 durable_objects.bindings = [
   { name = "runnerDO", class_name = "RunnerDO" },
+  { name = "replicatorDO", class_name = "ReplicatorDO" },
 ]
 vars = { DATADOG_SERVICE_LABEL = "zeppliear-sandbox", LOG_LEVEL = "debug", DO_LOCATION_HINT = "enam" }

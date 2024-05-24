@@ -1,22 +1,38 @@
-import type {DurableObjectLocationHint} from '@cloudflare/workers-types';
-import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import type {
+  DurableObjectLocationHint,
+  Fetcher,
+} from '@cloudflare/workers-types';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import postgres from 'postgres';
+import * as v from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
+import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
+import {Subscription} from '../types/subscription.js';
 import {
   InvalidationWatcher,
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
+import {REGISTER_FILTERS_PATTERN, VERSION_CHANGES_PATTERN} from './paths.js';
 import type {ReplicatorRegistry} from './replicator/registry.js';
-import {Replicator, ReplicatorService} from './replicator/replicator.js';
+import {
+  RegisterInvalidationFiltersRequest,
+  RegisterInvalidationFiltersResponse,
+  Replicator,
+  ReplicatorService,
+  VersionChange,
+  registerInvalidationFiltersResponse,
+  versionChangeSchema,
+} from './replicator/replicator.js';
 import type {Service} from './service.js';
 import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
 
 export interface ServiceRunnerEnv {
   runnerDO: DurableObjectNamespace;
+  replicatorDO: DurableObjectNamespace;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   UPSTREAM_URI: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -47,19 +63,17 @@ export class ServiceRunner
   readonly #upstream: PostgresDB;
   readonly #replica: PostgresDB;
   readonly #lc: LogContext;
+  readonly #runReplicator: boolean;
 
   #warmedUpConnections = false;
 
   constructor(
-    logSink: LogSink,
-    logLevel: LogLevel,
+    lc: LogContext,
     state: DurableObjectState,
     env: ServiceRunnerEnv,
+    runReplicator: boolean,
   ) {
-    this.#lc = new LogContext(logLevel, undefined, logSink).withContext(
-      'component',
-      'ServiceRunnerDO',
-    );
+    this.#lc = lc;
     this.#storage = new DurableStorage(state.storage);
     this.#env = env;
     // TODO: We should have separate upstream URIs for the Replicator (direct connection)
@@ -70,6 +84,7 @@ export class ServiceRunner
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
     });
+    this.#runReplicator = runReplicator;
   }
 
   getInvalidationWatcher(): Promise<InvalidationWatcher> {
@@ -83,9 +98,10 @@ export class ServiceRunner
     );
   }
 
-  getReplicator(): Promise<Replicator> {
-    return Promise.resolve(
-      this.#getService(
+  // eslint-disable-next-line require-await
+  async getReplicator(): Promise<Replicator> {
+    if (this.#runReplicator) {
+      return this.#getService(
         REPLICATOR_ID,
         this.#replicators,
         id =>
@@ -97,8 +113,11 @@ export class ServiceRunner
             this.#replica,
           ),
         'ReplicatorService',
-      ),
-    );
+      );
+    }
+    const id = this.#env.replicatorDO.idFromName(REPLICATOR_ID);
+    const stub = this.#env.replicatorDO.get(id);
+    return new ReplicatorStub(this.#lc, stub);
   }
 
   getViewSyncer(clientGroupID: string): ViewSyncer {
@@ -180,5 +199,58 @@ export class ServiceRunner
       replicaPingMs: await replicaPingMs,
       upstreamPingMs: await upstreamPingMs,
     };
+  }
+}
+
+class ReplicatorStub implements Replicator {
+  readonly #lc: LogContext;
+  readonly #stub: Fetcher;
+
+  constructor(lc: LogContext, stub: Fetcher) {
+    this.#lc = lc.withContext('stub', 'Replicator');
+    this.#stub = stub;
+  }
+
+  async registerInvalidationFilters(
+    req: RegisterInvalidationFiltersRequest,
+  ): Promise<RegisterInvalidationFiltersResponse> {
+    const lc = this.#lc.withContext('method', 'registerInvalidationFilters');
+    const res = await this.#stub.fetch(
+      `https://unused.dev${REGISTER_FILTERS_PATTERN.replace(':version', 'v0')}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(req),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `registerInvalidationFilters: ${res.status}: ${await res.text()}`,
+      );
+    }
+    const data = await res.json();
+    lc.debug?.('received', data);
+    return v.parse(data, registerInvalidationFiltersResponse);
+  }
+
+  async versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
+    const lc = this.#lc.withContext('method', 'versionChanges');
+    const res = await this.#stub.fetch(
+      `https://unused.dev${VERSION_CHANGES_PATTERN.replace(':version', 'v0')}`,
+      {headers: {upgrade: 'websocket'}},
+    );
+
+    const ws = res.webSocket;
+    if (!ws) {
+      throw new Error(
+        `server did not accept WebSocket: ${res.status}: ${await res.text()}`,
+      );
+    }
+    ws.accept();
+
+    const subscription: Subscription<VersionChange> =
+      new Subscription<VersionChange>({cleanup: () => closer.close()});
+    const closer = streamIn(lc, ws, subscription, versionChangeSchema);
+
+    return subscription;
   }
 }

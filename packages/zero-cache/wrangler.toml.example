@@ -5,7 +5,8 @@ account_id = "<your account id>
 node_compat = true
 logpush = true
 durable_objects.bindings = [
-  { name = "serviceRunnerDO", class_name = "ServiceRunnerDO" },
+  { name = "runnerDO", class_name = "RunnerDO" },
+  { name = "replicatorDO", class_name = "ReplicatorDO" },
 ]
 
 [vars]
@@ -16,7 +17,7 @@ SYNC_REPLICA_URI = <replicas postgres uri>
 
 [[migrations]]
 tag = "v1"
-new_classes = ["serviceRunnerDO"]
+new_classes = ["RunnerDO", "ReplicatorDO"]
 
 [build]
 # don't watch all resources because we want to run without --persist when

@@ -65,8 +65,9 @@ export type InvalidationFilterSpec = v.Infer<typeof rawFilterSpecSchema>;
  * stringified representation. An additional `id` hash is added to uniquely
  * identify the spec.
  */
-export const normalizedFilterSpecSchema =
-  rawFilterSpecSchema.map(normalizeFilterSpec);
+export const normalizedFilterSpecSchema = rawFilterSpecSchema
+  .extend({id: v.string()})
+  .map(normalizeFilterSpec);
 
 export type NormalizedInvalidationFilterSpec = v.Infer<
   typeof normalizedFilterSpecSchema
