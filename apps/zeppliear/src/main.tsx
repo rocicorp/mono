@@ -82,7 +82,7 @@ function incrementalPreload<F extends FromSet, R>(
       console.debug('COMPLETED preload of', description);
       resolve(unsub);
     }
-    if (result.length === currentLimit && currentLimit < targetLimit) {
+    if (result.length >= currentLimit && currentLimit < targetLimit) {
       incrementalPreload(
         description,
         baseQuery,
