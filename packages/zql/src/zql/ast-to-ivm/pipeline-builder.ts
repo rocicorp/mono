@@ -16,6 +16,18 @@ import {getValueFromEntity} from '../ivm/source/util.js';
 import type {PipelineEntity, StringOrNumber} from '../ivm/types.js';
 import type {Entity} from '../schema/entity-schema.js';
 
+export function pullUsedSources(ast: AST, ret: Set<string>): Set<string> {
+  if (ast.table) {
+    ret.add(ast.table);
+  }
+  if (ast.joins) {
+    for (const join of ast.joins) {
+      pullUsedSources(join.other, ret);
+    }
+  }
+  return ret;
+}
+
 export function buildPipeline(
   sourceProvider: (
     sourceName: string,
