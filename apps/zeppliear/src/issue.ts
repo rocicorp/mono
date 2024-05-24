@@ -188,10 +188,7 @@ export const commentSchema = z.object({
 
 export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
 
-export type CommentCreationPartial = Omit<
-  Comment,
-  'created' | 'modified' | 'creatorID'
->;
+export type CommentCreationPartial = Omit<Comment, 'created' | 'creatorID'>;
 
 export async function createIssueComment(
   zero: Zero<Collections>,
@@ -200,12 +197,10 @@ export async function createIssueComment(
 ): Promise<void> {
   // TODO: All the mutators should be synchronous.
   await zero.mutate(async m => {
-    const modified = getModifiedDate();
     await m.comment.create({
-      ...i,
+      ...c,
       creatorID,
-      created: modified,
-      modified,
+      created: getModifiedDate(),
     });
 
     // TODO: I think it would be more "real" to not have this denormalized
@@ -216,7 +211,7 @@ export async function createIssueComment(
     // to have some notion of "touch" in the CRUD API. Or maybe it would be
     // possible to setup the pg schema to ignore the incoming writes?
     await m.issue.update({
-      id: comment.issueID,
+      id: c.issueID,
       modified: getModifiedDate(),
     });
   });

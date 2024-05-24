@@ -155,7 +155,7 @@ export default function IssueDetail({
     if (commentText !== '' && issue) {
       onAddComment({
         id: nanoid(),
-        issueID: issue.id as string,
+        issueID: issue.id,
         body: commentText,
       });
       setCommentText('');
