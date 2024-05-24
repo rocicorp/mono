@@ -391,7 +391,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
       c.startPoke(cvrVersion),
     );
 
-    const resultParser = queryHandler.resultParser(lc, cvr.id);
+    const resultParser = queryHandler.resultParser(cvr.id);
     // Kick off queries in parallel. The reader pool will limit concurrent queries,
     // and the cursor page size limits the amount of row content in memory.
     const cursorPageSize = 1000; // TODO: something less arbitrary.
@@ -400,14 +400,16 @@ export class ViewSyncerService implements ViewSyncer, Service {
         const {query, values} = q.transformedAST.query();
         const {queryIDs} = q;
         const start = Date.now();
+        let total = 0;
         lc.debug?.(`executing [${queryIDs}]: ${query}`);
 
         for await (const rows of tx
           .unsafe(query, values)
           .cursor(cursorPageSize)) {
           const elapsed = Date.now() - start;
+          total += rows.length;
           lc.debug?.(
-            `processing ${rows.length} result(s) for [${queryIDs}] (${elapsed} ms)`,
+            `processing ${rows.length} of ${total} result(s) for [${queryIDs}] (${elapsed} ms)`,
           );
           const parsed = resultParser.parseResults(queryIDs, rows);
           const patches = await updater.received(lc, parsed);

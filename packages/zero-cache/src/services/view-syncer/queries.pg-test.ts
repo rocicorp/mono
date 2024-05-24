@@ -1,6 +1,5 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -10,7 +9,6 @@ import {QueryHandler} from './queries.js';
 
 describe('view-syncer/queries', () => {
   let db: PostgresDB;
-  const lc = createSilentLogContext();
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_queries_test');
@@ -158,7 +156,7 @@ describe('view-syncer/queries', () => {
     const {queryIDs, transformedAST} = first.value;
     expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr');
     const results = await db.unsafe(expanded.query, expanded.values);
 
     // This is what gets synced to the client (contents) and stored in the CVR (record).
@@ -320,7 +318,7 @@ describe('view-syncer/queries', () => {
     // expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
     expect(queryIDs).toEqual(['queryHash']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr');
     expect(expanded.query).toBe(
       'SELECT public.issues._0_version AS "public/issues/_0_version", ' +
         'public.issues.id AS "public/issues/id", ' +
@@ -506,7 +504,7 @@ describe('view-syncer/queries', () => {
     const {queryIDs, transformedAST} = first.value;
     expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr');
     const results = await db.unsafe(expanded.query, expanded.values);
 
     // This is what gets synced to the client (contents) and stored in the CVR (record).
@@ -680,7 +678,7 @@ describe('view-syncer/queries', () => {
     // expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
     expect(queryIDs).toEqual(['queryHash']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser(lc, 'foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr');
     expect(expanded.query).toBe(
       'SELECT public.issues._0_version AS "public/issues/_0_version", ' +
         'public.issues.id AS "public/issues/id", ' +
