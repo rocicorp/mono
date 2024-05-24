@@ -202,7 +202,7 @@ export class ServiceRunner
   }
 }
 
-export class ReplicatorStub implements Replicator {
+class ReplicatorStub implements Replicator {
   readonly #lc: LogContext;
   readonly #stub: Fetcher;
 
