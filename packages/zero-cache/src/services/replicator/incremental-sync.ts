@@ -706,7 +706,6 @@ class TransactionProcessor {
       table,
       op: row ? 's' : key ? 'd' : 't',
       rowKey: (key as postgres.JSONValue) ?? {}, // Empty object for truncate
-      row: (row as postgres.JSONValue) ?? null,
     };
     return tx`
     INSERT INTO _zero."ChangeLog" ${tx(change)}
@@ -739,7 +738,6 @@ type ChangeLogEntry = {
   table: string;
   op: 't' | 's' | 'd';
   rowKey: postgres.JSONValue;
-  row: postgres.JSONValue;
 };
 
 function table(db: postgres.Sql, msg: {relation: Pgoutput.MessageRelation}) {
