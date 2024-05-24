@@ -184,10 +184,12 @@ export class DifferenceStream<T extends PipelineEntity> {
     BAlias extends string | undefined,
   >(
     args: Omit<JoinArgs<T, BValue, AAlias, BAlias>, 'a' | 'output'>,
-    sourceProvider: (
-      sourceName: string,
-      order: Ordering | undefined,
-    ) => Source<PipelineEntity>,
+    sourceProvider:
+      | ((
+          sourceName: string,
+          order: Ordering | undefined,
+        ) => Source<PipelineEntity>)
+      | undefined,
   ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
     const stream = new DifferenceStream<
       JoinResult<T, BValue, AAlias, BAlias>

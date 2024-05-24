@@ -41,17 +41,20 @@ export type PlaylistTrack = {
 export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
-  const output = trackInput[join]({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'albumId'],
+  const output = trackInput[join](
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'albumId'],
 
-    b: albumInput,
-    bTable: 'album',
-    bAs: 'album',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['album', 'id'],
-  });
+      b: albumInput,
+      bTable: 'album',
+      bAs: 'album',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['album', 'id'],
+    },
+    undefined,
+  );
 
   const trackInputSpy = vi.spyOn(trackInput, 'messageUpstream');
   const albumInputSpy = vi.spyOn(albumInput, 'messageUpstream');
@@ -78,17 +81,20 @@ export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
 export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
-  const output = trackInput[join]({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'albumId'],
+  const output = trackInput[join](
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'albumId'],
 
-    b: albumInput,
-    bTable: 'album',
-    bAs: 'album',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['album', 'id'],
-  });
+      b: albumInput,
+      bTable: 'album',
+      bAs: 'album',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['album', 'id'],
+    },
+    undefined,
+  );
 
   const outputSpy = vi.spyOn(output, 'newDifference');
   const msg: PullMsg = {
