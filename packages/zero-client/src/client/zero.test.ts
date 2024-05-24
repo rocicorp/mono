@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
@@ -13,6 +14,7 @@ import {
   pushMessageSchema,
 } from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
@@ -26,7 +28,6 @@ import {
   waitForUpstreamMessage,
   zeroForTest,
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
-import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
@@ -39,7 +40,6 @@ import {
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1705,7 +1705,8 @@ test('kvStore option', async () => {
   await t('idb', 'kv-store-test-user-id-1' + uuid, true, []);
   await t('idb', 'kv-store-test-user-id-1' + uuid, true, [{id: 'a', value: 1}]);
   await t('mem', 'kv-store-test-user-id-2' + uuid, false, []);
-  await t(undefined, 'kv-store-test-user-id-3' + uuid, false, []);
+  // Defaults to idb
+  await t(undefined, 'kv-store-test-user-id-3' + uuid, true, []);
 });
 
 test('Close during connect should sleep', async () => {

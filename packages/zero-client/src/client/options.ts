@@ -1,7 +1,7 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {KVStoreProvider} from 'replicache';
-import type {MaybePromise} from 'shared/src/types.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import type {QueryDefs} from './zero.js';
 
 export type QueryParseDefs<QD extends QueryDefs> = {
@@ -103,11 +103,12 @@ export interface ZeroOptions<QD extends QueryDefs> {
   /**
    * Determines what kind of storage implementation to use on the client.
    *
-   * Defaults to `'mem'` which means that Zero uses an in memory storage and
-   * the data is not persisted on the client.
+   * Defaults to `'idb'` which means that Zero uses an IndexedDB storage
+   * implementation. This allows the data to be persisted on the client and
+   * enables faster syncs between application restarts.
    *
-   * By setting this to `'idb'` the data is persisted on the client using
-   * IndexedDB, allowing faster syncs between application restarts.
+   * By setting this to `'mem'`, Zero uses an in memory storage and
+   * the data is not persisted on the client.
    *
    * You can also set this to a function that is used to create new KV stores,
    * allowing a custom implementation of the underlying storage layer.

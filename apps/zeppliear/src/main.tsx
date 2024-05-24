@@ -1,11 +1,11 @@
+import {resolver} from '@rocicorp/resolver';
 import {UndoManager} from '@rocicorp/undo';
 import ReactDOM from 'react-dom/client';
-import {EntityQuery, Zero, FromSet} from 'zero-client';
+import {EntityQuery, FromSet, Zero} from 'zero-client';
 import App, {Collections} from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
 import './index.css';
 import type {Comment, Issue, IssueLabel, Label, Member} from './issue.js';
-import {resolver} from '@rocicorp/resolver';
 
 async function preload(z: Zero<Collections>) {
   const allLabelPreloadQuery = z.query.label.select('id', 'name');
@@ -101,7 +101,6 @@ async function init() {
   const z = new Zero({
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: 'anon',
-    kvStore: 'idb',
     queries: {
       issue: v => v as Issue,
       comment: v => v as Comment,

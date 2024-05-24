@@ -1,20 +1,20 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {assert} from 'shared/src/asserts.js';
+import {TestLogSink} from 'shared/src/logging-test-utils.js';
+import type {SinonFakeTimers} from 'sinon';
 import {
   ConnectedMessage,
   Downstream,
   ErrorKind,
   ErrorMessage,
-  PongMessage,
-  PullResponseMessage,
-  PullResponseBody,
-  upstreamSchema,
   PokeStartBody,
   PokeStartMessage,
+  PongMessage,
+  PullResponseBody,
+  PullResponseMessage,
+  upstreamSchema,
 } from 'zero-protocol';
-import {assert} from 'shared/src/asserts.js';
-import {TestLogSink} from 'shared/src/logging-test-utils.js';
-import type {SinonFakeTimers} from 'sinon';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
@@ -191,12 +191,19 @@ let testZeroCounter = 0;
 export function zeroForTest<QD extends QueryDefs>(
   options: Partial<ZeroOptions<QD>> = {},
 ): TestZero<QD> {
+  // Special case kvStore. If not present we default to 'mem'. This allows
+  // passing `undefined` to get the default behavior.
+  const newOptions = {...options};
+  if (!('kvStore' in options)) {
+    newOptions.kvStore = 'mem';
+  }
+
   const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testZeroCounter++,
     auth: 'test-auth',
-    ...options,
+    ...newOptions,
   });
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.
