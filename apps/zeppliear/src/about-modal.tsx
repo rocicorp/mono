@@ -67,15 +67,23 @@ export default function AboutModal({isOpen, onDismiss}: Props) {
       </div>
       <div className="flex flex-col flex-1 px-8 pt-4 pb-8 overflow-y-auto">
         <P noTopMargin>
-          Repliear is a loving &hearts; tribute to the{' '}
+          Zeppliear is a loving &hearts; tribute to the{' '}
           <A href="https://linear.app/">Linear issue tracker</A> built with{' '}
-          <A href="https://replicache.dev">Replicache.</A>
+          <A href="https://zerosync.dev">Zero.</A>
         </P>
 
         <P>
-          Replicache makes it much easier to build apps like Linear. To show
-          how, this demo recreates a subset of the Linear experience, focusing
-          on the distinctive features that are especially difficult to engineer.
+          Zero is a new way to build web apps. Instead of fetching data with
+          APIs, you sync your backend database continuously directly into the
+          browser. This makes development dramatically easier – you can build
+          features entirely client-side, against the entire database, without
+          having to deploy new APIs first.
+        </P>
+        <P>
+          But it also makes for far better user experiences: Zero stores up to
+          100MB fo the most recently used data locally in the browser, making
+          ~99% of user interactions <em>instantaneous</em>. When necessary, Zero
+          automatically falls back to the server.
         </P>
 
         <H1>Key Features</H1>
@@ -87,8 +95,7 @@ export default function AboutModal({isOpen, onDismiss}: Props) {
           className="text-sm font-normal text-gray-100"
         >
           <Feature title="Dataset">
-            The entire React issue db as of April 2022. ~11k issues, ~50 MB of
-            data.
+            1GB of data comprising over 200k issues and 2M comments.
           </Feature>
           <Feature title="Spinner-free">
             Everything in the UI responds instantly, without progress bars.
@@ -104,16 +111,8 @@ export default function AboutModal({isOpen, onDismiss}: Props) {
 
         <H1>Learn More</H1>
         <P>
-          Learn more at <A href="https://replicache.dev">replicache.dev</A>, or
-          come visit us in <A href="https://discord.replicache.dev">Discord</A>.
-        </P>
-
-        <P>
-          Check out the source for this demo at{' '}
-          <A href="https://github.com/rocicorp/repliear">
-            github.com/rocicorp/repliear
-          </A>
-          .
+          Learn more at <A href="https://zerosync.dev">zerosync.dev</A>, or come
+          visit us in <A href="https://discord.replicache.dev">Discord</A>.
         </P>
       </div>
     </div>
