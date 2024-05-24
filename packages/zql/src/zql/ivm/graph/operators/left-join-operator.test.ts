@@ -2,6 +2,7 @@ import {expect, test} from 'vitest';
 import {normalize} from '../../multiset.js';
 import {JoinResult, joinSymbol} from '../../types.js';
 import {DifferenceStream} from '../difference-stream.js';
+
 import {
   Album,
   Artist,

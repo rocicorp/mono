@@ -3,15 +3,18 @@ import {genFilter} from '../../../util/iterables.js';
 import type {Multiset} from '../../multiset.js';
 import {getValueFromEntity} from '../../source/util.js';
 import type {PipelineEntity} from '../../types.js';
-import type {DifferenceStream} from '../difference-stream.js';
-import {UnaryOperator} from './unary-operator.js';
+import type {DifferenceStream, Listener} from '../difference-stream.js';
+import type {Request} from '../message.js';
+import {OperatorBase} from './operator.js';
 
-export class FilterOperator<I extends PipelineEntity> extends UnaryOperator<
-  I,
-  I
-> {
-  #column: readonly [string | null, string];
-  #operator: (lhs: unknown) => boolean;
+export class FilterOperator<I extends PipelineEntity> extends OperatorBase<I> {
+  readonly #listener: Listener<I>;
+  readonly #input: DifferenceStream<I>;
+
+  readonly #column: readonly [string | null, string];
+  readonly #fn: (lhs: unknown) => boolean;
+  readonly #op;
+  readonly #value: unknown;
 
   constructor(
     input: DifferenceStream<I>,
@@ -20,15 +23,43 @@ export class FilterOperator<I extends PipelineEntity> extends UnaryOperator<
     operator: SimpleOperator,
     value: unknown,
   ) {
-    super(input, output, (_v, data: Multiset<I>) => this.#filter(data));
-    this.#operator = getOperator(operator, value);
+    super(output);
+    this.#listener = {
+      newDifference: (version, data, reply) => {
+        output.newDifference(version, this.#filter(data), reply);
+      },
+      commit: version => {
+        this.commit(version);
+      },
+    };
+    input.addDownstream(this.#listener);
+    this.#input = input;
+    this.#fn = getOperator(operator, value);
     this.#column = selector;
+    this.#op = operator;
+    this.#value = value;
   }
 
   #filter(data: Multiset<I>) {
     return genFilter(data, e =>
-      this.#operator(getValueFromEntity(e[0], this.#column)),
+      this.#fn(getValueFromEntity(e[0], this.#column)),
     );
+  }
+
+  messageUpstream(message: Request): void {
+    message = {
+      ...message,
+      hoistedConditions: message.hoistedConditions.concat({
+        selector: this.#column,
+        op: this.#op,
+        value: this.#value,
+      }),
+    };
+    this.#input.messageUpstream(message, this.#listener);
+  }
+
+  destroy() {
+    this.#input.removeDownstream(this.#listener);
   }
 }
 

@@ -1,7 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
-import {makeComparator} from '../../../query/statement.js';
 import {gen, iterInOrder} from '../../../util/iterables.js';
+import {makeComparator} from '../../compare.js';
 import type {Multiset} from '../../multiset.js';
 import {sourcesAreIdentical} from '../../source/util.js';
 import type {PipelineEntity} from '../../types.js';

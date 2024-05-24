@@ -60,22 +60,18 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
           <MenuIcon className="w-3.5 text-gray-50 hover:text-gray-100" />
         </button>
 
-        {/* Top menu*/}
-        <div className="flex flex-col flex-grow-0 flex-shrink-0 px-5 py-3">
-          {/* Create issue btn */}
-          <button
-            className="inline-flex items-center px-2 py-2 mt-3 bg-gray-850  hover:bg-gray-900 border border-gray rounded focus:outline-none h-7"
+        {/* actions */}
+        <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-4 py-3">
+          <div
+            className="flex items-center  px-3 py-2 mb-5 rounded cursor-pointer group h-8 hover:bg-gray-900"
             onMouseDown={() => {
               setIssueModalVisible(true);
               onCloseMenu && onCloseMenu();
             }}
           >
             <AddIcon className="mr-2.5 w-3.5 h-3.5" /> New Issue
-          </button>
-        </div>
+          </div>
 
-        {/* actions */}
-        <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-4">
           <ItemGroup title="Views">
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
