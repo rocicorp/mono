@@ -438,7 +438,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       rowRecordSchema,
       2000, // Arbitrary batch size. Limits how many row records are in memory at a time.
     );
+    let total = 0;
     for await (const existingRows of allRowRecords) {
+      total += existingRows.size;
       lc.debug?.(`scanning ${existingRows.size} existing rows`);
       for (const [path, existing] of existingRows) {
         if (existing.queriedColumns === null) {
@@ -453,7 +455,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
     }
 
-    lc.debug?.(`found ${results.size} rows for executed / removed queries`);
+    lc.debug?.(
+      `found ${
+        results.size
+      } (of ${total}) rows for executed / removed queries ${[
+        ...this.#removedOrExecutedQueryIDs,
+      ]}`,
+    );
     return results;
   }
 
@@ -552,7 +560,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): Promise<PatchToVersion[]> {
     const merges: PatchToVersion[] = [];
 
-    const existingRows = await this._writes.getEntries(
+    const existingRows = await this._directStorage.getEntries(
       [...rows.keys()],
       rowRecordSchema,
     );
@@ -563,37 +571,44 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         record: {id, rowVersion, queriedColumns},
       } = row;
 
+      assert(queriedColumns !== null); // We never "receive" tombstones.
+
       const existing = existingRows.get(path);
-      const merged = mergeQueriedColumns(
-        existing?.queriedColumns,
-        queriedColumns,
-      );
+
+      // Accumulate all received columns to determine which columns to prune at the end.
+      const previouslyReceived = this.#receivedRows.get(path);
+      const merged = previouslyReceived
+        ? mergeQueriedColumns(previouslyReceived, queriedColumns)
+        : mergeQueriedColumns(
+            existing?.queriedColumns,
+            queriedColumns,
+            this.#removedOrExecutedQueryIDs,
+          );
+
+      this.#receivedRows.set(path, merged);
 
       let patchVersion: CVRVersion;
       if (
         existing?.rowVersion === rowVersion &&
         Object.keys(merged).every(col => existing.queriedColumns?.[col])
       ) {
-        // No CVR changes necessary. Just send the content patch to interested clients
-        // (i.e. that are catching up), if any.
         patchVersion = existing.patchVersion;
       } else {
         patchVersion = this.#assertNewVersion();
-        if (existing) {
-          void this._writes.del(
-            this._paths.rowPatch(existing.patchVersion, id),
-          );
-        }
-        const updated = {id, rowVersion, patchVersion, queriedColumns: merged};
-        void this._writes.put(path, updated);
-        void this._writes.put(this._paths.rowPatch(patchVersion, id), {
-          type: 'row',
-          op: 'put',
-          id,
-          rowVersion,
-          columns: Object.keys(merged),
-        } satisfies RowPatch);
       }
+      if (existing) {
+        void this._writes.del(this._paths.rowPatch(existing.patchVersion, id));
+      }
+      const updated = {id, rowVersion, patchVersion, queriedColumns: merged};
+      void this._writes.put(path, updated satisfies RowRecord);
+      void this._writes.put(this._paths.rowPatch(patchVersion, id), {
+        type: 'row',
+        op: 'put',
+        id,
+        rowVersion,
+        columns: Object.keys(merged),
+      } satisfies RowPatch);
+
       merges.push({
         patch: {
           type: 'row',
@@ -603,13 +618,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         },
         toVersion: patchVersion,
       });
-
-      // Keep track of queried columns to determine which columns to prune at the end.
-      const allQueriedColumns = mergeQueriedColumns(
-        this.#receivedRows.get(path),
-        queriedColumns,
-      );
-      this.#receivedRows.set(path, allQueriedColumns);
     }
     return merges;
   }

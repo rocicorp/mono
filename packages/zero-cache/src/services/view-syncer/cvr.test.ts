@@ -676,7 +676,10 @@ describe('view-syncer/cvr', () => {
                   rowVersion: '03',
                   queriedColumns: {id: ['oneHash'], name: ['oneHash']},
                 },
-                contents: {id: 'new version patch with new field'},
+                contents: {
+                  id: 'new version patch',
+                  name: 'because of new field',
+                },
               },
             ],
             [
@@ -699,7 +702,7 @@ describe('view-syncer/cvr', () => {
             type: 'row',
             op: 'merge',
             id: ROW_ID1,
-            contents: {id: 'new version patch with new field'},
+            contents: {id: 'new version patch', name: 'because of new field'},
           },
         },
         {
@@ -1416,7 +1419,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['twoHash', 'oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
