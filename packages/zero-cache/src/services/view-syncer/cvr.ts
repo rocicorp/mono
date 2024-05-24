@@ -441,7 +441,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     let total = 0;
     for await (const existingRows of allRowRecords) {
       total += existingRows.size;
-      lc.debug?.(`scanning ${existingRows.size} existing rows`);
       for (const [path, existing] of existingRows) {
         if (existing.queriedColumns === null) {
           continue; // Tombstone
@@ -560,7 +559,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): Promise<PatchToVersion[]> {
     const merges: PatchToVersion[] = [];
 
-    const existingRows = await this._directStorage.getEntries(
+    const existingRows = await this._writes.getEntries(
       [...rows.keys()],
       rowRecordSchema,
     );
