@@ -502,7 +502,7 @@ class TransactionProcessor {
       setSnapshot,
       undefined,
       1,
-      5, // TODO: Parameterize the max workers for the readers pool.
+      3,
     );
   }
 

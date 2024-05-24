@@ -76,13 +76,18 @@ export class ServiceRunner
     this.#lc = lc;
     this.#storage = new DurableStorage(state.storage);
     this.#env = env;
+    // Connections are capped to stay within the DO limit of 6 TCP connections.
+    // Note that the Replicator uses one extra connection for replication.
+    //
     // TODO: We should have separate upstream URIs for the Replicator (direct connection)
     //       vs mutagen (can be a pooled connection).
     this.#upstream = postgres(this.#env.UPSTREAM_URI, {
       ...postgresTypeConfig(),
+      max: 1,
     });
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
+      max: 4,
     });
     this.#runReplicator = runReplicator;
   }
