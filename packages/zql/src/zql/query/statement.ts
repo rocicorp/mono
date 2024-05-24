@@ -93,11 +93,10 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
 
   const usedSources: Source<Entity>[] = [];
   const pipeline = buildPipeline(
-    <T extends Entity>(sourceName: string, order: Ordering | undefined) => {
+    (sourceName: string, order: Ordering | undefined) => {
       const source = context.getSource(sourceName, order);
-      const ret = source.stream as unknown as DifferenceStream<T>;
       usedSources.push(source);
-      return ret;
+      return source;
     },
     ast,
   );

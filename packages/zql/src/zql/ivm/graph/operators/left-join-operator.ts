@@ -1,5 +1,7 @@
+import type {Ordering} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
+import type {Source} from '../../source/source.js';
 import {
   getPrimaryKeyValuesAsStringUnqualified,
   getValueFromEntity,
@@ -14,6 +16,7 @@ import {
 import {combineRows, DifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
 import type {JoinArgs} from './join-operator.js';
+import {SourceHashIndexBackedDifferenceIndex} from './source-backed-difference-index.js';
 
 export class LeftJoinOperator<
   AValue extends PipelineEntity,
@@ -29,7 +32,10 @@ export class LeftJoinOperator<
   JoinResult<AValue, BValue, ATable, BAlias>
 > {
   readonly #indexA: DifferenceIndex<StringOrNumber | undefined, AValue>;
-  readonly #indexB: DifferenceIndex<StringOrNumber, BValue>;
+  readonly #indexB: SourceHashIndexBackedDifferenceIndex<
+    StringOrNumber,
+    BValue
+  >;
   readonly #aMatches: Map<
     StringOrNumber,
     [JoinResult<AValue, BValue, ATable, BAlias>, number]
@@ -40,12 +46,19 @@ export class LeftJoinOperator<
   readonly #getBJoinKey;
   readonly #joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>;
 
-  constructor(joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>) {
+  constructor(
+    joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>,
+    sourceProvider: (
+      sourceName: string,
+      order: Ordering | undefined,
+    ) => Source<PipelineEntity>,
+  ) {
     super(
       joinArgs.a,
       joinArgs.b,
       joinArgs.output,
-      (version, inputA, inputB) => this.#join(version, inputA, inputB),
+      (version, inputA, inputB, isHistory) =>
+        this.#join(version, inputA, inputB, isHistory),
       joinArgs.aJoinColumn,
     );
 
@@ -68,29 +81,31 @@ export class LeftJoinOperator<
     this.#indexA = new DifferenceIndex<StringOrNumber, AValue>(
       this.#getAPrimaryKey,
     );
-    this.#indexB = new DifferenceIndex<StringOrNumber, BValue>(
-      this.#getBPrimaryKey,
-    );
+
+    // load indexB from the source...
+    const sourceB = sourceProvider(joinArgs.bTable, undefined);
+    this.#indexB = new SourceHashIndexBackedDifferenceIndex(
+      sourceB.getOrCreateAndMaintainNewHashIndex(joinArgs.bJoinColumn),
+    ) as SourceHashIndexBackedDifferenceIndex<StringOrNumber, BValue>;
 
     this.#joinArgs = joinArgs;
   }
 
   #aKeysForCompaction = new Set<StringOrNumber | undefined>();
-  #bKeysForCompaction = new Set<StringOrNumber>();
   #lastVersion = -1;
   #join(
     version: Version,
     inputA: Multiset<AValue> | undefined,
     inputB: Multiset<BValue> | undefined,
+    isHistory: boolean,
   ) {
     if (this.#lastVersion !== version) {
       // TODO: all outstanding iterables _must_ be made invalid before processing a new version.
       // We should add some invariant in `joinOne` that checks if the version is still valid
       // and throws if not.
       this.#indexA.compact(this.#aKeysForCompaction);
-      this.#indexB.compact(this.#bKeysForCompaction);
+      this.#indexB.compact();
       this.#aKeysForCompaction.clear();
-      this.#bKeysForCompaction.clear();
       this.#lastVersion = version;
     }
 
@@ -101,14 +116,21 @@ export class LeftJoinOperator<
     // fill the inner set first so we don't emit 2x the amount of data
     // I.e., so we don't omit `null` values for each `a` value followed by
     // the actual join results.
-    if (inputB !== undefined) {
+    //
+    // Don't iterate over `inputB`
+    // ever?
+    // `inputB` could be a legit delta.
+    // Right. Don't iterate over `inputB` in history mode.
+    // It is already full-up. The join from `a` will get everything.
+    // Why iterate in non-history? To get the deletes.
+    // And to overlay the index for A to pick things up next time?
+    if (inputB !== undefined && !isHistory) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
           const key = this.#getBJoinKey(entry[0]);
           const ret = this.#joinOneInner(entry, key);
           if (key !== undefined) {
             this.#indexB.add(key, entry);
-            this.#bKeysForCompaction.add(key);
           }
           return ret;
         }),

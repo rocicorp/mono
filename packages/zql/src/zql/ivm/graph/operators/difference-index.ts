@@ -7,13 +7,6 @@ import {
   joinSymbol,
 } from '../../types.js';
 
-export const joinType = {
-  left: 0,
-  inner: 1,
-} as const;
-
-export type JoinType = (typeof joinType)[keyof typeof joinType];
-
 /**
  * Indexes difference events by a key.
  */

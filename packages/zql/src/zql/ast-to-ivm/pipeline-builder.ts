@@ -11,18 +11,19 @@ import type {
   SimpleHavingCondition,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
+import type {Source} from '../ivm/source/source.js';
 import {getValueFromEntity} from '../ivm/source/util.js';
 import type {StringOrNumber} from '../ivm/types.js';
 import type {Entity} from '../schema/entity-schema.js';
 
 export function buildPipeline(
-  sourceStreamProvider: (
+  sourceProvider: (
     sourceName: string,
     order: Ordering | undefined,
-  ) => DifferenceStream<Entity>,
+  ) => Source<Entity>,
   ast: AST,
 ) {
-  let stream = sourceStreamProvider(
+  let {stream} = sourceProvider(
     must(ast.table, 'Table not specified in the AST'),
     ast.orderBy,
   );
@@ -30,7 +31,7 @@ export function buildPipeline(
   // TODO: start working on pipeline sharing so we don't have to
   // re-build the join index every time.
   if (ast.joins) {
-    stream = applyJoins(sourceStreamProvider, ast.table, stream, ast.joins);
+    stream = applyJoins(sourceProvider, ast.table, stream, ast.joins);
   }
 
   if (ast.where) {
@@ -68,10 +69,10 @@ export function buildPipeline(
 }
 
 export function applyJoins<T extends Entity, O extends Entity>(
-  sourceStreamProvider: (
+  sourceProvider: (
     sourceName: string,
     order: Ordering | undefined,
-  ) => DifferenceStream<Entity>,
+  ) => Source<Entity>,
   sourceTableOrAlias: string,
   stream: DifferenceStream<T>,
   joins: Join[],
@@ -79,7 +80,7 @@ export function applyJoins<T extends Entity, O extends Entity>(
   let ret: DifferenceStream<Entity> =
     stream as unknown as DifferenceStream<Entity>;
   for (const join of joins) {
-    const bPipeline = buildPipeline(sourceStreamProvider, join.other);
+    const bPipeline = buildPipeline(sourceProvider, join.other);
 
     const aQualifiedColumn = join.on[0];
     const bQualifiedColumn = join.on[1];
