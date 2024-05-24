@@ -1,4 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
@@ -99,8 +98,8 @@ export class QueryHandler {
    * Returns an object for deconstructing each result from executed queries
    * into its constituent tables and rows.
    */
-  resultParser(lc: LogContext, cvrID: string) {
-    return new ResultParser(lc, this.#tables, cvrID);
+  resultParser(cvrID: string) {
+    return new ResultParser(this.#tables, cvrID);
   }
 
   tableSpec(schema: string, table: string) {
@@ -114,12 +113,10 @@ export type ParsedRow = {
 };
 
 class ResultParser {
-  readonly #lc: LogContext;
   readonly #tables: TableSchemas;
   readonly #paths: CVRPaths;
 
-  constructor(lc: LogContext, tables: TableSchemas, cvrID: string) {
-    this.#lc = lc;
+  constructor(tables: TableSchemas, cvrID: string) {
     this.#tables = tables;
     this.#paths = new CVRPaths(cvrID);
   }
@@ -206,9 +203,6 @@ class ResultParser {
         rowResult.contents = {...rowResult.contents, ...row};
       }
     }
-    this.#lc
-      .withContext('queryIDs', queryIDs)
-      .debug?.(`processed ${results.length} results`);
     return parsed;
   }
 }
