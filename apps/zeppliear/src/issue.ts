@@ -2,6 +2,7 @@ import type {Immutable} from 'shared/src/immutable.js';
 import type {EntityQuery, Zero} from 'zero-client';
 import {z} from 'zod';
 import type {Collections} from './app.jsx';
+import {getCurrentDateWithFutureShift} from './util/date.js';
 
 export type M = Record<string, never>;
 
@@ -187,13 +188,21 @@ export const commentSchema = z.object({
 
 export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
 
-export async function putIssueComment(
+export type CommentCreationPartial = Omit<Comment, 'created' | 'creatorID'>;
+
+export async function createIssueComment(
   zero: Zero<Collections>,
-  comment: Comment,
+  c: CommentCreationPartial,
+  creatorID: string,
 ): Promise<void> {
   // TODO: All the mutators should be synchronous.
   await zero.mutate(async m => {
-    await m.comment.set(comment);
+    const comment: Comment = {
+      ...c,
+      creatorID,
+      created: getModifiedDate(),
+    };
+    await m.comment.create(comment);
 
     // TODO: I think it would be more "real" to not have this denormalized
     // lastModified date. Instead, if the UI wants to show when the issue was
@@ -211,12 +220,13 @@ export async function putIssueComment(
 
 export async function deleteIssueComment(
   zero: Zero<Collections>,
-  comment: Comment,
+  id: string,
+  issueID: string,
 ): Promise<void> {
   await zero.mutate(async m => {
-    await m.comment.delete(comment.id);
+    await m.comment.delete(id);
     await m.issue.update({
-      id: comment.issueID,
+      id: issueID,
       modified: getModifiedDate(),
     });
   });
@@ -282,9 +292,7 @@ export function reverseTimestampSortKey(timestamp: number, id: string): string {
 }
 
 function getModifiedDate() {
-  const d = new Date();
-  // Shift to 105 years in the future.
-  d.setFullYear(d.getFullYear() + 105);
+  const d = getCurrentDateWithFutureShift();
   return d.getTime();
 }
 

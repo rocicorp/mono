@@ -24,7 +24,8 @@ export function timeAgo(
     throw new Error('Invalid timestamp');
   }
 
-  const difference = new Date().getTime() - new Date(timestamp).getTime();
+  const difference =
+    getCurrentDateWithFutureShift().getTime() - new Date(timestamp).getTime();
 
   if (Math.floor(difference / month) > 1)
     return formatDate(new Date(timestamp), true);
@@ -37,4 +38,11 @@ export function timeAgo(
   if (Math.floor(difference / second) > 1)
     return `${Math.floor(difference / second)} seconds ago`;
   return `just now`;
+}
+
+export function getCurrentDateWithFutureShift() {
+  const d = new Date();
+  // Shift to 105 years in the future.
+  d.setFullYear(d.getFullYear() + 105);
+  return d;
 }

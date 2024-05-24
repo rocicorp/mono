@@ -19,6 +19,7 @@ import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import {
   Comment,
+  CommentCreationPartial,
   Issue,
   IssueUpdate,
   Label,
@@ -34,7 +35,7 @@ import {timeAgo} from './util/date.js';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
-  onAddComment: (comment: Comment) => void;
+  onAddComment: (comment: CommentCreationPartial) => void;
   issuesProps: IssuesProps;
   isLoading: boolean;
   userID: string;
@@ -76,7 +77,6 @@ export default function IssueDetail({
   onAddComment,
   issuesProps,
   isLoading,
-  userID,
 }: Props) {
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
 
@@ -155,14 +155,12 @@ export default function IssueDetail({
     if (commentText !== '' && issue) {
       onAddComment({
         id: nanoid(),
-        issueID: issue.id as string,
-        created: Date.now(),
-        creatorID: userID,
+        issueID: issue.id,
         body: commentText,
       });
       setCommentText('');
     }
-  }, [onAddComment, commentText, issue, userID]);
+  }, [onAddComment, commentText, issue]);
 
   const handleFwdPrev = useCallback(
     (direction: 'prev' | 'fwd') => {

@@ -28,8 +28,9 @@ import {
   Member,
   createIssue,
   deleteIssueComment,
-  putIssueComment,
+  createIssueComment,
   updateIssues,
+  CommentCreationPartial,
 } from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
 import LeftMenu from './left-menu.jsx';
@@ -101,13 +102,13 @@ const App = ({undoManager}: AppProps) => {
     [zero, userID],
   );
   const handleCreateComment = useCallback(
-    async (comment: Comment) => {
+    async (comment: CommentCreationPartial) => {
       await undoManager.add({
-        execute: () => putIssueComment(zero, comment),
-        undo: () => deleteIssueComment(zero, comment),
+        execute: () => createIssueComment(zero, comment, userID),
+        undo: () => deleteIssueComment(zero, comment.id, comment.issueID),
       });
     },
-    [zero, undoManager],
+    [zero, undoManager, userID],
   );
 
   const handleUpdateIssues = useCallback(
@@ -198,7 +199,7 @@ interface LayoutProps {
   onToggleMenu: () => void;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onCreateIssue: (issue: IssueCreationPartial) => void;
-  onCreateComment: (comment: Comment) => void;
+  onCreateComment: (comment: CommentCreationPartial) => void;
   onOpenDetail: (issue: Issue) => void;
 }
 
