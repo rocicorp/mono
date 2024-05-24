@@ -1,11 +1,12 @@
 import {assert} from 'shared/src/asserts.js';
-import {buildPipeline} from '../ast-to-ivm/pipeline-builder.js';
+import {
+  buildPipeline,
+  pullUsedSources,
+} from '../ast-to-ivm/pipeline-builder.js';
 import type {AST, Ordering, Selector} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {makeComparator} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
-import type {Source} from '../ivm/source/source.js';
-import type {PipelineEntity} from '../ivm/types.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
@@ -91,15 +92,15 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   const {orderBy, limit} = ast;
   assert(orderBy);
 
-  const usedSources: Source<PipelineEntity>[] = [];
-  const pipeline = buildPipeline(
-    (sourceName: string, order: Ordering | undefined) => {
-      const source = context.getSource(sourceName, order);
-      usedSources.push(source);
-      return source;
-    },
-    ast,
-  );
+  const usedSources = pullUsedSources(ast, new Set<string>());
+  const promises: PromiseLike<void>[] = [];
+  for (const source of usedSources) {
+    const theSource = context.getSource(source, undefined);
+    if (theSource.isSeeded()) {
+      continue;
+    }
+    promises.push(theSource.awaitSeeding());
+  }
 
   // We need to await seeding since sources can be ready at different times.
   // If someone queries for Table A in one query then
@@ -109,8 +110,12 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   //
   // This waits for all sources to have been loaded into memory
   // before creating the view.
-  await Promise.all(
-    usedSources.filter(s => !s.isSeeded()).map(s => s.awaitSeeding()),
+  await Promise.all(promises);
+
+  const pipeline = buildPipeline(
+    (sourceName: string, order: Ordering | undefined) =>
+      context.getSource(sourceName, order),
+    ast,
   );
   const view = new TreeView<Return extends [] ? Return[number] : never>(
     context,
