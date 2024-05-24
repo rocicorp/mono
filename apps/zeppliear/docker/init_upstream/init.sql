@@ -31,8 +31,27 @@ CREATE TABLE "issueLabel" (
     "labelID" VARCHAR REFERENCES label(id),
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE
 );
-COPY "member" FROM '/docker-entrypoint-initdb.d/members.csv' WITH CSV HEADER;
-COPY "label" FROM '/docker-entrypoint-initdb.d/labels.csv' WITH CSV HEADER;
-COPY "issue" FROM '/docker-entrypoint-initdb.d/issues.csv' WITH CSV HEADER;
-COPY "comment" FROM '/docker-entrypoint-initdb.d/comments.csv' WITH CSV HEADER;
-COPY "issueLabel" FROM '/docker-entrypoint-initdb.d/issue_labels.csv' WITH CSV HEADER;
+
+COPY "member" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/members.csv.gz' WITH CSV HEADER;
+COPY "label" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/labels.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues_1.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues_2.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues_3.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues_4.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues_5.csv.gz' WITH CSV HEADER;
+COPY "issue" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issues_6.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels_1.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels_2.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels_3.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels_4.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels_5.csv.gz' WITH CSV HEADER;
+COPY "issueLabel" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/issue_labels_6.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments_1.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments_2.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments_3.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments_4.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments_5.csv.gz' WITH CSV HEADER;
+COPY "comment" FROM PROGRAM 'gzip -cd /docker-entrypoint-initdb.d/comments_6.csv.gz' WITH CSV HEADER;
