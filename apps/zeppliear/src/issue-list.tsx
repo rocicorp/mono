@@ -1,10 +1,21 @@
-import {CSSProperties, memo, useCallback, useEffect, useRef} from 'react';
+import {
+  CSSProperties,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
 import IssueRow from './issue-row.jsx';
 import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
+import {useQuery} from './hooks/use-query.js';
+import {useZero} from './hooks/use-zero.js';
+import type {Collections} from './app.js';
+import {useTimeout} from './hooks/use-timeout.js';
 
 interface Props {
   issuesProps: IssuesProps;
@@ -25,10 +36,43 @@ function RawRow({
   index: number;
   style: CSSProperties;
 }) {
+  const row = data.mustGetIssue(index);
+  const issueID = row.issue.id;
+
+  const zero = useZero<Collections>();
+
+  const [timerFired, setTimerFired] = useState(false);
+  useTimeout(() => {
+    console.log('Preloading issue', issueID);
+    setTimerFired(true);
+  }, 500);
+
+  // preload for detail view
+  const comments = useQuery(
+    zero.query.comment
+      .where('issueID', '=', issueID ?? '')
+      .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
+      .select(
+        'comment.id',
+        'comment.issueID',
+        'comment.created',
+        'comment.creatorID',
+        'comment.body',
+        'member.name',
+      )
+      .asc('comment.created'),
+    [issueID],
+    timerFired,
+  );
+
+  if (comments.length > 0) {
+    console.log('issue row preloaded', issueID);
+  }
+
   return (
     <div style={style}>
       <IssueRow
-        row={data.mustGetIssue(index)}
+        row={row}
         onChangePriority={data.onChangePriority}
         onChangeStatus={data.onChangeStatus}
         onOpenDetail={data.onOpenDetail}

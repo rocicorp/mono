@@ -109,10 +109,12 @@ export default function IssueDetail({
   const nextIssues = useQuery(
     getNextIssueQuery(query, issue, order, 'fwd'),
     queryDeps.concat(issue),
+    false, // temporarily disabled - slow query
   );
   const previousIssues = useQuery(
     getNextIssueQuery(query, issue, order, 'prev'),
     queryDeps.concat(issue),
+    false, // temporarily disabled - slow query
   );
 
   const comments = useQuery(
