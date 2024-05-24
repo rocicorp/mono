@@ -16,17 +16,20 @@ test('left join', () => {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
 
-  const output = trackInput.leftJoin({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'albumId'],
+  const output = trackInput.leftJoin(
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'albumId'],
 
-    b: albumInput,
-    bTable: 'album',
-    bAs: 'album',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['album', 'id'],
-  });
+      b: albumInput,
+      bTable: 'album',
+      bAs: 'album',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['album', 'id'],
+    },
+    undefined,
+  );
 
   const items: [JoinResult<Track, Album, 'track', 'album'>, number][] = [];
   output.effect((e, m) => {
@@ -260,29 +263,35 @@ test('junction table left join', () => {
   const trackArtistInput = new DifferenceStream<TrackArtist>();
   const artistInput = new DifferenceStream<Artist>();
 
-  const trackTrackArtist = trackInput.leftJoin({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'id'],
+  const trackTrackArtist = trackInput.leftJoin(
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'id'],
 
-    b: trackArtistInput,
-    bTable: 'trackArtist',
-    bAs: 'trackArtist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['trackArtist', 'trackId'],
-  });
+      b: trackArtistInput,
+      bTable: 'trackArtist',
+      bAs: 'trackArtist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['trackArtist', 'trackId'],
+    },
+    undefined,
+  );
 
-  const output = trackTrackArtist.leftJoin({
-    aTable: undefined,
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['trackArtist', 'artistId'],
+  const output = trackTrackArtist.leftJoin(
+    {
+      aTable: undefined,
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['trackArtist', 'artistId'],
 
-    b: artistInput,
-    bTable: 'artist',
-    bAs: 'artist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['artist', 'id'],
-  });
+      b: artistInput,
+      bTable: 'artist',
+      bAs: 'artist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['artist', 'id'],
+    },
+    undefined,
+  );
 
   const items: [
     JoinResult<Track, TrackArtist, 'track', 'trackArtist'>,
@@ -773,29 +782,35 @@ test('repro 1', () => {
   const trackArtistInput = new DifferenceStream<TrackArtist>();
   const artistInput = new DifferenceStream<Artist>();
 
-  const trackTrackArtist = trackInput.leftJoin({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'id'],
+  const trackTrackArtist = trackInput.leftJoin(
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'id'],
 
-    b: trackArtistInput,
-    bTable: 'trackArtist',
-    bAs: 'trackArtist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['trackArtist', 'trackId'],
-  });
+      b: trackArtistInput,
+      bTable: 'trackArtist',
+      bAs: 'trackArtist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['trackArtist', 'trackId'],
+    },
+    undefined,
+  );
 
-  const output = trackTrackArtist.leftJoin({
-    aTable: undefined,
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['trackArtist', 'artistId'],
+  const output = trackTrackArtist.leftJoin(
+    {
+      aTable: undefined,
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['trackArtist', 'artistId'],
 
-    b: artistInput,
-    bTable: 'artist',
-    bAs: 'artist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['artist', 'id'],
-  });
+      b: artistInput,
+      bTable: 'artist',
+      bAs: 'artist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['artist', 'id'],
+    },
+    undefined,
+  );
 
   const items: [
     JoinResult<Track, TrackArtist, 'track', 'trackArtist'>,
@@ -963,17 +978,20 @@ test('add track & album, then remove album', () => {
   const trackInput = new DifferenceStream<Track>();
   const albumInput = new DifferenceStream<Album>();
 
-  const output = trackInput.leftJoin({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'albumId'],
+  const output = trackInput.leftJoin(
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'albumId'],
 
-    b: albumInput,
-    bTable: 'album',
-    bAs: 'album',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['album', 'id'],
-  });
+      b: albumInput,
+      bTable: 'album',
+      bAs: 'album',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['album', 'id'],
+    },
+    undefined,
+  );
 
   const items: [JoinResult<Track, Album, 'track', 'album'>, number][] = [];
   output.effect((e, m) => {
@@ -1087,17 +1105,20 @@ test('one to many, remove the one, add the one', () => {
   const trackInput = new DifferenceStream<Track>();
   const trackArtistInput = new DifferenceStream<TrackArtist>();
 
-  const output = trackInput.leftJoin({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'id'],
+  const output = trackInput.leftJoin(
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'id'],
 
-    b: trackArtistInput,
-    bTable: 'trackArtist',
-    bAs: 'trackArtist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['trackArtist', 'trackId'],
-  });
+      b: trackArtistInput,
+      bTable: 'trackArtist',
+      bAs: 'trackArtist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['trackArtist', 'trackId'],
+    },
+    undefined,
+  );
 
   const items: [
     JoinResult<Track, TrackArtist, 'track', 'trackArtist'>,
@@ -1273,29 +1294,35 @@ test('two tracks, only 1 is linked to artists', () => {
   const trackArtistInput = new DifferenceStream<TrackArtist>();
   const artistInput = new DifferenceStream<Artist>();
 
-  const trackTrackArtist = trackInput.leftJoin({
-    aTable: 'track',
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['track', 'id'],
+  const trackTrackArtist = trackInput.leftJoin(
+    {
+      aTable: 'track',
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['track', 'id'],
 
-    b: trackArtistInput,
-    bTable: 'trackArtist',
-    bAs: 'trackArtist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['trackArtist', 'trackId'],
-  });
+      b: trackArtistInput,
+      bTable: 'trackArtist',
+      bAs: 'trackArtist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['trackArtist', 'trackId'],
+    },
+    undefined,
+  );
 
-  const output = trackTrackArtist.leftJoin({
-    aTable: undefined,
-    aPrimaryKeyColumns: ['id'],
-    aJoinColumn: ['trackArtist', 'artistId'],
+  const output = trackTrackArtist.leftJoin(
+    {
+      aTable: undefined,
+      aPrimaryKeyColumns: ['id'],
+      aJoinColumn: ['trackArtist', 'artistId'],
 
-    b: artistInput,
-    bTable: 'artist',
-    bAs: 'artist',
-    bPrimaryKeyColumns: ['id'],
-    bJoinColumn: ['artist', 'id'],
-  });
+      b: artistInput,
+      bTable: 'artist',
+      bAs: 'artist',
+      bPrimaryKeyColumns: ['id'],
+      bJoinColumn: ['artist', 'id'],
+    },
+    undefined,
+  );
 
   const items: [
     JoinResult<Track, TrackArtist, 'track', 'trackArtist'>,

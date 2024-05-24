@@ -32,10 +32,19 @@ export class LeftJoinOperator<
   JoinResult<AValue, BValue, ATable, BAlias>
 > {
   readonly #indexA: DifferenceIndex<StringOrNumber | undefined, AValue>;
-  readonly #indexB: SourceHashIndexBackedDifferenceIndex<
-    StringOrNumber,
-    BValue
-  >;
+  readonly #indexB:
+    | {
+        readonly type: 'source-hash-backed';
+        readonly index: SourceHashIndexBackedDifferenceIndex<
+          StringOrNumber,
+          BValue
+        >;
+      }
+    | {
+        readonly type: 'difference-index';
+        readonly index: DifferenceIndex<StringOrNumber, BValue>;
+        readonly bKeysForCompactions: Set<StringOrNumber>;
+      };
   readonly #aMatches: Map<
     StringOrNumber,
     [JoinResult<AValue, BValue, ATable, BAlias>, number]
@@ -48,10 +57,12 @@ export class LeftJoinOperator<
 
   constructor(
     joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>,
-    sourceProvider: (
-      sourceName: string,
-      order: Ordering | undefined,
-    ) => Source<PipelineEntity>,
+    sourceProvider:
+      | ((
+          sourceName: string,
+          order: Ordering | undefined,
+        ) => Source<PipelineEntity>)
+      | undefined,
   ) {
     super(
       joinArgs.a,
@@ -83,15 +94,29 @@ export class LeftJoinOperator<
     );
 
     // load indexB from the source...
-    const sourceB = sourceProvider(joinArgs.bTable, undefined);
-    this.#indexB = new SourceHashIndexBackedDifferenceIndex(
-      sourceB.getOrCreateAndMaintainNewHashIndex(joinArgs.bJoinColumn),
-    ) as SourceHashIndexBackedDifferenceIndex<StringOrNumber, BValue>;
+    if (sourceProvider === undefined) {
+      this.#indexB = {
+        type: 'difference-index',
+        index: new DifferenceIndex<StringOrNumber, BValue>(
+          this.#getBPrimaryKey,
+        ),
+        bKeysForCompactions: new Set(),
+      };
+    } else {
+      const sourceB = sourceProvider(joinArgs.bTable, undefined);
+      this.#indexB = {
+        type: 'source-hash-backed',
+        index: new SourceHashIndexBackedDifferenceIndex(
+          sourceB.getOrCreateAndMaintainNewHashIndex(joinArgs.bJoinColumn),
+        ) as SourceHashIndexBackedDifferenceIndex<StringOrNumber, BValue>,
+      };
+    }
 
     this.#joinArgs = joinArgs;
   }
 
-  #aKeysForCompaction = new Set<StringOrNumber | undefined>();
+  readonly #aKeysForCompaction = new Set<StringOrNumber>();
+
   #lastVersion = -1;
   #join(
     version: Version,
@@ -104,7 +129,11 @@ export class LeftJoinOperator<
       // We should add some invariant in `joinOne` that checks if the version is still valid
       // and throws if not.
       this.#indexA.compact(this.#aKeysForCompaction);
-      this.#indexB.compact();
+      if (this.#indexB.type === 'difference-index') {
+        this.#indexB.index.compact(this.#indexB.bKeysForCompactions);
+      } else {
+        this.#indexB.index.compact();
+      }
       this.#aKeysForCompaction.clear();
       this.#lastVersion = version;
     }
@@ -130,7 +159,10 @@ export class LeftJoinOperator<
           const key = this.#getBJoinKey(entry[0]);
           const ret = this.#joinOneInner(entry, key);
           if (key !== undefined) {
-            this.#indexB.add(key, entry);
+            this.#indexB.index.add(key, entry);
+            if (this.#indexB.type === 'difference-index') {
+              this.#indexB.bKeysForCompactions.add(key);
+            }
           }
           return ret;
         }),
@@ -166,9 +198,10 @@ export class LeftJoinOperator<
       ? aValue.id
       : this.#getAPrimaryKey(aValue as AValue);
 
-    const bEntries = aKey !== undefined ? this.#indexB.get(aKey) : undefined;
+    const bEntries =
+      aKey !== undefined ? this.#indexB.index.get(aKey) : undefined;
     // `undefined` cannot join with anything
-    if (bEntries === undefined || bEntries.length === 0) {
+    if (bEntries === undefined) {
       const joinEntry = [
         combineRows(
           aValue,

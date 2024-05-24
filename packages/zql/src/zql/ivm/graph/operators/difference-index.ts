@@ -27,8 +27,13 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
     existing.push(value);
   }
 
-  get(key: Key): Entry<V>[] {
-    return this.#index.get(key) ?? [];
+  get(key: Key): Entry<V>[] | undefined {
+    const ret = this.#index.get(key);
+    if (ret === undefined || ret.length === 0) {
+      return undefined;
+    }
+
+    return ret;
   }
 
   /**
