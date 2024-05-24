@@ -5,6 +5,7 @@ import type {EntityQuery} from 'zero-client';
 export function useQuery<From extends FromSet, Return>(
   q: EntityQuery<From, Return>,
   dependencies: readonly unknown[] = [],
+  enabled = true,
 ): Return {
   const [snapshot, setSnapshot] = useState([] as Return);
   const [lastDeps, setLastDeps] = useState<readonly unknown[] | undefined>();
@@ -12,9 +13,10 @@ export function useQuery<From extends FromSet, Return>(
   const statementRef = useRef<ReturnType<(typeof q)['prepare']>>();
 
   if (
-    lastDeps === undefined ||
-    lastDeps.length !== dependencies.length ||
-    lastDeps.some((v, i) => v !== dependencies[i])
+    enabled &&
+    (lastDeps === undefined ||
+      lastDeps.length !== dependencies.length ||
+      lastDeps.some((v, i) => v !== dependencies[i]))
   ) {
     setLastDeps(dependencies);
     const statement = q.prepare();
