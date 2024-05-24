@@ -65,11 +65,14 @@ function incrementalPreload<F extends FromSet, R>(
   currentLimit = Math.min(currentLimit, targetLimit);
   const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
 
-  console.log('incremental preload', description, {currentLimit, targetLimit});
+  console.debug('incremental preload', description, {
+    currentLimit,
+    targetLimit,
+  });
   const {resolve, promise} = resolver<() => void>();
   let done = false;
   const unsub = createdPreloadStatement.subscribe(result => {
-    console.log('incremental preload', description, 'got', {
+    console.debug('incremental preload', description, 'got', {
       currentLimit,
       targetLimit,
       resultLength: result.length,
