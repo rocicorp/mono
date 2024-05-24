@@ -95,19 +95,19 @@ class InfiniteSource<T extends PipelineEntity> implements Source<T> {
   readonly #materialite: MaterialiteForSourceInternal;
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
-  readonly #generator: {
+  readonly #iterable: {
     [Symbol.iterator](): Iterator<Entry<T>>;
   };
   readonly #name;
 
   constructor(
     materialite: MaterialiteForSourceInternal,
-    generator: Iterable<Entry<T>>,
+    iterable: Iterable<Entry<T>>,
     name: string,
   ) {
     this.#name = name;
     this.#materialite = materialite;
-    this.#generator = generator;
+    this.#iterable = iterable;
     this.#stream = new DifferenceStream<T>();
     this.#stream.setUpstream({
       commit: () => {},
@@ -163,7 +163,7 @@ class InfiniteSource<T extends PipelineEntity> implements Source<T> {
         this.#materialite.addDirtySource(this.#internal);
         this.#stream.newDifference(
           this.#materialite.getVersion(),
-          this.#generator,
+          this.#iterable,
           createPullResponseMessage(message, this.#name, [
             [[this.#name, 'id']],
             'asc',
