@@ -14,6 +14,9 @@ async function preload(z: Zero<Collections>) {
   const allMembersPreload = z.query.member.select('id', 'name');
   allMembersPreload.prepare().preload();
 
+  const allLabelsPreload = z.query.label.select('id', 'name');
+  allLabelsPreload.prepare().preload();
+
   const preloadIssueLimit = 10_000;
   const preloadIssueIncrement = 500;
   const issueBaseQuery = z.query.issue
@@ -44,6 +47,7 @@ async function preload(z: Zero<Collections>) {
     ['issue.status', 'issue.modified'],
     ['issue.priority', 'issue.modified'],
   ];
+
   for (const issueSort of issueSorts) {
     const [stmt, unsub] = await incrementalPreload(
       `issues order by ${issueSort.join(', ')} desc`,
@@ -131,9 +135,7 @@ async function init() {
   }) {
     return (
       <div className="repliear">
-        <ZeroProvider zero={zero}>
-          <App undoManager={undoManager} />
-        </ZeroProvider>
+        <ZeroProvider zero={zero}>hello</ZeroProvider>
       </div>
     );
   }
