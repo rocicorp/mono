@@ -414,16 +414,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {issueID: 123},
-            row: {
-              issueID: 123,
-              big: null,
-              flt: null,
-              ints: null,
-              bigs: null,
-              time: null,
-              description: null,
-              ['_0_version']: '01',
-            },
           },
           {
             stateVersion: '01',
@@ -432,16 +422,6 @@ describe('replicator/incremental-sync', () => {
             op: 's',
 
             rowKey: {issueID: 456},
-            row: {
-              issueID: 456,
-              big: null,
-              flt: null,
-              ints: null,
-              bigs: null,
-              time: '2024-03-21T18:50:23.646Z',
-              description: null,
-              ['_0_version']: '01',
-            },
           },
           {
             stateVersion: '02',
@@ -449,16 +429,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {issueID: 789},
-            row: {
-              issueID: 789,
-              big: 9223372036854775807n,
-              ints: null,
-              flt: null,
-              bigs: null,
-              time: null,
-              description: null,
-              ['_0_version']: '02',
-            },
           },
           {
             stateVersion: '02',
@@ -466,16 +436,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {issueID: 987},
-            row: {
-              issueID: 987,
-              big: null,
-              flt: null,
-              ints: [92233720, 123],
-              bigs: null,
-              time: null,
-              description: null,
-              ['_0_version']: '02',
-            },
           },
           {
             stateVersion: '02',
@@ -483,16 +443,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {issueID: 234},
-            row: {
-              issueID: 234,
-              big: null,
-              flt: 123.456,
-              ints: null,
-              bigs: null,
-              time: null,
-              description: null,
-              ['_0_version']: '02',
-            },
           },
         ],
         ['_zero.InvalidationIndex']: [
@@ -721,12 +671,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {orgID: 2, issueID: 789},
-            row: {
-              orgID: 2,
-              issueID: 789,
-              description: null,
-              ['_0_version']: '01',
-            },
           },
           {
             stateVersion: '02',
@@ -734,12 +678,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {orgID: 1, issueID: 456},
-            row: {
-              orgID: 1,
-              issueID: 456,
-              description: 'foo',
-              ['_0_version']: '02',
-            },
           },
           {
             stateVersion: '02',
@@ -747,7 +685,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: {orgID: 1, issueID: 123},
-            row: null,
           },
           {
             stateVersion: '02',
@@ -755,12 +692,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {orgID: 2, issueID: 123},
-            row: {
-              orgID: 2,
-              issueID: 123,
-              description: 'bar',
-              ['_0_version']: '02',
-            },
           },
         ],
         ['_zero.InvalidationIndex']: [
@@ -1017,12 +948,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {orgID: 2, issueID: 789},
-            row: {
-              orgID: 2,
-              issueID: 789,
-              description: null,
-              ['_0_version']: '01',
-            },
           },
           {
             stateVersion: '02',
@@ -1030,7 +955,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: {orgID: 1, issueID: 123},
-            row: null,
           },
           {
             stateVersion: '02',
@@ -1038,7 +962,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: {orgID: 1, issueID: 456},
-            row: null,
           },
           {
             stateVersion: '02',
@@ -1046,7 +969,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: {orgID: 2, issueID: 987},
-            row: null,
           },
         ],
       },
@@ -1233,7 +1155,6 @@ describe('replicator/incremental-sync', () => {
             table: 'bar',
             op: 's',
             rowKey: {id: 4},
-            row: {id: 4, ['_0_version']: '01'},
           },
           {
             stateVersion: '01',
@@ -1241,7 +1162,6 @@ describe('replicator/incremental-sync', () => {
             table: 'bar',
             op: 's',
             rowKey: {id: 5},
-            row: {id: 5, ['_0_version']: '01'},
           },
           {
             stateVersion: '01',
@@ -1249,7 +1169,6 @@ describe('replicator/incremental-sync', () => {
             table: 'bar',
             op: 's',
             rowKey: {id: 6},
-            row: {id: 6, ['_0_version']: '01'},
           },
           {
             stateVersion: '01',
@@ -1257,7 +1176,6 @@ describe('replicator/incremental-sync', () => {
             table: 'baz',
             op: 't',
             rowKey: {},
-            row: null,
           },
           {
             stateVersion: '02',
@@ -1265,7 +1183,6 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 't',
             rowKey: {},
-            row: null,
           },
           {
             stateVersion: '02',
@@ -1273,7 +1190,6 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: {id: 101},
-            row: {id: 101, ['_0_version']: '02'},
           },
         ],
         ['_zero.InvalidationIndex']: [
@@ -1454,12 +1370,6 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: {orgID: 1, issueID: 456},
-            row: {
-              orgID: 1,
-              issueID: 456,
-              description: 'foo',
-              ['_0_version']: '01',
-            },
           },
         ],
         ['_zero.InvalidationIndex']: [

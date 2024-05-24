@@ -35,11 +35,9 @@ export const CREATE_REPLICATION_TABLES =
   //
   // * `op`        : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
   // * `rowKey`    : JSONB row key, as `{[$columnName]: $columnValue}`, or '{}' for TRUNCATE
-  // * `row`       : JSON formatted full row contents, NULL for DELETE / TRUNCATE
   //
-  // Note that the `row` data is stored as JSON rather than JSONB to prioritize write
-  // throughput, as replication is critical bottleneck in the system. Row values are
-  // only needed for catchup, for which JSONB is not particularly advantageous over JSON.
+  // Note that the row data itself is not stored; since catchup is always done at the current
+  // snapshot of the database, row contents can instead be looked up from the database tables.
   `
   CREATE TABLE _zero."ChangeLog" (
     "stateVersion" VARCHAR(38)  NOT NULL,
@@ -47,7 +45,6 @@ export const CREATE_REPLICATION_TABLES =
     "table"        VARCHAR(128) NOT NULL,
     "op"           CHAR         NOT NULL,
     "rowKey"       JSONB        NOT NULL,
-    "row"          JSON,
     CONSTRAINT "PK_change_log" PRIMARY KEY("stateVersion", "schema", "table", "rowKey"),
     CONSTRAINT "RK_change_log" UNIQUE("schema", "table", "rowKey")
   );
