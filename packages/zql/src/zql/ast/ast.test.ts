@@ -9,6 +9,1212 @@ describe('zql/ast', () => {
     normalized: AST;
   };
 
+  function conditionCases(conditionType: 'having' | 'where'): Case[] {
+    return [
+      {
+        name: conditionType + ': simple condition',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'simple',
+              field: ['issues', 'id'],
+              op: '=',
+              value: {type: 'value', value: 1234},
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'simple',
+            field: ['issues', 'id'],
+            op: '=',
+            value: {type: 'value', value: 1234},
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': multiple conditions',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'simple',
+                  field: ['issues', 'id'],
+                  op: '=',
+                  value: {type: 'value', value: 1234},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'name'],
+                  op: '=',
+                  value: {type: 'value', value: 'foobar'},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '<',
+                  value: {type: 'value', value: 5},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '>',
+                  value: {type: 'value', value: 2},
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '>',
+                  value: {type: 'value', value: 2},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'id'],
+                  op: '=',
+                  value: {type: 'value', value: 1234},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'name'],
+                  op: '=',
+                  value: {type: 'value', value: 'foobar'},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '<',
+                  value: {type: 'value', value: 5},
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'simple',
+                field: ['issues', 'id'],
+                op: '=',
+                value: {type: 'value', value: 1234},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'name'],
+                op: '=',
+                value: {type: 'value', value: 'foobar'},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'priority'],
+                op: '<',
+                value: {type: 'value', value: 5},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'priority'],
+                op: '>',
+                value: {type: 'value', value: 2},
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': empty conjunctions removed',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [],
+            },
+            orderBy: [
+              [
+                ['issues', 'id'],
+                ['issues', 'name'],
+              ],
+              'asc',
+            ],
+          },
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'OR',
+              conditions: [],
+            },
+            orderBy: [
+              [
+                ['issues', 'id'],
+                ['issues', 'name'],
+              ],
+              'asc',
+            ],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          orderBy: [
+            [
+              ['issues', 'id'],
+              ['issues', 'name'],
+            ],
+            'asc',
+          ],
+        },
+      },
+      {
+        name:
+          conditionType + ': multiple conditions with same fields and operator',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '<',
+                  value: {type: 'value', value: 5},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '<',
+                  value: {type: 'value', value: 3},
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '<',
+                  value: {type: 'value', value: 3},
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '<',
+                  value: {type: 'value', value: 5},
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'simple',
+                field: ['issues', 'priority'],
+                op: '<',
+                value: {type: 'value', value: 3},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'priority'],
+                op: '<',
+                value: {type: 'value', value: 5},
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': nested conditions',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'simple',
+                  field: ['issues', 'id'],
+                  op: '=',
+                  value: {type: 'value', value: 1234},
+                },
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'id'],
+                  op: '=',
+                  value: {type: 'value', value: 1234},
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'simple',
+                field: ['issues', 'id'],
+                op: '=',
+                value: {type: 'value', value: 1234},
+              },
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'name'],
+                    op: '=',
+                    value: {type: 'value', value: 'foobar'},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'priority'],
+                    op: '>',
+                    value: {type: 'value', value: 2},
+                  },
+                ],
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': equivalent nested conjunctions',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'name'],
+                    op: '=',
+                    value: {type: 'value', value: 'foobar'},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'priority'],
+                    op: '>',
+                    value: {type: 'value', value: 2},
+                  },
+                ],
+              },
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'name'],
+                    op: '=',
+                    value: {type: 'value', value: 'foobar'},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'priority'],
+                    op: '>',
+                    value: {type: 'value', value: 2},
+                  },
+                ],
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': conjunction comparison',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                  ],
+                },
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                  ],
+                },
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'id'],
+                    op: '=',
+                    value: {type: 'value', value: 1234},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'name'],
+                    op: '=',
+                    value: {type: 'value', value: 'foobar'},
+                  },
+                ],
+              },
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'id'],
+                    op: '=',
+                    value: {type: 'value', value: 1234},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'priority'],
+                    op: '>',
+                    value: {type: 'value', value: 2},
+                  },
+                ],
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': conjunction fallback sorting to length',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                  ],
+                },
+                {
+                  type: 'conjunction',
+                  op: 'OR',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'id'],
+                      op: '=',
+                      value: {type: 'value', value: 1234},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'id'],
+                    op: '=',
+                    value: {type: 'value', value: 1234},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'name'],
+                    op: '=',
+                    value: {type: 'value', value: 'foobar'},
+                  },
+                ],
+              },
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'id'],
+                    op: '=',
+                    value: {type: 'value', value: 1234},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'name'],
+                    op: '=',
+                    value: {type: 'value', value: 'foobar'},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'priority'],
+                    op: '>',
+                    value: {type: 'value', value: 2},
+                  },
+                ],
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+      {
+        name: conditionType + ': condition flattening',
+        asts: [
+          {
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'AND',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'priority'],
+                      op: '>',
+                      value: {type: 'value', value: 2},
+                    },
+                    {
+                      type: 'conjunction',
+                      op: 'OR',
+                      conditions: [
+                        {
+                          type: 'simple',
+                          field: ['issues', 'a'],
+                          op: '=',
+                          value: {type: 'value', value: 'bc'},
+                        },
+                        {
+                          type: 'conjunction',
+                          op: 'OR',
+                          conditions: [
+                            {
+                              type: 'simple',
+                              field: ['issues', 'doo'],
+                              op: '>',
+                              value: {type: 'value', value: '23'},
+                            },
+                            {
+                              type: 'simple',
+                              field: ['issues', 'dah'],
+                              op: '<',
+                              value: {type: 'value', value: '56'},
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'id'],
+                  op: '=',
+                  value: {type: 'value', value: 1234},
+                },
+                {
+                  type: 'conjunction',
+                  op: 'AND',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'foo'],
+                      op: '=',
+                      value: {type: 'value', value: 'bar'},
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'bar'],
+                      op: '>',
+                      value: {type: 'value', value: 23},
+                    },
+                    {
+                      type: 'conjunction',
+                      op: 'OR',
+                      conditions: [
+                        {
+                          type: 'conjunction',
+                          op: 'AND',
+                          conditions: [
+                            {
+                              type: 'simple',
+                              field: ['issues', 'zzz'],
+                              op: '!=',
+                              value: {type: 'value', value: 48},
+                            },
+                            {
+                              type: 'simple',
+                              field: ['issues', 'xyz'],
+                              op: '!=',
+                              value: {type: 'value', value: 488},
+                            },
+                          ],
+                        },
+                        {
+                          type: 'simple',
+                          field: ['issues', 'ac'],
+                          op: '>',
+                          value: {type: 'value', value: 'dc'},
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+          {
+            // AST with different but equivalent nesting of AND's and OR's
+            table: 'issues',
+            select: [
+              [['issues', 'id'], 'i'],
+              [['issues', 'name'], 'n'],
+            ],
+            [conditionType]: {
+              type: 'conjunction',
+              op: 'AND',
+              conditions: [
+                {
+                  type: 'conjunction',
+                  op: 'AND',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'name'],
+                      op: '=',
+                      value: {type: 'value', value: 'foobar'},
+                    },
+                    {
+                      type: 'conjunction',
+                      op: 'OR',
+                      conditions: [
+                        {
+                          type: 'simple',
+                          field: ['issues', 'dah'],
+                          op: '<',
+                          value: {type: 'value', value: '56'},
+                        },
+                        {
+                          type: 'conjunction',
+                          op: 'OR',
+                          conditions: [
+                            {
+                              type: 'simple',
+                              field: ['issues', 'doo'],
+                              op: '>',
+                              value: {type: 'value', value: '23'},
+                            },
+                            {
+                              type: 'simple',
+                              field: ['issues', 'a'],
+                              op: '=',
+                              value: {type: 'value', value: 'bc'},
+                            },
+                          ],
+                        },
+                        {
+                          // Empty Conjunctions should be removed.
+                          type: 'conjunction',
+                          op: 'AND',
+                          conditions: [],
+                        },
+                      ],
+                    },
+                    {
+                      // Single-condition conjunctions should also be flattened.
+                      type: 'conjunction',
+                      op: 'OR',
+                      conditions: [
+                        {
+                          type: 'conjunction',
+                          op: 'AND',
+                          conditions: [
+                            {
+                              type: 'simple',
+                              field: ['issues', 'id'],
+                              op: '=',
+                              value: {type: 'value', value: 1234},
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      type: 'simple',
+                      field: ['issues', 'bar'],
+                      op: '>',
+                      value: {type: 'value', value: 23},
+                    },
+                  ],
+                },
+                {
+                  type: 'simple',
+                  field: ['issues', 'priority'],
+                  op: '>',
+                  value: {type: 'value', value: 2},
+                },
+                {
+                  type: 'conjunction',
+                  op: 'AND',
+                  conditions: [
+                    {
+                      type: 'simple',
+                      field: ['issues', 'foo'],
+                      op: '=',
+                      value: {type: 'value', value: 'bar'},
+                    },
+                    {
+                      type: 'conjunction',
+                      op: 'OR',
+                      conditions: [
+                        {
+                          type: 'simple',
+                          field: ['issues', 'ac'],
+                          op: '>',
+                          value: {type: 'value', value: 'dc'},
+                        },
+                        {
+                          type: 'conjunction',
+                          op: 'AND',
+                          conditions: [
+                            {
+                              type: 'simple',
+                              field: ['issues', 'zzz'],
+                              op: '!=',
+                              value: {type: 'value', value: 48},
+                            },
+                            {
+                              type: 'simple',
+                              field: ['issues', 'xyz'],
+                              op: '!=',
+                              value: {type: 'value', value: 488},
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            orderBy: [[['issues', 'id']], 'asc'],
+          },
+        ],
+        normalized: {
+          // Flattened conditions.
+          table: 'issues',
+          select: [
+            [['issues', 'id'], 'i'],
+            [['issues', 'name'], 'n'],
+          ],
+          [conditionType]: {
+            type: 'conjunction',
+            op: 'AND',
+            conditions: [
+              {
+                type: 'simple',
+                field: ['issues', 'bar'],
+                op: '>',
+                value: {type: 'value', value: 23},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'foo'],
+                op: '=',
+                value: {type: 'value', value: 'bar'},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'id'],
+                op: '=',
+                value: {type: 'value', value: 1234},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'name'],
+                op: '=',
+                value: {type: 'value', value: 'foobar'},
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'priority'],
+                op: '>',
+                value: {type: 'value', value: 2},
+              },
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'a'],
+                    op: '=',
+                    value: {type: 'value', value: 'bc'},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'dah'],
+                    op: '<',
+                    value: {type: 'value', value: '56'},
+                  },
+                  {
+                    type: 'simple',
+                    field: ['issues', 'doo'],
+                    op: '>',
+                    value: {type: 'value', value: '23'},
+                  },
+                ],
+              },
+              {
+                type: 'conjunction',
+                op: 'OR',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: ['issues', 'ac'],
+                    op: '>',
+                    value: {type: 'value', value: 'dc'},
+                  },
+                  {
+                    type: 'conjunction',
+                    op: 'AND',
+                    conditions: [
+                      {
+                        type: 'simple',
+                        field: ['issues', 'xyz'],
+                        op: '!=',
+                        value: {type: 'value', value: 488},
+                      },
+                      {
+                        type: 'simple',
+                        field: ['issues', 'zzz'],
+                        op: '!=',
+                        value: {type: 'value', value: 48},
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          orderBy: [[['issues', 'id']], 'asc'],
+        },
+      },
+    ];
+  }
+
   const cases: Case[] = [
     {
       name: 'simplest statement',
@@ -341,1204 +1547,197 @@ describe('zql/ast', () => {
         orderBy: [[['issues', 'id']], 'asc'],
       },
     },
+    ...conditionCases('where'),
+    ...conditionCases('having'),
     {
-      name: 'simple condition',
+      name: 'having: condition on aggregate',
       asts: [
         {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
+          table: 'issue',
+          joins: [
+            {
+              type: 'left',
+              other: {
+                table: 'issueLabel',
+                orderBy: [[['issueLabel', 'id']], 'asc'],
+              },
+              as: 'issueLabel',
+              on: [
+                ['issue', 'id'],
+                ['issueLabel', 'issueID'],
+              ],
+            },
+            {
+              type: 'left',
+              other: {
+                table: 'label',
+                orderBy: [[['label', 'id']], 'asc'],
+              },
+              as: 'label',
+              on: [
+                ['issueLabel', 'labelID'],
+                ['label', 'id'],
+              ],
+            },
           ],
-          where: {
-            type: 'simple',
-            field: ['issues', 'id'],
-            op: '=',
-            value: {type: 'value', value: 1234},
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'simple',
-          field: ['issues', 'id'],
-          op: '=',
-          value: {type: 'value', value: 1234},
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'multiple conditions',
-      asts: [
-        {
-          table: 'issues',
+          groupBy: [['issue', 'id']],
           select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
+            [['issues', 'id'], 'id_alias'],
+            [['issues', 'name'], 'a_name'],
           ],
-          where: {
+          aggregate: [
+            {
+              field: ['label', 'name'],
+              alias: 'labels',
+              aggregate: 'array',
+            },
+          ],
+          having: {
             type: 'conjunction',
             op: 'AND',
             conditions: [
               {
                 type: 'simple',
-                field: ['issues', 'id'],
-                op: '=',
-                value: {type: 'value', value: 1234},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'name'],
-                op: '=',
-                value: {type: 'value', value: 'foobar'},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '<',
-                value: {type: 'value', value: 5},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
+                field: ['issues', 'bar'],
                 op: '>',
-                value: {type: 'value', value: 2},
+                value: {type: 'value', value: 23},
+              },
+              {
+                type: 'simple',
+                op: 'INTERSECTS',
+                field: [null, 'labels'],
+                value: {
+                  type: 'value',
+                  value: ['crash'],
+                },
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
         },
         {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
+          table: 'issue',
+          joins: [
+            {
+              type: 'left',
+              other: {
+                table: 'issueLabel',
+                orderBy: [[['issueLabel', 'id']], 'asc'],
+              },
+              as: 'issueLabel',
+              on: [
+                ['issue', 'id'],
+                ['issueLabel', 'issueID'],
+              ],
+            },
+            {
+              type: 'left',
+              other: {
+                table: 'label',
+                orderBy: [[['label', 'id']], 'asc'],
+              },
+              as: 'label',
+              on: [
+                ['issueLabel', 'labelID'],
+                ['label', 'id'],
+              ],
+            },
           ],
-          where: {
+          groupBy: [['issue', 'id']],
+          select: [
+            [['issues', 'id'], 'id_alias'],
+            [['issues', 'name'], 'a_name'],
+          ],
+          aggregate: [
+            {
+              field: ['label', 'name'],
+              alias: 'labels',
+              aggregate: 'array',
+            },
+          ],
+          having: {
             type: 'conjunction',
             op: 'AND',
             conditions: [
               {
                 type: 'simple',
-                field: ['issues', 'priority'],
+                op: 'INTERSECTS',
+                field: [null, 'labels'],
+                value: {
+                  type: 'value',
+                  value: ['crash'],
+                },
+              },
+              {
+                type: 'simple',
+                field: ['issues', 'bar'],
                 op: '>',
-                value: {type: 'value', value: 2},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'id'],
-                op: '=',
-                value: {type: 'value', value: 1234},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'name'],
-                op: '=',
-                value: {type: 'value', value: 'foobar'},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '<',
-                value: {type: 'value', value: 5},
+                value: {type: 'value', value: 23},
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
         },
       ],
       normalized: {
-        table: 'issues',
+        table: 'issue',
         select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
+          [['issues', 'id'], 'id_alias'],
+          [['issues', 'name'], 'a_name'],
         ],
-        where: {
+        aggregate: [
+          {
+            field: ['label', 'name'],
+            alias: 'labels',
+            aggregate: 'array',
+          },
+        ],
+        joins: [
+          {
+            type: 'left',
+            other: {
+              table: 'issueLabel',
+              orderBy: [[['issueLabel', 'id']], 'asc'],
+            },
+            as: 'issueLabel',
+            on: [
+              ['issue', 'id'],
+              ['issueLabel', 'issueID'],
+            ],
+          },
+          {
+            type: 'left',
+            other: {
+              table: 'label',
+              orderBy: [[['label', 'id']], 'asc'],
+            },
+            as: 'label',
+            on: [
+              ['issueLabel', 'labelID'],
+              ['label', 'id'],
+            ],
+          },
+        ],
+        groupBy: [['issue', 'id']],
+        having: {
           type: 'conjunction',
           op: 'AND',
           conditions: [
             {
               type: 'simple',
-              field: ['issues', 'id'],
-              op: '=',
-              value: {type: 'value', value: 1234},
+              op: 'INTERSECTS',
+              field: [null, 'labels'],
+              value: {
+                type: 'value',
+                value: ['crash'],
+              },
             },
-            {
-              type: 'simple',
-              field: ['issues', 'name'],
-              op: '=',
-              value: {type: 'value', value: 'foobar'},
-            },
-            {
-              type: 'simple',
-              field: ['issues', 'priority'],
-              op: '<',
-              value: {type: 'value', value: 5},
-            },
-            {
-              type: 'simple',
-              field: ['issues', 'priority'],
-              op: '>',
-              value: {type: 'value', value: 2},
-            },
-          ],
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'empty conjunctions removed',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [],
-          },
-          orderBy: [
-            [
-              ['issues', 'id'],
-              ['issues', 'name'],
-            ],
-            'asc',
-          ],
-        },
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'OR',
-            conditions: [],
-          },
-          orderBy: [
-            [
-              ['issues', 'id'],
-              ['issues', 'name'],
-            ],
-            'asc',
-          ],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        orderBy: [
-          [
-            ['issues', 'id'],
-            ['issues', 'name'],
-          ],
-          'asc',
-        ],
-      },
-    },
-    {
-      name: 'multiple conditions with same fields and operator',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '<',
-                value: {type: 'value', value: 5},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '<',
-                value: {type: 'value', value: 3},
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '<',
-                value: {type: 'value', value: 3},
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '<',
-                value: {type: 'value', value: 5},
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
-            {
-              type: 'simple',
-              field: ['issues', 'priority'],
-              op: '<',
-              value: {type: 'value', value: 3},
-            },
-            {
-              type: 'simple',
-              field: ['issues', 'priority'],
-              op: '<',
-              value: {type: 'value', value: 5},
-            },
-          ],
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'nested conditions',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'simple',
-                field: ['issues', 'id'],
-                op: '=',
-                value: {type: 'value', value: 1234},
-              },
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'id'],
-                op: '=',
-                value: {type: 'value', value: 1234},
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
-            {
-              type: 'simple',
-              field: ['issues', 'id'],
-              op: '=',
-              value: {type: 'value', value: 1234},
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'name'],
-                  op: '=',
-                  value: {type: 'value', value: 'foobar'},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'priority'],
-                  op: '>',
-                  value: {type: 'value', value: 2},
-                },
-              ],
-            },
-          ],
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'equivalent nested conjunctions',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'name'],
-                  op: '=',
-                  value: {type: 'value', value: 'foobar'},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'priority'],
-                  op: '>',
-                  value: {type: 'value', value: 2},
-                },
-              ],
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'name'],
-                  op: '=',
-                  value: {type: 'value', value: 'foobar'},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'priority'],
-                  op: '>',
-                  value: {type: 'value', value: 2},
-                },
-              ],
-            },
-          ],
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'conjunction comparison',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                ],
-              },
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                ],
-              },
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'id'],
-                  op: '=',
-                  value: {type: 'value', value: 1234},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'name'],
-                  op: '=',
-                  value: {type: 'value', value: 'foobar'},
-                },
-              ],
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'id'],
-                  op: '=',
-                  value: {type: 'value', value: 1234},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'priority'],
-                  op: '>',
-                  value: {type: 'value', value: 2},
-                },
-              ],
-            },
-          ],
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'conjunction fallback sorting to length',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                ],
-              },
-              {
-                type: 'conjunction',
-                op: 'OR',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'id'],
-                    op: '=',
-                    value: {type: 'value', value: 1234},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'id'],
-                  op: '=',
-                  value: {type: 'value', value: 1234},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'name'],
-                  op: '=',
-                  value: {type: 'value', value: 'foobar'},
-                },
-              ],
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'id'],
-                  op: '=',
-                  value: {type: 'value', value: 1234},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'name'],
-                  op: '=',
-                  value: {type: 'value', value: 'foobar'},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'priority'],
-                  op: '>',
-                  value: {type: 'value', value: 2},
-                },
-              ],
-            },
-          ],
-        },
-        orderBy: [[['issues', 'id']], 'asc'],
-      },
-    },
-    {
-      name: 'condition flattening',
-      asts: [
-        {
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'AND',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'priority'],
-                    op: '>',
-                    value: {type: 'value', value: 2},
-                  },
-                  {
-                    type: 'conjunction',
-                    op: 'OR',
-                    conditions: [
-                      {
-                        type: 'simple',
-                        field: ['issues', 'a'],
-                        op: '=',
-                        value: {type: 'value', value: 'bc'},
-                      },
-                      {
-                        type: 'conjunction',
-                        op: 'OR',
-                        conditions: [
-                          {
-                            type: 'simple',
-                            field: ['issues', 'doo'],
-                            op: '>',
-                            value: {type: 'value', value: '23'},
-                          },
-                          {
-                            type: 'simple',
-                            field: ['issues', 'dah'],
-                            op: '<',
-                            value: {type: 'value', value: '56'},
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'id'],
-                op: '=',
-                value: {type: 'value', value: 1234},
-              },
-              {
-                type: 'conjunction',
-                op: 'AND',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'foo'],
-                    op: '=',
-                    value: {type: 'value', value: 'bar'},
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'bar'],
-                    op: '>',
-                    value: {type: 'value', value: 23},
-                  },
-                  {
-                    type: 'conjunction',
-                    op: 'OR',
-                    conditions: [
-                      {
-                        type: 'conjunction',
-                        op: 'AND',
-                        conditions: [
-                          {
-                            type: 'simple',
-                            field: ['issues', 'zzz'],
-                            op: '!=',
-                            value: {type: 'value', value: 48},
-                          },
-                          {
-                            type: 'simple',
-                            field: ['issues', 'xyz'],
-                            op: '!=',
-                            value: {type: 'value', value: 488},
-                          },
-                        ],
-                      },
-                      {
-                        type: 'simple',
-                        field: ['issues', 'ac'],
-                        op: '>',
-                        value: {type: 'value', value: 'dc'},
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-        {
-          // AST with different but equivalent nesting of AND's and OR's
-          table: 'issues',
-          select: [
-            [['issues', 'id'], 'i'],
-            [['issues', 'name'], 'n'],
-          ],
-          where: {
-            type: 'conjunction',
-            op: 'AND',
-            conditions: [
-              {
-                type: 'conjunction',
-                op: 'AND',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'name'],
-                    op: '=',
-                    value: {type: 'value', value: 'foobar'},
-                  },
-                  {
-                    type: 'conjunction',
-                    op: 'OR',
-                    conditions: [
-                      {
-                        type: 'simple',
-                        field: ['issues', 'dah'],
-                        op: '<',
-                        value: {type: 'value', value: '56'},
-                      },
-                      {
-                        type: 'conjunction',
-                        op: 'OR',
-                        conditions: [
-                          {
-                            type: 'simple',
-                            field: ['issues', 'doo'],
-                            op: '>',
-                            value: {type: 'value', value: '23'},
-                          },
-                          {
-                            type: 'simple',
-                            field: ['issues', 'a'],
-                            op: '=',
-                            value: {type: 'value', value: 'bc'},
-                          },
-                        ],
-                      },
-                      {
-                        // Empty Conjunctions should be removed.
-                        type: 'conjunction',
-                        op: 'AND',
-                        conditions: [],
-                      },
-                    ],
-                  },
-                  {
-                    // Single-condition conjunctions should also be flattened.
-                    type: 'conjunction',
-                    op: 'OR',
-                    conditions: [
-                      {
-                        type: 'conjunction',
-                        op: 'AND',
-                        conditions: [
-                          {
-                            type: 'simple',
-                            field: ['issues', 'id'],
-                            op: '=',
-                            value: {type: 'value', value: 1234},
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                  {
-                    type: 'simple',
-                    field: ['issues', 'bar'],
-                    op: '>',
-                    value: {type: 'value', value: 23},
-                  },
-                ],
-              },
-              {
-                type: 'simple',
-                field: ['issues', 'priority'],
-                op: '>',
-                value: {type: 'value', value: 2},
-              },
-              {
-                type: 'conjunction',
-                op: 'AND',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: ['issues', 'foo'],
-                    op: '=',
-                    value: {type: 'value', value: 'bar'},
-                  },
-                  {
-                    type: 'conjunction',
-                    op: 'OR',
-                    conditions: [
-                      {
-                        type: 'simple',
-                        field: ['issues', 'ac'],
-                        op: '>',
-                        value: {type: 'value', value: 'dc'},
-                      },
-                      {
-                        type: 'conjunction',
-                        op: 'AND',
-                        conditions: [
-                          {
-                            type: 'simple',
-                            field: ['issues', 'zzz'],
-                            op: '!=',
-                            value: {type: 'value', value: 48},
-                          },
-                          {
-                            type: 'simple',
-                            field: ['issues', 'xyz'],
-                            op: '!=',
-                            value: {type: 'value', value: 488},
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: [[['issues', 'id']], 'asc'],
-        },
-      ],
-      normalized: {
-        // Flattened conditions.
-        table: 'issues',
-        select: [
-          [['issues', 'id'], 'i'],
-          [['issues', 'name'], 'n'],
-        ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
             {
               type: 'simple',
               field: ['issues', 'bar'],
               op: '>',
               value: {type: 'value', value: 23},
             },
-            {
-              type: 'simple',
-              field: ['issues', 'foo'],
-              op: '=',
-              value: {type: 'value', value: 'bar'},
-            },
-            {
-              type: 'simple',
-              field: ['issues', 'id'],
-              op: '=',
-              value: {type: 'value', value: 1234},
-            },
-            {
-              type: 'simple',
-              field: ['issues', 'name'],
-              op: '=',
-              value: {type: 'value', value: 'foobar'},
-            },
-            {
-              type: 'simple',
-              field: ['issues', 'priority'],
-              op: '>',
-              value: {type: 'value', value: 2},
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'a'],
-                  op: '=',
-                  value: {type: 'value', value: 'bc'},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'dah'],
-                  op: '<',
-                  value: {type: 'value', value: '56'},
-                },
-                {
-                  type: 'simple',
-                  field: ['issues', 'doo'],
-                  op: '>',
-                  value: {type: 'value', value: '23'},
-                },
-              ],
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: [
-                {
-                  type: 'simple',
-                  field: ['issues', 'ac'],
-                  op: '>',
-                  value: {type: 'value', value: 'dc'},
-                },
-                {
-                  type: 'conjunction',
-                  op: 'AND',
-                  conditions: [
-                    {
-                      type: 'simple',
-                      field: ['issues', 'xyz'],
-                      op: '!=',
-                      value: {type: 'value', value: 488},
-                    },
-                    {
-                      type: 'simple',
-                      field: ['issues', 'zzz'],
-                      op: '!=',
-                      value: {type: 'value', value: 48},
-                    },
-                  ],
-                },
-              ],
-            },
           ],
         },
-        orderBy: [[['issues', 'id']], 'asc'],
       },
     },
   ];
