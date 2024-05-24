@@ -17,8 +17,8 @@ async function preload(z: Zero<Collections>) {
   const allLabelsPreload = z.query.label.select('id', 'name');
   allLabelsPreload.prepare().preload();
 
-  const preloadIssueLimit = 10_000;
-  const preloadIssueIncrement = 500;
+  const preloadIssueLimit = 5_000;
+  const preloadIssueIncrement = 1000;
   const issueBaseQuery = z.query.issue
     .leftJoin(
       z.query.issueLabel,
@@ -135,7 +135,9 @@ async function init() {
   }) {
     return (
       <div className="repliear">
-        <ZeroProvider zero={zero}>hello</ZeroProvider>
+        <ZeroProvider zero={zero}>
+          <App undoManager={undoManager}></App>
+        </ZeroProvider>
       </div>
     );
   }
