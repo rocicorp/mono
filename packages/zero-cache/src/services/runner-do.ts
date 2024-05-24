@@ -16,11 +16,11 @@ export class ServiceRunnerDO {
     state: DurableObjectState,
     env: ServiceRunnerEnv,
   ) {
-    this.#serviceRunner = new ServiceRunner(logSink, logLevel, state, env);
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ServiceRunnerDO',
     );
+    this.#serviceRunner = new ServiceRunner(lc, state, env, false);
     this.#lc = lc;
     void (async () => {
       const traceResponse = await fetch('https://cloudflare.com/cdn-cgi/trace');
