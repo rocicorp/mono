@@ -683,6 +683,17 @@ describe('view-syncer/cvr', () => {
               },
             ],
             [
+              `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+              {
+                record: {
+                  id: ROW_ID2,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash']},
+                },
+                contents: {id: 'same column selection as twoHash'},
+              },
+            ],
+            [
               `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
               {
                 record: {
@@ -703,6 +714,15 @@ describe('view-syncer/cvr', () => {
             op: 'merge',
             id: ROW_ID1,
             contents: {id: 'new version patch', name: 'because of new field'},
+          },
+        },
+        {
+          toVersion: {stateVersion: '1a0'},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID2,
+            contents: {id: 'same column selection as twoHash'},
           },
         },
         {
@@ -824,6 +844,12 @@ describe('view-syncer/cvr', () => {
           id: ROW_ID1,
           patchVersion: updated.version,
           queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+          rowVersion: '03',
+        } satisfies RowRecord,
+        [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
+          id: ROW_ID2,
+          patchVersion: {stateVersion: '1a0'},
+          queriedColumns: {id: ['twoHash', 'oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
