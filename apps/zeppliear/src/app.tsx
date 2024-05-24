@@ -2,7 +2,7 @@ import type {UndoManager} from '@rocicorp/undo';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {pickBy} from 'lodash';
-import {memo, useCallback, useState} from 'react';
+import {memo, useCallback, useEffect, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
 import {getIssueOrder, getViewStatuses} from './filters.js';
@@ -71,6 +71,10 @@ const App = ({undoManager}: AppProps) => {
     useQuery(
       zero.query.member.select('id').where('name', '=', activeUserName),
     ).at(0)?.id ?? '';
+
+  useEffect(() => {
+    console.debug({activeUserName, userID});
+  }, [userID]);
 
   const issueQuery = zero.query.issue;
 
