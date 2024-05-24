@@ -20,6 +20,7 @@ export class JoinOperatorBase<
     v: Version,
     inputA: Multiset<AValue> | undefined,
     inputB: Multiset<BValue> | undefined,
+    isHistory: boolean,
   ) => Multiset<O>;
   readonly #output: DifferenceStream<O>;
   readonly #buffer: {
@@ -43,6 +44,7 @@ export class JoinOperatorBase<
       v: Version,
       inputA: Multiset<AValue> | undefined,
       inputB: Multiset<BValue> | undefined,
+      isHistory: boolean,
     ) => Multiset<O>,
     aJoinColumn: Selector,
   ) {
@@ -77,7 +79,7 @@ export class JoinOperatorBase<
       if (this.#buffer.inputB !== undefined) {
         this.#output.newDifference(
           version,
-          this.#fn(version, data, this.#buffer.inputB),
+          this.#fn(version, data, this.#buffer.inputB, true),
           this.#getReply(reply),
         );
         this.#buffer.inputB = undefined;
@@ -88,7 +90,7 @@ export class JoinOperatorBase<
     } else {
       this.#output.newDifference(
         version,
-        this.#fn(version, data, undefined),
+        this.#fn(version, data, undefined, false),
         undefined,
       );
     }
@@ -103,7 +105,7 @@ export class JoinOperatorBase<
       if (this.#buffer.inputA !== undefined) {
         this.#output.newDifference(
           version,
-          this.#fn(version, this.#buffer.inputA, data),
+          this.#fn(version, this.#buffer.inputA, data, true),
           this.#getReply(),
         );
         this.#buffer.inputA = undefined;
@@ -114,7 +116,7 @@ export class JoinOperatorBase<
     } else {
       this.#output.newDifference(
         version,
-        this.#fn(version, undefined, data),
+        this.#fn(version, undefined, data, false),
         undefined,
       );
     }

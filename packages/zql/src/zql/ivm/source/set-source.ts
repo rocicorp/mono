@@ -1,5 +1,5 @@
 import {must} from 'shared/src/must.js';
-import type {Ordering, Selector} from '../../ast/ast.js';
+import type {Ordering, Primitive, Selector} from '../../ast/ast.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {
   createPullResponseMessage,
@@ -15,6 +15,7 @@ import type {ISortedMap} from 'sorted-btree-roci';
 import BTree from 'sorted-btree-roci';
 import {gen} from '../../util/iterables.js';
 import {makeComparator} from '../compare.js';
+import {SourceHashIndex} from './source-hash-index.js';
 
 /**
  * A source that remembers what values it contains.
@@ -31,6 +32,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     (data: ISortedMap<T, undefined>, v: Version) => void
   >();
   readonly #sorts = new Map<string, SetSource<T>>();
+  readonly #hashes = new Map<string, SourceHashIndex<Primitive, T>>();
   readonly comparator: Comparator<T>;
   readonly #name: string;
   readonly #order: Ordering;
@@ -157,6 +159,10 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       alternateSort.add(v);
     }
 
+    for (const hash of this.#hashes.values()) {
+      hash.add(v);
+    }
+
     return this;
   }
 
@@ -166,6 +172,10 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     for (const alternateSort of this.#sorts.values()) {
       alternateSort.delete(v);
+    }
+
+    for (const hash of this.#hashes.values()) {
+      hash.delete(v);
     }
 
     return this;
@@ -342,6 +352,18 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     this.#sorts.set(key, source);
     return [source, [fields, ordering[1]]];
+  }
+
+  // TODO: in the future we should collapse hash and sorted indices
+  // so one can stand in for the other and we don't need to maintain both.
+  getOrCreateAndMaintainNewHashIndex(column: Selector) {
+    const existing = this.#hashes.get(column[1]);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const index = new SourceHashIndex<Primitive, T>(column);
+    this.#hashes.set(column[1], index);
+    return index;
   }
 
   awaitSeeding(): PromiseLike<void> {
