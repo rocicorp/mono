@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Selector, SimpleOperator} from '../../ast/ast.js';
+import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
 import type {Multiset} from '../multiset.js';
 import type {
   JoinResult,
@@ -29,6 +29,7 @@ import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
 import {must} from 'shared/src/must.js';
 import type {Entity} from '../../schema/entity-schema.js';
+import type {Source} from '../source/source.js';
 
 export type Listener<T> = {
   newDifference: (
@@ -183,16 +184,23 @@ export class DifferenceStream<T extends PipelineEntity> {
     BAlias extends string | undefined,
   >(
     args: Omit<JoinArgs<T, BValue, AAlias, BAlias>, 'a' | 'output'>,
+    sourceProvider: (
+      sourceName: string,
+      order: Ordering | undefined,
+    ) => Source<PipelineEntity>,
   ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
     const stream = new DifferenceStream<
       JoinResult<T, BValue, AAlias, BAlias>
     >();
     return stream.setUpstream(
-      new LeftJoinOperator({
-        ...args,
-        a: this,
-        output: stream,
-      }),
+      new LeftJoinOperator(
+        {
+          ...args,
+          a: this,
+          output: stream,
+        },
+        sourceProvider,
+      ),
     );
   }
 

@@ -10,7 +10,6 @@ import {
 import type {Entry} from '../ivm/multiset.js';
 import type {Source, SourceInternal} from '../ivm/source/source.js';
 import type {PipelineEntity, Version} from '../ivm/types.js';
-import type {Entity} from '../schema/entity-schema.js';
 import type {Context} from './context.js';
 
 export class TestContext implements Context {
@@ -19,10 +18,10 @@ export class TestContext implements Context {
 
   subscriptionsChangedLog: {type: 'added' | 'removed'; ast: AST}[] = [];
 
-  getSource<T extends Entity>(name: string): Source<T> {
+  getSource<T extends PipelineEntity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {
       const source = this.materialite.newSetSource(
-        (l: T, r: T) => compareUTF8(l.id, r.id),
+        (l: T, r: T) => compareUTF8(l.id as string, r.id as string),
         [[[name, 'id']], 'asc'],
         name,
       ) as unknown as Source<PipelineEntity>;
@@ -50,7 +49,7 @@ export class InfiniteSourceContext implements Context {
     this.#iterables = iterables;
   }
 
-  getSource<X extends Entity>(name: string): Source<X> {
+  getSource<X extends PipelineEntity>(name: string): Source<X> {
     const existing = this.#sources.get(name);
     if (existing) {
       return existing as unknown as Source<X>;
@@ -64,7 +63,7 @@ export class InfiniteSourceContext implements Context {
       );
     } else {
       source = this.materialite.newSetSource<X>(
-        (l: X, r: X) => compareUTF8(l.id, r.id),
+        (l: X, r: X) => compareUTF8(l.id as string, r.id as string),
         [[[name, 'id']], 'asc'],
         name,
       ) as unknown as Source<PipelineEntity>;
@@ -152,6 +151,10 @@ class InfiniteSource<T extends PipelineEntity> implements Source<T> {
     );
     this.#materialite.addDirtySource(this.#internal);
     return this;
+  }
+
+  getOrCreateAndMaintainNewHashIndex(): never {
+    throw new Error('Method not implemented.');
   }
 
   processMessage(message: Request): void {

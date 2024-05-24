@@ -5,9 +5,9 @@ import type {Context} from '../context/context.js';
 import {makeComparator} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import type {Source} from '../ivm/source/source.js';
+import type {PipelineEntity} from '../ivm/types.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
-import type {Entity} from '../schema/entity-schema.js';
 import type {MakeHumanReadable} from './entity-query.js';
 
 export interface IStatement<TReturn> {
@@ -91,7 +91,7 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   const {orderBy, limit} = ast;
   assert(orderBy);
 
-  const usedSources: Source<Entity>[] = [];
+  const usedSources: Source<PipelineEntity>[] = [];
   const pipeline = buildPipeline(
     (sourceName: string, order: Ordering | undefined) => {
       const source = context.getSource(sourceName, order);
