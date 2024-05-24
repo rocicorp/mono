@@ -124,7 +124,6 @@ export class LeftJoinOperator<
     inputB: Multiset<BValue> | undefined,
     isHistory: boolean,
   ) {
-    console.log('IS HISTORY?', isHistory, version, this.#lastVersion);
     if (this.#lastVersion !== version) {
       // TODO: all outstanding iterables _must_ be made invalid before processing a new version.
       // We should add some invariant in `joinOne` that checks if the version is still valid
@@ -155,7 +154,6 @@ export class LeftJoinOperator<
     // Why iterate in non-history? To get the deletes.
     // And to overlay the index for A to pick things up next time?
     if (inputB !== undefined && !isHistory) {
-      console.log('PROCESSING INPUT B', this.#joinArgs.bTable);
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
           const key = this.#getBJoinKey(entry[0]);
@@ -172,7 +170,6 @@ export class LeftJoinOperator<
     }
 
     if (inputA !== undefined) {
-      console.log('PROCESSING INPUT A', this.#joinArgs.aTable, isHistory);
       iterablesToReturn.push(
         genFlatMap(inputA, entry => {
           const key = this.#getAJoinKey(entry[0]);

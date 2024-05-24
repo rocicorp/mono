@@ -84,14 +84,23 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
                 undefined,
                 true,
               );
+              for (const hash of this.#hashes.values()) {
+                hash.add(val);
+              }
               ++i;
               continue;
             }
           }
           if (mult < 0) {
             this.#tree = this.#tree.without(val);
+            for (const hash of this.#hashes.values()) {
+              hash.delete(val);
+            }
           } else if (mult > 0) {
             this.#tree = this.#tree.with(val, undefined, true);
+            for (const hash of this.#hashes.values()) {
+              hash.add(val);
+            }
           }
         }
 
@@ -159,10 +168,6 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       alternateSort.add(v);
     }
 
-    for (const hash of this.#hashes.values()) {
-      hash.add(v);
-    }
-
     return this;
   }
 
@@ -172,10 +177,6 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     for (const alternateSort of this.#sorts.values()) {
       alternateSort.delete(v);
-    }
-
-    for (const hash of this.#hashes.values()) {
-      hash.delete(v);
     }
 
     return this;
@@ -201,12 +202,14 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     // TODO: invariant to ensure we are in a tx.
     for (const v of values) {
       this.#tree = this.#tree.with(v, undefined, true);
-    }
-    for (const hash of this.#hashes.values()) {
-      for (const v of this.#tree.keys()) {
+      for (const hash of this.#hashes.values()) {
         hash.add(v);
       }
+      for (const alternateSort of this.#sorts.values()) {
+        alternateSort.add(v);
+      }
     }
+
     this._materialite.addDirtySource(this.#internal);
 
     this.#seeded = true;
@@ -370,9 +373,12 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     }
     const index = new SourceHashIndex<K, T>(column);
     this.#hashes.set(column[1], index);
-    for (const v of this.#tree.keys()) {
-      index.add(v);
+    if (this.#seeded) {
+      for (const v of this.#tree.keys()) {
+        index.add(v);
+      }
     }
+
     return index;
   }
 

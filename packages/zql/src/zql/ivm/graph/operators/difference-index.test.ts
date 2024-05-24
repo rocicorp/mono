@@ -59,5 +59,5 @@ test('compact', () => {
 
   index.add('a', [1, 1]);
   index.compact(new Set(['a']));
-  expect(index.get('a')).toEqual([]);
+  expect(index.get('a')).toEqual(undefined);
 });
