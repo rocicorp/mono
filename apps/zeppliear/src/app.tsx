@@ -28,7 +28,7 @@ import {
   Member,
   createIssue,
   deleteIssueComment,
-  createIssueComment as createIssueComment,
+  createIssueComment,
   updateIssues,
   CommentCreationPartial,
 } from './issue.js';
