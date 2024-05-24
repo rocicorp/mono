@@ -13,7 +13,6 @@ import {
   useOrderByState,
   useViewState,
 } from './hooks/query-state-hooks.js';
-import {usePreloadQuery} from './hooks/use-preload-query.js';
 import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import IssueBoard from './issue-board.jsx';
@@ -92,49 +91,6 @@ const App = ({undoManager}: AppProps) => {
   const viewIssueCount = 0;
 
   const issuesProps = useIssuesProps(filteredQuery, issueQueryDeps, issueOrder);
-  // ========= pre-loads
-  const fields = [
-    'created',
-    'creatorID',
-    'description',
-    'id',
-    'kanbanOrder',
-    'priority',
-    'modified',
-    'status',
-    'title',
-  ] as const;
-  const preloadIssueLimit = 10_000;
-  const createdPreloadQuery = issueQuery
-    .select(...fields)
-    .limit(preloadIssueLimit)
-    .desc('created');
-  const modifiedPreloadQuery = issueQuery
-    .select(...fields)
-    .limit(preloadIssueLimit)
-    .desc('modified');
-  const statusPreloadQuery = issueQuery
-    .select(...fields)
-    .limit(preloadIssueLimit)
-    .desc('status', 'modified');
-  const priorityPreloadQuery = issueQuery
-    .select(...fields)
-    .limit(preloadIssueLimit)
-    .desc('priority', 'modified');
-
-  const allLabelPreloadQuery = zero.query.label.select('id', 'name');
-  const allIssueLabelPreloadQuery = zero.query.issueLabel.select(
-    'id',
-    'issueID',
-    'labelID',
-  );
-  usePreloadQuery(createdPreloadQuery);
-  usePreloadQuery(modifiedPreloadQuery);
-  usePreloadQuery(statusPreloadQuery);
-  usePreloadQuery(priorityPreloadQuery);
-  usePreloadQuery(allIssueLabelPreloadQuery);
-  usePreloadQuery(allLabelPreloadQuery);
-  // ========= end pre-loads
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
@@ -367,6 +323,7 @@ function filterQuery(
       agg.array('label.name', 'labels'),
     );
   if (filters.labelFilter) {
+    console.log('has labelFilters');
     // TODO: if `having` has been applied then selection
     // set should not be updated to remove what `having` operates against.
     filteredQuery = filteredQuery.having('labels', 'INTERSECTS', [
