@@ -135,6 +135,7 @@ export type SimpleCondition = {
  */
 export function normalizeAST(ast: AST): AST {
   const where = flattened(ast.where);
+  const having = flattened(ast.having);
   return {
     schema: ast.schema,
     table: ast.table,
@@ -161,13 +162,14 @@ export function normalizeAST(ast: AST): AST {
           );
         })
       : undefined,
-    where: where ? sorted(where) : undefined,
+    where: where ? sortedWhere(where) : undefined,
     joins: ast.joins?.map(join => ({...join, other: normalizeAST(join.other)})),
     groupBy: ast.groupBy
       ? [...ast.groupBy].sort(
           (l, r) => compareUTF8(l[0], r[0]) || compareUTF8(l[1], r[1]),
         )
       : undefined,
+    having: having ? sortedHaving(having) : undefined,
     // The order of ORDER BY expressions is semantically significant, so it
     // is left as is (i.e. not sorted).
     orderBy: ast.orderBy,
@@ -186,7 +188,9 @@ export function normalizeAST(ast: AST): AST {
  * Also flattens singleton Conjunctions regardless of operator, and removes
  * empty Conjunctions.
  */
-function flattened(cond: Condition | undefined): Condition | undefined {
+function flattened<T extends Condition | HavingCondition>(
+  cond: T | undefined,
+): T | undefined {
   if (cond === undefined) {
     return undefined;
   }
@@ -203,13 +207,13 @@ function flattened(cond: Condition | undefined): Condition | undefined {
     case 0:
       return undefined;
     case 1:
-      return conditions[0];
+      return conditions[0] as T;
     default:
       return {
         type: cond.type,
         op: cond.op,
         conditions,
-      };
+      } as T;
   }
 }
 
@@ -219,30 +223,33 @@ function flattened(cond: Condition | undefined): Condition | undefined {
  * not defined; specifically, the query engine chooses the best order for them:
  * https://www.postgresql.org/docs/current/sql-expressions.html#SYNTAX-EXPRESS-EVAL
  */
-function sorted(cond: Condition): Condition {
+function sortedWhere(cond: Condition): Condition {
   if (cond.type === 'simple') {
     return cond;
   }
   return {
     type: cond.type,
     op: cond.op,
-    conditions: cond.conditions.map(c => sorted(c)).sort(cmp),
+    conditions: cond.conditions.map(c => sortedWhere(c)).sort(cmpCondition),
   };
 }
 
-function cmp(a: Condition, b: Condition): number {
+function cmpCondition<T extends Condition | HavingCondition>(
+  a: T,
+  b: T,
+): number {
   if (a.type === 'simple') {
     if (b.type !== 'simple') {
       return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
     }
     return (
-      compareUTF8(a.field[0], b.field[0]) ||
-      compareUTF8(a.field[1], b.field[1]) ||
-      compareUTF8(a.op, b.op) ||
+      compareUTF8MaybeNull(a.field[0], b.field[0]) ||
+      compareUTF8MaybeNull(a.field[1], b.field[1]) ||
+      compareUTF8MaybeNull(a.op, b.op) ||
       // Comparing the same field with the same op more than once doesn't make logical
       // sense, but is technically possible. Assume the values are of the same type and
       // sort by their String forms.
-      compareUTF8(String(a.value.value), String(b.value.value))
+      compareUTF8MaybeNull(String(a.value.value), String(b.value.value))
     );
   }
   if (b.type === 'simple') {
@@ -250,7 +257,7 @@ function cmp(a: Condition, b: Condition): number {
   }
   // For comparing two conjunctions, compare the ops first, and then compare
   // the conjunctions member-wise.
-  const val = compareUTF8(a.op, b.op);
+  const val = compareUTF8MaybeNull(a.op, b.op);
   if (val !== 0) {
     return val;
   }
@@ -259,13 +266,43 @@ function cmp(a: Condition, b: Condition): number {
     l < a.conditions.length && r < b.conditions.length;
     l++, r++
   ) {
-    const val = cmp(a.conditions[l], b.conditions[r]);
+    const val = cmpCondition(a.conditions[l], b.conditions[r]);
     if (val !== 0) {
       return val;
     }
   }
   // prefixes first
   return a.conditions.length - b.conditions.length;
+}
+
+/**
+ * Returns a sorted version of the Conditions for deterministic hashing / deduping.
+ * This is semantically valid because the order of evaluation of subexpressions is
+ * not defined; specifically, the query engine chooses the best order for them:
+ * https://www.postgresql.org/docs/current/sql-expressions.html#SYNTAX-EXPRESS-EVAL
+ */
+function sortedHaving(cond: HavingCondition): HavingCondition {
+  if (cond.type === 'simple') {
+    return cond;
+  }
+  return {
+    type: cond.type,
+    op: cond.op,
+    conditions: cond.conditions.map(c => sortedHaving(c)).sort(cmpCondition),
+  };
+}
+
+function compareUTF8MaybeNull(a: string | null, b: string | null): number {
+  if (a !== null && b !== null) {
+    return compareUTF8(a, b);
+  }
+  if (b !== null) {
+    return -1;
+  }
+  if (a !== null) {
+    return 1;
+  }
+  return 0;
 }
 
 export function isJoinWithQuery(join: Join) {
