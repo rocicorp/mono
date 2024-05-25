@@ -99,6 +99,7 @@ function incrementalPreload<F extends FromSet, R>(
 
 async function init() {
   const z = new Zero({
+    logLevel: 'debug',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: 'anon',
     queries: {
