@@ -9,6 +9,7 @@ import {
   useOrderByState,
   usePriorityFilterState,
   useStatusFilterState,
+  useTextSearchState,
 } from './hooks/query-state-hooks.js';
 import {Order, Priority, Status} from './issue.js';
 import SortOrderMenu from './sort-order-menu.jsx';
@@ -93,6 +94,7 @@ function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
   const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
   const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();
   const [labelFilters, setLabelFilterByParam] = useLabelFilterState();
+  const [textSearch, setTextSearch] = useTextSearchState();
   const title = getTitle(view);
 
   return (
@@ -130,6 +132,16 @@ function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
               labelFilters,
               setLabelFilterByParam,
             )}
+          />
+        </div>
+
+        <div className="flex grow items-center mx-3">
+          <input
+            type="text"
+            className="grow border-gray-700 bg-gray-700 opacity-75 hover:opacity-100 focus:opacity-100"
+            placeholder="Search"
+            value={textSearch ?? ''}
+            onChange={e => setTextSearch(e.target.value)}
           />
         </div>
 

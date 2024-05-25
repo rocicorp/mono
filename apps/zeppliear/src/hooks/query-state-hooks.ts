@@ -84,10 +84,15 @@ export function useIssueDetailState() {
   return useQueryState('iss', identityProcessor);
 }
 
+export function useTextSearchState() {
+  return useQueryState('q', identityProcessor);
+}
+
 export type FiltersState = {
   statusFilter: Set<Status> | null;
   priorityFilter: Set<Priority> | null;
   labelFilter: Set<string> | null;
+  textFilter: string | null;
   hasNonViewFilters: boolean;
 };
 
@@ -95,6 +100,7 @@ export function useFilters(): FiltersState {
   const [statusFilter] = useStatusFilterState();
   const [priorityFilter] = usePriorityFilterState();
   const [labelFilter] = useLabelFilterState();
+  const [textFilter] = useTextSearchState();
   const [view] = useViewState();
 
   return useMemo(() => {
@@ -107,7 +113,8 @@ export function useFilters(): FiltersState {
       statusFilter,
       priorityFilter,
       labelFilter,
+      textFilter,
       hasNonViewFilters,
     };
-  }, [statusFilter, priorityFilter, labelFilter, view]);
+  }, [statusFilter, priorityFilter, labelFilter, textFilter, view]);
 }
