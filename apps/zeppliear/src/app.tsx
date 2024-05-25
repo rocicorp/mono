@@ -335,6 +335,14 @@ function filterQuery(
     ]);
   }
 
+  if (filters.textFilter) {
+    filteredQuery = filteredQuery.where(
+      'issue.title',
+      'ILIKE',
+      `%${filters.textFilter}%`,
+    );
+  }
+
   return filteredQuery;
 }
 
