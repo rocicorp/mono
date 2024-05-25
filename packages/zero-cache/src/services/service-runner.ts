@@ -16,6 +16,7 @@ import {
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import {getDOLocation} from './location.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
 import {
   REGISTER_FILTERS_PATTERN,
@@ -137,7 +138,7 @@ export class ServiceRunner
 
   #getReplicatorStub(): ReplicatorStub {
     const id = this.#env.replicatorDO.idFromName(REPLICATOR_ID);
-    const stub = this.#env.replicatorDO.get(id);
+    const stub = this.#env.replicatorDO.get(id, getDOLocation(this.#env));
     return new ReplicatorStub(this.#lc, stub);
   }
 
