@@ -17,7 +17,7 @@ async function preload(z: Zero<Collections>) {
   const allLabelsPreload = z.query.label.select('id', 'name');
   allLabelsPreload.prepare().preload();
 
-  const preloadIssueLimit = 5_000;
+  const preloadIssueLimit = 3000;
   const preloadIssueIncrement = 1000;
   const issueBaseQuery = z.query.issue
     .leftJoin(
@@ -26,7 +26,10 @@ async function preload(z: Zero<Collections>) {
       'issue.id',
       'issueLabel.issueID',
     )
+<<<<<<< HEAD
     .leftJoin(z.query.label, 'label', 'issueLabel.labelID', 'label.id')
+=======
+>>>>>>> 076da0971 (feat(zeppliear): tweak preloads)
     .select(
       'issue.created',
       'issue.creatorID',
@@ -42,8 +45,8 @@ async function preload(z: Zero<Collections>) {
     .groupBy('issue.id');
 
   const issueSorts: Parameters<typeof issueBaseQuery.desc>[] = [
-    ['issue.created'],
     ['issue.modified'],
+    ['issue.created'],
     ['issue.status', 'issue.modified'],
     ['issue.priority', 'issue.modified'],
   ];
@@ -60,6 +63,8 @@ async function preload(z: Zero<Collections>) {
     stmt.preload();
     unsub();
   }
+
+  console.debug('COMPLETED PRELOAD');
 }
 
 function incrementalPreload<F extends FromSet, R>(

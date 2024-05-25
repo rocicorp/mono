@@ -39,35 +39,35 @@ function RawRow({
   const row = data.mustGetIssue(index);
   const issueID = row.issue.id;
 
-  // const zero = useZero<Collections>();
+  const zero = useZero<Collections>();
 
-  // const [timerFired, setTimerFired] = useState(false);
-  // useTimeout(() => {
-  //   console.log('Preloading issue', issueID);
-  //   setTimerFired(true);
-  // }, 500);
+  const [timerFired, setTimerFired] = useState(false);
+  useTimeout(() => {
+    console.log('Preloading issue', issueID);
+    setTimerFired(true);
+  }, 500);
 
-  // // preload for detail view
-  // const comments = useQuery(
-  //   zero.query.comment
-  //     .where('issueID', '=', issueID ?? '')
-  //     .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
-  //     .select(
-  //       'comment.id',
-  //       'comment.issueID',
-  //       'comment.created',
-  //       'comment.creatorID',
-  //       'comment.body',
-  //       'member.name',
-  //     )
-  //     .asc('comment.created'),
-  //   [issueID],
-  //   timerFired,
-  // );
+  // preload for detail view
+  const comments = useQuery(
+    zero.query.comment
+      .where('issueID', '=', issueID ?? '')
+      .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
+      .select(
+        'comment.id',
+        'comment.issueID',
+        'comment.created',
+        'comment.creatorID',
+        'comment.body',
+        'member.name',
+      )
+      .asc('comment.created'),
+    [issueID],
+    timerFired,
+  );
 
-  // if (comments.length > 0) {
-  //   console.log('issue row preloaded', issueID);
-  // }
+  if (comments.length > 0) {
+    console.log('issue row preloaded', issueID);
+  }
 
   return (
     <div style={style}>
