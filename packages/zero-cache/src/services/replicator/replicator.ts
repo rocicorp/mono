@@ -1,6 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -55,6 +56,13 @@ export const versionChangeSchema = v.object({
 export type VersionChange = v.Infer<typeof versionChangeSchema>;
 
 export interface Replicator {
+  /**
+   * Returns an opaque message for human-readable consumption. This is
+   * purely for ensuring that the Replicator has started at least once to
+   * bootstrap a new replica.
+   */
+  status(): Promise<ReadonlyJSONObject>;
+
   /**
    * Registers a set of InvalidationFilterSpecs.
    *
@@ -139,6 +147,10 @@ export class ReplicatorService implements Replicator, Service {
       txSerializer,
       invalidationFilters,
     );
+  }
+
+  status() {
+    return Promise.resolve({status: 'ok'});
   }
 
   async run() {
