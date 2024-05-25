@@ -4,8 +4,8 @@ import type {
 } from '@cloudflare/workers-types';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {timed} from 'shared/src/timed.js';
+import {getDOLocation} from './location.js';
 import type {ServiceRunnerEnv} from './service-runner.js';
-import {assert} from 'shared/src/asserts.js';
 
 export interface WorkerOptions {
   logSink: LogSink;
@@ -116,9 +116,7 @@ async function sendToRunnerDO(
   const {runnerDO} = env;
 
   const id = runnerDO.idFromName('runnerDO');
-  const locationHint = ctx.env.DO_LOCATION_HINT;
-  assertDOLocation(locationHint);
-  const stub = runnerDO.get(id, {locationHint});
+  const stub = runnerDO.get(id, getDOLocation(ctx.env));
 
   lc.debug?.(`Sending request ${request.url} to runnerDO`);
   const responseFromDO = await timed(lc.debug, 'runnerDO fetch', async () => {
@@ -166,27 +164,4 @@ async function workerFetch(
       status: 500,
     });
   }
-}
-
-const DO_LOCATION_HINTS: ReadonlySet<string> = new Set([
-  'wnam',
-  'enam',
-  'sam',
-  'weur',
-  'eeur',
-  'apac',
-  'oc',
-  'afr',
-  'me',
-]);
-
-function assertDOLocation(
-  val: string,
-): asserts val is DurableObjectLocationHint {
-  assert(
-    DO_LOCATION_HINTS.has(val),
-    `${val} is not a valid location hint value.  Supported values: ${[
-      ...DO_LOCATION_HINTS.values(),
-    ].join(',')}.`,
-  );
 }
