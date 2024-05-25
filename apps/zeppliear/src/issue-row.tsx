@@ -53,7 +53,7 @@ function IssueRow({
         ))}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
-        {formatDate(new Date(issue.modified))}
+        {formatDate(new Date(issue.modified), true)}
       </div>
     </div>
   );
