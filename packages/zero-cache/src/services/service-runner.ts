@@ -4,6 +4,7 @@ import type {
 } from '@cloudflare/workers-types';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import postgres from 'postgres';
+import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import type {JSONObject} from '../types/bigint-json.js';
@@ -16,7 +17,11 @@ import {
 } from './invalidation-watcher/invalidation-watcher.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
-import {REGISTER_FILTERS_PATTERN, VERSION_CHANGES_PATTERN} from './paths.js';
+import {
+  REGISTER_FILTERS_PATTERN,
+  REPLICATOR_STATUS_PATTERN,
+  VERSION_CHANGES_PATTERN,
+} from './paths.js';
 import type {ReplicatorRegistry} from './replicator/registry.js';
 import {
   RegisterInvalidationFiltersRequest,
@@ -90,6 +95,14 @@ export class ServiceRunner
       max: 4,
     });
     this.#runReplicator = runReplicator;
+
+    if (!runReplicator) {
+      // Ping the replicator to bootstrap the replication process for new replicas.
+      void this.#getReplicatorStub()
+        .status()
+        .then(res => lc.info?.(`Replicator status`, res))
+        .catch(e => lc.error?.('Error pinging replicator', e));
+    }
   }
 
   getInvalidationWatcher(): Promise<InvalidationWatcher> {
@@ -120,6 +133,10 @@ export class ServiceRunner
         'ReplicatorService',
       );
     }
+    return this.#getReplicatorStub();
+  }
+
+  #getReplicatorStub(): ReplicatorStub {
     const id = this.#env.replicatorDO.idFromName(REPLICATOR_ID);
     const stub = this.#env.replicatorDO.get(id);
     return new ReplicatorStub(this.#lc, stub);
@@ -141,10 +158,10 @@ export class ServiceRunner
       this.#warmedUpConnections = true;
       const start = Date.now();
       void Promise.all([
-        // Warm up 1 upstream connection for mutagen, and 2 replica connections for view syncing.
+        // Warm up 1 upstream connection for mutagen, and 4 replica connections for view syncing.
         // Note: These can be much larger when not limited to 6 TCP connections per DO.
         this.#upstream`SELECT 1`.simple().execute(),
-        ...Array.from({length: 2}, () =>
+        ...Array.from({length: 4}, () =>
           this.#replica`SELECT 1`.simple().execute(),
         ),
       ])
@@ -214,6 +231,20 @@ class ReplicatorStub implements Replicator {
   constructor(lc: LogContext, stub: Fetcher) {
     this.#lc = lc.withContext('stub', 'Replicator');
     this.#stub = stub;
+  }
+
+  async status() {
+    const lc = this.#lc.withContext('method', 'status');
+    const res = await this.#stub.fetch(
+      `https://unused.dev${REPLICATOR_STATUS_PATTERN.replace(
+        ':version',
+        'v0',
+      )}`,
+      {method: 'POST'},
+    );
+    const data = await res.json();
+    lc.debug?.('received', data);
+    return v.parse(data, jsonObjectSchema);
   }
 
   async registerInvalidationFilters(

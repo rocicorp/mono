@@ -1,7 +1,11 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {BaseContext, Router, bodyOnly, post} from 'cf-shared/src/router.js';
 import {streamOut} from '../types/streams.js';
-import {REGISTER_FILTERS_PATTERN, VERSION_CHANGES_PATTERN} from './paths.js';
+import {
+  REGISTER_FILTERS_PATTERN,
+  REPLICATOR_STATUS_PATTERN,
+  VERSION_CHANGES_PATTERN,
+} from './paths.js';
 import {registerInvalidationFiltersRequest} from './replicator/replicator.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
@@ -34,7 +38,13 @@ export class ReplicatorDO {
   #initRoutes() {
     this.#router.register(REGISTER_FILTERS_PATTERN, this.#registerFilters);
     this.#router.register(VERSION_CHANGES_PATTERN, this.#versionChanges);
+    this.#router.register(REPLICATOR_STATUS_PATTERN, this.#status);
   }
+
+  #status = post().handleJSON(async () => {
+    const replicator = await this.#serviceRunner.getReplicator();
+    return replicator.status();
+  });
 
   #registerFilters = post()
     .with(bodyOnly(registerInvalidationFiltersRequest))
