@@ -70,8 +70,6 @@ export class ServiceRunner
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
-  #warmedUpConnections = false;
-
   constructor(
     lc: LogContext,
     state: DurableObjectState,
@@ -103,6 +101,7 @@ export class ServiceRunner
         .then(res => lc.info?.(`Replicator status`, res))
         .catch(e => lc.error?.('Error pinging replicator', e));
     }
+    this.#warmUpConnections();
   }
 
   getInvalidationWatcher(): Promise<InvalidationWatcher> {
@@ -143,7 +142,6 @@ export class ServiceRunner
   }
 
   getViewSyncer(clientGroupID: string): ViewSyncer {
-    this.#warmUpConnections();
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
@@ -154,25 +152,22 @@ export class ServiceRunner
   }
 
   #warmUpConnections() {
-    if (!this.#warmedUpConnections) {
-      this.#warmedUpConnections = true;
-      const start = Date.now();
-      void Promise.all([
-        // Warm up 1 upstream connection for mutagen, and 4 replica connections for view syncing.
-        // Note: These can be much larger when not limited to 6 TCP connections per DO.
-        this.#upstream`SELECT 1`.simple().execute(),
-        ...Array.from({length: 4}, () =>
-          this.#replica`SELECT 1`.simple().execute(),
-        ),
-      ])
-        .then(
-          () =>
-            this.#lc.info?.(
-              `warmed up db connections (${Date.now() - start} ms)`,
-            ),
-        )
-        .catch(e => this.#lc.error?.(`error warming up db connections`, e));
-    }
+    const start = Date.now();
+    void Promise.all([
+      // Warm up 1 upstream connection for mutagen, and 4 replica connections for view syncing.
+      // Note: These can be much larger when not limited to 6 TCP connections per DO.
+      this.#upstream`SELECT 1`.simple().execute(),
+      ...Array.from({length: 4}, () =>
+        this.#replica`SELECT 1`.simple().execute(),
+      ),
+    ])
+      .then(
+        () =>
+          this.#lc.info?.(
+            `warmed up db connections (${Date.now() - start} ms)`,
+          ),
+      )
+      .catch(e => this.#lc.error?.(`error warming up db connections`, e));
   }
 
   getMutagen(clientGroupID: string): Mutagen {
