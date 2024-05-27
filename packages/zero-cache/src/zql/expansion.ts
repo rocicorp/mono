@@ -221,6 +221,12 @@ export function expandSubqueries(
 ): AST {
   const {schema, select, where, joins, groupBy, orderBy, table, alias} = ast;
 
+  const aggregateRequiredColumns = groupBy && groupBy.length > 0;
+
+  // if it is a group by
+  // we must indicate that
+  // and pull required columns through aggregation.
+
   // Collect all references from SELECT, WHERE, and ON clauses
   const selectors = new Map<string, SelectorAndMaybeAlias[]>();
   const defaultFrom = alias ?? table;
@@ -258,7 +264,14 @@ export function expandSubqueries(
   orderBy?.[0].forEach(ordering => addSelector(ordering));
 
   // Add primary keys
-  requiredColumns(schema, table).forEach(selector => addSelector(selector));
+  if (aggregateRequiredColumns) {
+    addSelector(
+      getColumnsAsAggregate(table, requiredColumns(schema, table)),
+      `agg/required/${table}`,
+    );
+  } else {
+    requiredColumns(schema, table).forEach(selector => addSelector(selector));
+  }
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
@@ -319,6 +332,18 @@ function union(
     }
   }
   return ret;
+}
+
+function getColumnsAsAggregate(
+  table: string,
+  selectors: readonly Selector[],
+): Selector {
+  return [
+    table,
+    `jsonb_agg(jsonb_build_object(
+    ${selectors.map(c => `'${c[1]}', ${c[1]}`).join(',\n')}
+  ))`,
+  ];
 }
 
 function getWhereColumns(
