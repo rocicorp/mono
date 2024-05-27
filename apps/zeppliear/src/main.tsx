@@ -67,11 +67,12 @@ async function preload(z: Zero<Collections>) {
   console.debug('COMPLETED PRELOAD');
 }
 
-function incrementalPreload<F extends FromSet, R>(
+async function incrementalPreload<F extends FromSet, R>(
   description: string,
   baseQuery: EntityQuery<F, R[]>,
   targetLimit: number,
   increment: number,
+<<<<<<< HEAD
   currentLimit = 0,
 ): Promise<[ReturnType<typeof baseQuery.prepare>, () => void]> {
   if (currentLimit === 0) {
@@ -87,31 +88,33 @@ function incrementalPreload<F extends FromSet, R>(
   });
   const {resolve, promise} =
     resolver<[ReturnType<typeof baseQuery.prepare>, () => void]>();
+=======
+): Promise<() => void> {
+>>>>>>> 7db10734d (preload work)
   let done = false;
-  const unsub = createdPreloadStatement.subscribe(result => {
-    console.debug('incremental preload', description, 'got', {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  let lastCleanup: () => void = () => {};
+  for (let currentLimit = increment; !done; currentLimit += increment) {
+    currentLimit = Math.min(targetLimit, currentLimit);
+    const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
+    console.debug('incremental preload', description, {
       currentLimit,
       targetLimit,
-      resultLength: result.length,
     });
-    if (currentLimit >= targetLimit && !done) {
+    const {cleanup, preloaded} = createdPreloadStatement.preload();
+    lastCleanup?.();
+    lastCleanup = cleanup;
+    await preloaded;
+    if (currentLimit === targetLimit) {
       done = true;
+<<<<<<< HEAD
       console.debug('COMPLETED preload of', description);
       resolve([createdPreloadStatement, unsub]);
+=======
+>>>>>>> 7db10734d (preload work)
     }
-    if (result.length >= currentLimit && currentLimit < targetLimit) {
-      incrementalPreload(
-        description,
-        baseQuery,
-        targetLimit,
-        increment,
-        currentLimit + increment,
-      ).then(resolve);
-      unsub();
-      createdPreloadStatement.destroy();
-    }
-  });
-  return promise;
+  }
+  return lastCleanup;
 }
 
 async function init() {

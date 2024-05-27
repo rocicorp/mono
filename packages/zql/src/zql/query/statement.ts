@@ -10,6 +10,7 @@ import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
+import {resolver} from '@rocicorp/resolver';
 
 export interface IStatement<TReturn> {
   subscribe(cb: (value: MakeHumanReadable<TReturn>) => void): () => void;
@@ -36,11 +37,18 @@ export class Statement<Return> implements IStatement<Return> {
     return this.#materialization;
   }
 
-  preload() {
-    this.#context.subscriptionAdded(this.#ast);
-    return () => {
-      this.#context.subscriptionAdded(this.#ast);
-    };
+  preload(): {
+    cleanup: () => void;
+    preloaded: Promise<void>;
+  } {
+    const {resolve, promise: preloaded} = resolver();
+    const cleanup = this.#context.subscriptionAdded(this.#ast, got => {
+      console.log('got', got);
+      if (got) {
+        resolve();
+      }
+    });
+    return {cleanup, preloaded};
   }
 
   subscribe(
@@ -48,12 +56,12 @@ export class Statement<Return> implements IStatement<Return> {
     initialData = true,
   ) {
     const materialization = this.#getMaterialization();
-    this.#context.subscriptionAdded(this.#ast);
+    const subscriptionRemoved = this.#context.subscriptionAdded(this.#ast);
     const cleanupPromise = materialization.then(view =>
       view.on(cb, initialData),
     );
     const cleanup = () => {
-      this.#context.subscriptionRemoved(this.#ast);
+      subscriptionRemoved();
       void cleanupPromise.then(p => p());
     };
 

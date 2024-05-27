@@ -12,10 +12,47 @@ import IssueRow from './issue-row.jsx';
 import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
-import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import type {Collections} from './app.js';
 import {useTimeout} from './hooks/use-timeout.js';
+import type {Zero} from 'zero-client';
+
+const preloadQueue: string[] = [];
+let preloadQueueProcessing = false;
+function preloadComments(zero: Zero<Collections>, issueID: string) {
+  preloadQueue.push(issueID);
+  void processPreloadQueue(zero);
+}
+
+async function processPreloadQueue(zero: Zero<Collections>) {
+  if (preloadQueueProcessing) {
+    return;
+  }
+  preloadQueueProcessing = true;
+  try {
+    while (preloadQueue.length > 0) {
+      const issueID = preloadQueue.shift();
+      console.debug('preloading comments for', issueID);
+      await zero.query.comment
+        .where('issueID', '=', issueID ?? '')
+        .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
+        .select(
+          'comment.id',
+          'comment.issueID',
+          'comment.created',
+          'comment.creatorID',
+          'comment.body',
+          'member.name',
+        )
+        .asc('comment.created')
+        .prepare()
+        .preload().preloaded;
+      console.debug('preloaded comments for', issueID);
+    }
+  } finally {
+    preloadQueueProcessing = false;
+  }
+}
 
 interface Props {
   issuesProps: IssuesProps;
@@ -41,33 +78,10 @@ function RawRow({
 
   const zero = useZero<Collections>();
 
-  const [timerFired, setTimerFired] = useState(false);
   useTimeout(() => {
-    console.log('Preloading issue', issueID);
-    setTimerFired(true);
+    console.debug('Preloading issue', issueID);
+    preloadComments(zero, issueID);
   }, 500);
-
-  // preload for detail view
-  const comments = useQuery(
-    zero.query.comment
-      .where('issueID', '=', issueID ?? '')
-      .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
-      .select(
-        'comment.id',
-        'comment.issueID',
-        'comment.created',
-        'comment.creatorID',
-        'comment.body',
-        'member.name',
-      )
-      .asc('comment.created'),
-    [issueID],
-    timerFired,
-  );
-
-  if (comments.length > 0) {
-    console.log('issue row preloaded', issueID);
-  }
 
   return (
     <div style={style}>
