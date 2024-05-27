@@ -1,7 +1,6 @@
 import type {AST, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
-import {deaggregate} from '../../zql/deaggregation.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
   expandSelection,
@@ -79,8 +78,7 @@ export class QueryHandler {
         ];
       };
 
-      const deaggregated = deaggregate(q.ast);
-      const expanded = expandSelection(deaggregated, requiredColumns);
+      const expanded = expandSelection(q.ast, requiredColumns);
       const transformedAST = new Normalized(expanded);
       const transformationHash = transformedAST.hash();
 

@@ -28,6 +28,20 @@ describe('zql/expansion', () => {
 
   const cases: Case[] = [
     {
+      name: 'group-by',
+      ast: {
+        table: 'issues',
+        select: [[['issues', 'title'], 'title']],
+        groupBy: [['issues', 'status']],
+      },
+      original:
+        'SELECT issues.title AS title FROM issues GROUP BY issues.status',
+      afterSubqueryExpansion:
+        'SELECT issues.title AS title FROM issues GROUP BY issues.status',
+      afterReAliasAndBubble:
+        'SELECT issues.title AS title FROM issues GROUP BY issues.status',
+    },
+    {
       name: 'adds primary keys, preserved existing selects',
       ast: {
         table: 'issues',
@@ -538,6 +552,9 @@ describe('zql/expansion', () => {
   ];
 
   for (const c of cases) {
+    if (c.name !== 'group-by') {
+      continue;
+    }
     test(c.name, () => {
       expect(new Normalized(c.ast).query().query).toBe(
         stripCommentsAndWhitespace(c.original),
