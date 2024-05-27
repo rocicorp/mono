@@ -1,4 +1,4 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {AST, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
 import {deaggregate} from '../../zql/deaggregation.js';
@@ -63,14 +63,20 @@ export class QueryHandler {
     const transformed = new Map<string, TransformedQueryBuilder>();
 
     for (const q of queries) {
-      const requiredColumns = (schema = 'public', table: string) => {
+      const requiredColumns = (
+        schema = 'public',
+        table: string,
+      ): Selector[] => {
         const t = this.#tables.spec(schema, table);
         if (!t) {
           throw new InvalidQueryError(
             `Unknown table "${table}" in ${JSON.stringify(q.ast)}`,
           );
         }
-        return [...t.primaryKey, ZERO_VERSION_COLUMN_NAME];
+        return [
+          ...t.primaryKey.map(pk => [table, pk] as const),
+          [table, ZERO_VERSION_COLUMN_NAME] as const,
+        ];
       };
 
       const deaggregated = deaggregate(q.ast);

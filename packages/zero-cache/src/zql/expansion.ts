@@ -1,6 +1,5 @@
 import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import {union} from 'shared/src/set-utils.js';
 
 /**
  * Maps a table to the set of columns that must always be selected. For example,
@@ -10,7 +9,7 @@ import {union} from 'shared/src/set-utils.js';
 export type RequiredColumns = (
   schema: string | undefined,
   table: string,
-) => readonly string[];
+) => readonly Selector[];
 
 /**
  * The character used to separate the column aliases created during query expansion
@@ -170,10 +169,15 @@ export function expandSelection(
   ast: AST,
   requiredColumns: RequiredColumns,
 ): AST {
-  const expanded = expandSubqueries(ast, requiredColumns, new Set());
+  const expanded = expandSubqueries(ast, requiredColumns, []);
   const reAliased = reAliasAndBubbleSelections(expanded, new Map());
   return reAliased;
 }
+
+type SelectorAndMaybeAlias = {
+  selector: Selector;
+  aggregateAlias?: string | undefined;
+};
 
 /**
  * The first step of full query expansion is sub-query expansion. In this step,
@@ -213,50 +217,68 @@ export function expandSelection(
 export function expandSubqueries(
   ast: AST,
   requiredColumns: RequiredColumns,
-  externallyReferencedColumns: Set<string>,
+  externallyReferencedColumns: SelectorAndMaybeAlias[],
 ): AST {
   const {schema, select, where, joins, groupBy, orderBy, table, alias} = ast;
 
   // Collect all references from SELECT, WHERE, and ON clauses
-  const selectors = new Map<string, Set<string>>(); // Maps from alias to column aliases
+  const selectors = new Map<string, SelectorAndMaybeAlias[]>();
   const defaultFrom = alias ?? table;
-  const addSelector = (selector: string) => {
-    const parts = selector.split('.'); // "issues.id" or just "id"
-    const [from, col] = parts.length === 2 ? parts : [defaultFrom, selector];
-    selectors.get(from)?.add(col) ?? selectors.set(from, new Set([col]));
+  const addSelector = (
+    selector: Selector,
+    aggregateAlias?: string | undefined,
+  ) => {
+    const [from] = selector;
+    selectors.get(from)?.push({
+      selector,
+      aggregateAlias,
+    }) ??
+      selectors.set(from, [
+        {
+          selector,
+          aggregateAlias,
+        },
+      ]);
   };
   const selected = new Set<string>();
   // Add all referenced fields / selectors.
   select?.forEach(([selector, alias]) => {
-    addSelector(selector.join('.'));
+    addSelector(selector);
     selected.add(alias);
   });
-  selectors.get(defaultFrom)?.forEach(col => selected.add(col));
+  selectors
+    .get(defaultFrom)
+    ?.forEach(selector =>
+      selected.add(selector.aggregateAlias ?? selector.selector[1]),
+    );
 
-  getWhereColumns(where, new Set<string>()).forEach(addSelector);
-  joins?.forEach(({on}) => on.forEach(part => addSelector(part.join('.'))));
-  groupBy?.forEach(grouping => addSelector(grouping.join('.')));
-  orderBy?.[0].forEach(ordering => addSelector(ordering.join('.')));
-
-  function asSelector(col: string): Selector {
-    return (col.includes('.')
-      ? col.split('.')
-      : [defaultFrom, col]) as unknown as Selector;
-  }
+  getWhereColumns(where, []).forEach(selector => addSelector(selector));
+  joins?.forEach(({on}) => on.forEach(part => addSelector(part)));
+  groupBy?.forEach(grouping => addSelector(grouping));
+  orderBy?.[0].forEach(ordering => addSelector(ordering));
 
   // Add primary keys
-  requiredColumns(schema, table).forEach(addSelector);
+  requiredColumns(schema, table).forEach(selector => addSelector(selector));
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
-    externallyReferencedColumns,
-    selectors.get(defaultFrom) ?? new Set(),
+    externallyReferencedColumns.map(sel => ({
+      selector: [defaultFrom, sel.selector[1]],
+      aggregateAlias: sel.aggregateAlias,
+    })),
+    selectors.get(defaultFrom) ?? [],
   );
   // Now add SELECT expressions for referenced columns that weren't originally SELECT'ed.
   const additionalSelection = [...allFromReferences]
-    .filter(col => !selected.has(col))
+    .filter(sel => !selected.has(sel.aggregateAlias ?? sel.selector[1]))
     // set default from or split and set from.
-    .map(col => [asSelector(col), col] as [Selector, string]);
+    .map(
+      sel =>
+        [sel.selector, sel.aggregateAlias ?? sel.selector[1]] as [
+          Selector,
+          string,
+        ],
+    );
   const expandedSelect = [...(select ?? []), ...additionalSelection];
 
   return {
@@ -268,18 +290,43 @@ export function expandSubqueries(
         join.other,
         requiredColumns,
         // Send down references to the JOIN alias as the externallyReferencedColumns.
-        selectors.get(join.as) ?? new Set(),
+        selectors.get(join.as) ?? [],
       ),
     })),
   };
 }
 
+function union(
+  a: SelectorAndMaybeAlias[],
+  b: SelectorAndMaybeAlias[],
+): SelectorAndMaybeAlias[] {
+  const got = new Set<string>();
+  const ret: SelectorAndMaybeAlias[] = [];
+  const getKey = (sel: SelectorAndMaybeAlias) =>
+    sel.aggregateAlias ?? sel.selector[1];
+  for (const sel of a) {
+    const key = getKey(sel);
+    if (!got.has(key)) {
+      got.add(key);
+      ret.push(sel);
+    }
+  }
+  for (const sel of b) {
+    const key = getKey(sel);
+    if (!got.has(key)) {
+      got.add(key);
+      ret.push(sel);
+    }
+  }
+  return ret;
+}
+
 function getWhereColumns(
   where: Condition | undefined,
-  cols: Set<string>,
-): Set<string> {
+  cols: Selector[],
+): Selector[] {
   if (where?.type === 'simple') {
-    cols.add(where.field.join('.'));
+    cols.push(where.field);
   } else if (where?.type === 'conjunction') {
     where.conditions.forEach(condition => getWhereColumns(condition, cols));
   }
