@@ -21,7 +21,10 @@ describe('zql/expansion', () => {
   const REQUIRED_COLUMNS: RequiredColumns = (
     schema: string | undefined,
     table: string,
-  ) => [`${schema ? schema + '_' : ''}${table}_key`, `_0_version`];
+  ) => [
+    [table, `${schema ? schema + '_' : ''}${table}_key`],
+    [table, `_0_version`],
+  ];
 
   const cases: Case[] = [
     {
@@ -539,7 +542,7 @@ describe('zql/expansion', () => {
       expect(new Normalized(c.ast).query().query).toBe(
         stripCommentsAndWhitespace(c.original),
       );
-      const expanded = expandSubqueries(c.ast, REQUIRED_COLUMNS, new Set());
+      const expanded = expandSubqueries(c.ast, REQUIRED_COLUMNS, []);
       expect(new Normalized(expanded).query().query).toBe(
         stripCommentsAndWhitespace(c.afterSubqueryExpansion),
       );
