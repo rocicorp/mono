@@ -1,5 +1,6 @@
 import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
+import type {AggSelect, ServerAST} from './server-ast.js';
 
 /**
  * Maps a table to the set of columns that must always be selected. For example,
@@ -215,10 +216,10 @@ type SelectorAndMaybeAlias = {
  */
 // Exported for testing
 export function expandSubqueries(
-  ast: AST,
+  ast: ServerAST,
   requiredColumns: RequiredColumns,
   externallyReferencedColumns: SelectorAndMaybeAlias[],
-): AST {
+): ServerAST {
   const {schema, select, where, joins, groupBy, orderBy, table, alias} = ast;
 
   const aggregateRequiredColumns = groupBy && groupBy.length > 0;
@@ -264,11 +265,9 @@ export function expandSubqueries(
   orderBy?.[0].forEach(ordering => addSelector(ordering));
 
   // Add primary keys
+  let aggLift: AggSelect | undefined;
   if (aggregateRequiredColumns) {
-    addSelector(
-      getColumnsAsAggregate(table, requiredColumns(schema, table)),
-      `agg/required/${table}`,
-    );
+    aggLift = getColumnsAsAggregate(table, requiredColumns(schema, table));
   } else {
     requiredColumns(schema, table).forEach(selector => addSelector(selector));
   }
@@ -294,9 +293,11 @@ export function expandSubqueries(
     );
   const expandedSelect = [...(select ?? []), ...additionalSelection];
 
+  console.log('returning agg lift', aggLift);
   return {
     ...ast,
     select: expandedSelect,
+    aggLift: aggLift ? [aggLift] : undefined,
     joins: joins?.map(join => ({
       ...join,
       other: expandSubqueries(
@@ -337,13 +338,15 @@ function union(
 function getColumnsAsAggregate(
   table: string,
   selectors: readonly Selector[],
-): Selector {
-  return [
+): AggSelect {
+  return {
+    selectors: selectors.map(selector => ({
+      column: selector[1],
+      alias: selector[1],
+    })),
     table,
-    `jsonb_agg(jsonb_build_object(
-    ${selectors.map(c => `'${c[1]}', ${c[1]}`).join(',\n')}
-  ))`,
-  ];
+    alias: `agg/${table}`,
+  };
 }
 
 function getWhereColumns(
