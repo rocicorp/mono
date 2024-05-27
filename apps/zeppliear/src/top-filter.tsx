@@ -1,7 +1,6 @@
+import {noop} from 'lodash';
 import {memo} from 'react';
 import MenuIcon from './assets/icons/menu.svg?react';
-
-import {noop} from 'lodash';
 import FilterMenu from './filter-menu.js';
 import {createToggleFilterHandler} from './filters.js';
 import {

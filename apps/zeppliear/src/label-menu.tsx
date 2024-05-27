@@ -4,6 +4,7 @@ import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import {getLabelColor} from './issue.js';
 import {LabelTypeahead} from './label-typeahead.jsx';
+import {escapeLike} from './util/escape-like.js';
 
 export function LabelMenu({
   onSelectLabel,
@@ -28,7 +29,7 @@ function LabelsComponent({
 }) {
   const zero = useZero<Collections>();
   const query = filter
-    ? zero.query.label.where('name', 'ILIKE', `%${filter}%`)
+    ? zero.query.label.where('name', 'ILIKE', `%${escapeLike(filter)}%`)
     : zero.query.label;
   const labels = useQuery(query.select('name').limit(10), [filter]);
   return (

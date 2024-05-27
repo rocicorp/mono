@@ -20,6 +20,7 @@ import IssueDetail from './issue-detail.jsx';
 import IssueList from './issue-list.jsx';
 import {
   Comment,
+  CommentCreationPartial,
   Issue,
   IssueCreationPartial,
   IssueLabel,
@@ -27,14 +28,14 @@ import {
   Label,
   Member,
   createIssue,
-  deleteIssueComment,
   createIssueComment,
+  deleteIssueComment,
   updateIssues,
-  CommentCreationPartial,
 } from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
 import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
+import {escapeLike} from './util/escape-like.js';
 
 export type Collections = {
   member: Member;
@@ -339,7 +340,7 @@ function filterQuery(
     filteredQuery = filteredQuery.where(
       'issue.title',
       'ILIKE',
-      `%${filters.textFilter}%`,
+      `%${escapeLike(filters.textFilter)}%`,
     );
   }
 
