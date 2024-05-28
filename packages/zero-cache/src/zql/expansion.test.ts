@@ -31,19 +31,18 @@ describe('zql/expansion', () => {
       name: 'group-by',
       ast: {
         table: 'issues',
-        select: [[['issues', 'title'], 'title']],
+        select: [[['issues', 'status'], 'status']],
         groupBy: [['issues', 'status']],
       },
       original:
         'SELECT issues.status AS status FROM issues GROUP BY issues.status',
       afterSubqueryExpansion: `SELECT
-        issues.status AS status,
-        jsonb_agg(jsonb_build_object('issues_key', issues.issues_key, '_0_version', issues._0_version)) AS "issues/_0_agg_lift"
-      FROM issues GROUP BY issues.status`,
+        jsonb_agg(jsonb_build_object('status', issues.status, 'issues_key', issues.issues_key, '_0_version', issues._0_version))
+          AS "issues/_0_agg_lift"
+        FROM issues GROUP BY issues.status`,
       afterReAliasAndBubble: `SELECT
-        public.issues.status AS "public/issues/status",
-        jsonb_agg(jsonb_build_object('issues_key', issues.issues_key, '_0_version', issues._0_version)) AS "public/issues/_0_agg_lift"
-      FROM issues GROUP BY public.issues.status`,
+        jsonb_agg(jsonb_build_object('status', issues.status, 'issues_key', issues.issues_key, '_0_version', issues._0_version))
+          AS "public/issues/_0_agg_lift" FROM issues GROUP BY issues.status`,
     },
     {
       name: 'adds primary keys, preserved existing selects',

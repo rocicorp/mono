@@ -41,7 +41,11 @@ export class Normalized {
     // equivalent ASTs produce the same queries and hash identifier.
     this.#ast = withNormalizedServerFields(normalizeAST(ast), ast);
 
-    assert(this.#ast.select?.length || this.#ast.aggregate?.length);
+    assert(
+      this.#ast.select?.length ||
+        this.#ast.aggregate?.length ||
+        this.#ast.aggLift?.length,
+    );
 
     this.#query = this.#constructQuery(this.#ast);
   }

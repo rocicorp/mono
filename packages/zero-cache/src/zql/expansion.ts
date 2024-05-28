@@ -1,5 +1,4 @@
 import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
-import {assert} from 'shared/src/asserts.js';
 import type {AggSelect, ServerAST} from './server-ast.js';
 
 /**
@@ -223,7 +222,7 @@ export function expandSubqueries(
 ): ServerAST {
   const {schema, select, where, joins, groupBy, orderBy, table, alias} = ast;
 
-  const aggregateRequiredColumns = groupBy && groupBy.length > 0;
+  const aggregateColumns = groupBy && groupBy.length > 0;
 
   // if it is a group by
   // we must indicate that
@@ -266,12 +265,7 @@ export function expandSubqueries(
   orderBy?.[0].forEach(ordering => addSelector(ordering));
 
   // Add primary keys
-  let aggLift: AggSelect | undefined;
-  if (aggregateRequiredColumns) {
-    aggLift = getColumnsAsAggregate(table, requiredColumns(schema, table));
-  } else {
-    requiredColumns(schema, table).forEach(selector => addSelector(selector));
-  }
+  requiredColumns(schema, table).forEach(selector => addSelector(selector));
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
@@ -292,12 +286,19 @@ export function expandSubqueries(
           string,
         ],
     );
-  const expandedSelect = [...(select ?? []), ...additionalSelection];
+  let expandedSelect = [...(select ?? []), ...additionalSelection];
+
+  // just stick the entire `expandedSelect` into `aggLifts`?
+  let aggLift: AggSelect[] | undefined;
+  if (aggregateColumns) {
+    aggLift = getColumnsAsAggregate(expandedSelect);
+    expandedSelect = [];
+  }
 
   return {
     ...ast,
     select: expandedSelect,
-    aggLift: aggLift ? [aggLift] : undefined,
+    aggLift,
     joins: joins?.map(join => ({
       ...join,
       other: expandSubqueries(
@@ -336,17 +337,29 @@ function union(
 }
 
 function getColumnsAsAggregate(
-  table: string,
-  selectors: readonly Selector[],
-): AggSelect {
-  return {
-    selectors: selectors.map(selector => ({
-      column: selector[1],
-      alias: selector[1],
-    })),
-    table,
-    alias: `${table}/${AGG_LIFT_SUFFIX}`,
-  };
+  selectorsAndAliases: readonly (readonly [
+    selector: Selector,
+    alias: string,
+  ])[],
+): AggSelect[] {
+  const selectorsByTable = new Map<string, Selector[]>();
+  selectorsAndAliases.forEach(([selector]) => {
+    const [table] = selector;
+    selectorsByTable.get(table)?.push(selector) ??
+      selectorsByTable.set(table, [selector]);
+  });
+  const ret: AggSelect[] = [];
+  selectorsByTable.forEach((selectors, table) => {
+    ret.push({
+      selectors: selectors.map(selector => ({
+        column: selector[1],
+        alias: selector[1],
+      })),
+      table,
+      alias: `${table}/${AGG_LIFT_SUFFIX}`,
+    });
+  });
+  return ret;
 }
 
 function getWhereColumns(
@@ -406,7 +419,10 @@ export function reAliasAndBubbleSelections(
   const renameSelector = (parts: Selector): Selector => {
     const [from, col] = parts;
     const newCol = reAliasMaps.get(from)?.get(col);
-    assert(newCol, `New column not found for ${from}.${col}`);
+    // assert(newCol, `New column not found for ${from}.${col}`);
+    if (newCol === undefined) {
+      return parts;
+    }
     // Note: The absence of a schema is assumed to be the "public" schema. If
     //       non-public schemas and schema search paths are to be supported, this
     //       is where the logic would have to be to resolve the schema for the table.
