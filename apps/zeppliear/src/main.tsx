@@ -1,4 +1,3 @@
-import {resolver} from '@rocicorp/resolver';
 import {UndoManager} from '@rocicorp/undo';
 import ReactDOM from 'react-dom/client';
 import {EntityQuery, FromSet, Zero} from 'zero-client';
@@ -14,8 +13,11 @@ async function preload(z: Zero<Collections>) {
   const allMembersPreload = z.query.member.select('id', 'name');
   allMembersPreload.prepare().preload();
 
-  const preloadIssueLimit = 10_000;
-  const preloadIssueIncrement = 500;
+  const allLabelsPreload = z.query.label.select('id', 'name');
+  allLabelsPreload.prepare().preload();
+
+  const preloadIssueLimit = 3000;
+  const preloadIssueIncrement = 1000;
   const issueBaseQuery = z.query.issue
     .leftJoin(
       z.query.issueLabel,
@@ -39,70 +41,60 @@ async function preload(z: Zero<Collections>) {
     .groupBy('issue.id');
 
   const issueSorts: Parameters<typeof issueBaseQuery.desc>[] = [
-    ['issue.created'],
     ['issue.modified'],
+    ['issue.created'],
     ['issue.status', 'issue.modified'],
     ['issue.priority', 'issue.modified'],
   ];
+
   for (const issueSort of issueSorts) {
-    const [stmt, unsub] = await incrementalPreload(
+    await incrementalPreload(
       `issues order by ${issueSort.join(', ')} desc`,
       issueBaseQuery.desc(...issueSort) as TODO,
       preloadIssueLimit,
       preloadIssueIncrement,
     );
-    // hacky conversion to a preload statement
-    // so we no longer maintain the view.
-    stmt.preload();
-    unsub();
   }
+
+  console.debug('COMPLETED PRELOAD');
 }
 
-function incrementalPreload<F extends FromSet, R>(
+async function incrementalPreload<F extends FromSet, R>(
   description: string,
   baseQuery: EntityQuery<F, R[]>,
   targetLimit: number,
   increment: number,
   currentLimit = 0,
-): Promise<[ReturnType<typeof baseQuery.prepare>, () => void]> {
+): Promise<() => void> {
   if (currentLimit === 0) {
     currentLimit = increment;
     console.debug('STARTING preload of', description);
   }
   currentLimit = Math.min(currentLimit, targetLimit);
-  const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
-
   console.debug('incremental preload', description, {
     currentLimit,
     targetLimit,
   });
-  const {resolve, promise} =
-    resolver<[ReturnType<typeof baseQuery.prepare>, () => void]>();
   let done = false;
-  const unsub = createdPreloadStatement.subscribe(result => {
-    console.debug('incremental preload', description, 'got', {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  let lastCleanup: () => void = () => {};
+  for (let currentLimit = increment; !done; currentLimit += increment) {
+    currentLimit = Math.min(targetLimit, currentLimit);
+    const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
+    console.debug('incremental preload', description, {
       currentLimit,
       targetLimit,
-      resultLength: result.length,
     });
-    if (currentLimit >= targetLimit && !done) {
+    const {cleanup, preloaded} = createdPreloadStatement.preload();
+    lastCleanup?.();
+    lastCleanup = cleanup;
+    await preloaded;
+    if (currentLimit === targetLimit) {
       done = true;
-      console.debug('COMPLETED preload of', description);
-      resolve([createdPreloadStatement, unsub]);
     }
-    if (result.length >= currentLimit && currentLimit < targetLimit) {
-      incrementalPreload(
-        description,
-        baseQuery,
-        targetLimit,
-        increment,
-        currentLimit + increment,
-      ).then(resolve);
-      unsub();
-      createdPreloadStatement.destroy();
-    }
-  });
-  return promise;
+  }
+  console.debug('COMPLETED preload of', description);
+  return lastCleanup;
 }
 
 async function init() {
@@ -132,7 +124,7 @@ async function init() {
     return (
       <div className="repliear">
         <ZeroProvider zero={zero}>
-          <App undoManager={undoManager} />
+          <App undoManager={undoManager}></App>
         </ZeroProvider>
       </div>
     );

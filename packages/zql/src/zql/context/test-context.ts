@@ -10,13 +10,20 @@ import {
 import type {Entry} from '../ivm/multiset.js';
 import type {Source, SourceInternal} from '../ivm/source/source.js';
 import type {PipelineEntity, Version} from '../ivm/types.js';
-import type {Context} from './context.js';
+import type {Context, GotCallback} from './context.js';
 
 export class TestContext implements Context {
   readonly materialite = new Materialite();
   readonly #sources = new Map<string, Source<PipelineEntity>>();
 
-  subscriptionsChangedLog: {type: 'added' | 'removed'; ast: AST}[] = [];
+  subscriptionsChangedLog: (
+    | {type: 'removed'; ast: AST}
+    | {
+        type: 'added';
+        ast: AST;
+        gotCallback?: GotCallback;
+      }
+  )[] = [];
 
   getSource<T extends PipelineEntity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {
@@ -31,12 +38,11 @@ export class TestContext implements Context {
     return this.#sources.get(name)! as unknown as Source<T>;
   }
 
-  subscriptionAdded(ast: AST): void {
-    this.subscriptionsChangedLog.push({type: 'added', ast});
-  }
-
-  subscriptionRemoved(ast: AST): void {
-    this.subscriptionsChangedLog.push({type: 'removed', ast});
+  subscriptionAdded(ast: AST, gotCallback: GotCallback): () => void {
+    this.subscriptionsChangedLog.push({type: 'added', ast, gotCallback});
+    return () => {
+      this.subscriptionsChangedLog.push({type: 'removed', ast});
+    };
   }
 }
 
@@ -75,9 +81,9 @@ export class InfiniteSourceContext implements Context {
     return source as unknown as Source<X>;
   }
 
-  subscriptionAdded(_ast: AST): void {}
-
-  subscriptionRemoved(_ast: AST): void {}
+  subscriptionAdded(_ast: AST): () => void {
+    return () => {};
+  }
 }
 
 export function makeTestContext(): TestContext {

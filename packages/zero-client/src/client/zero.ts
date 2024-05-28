@@ -423,8 +423,10 @@ export class Zero<QD extends QueryDefs> {
 
     this.mutate = makeCRUDMutate<QD>(queries, rep.mutate);
 
-    this.#queryManager = new QueryManager(rep.clientID, msg =>
-      this.#sendChangeDesiredQueries(msg),
+    this.#queryManager = new QueryManager(
+      rep.clientID,
+      msg => this.#sendChangeDesiredQueries(msg),
+      rep.experimentalWatch.bind(rep),
     );
 
     this.#zqlContext = new ZeroContext(
@@ -437,16 +439,8 @@ export class Zero<QD extends QueryDefs> {
           ),
         ),
       {
-        subscriptionAdded: ast => this.#queryManager.add(ast),
-        subscriptionRemoved: ast => {
-          const removed = this.#queryManager.remove(ast);
-          if (!removed) {
-            this.#lc.error?.(
-              'Unexpected failure to remove ast from query manager',
-              JSON.stringify(ast),
-            );
-          }
-        },
+        subscriptionAdded: (ast, gotCallback) =>
+          this.#queryManager.add(ast, gotCallback),
       },
     );
 

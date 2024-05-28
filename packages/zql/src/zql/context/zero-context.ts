@@ -8,7 +8,7 @@ import type {Source} from '../ivm/source/source.js';
 import type {PipelineEntity} from '../ivm/types.js';
 import type {Entity} from '../schema/entity-schema.js';
 import {mapIter} from '../util/iterables.js';
-import type {Context, SubscriptionDelegate} from './context.js';
+import type {Context, GotCallback, SubscriptionDelegate} from './context.js';
 
 export type AddWatch = (name: string, cb: WatchCallback) => void;
 
@@ -34,12 +34,8 @@ export class ZeroContext implements Context {
     return this.#sourceStore.getSource(name) as unknown as Source<T>;
   }
 
-  subscriptionAdded(ast: AST): void {
-    this.#subscriptionDelegate.subscriptionAdded(ast);
-  }
-
-  subscriptionRemoved(ast: AST): void {
-    this.#subscriptionDelegate.subscriptionRemoved(ast);
+  subscriptionAdded(ast: AST, gotCallback: GotCallback): () => void {
+    return this.#subscriptionDelegate.subscriptionAdded(ast, gotCallback);
   }
 }
 
