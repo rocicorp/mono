@@ -6,49 +6,56 @@ import App, {Collections} from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
 import './index.css';
 import type {Comment, Issue, IssueLabel, Label, Member} from './issue.js';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TODO = any;
 async function preload(z: Zero<Collections>) {
-  const allLabelPreloadQuery = z.query.label.select('id', 'name');
-  allLabelPreloadQuery.prepare().preload();
-
   const allMembersPreload = z.query.member.select('id', 'name');
   allMembersPreload.prepare().preload();
 
   const preloadIssueLimit = 10_000;
   const preloadIssueIncrement = 500;
-  const issueBaseQuery = z.query.issue.select(
-    'created',
-    'creatorID',
-    'description',
-    'id',
-    'kanbanOrder',
-    'priority',
-    'modified',
-    'status',
-    'title',
-  );
+  const issueBaseQuery = z.query.issue
+    .leftJoin(
+      z.query.issueLabel,
+      'issueLabel',
+      'issue.id',
+      'issueLabel.issueID',
+    )
+    .leftJoin(z.query.label, 'label', 'issueLabel.labelID', 'label.id')
+    .select(
+      'issue.created',
+      'issue.creatorID',
+      'issue.description',
+      'issue.id',
+      'issue.kanbanOrder',
+      'issue.priority',
+      'issue.modified',
+      'issue.status',
+      'issue.title',
+      agg.array('label.name', 'labels'),
+    )
+    .groupBy('issue.id');
 
   const issueSorts: Parameters<typeof issueBaseQuery.desc>[] = [
-    ['created'],
-    ['modified'],
-    ['status', 'modified'],
-    ['priority', 'modified'],
+    ['issue.created'],
+    ['issue.modified'],
+    ['issue.status', 'issue.modified'],
+    ['issue.priority', 'issue.modified'],
   ];
   for (const issueSort of issueSorts) {
-    await incrementalPreload(
+    const [stmt, unsub] = await incrementalPreload(
       `issues order by ${issueSort.join(', ')} desc`,
-      issueBaseQuery.desc(...issueSort),
+      issueBaseQuery.desc(...issueSort) as TODO,
       preloadIssueLimit,
       preloadIssueIncrement,
     );
+    // hacky conversion to a preload statement
+    // so we no longer maintain the view.
+    stmt.preload();
+    unsub();
   }
-
-  await incrementalPreload(
-    'issueLabels',
-    z.query.issueLabel.select('id', 'issueID', 'labelID'),
-    100_000,
-    5_000,
-  );
 }
 
 function incrementalPreload<F extends FromSet, R>(
@@ -57,7 +64,7 @@ function incrementalPreload<F extends FromSet, R>(
   targetLimit: number,
   increment: number,
   currentLimit = 0,
-): Promise<() => void> {
+): Promise<[ReturnType<typeof baseQuery.prepare>, () => void]> {
   if (currentLimit === 0) {
     currentLimit = increment;
     console.debug('STARTING preload of', description);
@@ -69,7 +76,8 @@ function incrementalPreload<F extends FromSet, R>(
     currentLimit,
     targetLimit,
   });
-  const {resolve, promise} = resolver<() => void>();
+  const {resolve, promise} =
+    resolver<[ReturnType<typeof baseQuery.prepare>, () => void]>();
   let done = false;
   const unsub = createdPreloadStatement.subscribe(result => {
     console.debug('incremental preload', description, 'got', {
@@ -80,7 +88,7 @@ function incrementalPreload<F extends FromSet, R>(
     if (currentLimit >= targetLimit && !done) {
       done = true;
       console.debug('COMPLETED preload of', description);
-      resolve(unsub);
+      resolve([createdPreloadStatement, unsub]);
     }
     if (result.length >= currentLimit && currentLimit < targetLimit) {
       incrementalPreload(
