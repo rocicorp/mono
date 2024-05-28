@@ -61,7 +61,6 @@ export class Normalized {
     } = ast;
 
     let query = '';
-    console.log('agg lift?', ast.aggLift);
     const selection = [
       ...(select ?? []).map(
         ([sel, alias]) => `${selector(sel)} AS ${ident(alias)}`,
@@ -79,7 +78,7 @@ export class Normalized {
         agg =>
           `jsonb_agg(jsonb_build_object(${agg.selectors
             .map(s => `'${s.alias}', ${ident(agg.table)}.${ident(s.column)}`)
-            .join(', ')})) AS ${ident(agg.alias)})`,
+            .join(', ')})) AS ${ident(agg.alias)}`,
       ),
     ].join(', ');
 

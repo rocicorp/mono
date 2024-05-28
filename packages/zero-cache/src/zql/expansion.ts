@@ -17,6 +17,7 @@ export type RequiredColumns = (
  * into their component parts.
  */
 export const ALIAS_COMPONENT_SEPARATOR = '/';
+export const AGG_LIFT_SUFFIX = '_0_agg_lift';
 
 /**
  * Expands the selection of a query to include all of the rows and column values
@@ -293,7 +294,6 @@ export function expandSubqueries(
     );
   const expandedSelect = [...(select ?? []), ...additionalSelection];
 
-  console.log('returning agg lift', aggLift);
   return {
     ...ast,
     select: expandedSelect,
@@ -345,7 +345,7 @@ function getColumnsAsAggregate(
       alias: selector[1],
     })),
     table,
-    alias: `agg/${table}`,
+    alias: `${table}/${AGG_LIFT_SUFFIX}`,
   };
 }
 
@@ -369,9 +369,9 @@ function getWhereColumns(
  */
 // Exported for testing
 export function reAliasAndBubbleSelections(
-  ast: AST,
+  ast: ServerAST,
   exports: Map<string, string>,
-): AST {
+): ServerAST {
   const {select, joins, groupBy, orderBy} = ast;
 
   // Bubble up new aliases from subqueries.
@@ -415,6 +415,9 @@ export function reAliasAndBubbleSelections(
       : [from, newCol];
   };
 
+  const renameAggLift = (alias: string): string =>
+    `${ast.schema ?? 'public'}/${alias}`;
+
   // Return a modified AST with all selectors realiased (SELECT, ON, GROUP BY, ORDER BY),
   // and bubble up all selected aliases to the `exports` Map.
   const exported = new Set<string>();
@@ -441,6 +444,10 @@ export function reAliasAndBubbleSelections(
           return [selector, alias];
         }),
     ],
+    aggLift: ast.aggLift?.map(agg => ({
+      ...agg,
+      alias: renameAggLift(agg.alias),
+    })),
     joins: reAliasedJoins?.map(join => ({
       ...join,
       on: [renameSelector(join.on[0]), renameSelector(join.on[1])],
