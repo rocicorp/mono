@@ -1,5 +1,6 @@
 import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
-import type {AggSelect, ServerAST} from './server-ast.js';
+import {splitLastComponent} from '../services/view-syncer/queries.js';
+import type {AggLift, ServerAST} from './server-ast.js';
 
 /**
  * Maps a table to the set of columns that must always be selected. For example,
@@ -289,7 +290,7 @@ export function expandSubqueries(
   let expandedSelect = [...(select ?? []), ...additionalSelection];
 
   // just stick the entire `expandedSelect` into `aggLifts`?
-  let aggLift: AggSelect[] | undefined;
+  let aggLift: AggLift[] | undefined;
   if (aggregateColumns) {
     aggLift = getColumnsAsAggregate(expandedSelect);
     expandedSelect = [];
@@ -341,14 +342,14 @@ function getColumnsAsAggregate(
     selector: Selector,
     alias: string,
   ])[],
-): AggSelect[] {
+): AggLift[] {
   const selectorsByTable = new Map<string, Selector[]>();
   selectorsAndAliases.forEach(([selector]) => {
     const [table] = selector;
     selectorsByTable.get(table)?.push(selector) ??
       selectorsByTable.set(table, [selector]);
   });
-  const ret: AggSelect[] = [];
+  const ret: AggLift[] = [];
   selectorsByTable.forEach((selectors, table) => {
     ret.push({
       selectors: selectors.map(selector => ({
@@ -434,6 +435,9 @@ export function reAliasAndBubbleSelections(
   const renameAggLift = (alias: string): string =>
     `${ast.schema ?? 'public'}/${alias}`;
 
+  // TODO: if we're grouped-by then the bubble up should
+  // be done through `aggLift` instead of `select`.
+
   // Return a modified AST with all selectors realiased (SELECT, ON, GROUP BY, ORDER BY),
   // and bubble up all selected aliases to the `exports` Map.
   const exported = new Set<string>();
@@ -452,15 +456,17 @@ export function reAliasAndBubbleSelections(
           return [newSelector, newAlias] as const;
         },
       ),
-      ...bubbleUp
-        .filter(selector => !exported.has(selector.join('.')))
-        .map((selector): readonly [Selector, string] => {
-          const alias = selector.join(ALIAS_COMPONENT_SEPARATOR);
-          exports.set(alias, alias);
-          return [selector, alias];
-        }),
+      ...(ast.aggLift
+        ? []
+        : bubbleUp
+            .filter(selector => !exported.has(selector.join('.')))
+            .map((selector): readonly [Selector, string] => {
+              const alias = selector.join(ALIAS_COMPONENT_SEPARATOR);
+              exports.set(alias, alias);
+              return [selector, alias];
+            })),
     ],
-    aggLift: ast.aggLift?.map(agg => ({
+    aggLift: aggLiftWithBubbles(ast.aggLift, bubbleUp, exports)?.map(agg => ({
       ...agg,
       alias: renameAggLift(agg.alias),
     })),
@@ -468,7 +474,49 @@ export function reAliasAndBubbleSelections(
       ...join,
       on: [renameSelector(join.on[0]), renameSelector(join.on[1])],
     })),
+    aggregate: undefined,
     groupBy: groupBy?.map(renameSelector),
     orderBy: orderBy ? [orderBy[0].map(renameSelector), orderBy[1]] : undefined,
   };
+}
+
+function aggLiftWithBubbles(
+  aggLift: AggLift[] | undefined,
+  bubbleUp: readonly Selector[],
+  exports: Map<string, string>,
+): AggLift[] | undefined {
+  if (!aggLift) {
+    return;
+  }
+
+  const lifts = new Map<string, AggLift>();
+  for (const lift of aggLift) {
+    lifts.set(lift.table, {
+      ...lift,
+      selectors: [...lift.selectors],
+    });
+  }
+
+  for (const bubble of bubbleUp) {
+    const [table, column] = bubble;
+    const lift = lifts.get(table);
+    if (!lift) {
+      lifts.set(table, {
+        table,
+        alias: `${table}/${AGG_LIFT_SUFFIX}`,
+        selectors: [{column, alias: splitLastComponent(column)[1]}],
+      });
+      continue;
+    }
+    const alias = splitLastComponent(column)[1];
+    if (!lift.selectors.find(s => s.column === column)) {
+      lift.selectors.push({column, alias});
+    }
+  }
+
+  for (const lift of lifts.values()) {
+    exports.set(lift.alias, lift.alias);
+  }
+
+  return [...lifts.values()];
 }

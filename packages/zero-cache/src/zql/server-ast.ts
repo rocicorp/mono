@@ -1,6 +1,6 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 
-export type AggSelect = {
+export type AggLift = {
   selectors: {
     column: string;
     alias: string;
@@ -9,5 +9,5 @@ export type AggSelect = {
   alias: string;
 };
 export type ServerAST = AST & {
-  aggLift?: AggSelect[] | undefined;
+  aggLift?: AggLift[] | undefined;
 };
