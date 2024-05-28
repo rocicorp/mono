@@ -178,7 +178,7 @@ export function expandSelection(
 
 type SelectorAndMaybeAlias = {
   selector: Selector;
-  aggregateAlias?: string | undefined;
+  aggLiftAlias?: string | undefined;
 };
 
 /**
@@ -221,7 +221,17 @@ export function expandSubqueries(
   requiredColumns: RequiredColumns,
   externallyReferencedColumns: SelectorAndMaybeAlias[],
 ): ServerAST {
-  const {schema, select, where, joins, groupBy, orderBy, table, alias} = ast;
+  const {
+    schema,
+    select,
+    where,
+    aggregate,
+    joins,
+    groupBy,
+    orderBy,
+    table,
+    alias,
+  } = ast;
 
   const aggregateColumns = groupBy && groupBy.length > 0;
 
@@ -234,17 +244,17 @@ export function expandSubqueries(
   const defaultFrom = alias ?? table;
   const addSelector = (
     selector: Selector,
-    aggregateAlias?: string | undefined,
+    aggLiftAlias?: string | undefined,
   ) => {
     const [from] = selector;
     selectors.get(from)?.push({
       selector,
-      aggregateAlias,
+      aggLiftAlias,
     }) ??
       selectors.set(from, [
         {
           selector,
-          aggregateAlias,
+          aggLiftAlias,
         },
       ]);
   };
@@ -257,13 +267,18 @@ export function expandSubqueries(
   selectors
     .get(defaultFrom)
     ?.forEach(selector =>
-      selected.add(selector.aggregateAlias ?? selector.selector[1]),
+      selected.add(selector.aggLiftAlias ?? selector.selector[1]),
     );
 
   getWhereColumns(where, []).forEach(selector => addSelector(selector));
   joins?.forEach(({on}) => on.forEach(part => addSelector(part)));
   groupBy?.forEach(grouping => addSelector(grouping));
   orderBy?.[0].forEach(ordering => addSelector(ordering));
+  aggregate?.forEach(agg => {
+    if (agg.field !== undefined) {
+      addSelector(agg.field);
+    }
+  });
 
   // Add primary keys
   requiredColumns(schema, table).forEach(selector => addSelector(selector));
@@ -272,17 +287,17 @@ export function expandSubqueries(
   const allFromReferences = union(
     externallyReferencedColumns.map(sel => ({
       selector: [defaultFrom, sel.selector[1]],
-      aggregateAlias: sel.aggregateAlias,
+      aggregateAlias: sel.aggLiftAlias,
     })),
     selectors.get(defaultFrom) ?? [],
   );
   // Now add SELECT expressions for referenced columns that weren't originally SELECT'ed.
   const additionalSelection = [...allFromReferences]
-    .filter(sel => !selected.has(sel.aggregateAlias ?? sel.selector[1]))
+    .filter(sel => !selected.has(sel.aggLiftAlias ?? sel.selector[1]))
     // set default from or split and set from.
     .map(
       sel =>
-        [sel.selector, sel.aggregateAlias ?? sel.selector[1]] as [
+        [sel.selector, sel.aggLiftAlias ?? sel.selector[1]] as [
           Selector,
           string,
         ],
@@ -319,7 +334,7 @@ function union(
   const got = new Set<string>();
   const ret: SelectorAndMaybeAlias[] = [];
   const getKey = (sel: SelectorAndMaybeAlias) =>
-    sel.aggregateAlias ?? sel.selector[1];
+    sel.aggLiftAlias ?? sel.selector[1];
   for (const sel of a) {
     const key = getKey(sel);
     if (!got.has(key)) {
