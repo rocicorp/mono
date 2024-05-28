@@ -1,233 +1,246 @@
-// import {expect, test, vi} from 'vitest';
-// import {QueryManager} from './query-manager.js';
-// import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
-// import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
-// import {
-//   type ScanOptions,
-//   type ReadTransaction,
-//   type ScanIndexOptions,
-//   makeScanResult,
-//   ReadonlyJSONValue,
-//   ScanResult,
-//   IndexKey,
-//   ScanNoIndexOptions,
-//   DeepReadonly,
-// } from 'replicache';
+import {expect, test, vi, beforeEach} from 'vitest';
+import {
+  QueryManager,
+  WatchGotQueries,
+  WatchGotQueriesCallback,
+} from './query-manager.js';
+import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
+import {
+  type ScanOptions,
+  type ReadTransaction,
+  type ScanIndexOptions,
+  makeScanResult,
+  ReadonlyJSONValue,
+  ScanResult,
+  IndexKey,
+  ScanNoIndexOptions,
+  DeepReadonly,
+} from 'replicache';
 
-// test('add', () => {
-//   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
-//   const queryManager = new QueryManager('client1', send);
-//   const ast: AST = {
-//     table: 'issues',
-//     select: [
-//       [['issues', 'id'], 'id'],
-//       [['issues', 'name'], 'name'],
-//     ],
-//     orderBy: [[['issues', 'id']], 'asc'],
-//   };
-//   queryManager.add(ast);
-//   expect(send).toBeCalledTimes(1);
-//   expect(send).toBeCalledWith([
-//     'changeDesiredQueries',
-//     {
-//       desiredQueriesPatch: [
-//         {
-//           op: 'put',
-//           hash: '3o852oxdcga5g',
-//           ast: {
-//             table: 'issues',
-//             alias: undefined,
-//             select: [
-//               [['issues', 'id'], 'id'],
-//               [['issues', 'name'], 'name'],
-//             ],
-//             aggregate: undefined,
-//             where: undefined,
-//             joins: undefined,
-//             groupBy: undefined,
-//             orderBy: [[['issues', 'id']], 'asc'],
-//             limit: undefined,
-//             schema: undefined,
-//           } satisfies AST,
-//         },
-//       ],
-//     },
-//   ]);
+const watchGotQueriesCalls: WatchGotQueriesCallback[] = [];
+const testWatchGotQueries: WatchGotQueries = callback => {
+  watchGotQueriesCalls.push(callback);
+};
 
-//   queryManager.add(ast);
-//   expect(send).toBeCalledTimes(1);
-// });
+beforeEach(() => {
+  watchGotQueriesCalls.length = 0;
+});
 
-// test('remove', () => {
-//   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
-//   const queryManager = new QueryManager('client1', send);
-//   const ast: AST = {
-//     table: 'issues',
-//     select: [
-//       [['issues', 'id'], 'id'],
-//       [['issues', 'name'], 'name'],
-//     ],
-//     orderBy: [[['issues', 'id']], 'asc'],
-//   };
+test('add', () => {
+  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const queryManager = new QueryManager('client1', send, testWatchGotQueries);
+  const ast: AST = {
+    table: 'issues',
+    select: [
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
+    ],
+    orderBy: [[['issues', 'id']], 'asc'],
+  };
+  queryManager.add(ast);
+  expect(send).toBeCalledTimes(1);
+  expect(send).toBeCalledWith([
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '3o852oxdcga5g',
+          ast: {
+            table: 'issues',
+            alias: undefined,
+            select: [
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
+            ],
+            aggregate: undefined,
+            where: undefined,
+            joins: undefined,
+            groupBy: undefined,
+            orderBy: [[['issues', 'id']], 'asc'],
+            limit: undefined,
+            schema: undefined,
+          } satisfies AST,
+        },
+      ],
+    },
+  ]);
 
-//   expect(queryManager.remove(ast)).toBe(false);
+  queryManager.add(ast);
+  expect(send).toBeCalledTimes(1);
+});
 
-//   queryManager.add(ast);
-//   expect(send).toBeCalledTimes(1);
-//   expect(send).toBeCalledWith([
-//     'changeDesiredQueries',
-//     {
-//       desiredQueriesPatch: [
-//         {
-//           op: 'put',
-//           hash: '3o852oxdcga5g',
-//           ast: {
-//             table: 'issues',
-//             alias: undefined,
-//             select: [
-//               [['issues', 'id'], 'id'],
-//               [['issues', 'name'], 'name'],
-//             ],
-//             aggregate: undefined,
-//             where: undefined,
-//             joins: undefined,
-//             groupBy: undefined,
-//             schema: undefined,
-//             orderBy: [[['issues', 'id']], 'asc'],
-//             limit: undefined,
-//           } satisfies AST,
-//         },
-//       ],
-//     },
-//   ]);
+test('remove', () => {
+  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const queryManager = new QueryManager('client1', send, testWatchGotQueries);
+  const ast: AST = {
+    table: 'issues',
+    select: [
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
+    ],
+    orderBy: [[['issues', 'id']], 'asc'],
+  };
 
-//   queryManager.add(ast);
-//   expect(send).toBeCalledTimes(1);
+  expect(queryManager.remove(ast)).toBe(false);
 
-//   expect(queryManager.remove(ast)).toBe(true);
-//   expect(send).toBeCalledTimes(1);
-//   expect(queryManager.remove(ast)).toBe(true);
-//   expect(send).toBeCalledTimes(2);
-//   expect(send).toBeCalledWith([
-//     'changeDesiredQueries',
-//     {
-//       desiredQueriesPatch: [
-//         {
-//           op: 'del',
-//           hash: '3o852oxdcga5g',
-//         },
-//       ],
-//     },
-//   ]);
+  queryManager.add(ast);
+  expect(send).toBeCalledTimes(1);
+  expect(send).toBeCalledWith([
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '3o852oxdcga5g',
+          ast: {
+            table: 'issues',
+            alias: undefined,
+            select: [
+              [['issues', 'id'], 'id'],
+              [['issues', 'name'], 'name'],
+            ],
+            aggregate: undefined,
+            where: undefined,
+            joins: undefined,
+            groupBy: undefined,
+            schema: undefined,
+            orderBy: [[['issues', 'id']], 'asc'],
+            limit: undefined,
+          } satisfies AST,
+        },
+      ],
+    },
+  ]);
 
-//   expect(queryManager.remove(ast)).toBe(false);
-// });
+  queryManager.add(ast);
+  expect(send).toBeCalledTimes(1);
 
-// function getTestScanAsyncIterator(
-//   entries: (readonly [key: string, value: ReadonlyJSONValue])[],
-// ) {
-//   return async function* (fromKey: string) {
-//     for (const [key, value] of entries) {
-//       if (key >= fromKey) {
-//         yield [key, value] as const;
-//       }
-//     }
-//   };
-// }
+  expect(queryManager.remove(ast)).toBe(true);
+  expect(send).toBeCalledTimes(1);
+  expect(queryManager.remove(ast)).toBe(true);
+  expect(send).toBeCalledTimes(2);
+  expect(send).toBeCalledWith([
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch: [
+        {
+          op: 'del',
+          hash: '3o852oxdcga5g',
+        },
+      ],
+    },
+  ]);
 
-// class TestTransaction implements ReadTransaction {
-//   readonly clientID = 'client1';
-//   readonly environment = 'client';
-//   readonly location = 'client';
-//   scanEntries: (readonly [key: string, value: ReadonlyJSONValue])[] = [];
-//   scanCalls: ScanOptions[] = [];
+  expect(queryManager.remove(ast)).toBe(false);
+});
 
-//   get(_key: string): Promise<ReadonlyJSONValue | undefined> {
-//     throw new Error('unexpected call to get');
-//   }
-//   has(_key: string): Promise<boolean> {
-//     throw new Error('unexpected call to has');
-//   }
-//   isEmpty(): Promise<boolean> {
-//     throw new Error('unexpected call to isEmpty');
-//   }
-//   scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
-//   scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
-//   scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
+function getTestScanAsyncIterator(
+  entries: (readonly [key: string, value: ReadonlyJSONValue])[],
+) {
+  return async function* (fromKey: string) {
+    for (const [key, value] of entries) {
+      if (key >= fromKey) {
+        yield [key, value] as const;
+      }
+    }
+  };
+}
 
-//   scan<V extends ReadonlyJSONValue>(
-//     options: ScanIndexOptions,
-//   ): ScanResult<IndexKey, DeepReadonly<V>>;
-//   scan<V extends ReadonlyJSONValue>(
-//     options?: ScanNoIndexOptions,
-//   ): ScanResult<string, DeepReadonly<V>>;
-//   scan<V extends ReadonlyJSONValue>(
-//     options?: ScanOptions,
-//   ): ScanResult<IndexKey | string, DeepReadonly<V>>;
+class TestTransaction implements ReadTransaction {
+  readonly clientID = 'client1';
+  readonly environment = 'client';
+  readonly location = 'client';
+  scanEntries: (readonly [key: string, value: ReadonlyJSONValue])[] = [];
+  scanCalls: ScanOptions[] = [];
 
-//   scan(
-//     options: ScanOptions = {},
-//   ): ScanResult<IndexKey | string, ReadonlyJSONValue> {
-//     this.scanCalls.push(options);
-//     return makeScanResult(options, getTestScanAsyncIterator(this.scanEntries));
-//   }
-// }
+  get(_key: string): Promise<ReadonlyJSONValue | undefined> {
+    throw new Error('unexpected call to get');
+  }
+  has(_key: string): Promise<boolean> {
+    throw new Error('unexpected call to has');
+  }
+  isEmpty(): Promise<boolean> {
+    throw new Error('unexpected call to isEmpty');
+  }
+  scan(options: ScanIndexOptions): ScanResult<IndexKey, ReadonlyJSONValue>;
+  scan(options?: ScanNoIndexOptions): ScanResult<string, ReadonlyJSONValue>;
+  scan(options?: ScanOptions): ScanResult<IndexKey | string, ReadonlyJSONValue>;
 
-// test('getQueriesPatch', async () => {
-//   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
-//   const queryManager = new QueryManager('client1', send);
-//   // hash: 3m39m3xhe8uxg
-//   const ast1: AST = {
-//     table: 'issues',
-//     select: [
-//       [['issues', 'id'], 'id'],
-//       [['issues', 'name'], 'name'],
-//     ],
-//     orderBy: [[['issues', 'id']], 'asc'],
-//   };
-//   queryManager.add(ast1);
-//   // hash 1wpmhwzkyaqrd
-//   const ast2: AST = {
-//     table: 'issues',
-//     select: [
-//       [['issues', 'id'], 'id'],
-//       [['issues', 'name'], 'name'],
-//     ],
-//     orderBy: [[['issues', 'id']], 'desc'],
-//   };
-//   queryManager.add(ast2);
+  scan<V extends ReadonlyJSONValue>(
+    options: ScanIndexOptions,
+  ): ScanResult<IndexKey, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanNoIndexOptions,
+  ): ScanResult<string, DeepReadonly<V>>;
+  scan<V extends ReadonlyJSONValue>(
+    options?: ScanOptions,
+  ): ScanResult<IndexKey | string, DeepReadonly<V>>;
 
-//   const testReadTransaction = new TestTransaction();
-//   testReadTransaction.scanEntries = [
-//     ['d/client1/3o852oxdcga5g', 'unused'],
-//     ['d/client1/shouldBeDeleted', 'unused'],
-//   ];
+  scan(
+    options: ScanOptions = {},
+  ): ScanResult<IndexKey | string, ReadonlyJSONValue> {
+    this.scanCalls.push(options);
+    return makeScanResult(options, getTestScanAsyncIterator(this.scanEntries));
+  }
+}
 
-//   const patch = await queryManager.getQueriesPatch(testReadTransaction);
-//   expect(patch).toEqual([
-//     {
-//       op: 'del',
-//       hash: 'shouldBeDeleted',
-//     },
-//     {
-//       op: 'put',
-//       hash: '1ld7py8mkar54',
-//       ast: {
-//         table: 'issues',
-//         alias: undefined,
-//         select: [
-//           [['issues', 'id'], 'id'],
-//           [['issues', 'name'], 'name'],
-//         ],
-//         aggregate: undefined,
-//         where: undefined,
-//         joins: undefined,
-//         groupBy: undefined,
-//         orderBy: [[['issues', 'id']], 'desc'],
-//         limit: undefined,
-//         schema: undefined,
-//       } satisfies AST,
-//     },
-//   ]);
-//   expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
-// });
+test('getQueriesPatch', async () => {
+  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const queryManager = new QueryManager('client1', send, testWatchGotQueries);
+  // hash: 3m39m3xhe8uxg
+  const ast1: AST = {
+    table: 'issues',
+    select: [
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
+    ],
+    orderBy: [[['issues', 'id']], 'asc'],
+  };
+  queryManager.add(ast1);
+  // hash 1wpmhwzkyaqrd
+  const ast2: AST = {
+    table: 'issues',
+    select: [
+      [['issues', 'id'], 'id'],
+      [['issues', 'name'], 'name'],
+    ],
+    orderBy: [[['issues', 'id']], 'desc'],
+  };
+  queryManager.add(ast2);
+
+  const testReadTransaction = new TestTransaction();
+  testReadTransaction.scanEntries = [
+    ['d/client1/3o852oxdcga5g', 'unused'],
+    ['d/client1/shouldBeDeleted', 'unused'],
+  ];
+
+  const patch = await queryManager.getQueriesPatch(testReadTransaction);
+  expect(patch).toEqual([
+    {
+      op: 'del',
+      hash: 'shouldBeDeleted',
+    },
+    {
+      op: 'put',
+      hash: '1ld7py8mkar54',
+      ast: {
+        table: 'issues',
+        alias: undefined,
+        select: [
+          [['issues', 'id'], 'id'],
+          [['issues', 'name'], 'name'],
+        ],
+        aggregate: undefined,
+        where: undefined,
+        joins: undefined,
+        groupBy: undefined,
+        orderBy: [[['issues', 'id']], 'desc'],
+        limit: undefined,
+        schema: undefined,
+      } satisfies AST,
+    },
+  ]);
+  expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+});

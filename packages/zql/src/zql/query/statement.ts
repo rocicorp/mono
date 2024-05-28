@@ -39,15 +39,21 @@ export class Statement<Return> implements IStatement<Return> {
 
   preload(): {
     cleanup: () => void;
-    preloaded: Promise<void>;
+    preloaded: Promise<boolean>;
   } {
-    const {resolve, promise: preloaded} = resolver();
-    const cleanup = this.#context.subscriptionAdded(this.#ast, got => {
-      console.log('got', got);
-      if (got) {
-        resolve();
-      }
-    });
+    const {resolve, promise: preloaded} = resolver<boolean>();
+    const subscriptionRemoved = this.#context.subscriptionAdded(
+      this.#ast,
+      got => {
+        if (got) {
+          resolve(true);
+        }
+      },
+    );
+    const cleanup = () => {
+      subscriptionRemoved();
+      resolve(false);
+    };
     return {cleanup, preloaded};
   }
 

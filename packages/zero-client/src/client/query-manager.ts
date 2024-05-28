@@ -10,6 +10,40 @@ import type {GotCallback} from '@rocicorp/zql/src/zql/context/context.js';
 
 const defaultGotCallback = () => {};
 
+export function makeWatchGotQueries(
+  replicacheImpl: ReplicacheImpl,
+): WatchGotQueries {
+  return callback => {
+    replicacheImpl.experimentalWatch(
+      diff => {
+        const gotQueriesDiff: GotQueriesDiff = [];
+        for (const diffOp of diff) {
+          const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
+          switch (diffOp.op) {
+            case 'add':
+              gotQueriesDiff.push({op: 'add', queryHash});
+              break;
+            case 'del':
+              gotQueriesDiff.push({op: 'del', queryHash});
+              break;
+          }
+        }
+        callback(gotQueriesDiff);
+      },
+      {
+        prefix: GOT_QUERIES_KEY_PREFIX,
+        initialValuesInFirstDiff: true,
+      },
+    );
+  };
+}
+
+export type GotQueriesDiffOperation = {op: 'add' | 'del'; queryHash: string};
+export type GotQueriesDiff = GotQueriesDiffOperation[];
+export type WatchGotQueriesCallback = (diff: GotQueriesDiff) => void;
+
+export type WatchGotQueries = (callback: WatchGotQueriesCallback) => void;
+
 export class QueryManager {
   readonly #clientID: ClientID;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
@@ -22,31 +56,25 @@ export class QueryManager {
   constructor(
     clientID: ClientID,
     send: (change: ChangeDesiredQueriesMessage) => void,
-    replicacheImpl: ReplicacheImpl,
+    watchGotQueries: WatchGotQueries,
   ) {
     this.#clientID = clientID;
     this.#send = send;
-    replicacheImpl.experimentalWatch(
-      diff => {
-        for (const diffOp of diff) {
-          const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
-          switch (diffOp.op) {
-            case 'add':
-              this.#gotQueries.add(queryHash);
-              this.#fireGotCallbacks(queryHash, true);
-              break;
-            case 'del':
-              this.#gotQueries.delete(queryHash);
-              this.#fireGotCallbacks(queryHash, false);
-              break;
-          }
+    watchGotQueries(diff => {
+      for (const diffOp of diff) {
+        const {op, queryHash} = diffOp;
+        switch (op) {
+          case 'add':
+            this.#gotQueries.add(queryHash);
+            this.#fireGotCallbacks(queryHash, true);
+            break;
+          case 'del':
+            this.#gotQueries.delete(queryHash);
+            this.#fireGotCallbacks(queryHash, false);
+            break;
         }
-      },
-      {
-        prefix: GOT_QUERIES_KEY_PREFIX,
-        initialValuesInFirstDiff: true,
-      },
-    );
+      }
+    });
   }
 
   #fireGotCallbacks(queryHash: string, got: boolean) {
@@ -76,11 +104,7 @@ export class QueryManager {
     return patch;
   }
 
-  add(ast: AST, gC: GotCallback = defaultGotCallback): () => void {
-    const gotCallback: GotCallback = got => {
-      console.log(ast, got);
-      gC(got);
-    };
+  add(ast: AST, gotCallback: GotCallback = defaultGotCallback): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hash(normalized);
     let entry = this.#queries.get(astHash);

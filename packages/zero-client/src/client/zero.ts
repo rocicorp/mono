@@ -73,7 +73,7 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import type {QueryParseDefs, ZeroOptions} from './options.js';
-import {QueryManager} from './query-manager.js';
+import {QueryManager, makeWatchGotQueries} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
@@ -426,7 +426,7 @@ export class Zero<QD extends QueryDefs> {
     this.#queryManager = new QueryManager(
       rep.clientID,
       msg => this.#sendChangeDesiredQueries(msg),
-      rep,
+      makeWatchGotQueries(rep),
     );
 
     this.#zqlContext = new ZeroContext(

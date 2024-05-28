@@ -182,9 +182,11 @@ test('ensure we get callbacks when subscribing and unsubscribing', async () => {
   });
   await new Promise(resolve => setTimeout(resolve, 0));
 
-  expect(context.subscriptionsChangedLog).toEqual([
-    {type: 'added', ast: ast(q)},
-  ]);
+  expect(context.subscriptionsChangedLog.length).toEqual(1);
+  expect(context.subscriptionsChangedLog[0]).to.deep.include({
+    type: 'added',
+    ast: ast(q),
+  });
 
   context.subscriptionsChangedLog.length = 0;
   unsubscribe();
@@ -192,6 +194,81 @@ test('ensure we get callbacks when subscribing and unsubscribing', async () => {
   expect(context.subscriptionsChangedLog).toEqual([
     {type: 'removed', ast: ast(q)},
   ]);
+});
+
+test('preloaded resolves to true when subscription is got', async () => {
+  const context = makeTestContext();
+  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+
+  const statement = q.prepare();
+  const {cleanup, preloaded} = statement.preload();
+  let preloadedResolved = false;
+  const chainedPreloaded = preloaded.then(value => {
+    preloadedResolved = true;
+    return value;
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(context.subscriptionsChangedLog.length).toEqual(1);
+  expect(context.subscriptionsChangedLog[0]).to.deep.include({
+    type: 'added',
+    ast: ast(q),
+  });
+
+  expect(preloadedResolved).false;
+
+  const {gotCallback} = context.subscriptionsChangedLog[0];
+  expect(gotCallback).toBeDefined();
+
+  gotCallback?.(false);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(preloadedResolved).false;
+
+  gotCallback?.(true);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(preloadedResolved).true;
+
+  expect(await chainedPreloaded).true;
+
+  context.subscriptionsChangedLog.length = 0;
+  cleanup();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(context.subscriptionsChangedLog).toEqual([
+    {type: 'removed', ast: ast(q)},
+  ]);
+});
+
+test('preloaded resolves to false if preload is cleanedup before query is ever got', async () => {
+  const context = makeTestContext();
+  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+
+  const statement = q.prepare();
+  const {cleanup, preloaded} = statement.preload();
+  let preloadedResolved = false;
+  const chainedPreloaded = preloaded.then(value => {
+    preloadedResolved = true;
+    return value;
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(context.subscriptionsChangedLog.length).toEqual(1);
+  expect(context.subscriptionsChangedLog[0]).to.deep.include({
+    type: 'added',
+    ast: ast(q),
+  });
+
+  expect(preloadedResolved).false;
+
+  const {gotCallback} = context.subscriptionsChangedLog[0];
+  expect(gotCallback).toBeDefined();
+
+  context.subscriptionsChangedLog.length = 0;
+  cleanup();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(context.subscriptionsChangedLog).toEqual([
+    {type: 'removed', ast: ast(q)},
+  ]);
+  expect(preloadedResolved).true;
+
+  expect(await chainedPreloaded).false;
 });
 
 //

@@ -26,10 +26,7 @@ async function preload(z: Zero<Collections>) {
       'issue.id',
       'issueLabel.issueID',
     )
-<<<<<<< HEAD
     .leftJoin(z.query.label, 'label', 'issueLabel.labelID', 'label.id')
-=======
->>>>>>> 076da0971 (feat(zeppliear): tweak preloads)
     .select(
       'issue.created',
       'issue.creatorID',
@@ -52,16 +49,12 @@ async function preload(z: Zero<Collections>) {
   ];
 
   for (const issueSort of issueSorts) {
-    const [stmt, unsub] = await incrementalPreload(
+    await incrementalPreload(
       `issues order by ${issueSort.join(', ')} desc`,
       issueBaseQuery.desc(...issueSort) as TODO,
       preloadIssueLimit,
       preloadIssueIncrement,
     );
-    // hacky conversion to a preload statement
-    // so we no longer maintain the view.
-    stmt.preload();
-    unsub();
   }
 
   console.debug('COMPLETED PRELOAD');
@@ -72,25 +65,17 @@ async function incrementalPreload<F extends FromSet, R>(
   baseQuery: EntityQuery<F, R[]>,
   targetLimit: number,
   increment: number,
-<<<<<<< HEAD
   currentLimit = 0,
-): Promise<[ReturnType<typeof baseQuery.prepare>, () => void]> {
+): Promise<() => void> {
   if (currentLimit === 0) {
     currentLimit = increment;
     console.debug('STARTING preload of', description);
   }
   currentLimit = Math.min(currentLimit, targetLimit);
-  const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
-
   console.debug('incremental preload', description, {
     currentLimit,
     targetLimit,
   });
-  const {resolve, promise} =
-    resolver<[ReturnType<typeof baseQuery.prepare>, () => void]>();
-=======
-): Promise<() => void> {
->>>>>>> 7db10734d (preload work)
   let done = false;
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   let lastCleanup: () => void = () => {};
@@ -107,13 +92,9 @@ async function incrementalPreload<F extends FromSet, R>(
     await preloaded;
     if (currentLimit === targetLimit) {
       done = true;
-<<<<<<< HEAD
-      console.debug('COMPLETED preload of', description);
-      resolve([createdPreloadStatement, unsub]);
-=======
->>>>>>> 7db10734d (preload work)
     }
   }
+  console.debug('COMPLETED preload of', description);
   return lastCleanup;
 }
 
