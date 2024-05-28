@@ -1,3 +1,4 @@
+import {useDebounce} from '@uidotdev/usehooks';
 import {useMemo} from 'react';
 import type {SafeParseReturnType} from 'zod';
 import {
@@ -100,8 +101,9 @@ export function useFilters(): FiltersState {
   const [statusFilter] = useStatusFilterState();
   const [priorityFilter] = usePriorityFilterState();
   const [labelFilter] = useLabelFilterState();
-  const [textFilter] = useTextSearchState();
+  const [textFilterSync] = useTextSearchState();
   const [view] = useViewState();
+  const textFilter = useDebounce(textFilterSync, 250);
 
   return useMemo(() => {
     const viewStatuses = getViewStatuses(view);
