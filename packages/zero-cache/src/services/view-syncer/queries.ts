@@ -259,7 +259,9 @@ export function union<T>(...arrs: (readonly T[] | undefined)[]): T[] {
   return [...set];
 }
 
-function splitLastComponent(str: string): [prefix: string, suffix: string] {
+export function splitLastComponent(
+  str: string,
+): [prefix: string, suffix: string] {
   const lastSlash = str.lastIndexOf(ALIAS_COMPONENT_SEPARATOR);
   return lastSlash < 0
     ? ['', str]
