@@ -16,10 +16,14 @@ export class TestContext implements Context {
   readonly materialite = new Materialite();
   readonly #sources = new Map<string, Source<PipelineEntity>>();
 
-  subscriptionsChangedLog: ({type: 'added' | 'removed'; ast: AST} & {
-    type: 'added';
-    gotCallback?: GotCallback;
-  })[] = [];
+  subscriptionsChangedLog: (
+    | {type: 'removed'; ast: AST}
+    | {
+        type: 'added';
+        ast: AST;
+        gotCallback?: GotCallback;
+      }
+  )[] = [];
 
   getSource<T extends PipelineEntity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {

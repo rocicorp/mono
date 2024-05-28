@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {makeTestContext} from '../context/test-context.js';
 import {makeComparator} from '../ivm/compare.js';
 import {EntityQuery, astForTesting as ast} from './entity-query.js';
+import {assert} from 'shared/src/asserts.js';
 
 const e1 = z.object({
   id: z.string(),
@@ -216,6 +217,7 @@ test('preloaded resolves to true when subscription is got', async () => {
 
   expect(preloadedResolved).false;
 
+  assert(context.subscriptionsChangedLog[0].type === 'added');
   const {gotCallback} = context.subscriptionsChangedLog[0];
   expect(gotCallback).toBeDefined();
 
@@ -257,6 +259,7 @@ test('preloaded resolves to false if preload is cleanedup before query is ever g
 
   expect(preloadedResolved).false;
 
+  assert(context.subscriptionsChangedLog[0].type === 'added');
   const {gotCallback} = context.subscriptionsChangedLog[0];
   expect(gotCallback).toBeDefined();
 

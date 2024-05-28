@@ -19,8 +19,9 @@ test('getSource - no ordering', () => {
   };
 
   const context = new ZeroContext(materialite, addWatch, {
-    subscriptionAdded() {},
-    subscriptionRemoved() {},
+    subscriptionAdded() {
+      return () => {};
+    },
   });
   const source = context.getSource('e1');
   expect(source).toBeDefined();

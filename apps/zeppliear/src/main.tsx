@@ -1,4 +1,3 @@
-import {resolver} from '@rocicorp/resolver';
 import {UndoManager} from '@rocicorp/undo';
 import ReactDOM from 'react-dom/client';
 import {EntityQuery, FromSet, Zero} from 'zero-client';
