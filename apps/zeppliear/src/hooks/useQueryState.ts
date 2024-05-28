@@ -1,4 +1,4 @@
-import {useState, useEffect, useCallback, useMemo} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 
 export type QueryStateProcessor<T> = {
   toString: (value: T) => string;
@@ -10,7 +10,7 @@ export const identityProcessor = {
   fromString: (value: string | null) => value,
 };
 
-const queryStateListenres = new Set<() => void>();
+const queryStateListeners = new Set<() => void>();
 
 export function useQueryState<T>(
   key: string,
@@ -19,7 +19,7 @@ export function useQueryState<T>(
   const getQueryValue = useCallback(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const param = searchParams.get(key);
-    return param === null ? null : decodeURIComponent(param);
+    return param === null ? null : param;
   }, [key]);
 
   // Initialize state from the current URL
@@ -34,7 +34,7 @@ export function useQueryState<T>(
     if (value === null) {
       searchParams.delete(key);
     } else {
-      searchParams.set(key, encodeURIComponent(value));
+      searchParams.set(key, value);
     }
     const newRelativePathQuery = `${
       window.location.pathname
@@ -43,7 +43,7 @@ export function useQueryState<T>(
       return;
     }
     history.pushState(null, '', newRelativePathQuery);
-    for (const listener of queryStateListenres) {
+    for (const listener of queryStateListeners) {
       listener();
     }
   }, [key, value, processor]);
@@ -56,12 +56,12 @@ export function useQueryState<T>(
 
     // Subscribe to popstate event
     window.addEventListener('popstate', handlePopState);
-    queryStateListenres.add(handlePopState);
+    queryStateListeners.add(handlePopState);
 
     // Cleanup listener
     return () => {
       window.removeEventListener('popstate', handlePopState);
-      queryStateListenres.delete(handlePopState);
+      queryStateListeners.delete(handlePopState);
     };
   }, [getQueryValue, key, processor]);
 
