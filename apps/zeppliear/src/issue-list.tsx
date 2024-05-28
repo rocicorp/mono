@@ -32,6 +32,9 @@ function deprioritizcePreloadingComments(
   if (index > -1) {
     preloadQueue.splice(index, 1);
   }
+  if (lowPriorityPreloadQueue.includes(issueID)) {
+    return;
+  }
   lowPriorityPreloadQueue.push(issueID);
   void processPreloadQueues(zero);
 }
