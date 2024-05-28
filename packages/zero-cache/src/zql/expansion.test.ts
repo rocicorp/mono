@@ -105,7 +105,8 @@ describe('zql/expansion', () => {
       LEFT JOIN (SELECT
           labels._0_version AS _0_version,
           labels.id AS id,
-          labels.labels_key AS labels_key
+          labels.labels_key AS labels_key,
+          labels.name AS name
         FROM
           labels) AS labels ON labels.id = "issueLabels"."labelId"
     GROUP BY
@@ -129,6 +130,7 @@ describe('zql/expansion', () => {
           "issueLabels"."public/issueLabels/_0_version")) AS "public/issueLabels/_0_agg_lift",
       jsonb_agg(jsonb_build_object('id',
           labels."public/labels/id",
+          'name', labels."public/labels/name",
           'labels_key',
           labels."public/labels/labels_key",
           '_0_version',
@@ -145,7 +147,8 @@ describe('zql/expansion', () => {
       LEFT JOIN (SELECT
           public.labels._0_version AS "public/labels/_0_version",
           public.labels.id AS "public/labels/id",
-          public.labels.labels_key AS "public/labels/labels_key"
+          public.labels.labels_key AS "public/labels/labels_key",
+          public.labels.name AS "public/labels/name"
         FROM
           labels) AS labels ON labels."public/labels/id" = "issueLabels"."public/issueLabels/labelId"
     GROUP BY

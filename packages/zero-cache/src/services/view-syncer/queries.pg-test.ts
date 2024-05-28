@@ -422,10 +422,12 @@ describe('view-syncer/queries', () => {
               rowVersion: '1b',
               queriedColumns: {
                 id: ['queryHash'],
+                name: ['queryHash'],
               },
             },
             contents: {
               id: '2',
+              name: 'feature',
             },
           },
         ],
@@ -516,10 +518,12 @@ describe('view-syncer/queries', () => {
               rowVersion: '1a',
               queriedColumns: {
                 id: ['queryHash'],
+                name: ['queryHash'],
               },
             },
             contents: {
               id: '1',
+              name: 'bug',
             },
           },
         ],
