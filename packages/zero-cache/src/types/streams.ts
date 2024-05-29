@@ -50,7 +50,7 @@ export function streamIn<T extends JSONValue>(
     try {
       const value = BigIntJSON.parse(data);
       const msg = v.parse(value, schema);
-      lc.debug?.(`received`, BigIntJSON.stringify(msg));
+      lc.debug?.(`received`, data);
       sink.push(msg);
     } catch (e) {
       closer.close(e);
