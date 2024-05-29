@@ -3,6 +3,8 @@
 # build outputs
 **/*.tgz
 
+# sqlite dbs
+*.db
 
 # turbo
 .turbo
