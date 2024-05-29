@@ -32,10 +32,10 @@ interface RowProps {
 }
 
 function RowPreMemo({data, index, style}: RowProps) {
-  const issue = data.getIssue(index);
   // We are rendering an extra item for the placeholder.
   // To do this we increased our data set size to include one 'fake' item.
-  if (!issue) {
+  const issue = data.getIssue(index);
+  if (!issue || data.isLoadingIndicator(index)) {
     return null;
   }
 

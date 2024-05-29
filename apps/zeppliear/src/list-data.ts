@@ -1,6 +1,6 @@
 import {useCallback, useMemo, useState} from 'react';
 import type {ListOnItemsRenderedProps} from 'react-window';
-import {useQuery} from './hooks/use-query.js';
+import {ResultType, useQueryWithResultType} from './hooks/use-query.js';
 import {
   orderQuery,
   type Issue,
@@ -9,10 +9,12 @@ import {
   type Status,
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
+import {assert} from './util/asserts.js';
 
 export type ListData = {
   getIssue(index: number): IssueWithLabels | undefined;
   mustGetIssue(index: number): IssueWithLabels;
+  isLoadingIndicator(index: number): boolean;
   iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels>;
   iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels>;
   onItemsRendered: (props: ListOnItemsRenderedProps) => void;
@@ -20,6 +22,7 @@ export type ListData = {
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
   readonly onOpenDetail: (issue: Issue) => void;
   readonly count: number;
+  readonly resultType: ResultType;
 };
 
 export function useListData({
@@ -37,7 +40,7 @@ export function useListData({
   const {query, queryDeps, order} = issuesProps;
   const issueQueryOrdered = orderQuery(query, order, false);
   const [limit, setLimit] = useState(pageSize);
-  const issues = useQuery(
+  const {value: issues, resultType} = useQueryWithResultType(
     issueQueryOrdered.limit(limit),
     queryDeps.concat(limit),
   );
@@ -58,8 +61,16 @@ export function useListData({
         onChangeStatus,
         onOpenDetail,
         onItemsRendered,
+        resultType,
       ),
-    [issues, onChangePriority, onChangeStatus, onItemsRendered, onOpenDetail],
+    [
+      issues,
+      onChangePriority,
+      onChangeStatus,
+      onItemsRendered,
+      onOpenDetail,
+      resultType,
+    ],
   );
 }
 
@@ -70,6 +81,7 @@ class ListDataImpl implements ListData {
   readonly onOpenDetail: (issue: Issue) => void;
   readonly count: number;
   readonly onItemsRendered: (props: ListOnItemsRenderedProps) => void;
+  readonly resultType: ResultType;
 
   constructor(
     issues: IssueWithLabels[],
@@ -77,14 +89,15 @@ class ListDataImpl implements ListData {
     onChangeStatus: (issue: Issue, status: Status) => void,
     onOpenDetail: (issue: Issue) => void,
     onItemsRendered: (props: ListOnItemsRenderedProps) => void,
+    resultType: ResultType,
   ) {
-    const overscan = 0;
     this.#issues = issues;
     this.onChangePriority = onChangePriority;
     this.onChangeStatus = onChangeStatus;
     this.onOpenDetail = onOpenDetail;
-    this.count = issues.length + overscan;
+    this.count = issues.length + (resultType === 'complete' ? 0 : 1);
     this.onItemsRendered = onItemsRendered;
+    this.resultType = resultType;
   }
 
   getIssue(index: number): IssueWithLabels | undefined {
@@ -96,6 +109,14 @@ class ListDataImpl implements ListData {
       throw new Error(`Invalid index: ${index}`);
     }
     return this.#issues[index];
+  }
+
+  isLoadingIndicator(index: number): boolean {
+    if (index === this.#issues.length) {
+      assert(this.resultType !== 'complete');
+      return true;
+    }
+    return false;
   }
 
   #findIndex(issue: Issue): number {

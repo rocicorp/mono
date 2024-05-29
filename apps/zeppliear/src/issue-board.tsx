@@ -91,7 +91,11 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
       const sourceListData = listDataMap.get(sourceStatus);
       assert(sourceListData);
 
-      const draggedIssue = sourceListData.getIssue(source.index)?.issue;
+      if (sourceListData.isLoadingIndicator(source.index)) {
+        return;
+      }
+      const issueOrLoading = sourceListData.getIssue(source.index);
+      const draggedIssue = !issueOrLoading ? null : issueOrLoading.issue;
       if (!draggedIssue) {
         return;
       }
@@ -103,8 +107,11 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
 
       const destinationListData = listDataMap.get(destinationStatus);
       assert(destinationListData);
-      const issueToInsertBefore =
-        destinationListData.getIssue(destinationIndex)?.issue;
+      if (destinationListData.isLoadingIndicator(destinationIndex)) {
+        return;
+      }
+      const issue = destinationListData.getIssue(destinationIndex);
+      const issueToInsertBefore = !issue ? null : issue.issue;
       if (draggedIssue === issueToInsertBefore) {
         return;
       }

@@ -1,13 +1,14 @@
 import {CSSProperties, memo, useCallback, useEffect, useRef} from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
+import type {Zero} from 'zero-client';
+import type {Collections} from './app.js';
+import {useZero} from './hooks/use-zero.js';
+import IssueRowLoading from './issue-row-loading.js';
 import IssueRow from './issue-row.jsx';
 import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
-import {useZero} from './hooks/use-zero.js';
-import type {Collections} from './app.js';
-import type {Zero} from 'zero-client';
 
 const preloadQueue: string[] = [];
 const lowPriorityPreloadQueue: string[] = [];
@@ -24,7 +25,7 @@ function preloadComments(zero: Zero<Collections>, issueID: string) {
   void processPreloadQueues(zero);
 }
 
-function deprioritizcePreloadingComments(
+function deprioritizePreloadingComments(
   zero: Zero<Collections>,
   issueID: string,
 ) {
@@ -85,8 +86,14 @@ interface Props {
   view: string | null;
 }
 
-const itemKey = (index: number, data: ListData) =>
-  data.mustGetIssue(index).issue.id;
+const loadingIndicatorKey = 'loading-indicator-key';
+
+const itemKey = (index: number, data: ListData) => {
+  if (data.isLoadingIndicator(index)) {
+    return loadingIndicatorKey;
+  }
+  return data.mustGetIssue(index).issue.id;
+};
 
 function RawRow({
   data,
@@ -97,29 +104,36 @@ function RawRow({
   index: number;
   style: CSSProperties;
 }) {
-  const row = data.mustGetIssue(index);
-  const issueID = row.issue.id;
-
   const zero = useZero<Collections>();
+  const isLoadingIndicator = data.isLoadingIndicator(index);
 
   useEffect(() => {
+    if (isLoadingIndicator) {
+      return;
+    }
+    const row = data.mustGetIssue(index);
+    const issueID = row.issue.id;
     const timeout = setTimeout(() => {
       preloadComments(zero, issueID);
     }, 250);
     return () => {
       clearTimeout(timeout);
-      deprioritizcePreloadingComments(zero, issueID);
+      deprioritizePreloadingComments(zero, issueID);
     };
-  }, [zero, issueID]);
+  }, [zero, isLoadingIndicator, data, index]);
 
   return (
     <div style={style}>
-      <IssueRow
-        row={row}
-        onChangePriority={data.onChangePriority}
-        onChangeStatus={data.onChangeStatus}
-        onOpenDetail={data.onOpenDetail}
-      />
+      {isLoadingIndicator ? (
+        <IssueRowLoading />
+      ) : (
+        <IssueRow
+          row={data.mustGetIssue(index)}
+          onChangePriority={data.onChangePriority}
+          onChangeStatus={data.onChangeStatus}
+          onOpenDetail={data.onOpenDetail}
+        />
+      )}
     </div>
   );
 }
