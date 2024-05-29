@@ -880,14 +880,21 @@ test('smokeTest', async () => {
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
-    // once for initial data, once for each mutation
-    // once we have batch mutations this can go back to 2
-    expect(spy).toHaveBeenCalledTimes(3);
-    expect(spy.mock.calls[0][0]).toEqual([]);
-    expect(spy.mock.calls[1][0]).toEqual([{id: 'a', value: 1}]);
-    expect(spy.mock.calls[2][0]).toEqual([
-      {id: 'a', value: 1},
-      {id: 'b', value: 2},
+    // once for initial data
+    // once for each mutation
+    // once for gotQueries
+    // once we have batch mutations this can go back to 3
+    expect(spy).toHaveBeenCalledTimes(4);
+    expect(spy.mock.calls[0]).toEqual([[], 'partial']);
+    // TODO(arv): Skip this repeated call
+    expect(spy.mock.calls[1]).toEqual([[], 'partial']);
+    expect(spy.mock.calls[2]).toEqual([[{id: 'a', value: 1}], 'partial']);
+    expect(spy.mock.calls[3]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
     ]);
 
     spy.mockReset();
@@ -900,9 +907,12 @@ test('smokeTest', async () => {
     await r.mutate.issues.set({id: 'a', value: 11});
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.lastCall[0]).toEqual([
-      {id: 'a', value: 11},
-      {id: 'b', value: 2},
+    expect(spy.mock.lastCall).toEqual([
+      [
+        {id: 'a', value: 11},
+        {id: 'b', value: 2},
+      ],
+      'partial',
     ]);
 
     spy.mockReset();
