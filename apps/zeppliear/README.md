@@ -29,6 +29,14 @@ npm install
 VITE_PUBLIC_SERVER='http://localhost:8787' npm run dev
 ```
 
+After you have visted the local website and the sync / replica tables have populated.
+
+## Create the indexes on the Replica
+
+```
+./create-indexes.sh
+```
+
 # To reset clear local postgres dbs and docker volumes
 
 ```
@@ -36,6 +44,8 @@ docker-compose down
 docker volume rm -f docker_pgdata_sync
 docker volume rm -f docker_pgdata_upstream
 ```
+
+###
 
 ## Credits
 
