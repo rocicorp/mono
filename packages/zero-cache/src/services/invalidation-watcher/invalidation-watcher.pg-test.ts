@@ -126,6 +126,14 @@ describe('invalidation-watcher', () => {
             newVersion: '101',
             prevVersion: '0a',
             invalidations: {['beefcafe']: '101', ['87654321']: '101'},
+            changes: [
+              {
+                schema: 'public',
+                table: 'foo',
+                rowKey: {id: '123'},
+                rowData: {id: '123', val: 1},
+              },
+            ],
           },
         ],
       ],
@@ -134,11 +142,20 @@ describe('invalidation-watcher', () => {
           version: '0a',
           fromVersion: null, // Initial update
           invalidatedQueries: new Set(),
+          changes: undefined,
         },
         {
           version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
+          changes: [
+            {
+              schema: 'public',
+              table: 'foo',
+              rowKey: {id: '123'},
+              rowData: {id: '123', val: 1},
+            },
+          ],
         },
       ],
       expectedCoalescedUpdates: [
@@ -146,11 +163,12 @@ describe('invalidation-watcher', () => {
           version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q2']),
+          changes: undefined,
         },
       ],
     },
     {
-      name: 'update without hashes',
+      name: 'update without hashes or changes',
       setupDB: `
       INSERT INTO _zero."TxLog" ("stateVersion", lsn, time, xid)
         VALUES ('0a', '0/511', '2024-04-15T00:00:01Z', 103);
@@ -177,11 +195,13 @@ describe('invalidation-watcher', () => {
           version: '0a',
           fromVersion: null,
           invalidatedQueries: new Set(),
+          changes: undefined,
         },
         {
           version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
+          changes: undefined,
         },
       ],
       expectedCoalescedUpdates: [
@@ -189,6 +209,7 @@ describe('invalidation-watcher', () => {
           version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q2']),
+          changes: undefined,
         },
       ],
     },
@@ -218,6 +239,14 @@ describe('invalidation-watcher', () => {
             newVersion: '0a',
             prevVersion: '01',
             invalidations: {['01234567']: '0a', ['0abc1230']: '0a'},
+            changes: [
+              {
+                schema: 'public',
+                table: 'foo',
+                rowKey: {id: '123'},
+                rowData: {id: '123', val: 1},
+              },
+            ],
           },
         ],
       ],
@@ -226,11 +255,13 @@ describe('invalidation-watcher', () => {
           version: '01',
           fromVersion: null,
           invalidatedQueries: new Set(),
+          changes: undefined,
         },
         {
           version: '101',
           fromVersion: '01',
           invalidatedQueries: new Set(['q1', 'q2']),
+          changes: undefined,
         },
       ],
       expectedCoalescedUpdates: [
@@ -238,6 +269,7 @@ describe('invalidation-watcher', () => {
           version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q1', 'q2']),
+          changes: undefined,
         },
       ],
     },
@@ -251,7 +283,18 @@ describe('invalidation-watcher', () => {
         INSERT INTO _zero."InvalidationIndex" (hash, "stateVersion")
           VALUES ('\\x01010101', '01');
           `,
-          {newVersion: '01', prevVersion: '00'},
+          {
+            newVersion: '01',
+            prevVersion: '00',
+            changes: [
+              {
+                schema: 'public',
+                table: 'foo',
+                rowKey: {id: '123'},
+                rowData: {id: '123', val: 1},
+              },
+            ],
+          },
         ],
         [
           `
@@ -262,7 +305,18 @@ describe('invalidation-watcher', () => {
         INSERT INTO _zero."InvalidationIndex" (hash, "stateVersion")
           VALUES ('\\x0abc1230', '0a');
           `,
-          {newVersion: '0a', prevVersion: '01'},
+          {
+            newVersion: '0a',
+            prevVersion: '01',
+            changes: [
+              {
+                schema: 'public',
+                table: 'foo',
+                rowKey: {id: '123'},
+                rowData: {id: '123', val: 2},
+              },
+            ],
+          },
         ],
         [
           `
@@ -273,7 +327,17 @@ describe('invalidation-watcher', () => {
         INSERT INTO _zero."InvalidationIndex" (hash, "stateVersion")
           VALUES ('\\x87654321', '101');
           `,
-          {newVersion: '101', prevVersion: '0a'},
+          {
+            newVersion: '101',
+            prevVersion: '0a',
+            changes: [
+              {
+                schema: 'public',
+                table: 'foo',
+                rowKey: {id: '123'},
+              },
+            ],
+          },
         ],
       ],
       expectedIncrementalUpdates: [
@@ -281,21 +345,45 @@ describe('invalidation-watcher', () => {
           version: '00',
           fromVersion: null,
           invalidatedQueries: new Set(),
+          changes: undefined,
         },
         {
           version: '01',
           fromVersion: '00',
           invalidatedQueries: new Set(['q1']),
+          changes: [
+            {
+              schema: 'public',
+              table: 'foo',
+              rowKey: {id: '123'},
+              rowData: {id: '123', val: 1},
+            },
+          ],
         },
         {
           version: '0a',
           fromVersion: '01',
           invalidatedQueries: new Set(['q2']),
+          changes: [
+            {
+              schema: 'public',
+              table: 'foo',
+              rowKey: {id: '123'},
+              rowData: {id: '123', val: 2},
+            },
+          ],
         },
         {
           version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
+          changes: [
+            {
+              schema: 'public',
+              table: 'foo',
+              rowKey: {id: '123'},
+            },
+          ],
         },
       ],
       expectedCoalescedUpdates: [
@@ -303,6 +391,7 @@ describe('invalidation-watcher', () => {
           version: '101',
           fromVersion: null,
           invalidatedQueries: new Set(['q1', 'q2']),
+          changes: undefined,
         },
       ],
     },
@@ -355,11 +444,13 @@ describe('invalidation-watcher', () => {
           // - q1 as its FOO_SPEC2 was newly registered,
           // - q3 because the '12344321' hash at "04" is newer than fromVersion: "01".
           invalidatedQueries: new Set(['q1', 'q3']),
+          changes: undefined,
         },
         {
           version: '101',
           fromVersion: '0a',
           invalidatedQueries: new Set(['q1']),
+          changes: undefined,
         },
       ],
       expectedCoalescedUpdates: [
@@ -372,6 +463,7 @@ describe('invalidation-watcher', () => {
           version: '101',
           fromVersion: '01',
           invalidatedQueries: new Set(['q1', 'q2']),
+          changes: undefined,
         },
       ],
     },

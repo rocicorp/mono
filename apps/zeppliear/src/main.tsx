@@ -1,4 +1,3 @@
-import {resolver} from '@rocicorp/resolver';
 import {UndoManager} from '@rocicorp/undo';
 import {createRoot} from 'react-dom/client';
 import {must} from 'shared/src/must.js';
@@ -7,52 +6,61 @@ import App, {Collections} from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
 import './index.css';
 import type {Comment, Issue, IssueLabel, Label, Member} from './issue.js';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TODO = any;
 async function preload(z: Zero<Collections>) {
-  const allLabelPreloadQuery = z.query.label.select('id', 'name');
-  allLabelPreloadQuery.prepare().preload();
-
   const allMembersPreload = z.query.member.select('id', 'name');
   allMembersPreload.prepare().preload();
 
-  const preloadIssueLimit = 10_000;
-  const preloadIssueIncrement = 500;
-  const issueBaseQuery = z.query.issue.select(
-    'created',
-    'creatorID',
-    'description',
-    'id',
-    'kanbanOrder',
-    'priority',
-    'modified',
-    'status',
-    'title',
-  );
+  const allLabelsPreload = z.query.label.select('id', 'name');
+  allLabelsPreload.prepare().preload();
+
+  const preloadIssueLimit = 3000;
+  const preloadIssueIncrement = 1000;
+  const issueBaseQuery = z.query.issue
+    .leftJoin(
+      z.query.issueLabel,
+      'issueLabel',
+      'issue.id',
+      'issueLabel.issueID',
+    )
+    .leftJoin(z.query.label, 'label', 'issueLabel.labelID', 'label.id')
+    .select(
+      'issue.created',
+      'issue.creatorID',
+      'issue.description',
+      'issue.id',
+      'issue.kanbanOrder',
+      'issue.priority',
+      'issue.modified',
+      'issue.status',
+      'issue.title',
+      agg.array('label.name', 'labels'),
+    )
+    .groupBy('issue.id');
 
   const issueSorts: Parameters<typeof issueBaseQuery.desc>[] = [
-    ['created'],
-    ['modified'],
-    ['status', 'modified'],
-    ['priority', 'modified'],
+    ['issue.modified'],
+    ['issue.created'],
+    ['issue.status', 'issue.modified'],
+    ['issue.priority', 'issue.modified'],
   ];
+
   for (const issueSort of issueSorts) {
     await incrementalPreload(
       `issues order by ${issueSort.join(', ')} desc`,
-      issueBaseQuery.desc(...issueSort),
+      issueBaseQuery.desc(...issueSort) as TODO,
       preloadIssueLimit,
       preloadIssueIncrement,
     );
   }
 
-  await incrementalPreload(
-    'issueLabels',
-    z.query.issueLabel.select('id', 'issueID', 'labelID'),
-    100_000,
-    5_000,
-  );
+  console.debug('COMPLETED PRELOAD');
 }
 
-function incrementalPreload<F extends FromSet, R>(
+async function incrementalPreload<F extends FromSet, R>(
   description: string,
   baseQuery: EntityQuery<F, R[]>,
   targetLimit: number,
@@ -64,38 +72,30 @@ function incrementalPreload<F extends FromSet, R>(
     console.debug('STARTING preload of', description);
   }
   currentLimit = Math.min(currentLimit, targetLimit);
-  const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
-
   console.debug('incremental preload', description, {
     currentLimit,
     targetLimit,
   });
-  const {resolve, promise} = resolver<() => void>();
   let done = false;
-  const unsub = createdPreloadStatement.subscribe(result => {
-    console.debug('incremental preload', description, 'got', {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  let lastCleanup: () => void = () => {};
+  for (let currentLimit = increment; !done; currentLimit += increment) {
+    currentLimit = Math.min(targetLimit, currentLimit);
+    const createdPreloadStatement = baseQuery.limit(currentLimit).prepare();
+    console.debug('incremental preload', description, {
       currentLimit,
       targetLimit,
-      resultLength: result.length,
     });
-    if (currentLimit >= targetLimit && !done) {
+    const {cleanup, preloaded} = createdPreloadStatement.preload();
+    lastCleanup?.();
+    lastCleanup = cleanup;
+    await preloaded;
+    if (currentLimit === targetLimit) {
       done = true;
-      console.debug('COMPLETED preload of', description);
-      resolve(unsub);
     }
-    if (result.length >= currentLimit && currentLimit < targetLimit) {
-      incrementalPreload(
-        description,
-        baseQuery,
-        targetLimit,
-        increment,
-        currentLimit + increment,
-      ).then(resolve);
-      unsub();
-      createdPreloadStatement.destroy();
-    }
-  });
-  return promise;
+  }
+  console.debug('COMPLETED preload of', description);
+  return lastCleanup;
 }
 
 function init() {
@@ -125,7 +125,7 @@ function init() {
     return (
       <div className="repliear">
         <ZeroProvider zero={zero}>
-          <App undoManager={undoManager} />
+          <App undoManager={undoManager}></App>
         </ZeroProvider>
       </div>
     );

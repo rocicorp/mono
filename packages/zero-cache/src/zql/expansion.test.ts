@@ -21,9 +21,139 @@ describe('zql/expansion', () => {
   const REQUIRED_COLUMNS: RequiredColumns = (
     schema: string | undefined,
     table: string,
-  ) => [`${schema ? schema + '_' : ''}${table}_key`, `_0_version`];
+  ) => [
+    [table, `${schema ? schema + '_' : ''}${table}_key`],
+    [table, `_0_version`],
+  ];
 
   const cases: Case[] = [
+    {
+      name: 'group-by',
+      ast: {
+        table: 'issues',
+        select: [[['issues', 'status'], 'status']],
+        groupBy: [['issues', 'status']],
+      },
+      original:
+        'SELECT issues.status AS status FROM issues GROUP BY issues.status',
+      afterSubqueryExpansion: `SELECT
+        jsonb_agg(jsonb_build_object('status', issues.status, 'issues_key', issues.issues_key, '_0_version', issues._0_version))
+          AS "issues/_0_agg_lift"
+        FROM issues GROUP BY issues.status`,
+      afterReAliasAndBubble: `SELECT
+        jsonb_agg(jsonb_build_object('status', issues.status, 'issues_key', issues.issues_key, '_0_version', issues._0_version))
+          AS "public/issues/_0_agg_lift" FROM issues GROUP BY issues.status`,
+    },
+    {
+      name: 'issue list with labels',
+      ast: {
+        table: 'issues',
+        select: [[['issues', 'title'], 'title']],
+        aggregate: [
+          {
+            aggregate: 'array',
+            field: ['labels', 'name'],
+            alias: 'labels',
+          },
+        ],
+        joins: [
+          {
+            type: 'left',
+            other: {table: 'issueLabels'},
+            as: 'issueLabels',
+            on: [
+              ['issueLabels', 'issueId'],
+              ['issues', 'id'],
+            ],
+          },
+          {
+            type: 'left',
+            other: {table: 'labels'},
+            as: 'labels',
+            on: [
+              ['labels', 'id'],
+              ['issueLabels', 'labelId'],
+            ],
+          },
+        ],
+        groupBy: [['issues', 'id']],
+      },
+      original: `SELECT
+        issues.title AS title,
+        array_agg(labels.name) AS "array_agg(labels.name)"
+      FROM issues LEFT JOIN "issueLabels" AS "issueLabels" ON "issueLabels"."issueId" = issues.id
+      LEFT JOIN labels AS labels ON labels.id = "issueLabels"."labelId" GROUP BY issues.id`,
+      afterSubqueryExpansion: `SELECT
+      array_agg(labels.name) AS "array_agg(labels.name)",
+      jsonb_agg(jsonb_build_object('title',
+          issues.title,
+          'id',
+          issues.id,
+          'issues_key',
+          issues.issues_key,
+          '_0_version',
+          issues._0_version)) AS "issues/_0_agg_lift"
+    FROM
+      issues
+      LEFT JOIN (SELECT
+          "issueLabels"._0_version AS _0_version,
+          "issueLabels"."issueId" AS "issueId",
+          "issueLabels"."issueLabels_key" AS "issueLabels_key",
+          "issueLabels"."labelId" AS "labelId"
+        FROM
+          "issueLabels") AS "issueLabels" ON "issueLabels"."issueId" = issues.id
+      LEFT JOIN (SELECT
+          labels._0_version AS _0_version,
+          labels.id AS id,
+          labels.labels_key AS labels_key,
+          labels.name AS name
+        FROM
+          labels) AS labels ON labels.id = "issueLabels"."labelId"
+    GROUP BY
+      issues.id`,
+      afterReAliasAndBubble: `SELECT
+      jsonb_agg(jsonb_build_object('title',
+          issues.title,
+          'id',
+          issues.id,
+          'issues_key',
+          issues.issues_key,
+          '_0_version',
+          issues._0_version)) AS "public/issues/_0_agg_lift",
+      jsonb_agg(jsonb_build_object('issueId',
+          "issueLabels"."public/issueLabels/issueId",
+          'labelId',
+          "issueLabels"."public/issueLabels/labelId",
+          'issueLabels_key',
+          "issueLabels"."public/issueLabels/issueLabels_key",
+          '_0_version',
+          "issueLabels"."public/issueLabels/_0_version")) AS "public/issueLabels/_0_agg_lift",
+      jsonb_agg(jsonb_build_object('id',
+          labels."public/labels/id",
+          'name', labels."public/labels/name",
+          'labels_key',
+          labels."public/labels/labels_key",
+          '_0_version',
+          labels."public/labels/_0_version")) AS "public/labels/_0_agg_lift"
+    FROM
+      issues
+      LEFT JOIN (SELECT
+          public."issueLabels"._0_version AS "public/issueLabels/_0_version",
+          public."issueLabels"."issueId" AS "public/issueLabels/issueId",
+          public."issueLabels"."issueLabels_key" AS "public/issueLabels/issueLabels_key",
+          public."issueLabels"."labelId" AS "public/issueLabels/labelId"
+        FROM
+          "issueLabels") AS "issueLabels" ON "issueLabels"."public/issueLabels/issueId" = issues.id
+      LEFT JOIN (SELECT
+          public.labels._0_version AS "public/labels/_0_version",
+          public.labels.id AS "public/labels/id",
+          public.labels.labels_key AS "public/labels/labels_key",
+          public.labels.name AS "public/labels/name"
+        FROM
+          labels) AS labels ON labels."public/labels/id" = "issueLabels"."public/issueLabels/labelId"
+    GROUP BY
+      issues.id`,
+    },
     {
       name: 'adds primary keys, preserved existing selects',
       ast: {
@@ -539,7 +669,7 @@ describe('zql/expansion', () => {
       expect(new Normalized(c.ast).query().query).toBe(
         stripCommentsAndWhitespace(c.original),
       );
-      const expanded = expandSubqueries(c.ast, REQUIRED_COLUMNS, new Set());
+      const expanded = expandSubqueries(c.ast, REQUIRED_COLUMNS, []);
       expect(new Normalized(expanded).query().query).toBe(
         stripCommentsAndWhitespace(c.afterSubqueryExpansion),
       );

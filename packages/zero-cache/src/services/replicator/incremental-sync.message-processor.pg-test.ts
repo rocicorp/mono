@@ -114,7 +114,27 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
-      versions: [{prevVersion: '00', newVersion: '0e', invalidations: {}}],
+      versions: [
+        {
+          prevVersion: '00',
+          newVersion: '0e',
+          invalidations: {},
+          changes: [
+            {
+              rowData: {['_0_version']: '0e', id: 123},
+              rowKey: {id: 123},
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {['_0_version']: '0e', id: 234},
+              rowKey: {id: 234},
+              schema: 'public',
+              table: 'foo',
+            },
+          ],
+        },
+      ],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0e'},
@@ -168,7 +188,27 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
-      versions: [{prevVersion: '00', newVersion: '0e', invalidations: {}}],
+      versions: [
+        {
+          prevVersion: '00',
+          newVersion: '0e',
+          invalidations: {},
+          changes: [
+            {
+              rowData: {['_0_version']: '0e', id: 123},
+              rowKey: {id: 123},
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {['_0_version']: '0e', id: 234},
+              rowKey: {id: 234},
+              schema: 'public',
+              table: 'foo',
+            },
+          ],
+        },
+      ],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0e'},
@@ -221,7 +261,27 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
-      versions: [{prevVersion: '00', newVersion: '0e', invalidations: {}}],
+      versions: [
+        {
+          prevVersion: '00',
+          newVersion: '0e',
+          invalidations: {},
+          changes: [
+            {
+              rowData: {['_0_version']: '0e', id: 123},
+              rowKey: {id: 123},
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {['_0_version']: '0e', id: 234},
+              rowKey: {id: 234},
+              schema: 'public',
+              table: 'foo',
+            },
+          ],
+        },
+      ],
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '0e'},
@@ -280,8 +340,44 @@ describe('replicator/message-processor', () => {
         '0/f',
       ],
       versions: [
-        {prevVersion: '00', newVersion: '0a', invalidations: {}},
-        {prevVersion: '0a', newVersion: '0f', invalidations: {}},
+        {
+          prevVersion: '00',
+          newVersion: '0a',
+          invalidations: {},
+          changes: [
+            {
+              rowData: {['_0_version']: '0a', id: 123},
+              rowKey: {id: 123},
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {['_0_version']: '0a', id: 234},
+              rowKey: {id: 234},
+              schema: 'public',
+              table: 'foo',
+            },
+          ],
+        },
+        {
+          prevVersion: '0a',
+          newVersion: '0f',
+          invalidations: {},
+          changes: [
+            {
+              rowData: {['_0_version']: '0f', id: 789},
+              rowKey: {id: 789},
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {['_0_version']: '0f', id: 987},
+              rowKey: {id: 987},
+              schema: 'public',
+              table: 'foo',
+            },
+          ],
+        },
       ],
       replicated: {
         foo: [

@@ -3,6 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
+import {jsonObjectSchema} from '../../types/bigint-json.js';
 import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
@@ -32,6 +33,35 @@ export type RegisterInvalidationFiltersResponse = v.Infer<
   typeof registerInvalidationFiltersResponse
 >;
 
+export const truncateChangeSchema = v.object({
+  schema: v.string(),
+  table: v.string(),
+  rowKey: v.undefined().optional(),
+  rowData: v.undefined().optional(),
+});
+
+export const deleteRowChangeSchema = v.object({
+  schema: v.string(),
+  table: v.string(),
+  rowKey: jsonObjectSchema,
+  rowData: v.undefined().optional(),
+});
+
+export const putRowChangeSchema = v.object({
+  schema: v.string(),
+  table: v.string(),
+  rowKey: jsonObjectSchema,
+  rowData: jsonObjectSchema,
+});
+
+export const rowChangeSchema = v.union(
+  truncateChangeSchema,
+  deleteRowChangeSchema,
+  putRowChangeSchema,
+);
+
+export type RowChange = v.Infer<typeof rowChangeSchema>;
+
 export const versionChangeSchema = v.object({
   /** The new version. */
   newVersion: v.string(),
@@ -45,12 +75,27 @@ export const versionChangeSchema = v.object({
 
   /**
    * A mapping from hex invalidation hash to the latest version in which
-   * the invalidation occurred, if greater than `prevVersion`. The inclusion
-   * of the invalidations is optional and may be absent if the number of
-   * invalidations exceeds a certain limit. Consumers must consider this field
-   * an optional optimization and handle its absence accordingly.
+   * the invalidation occurred, if greater than `prevVersion`.
+   *
+   * The inclusion of the invalidations is optional and may be absent if the
+   * number of invalidations exceeds a certain limit. Consumers must consider
+   * this field an optional optimization and handle its absence accordingly.
    */
   invalidations: v.readonlyRecord(v.string()).optional(),
+
+  /**
+   * An ordered list RowChanges comprising the difference between the `prevVersion`
+   * and `newVersion`. Redundant changes may or may not be removed (e.g. an insert
+   * followed by a delete of the same row). Combined with the fact that row changes
+   * are not associated specific version, it is important that the client process the
+   * changes either in their entirety or not at all, as a partial scan is not necessarily
+   * be consistent with any snapshot of the database.
+   *
+   * The inclusion of changes is optional and may be absent if the number of changes
+   * exceeds a certain limit. Consumers must consider this field an optional optimization
+   * and handle its absence accordingly.
+   */
+  changes: v.readonly(v.array(rowChangeSchema)).optional(),
 });
 
 export type VersionChange = v.Infer<typeof versionChangeSchema>;

@@ -1,14 +1,17 @@
 import {
   Aggregate,
+  AST,
   normalizeAST,
+  Ordering,
   Selector,
-  type AST,
   type Condition,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
+import {compareUTF8} from 'compare-utf8';
 import {ident} from 'pg-format';
 import type {JSONValue} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {create64} from '../types/xxhash.js';
+import type {ServerAST} from './server-ast.js';
 
 export type ParameterizedQuery = {
   query: string;
@@ -19,7 +22,7 @@ export type ParameterizedQuery = {
  * @returns An object for producing normalized version of the supplied `ast`,
  *     the resulting parameterized query, and hash identifier.
  */
-export function getNormalized(ast: AST): Normalized {
+export function getNormalized(ast: ServerAST): Normalized {
   return new Normalized(ast);
 }
 
@@ -28,35 +31,29 @@ function aggFn(agg: Aggregate) {
 }
 
 export class Normalized {
-  readonly #ast: AST;
+  readonly #ast: ServerAST;
   readonly #values: JSONValue[] = [];
   readonly #query;
   #nextParam = 1;
 
-  constructor(ast: AST) {
+  constructor(ast: ServerAST) {
     // Normalize the AST such that all order-agnostic lists (basically, everything
     // except ORDER BY) are sorted in a deterministic manner such that semantically
     // equivalent ASTs produce the same queries and hash identifier.
-    this.#ast = normalizeAST(ast);
+    this.#ast = withNormalizedServerFields(normalizeAST(ast), ast);
 
-    assert(this.#ast.select?.length || this.#ast.aggregate?.length);
+    assert(
+      this.#ast.select?.length ||
+        this.#ast.aggregate?.length ||
+        this.#ast.aggLift?.length,
+    );
 
     this.#query = this.#constructQuery(this.#ast);
   }
 
-  #constructQuery(ast: AST): string {
-    const {
-      schema,
-      table,
-      alias,
-      select,
-      aggregate,
-      joins,
-      where,
-      groupBy,
-      orderBy,
-      limit,
-    } = ast;
+  #constructQuery(ast: ServerAST): string {
+    const {schema, table, alias, select, aggregate, joins, where} = ast;
+    let {groupBy, orderBy, limit} = ast;
 
     let query = '';
     const selection = [
@@ -72,18 +69,55 @@ export class Normalized {
         })`;
         return `${agg} AS ${ident(agg)}`;
       }),
+      ...(ast.aggLift ?? []).map(
+        agg =>
+          `jsonb_agg(jsonb_build_object(${agg.selectors
+            .map(s => `'${s.alias}', ${ident(agg.table)}.${ident(s.column)}`)
+            .join(', ')})) AS ${ident(agg.alias)}`,
+      ),
     ].join(', ');
+
+    // 1. all joins are left joins
+    // 2. order by is only against fields in the `from` table
+    // 3. group by is against unique field in the `from` table
+    // 4. limit exists
+    // then:
+    // move order and limit to sub-query
 
     if (selection) {
       query += `SELECT ${selection} FROM `;
     }
-    if (schema) {
-      query += ident(schema) + '.';
+
+    const getOrderByStr = ([names, dir]: Ordering) =>
+      ` ORDER BY ${names.map(x => `${selector(x)} ${dir}`).join(', ')}`;
+
+    if (moveOrderByAndLimit(ast)) {
+      query += `(SELECT * FROM `;
+      if (schema) {
+        query += ident(schema) + '.';
+      }
+      query += ident(table);
+      if (orderBy) {
+        query += getOrderByStr(orderBy);
+      }
+      if (limit !== undefined) {
+        query += ` LIMIT ${limit}`;
+      }
+      query += `) AS ${ident(alias ?? table)}`;
+
+      orderBy = undefined;
+      limit = undefined;
+      groupBy = undefined;
+    } else {
+      if (schema) {
+        query += ident(schema) + '.';
+      }
+      query += ident(table);
+      if (alias) {
+        query += ` AS ${ident(alias)}`;
+      }
     }
-    query += ident(table);
-    if (alias) {
-      query += ` AS ${ident(alias)}`;
-    }
+
     joins?.forEach(join => {
       const {
         type,
@@ -103,10 +137,7 @@ export class Normalized {
       query += ` GROUP BY ${groupBy.map(x => selector(x)).join(', ')}`;
     }
     if (orderBy) {
-      const [names, dir] = orderBy;
-      query += ` ORDER BY ${names
-        .map(x => `${selector(x)} ${dir}`)
-        .join(', ')}`;
+      query += getOrderByStr(orderBy);
     }
     if (limit !== undefined) {
       query += ` LIMIT ${limit}`;
@@ -140,7 +171,7 @@ export class Normalized {
   }
 
   /** @returns The normalized AST. */
-  ast(): AST {
+  ast(): ServerAST {
     return this.#ast;
   }
 
@@ -170,3 +201,35 @@ function selector(selector: Selector): string {
 }
 
 const SEED = 0x34567890n;
+
+function withNormalizedServerFields(ast: AST, serverAst: ServerAST): ServerAST {
+  if (serverAst.aggLift === undefined) {
+    return ast;
+  }
+  const aggLift = serverAst.aggLift.map(agg => ({
+    ...agg,
+    selectors: [...agg.selectors].sort((a, b) => compareUTF8(a.alias, b.alias)),
+  }));
+  aggLift.sort((a, b) => compareUTF8(a.alias, b.alias));
+  return {
+    ...ast,
+    aggLift: serverAst.aggLift,
+  };
+}
+
+function moveOrderByAndLimit(ast: ServerAST): boolean {
+  return !!(
+    // all left joins
+    (
+      ast.joins?.every(join => join.type === 'left') &&
+      // ordering only against left most table
+      ast.orderBy?.[0].every(selector => selector[0] === ast.table) &&
+      // group by only against primary key of left most table
+      ast.groupBy?.every(
+        selector => selector[0] === ast.table && selector[1] === 'id',
+      ) &&
+      // limit exists
+      ast.limit !== undefined
+    )
+  );
+}

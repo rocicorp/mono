@@ -1,21 +1,82 @@
-import {
-  CSSProperties,
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import {CSSProperties, memo, useCallback, useEffect, useRef} from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import {FixedSizeList} from 'react-window';
 import IssueRow from './issue-row.jsx';
 import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
-import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import type {Collections} from './app.js';
-import {useTimeout} from './hooks/use-timeout.js';
+import type {Zero} from 'zero-client';
+
+const preloadQueue: string[] = [];
+const lowPriorityPreloadQueue: string[] = [];
+
+function preloadComments(zero: Zero<Collections>, issueID: string) {
+  if (preloadQueue.includes(issueID)) {
+    return;
+  }
+  const lowPriorityIndex = lowPriorityPreloadQueue.indexOf(issueID);
+  if (lowPriorityIndex > -1) {
+    lowPriorityPreloadQueue.splice(lowPriorityIndex, 1);
+  }
+  preloadQueue.push(issueID);
+  void processPreloadQueues(zero);
+}
+
+function deprioritizcePreloadingComments(
+  zero: Zero<Collections>,
+  issueID: string,
+) {
+  const index = preloadQueue.indexOf(issueID);
+  if (index > -1) {
+    preloadQueue.splice(index, 1);
+  }
+  if (lowPriorityPreloadQueue.includes(issueID)) {
+    return;
+  }
+  lowPriorityPreloadQueue.push(issueID);
+  void processPreloadQueues(zero);
+}
+
+let preloadQueueProcessing = false;
+async function processPreloadQueues(zero: Zero<Collections>) {
+  if (preloadQueueProcessing) {
+    return;
+  }
+  preloadQueueProcessing = true;
+  try {
+    while (preloadQueue.length > 0 || lowPriorityPreloadQueue.length > 0) {
+      const highPriority = preloadQueue.length > 0;
+      const issueID = highPriority
+        ? preloadQueue.shift()
+        : lowPriorityPreloadQueue.shift();
+      console.debug(
+        'preloading comments for',
+        issueID,
+        'highPriority?',
+        highPriority,
+      );
+      await zero.query.comment
+        .where('issueID', '=', issueID ?? '')
+        .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
+        .select(
+          'comment.id',
+          'comment.issueID',
+          'comment.created',
+          'comment.creatorID',
+          'comment.body',
+          'member.name',
+        )
+        .asc('comment.created')
+        .prepare()
+        .preload().preloaded;
+      console.debug('preloaded comments for', issueID);
+    }
+  } finally {
+    preloadQueueProcessing = false;
+  }
+}
 
 interface Props {
   issuesProps: IssuesProps;
@@ -41,33 +102,15 @@ function RawRow({
 
   const zero = useZero<Collections>();
 
-  const [timerFired, setTimerFired] = useState(false);
-  useTimeout(() => {
-    console.log('Preloading issue', issueID);
-    setTimerFired(true);
-  }, 500);
-
-  // preload for detail view
-  const comments = useQuery(
-    zero.query.comment
-      .where('issueID', '=', issueID ?? '')
-      .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
-      .select(
-        'comment.id',
-        'comment.issueID',
-        'comment.created',
-        'comment.creatorID',
-        'comment.body',
-        'member.name',
-      )
-      .asc('comment.created'),
-    [issueID],
-    timerFired,
-  );
-
-  if (comments.length > 0) {
-    console.log('issue row preloaded', issueID);
-  }
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      preloadComments(zero, issueID);
+    }, 250);
+    return () => {
+      clearTimeout(timeout);
+      deprioritizcePreloadingComments(zero, issueID);
+    };
+  }, [zero, issueID]);
 
   return (
     <div style={style}>

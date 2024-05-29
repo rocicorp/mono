@@ -222,6 +222,7 @@ describe('view-syncer/service', () => {
       fromVersion: null,
       version: '1xz',
       invalidatedQueries: new Set(),
+      changes: undefined,
     });
 
     expect(await downstream.dequeue()).toEqual([
@@ -463,6 +464,7 @@ describe('view-syncer/service', () => {
       fromVersion: null,
       version: '1xz',
       invalidatedQueries: new Set(),
+      changes: undefined,
     });
 
     expect(await downstream.dequeue()).toEqual([
@@ -628,6 +630,7 @@ describe('view-syncer/service', () => {
       fromVersion: null,
       version: '1xz',
       invalidatedQueries: new Set(),
+      changes: undefined,
     });
 
     let err;
@@ -805,6 +808,7 @@ describe('view-syncer/service', () => {
       fromVersion: null,
       version: '1xz',
       invalidatedQueries: new Set(),
+      changes: undefined,
     });
 
     let err;

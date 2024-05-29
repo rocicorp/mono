@@ -20,7 +20,7 @@ import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
-import type {VersionChange} from './replicator.js';
+import type {RowChange, VersionChange} from './replicator.js';
 import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
@@ -290,6 +290,38 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {issueID: '456'},
             })]: '01',
           },
+          changes: [
+            {
+              rowData: {
+                ['_0_version']: '01',
+                big: null,
+                bigs: null,
+                description: null,
+                flt: null,
+                ints: null,
+                issueID: 123,
+                time: null,
+              },
+              rowKey: {issueID: 123},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                big: null,
+                bigs: null,
+                description: null,
+                flt: null,
+                ints: null,
+                issueID: 456,
+                time: new Date('2024-03-21T18:50:23.646Z'),
+              },
+              rowKey: {issueID: 456},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
         {
           prevVersion: '01',
@@ -311,6 +343,53 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {issueID: '234'},
             })]: '02',
           },
+          changes: [
+            {
+              rowData: {
+                ['_0_version']: '02',
+                big: 9223372036854775807n,
+                bigs: null,
+                description: null,
+                flt: null,
+                ints: null,
+                issueID: 789,
+                time: null,
+              },
+              rowKey: {issueID: 789},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '02',
+                big: null,
+                bigs: null,
+                description: null,
+                flt: null,
+                ints: [92233720, 123],
+                issueID: 987,
+                time: null,
+              },
+              rowKey: {issueID: 987},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '02',
+                big: null,
+                bigs: null,
+                description: null,
+                flt: 123.456,
+                ints: null,
+                issueID: 234,
+                time: null,
+              },
+              rowKey: {issueID: 234},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
       ],
       coalescedVersionChange: {
@@ -343,6 +422,83 @@ describe('replicator/incremental-sync', () => {
             filteredColumns: {issueID: '234'},
           })]: '02',
         },
+        changes: [
+          {
+            rowData: {
+              ['_0_version']: '01',
+              big: null,
+              bigs: null,
+              description: null,
+              flt: null,
+              ints: null,
+              issueID: 123,
+              time: null,
+            },
+            rowKey: {issueID: 123},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              big: null,
+              bigs: null,
+              description: null,
+              flt: null,
+              ints: null,
+              issueID: 456,
+              time: new Date('2024-03-21T18:50:23.646Z'),
+            },
+            rowKey: {issueID: 456},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '02',
+              big: 9223372036854775807n,
+              bigs: null,
+              description: null,
+              flt: null,
+              ints: null,
+              issueID: 789,
+              time: null,
+            },
+            rowKey: {issueID: 789},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '02',
+              big: null,
+              bigs: null,
+              description: null,
+              flt: null,
+              ints: [92233720, 123],
+              issueID: 987,
+              time: null,
+            },
+            rowKey: {issueID: 987},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '02',
+              big: null,
+              bigs: null,
+              description: null,
+              flt: 123.456,
+              ints: null,
+              issueID: 234,
+              time: null,
+            },
+            rowKey: {issueID: 234},
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
       },
       data: {
         ['public.issues']: [
@@ -609,6 +765,41 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {issueID: '789', orgID: '2'},
             })]: '01',
           },
+          changes: [
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 123,
+                orgID: 1,
+              },
+              rowKey: {issueID: 123, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 456,
+                orgID: 1,
+              },
+              rowKey: {issueID: 456, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 789,
+                orgID: 2,
+              },
+              rowKey: {issueID: 789, orgID: 2},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
         {
           prevVersion: '01',
@@ -630,6 +821,36 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {issueID: '456', orgID: '1'},
             })]: '02',
           },
+          changes: [
+            {
+              rowData: {
+                ['_0_version']: '02',
+                description: 'foo',
+                issueID: 456,
+                orgID: 1,
+              },
+              rowKey: {issueID: 456, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '02',
+                description: 'bar',
+                issueID: 123,
+                orgID: 2,
+              },
+              rowKey: {issueID: 123, orgID: 2},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: undefined,
+              rowKey: {issueID: 123, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
       ],
       coalescedVersionChange: {
@@ -657,6 +878,69 @@ describe('replicator/incremental-sync', () => {
             filteredColumns: {issueID: '789', orgID: '2'},
           })]: '01',
         },
+        changes: [
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 123,
+              orgID: 1,
+            },
+            rowKey: {issueID: 123, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 456,
+              orgID: 1,
+            },
+            rowKey: {issueID: 456, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 789,
+              orgID: 2,
+            },
+            rowKey: {issueID: 789, orgID: 2},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '02',
+              description: 'foo',
+              issueID: 456,
+              orgID: 1,
+            },
+            rowKey: {issueID: 456, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '02',
+              description: 'bar',
+              issueID: 123,
+              orgID: 2,
+            },
+            rowKey: {issueID: 123, orgID: 2},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: undefined,
+            rowKey: {issueID: 123, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
       },
       data: {
         ['public.issues']: [
@@ -842,6 +1126,52 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {issueID: '987', orgID: '2'},
             })]: '01',
           },
+          changes: [
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 123,
+                orgID: 1,
+              },
+              rowKey: {issueID: 123, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 456,
+                orgID: 1,
+              },
+              rowKey: {issueID: 456, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 789,
+                orgID: 2,
+              },
+              rowKey: {issueID: 789, orgID: 2},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: null,
+                issueID: 987,
+                orgID: 2,
+              },
+              rowKey: {issueID: 987, orgID: 2},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
         {
           prevVersion: '01',
@@ -863,6 +1193,26 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {issueID: '987', orgID: '2'},
             })]: '02',
           },
+          changes: [
+            {
+              rowData: undefined,
+              rowKey: {issueID: 123, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: undefined,
+              rowKey: {issueID: 456, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+            {
+              rowData: undefined,
+              rowKey: {issueID: 987, orgID: 2},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
       ],
       coalescedVersionChange: {
@@ -890,6 +1240,70 @@ describe('replicator/incremental-sync', () => {
             filteredColumns: {issueID: '987', orgID: '2'},
           })]: '02',
         },
+        changes: [
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 123,
+              orgID: 1,
+            },
+            rowKey: {issueID: 123, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 456,
+              orgID: 1,
+            },
+            rowKey: {issueID: 456, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 789,
+              orgID: 2,
+            },
+            rowKey: {issueID: 789, orgID: 2},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: null,
+              issueID: 987,
+              orgID: 2,
+            },
+            rowKey: {issueID: 987, orgID: 2},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: undefined,
+            rowKey: {issueID: 123, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: undefined,
+            rowKey: {issueID: 456, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            rowData: undefined,
+            rowKey: {issueID: 987, orgID: 2},
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
       },
       data: {
         ['_zero.InvalidationIndex']: [
@@ -1105,6 +1519,43 @@ describe('replicator/incremental-sync', () => {
               filteredColumns: {id: '6'},
             })]: '01',
           },
+          changes: [
+            {
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                id: 4,
+              },
+              rowKey: {id: 4},
+              schema: 'public',
+              table: 'bar',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                id: 5,
+              },
+              rowKey: {id: 5},
+              schema: 'public',
+              table: 'bar',
+            },
+            {
+              rowData: {
+                ['_0_version']: '01',
+                id: 6,
+              },
+              rowKey: {id: 6},
+              schema: 'public',
+              table: 'bar',
+            },
+            {
+              schema: 'public',
+              table: 'baz',
+            },
+          ],
         },
         {
           prevVersion: '01',
@@ -1113,6 +1564,21 @@ describe('replicator/incremental-sync', () => {
             [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
               '02',
           },
+          changes: [
+            {
+              schema: 'public',
+              table: 'foo',
+            },
+            {
+              rowData: {
+                ['_0_version']: '02',
+                id: 101,
+              },
+              rowKey: {id: 101},
+              schema: 'public',
+              table: 'foo',
+            },
+          ],
         },
       ],
       coalescedVersionChange: {
@@ -1139,6 +1605,56 @@ describe('replicator/incremental-sync', () => {
             filteredColumns: {id: '6'},
           })]: '01',
         },
+        changes: [
+          {
+            schema: 'public',
+            table: 'foo',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              id: 4,
+            },
+            rowKey: {id: 4},
+            schema: 'public',
+            table: 'bar',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              id: 5,
+            },
+            rowKey: {id: 5},
+            schema: 'public',
+            table: 'bar',
+          },
+          {
+            rowData: {
+              ['_0_version']: '01',
+              id: 6,
+            },
+            rowKey: {id: 6},
+            schema: 'public',
+            table: 'bar',
+          },
+          {
+            schema: 'public',
+            table: 'baz',
+          },
+          {
+            schema: 'public',
+            table: 'foo',
+          },
+          {
+            rowData: {
+              ['_0_version']: '02',
+              id: 101,
+            },
+            rowKey: {id: 101},
+            schema: 'public',
+            table: 'foo',
+          },
+        ],
       },
       data: {
         ['public.foo']: [{id: 101, ['_0_version']: '02'}],
@@ -1336,6 +1852,19 @@ describe('replicator/incremental-sync', () => {
               },
             })]: '01',
           },
+          changes: [
+            {
+              rowData: {
+                ['_0_version']: '01',
+                description: 'foo',
+                issueID: 456,
+                orgID: 1,
+              },
+              rowKey: {issueID: 456, orgID: 1},
+              schema: 'public',
+              table: 'issues',
+            },
+          ],
         },
       ],
       coalescedVersionChange: {
@@ -1358,6 +1887,19 @@ describe('replicator/incremental-sync', () => {
             },
           })]: '01',
         },
+        changes: [
+          {
+            rowData: {
+              ['_0_version']: '01',
+              description: 'foo',
+              issueID: 456,
+              orgID: 1,
+            },
+            rowKey: {issueID: 456, orgID: 1},
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
       },
       data: {
         ['public.issues']: [
@@ -1504,20 +2046,38 @@ describe('replicator/incremental-sync', () => {
     v: VersionChange,
     versions: string[],
   ): VersionChange {
-    const convert = (obj: object) =>
-      Object.fromEntries(
-        Object.entries(obj).map(([key, val]): [string, object | string] => {
-          if (typeof val === 'string') {
-            const index = Number(versionFromLexi(val));
-            return [key, index > 0 ? versions[index - 1] : val];
-          }
-          if (typeof val === 'object') {
-            return [key, convert(val)];
-          }
-          throw Error(`Unexpected value`, val);
-        }),
-      );
-    return convert(v) as VersionChange;
+    const convert = (val: string) => {
+      const index = Number(versionFromLexi(val));
+      return index > 0 ? versions[index - 1] : val;
+    };
+    return {
+      newVersion: convert(v.newVersion),
+      prevVersion: convert(v.prevVersion),
+      invalidations:
+        v.invalidations === undefined
+          ? undefined
+          : Object.fromEntries(
+              Object.entries(v.invalidations).map(([k, v]) => [k, convert(v)]),
+            ),
+      changes:
+        v.changes === undefined
+          ? undefined
+          : v.changes.map(
+              c =>
+                ({
+                  ...c,
+                  rowData:
+                    c.rowData === undefined
+                      ? undefined
+                      : {
+                          ...c.rowData,
+                          ['_0_version']: convert(
+                            c.rowData['_0_version'] as string,
+                          ),
+                        },
+                }) as RowChange,
+            ),
+    };
   }
 
   function replaceVersions(

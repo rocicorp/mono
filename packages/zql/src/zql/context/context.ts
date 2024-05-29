@@ -3,9 +3,10 @@ import type {Materialite} from '../ivm/materialite.js';
 import type {Source} from '../ivm/source/source.js';
 import type {PipelineEntity} from '../ivm/types.js';
 
+export type GotCallback = (got: boolean) => void;
+
 export type SubscriptionDelegate = {
-  subscriptionAdded(ast: AST): void;
-  subscriptionRemoved(ast: AST): void;
+  subscriptionAdded(ast: AST, gotCallback?: GotCallback): () => void;
 };
 
 /**
