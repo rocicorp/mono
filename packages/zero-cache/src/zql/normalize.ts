@@ -52,8 +52,8 @@ export class Normalized {
   }
 
   #constructQuery(ast: ServerAST): string {
-    const {schema, table, alias, select, aggregate, joins, where} = ast;
-    let {groupBy, orderBy, limit} = ast;
+    const {schema, table, alias, select, aggregate, joins} = ast;
+    let {groupBy, orderBy, limit, where} = ast;
 
     let query = '';
     const selection = [
@@ -97,6 +97,9 @@ export class Normalized {
         query += ident(schema) + '.';
       }
       query += ident(table);
+      if (where) {
+        query += ` WHERE ${this.#condition(where)}`;
+      }
       if (orderBy) {
         query += getOrderByStr(orderBy);
       }
@@ -108,6 +111,7 @@ export class Normalized {
       orderBy = undefined;
       limit = undefined;
       groupBy = undefined;
+      where = undefined;
     } else {
       if (schema) {
         query += ident(schema) + '.';
@@ -229,7 +233,22 @@ function moveOrderByAndLimit(ast: ServerAST): boolean {
         selector => selector[0] === ast.table && selector[1] === 'id',
       ) &&
       // limit exists
-      ast.limit !== undefined
+      ast.limit !== undefined &&
+      allWheresAgainst(ast.table, ast.where)
     )
   );
+}
+
+// ugh... this is overly specific.
+function allWheresAgainst(
+  table: string,
+  where: Condition | undefined,
+): boolean {
+  if (where === undefined) {
+    return true;
+  }
+  if (where.type === 'simple') {
+    return where.field[0] === table;
+  }
+  return where.conditions.every(cond => allWheresAgainst(table, cond));
 }
