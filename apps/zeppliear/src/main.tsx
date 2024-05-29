@@ -1,5 +1,6 @@
 import {UndoManager} from '@rocicorp/undo';
-import ReactDOM from 'react-dom/client';
+import {createRoot} from 'react-dom/client';
+import {must} from 'shared/src/must.js';
 import {EntityQuery, FromSet, Zero} from 'zero-client';
 import App, {Collections} from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
@@ -97,7 +98,7 @@ async function incrementalPreload<F extends FromSet, R>(
   return lastCleanup;
 }
 
-async function init() {
+function init() {
   const z = new Zero({
     logLevel: 'debug',
     server: import.meta.env.VITE_PUBLIC_SERVER,
@@ -130,9 +131,8 @@ async function init() {
     );
   }
 
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <Home zero={z} undoManager={undoManager} />,
-  );
+  const root = must(document.getElementById('root'));
+  createRoot(root).render(<Home zero={z} undoManager={undoManager} />);
 }
 
-await init();
+init();
