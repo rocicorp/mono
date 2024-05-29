@@ -8,13 +8,14 @@ import {
   TransactionPool,
   sharedReadOnlySnapshot,
 } from '../../db/transaction-pool.js';
+import {stringify} from '../../types/bigint-json.js';
 import {max, min, type LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import type {InvalidationInfo} from '../../zql/invalidation.js';
 import type {ReplicatorRegistry} from '../replicator/registry.js';
-import type {VersionChange} from '../replicator/replicator.js';
+import type {RowChange, VersionChange} from '../replicator/replicator.js';
 import {queryStateVersion} from '../replicator/schema/replication.js';
 import {
   PublicationInfo,
@@ -56,6 +57,19 @@ export type QueryInvalidationUpdate = {
    * invalidated queries.
    */
   reader: TransactionPool;
+
+  /**
+   * An ordered list RowChanges comprising the difference between the `fromVersion`
+   * and `newVersion`. Redundant changes may or may not be removed (e.g. an insert
+   * followed by a delete of the same row). Combined with the fact that row changes
+   * are not associated specific version, it is important that the client process the
+   * changes either in their entirety or not at all, as a partial scan is not necessarily
+   * be consistent with any snapshot of the database.
+   *
+   * Currently, changes are only included when received from the Replicator's `VersionChange`
+   * message for the exact version range.
+   */
+  changes: readonly RowChange[] | undefined;
 
   /** New table schemas if there was a schema change. */
   tableSchemas?: TableSpec[];
@@ -296,6 +310,12 @@ export class InvalidationWatcherService
               curr.invalidatedQueries,
             ),
             reader: curr.reader,
+            changes:
+              !prev.changes ||
+              !curr.changes ||
+              prev.version !== curr.fromVersion
+                ? undefined
+                : [...prev.changes, ...curr.changes],
           };
         },
 
@@ -394,7 +414,7 @@ export class InvalidationWatcherService
    */
   async #processVersionChange(versionChange: VersionChange) {
     const lc = this.#lc.withContext('versionChange', versionChange.newVersion);
-    lc.debug?.(`processing VersionChange`, versionChange);
+    lc.debug?.(`processing VersionChange ${stringify(versionChange)}`);
 
     // TODO: Plumb schema changes from the logical replication stream through the
     //       VersionChange updates, and handle them by reloading the table schemas
@@ -404,6 +424,7 @@ export class InvalidationWatcherService
       versionChange.prevVersion,
       versionChange.newVersion,
       versionChange.invalidations,
+      versionChange.changes,
     );
 
     const updates = this.#hashSubscriptions.computeInvalidationUpdates(hashes);
@@ -490,27 +511,42 @@ export class InvalidationWatcherService
    *                   can be used directly instead of querying them from the invalidation index.
    * @param invalidations Existing invalidation hashes to use if the version of the resulting
    *                    snapshot is equal to `minVersion`.
+   * @param changes Existing RowChanges to use if the version of the resulting snapshot is
+   *                equal to `minVersion`.
    */
   async #createBaseUpdate(
     lc: LogContext,
     fromVersion: LexiVersion | undefined,
     minVersion: LexiVersion,
     invalidations?: Record<string, string>,
+    changes?: readonly RowChange[],
   ): Promise<{
     update: Omit<QueryInvalidationUpdate, 'invalidatedQueries'>;
     hashes: Set<string>;
   }> {
     const {reader, version} = await this.#getOrCreateReader(lc, minVersion);
-    const update = {version, fromVersion: fromVersion ?? null, reader};
+    const update = {
+      version,
+      fromVersion: fromVersion ?? null,
+      reader,
+      changes,
+    };
 
     if (!fromVersion) {
       // Brand new CVR. Invalidations are irrelevant and need not be looked up.
       return {update, hashes: new Set()};
     }
 
+    if (update.changes && minVersion !== version) {
+      lc.debug?.(
+        `dropping row changes because tx pool version ${version} !== ${minVersion}`,
+      );
+      update.changes = undefined;
+    }
+
     if (invalidations && minVersion === version) {
       // Invalidations sent from the Replicator's VersionChange message can be used
-      // directly if `atVersion` matches that of the `reader` snapshot.
+      // directly if `minVersion` matches that of the `reader` snapshot.
       lc.debug?.(`using hashes from VersionChange`);
       const hashes = new Set(Object.keys(invalidations));
       return {update, hashes};
