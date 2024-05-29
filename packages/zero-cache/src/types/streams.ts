@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {JSONValue} from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
+import {parse, stringify, type JSONValue} from './bigint-json.js';
 import type {Subscription} from './subscription.js';
 
 export type CancelableAsyncIterable<T> = AsyncIterable<T> & {
@@ -23,7 +23,7 @@ export async function streamOut<T extends JSONValue>(
   try {
     for await (const msg of source) {
       lc.debug?.(`sending`, msg);
-      sink.send(JSON.stringify(msg));
+      sink.send(stringify(msg));
     }
     closer.close();
   } catch (e) {
@@ -47,7 +47,7 @@ export function streamIn<T extends JSONValue>(
       return;
     }
     try {
-      const value = JSON.parse(data);
+      const value = parse(data);
       const msg = v.parse(value, schema);
       lc.debug?.(`received`, msg);
       sink.push(msg);
