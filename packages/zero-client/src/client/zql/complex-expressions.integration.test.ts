@@ -99,6 +99,45 @@ describe('complex expressions', async () => {
         z.query.track.where(or(exp('id', '=', '001'), exp('id', '=', '002'))),
       expected: tracks.slice(0, 2),
     },
+    {
+      name: 'cursor style with 2 orderings',
+      query: () =>
+        z.query.track
+          .asc('title', 'albumId')
+          .where('title', 'IN', ['a', 'c'])
+          .where(
+            or(
+              exp('title', '>', 'a'),
+              and(exp('title', '=', 'a'), exp('albumId', '>', '001')),
+              and(
+                exp('title', '=', 'a'),
+                exp('albumId', '=', '001'),
+                exp('id', '>', '001'),
+              ),
+            ),
+          )
+          .limit(1),
+      expected: [tracks[1]],
+    },
+    {
+      name: 'cursor style with 2 orderings, less overlap',
+      query: () =>
+        z.query.track
+          .asc('title', 'length')
+          .where(
+            or(
+              exp('title', '>', 'a'),
+              and(exp('title', '=', 'a'), exp('length', '>', 100)),
+              and(
+                exp('title', '=', 'a'),
+                exp('length', '=', 100),
+                exp('id', '>', '001'),
+              ),
+            ),
+          )
+          .limit(1),
+      expected: [tracks[1]],
+    },
   ])('$name', async ({query, expected}) => {
     const stmt = query().prepare();
     const rows = await stmt.exec();
