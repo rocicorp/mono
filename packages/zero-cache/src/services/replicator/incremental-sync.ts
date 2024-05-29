@@ -18,7 +18,7 @@ import {
   synchronizedSnapshots,
 } from '../../db/transaction-pool.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
-import {stringify} from '../../types/bigint-json.js';
+import {JSONValue, stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {PostgresDB, registerPostgresTypeParsers} from '../../types/pg.js';
 import type {RowKey, RowKeyType, RowValue} from '../../types/row-key.js';
@@ -26,7 +26,7 @@ import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {replicationSlot} from './initial-sync.js';
 import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
-import type {VersionChange} from './replicator.js';
+import type {RowChange, VersionChange} from './replicator.js';
 import {
   ZERO_VERSION_COLUMN_NAME,
   queryLastLSN,
@@ -152,12 +152,16 @@ export class IncrementalSyncer {
           newVersion: curr.newVersion,
           prevVersion: prev.prevVersion,
           invalidations:
-            !curr.invalidations || !prev.invalidations
+            !prev.invalidations || !curr.invalidations
               ? undefined
               : {
                   ...prev.invalidations,
                   ...curr.invalidations,
                 },
+          changes:
+            !prev.changes || !curr.changes
+              ? undefined
+              : [...prev.changes, ...curr.changes],
         }),
         cleanup: () => this.#eventEmitter.off('version', subscribe),
       });
@@ -535,6 +539,7 @@ class TransactionProcessor {
       invalidations: Object.fromEntries(
         [...invalidations.keys()].map(hash => [hash, this.#version]),
       ),
+      changes: rowChanges(this.#tableTrackers.values()),
     };
   }
 
@@ -743,4 +748,31 @@ type ChangeLogEntry = {
 function table(db: postgres.Sql, msg: {relation: Pgoutput.MessageRelation}) {
   const {schema, name: table} = msg.relation;
   return db`${db(schema)}.${db(table)}`;
+}
+
+function rowChanges(
+  tableTrackers: Iterable<TableTracker>,
+): RowChange[] | undefined {
+  const rowChanges: RowChange[] = [];
+
+  for (const tracker of tableTrackers) {
+    const {schema, table} = tracker;
+    const {truncated, changes} = tracker.getEffectiveRowChanges();
+    if (truncated) {
+      rowChanges.push({schema, table});
+    }
+    for (const [_, change] of changes) {
+      const {rowKey} = change;
+      rowChanges.push({
+        schema,
+        table,
+        rowKey: rowKey as Record<string, JSONValue>,
+        rowData:
+          change.postValue === 'none'
+            ? undefined
+            : (change.postValue as Record<string, JSONValue>),
+      });
+    }
+  }
+  return rowChanges;
 }
