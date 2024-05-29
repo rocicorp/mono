@@ -10,7 +10,7 @@ import {
   Status,
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
-import {isLoadingSentinel, type ListData} from './list-data.js';
+import type {ListData} from './list-data.js';
 import {assert} from './util/asserts.js';
 
 export type IssuesByStatusType = {
@@ -91,11 +91,11 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
       const sourceListData = listDataMap.get(sourceStatus);
       assert(sourceListData);
 
+      if (sourceListData.isLoadingIndicator(source.index)) {
+        return;
+      }
       const issueOrLoading = sourceListData.getIssue(source.index);
-      const draggedIssue =
-        !issueOrLoading || isLoadingSentinel(issueOrLoading)
-          ? null
-          : issueOrLoading.issue;
+      const draggedIssue = !issueOrLoading ? null : issueOrLoading.issue;
       if (!draggedIssue) {
         return;
       }
@@ -107,9 +107,11 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
 
       const destinationListData = listDataMap.get(destinationStatus);
       assert(destinationListData);
+      if (destinationListData.isLoadingIndicator(destinationIndex)) {
+        return;
+      }
       const issue = destinationListData.getIssue(destinationIndex);
-      const issueToInsertBefore =
-        !issue || isLoadingSentinel(issue) ? null : issue.issue;
+      const issueToInsertBefore = !issue ? null : issue.issue;
       if (draggedIssue === issueToInsertBefore) {
         return;
       }

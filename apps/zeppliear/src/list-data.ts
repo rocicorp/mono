@@ -12,8 +12,9 @@ import type {IssuesProps} from './issues-props.js';
 import {assert} from './util/asserts.js';
 
 export type ListData = {
-  getIssue(index: number): IssueWithLabels | undefined | LoadingSentinel;
-  mustGetIssue(index: number): IssueWithLabels | LoadingSentinel;
+  getIssue(index: number): IssueWithLabels | undefined;
+  mustGetIssue(index: number): IssueWithLabels;
+  isLoadingIndicator(index: number): boolean;
   iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels>;
   iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels>;
   onItemsRendered: (props: ListOnItemsRenderedProps) => void;
@@ -73,13 +74,6 @@ export function useListData({
   );
 }
 
-export const loadingSentinel = Symbol();
-export type LoadingSentinel = typeof loadingSentinel;
-
-export function isLoadingSentinel(value: unknown): value is LoadingSentinel {
-  return value === loadingSentinel;
-}
-
 class ListDataImpl implements ListData {
   readonly #issues: readonly IssueWithLabels[];
   readonly onChangePriority: (issue: Issue, priority: Priority) => void;
@@ -106,22 +100,23 @@ class ListDataImpl implements ListData {
     this.resultType = resultType;
   }
 
-  getIssue(index: number): IssueWithLabels | undefined | LoadingSentinel {
-    if (index === this.#issues.length) {
-      return this.resultType === 'complete' ? undefined : loadingSentinel;
-    }
+  getIssue(index: number): IssueWithLabels | undefined {
     return this.#issues[index];
   }
 
-  mustGetIssue(index: number): IssueWithLabels | LoadingSentinel {
-    if (index === this.#issues.length) {
-      assert(this.resultType !== 'complete');
-      return loadingSentinel;
-    }
+  mustGetIssue(index: number): IssueWithLabels {
     if (index < 0 || index >= this.#issues.length) {
       throw new Error(`Invalid index: ${index}`);
     }
     return this.#issues[index];
+  }
+
+  isLoadingIndicator(index: number): boolean {
+    if (index === this.#issues.length) {
+      assert(this.resultType !== 'complete');
+      return true;
+    }
+    return false;
   }
 
   #findIndex(issue: Issue): number {

@@ -12,7 +12,7 @@ import {IssueItemByID} from './issue-item-by-id.jsx';
 import IssueItem from './issue-item.jsx';
 import type {Issue, Priority, Status} from './issue.js';
 import {IssuesProps, useIssuesProps} from './issues-props.js';
-import {ListData, isLoadingSentinel, useListData} from './list-data.js';
+import {ListData, useListData} from './list-data.js';
 import StatusIcon from './status-icon.jsx';
 
 interface Props {
@@ -32,10 +32,10 @@ interface RowProps {
 }
 
 function RowPreMemo({data, index, style}: RowProps) {
-  const issue = data.getIssue(index);
   // We are rendering an extra item for the placeholder.
   // To do this we increased our data set size to include one 'fake' item.
-  if (!issue || isLoadingSentinel(issue)) {
+  const issue = data.getIssue(index);
+  if (!issue || data.isLoadingIndicator(index)) {
     return null;
   }
 

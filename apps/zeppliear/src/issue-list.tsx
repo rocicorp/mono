@@ -8,7 +8,7 @@ import IssueRowLoading from './issue-row-loading.js';
 import IssueRow from './issue-row.jsx';
 import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
-import {ListData, isLoadingSentinel, useListData} from './list-data.js';
+import {ListData, useListData} from './list-data.js';
 
 const preloadQueue: string[] = [];
 const lowPriorityPreloadQueue: string[] = [];
@@ -86,14 +86,13 @@ interface Props {
   view: string | null;
 }
 
-const loadingSentinelKey = 'loading' + Math.random();
+const loadingIndicatorKey = 'loading-indicator-key';
 
 const itemKey = (index: number, data: ListData) => {
-  const issue = data.mustGetIssue(index);
-  if (isLoadingSentinel(issue)) {
-    return loadingSentinelKey;
+  if (data.isLoadingIndicator(index)) {
+    return loadingIndicatorKey;
   }
-  return issue.issue.id;
+  return data.mustGetIssue(index).issue.id;
 };
 
 function RawRow({
@@ -106,13 +105,13 @@ function RawRow({
   style: CSSProperties;
 }) {
   const zero = useZero<Collections>();
-
-  const row = data.mustGetIssue(index);
+  const isLoadingIndicator = data.isLoadingIndicator(index);
 
   useEffect(() => {
-    if (isLoadingSentinel(row)) {
+    if (isLoadingIndicator) {
       return;
     }
+    const row = data.mustGetIssue(index);
     const issueID = row.issue.id;
     const timeout = setTimeout(() => {
       preloadComments(zero, issueID);
@@ -121,15 +120,15 @@ function RawRow({
       clearTimeout(timeout);
       deprioritizePreloadingComments(zero, issueID);
     };
-  }, [zero, row]);
+  }, [zero, isLoadingIndicator, data, index]);
 
   return (
     <div style={style}>
-      {isLoadingSentinel(row) ? (
+      {isLoadingIndicator ? (
         <IssueRowLoading />
       ) : (
         <IssueRow
-          row={row}
+          row={data.mustGetIssue(index)}
           onChangePriority={data.onChangePriority}
           onChangeStatus={data.onChangeStatus}
           onOpenDetail={data.onOpenDetail}
