@@ -186,14 +186,23 @@ test('ensure we get callbacks when subscribing and unsubscribing', async () => {
   expect(context.subscriptionsChangedLog.length).toEqual(1);
   expect(context.subscriptionsChangedLog[0]).to.deep.include({
     type: 'added',
-    ast: ast(q),
+    ast: {
+      ...ast(q),
+      orderBy: [[['e1', 'id']], 'asc'],
+    },
   });
 
   context.subscriptionsChangedLog.length = 0;
   unsubscribe();
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(context.subscriptionsChangedLog).toEqual([
-    {type: 'removed', ast: ast(q)},
+    {
+      type: 'removed',
+      ast: {
+        ...ast(q),
+        orderBy: [[['e1', 'id']], 'asc'],
+      },
+    },
   ]);
 });
 
@@ -212,7 +221,10 @@ test('preloaded resolves to true when subscription is got', async () => {
   expect(context.subscriptionsChangedLog.length).toEqual(1);
   expect(context.subscriptionsChangedLog[0]).to.deep.include({
     type: 'added',
-    ast: ast(q),
+    ast: {
+      ...ast(q),
+      orderBy: [[['e1', 'id']], 'asc'],
+    },
   });
 
   expect(preloadedResolved).false;
@@ -235,7 +247,13 @@ test('preloaded resolves to true when subscription is got', async () => {
   cleanup();
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(context.subscriptionsChangedLog).toEqual([
-    {type: 'removed', ast: ast(q)},
+    {
+      type: 'removed',
+      ast: {
+        ...ast(q),
+        orderBy: [[['e1', 'id']], 'asc'],
+      },
+    },
   ]);
 });
 
@@ -254,7 +272,10 @@ test('preloaded resolves to false if preload is cleanedup before query is ever g
   expect(context.subscriptionsChangedLog.length).toEqual(1);
   expect(context.subscriptionsChangedLog[0]).to.deep.include({
     type: 'added',
-    ast: ast(q),
+    ast: {
+      ...ast(q),
+      orderBy: [[['e1', 'id']], 'asc'],
+    },
   });
 
   expect(preloadedResolved).false;
@@ -267,7 +288,13 @@ test('preloaded resolves to false if preload is cleanedup before query is ever g
   cleanup();
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(context.subscriptionsChangedLog).toEqual([
-    {type: 'removed', ast: ast(q)},
+    {
+      type: 'removed',
+      ast: {
+        ...ast(q),
+        orderBy: [[['e1', 'id']], 'asc'],
+      },
+    },
   ]);
   expect(preloadedResolved).true;
 

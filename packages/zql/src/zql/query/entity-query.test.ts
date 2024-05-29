@@ -549,7 +549,6 @@ describe('ast', () => {
 
     expect(ast(q)).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'asc'],
       where: {
         type: 'simple',
         field: ['e1', 'id'],
@@ -566,7 +565,6 @@ describe('ast', () => {
 
     expect(ast(q)).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'asc'],
       where: {
         type: 'conjunction',
         op: 'AND',
@@ -597,7 +595,6 @@ describe('ast', () => {
     // multiple ANDs are flattened
     expect(ast(q)).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'asc'],
       where: {
         type: 'conjunction',
         op: 'AND',
@@ -637,7 +634,6 @@ describe('ast', () => {
   test('limit', () => {
     const q = new EntityQuery<{e1: E1}>(context, 'e1');
     expect(ast(q.limit(10))).toEqual({
-      orderBy: [[['e1', 'id']], 'asc'],
       table: 'e1',
       limit: 10,
     } satisfies AST);
@@ -714,7 +710,6 @@ describe('ast', () => {
 
     expect(ast(q.where(or(exp('a', '=', 123), exp('c', '=', 'abc'))))).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'asc'],
       where: {
         type: 'conjunction',
         op: 'OR',
@@ -746,7 +741,6 @@ describe('ast', () => {
       ),
     ).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'asc'],
       where: {
         type: 'conjunction',
         op: 'AND',
@@ -1229,7 +1223,6 @@ test('where is always qualified', () => {
     ),
   ).toEqual({
     table: 'e1',
-    orderBy: [[['e1', 'id']], 'asc'],
     where: {
       type: 'conjunction',
       op: 'AND',
@@ -1251,7 +1244,7 @@ test('where is always qualified', () => {
     joins: [
       {
         type: 'inner',
-        other: {table: 'e1', orderBy: [[['e1', 'id']], 'asc']},
+        other: {table: 'e1'},
         as: 'e2',
         on: [
           ['e1', 'a'],
@@ -1266,10 +1259,9 @@ describe('all references to columns are always qualified', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   test.each([
     {
-      test: 'unqalified where',
+      test: 'unqualified where',
       q: q.where('a', '=', 1),
       expected: {
-        orderBy: [[['e1', 'id']], 'asc'],
         table: 'e1',
         where: {
           type: 'simple',
@@ -1283,7 +1275,6 @@ describe('all references to columns are always qualified', () => {
       test: 'qualified where',
       q: q.where('e1.a', '=', 1),
       expected: {
-        orderBy: [[['e1', 'id']], 'asc'],
         table: 'e1',
         where: {
           type: 'simple',
@@ -1294,11 +1285,10 @@ describe('all references to columns are always qualified', () => {
       },
     },
     {
-      test: 'unqalified select',
+      test: 'unqualified select',
       q: q.select('a'),
       expected: {
         aggregate: [],
-        orderBy: [[['e1', 'id']], 'asc'],
         table: 'e1',
         select: [[['e1', 'a'], 'a']],
       },
@@ -1316,11 +1306,10 @@ describe('all references to columns are always qualified', () => {
       q: q.join(q, 'e2', 'a', 'a'),
       expected: {
         table: 'e1',
-        orderBy: [[['e1', 'id']], 'asc'],
         joins: [
           {
             type: 'inner',
-            other: {table: 'e1', orderBy: [[['e1', 'id']], 'asc']},
+            other: {table: 'e1'},
             as: 'e2',
             on: [
               ['e1', 'a'],
@@ -1337,11 +1326,10 @@ describe('all references to columns are always qualified', () => {
       q: q.join(q, 'e2', 'e1.a', 'e2.a' as any),
       expected: {
         table: 'e1',
-        orderBy: [[['e1', 'id']], 'asc'],
         joins: [
           {
             type: 'inner',
-            other: {table: 'e1', orderBy: [[['e1', 'id']], 'asc']},
+            other: {table: 'e1'},
             as: 'e2',
             on: [
               ['e1', 'a'],
@@ -1356,11 +1344,11 @@ describe('all references to columns are always qualified', () => {
       q: q.join(q, 'e2', 'a', 'a').join(q, 'e3', 'e2.a', 'a'),
       expected: {
         table: 'e1',
-        orderBy: [[['e1', 'id']], 'asc'],
+
         joins: [
           {
             type: 'inner',
-            other: {table: 'e1', orderBy: [[['e1', 'id']], 'asc']},
+            other: {table: 'e1'},
             as: 'e2',
             on: [
               ['e1', 'a'],
@@ -1369,7 +1357,7 @@ describe('all references to columns are always qualified', () => {
           },
           {
             type: 'inner',
-            other: {table: 'e1', orderBy: [[['e1', 'id']], 'asc']},
+            other: {table: 'e1'},
             as: 'e3',
             on: [
               ['e2', 'a'],
@@ -1384,7 +1372,6 @@ describe('all references to columns are always qualified', () => {
       q: q.having(exp('a', '=', 1)),
       expected: {
         table: 'e1',
-        orderBy: [[['e1', 'id']], 'asc'],
         having: {
           type: 'simple',
           field: [null, 'a'],
