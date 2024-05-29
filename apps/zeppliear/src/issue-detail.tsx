@@ -3,6 +3,7 @@ import {
   WhereCondition,
   and,
   exp,
+  or,
 } from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
@@ -436,7 +437,7 @@ function getNextIssueQuery(
     direction === 'prev',
   );
 
-  let op: '<=' | '>=' = direction === 'fwd' ? '<=' : '>=';
+  let op: '<' | '>' = direction === 'fwd' ? '<' : '>';
 
   let primary: 'created' | 'modified' | 'status' | 'priority' | 'kanbanOrder';
   switch (order) {
@@ -455,20 +456,35 @@ function getNextIssueQuery(
     case Order.Kanban:
       primary = 'kanbanOrder';
       // also flip op for kanban order
-      op = direction === 'fwd' ? '>=' : '<=';
+      op = direction === 'fwd' ? '>' : '<';
       break;
   }
 
-  let whereClause: WhereCondition<FS> = exp(
-    `issue.${primary}`,
-    op,
-    issue[primary],
+  let whereClause: WhereCondition<FS> = or(
+    and(
+      exp(`issue.${primary}`, '=', issue[primary]),
+      exp('issue.id', op === '<' ? '<=' : '>=', issue.id),
+    ),
+    exp(`issue.${primary}`, op, issue[primary]),
   );
 
   if (order === Order.Status || order === Order.Priority) {
-    // These needs a secondary order
-    whereClause = and(whereClause, exp(`issue.modified`, op, issue.modified));
+    // These sort issue[primary] desc, issue.modified desc, issue.id desc
+    whereClause = or(
+      and(
+        exp(`issue.${primary}`, '=', issue[primary]),
+        exp('issue.modified', '=', issue.modified),
+        exp('issue.id', op === '<' ? '<=' : '>=', issue.id),
+      ),
+      and(
+        exp(`issue.${primary}`, '=', issue[primary]),
+        exp('issue.modified', op, issue.modified),
+      ),
+      exp(`issue.${primary}`, op, issue[primary]),
+    );
   }
 
-  return filteredAndOrderedQuery.where(whereClause).limit(2);
+  const query = filteredAndOrderedQuery.where(whereClause).limit(2);
+
+  return query;
 }
