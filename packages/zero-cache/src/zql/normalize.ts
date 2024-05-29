@@ -2,6 +2,7 @@ import {
   Aggregate,
   AST,
   normalizeAST,
+  Ordering,
   Selector,
   type Condition,
 } from '@rocicorp/zql/src/zql/ast/ast.js';
@@ -51,18 +52,8 @@ export class Normalized {
   }
 
   #constructQuery(ast: ServerAST): string {
-    const {
-      schema,
-      table,
-      alias,
-      select,
-      aggregate,
-      joins,
-      where,
-      groupBy,
-      orderBy,
-      limit,
-    } = ast;
+    const {schema, table, alias, select, aggregate, joins, where} = ast;
+    let {groupBy, orderBy, limit} = ast;
 
     let query = '';
     const selection = [
@@ -86,16 +77,47 @@ export class Normalized {
       ),
     ].join(', ');
 
+    // 1. all joins are left joins
+    // 2. order by is only against fields in the `from` table
+    // 3. group by is against unique field in the `from` table
+    // 4. limit exists
+    // then:
+    // move order and limit to sub-query
+
     if (selection) {
       query += `SELECT ${selection} FROM `;
     }
-    if (schema) {
-      query += ident(schema) + '.';
+
+    const getOrderByStr = ([names, dir]: Ordering) =>
+      ` ORDER BY ${names.map(x => `${selector(x)} ${dir}`).join(', ')}`;
+
+    if (moveOrderByAndLimit(ast)) {
+      query += `(SELECT * FROM `;
+      if (schema) {
+        query += ident(schema) + '.';
+      }
+      query += ident(table);
+      if (orderBy) {
+        query += getOrderByStr(orderBy);
+      }
+      if (limit !== undefined) {
+        query += ` LIMIT ${limit}`;
+      }
+      query += `) AS ${ident(alias ?? table)}`;
+
+      orderBy = undefined;
+      limit = undefined;
+      groupBy = undefined;
+    } else {
+      if (schema) {
+        query += ident(schema) + '.';
+      }
+      query += ident(table);
+      if (alias) {
+        query += ` AS ${ident(alias)}`;
+      }
     }
-    query += ident(table);
-    if (alias) {
-      query += ` AS ${ident(alias)}`;
-    }
+
     joins?.forEach(join => {
       const {
         type,
@@ -115,10 +137,7 @@ export class Normalized {
       query += ` GROUP BY ${groupBy.map(x => selector(x)).join(', ')}`;
     }
     if (orderBy) {
-      const [names, dir] = orderBy;
-      query += ` ORDER BY ${names
-        .map(x => `${selector(x)} ${dir}`)
-        .join(', ')}`;
+      query += getOrderByStr(orderBy);
     }
     if (limit !== undefined) {
       query += ` LIMIT ${limit}`;
@@ -196,4 +215,21 @@ function withNormalizedServerFields(ast: AST, serverAst: ServerAST): ServerAST {
     ...ast,
     aggLift: serverAst.aggLift,
   };
+}
+
+function moveOrderByAndLimit(ast: ServerAST): boolean {
+  return !!(
+    // all left joins
+    (
+      ast.joins?.every(join => join.type === 'left') &&
+      // ordering only against left most table
+      ast.orderBy?.[0].every(selector => selector[0] === ast.table) &&
+      // group by only against primary key of left most table
+      ast.groupBy?.every(
+        selector => selector[0] === ast.table && selector[1] === 'id',
+      ) &&
+      // limit exists
+      ast.limit !== undefined
+    )
+  );
 }
