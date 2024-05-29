@@ -1,4 +1,4 @@
-import {useDebounce} from '@uidotdev/usehooks';
+import {useThrottle} from '@uidotdev/usehooks';
 import {useMemo} from 'react';
 import type {SafeParseReturnType} from 'zod';
 import {
@@ -103,7 +103,7 @@ export function useFilters(): FiltersState {
   const [labelFilter] = useLabelFilterState();
   const [textFilterSync] = useTextSearchState();
   const [view] = useViewState();
-  const textFilter = useDebounce(textFilterSync, 250);
+  const textFilter = useThrottle(textFilterSync, 250);
 
   return useMemo(() => {
     const viewStatuses = getViewStatuses(view);
