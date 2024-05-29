@@ -49,21 +49,21 @@ async function testBasics(userID: string) {
   });
 
   await sleep(1);
-  assert(deepEqual(log, [[]]));
+  assert(deepEqual(log, [[], []]));
 
   await r.mutate.e.set({id: 'foo', value: 1});
-  assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
+  assert(deepEqual(log, [[], [], [{id: 'foo', value: 1}]]));
 
   await r.mutate.e.set({id: 'foo', value: 2});
   assert(
-    deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+    deepEqual(log, [[], [], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   cancelSubscribe();
 
   await r.mutate.e.set({id: 'foo', value: 3});
   assert(
-    deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+    deepEqual(log, [[], [], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
   assert(deepEqual(await q.exec(), [{id: 'foo', value: 3}]));
 }
