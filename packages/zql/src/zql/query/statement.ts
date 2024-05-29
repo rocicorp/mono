@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {
   buildPipeline,
@@ -10,7 +11,8 @@ import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
 import type {MakeHumanReadable} from './entity-query.js';
-import {resolver} from '@rocicorp/resolver';
+
+export type ResultType = 'complete' | 'partial' | 'none';
 
 export interface IStatement<TReturn> {
   subscribe(cb: (value: MakeHumanReadable<TReturn>) => void): () => void;
@@ -58,13 +60,36 @@ export class Statement<Return> implements IStatement<Return> {
   }
 
   subscribe(
-    cb: (value: MakeHumanReadable<Return>) => void,
+    callback: (
+      value: MakeHumanReadable<Return>,
+      resultType: ResultType,
+    ) => void,
     initialData = true,
   ) {
+    let resultType: ResultType = 'none';
     const materialization = this.#getMaterialization();
-    const subscriptionRemoved = this.#context.subscriptionAdded(this.#ast);
+    const subscriptionRemoved = this.#context.subscriptionAdded(
+      this.#ast,
+      got => {
+        if (got) {
+          resultType = 'complete';
+        }
+        // When we get the gotQueries signal, we need to call the callback since
+        // the result might be empty and the view won't trigger a change.
+        this.exec()
+          .then(v => {
+            callback(v, resultType);
+          })
+          .catch(e => console.error(e));
+      },
+    );
     const cleanupPromise = materialization.then(view =>
-      view.on(cb, initialData),
+      view.on(v => {
+        if (resultType === 'none') {
+          resultType = 'partial';
+        }
+        callback(v, resultType);
+      }, initialData),
     );
     const cleanup = () => {
       subscriptionRemoved();
