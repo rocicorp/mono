@@ -5,7 +5,14 @@ import {EntityQuery, FromSet, Zero} from 'zero-client';
 import App, {Collections} from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
 import './index.css';
-import type {Comment, Issue, IssueLabel, Label, Member} from './issue.js';
+import {
+  commentsForIssuesQuery,
+  type Comment,
+  type Issue,
+  type IssueLabel,
+  type Label,
+  type Member,
+} from './issue.js';
 import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +24,7 @@ async function preload(z: Zero<Collections>) {
   const allLabelsPreload = z.query.label.select('id', 'name');
   allLabelsPreload.prepare().preload();
 
-  const preloadIssueLimit = 3000;
+  const preloadIssueLimit = 2000;
   const preloadIssueIncrement = 1000;
   const issueBaseQuery = z.query.issue
     .leftJoin(
@@ -44,8 +51,6 @@ async function preload(z: Zero<Collections>) {
   const issueSorts: Parameters<typeof issueBaseQuery.desc>[] = [
     ['issue.modified'],
     ['issue.created'],
-    ['issue.status', 'issue.modified'],
-    ['issue.priority', 'issue.modified'],
   ];
 
   for (const issueSort of issueSorts) {
@@ -55,6 +60,44 @@ async function preload(z: Zero<Collections>) {
       preloadIssueLimit,
       preloadIssueIncrement,
     );
+  }
+
+  if (new URL(location.href).searchParams.get('commentPreload') === 'true') {
+    console.log('Aggressive comment preload beginning!!!');
+    let preloadStarted = false;
+    const aggresiveCommentPreloadLimit = 10000;
+    const cleanup = z.query.issue
+      .select('id')
+      .desc('issue.modified')
+      .limit(aggresiveCommentPreloadLimit)
+      .prepare()
+      .subscribe(async (results, resultType) => {
+        if (resultType === 'complete') {
+          cleanup();
+          if (preloadStarted) {
+            return;
+          }
+          preloadStarted = true;
+          let preloaded = 0;
+          const ids = [];
+          for (const {id} of results) {
+            ids.push(id);
+            if (ids.length === 500) {
+              await commentsForIssuesQuery(z, ids).prepare().preload()
+                .preloaded;
+              preloaded += ids.length;
+              ids.length = 0;
+              console.log(
+                'Aggressive comment preload progress',
+                preloaded,
+                '/',
+                aggresiveCommentPreloadLimit,
+              );
+            }
+          }
+          console.log('Aggressive comment preload done.');
+        }
+      });
   }
 
   console.debug('COMPLETED PRELOAD');
@@ -100,7 +143,7 @@ async function incrementalPreload<F extends FromSet, R>(
 
 function init() {
   const z = new Zero({
-    logLevel: 'debug',
+    logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: 'anon',
     queries: {

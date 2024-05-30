@@ -307,6 +307,31 @@ export type IssueQuery = EntityQuery<
   }[]
 >;
 
+function commentBaseQuery(z: Zero<Collections>) {
+  return z.query.comment
+    .join(z.query.member, 'member', 'comment.creatorID', 'member.id')
+    .select(
+      'comment.id',
+      'comment.issueID',
+      'comment.created',
+      'comment.creatorID',
+      'comment.body',
+      'member.name',
+    )
+    .asc('comment.created');
+}
+
+export function commentsForIssuesQuery(
+  z: Zero<Collections>,
+  issueIDs: string[],
+) {
+  return commentBaseQuery(z).where('comment.issueID', 'IN', issueIDs);
+}
+
+export function commentsForIssueQuery(z: Zero<Collections>, issueID: string) {
+  return commentBaseQuery(z).where('comment.issueID', '=', issueID);
+}
+
 export function orderQuery<R>(
   // TODO: having to know the return type of the query to take it in as an arg is...
   // confusing at best.
