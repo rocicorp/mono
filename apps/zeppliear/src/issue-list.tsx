@@ -6,7 +6,13 @@ import type {Collections} from './app.js';
 import {useZero} from './hooks/use-zero.js';
 import IssueRowLoading from './issue-row-loading.js';
 import IssueRow from './issue-row.jsx';
-import type {Issue, IssueUpdate, Priority, Status} from './issue.js';
+import {
+  commentsForIssueQuery,
+  type Issue,
+  type IssueUpdate,
+  type Priority,
+  type Status,
+} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
 
@@ -32,12 +38,16 @@ function deprioritizePreloadingComments(
   const index = preloadQueue.indexOf(issueID);
   if (index > -1) {
     preloadQueue.splice(index, 1);
+
+    if (lowPriorityPreloadQueue.includes(issueID)) {
+      return;
+    }
+    lowPriorityPreloadQueue.unshift(issueID);
+    if (lowPriorityPreloadQueue.length > 250) {
+      lowPriorityPreloadQueue.length = 250;
+    }
+    void processPreloadQueues(zero);
   }
-  if (lowPriorityPreloadQueue.includes(issueID)) {
-    return;
-  }
-  lowPriorityPreloadQueue.push(issueID);
-  void processPreloadQueues(zero);
 }
 
 let preloadQueueProcessing = false;
@@ -48,31 +58,36 @@ async function processPreloadQueues(zero: Zero<Collections>) {
   preloadQueueProcessing = true;
   try {
     while (preloadQueue.length > 0 || lowPriorityPreloadQueue.length > 0) {
-      const highPriority = preloadQueue.length > 0;
-      const issueID = highPriority
-        ? preloadQueue.shift()
-        : lowPriorityPreloadQueue.shift();
       console.debug(
-        'preloading comments for',
-        issueID,
-        'highPriority?',
-        highPriority,
+        'comment preload queue sizes',
+        preloadQueue.length,
+        lowPriorityPreloadQueue.length,
       );
-      await zero.query.comment
-        .where('issueID', '=', issueID ?? '')
-        .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
-        .select(
-          'comment.id',
-          'comment.issueID',
-          'comment.created',
-          'comment.creatorID',
-          'comment.body',
-          'member.name',
-        )
-        .asc('comment.created')
-        .prepare()
-        .preload().preloaded;
-      console.debug('preloaded comments for', issueID);
+      const p: Promise<unknown>[] = [];
+      for (let i = 0; i < 5; i++) {
+        const highPriority = preloadQueue.length > 0;
+        const issueID = highPriority
+          ? preloadQueue.shift()
+          : lowPriorityPreloadQueue.shift();
+        if (!issueID) {
+          break;
+        }
+        console.debug(
+          'preloading comments for',
+          issueID,
+          'highPriority?',
+          highPriority,
+        );
+        p.push(
+          commentsForIssueQuery(zero, issueID)
+            .prepare()
+            .preload()
+            .preloaded.then(() => {
+              console.debug('preloaded comments for', issueID);
+            }),
+        );
+      }
+      await Promise.all(p);
     }
   } finally {
     preloadQueueProcessing = false;
@@ -106,13 +121,12 @@ function RawRow({
 }) {
   const zero = useZero<Collections>();
   const isLoadingIndicator = data.isLoadingIndicator(index);
+  const issueID = isLoadingIndicator ? null : data.mustGetIssue(index).issue.id;
 
   useEffect(() => {
-    if (isLoadingIndicator) {
+    if (issueID === null) {
       return;
     }
-    const row = data.mustGetIssue(index);
-    const issueID = row.issue.id;
     const timeout = setTimeout(() => {
       preloadComments(zero, issueID);
     }, 250);
@@ -120,7 +134,7 @@ function RawRow({
       clearTimeout(timeout);
       deprioritizePreloadingComments(zero, issueID);
     };
-  }, [zero, isLoadingIndicator, data, index]);
+  }, [zero, issueID]);
 
   return (
     <div style={style}>

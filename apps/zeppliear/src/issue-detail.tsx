@@ -27,6 +27,7 @@ import {
   Order,
   Priority,
   Status,
+  commentsForIssueQuery,
   orderQuery,
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
@@ -116,21 +117,9 @@ export default function IssueDetail({
     queryDeps.concat(issue),
   );
 
-  const comments = useQuery(
-    zero.query.comment
-      .where('issueID', '=', detailIssueID ?? '')
-      .join(zero.query.member, 'member', 'comment.creatorID', 'member.id')
-      .select(
-        'comment.id',
-        'comment.issueID',
-        'comment.created',
-        'comment.creatorID',
-        'comment.body',
-        'member.name',
-      )
-      .asc('comment.created'),
-    [detailIssueID],
-  );
+  const comments = useQuery(commentsForIssueQuery(zero, detailIssueID ?? ''), [
+    detailIssueID,
+  ]);
 
   const handleClose = useCallback(() => {
     setDetailIssueID(null);
