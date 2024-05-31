@@ -1,4 +1,3 @@
-import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
@@ -10,11 +9,15 @@ import {MessageProcessor} from './incremental-sync.js';
 import {InvalidationFilters} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
 import {setupReplicationTables} from './schema/replication.js';
+import {TransactionTrainService} from './transaction-train.js';
 
 describe('replicator/message-processor', () => {
+  let lc: LogContext;
   let replica: PostgresDB;
+  let train: TransactionTrainService;
 
   beforeEach(async () => {
+    lc = createSilentLogContext();
     replica = await testDBs.create('message_processor_test_replica');
 
     await replica`
@@ -26,16 +29,19 @@ describe('replicator/message-processor', () => {
     `;
     await replica.begin(tx =>
       setupReplicationTables(
-        createSilentLogContext(),
+        lc,
         'unused_id',
         tx,
         null as unknown as PostgresDB, // unused
         'postgres:///unused_upstream',
       ),
     );
+    train = new TransactionTrainService(lc, replica);
+    void train.run();
   });
 
   afterEach(async () => {
+    await train.stop();
     await testDBs.drop(replica);
   });
 
@@ -398,20 +404,18 @@ describe('replicator/message-processor', () => {
       const versionChanges = new Queue<VersionChange>();
 
       const processor = new MessageProcessor(
-        replica,
         {
           // Unused in this test.
           publications: [],
           tables: [],
         },
-        new Lock(),
+        train,
         new InvalidationFilters(),
         (lsn: string) => acknowledgements.enqueue(lsn),
         (v: VersionChange) => versionChanges.enqueue(v),
         (_: LogContext, err: unknown) => failures.enqueue(err),
       );
 
-      const lc = createSilentLogContext();
       for (const [lsn, msgs] of Object.entries(c.messages)) {
         for (const msg of msgs) {
           processor.processMessage(lc, lsn, msg);
