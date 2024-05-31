@@ -1,4 +1,3 @@
-import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
@@ -11,6 +10,7 @@ import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {InvalidationFilters, Invalidator} from './invalidation.js';
 import {initSyncSchema} from './schema/sync-schema.js';
+import {TransactionTrainService} from './transaction-train.js';
 
 export const registerInvalidationFiltersRequest = v.object({
   specs: v.array(normalizedFilterSpecSchema),
@@ -156,6 +156,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly #upstreamUri: string;
   readonly #upstream: PostgresDB;
   readonly #syncReplica: PostgresDB;
+  readonly #txTrain: TransactionTrainService;
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #invalidator: Invalidator;
   readonly #ready = resolver();
@@ -175,21 +176,19 @@ export class ReplicatorService implements Replicator, Service {
     this.#upstream = upstream;
     this.#syncReplica = syncReplica;
 
-    // This lock ensures that transactions are processed serially, even
-    // across re-connects to the upstream db.
-    const txSerializer = new Lock();
+    this.#txTrain = new TransactionTrainService(this.#lc, syncReplica);
     const invalidationFilters = new InvalidationFilters();
 
     this.#incrementalSyncer = new IncrementalSyncer(
       upstreamUri,
       replicaID,
       this.#syncReplica,
-      txSerializer,
+      this.#txTrain,
       invalidationFilters,
     );
     this.#invalidator = new Invalidator(
       this.#syncReplica,
-      txSerializer,
+      this.#txTrain,
       invalidationFilters,
     );
   }
@@ -209,6 +208,8 @@ export class ReplicatorService implements Replicator, Service {
 
     this.#ready.resolve();
 
+    void this.#txTrain.run();
+
     await this.#incrementalSyncer.run(this.#lc);
   }
 
@@ -224,5 +225,8 @@ export class ReplicatorService implements Replicator, Service {
     return this.#incrementalSyncer.versionChanges();
   }
 
-  async stop() {}
+  async stop() {
+    await this.#incrementalSyncer.stop(this.#lc);
+    await this.#txTrain.stop();
+  }
 }

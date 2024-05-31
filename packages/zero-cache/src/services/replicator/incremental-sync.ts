@@ -1,5 +1,4 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
-import type {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {EventEmitter} from 'eventemitter3';
 import {
@@ -9,13 +8,12 @@ import {
 } from 'pg-logical-replication';
 import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
 import {
   ControlFlowError,
-  Mode,
   Statement,
   TransactionPool,
-  synchronizedSnapshots,
 } from '../../db/transaction-pool.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {JSONValue, stringify} from '../../types/bigint-json.js';
@@ -27,12 +25,9 @@ import {Subscription} from '../../types/subscription.js';
 import {replicationSlot} from './initial-sync.js';
 import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
 import type {RowChange, VersionChange} from './replicator.js';
-import {
-  ZERO_VERSION_COLUMN_NAME,
-  queryLastLSN,
-  queryStateVersion,
-} from './schema/replication.js';
+import {ZERO_VERSION_COLUMN_NAME, queryLastLSN} from './schema/replication.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
+import type {TransactionTrain} from './transaction-train.js';
 import {toLexiVersion} from './types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
 
@@ -54,9 +49,10 @@ export class IncrementalSyncer {
   readonly #replica: PostgresDB;
   readonly #eventEmitter: EventEmitter = new EventEmitter();
 
-  // This lock ensures that transactions are processed serially, even
-  // across re-connects to the upstream db.
-  readonly #txSerializer: Lock;
+  // The train ensures that transactions are processed serially, even
+  // across re-connects to the upstream db and multiple (temporarily)
+  // running instances of the Replicator.
+  readonly #txTrain: TransactionTrain;
   readonly #invalidationFilters: InvalidationFilters;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
@@ -68,13 +64,13 @@ export class IncrementalSyncer {
     upstreamUri: string,
     replicaID: string,
     replica: PostgresDB,
-    txSerializer: Lock,
+    txTrain: TransactionTrain,
     invalidationFilters: InvalidationFilters,
   ) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replica = replica;
-    this.#txSerializer = txSerializer;
+    this.#txTrain = txTrain;
     this.#invalidationFilters = invalidationFilters;
   }
 
@@ -97,9 +93,8 @@ export class IncrementalSyncer {
       this.#service = service;
 
       const processor = new MessageProcessor(
-        this.#replica,
         replicated,
-        this.#txSerializer,
+        this.#txTrain,
         this.#invalidationFilters,
         (lsn: string) => {
           if (!lastLSN || toLexiVersion(lastLSN) < toLexiVersion(lsn)) {
@@ -279,29 +274,28 @@ class PrecedingTransactionError extends ControlFlowError {
  */
 // Exported for testing.
 export class MessageProcessor {
-  readonly #replica: PostgresDB;
   readonly #replicated: PublicationInfo;
-  readonly #txSerializer: Lock;
+  readonly #txTrain: TransactionTrain;
   readonly #invalidationFilters: InvalidationFilters;
   readonly #acknowledge: (lsn: string) => unknown;
   readonly #emitVersion: (v: VersionChange) => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
+  #currentTx: Queue<Pgoutput.Message> | null = null;
+
   #failure: Error | undefined;
   #tx: TransactionProcessor | undefined;
 
   constructor(
-    replica: PostgresDB,
     replicated: PublicationInfo,
-    txSerializer: Lock,
+    txTrain: TransactionTrain,
     invalidationFilters: InvalidationFilters,
     acknowledge: (lsn: string) => unknown,
     emitVersion: (v: VersionChange) => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
-    this.#replica = replica;
     this.#replicated = replicated;
-    this.#txSerializer = txSerializer;
+    this.#txTrain = txTrain;
     this.#invalidationFilters = invalidationFilters;
     this.#acknowledge = acknowledge;
     this.#emitVersion = emitVersion;
@@ -311,47 +305,99 @@ export class MessageProcessor {
   #createAndEnqueueNewTransaction(
     lc: LogContext,
     commitLsn: string,
-  ): TransactionProcessor {
+    messages: Queue<Pgoutput.Message>,
+  ): void {
     const start = Date.now();
-    const txProcessor = new TransactionProcessor(
-      lc,
-      commitLsn,
-      this.#invalidationFilters,
-    );
-    void this.#txSerializer.withLock(async () => {
-      const inLock = Date.now();
-      try {
-        if (this.#failure) {
-          // If a preceding transaction failed, all subsequent transactions must also fail.
-          txProcessor.fail(new PrecedingTransactionError(this.#failure));
-        }
-        const versionChange = await txProcessor.execute(this.#replica);
-        this.#acknowledge(commitLsn);
-        this.#emitVersion(versionChange);
-        lc.debug?.(
-          `Committed tx (queued: ${inLock - start} ms) (${
-            Date.now() - start
-          } ms)`,
+    void this.#txTrain.runNext(
+      async (writer, readers, preStateVersion, invalidationRegistryVersion) => {
+        const inLock = Date.now();
+        const txProcessor = new TransactionProcessor(
+          lc,
+          commitLsn,
+          writer,
+          readers,
+          this.#invalidationFilters,
         );
-      } catch (e) {
-        if (
-          // A unique violation on the TxLog means that the transaction has already been
-          // processed. This is not a real error, and can happen, for example, if the upstream
-          // the connection was lost before the acknowledgment was sent. Recover by resending
-          // the acknowledgement, and continue processing the stream.
-          e instanceof postgres.PostgresError &&
-          e.code === PG_UNIQUE_VIOLATION &&
-          e.schema_name === '_zero' &&
-          e.table_name === 'TxLog'
-        ) {
+        try {
+          if (this.#failure) {
+            // If a preceding transaction failed, all subsequent transactions must also fail.
+            txProcessor.fail(new PrecedingTransactionError(this.#failure));
+            return;
+          }
+
+          loop: for await (const msg of messages.asAsyncIterable()) {
+            switch (msg.tag) {
+              case 'begin':
+                txProcessor.processBegin(msg, invalidationRegistryVersion);
+                break;
+              case 'relation':
+                this.#processRelation(msg);
+                break;
+              case 'insert':
+                txProcessor.processInsert(msg);
+                break;
+              case 'update':
+                txProcessor.processUpdate(msg);
+                break;
+              case 'delete':
+                txProcessor.processDelete(msg);
+                break;
+              case 'truncate':
+                txProcessor.processTruncate(msg);
+                break;
+              case 'commit': {
+                txProcessor.processCommit(msg);
+                break loop; // Done with transaction!
+              }
+              case 'origin':
+                // We are agnostic as to which node a transaction originated from.
+                lc.info?.('Ignoring ORIGIN message in replication stream', msg);
+                break;
+              case 'type':
+                throw new Error(
+                  `Custom types are not supported (received "${msg.typeName}")`,
+                );
+              default:
+                // TODO: Determine what the "Message" message is.
+                // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#:~:text=Identifies%20the%20message%20as%20a%20logical%20decoding%20message.
+                lc.error?.(
+                  `Received unexpected message of type ${msg.tag}`,
+                  msg,
+                );
+                throw new Error(
+                  `Don't know how to handle message of type ${msg.tag}`,
+                );
+            }
+          }
+
+          const versionChange =
+            await txProcessor.getFinalVersionChange(preStateVersion);
           this.#acknowledge(commitLsn);
-          lc.debug?.(`Skipped repeat tx`);
-        } else {
-          this.#failInLock(lc, e);
+          this.#emitVersion(versionChange);
+          lc.debug?.(
+            `Committed tx (queued: ${inLock - start} ms) (${
+              Date.now() - start
+            } ms)`,
+          );
+        } catch (e) {
+          if (
+            // A unique violation on the TxLog means that the transaction has already been
+            // processed. This is not a real error, and can happen, for example, if the upstream
+            // the connection was lost before the acknowledgment was sent. Recover by resending
+            // the acknowledgement, and continue processing the stream.
+            e instanceof postgres.PostgresError &&
+            e.code === PG_UNIQUE_VIOLATION &&
+            e.schema_name === '_zero' &&
+            e.table_name === 'TxLog'
+          ) {
+            this.#acknowledge(commitLsn);
+            lc.debug?.(`Skipped repeat tx`);
+          } else {
+            this.#failInLock(lc, e);
+          }
         }
-      }
-    });
-    return txProcessor;
+      },
+    );
   }
 
   /** See {@link MessageProcessor} documentation for error handling semantics. */
@@ -362,9 +408,9 @@ export class MessageProcessor {
       // lock via the TransactionProcessor's `setFailed` rejection callback.
       this.#tx.fail(err);
     } else {
-      // Otherwise, manually enqueue the failure on the `txSerializer` to allow previous
+      // Otherwise, manually enqueue the failure on the `txTrain` to allow previous
       // transactions to complete, and prevent subsequent transactions from proceeding.
-      void this.#txSerializer.withLock(() => {
+      void this.#txTrain.runNext(() => {
         this.#failInLock(lc, err);
       });
     }
@@ -398,57 +444,28 @@ export class MessageProcessor {
       const {commitLsn} = message;
       assert(commitLsn);
 
-      if (this.#tx) {
+      if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(message)}`);
       }
-      this.#tx = this.#createAndEnqueueNewTransaction(
+      this.#currentTx = new Queue();
+      this.#createAndEnqueueNewTransaction(
         lc.withContext('txBegin', lsn).withContext('txCommit', commitLsn),
         commitLsn,
+        this.#currentTx,
       );
-      return this.#tx.processBegin(message);
     }
 
-    // For non-begin messages, there should be a TransactionProcessor set.
-    if (!this.#tx) {
+    // For non-begin messages, there should be a #currentTx set.
+    if (!this.#currentTx) {
       throw new Error(
         `Received message outside of transaction: ${stringify(message)}`,
       );
     }
-    switch (message.tag) {
-      case 'relation':
-        return this.#processRelation(message);
-      case 'insert':
-        return this.#tx.processInsert(message);
-      case 'update':
-        return this.#tx.processUpdate(message);
-      case 'delete':
-        return this.#tx.processDelete(message);
-      case 'truncate':
-        return this.#tx.processTruncate(message);
-      case 'commit': {
-        // Undef this.#tx to allow the assembly of the next transaction.
-        const tx = this.#tx;
-        this.#tx = undefined;
-        return tx.processCommit(message);
-      }
-      case 'origin':
-        // We are agnostic as to which node a transaction originated from.
-        lc.info?.('Ignoring ORIGIN message in replication stream', message);
-        return;
-      case 'type':
-        throw new Error(
-          `Custom types are not supported (received "${message.typeName}")`,
-        );
-      default:
-        // TODO: Determine what the "Message" message is.
-        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#:~:text=Identifies%20the%20message%20as%20a%20logical%20decoding%20message.
-        lc.error?.(
-          `Received unexpected message of type ${message.tag}`,
-          message,
-        );
-        throw new Error(
-          `Don't know how to handle message of type ${message.tag}`,
-        );
+    void this.#currentTx.enqueue(message);
+
+    if (message.tag === 'commit') {
+      // Undef this.#currentTx to allow the assembly of the next transaction.
+      this.#currentTx = null;
     }
   }
 
@@ -485,35 +502,26 @@ class TransactionProcessor {
   readonly #readers: TransactionPool;
   readonly #tableTrackers = new Map<string, TableTracker>();
 
-  #prevVersion: string | undefined;
-
-  constructor(lc: LogContext, lsn: string, filters: InvalidationFilters) {
+  constructor(
+    lc: LogContext,
+    lsn: string,
+    writer: TransactionPool,
+    readers: TransactionPool,
+    filters: InvalidationFilters,
+  ) {
     this.#version = toLexiVersion(lsn);
     this.#lc = lc.withContext('tx', this.#version);
     this.#invalidation = new InvalidationProcessor(filters);
-
-    const {exportSnapshot, cleanupExport, setSnapshot} =
-      synchronizedSnapshots();
-    this.#writer = new TransactionPool(
-      this.#lc.withContext('pool', 'writer'),
-      Mode.SERIALIZABLE,
-      exportSnapshot,
-      cleanupExport,
-    );
-    this.#readers = new TransactionPool(
-      this.#lc.withContext('pool', 'readers'),
-      Mode.READONLY,
-      setSnapshot,
-      undefined,
-      1,
-      3,
-    );
+    this.#writer = writer;
+    this.#readers = readers;
   }
 
-  async execute(db: PostgresDB): Promise<VersionChange> {
+  async getFinalVersionChange(
+    prevVersion: LexiVersion,
+  ): Promise<VersionChange> {
     const [writes, reads] = await Promise.allSettled([
-      this.#writer.run(db),
-      this.#readers.run(db),
+      this.#writer.done(),
+      this.#readers.done(),
     ]);
     if (reads.status === 'rejected') {
       // An error from the readers pool is logged but otherwise dropped, because meaningful
@@ -530,12 +538,11 @@ class TransactionProcessor {
       throw writes.reason;
     }
 
-    assert(this.#prevVersion, `#prevVersion not fetched`);
     const invalidations = this.#invalidation.getInvalidations();
 
     return {
       newVersion: this.#version,
-      prevVersion: this.#prevVersion,
+      prevVersion,
       invalidations: Object.fromEntries(
         [...invalidations.keys()].map(hash => [hash, this.#version]),
       ),
@@ -548,8 +555,14 @@ class TransactionProcessor {
     this.#readers.fail(err);
   }
 
-  processBegin(begin: Pgoutput.MessageBegin) {
-    this.#invalidation.processInitTasks(this.#readers, this.#writer);
+  processBegin(
+    begin: Pgoutput.MessageBegin,
+    invalidationRegistryVersion: LexiVersion | null,
+  ) {
+    this.#invalidation.processInitTasks(
+      this.#readers,
+      invalidationRegistryVersion,
+    );
 
     const row = {
       stateVersion: this.#version,
@@ -558,13 +571,9 @@ class TransactionProcessor {
       xid: begin.xid,
     };
 
-    return this.#writer.process(tx => {
-      const prevVersion = queryStateVersion(tx);
-      prevVersion
-        .then(result => (this.#prevVersion = result[0].max ?? '00'))
-        .catch(e => this.fail(e));
-      return [tx`INSERT INTO _zero."TxLog" ${tx(row)}`];
-    });
+    return this.#writer.process(tx => [
+      tx`INSERT INTO _zero."TxLog" ${tx(row)}`,
+    ]);
   }
 
   processInsert(insert: Pgoutput.MessageInsert) {

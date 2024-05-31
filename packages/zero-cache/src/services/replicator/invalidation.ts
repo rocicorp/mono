@@ -1,4 +1,3 @@
-import type {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {stringify} from 'json-custom-numbers';
@@ -20,22 +19,22 @@ import type {
   RegisterInvalidationFiltersRequest,
   RegisterInvalidationFiltersResponse,
 } from './replicator.js';
-import {queryStateVersion} from './schema/replication.js';
+import type {TransactionTrain} from './transaction-train.js';
 import type {EffectiveRowChange, TableTracker} from './types/table-tracker.js';
 
 export class Invalidator {
   readonly #replica: PostgresDB;
-  readonly #txSerializer: Lock;
+  readonly #txTrain: TransactionTrain;
   readonly #filters: InvalidationFilters;
   readonly #lastRequestedTimes = new Map<string, Date>();
 
   constructor(
     replica: PostgresDB,
-    txSerializer: Lock,
+    txTrain: TransactionTrain,
     invalidationFilters: InvalidationFilters,
   ) {
     this.#replica = replica;
-    this.#txSerializer = txSerializer;
+    this.#txTrain = txTrain;
     this.#filters = invalidationFilters;
   }
 
@@ -77,45 +76,47 @@ export class Invalidator {
       return {specs};
     }
 
-    // Register the specs from within the txSerializer.
-    return this.#txSerializer.withLock(() =>
-      this.#replica.begin(async tx => {
-        // Check again in case registration happened while waiting for the lock
-        // (e.g. a concurrent request).
-        const specs = (await getVersions(tx)).map(row => ({
+    // Register the specs from within the transaction train.
+    return this.#txTrain.runNext(async (writer, _readers, fromStateVersion) => {
+      // Check again in case registration happened while waiting for the train
+      // (e.g. a concurrent request).
+      const specs = await writer.processReadTask(async tx =>
+        (await getVersions(tx)).map(row => ({
           id: row.id,
           fromStateVersion: row.fromStateVersion,
-        }));
-        const latest = specs[specs.length - 1].fromStateVersion;
-        if (latest) {
-          return {specs};
-        }
+        })),
+      );
+      const latest = specs[specs.length - 1].fromStateVersion;
+      if (latest) {
+        return {specs};
+      }
 
-        // Get the current stateVersion.
-        const stateVersion = await queryStateVersion(tx);
-        const fromStateVersion = stateVersion[0].max ?? '00';
-
-        const unregistered = specs.filter(row => row.fromStateVersion === null);
-        for (const row of unregistered) {
+      const unregistered = specs.filter(row => row.fromStateVersion === null);
+      writer.process(tx => [
+        ...unregistered.map(row => {
+          row.fromStateVersion = fromStateVersion;
           const {id} = row;
           const spec = specsByID.get(id);
-          const registration = {id, spec, fromStateVersion, lastRequested: now};
-          void tx`
-          INSERT INTO _zero."InvalidationRegistry" ${tx(registration)}
-          `.execute();
-          row.fromStateVersion = fromStateVersion;
-        }
-
+          const reg = {
+            id,
+            spec,
+            fromStateVersion,
+            lastRequested: now,
+          };
+          return tx`INSERT INTO _zero."InvalidationRegistry" ${tx(reg)}`;
+        }),
         // UPDATE the InvalidationRegistryVersion.
-        void tx`UPDATE _zero."InvalidationRegistryVersion" SET ${tx({
+        tx`UPDATE _zero."InvalidationRegistryVersion" SET ${tx({
           stateVersionAtLastSpecChange: fromStateVersion,
-        })}`.execute();
+        })}`,
+      ]);
 
-        await this.#filters.ensureCachedFilters(lc, tx, fromStateVersion);
+      await writer.processReadTask(tx =>
+        this.#filters.ensureCachedFilters(lc, tx, fromStateVersion),
+      );
 
-        return {specs};
-      }),
-    );
+      return {specs};
+    });
   }
 }
 
@@ -144,7 +145,7 @@ export class InvalidationFilters {
   async ensureCachedFilters(
     lc: LogContext,
     db: PostgresDB,
-    expectedVersion?: LexiVersion,
+    expectedVersion?: LexiVersion | null,
   ): Promise<CachedFilters> {
     const cached = this.#cachedFilters;
     if (cached && cached.version === (expectedVersion ?? cached.version)) {
@@ -180,35 +181,20 @@ export class InvalidationProcessor {
   }
 
   /**
-   * Runs Tasks on the `readers` and `writer` pools to initialize the invalidation processing.
-   *
-   * Implementation: The `writer` task checks the version of the InvalidationRegistry and
-   * loads the filters if the version differs from the cached filters. This must be done on
-   * the `writer` pool to prevent a concurrent update to the InvalidationRegistry via a
-   * `SELECT ... FOR UPDATE`.
+   * Runs Tasks to initialize the invalidation processing.
    */
-  processInitTasks(_readers: TransactionPool, writer: TransactionPool) {
+  processInitTasks(
+    readers: TransactionPool,
+    invalidationRegistryVersion: LexiVersion | null,
+  ) {
     const {promise, resolve, reject} = resolver<CachedFilters>();
     this.#cachedFilters = promise;
 
-    writer.process((tx, lc) => {
-      // Perform a SELECT ... FOR UPDATE query to prevent concurrent invalidation filter registration.
-      // Although concurrency should not happen in the steady state because registration is serialized
-      // with transaction processing via the `txSerializer`, enforcing this at the database level provides
-      // protection in the face of multiple Durable Objects running during an update.
-      const stmt = tx`
-      SELECT "stateVersionAtLastSpecChange" as version
-        FROM _zero."InvalidationRegistryVersion" 
-        FOR UPDATE
-      `.simple();
-
-      stmt.then(result => {
-        this.#filters
-          .ensureCachedFilters(lc, tx, result.length ? result[0].version : '00')
-          .then(resolve, reject);
-      }, reject);
-      return [stmt];
-    });
+    void readers.processReadTask((tx, lc) =>
+      this.#filters
+        .ensureCachedFilters(lc, tx, invalidationRegistryVersion)
+        .then(resolve, reject),
+    );
   }
 
   /**
