@@ -560,10 +560,7 @@ const IDLE_TIMEOUT_MS = 5_000;
 
 const KEEPALIVE_TIMEOUT_MS = 60_000;
 
-const KEEPALIVE_TASK: Task = (tx, lc) => {
-  lc.debug?.('sending keepalive');
-  return [tx`SELECT 1`.simple()];
-};
+const KEEPALIVE_TASK: Task = tx => [tx`SELECT 1`.simple()];
 
 type TimeoutTask = {
   timeoutMs: number;
