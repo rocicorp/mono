@@ -8,9 +8,9 @@ import {
   PongMessage,
   upstreamSchema,
 } from 'zero-protocol';
+import {findErrorForClient} from '../types/error-for-client.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
-import {findErrorForClient} from '../types/error-for-client.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 
@@ -162,7 +162,7 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
-      this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)]);
+      this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)], e);
       return;
     }
     try {
@@ -246,14 +246,11 @@ export class Connection {
       ErrorKind.Internal,
       String(e),
     ];
-    this.#closeWithError(errorMessage);
+    this.#closeWithError(errorMessage, e);
   }
 
-  #closeWithError(
-    errorMessage: ErrorMessage,
-    logLevel: 'info' | 'error' = 'info',
-  ) {
-    this.sendError(errorMessage, logLevel);
+  #closeWithError(errorMessage: ErrorMessage, thrown?: unknown) {
+    this.sendError(errorMessage, thrown);
     this.close();
   }
 
@@ -261,8 +258,8 @@ export class Connection {
     send(this.#ws, data);
   }
 
-  sendError(errorMessage: ErrorMessage, logLevel: 'info' | 'error' = 'info') {
-    sendError(this.#lc, this.#ws, errorMessage, logLevel);
+  sendError(errorMessage: ErrorMessage, thrown?: unknown) {
+    sendError(this.#lc, this.#ws, errorMessage, thrown);
   }
 }
 
@@ -274,10 +271,11 @@ export function sendError(
   lc: LogContext,
   ws: WebSocket,
   errorMessage: ErrorMessage,
-  logLevel: 'info' | 'error' = 'info',
+  thrown?: unknown,
 ) {
   lc = lc.withContext('errorKind', errorMessage[1]);
-  lc[logLevel]?.('Sending error on WebSocket', errorMessage);
+  const logLevel = thrown ? 'error' : 'info';
+  lc[logLevel]?.('Sending error on WebSocket', errorMessage, thrown ?? '');
   send(ws, errorMessage);
 }
 
