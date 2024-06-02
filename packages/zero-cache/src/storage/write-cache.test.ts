@@ -722,6 +722,114 @@ describe('write-cache', () => {
       });
     });
   }
+
+  test('cancel pending', async () => {
+    await runWithDurableObjectStorage(async storage => {
+      const durable = new DurableStorage(storage);
+
+      for (const k of durableEntryKeys) {
+        await durable.put(k, `orig-${k}`);
+      }
+
+      const cache = new WriteCache(durable);
+
+      expect(cache.isDirty()).toBe(false);
+      expect(await cache.get('foo-1', valita.string())).toEqual('orig-foo-1');
+      expect(cache.isDirty()).toBe(false);
+
+      for (const k of [...durableEntryKeys, 'abc', '123']) {
+        await cache.put(k, `new-${k}`);
+      }
+
+      expect(cache.isDirty()).toBe(true);
+
+      for (const k of ['foo-1', '123']) {
+        await cache.del(k);
+      }
+
+      const entries = [...(await cache.list({}, valita.string()))];
+      expect(entries).toMatchInlineSnapshot(`
+        [
+          [
+            "abc",
+            "new-abc",
+          ],
+          [
+            "bar-1",
+            "new-bar-1",
+          ],
+          [
+            "baz-1",
+            "new-baz-1",
+          ],
+        ]
+      `);
+
+      const durableEntriesBeforeFlush = [
+        ...(await durable.list({}, valita.string())),
+      ];
+      expect(durableEntriesBeforeFlush).toEqual(
+        durableEntryKeys.map(k => [k, `orig-${k}`]),
+      );
+
+      expect(cache.pending()).toMatchInlineSnapshot(`
+        [
+          {
+            "key": "bar-1",
+            "op": "put",
+            "value": "new-bar-1",
+          },
+          {
+            "key": "baz-1",
+            "op": "put",
+            "value": "new-baz-1",
+          },
+          {
+            "key": "foo-1",
+            "op": "del",
+          },
+          {
+            "key": "abc",
+            "op": "put",
+            "value": "new-abc",
+          },
+          {
+            "key": "123",
+            "op": "del",
+          },
+        ]
+      `);
+
+      // Cancel everything but baz-1 and 123 (which was added and deleted)
+      cache.cancelPending('foo-1');
+      cache.cancelPending('bar-1');
+      cache.cancelPending('abc');
+
+      await cache.flush();
+      expect(cache.isDirty()).toBe(false);
+
+      const durableEntriesAfterFlush = [
+        ...(await durable.list({}, valita.string())),
+      ];
+
+      expect(durableEntriesAfterFlush).toMatchInlineSnapshot(`
+        [
+          [
+            "bar-1",
+            "orig-bar-1",
+          ],
+          [
+            "baz-1",
+            "new-baz-1",
+          ],
+          [
+            "foo-1",
+            "orig-foo-1",
+          ],
+        ]
+      `);
+    });
+  });
 });
 
 async function testGetEntries(keys: string[], cache: WriteCache, c: Case) {
