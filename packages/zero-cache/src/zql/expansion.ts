@@ -1,6 +1,6 @@
 import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
-import {splitLastComponent} from '../services/view-syncer/queries.js';
-import type {AggLift, ServerAST} from './server-ast.js';
+import {assert} from 'shared/src/asserts.js';
+import type {ServerAST, SubQuery} from './server-ast.js';
 
 /**
  * Maps a table to the set of columns that must always be selected. For example,
@@ -17,7 +17,6 @@ export type RequiredColumns = (
  * into their component parts.
  */
 export const ALIAS_COMPONENT_SEPARATOR = '/';
-export const AGG_LIFT_SUFFIX = '_0_agg_lift';
 
 /**
  * Expands the selection of a query to include all of the rows and column values
@@ -176,11 +175,6 @@ export function expandSelection(
   return reAliased;
 }
 
-type SelectorAndMaybeAlias = {
-  selector: Selector;
-  aggLiftAlias?: string | undefined;
-};
-
 /**
  * The first step of full query expansion is sub-query expansion. In this step,
  * all AST's are converted to explicit `SELECT` statements that select all of the
@@ -219,13 +213,14 @@ type SelectorAndMaybeAlias = {
 export function expandSubqueries(
   ast: ServerAST,
   requiredColumns: RequiredColumns,
-  externallyReferencedColumns: SelectorAndMaybeAlias[],
+  externallyReferencedColumns: Selector[],
 ): ServerAST {
   const {
     schema,
     select,
     where,
     aggregate,
+    subQuery,
     joins,
     groupBy,
     orderBy,
@@ -233,30 +228,12 @@ export function expandSubqueries(
     alias,
   } = ast;
 
-  const aggregateColumns = groupBy && groupBy.length > 0;
-
-  // if it is a group by
-  // we must indicate that
-  // and pull required columns through aggregation.
-
   // Collect all references from SELECT, WHERE, and ON clauses
-  const selectors = new Map<string, SelectorAndMaybeAlias[]>();
-  const defaultFrom = alias ?? table;
-  const addSelector = (
-    selector: Selector,
-    aggLiftAlias?: string | undefined,
-  ) => {
+  const selectors = new Map<string, Selector[]>();
+  const defaultFrom = subQuery?.alias ?? alias ?? table;
+  const addSelector = (selector: Selector) => {
     const [from] = selector;
-    selectors.get(from)?.push({
-      selector,
-      aggLiftAlias,
-    }) ??
-      selectors.set(from, [
-        {
-          selector,
-          aggLiftAlias,
-        },
-      ]);
+    selectors.get(from)?.push(selector) ?? selectors.set(from, [selector]);
   };
   const selected = new Set<string>();
   // Add all referenced fields / selectors.
@@ -264,11 +241,7 @@ export function expandSubqueries(
     addSelector(selector);
     selected.add(alias);
   });
-  selectors
-    .get(defaultFrom)
-    ?.forEach(selector =>
-      selected.add(selector.aggLiftAlias ?? selector.selector[1]),
-    );
+  selectors.get(defaultFrom)?.forEach(selector => selected.add(selector[1]));
 
   getWhereColumns(where, []).forEach(selector => addSelector(selector));
   joins?.forEach(({on}) => on.forEach(part => addSelector(part)));
@@ -280,41 +253,36 @@ export function expandSubqueries(
     }
   });
 
-  // Add primary keys
-  requiredColumns(schema, table).forEach(selector => addSelector(selector));
+  if (!subQuery) {
+    // Add primary keys
+    requiredColumns(schema, table).forEach(selector => addSelector(selector));
+  }
 
   // Union with selections that are externally referenced (passed by a higher level query).
   const allFromReferences = union(
-    externallyReferencedColumns.map(sel => ({
-      selector: [defaultFrom, sel.selector[1]],
-      aggregateAlias: sel.aggLiftAlias,
-    })),
+    externallyReferencedColumns.map(sel => [defaultFrom, sel[1]]),
     selectors.get(defaultFrom) ?? [],
   );
   // Now add SELECT expressions for referenced columns that weren't originally SELECT'ed.
   const additionalSelection = [...allFromReferences]
-    .filter(sel => !selected.has(sel.aggLiftAlias ?? sel.selector[1]))
+    .filter(sel => !selected.has(sel[1]))
     // set default from or split and set from.
-    .map(
-      sel =>
-        [sel.selector, sel.aggLiftAlias ?? sel.selector[1]] as [
-          Selector,
-          string,
-        ],
-    );
-  let expandedSelect = [...(select ?? []), ...additionalSelection];
-
-  // just stick the entire `expandedSelect` into `aggLifts`?
-  let aggLift: AggLift[] | undefined;
-  if (aggregateColumns) {
-    aggLift = getColumnsAsAggregate(expandedSelect);
-    expandedSelect = [];
-  }
+    .map(sel => [sel, sel[1]] as [Selector, string]);
+  const expandedSelect = [...(select ?? []), ...additionalSelection];
 
   return {
     ...ast,
     select: expandedSelect,
-    aggLift,
+    subQuery: subQuery
+      ? {
+          ...subQuery,
+          ast: expandSubqueries(
+            subQuery.ast,
+            requiredColumns,
+            selectors.get(subQuery.alias) ?? [],
+          ),
+        }
+      : undefined,
     joins: joins?.map(join => ({
       ...join,
       other: expandSubqueries(
@@ -327,55 +295,15 @@ export function expandSubqueries(
   };
 }
 
-function union(
-  a: SelectorAndMaybeAlias[],
-  b: SelectorAndMaybeAlias[],
-): SelectorAndMaybeAlias[] {
+function union(a: Selector[], b: Selector[]): Selector[] {
   const got = new Set<string>();
-  const ret: SelectorAndMaybeAlias[] = [];
-  const getKey = (sel: SelectorAndMaybeAlias) =>
-    sel.aggLiftAlias ?? sel.selector[1];
-  for (const sel of a) {
-    const key = getKey(sel);
-    if (!got.has(key)) {
-      got.add(key);
-      ret.push(sel);
+  return [...a, ...b].filter((sel: Selector) => {
+    if (got.has(sel[1])) {
+      return false;
     }
-  }
-  for (const sel of b) {
-    const key = getKey(sel);
-    if (!got.has(key)) {
-      got.add(key);
-      ret.push(sel);
-    }
-  }
-  return ret;
-}
-
-function getColumnsAsAggregate(
-  selectorsAndAliases: readonly (readonly [
-    selector: Selector,
-    alias: string,
-  ])[],
-): AggLift[] {
-  const selectorsByTable = new Map<string, Selector[]>();
-  selectorsAndAliases.forEach(([selector]) => {
-    const [table] = selector;
-    selectorsByTable.get(table)?.push(selector) ??
-      selectorsByTable.set(table, [selector]);
+    got.add(sel[1]);
+    return true;
   });
-  const ret: AggLift[] = [];
-  selectorsByTable.forEach((selectors, table) => {
-    ret.push({
-      selectors: selectors.map(selector => ({
-        column: selector[1],
-        alias: selector[1],
-      })),
-      table,
-      alias: `${table}/${AGG_LIFT_SUFFIX}`,
-    });
-  });
-  return ret;
 }
 
 function getWhereColumns(
@@ -401,7 +329,7 @@ export function reAliasAndBubbleSelections(
   ast: ServerAST,
   exports: Map<string, string>,
 ): ServerAST {
-  const {select, joins, groupBy, orderBy} = ast;
+  const {select, subQuery, joins, groupBy, orderBy} = ast;
 
   // Bubble up new aliases from subqueries.
   const reAliasMaps = new Map<string, Map<string, string>>(); // queryAlias -> prevAlias -> currAlias.
@@ -413,6 +341,16 @@ export function reAliasAndBubbleSelections(
       other: reAliasAndBubbleSelections(join.other, reAliasMap),
     };
   });
+  // The subQuery is handled like a JOIN.
+  let reAliasedSubquery: SubQuery | undefined;
+  if (subQuery) {
+    const reAliasMap = new Map<string, string>();
+    reAliasMaps.set(subQuery.alias, reAliasMap);
+    reAliasedSubquery = {
+      alias: subQuery.alias,
+      ast: reAliasAndBubbleSelections(subQuery.ast, reAliasMap),
+    };
+  }
   const bubbleUp = [...reAliasMaps.entries()].flatMap(
     ([joinAlias, reAliasMap]) =>
       [...reAliasMap.values()].map(
@@ -420,38 +358,31 @@ export function reAliasAndBubbleSelections(
       ),
   );
 
-  // reAlias the columns selected from this AST's FROM table/alias.
-  const defaultFrom = ast.table;
-  const reAliasMap = new Map<string, string>();
-  reAliasMaps.set(defaultFrom, reAliasMap);
-  select?.forEach(([parts, alias]) => {
-    reAliasMap.set(alias, parts[1]); // Use the original column name.
+  if (!subQuery) {
+    // reAlias the columns selected from this AST's FROM table/alias.
+    const defaultFrom = ast.table;
+    const reAliasMap = new Map<string, string>();
+    reAliasMaps.set(defaultFrom, reAliasMap);
+    select?.forEach(([parts, alias]) => {
+      reAliasMap.set(alias, parts[1]); // Use the original column name.
 
-    // Also map the column name to itself.
-    const column = parts[1];
-    reAliasMap.set(column, column);
-  });
+      // Also map the column name to itself.
+      const column = parts[1];
+      reAliasMap.set(column, column);
+    });
+  }
 
   const renameSelector = (parts: Selector): Selector => {
     const [from, col] = parts;
     const newCol = reAliasMaps.get(from)?.get(col);
-    // assert(newCol, `New column not found for ${from}.${col}`);
-    if (newCol === undefined) {
-      return parts;
-    }
+    assert(newCol, `New column not found for ${from}.${col}`);
     // Note: The absence of a schema is assumed to be the "public" schema. If
     //       non-public schemas and schema search paths are to be supported, this
     //       is where the logic would have to be to resolve the schema for the table.
-    return from === ast.table
+    return !subQuery && from === ast.table
       ? [`${ast.schema ?? 'public'}.${from}`, newCol]
       : [from, newCol];
   };
-
-  const renameAggLift = (alias: string): string =>
-    `${ast.schema ?? 'public'}/${alias}`;
-
-  // TODO: if we're grouped-by then the bubble up should
-  // be done through `aggLift` instead of `select`.
 
   // Return a modified AST with all selectors realiased (SELECT, ON, GROUP BY, ORDER BY),
   // and bubble up all selected aliases to the `exports` Map.
@@ -471,67 +402,20 @@ export function reAliasAndBubbleSelections(
           return [newSelector, newAlias] as const;
         },
       ),
-      ...(ast.aggLift
-        ? []
-        : bubbleUp
-            .filter(selector => !exported.has(selector.join('.')))
-            .map((selector): readonly [Selector, string] => {
-              const alias = selector.join(ALIAS_COMPONENT_SEPARATOR);
-              exports.set(alias, alias);
-              return [selector, alias];
-            })),
+      ...bubbleUp
+        .filter(selector => !exported.has(selector.join('.')))
+        .map((selector): readonly [Selector, string] => {
+          const alias = selector.join(ALIAS_COMPONENT_SEPARATOR);
+          exports.set(alias, alias);
+          return [selector, alias];
+        }),
     ],
-    aggLift: aggLiftWithBubbles(ast.aggLift, bubbleUp, exports)?.map(agg => ({
-      ...agg,
-      alias: renameAggLift(agg.alias),
-    })),
+    subQuery: reAliasedSubquery,
     joins: reAliasedJoins?.map(join => ({
       ...join,
       on: [renameSelector(join.on[0]), renameSelector(join.on[1])],
     })),
-    aggregate: undefined,
     groupBy: groupBy?.map(renameSelector),
     orderBy: orderBy ? [orderBy[0].map(renameSelector), orderBy[1]] : undefined,
   };
-}
-
-function aggLiftWithBubbles(
-  aggLift: AggLift[] | undefined,
-  bubbleUp: readonly Selector[],
-  exports: Map<string, string>,
-): AggLift[] | undefined {
-  if (!aggLift) {
-    return;
-  }
-
-  const lifts = new Map<string, AggLift>();
-  for (const lift of aggLift) {
-    lifts.set(lift.table, {
-      ...lift,
-      selectors: [...lift.selectors],
-    });
-  }
-
-  for (const bubble of bubbleUp) {
-    const [table, column] = bubble;
-    const lift = lifts.get(table);
-    if (!lift) {
-      lifts.set(table, {
-        table,
-        alias: `${table}/${AGG_LIFT_SUFFIX}`,
-        selectors: [{column, alias: splitLastComponent(column)[1]}],
-      });
-      continue;
-    }
-    const alias = splitLastComponent(column)[1];
-    if (!lift.selectors.find(s => s.column === column)) {
-      lift.selectors.push({column, alias});
-    }
-  }
-
-  for (const lift of lifts.values()) {
-    exports.set(lift.alias, lift.alias);
-  }
-
-  return [...lifts.values()];
 }

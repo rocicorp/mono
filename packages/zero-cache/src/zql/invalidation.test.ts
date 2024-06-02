@@ -1,4 +1,4 @@
-import type {AST, Condition, Primitive} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {Condition, Primitive} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {describe, expect, test} from 'vitest';
 import {
   NormalizedInvalidationFilterSpec,
@@ -8,6 +8,7 @@ import {expandSelection} from './expansion.js';
 import {computeInvalidationInfo, computeMatchers} from './invalidation.js';
 import {getNormalized} from './normalize.js';
 import {and, cond, or} from './query-test-util.js';
+import type {ServerAST} from './server-ast.js';
 
 describe('zql/invalidation matchers', () => {
   type Case = {
@@ -208,7 +209,7 @@ describe('zql/invalidation matchers', () => {
 describe('zql/invalidation hashes filters and hashes', () => {
   type Case = {
     name: string;
-    ast: AST;
+    ast: ServerAST;
     filters: NormalizedInvalidationFilterSpec[];
     hashes: string[];
   };
@@ -227,6 +228,40 @@ describe('zql/invalidation hashes filters and hashes', () => {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
         orderBy: [[['foo', 'id']], 'asc'],
+      },
+      filters: [
+        {
+          id: '16dq50vgca6xn',
+          schema: 'zero',
+          table: 'foo',
+          selectedColumns: ['id'],
+          filteredColumns: {},
+        },
+      ],
+      hashes: [
+        FULL_TABLE_INVALIDATION,
+        invalidationHash({
+          schema: 'zero',
+          table: 'foo',
+          selectedColumns: ['id'],
+        }),
+      ],
+    },
+    {
+      name: 'subquery',
+      ast: {
+        schema: 'zero',
+        table: 'foo',
+        select: [[['foo', 'id'], 'id']],
+        subQuery: {
+          ast: {
+            schema: 'zero',
+            table: 'foo',
+            select: [[['foo', 'id'], 'id']],
+            orderBy: [[['foo', 'id']], 'asc'],
+          },
+          alias: 'foo',
+        },
       },
       filters: [
         {

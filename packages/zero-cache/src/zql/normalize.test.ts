@@ -1,12 +1,12 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {JSONValue} from 'postgres';
 import {describe, expect, test} from 'vitest';
 import {getNormalized} from './normalize.js';
+import type {ServerAST} from './server-ast.js';
 
 describe('zql/normalize-query-hash', () => {
   type Case = {
     name: string;
-    asts: AST[];
+    asts: ServerAST[];
     query: string;
     values?: JSONValue[];
   };
@@ -24,22 +24,48 @@ describe('zql/normalize-query-hash', () => {
       query: 'SELECT issues.id AS id FROM issues ORDER BY issues.id asc',
     },
     {
+      name: 'subquery',
+      asts: [
+        {
+          table: 'issues',
+          subQuery: {
+            ast: {
+              table: 'issues',
+              select: [
+                [['issues', 'id'], 'id'],
+                [['issues', 'created'], 'created'],
+              ],
+              limit: 10,
+            },
+            alias: 'issues_alias',
+          },
+          select: [[['issues_alias', 'id'], 'id']],
+          orderBy: [[['issues_alias', 'id']], 'asc'],
+        },
+      ],
+      query:
+        'SELECT issues_alias.id AS id FROM ' +
+        // Note: subquery is also normalized (e.g. fields are sorted)
+        '(SELECT issues.created AS created, issues.id AS id FROM issues LIMIT 10) AS issues_alias ' +
+        'ORDER BY issues_alias.id asc',
+    },
+    {
       name: 'statement with schema',
       asts: [
         {
           schema: 'zero',
           table: 'clients',
           select: [
-            [['clients', 'clientID'], 'clientID'],
+            [['clients', 'col.with.dots'], 'clientID'],
             [['zero.clients', 'lastMutationID'], 'lastMutationID'],
           ],
-          orderBy: [[['clients', 'clientID']], 'asc'],
+          orderBy: [[['clients', 'col.with.dots']], 'asc'],
         },
       ],
       query:
-        'SELECT clients."clientID" AS "clientID", ' +
+        'SELECT clients."col.with.dots" AS "clientID", ' +
         'zero.clients."lastMutationID" AS "lastMutationID" ' +
-        'FROM zero.clients ORDER BY clients."clientID" asc',
+        'FROM zero.clients ORDER BY clients."col.with.dots" asc',
     },
     {
       name: 'table alias',

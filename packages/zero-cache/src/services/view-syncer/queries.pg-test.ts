@@ -175,11 +175,11 @@ describe('view-syncer/queries', () => {
     const {queryIDs, transformedAST} = first.value;
     expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser('foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr', queryIDs);
     const results = await db.unsafe(expanded.query, expanded.values);
 
     // This is what gets synced to the client (contents) and stored in the CVR (record).
-    expect(resultParser.parseResults(queryIDs, results)).toEqual(
+    expect(resultParser.parseResults(results)).toEqual(
       new Map([
         [
           '/vs/cvr/foo-cvr/d/r/e3jqcp8k60hejdhju08414x2z',
@@ -332,10 +332,10 @@ describe('view-syncer/queries', () => {
     const {queryIDs, transformedAST} = first.value;
     expect(queryIDs).toEqual(['queryHash']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser('foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr', queryIDs);
     const results = await db.unsafe(expanded.query, expanded.values);
 
-    expect(resultParser.parseResults(queryIDs, results)).toEqual(
+    expect(resultParser.parseResults(results)).toEqual(
       new Map([
         [
           '/vs/cvr/foo-cvr/d/r/2z8i982skum71jkx73g5y2gao',
@@ -680,11 +680,11 @@ describe('view-syncer/queries', () => {
     const {queryIDs, transformedAST} = first.value;
     expect(queryIDs).toEqual(['queryHash', 'queryHash2']);
     const expanded = transformedAST.query();
-    const resultParser = queryHandler.resultParser('foo-cvr');
+    const resultParser = queryHandler.resultParser('foo-cvr', queryIDs);
     const results = await db.unsafe(expanded.query, expanded.values);
 
     // This is what gets synced to the client (contents) and stored in the CVR (record).
-    expect(resultParser.parseResults(queryIDs, results)).toEqual(
+    expect(resultParser.parseResults(results)).toEqual(
       new Map([
         [
           '/vs/cvr/foo-cvr/d/r/e3jqcp8k60hejdhju08414x2z',

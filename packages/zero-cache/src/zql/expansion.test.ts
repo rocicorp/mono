@@ -1,4 +1,3 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {describe, expect, test} from 'vitest';
 import {
   expandSelection,
@@ -8,11 +7,12 @@ import {
 } from './expansion.js';
 import {Normalized} from './normalize.js';
 import {and, cond, or, stripCommentsAndWhitespace} from './query-test-util.js';
+import type {ServerAST} from './server-ast.js';
 
 describe('zql/expansion', () => {
   type Case = {
     name: string;
-    ast: AST;
+    ast: ServerAST;
     original: string; // Provided purely for test readability
     afterSubqueryExpansion: string;
     afterReAliasAndBubble?: string;
@@ -27,133 +27,6 @@ describe('zql/expansion', () => {
   ];
 
   const cases: Case[] = [
-    {
-      name: 'group-by',
-      ast: {
-        table: 'issues',
-        select: [[['issues', 'status'], 'status']],
-        groupBy: [['issues', 'status']],
-      },
-      original:
-        'SELECT issues.status AS status FROM issues GROUP BY issues.status',
-      afterSubqueryExpansion: `SELECT
-        jsonb_agg(jsonb_build_object('status', issues.status, 'issues_key', issues.issues_key, '_0_version', issues._0_version))
-          AS "issues/_0_agg_lift"
-        FROM issues GROUP BY issues.status`,
-      afterReAliasAndBubble: `SELECT
-        jsonb_agg(jsonb_build_object('status', issues.status, 'issues_key', issues.issues_key, '_0_version', issues._0_version))
-          AS "public/issues/_0_agg_lift" FROM issues GROUP BY issues.status`,
-    },
-    {
-      name: 'issue list with labels',
-      ast: {
-        table: 'issues',
-        select: [[['issues', 'title'], 'title']],
-        aggregate: [
-          {
-            aggregate: 'array',
-            field: ['labels', 'name'],
-            alias: 'labels',
-          },
-        ],
-        joins: [
-          {
-            type: 'left',
-            other: {table: 'issueLabels'},
-            as: 'issueLabels',
-            on: [
-              ['issueLabels', 'issueId'],
-              ['issues', 'id'],
-            ],
-          },
-          {
-            type: 'left',
-            other: {table: 'labels'},
-            as: 'labels',
-            on: [
-              ['labels', 'id'],
-              ['issueLabels', 'labelId'],
-            ],
-          },
-        ],
-        groupBy: [['issues', 'id']],
-      },
-      original: `SELECT
-        issues.title AS title,
-        array_agg(labels.name) AS "array_agg(labels.name)"
-      FROM issues LEFT JOIN "issueLabels" AS "issueLabels" ON "issueLabels"."issueId" = issues.id
-      LEFT JOIN labels AS labels ON labels.id = "issueLabels"."labelId" GROUP BY issues.id`,
-      afterSubqueryExpansion: `SELECT
-      array_agg(labels.name) AS "array_agg(labels.name)",
-      jsonb_agg(jsonb_build_object('title',
-          issues.title,
-          'id',
-          issues.id,
-          'issues_key',
-          issues.issues_key,
-          '_0_version',
-          issues._0_version)) AS "issues/_0_agg_lift"
-    FROM
-      issues
-      LEFT JOIN (SELECT
-          "issueLabels"._0_version AS _0_version,
-          "issueLabels"."issueId" AS "issueId",
-          "issueLabels"."issueLabels_key" AS "issueLabels_key",
-          "issueLabels"."labelId" AS "labelId"
-        FROM
-          "issueLabels") AS "issueLabels" ON "issueLabels"."issueId" = issues.id
-      LEFT JOIN (SELECT
-          labels._0_version AS _0_version,
-          labels.id AS id,
-          labels.labels_key AS labels_key,
-          labels.name AS name
-        FROM
-          labels) AS labels ON labels.id = "issueLabels"."labelId"
-    GROUP BY
-      issues.id`,
-      afterReAliasAndBubble: `SELECT
-      jsonb_agg(jsonb_build_object('title',
-          issues.title,
-          'id',
-          issues.id,
-          'issues_key',
-          issues.issues_key,
-          '_0_version',
-          issues._0_version)) AS "public/issues/_0_agg_lift",
-      jsonb_agg(jsonb_build_object('issueId',
-          "issueLabels"."public/issueLabels/issueId",
-          'labelId',
-          "issueLabels"."public/issueLabels/labelId",
-          'issueLabels_key',
-          "issueLabels"."public/issueLabels/issueLabels_key",
-          '_0_version',
-          "issueLabels"."public/issueLabels/_0_version")) AS "public/issueLabels/_0_agg_lift",
-      jsonb_agg(jsonb_build_object('id',
-          labels."public/labels/id",
-          'name', labels."public/labels/name",
-          'labels_key',
-          labels."public/labels/labels_key",
-          '_0_version',
-          labels."public/labels/_0_version")) AS "public/labels/_0_agg_lift"
-    FROM
-      issues
-      LEFT JOIN (SELECT
-          public."issueLabels"._0_version AS "public/issueLabels/_0_version",
-          public."issueLabels"."issueId" AS "public/issueLabels/issueId",
-          public."issueLabels"."issueLabels_key" AS "public/issueLabels/issueLabels_key",
-          public."issueLabels"."labelId" AS "public/issueLabels/labelId"
-        FROM
-          "issueLabels") AS "issueLabels" ON "issueLabels"."public/issueLabels/issueId" = issues.id
-      LEFT JOIN (SELECT
-          public.labels._0_version AS "public/labels/_0_version",
-          public.labels.id AS "public/labels/id",
-          public.labels.labels_key AS "public/labels/labels_key",
-          public.labels.name AS "public/labels/name"
-        FROM
-          labels) AS labels ON labels."public/labels/id" = "issueLabels"."public/issueLabels/labelId"
-    GROUP BY
-      issues.id`,
-    },
     {
       name: 'adds primary keys, preserved existing selects',
       ast: {
@@ -252,6 +125,77 @@ describe('zql/expansion', () => {
       `,
     },
     {
+      name: 'handles subqueries',
+      ast: {
+        table: 'issues',
+        select: [[['issues', 'title'], 'title']],
+        subQuery: {
+          alias: 'issues',
+          ast: {
+            table: 'issues',
+            select: [[['issues', 'title'], 'title']],
+            where: or(
+              cond(['issues', 'priority'], '>', 3),
+              and(
+                cond(['issues', 'owner_id'], '=', 1234),
+                cond(['issues', 'component_id'], '=', 2345),
+              ),
+            ),
+            orderBy: [
+              [
+                ['issues', 'date'],
+                ['issues', 'priority'],
+              ],
+              'asc',
+            ],
+          },
+        },
+      },
+      original: `
+      SELECT issues.title AS title FROM 
+        (SELECT issues.title AS title FROM issues 
+          WHERE (issues.priority > $1 OR (issues.component_id = $2 AND issues.owner_id = $3)) 
+          ORDER BY issues.date asc, issues.priority asc) AS issues
+      `,
+      afterSubqueryExpansion: `
+      SELECT issues.title AS title FROM 
+        (SELECT 
+          issues._0_version AS _0_version, 
+          issues.component_id AS component_id, 
+          issues.date AS date, 
+          issues.issues_key AS issues_key, 
+          issues.owner_id AS owner_id, 
+          issues.priority AS priority, 
+          issues.title AS title 
+        FROM issues 
+        WHERE (issues.priority > $1 OR (issues.component_id = $2 AND issues.owner_id = $3)) 
+        ORDER BY issues.date asc, issues.priority asc)
+      AS issues
+      `,
+      afterReAliasAndBubble: `
+      SELECT 
+        issues."public/issues/_0_version" AS "issues/public/issues/_0_version", 
+        issues."public/issues/component_id" AS "issues/public/issues/component_id", 
+        issues."public/issues/date" AS "issues/public/issues/date", 
+        issues."public/issues/issues_key" AS "issues/public/issues/issues_key", 
+        issues."public/issues/owner_id" AS "issues/public/issues/owner_id", 
+        issues."public/issues/priority" AS "issues/public/issues/priority", 
+        issues."public/issues/title" AS "issues/public/issues/title" FROM
+       (SELECT 
+          public.issues._0_version AS "public/issues/_0_version", 
+          public.issues.component_id AS "public/issues/component_id", 
+          public.issues.date AS "public/issues/date", 
+          public.issues.issues_key AS "public/issues/issues_key", 
+          public.issues.owner_id AS "public/issues/owner_id", 
+          public.issues.priority AS "public/issues/priority", 
+          public.issues.title AS "public/issues/title" 
+        FROM issues 
+        WHERE (issues.priority > $1 OR (issues.component_id = $2 AND issues.owner_id = $3)) 
+        ORDER BY public.issues.date asc, public.issues.priority asc) 
+      AS issues
+    `,
+    },
+    {
       name: 'propagates referenced ON fields into joins',
       ast: {
         table: 'issues',
@@ -317,6 +261,94 @@ describe('zql/expansion', () => {
       FROM users) AS owner ON owner."public/users/id" = public.issues.owner_id
       ORDER BY owner."public/users/level" asc
       `,
+    },
+    {
+      name: 'handles subqueries with joins',
+      ast: {
+        table: 'issues',
+        select: [
+          [['issues', 'id'], 'id'],
+          [['labels', 'name'], 'label'],
+        ],
+        subQuery: {
+          alias: 'issues',
+          ast: {
+            table: 'issues',
+            select: [[['issues', 'id'], 'id']],
+            where: or(
+              cond(['issues', 'priority'], '>', 3),
+              and(
+                cond(['issues', 'owner_id'], '=', 1234),
+                cond(['issues', 'component_id'], '=', 2345),
+              ),
+            ),
+            orderBy: [
+              [
+                ['issues', 'date'],
+                ['issues', 'priority'],
+              ],
+              'asc',
+            ],
+          },
+        },
+        joins: [
+          {
+            type: 'left',
+            other: {
+              table: 'labels',
+              select: [
+                [['labels', 'id'], 'id'],
+                [['labels', 'name'], 'name'],
+              ],
+            },
+            as: 'labels',
+            on: [
+              ['labels', 'id'],
+              ['issues', 'id'],
+            ],
+          },
+        ],
+      },
+      original: `
+      SELECT issues.id AS id, labels.name AS label FROM (SELECT issues.id AS id FROM issues WHERE (issues.priority > $1 OR (issues.component_id = $2 AND issues.owner_id = $3)) ORDER BY issues.date asc, issues.priority asc) AS issues LEFT JOIN (SELECT labels.id AS id, labels.name AS name FROM labels) AS labels ON labels.id = issues.id
+      `,
+      afterSubqueryExpansion: `
+      SELECT issues.id AS id, labels.name AS label FROM (SELECT issues._0_version AS _0_version, issues.component_id AS component_id, issues.date AS date, issues.id AS id, issues.issues_key AS issues_key, issues.owner_id AS owner_id, issues.priority AS priority FROM issues WHERE (issues.priority > $1 OR (issues.component_id = $2 AND issues.owner_id = $3)) ORDER BY issues.date asc, issues.priority asc) AS issues LEFT JOIN (SELECT labels._0_version AS _0_version, labels.id AS id, labels.labels_key AS labels_key, labels.name AS name FROM labels) AS labels ON labels.id = issues.id
+      `,
+      afterReAliasAndBubble: `
+      SELECT 
+        issues."public/issues/_0_version" AS "issues/public/issues/_0_version",
+        issues."public/issues/component_id" AS "issues/public/issues/component_id", 
+        issues."public/issues/date" AS "issues/public/issues/date", 
+        issues."public/issues/id" AS "issues/public/issues/id", 
+        issues."public/issues/issues_key" AS "issues/public/issues/issues_key", 
+        issues."public/issues/owner_id" AS "issues/public/issues/owner_id", 
+        issues."public/issues/priority" AS "issues/public/issues/priority", 
+        labels."public/labels/_0_version" AS "labels/public/labels/_0_version", 
+        labels."public/labels/id" AS "labels/public/labels/id", 
+        labels."public/labels/labels_key" AS "labels/public/labels/labels_key", 
+        labels."public/labels/name" AS "labels/public/labels/name" FROM
+       (SELECT 
+          public.issues._0_version AS "public/issues/_0_version", 
+          public.issues.component_id AS "public/issues/component_id", 
+          public.issues.date AS "public/issues/date", 
+          public.issues.id AS "public/issues/id", 
+          public.issues.issues_key AS "public/issues/issues_key", 
+          public.issues.owner_id AS "public/issues/owner_id", 
+          public.issues.priority AS "public/issues/priority" 
+        FROM issues 
+        WHERE (issues.priority > $1 OR (issues.component_id = $2 AND issues.owner_id = $3)) 
+        ORDER BY public.issues.date asc, public.issues.priority asc) 
+      AS issues 
+      LEFT JOIN
+       (SELECT 
+          public.labels._0_version AS "public/labels/_0_version", 
+          public.labels.id AS "public/labels/id", 
+          public.labels.labels_key AS "public/labels/labels_key", 
+          public.labels.name AS "public/labels/name" FROM labels) 
+      AS labels 
+      ON labels."public/labels/id" = issues."public/issues/id"
+    `,
     },
     {
       name: 'propagates fields from join subqueries',
