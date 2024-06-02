@@ -11,6 +11,7 @@ import type {
 } from 'zero-protocol';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import {initStorageSchema} from '../../storage/schema.js';
+import type {JSONObject} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -391,34 +392,45 @@ export class ViewSyncerService implements ViewSyncer, Service {
       c.startPoke(cvrVersion),
     );
 
-    const resultParser = queryHandler.resultParser(cvr.id);
     // Kick off queries in parallel. The reader pool will limit concurrent queries,
     // and the cursor page size limits the amount of row content in memory.
     const cursorPageSize = 1000; // TODO: something less arbitrary.
-    const queriesDone = queriesToExecute.map(q =>
-      reader.processReadTask(async tx => {
+    const queriesDone = queriesToExecute.map(q => {
+      const {queryIDs} = q;
+      const resultParser = queryHandler.resultParser(cvr.id);
+
+      return reader.processReadTask(async tx => {
         const {query, values} = q.transformedAST.query();
-        const {queryIDs} = q;
         const start = Date.now();
-        let total = 0;
+        let totalResults = 0;
+        let totalRows = 0;
         lc.debug?.(`executing [${queryIDs}]: ${query}`);
 
-        for await (const rows of tx
-          .unsafe(query, values)
-          .cursor(cursorPageSize)) {
+        async function processBatch(results: readonly JSONObject[]) {
           const elapsed = Date.now() - start;
-          total += rows.length;
+          const rows = resultParser.parseResults(queryIDs, results);
+          totalResults += results.length;
+          totalRows += rows.size;
           lc.debug?.(
-            `processing ${rows.length} of ${total} result(s) for [${queryIDs}] (${elapsed} ms)`,
+            `processing ${rows.size}/${results.length} row/result(s) (of ${totalRows}/${totalResults}) for [${queryIDs}] (${elapsed} ms)`,
           );
-          const parsed = resultParser.parseResults(queryIDs, rows);
-          const patches = await updater.received(lc, parsed);
+          const patches = await updater.received(lc, rows);
           patches.forEach(patch =>
             pokers.forEach(poker => poker.addPatch(patch)),
           );
         }
-      }),
-    );
+
+        // Pipeline the processing of each batch with Postgres' computation of the next batch.
+        let lastBatch = Promise.resolve();
+        for await (const results of tx
+          .unsafe(query, values)
+          .cursor(cursorPageSize)) {
+          await lastBatch;
+          lastBatch = processBatch(results);
+        }
+        await lastBatch;
+      });
+    });
 
     await Promise.all(queriesDone);
 
