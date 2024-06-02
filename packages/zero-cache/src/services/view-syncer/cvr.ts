@@ -173,10 +173,11 @@ export class CVRUpdater {
     const start = Date.now();
 
     this.#setLastActive(lastActive);
+    const numEntries = this._writes.pendingSize();
     await this._writes.flush(); // Calls put() and del() with a final `await`
     await this._directStorage.flush(); // DurableObjectStorage.sync();
 
-    lc.debug?.(`flushed CVR (${Date.now() - start} ms)`);
+    lc.debug?.(`flushed ${numEntries} CVR entries (${Date.now() - start} ms)`);
     return this._cvr;
   }
 }
@@ -671,7 +672,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const catchupRowPatches = await this.#catchupRowPatches;
     lc.debug?.(`processing ${catchupRowPatches.size} row patches`);
     for (const [path, rowPatch] of catchupRowPatches) {
-      if (this._writes.pendingDelete(path)) {
+      if (this._writes.isPendingDelete(path)) {
         continue; // row patch has been replaced.
       }
       const toVersion = this._paths.versionFromPatchPath(path);
@@ -714,7 +715,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     };
 
     for (const [path, patchRecord] of catchupConfigPatches) {
-      if (this._writes.pendingDelete(path)) {
+      if (this._writes.isPendingDelete(path)) {
         continue; // config patch has been replaced.
       }
       const toVersion = this._paths.versionFromPatchPath(path);
