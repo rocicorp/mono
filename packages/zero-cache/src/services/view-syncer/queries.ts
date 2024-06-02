@@ -1,8 +1,8 @@
 import type {AST, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
+import {deaggregateArrays} from '../../zql/deaggregation.js';
 import {
-  AGG_LIFT_SUFFIX,
   ALIAS_COMPONENT_SEPARATOR,
   expandSelection,
 } from '../../zql/expansion.js';
@@ -15,7 +15,6 @@ import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
 import {CVRPaths} from './schema/paths.js';
 import type {QueryRecord, RowID, RowRecord} from './schema/types.js';
-import {joinIterables} from 'shared/src/iterables.js';
 
 export class InvalidQueryError extends Error {}
 
@@ -49,6 +48,16 @@ export class QueryHandler {
     this.#tables = new TableSchemas(tables);
   }
 
+  #getTableSpecOrError(schema = 'public', table: string, ast: AST) {
+    const t = this.#tables.spec(schema, table);
+    if (!t) {
+      throw new InvalidQueryError(
+        `Unknown table "${table}" in ${JSON.stringify(ast)}`,
+      );
+    }
+    return t;
+  }
+
   /**
    * Transforms the client-desired queries into normalized, expanded versions that
    * includes primary key columns, the row version column, and all columns required
@@ -68,19 +77,20 @@ export class QueryHandler {
         schema = 'public',
         table: string,
       ): Selector[] => {
-        const t = this.#tables.spec(schema, table);
-        if (!t) {
-          throw new InvalidQueryError(
-            `Unknown table "${table}" in ${JSON.stringify(q.ast)}`,
-          );
-        }
+        const t = this.#getTableSpecOrError(schema, table, q.ast);
         return [
           ...t.primaryKey.map(pk => [table, pk] as const),
           [table, ZERO_VERSION_COLUMN_NAME] as const,
         ];
       };
 
-      const expanded = expandSelection(q.ast, requiredColumns);
+      const isPrimaryKey = (schema = 'public', table: string, col: string) => {
+        const t = this.#getTableSpecOrError(schema, table, q.ast);
+        return t.primaryKey.length === 1 && t.primaryKey[0] === col;
+      };
+
+      const deaggregated = deaggregateArrays(q.ast, isPrimaryKey);
+      const expanded = expandSelection(deaggregated, requiredColumns);
       const transformedAST = new Normalized(expanded);
       const transformationHash = transformedAST.hash();
 
@@ -104,8 +114,8 @@ export class QueryHandler {
    * Returns an object for deconstructing each result from executed queries
    * into its constituent tables and rows.
    */
-  resultParser(cvrID: string) {
-    return new ResultParser(this.#tables, cvrID);
+  resultParser(cvrID: string, queryIDs: readonly string[]) {
+    return new ResultParser(this.#tables, cvrID, queryIDs);
   }
 
   tableSpec(schema: string, table: string) {
@@ -121,10 +131,22 @@ export type ParsedRow = {
 class ResultParser {
   readonly #tables: TableSchemas;
   readonly #paths: CVRPaths;
+  readonly #queryIDs: readonly string[];
+  // Maps sub-query names to row-paths to dedupe redundant rows from deaggregations.
+  readonly #subQueryRows = new Map<string, Set<string>>();
 
-  constructor(tables: TableSchemas, cvrID: string) {
+  /**
+   * @param queryIDs The query ID(s) with which the query is associated. See
+   *        {@link TransformedQuery.queryIDs} for why there may be more than one.
+   */
+  constructor(
+    tables: TableSchemas,
+    cvrID: string,
+    queryIDs: readonly string[],
+  ) {
     this.#tables = tables;
     this.#paths = new CVRPaths(cvrID);
+    this.#queryIDs = queryIDs;
   }
 
   /**
@@ -135,13 +157,8 @@ class ResultParser {
    *
    * Returns a mapping from the CVR row record path to {@link ParsedRow}.
    *
-   * @param queryIDs The query ID(s) with which the query is associated. See
-   *        {@link TransformedQuery.queryIDs} for why there may be more than one.
    */
-  parseResults(
-    queryIDs: readonly string[],
-    results: readonly JSONObject[],
-  ): Map<string, ParsedRow> {
+  parseResults(results: readonly JSONObject[]): Map<string, ParsedRow> {
     const parsed = new Map<string, ParsedRow>(); // Maps CVRPath.row() => RowResult
     for (const result of results) {
       // Partitions the values of the full result into individual "subquery/table" keys.
@@ -165,29 +182,17 @@ class ResultParser {
       // "parent/public/issues": {id: 5, name: "trix"}
       //```
       const rows = new Map<string, JSONObject>();
-      const aggLifts: [rowAlias: string, value: JSONObject][] = [];
 
       for (const [alias, value] of Object.entries(result)) {
         const [rowAlias, columnName] = splitLastComponent(alias);
-        if (columnName === AGG_LIFT_SUFFIX) {
-          if (Array.isArray(value)) {
-            for (const row of value) {
-              aggLifts.push([rowAlias, row as JSONObject]);
-            }
-          }
-        } else {
-          rows.set(rowAlias, {
-            ...rows.get(rowAlias),
-            [columnName]: value,
-          });
-        }
+        rows.set(rowAlias, {
+          ...rows.get(rowAlias),
+          [columnName]: value,
+        });
       }
 
       // Now, merge each row into its corresponding RowResult by row key.
-      for (const [rowAlias, rowWithVersion] of joinIterables(
-        rows.entries(),
-        aggLifts,
-      )) {
+      for (const [rowAlias, rowWithVersion] of rows.entries()) {
         // Exclude the _0_version column from what is sent to the client.
         const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
         if (rowVersion === null) {
@@ -199,9 +204,18 @@ class ResultParser {
         }
 
         const [prefix, table] = splitLastComponent(rowAlias);
-        const [_, schema] = splitLastComponent(prefix);
+        const [subQueryName, schema] = splitLastComponent(prefix);
         const id = this.#tables.rowID(schema, table, row);
         const key = this.#paths.row(id);
+
+        let subQuery = this.#subQueryRows.get(subQueryName);
+        if (!subQuery) {
+          subQuery = new Set();
+          this.#subQueryRows.set(subQueryName, subQuery);
+        } else if (subQuery.has(key)) {
+          continue; // Redundant row for this sub-query (i.e. from de-aggregation)
+        }
+        subQuery.add(key);
 
         let rowResult = parsed.get(key);
         if (!rowResult) {
@@ -215,7 +229,7 @@ class ResultParser {
           rowResult.record.queriedColumns ??= {}; // Appease the compiler
           rowResult.record.queriedColumns[col] = union(
             rowResult.record.queriedColumns[col],
-            queryIDs,
+            this.#queryIDs,
           );
         }
         rowResult.contents = {...rowResult.contents, ...row};

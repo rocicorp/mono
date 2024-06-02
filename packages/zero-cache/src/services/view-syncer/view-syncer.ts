@@ -397,7 +397,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     const cursorPageSize = 1000; // TODO: something less arbitrary.
     const queriesDone = queriesToExecute.map(q => {
       const {queryIDs} = q;
-      const resultParser = queryHandler.resultParser(cvr.id);
+      const resultParser = queryHandler.resultParser(cvr.id, queryIDs);
 
       return reader.processReadTask(async tx => {
         const {query, values} = q.transformedAST.query();
@@ -408,7 +408,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
         async function processBatch(results: readonly JSONObject[]) {
           const elapsed = Date.now() - start;
-          const rows = resultParser.parseResults(queryIDs, results);
+          const rows = resultParser.parseResults(results);
           totalResults += results.length;
           totalRows += rows.size;
           lc.debug?.(

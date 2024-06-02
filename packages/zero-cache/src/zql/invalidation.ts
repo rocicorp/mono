@@ -16,6 +16,7 @@ import {
   type RowTag,
 } from '../types/invalidation.js';
 import type {Normalized} from './normalize.js';
+import type {ServerAST} from './server-ast.js';
 
 export type InvalidationInfo = {
   readonly filters: readonly NormalizedInvalidationFilterSpec[];
@@ -26,7 +27,14 @@ export type InvalidationInfo = {
 export function computeInvalidationInfo(
   normalized: Normalized,
 ): InvalidationInfo {
-  const {schema = 'public', table, select, aggregate, where} = normalized.ast();
+  return computeInvalidationInfoNormalized(normalized.ast());
+}
+
+function computeInvalidationInfoNormalized(ast: ServerAST): InvalidationInfo {
+  const {schema = 'public', table, select, aggregate, subQuery, where} = ast;
+  if (subQuery) {
+    return computeInvalidationInfoNormalized(subQuery.ast);
+  }
 
   const sanitizeSelector = (selector: Selector | undefined) => {
     if (selector === undefined) {
