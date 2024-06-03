@@ -24,7 +24,7 @@ import type {
 import type {PipelineEntity, Version} from '@rocicorp/zql/src/zql/ivm/types.js';
 import {genMap, genCached} from '@rocicorp/zql/src/zql/util/iterables.js';
 import type {Statement} from 'better-sqlite3';
-import type {StatementCache} from './internal/statement-cache.js';
+import type {DB} from './internal/DB.js';
 import {conditionsAndSortToSQL, getConditionBindParams} from './util/sql.js';
 
 const resolved = Promise.resolve();
@@ -36,13 +36,13 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
   readonly #internal: SourceInternal;
   readonly #name: string;
   readonly #materialite: MaterialiteForSourceInternal;
-  readonly #stmtCache: StatementCache;
+  readonly #db: DB;
   readonly #cols: string[];
   #id = id++;
   #pending: Entry<T>[] = [];
 
   constructor(
-    stmtCache: StatementCache,
+    db: DB,
     materialite: MaterialiteForSourceInternal,
     name: string,
     columns: string[],
@@ -57,15 +57,15 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
       },
       destroy: () => {},
     });
-    this.#stmtCache = stmtCache;
+    this.#db = db;
 
     this.#internal = {
       onCommitEnqueue: (_v: Version) => {
         // fk checks must be _off_
         insertOrDeleteTx(
           this.#pending,
-          this.#stmtCache.get(insertSQL),
-          this.#stmtCache.get(deleteSQL),
+          this.#db.getStmt(insertSQL),
+          this.#db.getStmt(deleteSQL),
         );
       },
       onCommitted: (_v: Version) => {},
@@ -84,9 +84,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
       .join(', ')}`;
     const deleteSQL = `DELETE FROM "${name}" WHERE id = ?`;
 
-    const insertOrDeleteTx = this.#stmtCache.db.transaction(
-      this.#insertOrDelete,
-    );
+    const insertOrDeleteTx = this.#db.transaction(this.#insertOrDelete);
 
     this.#cols = sortedCols;
   }
@@ -157,7 +155,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
           : -1,
       );
     const sql = conditionsAndSortToSQL(this.#name, sortedConditions, sort);
-    const stmt = this.#stmtCache.get(sql);
+    const stmt = this.#db.getStmt(sql);
 
     try {
       this.#stream.newDifference(
@@ -175,7 +173,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
         createPullResponseMessage(msg, this.#name, sort),
       );
     } finally {
-      this.#stmtCache.return(sql);
+      this.#db.returnStmt(sql);
     }
   }
 
