@@ -1,0 +1,4 @@
+- source provider for SQLite to ZQL
+  - SQLite sources are pretty smart so just need to cache prepared statements for sources and pick the right one.
+- hook into materialite commitEnqueue / commit reasonably well
+  - deal with updates... insertOrReplace? onConflictDoUpdate?
