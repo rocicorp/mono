@@ -16,7 +16,7 @@ import {
 } from '@rocicorp/zql/src/zql/ivm/graph/message.js';
 import type {MaterialiteForSourceInternal} from '@rocicorp/zql/src/zql/ivm/materialite.js';
 import type {Entry} from '@rocicorp/zql/src/zql/ivm/multiset.js';
-import type {SourceHashIndex} from '@rocicorp/zql/src/zql/ivm/source/source-hash-index.js';
+import type {HashIndex} from '@rocicorp/zql/src/zql/ivm/source/source-hash-index.js';
 import type {
   Source,
   SourceInternal,
@@ -25,6 +25,7 @@ import type {PipelineEntity, Version} from '@rocicorp/zql/src/zql/ivm/types.js';
 import {genMap, genCached} from '@rocicorp/zql/src/zql/util/iterables.js';
 import type {Statement} from 'better-sqlite3';
 import type {DB} from './internal/DB.js';
+import {TableSourceHashIndex} from './table-source-hash-index.js';
 import {conditionsAndSortToSQL, getConditionBindParams} from './util/sql.js';
 
 const resolved = Promise.resolve();
@@ -201,13 +202,9 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
   }
 
   getOrCreateAndMaintainNewHashIndex<K extends Primitive>(
-    _column: Selector,
-  ): SourceHashIndex<K, T> {
-    // we can just return a class that provides a different view over the same table.
-    // a different select statement.
-    // select by key column.
-    // well we need to compaction stuff too and overlay view! So need a new class here.
-    throw new Error('Not yet implemented');
+    column: Selector,
+  ): HashIndex<K, T> {
+    return new TableSourceHashIndex(this.#db, this.#name, column);
   }
 
   seed(_: Iterable<T>): this {
