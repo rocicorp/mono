@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["ESNext.Array", "ESNext", "DOM"],
+    "outDir": "dist",
     "paths": {
       "zero-client/src/*": ["../zero-client/src/*"],
       "replicache": ["../replicache/src/mod.ts"],

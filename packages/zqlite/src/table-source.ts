@@ -68,7 +68,9 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
         }
         insertOrDeleteTx(this.#pending, insertStmt, deleteStmt);
       },
-      onCommitted: (_v: Version) => {},
+      onCommitted: (version: Version) => {
+        this.#stream.commit(version);
+      },
       onRollback: () => {
         this.#pending = [];
       },

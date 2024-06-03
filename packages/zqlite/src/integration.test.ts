@@ -34,16 +34,20 @@ test('good old issues query', async () => {
     'issueLabel',
   );
 
+  const start = performance.now();
+
   const stmt = issueQuery
     .leftJoin(issueLabelQuery, 'issueLabel', 'issue.id', 'issueLabel.issueId')
     .leftJoin(labelQuery, 'label', 'issueLabel.labelId', 'label.id')
     .groupBy('issue.id')
-    .select('issue.*', agg.array('label.name', 'labels'))
+    .select('issue.*', agg.array('label.*', 'labels'))
     .desc('issue.modified')
-    .limit(100)
-    // .limit(10_000)
+    .limit(10_000)
     .prepare();
 
   const rows = await stmt.exec();
-  console.log(rows.length);
+
+  const end = performance.now();
+  console.log('Time:', (end - start).toFixed(2) + 'ms');
+  console.log('Rows: ', rows.length.toLocaleString());
 });

@@ -9,7 +9,7 @@ export class StatementCache {
     this.#db = db;
   }
 
-  get db() {
+  get db(): Database {
     return this.#db;
   }
 
