@@ -63,11 +63,10 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
     this.#internal = {
       onCommitEnqueue: (_v: Version) => {
         // fk checks must be _off_
-        insertOrDeleteTx(
-          this.#pending,
-          this.#db.getStmt(insertSQL),
-          this.#db.getStmt(deleteSQL),
-        );
+        if (this.#pending.length === 0) {
+          return;
+        }
+        insertOrDeleteTx(this.#pending, insertStmt, deleteStmt);
       },
       onCommitted: (_v: Version) => {},
       onRollback: () => {
@@ -86,6 +85,8 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
     const deleteSQL = `DELETE FROM "${name}" WHERE id = ?`;
 
     const insertOrDeleteTx = this.#db.transaction(this.#insertOrDelete);
+    const insertStmt = this.#db.getStmt(insertSQL);
+    const deleteStmt = this.#db.getStmt(deleteSQL);
 
     this.#cols = sortedCols;
   }

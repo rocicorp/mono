@@ -13,8 +13,9 @@ export function conditionsAndSortToSQL(
   }
   if (sort) {
     sql += ' ORDER BY ';
-    sql += sort[0].map(s => `${s[1]} ${sort[1]}`).join(', ');
+    sql += sort[0].map(s => `"${s[1]}" ${sort[1]}`).join(', ');
   }
+
   return sql;
 }
 

@@ -1,13 +1,108 @@
-import {describe, test} from 'vitest';
+import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
+import type {PipelineEntity} from '@rocicorp/zql/src/zql/ivm/types.js';
+import Database from 'better-sqlite3';
+import {describe, expect, test} from 'vitest';
+import {createContext} from './context.js';
 
-test('add', () => {});
-test('delete', () => {});
+test('add', () => {
+  const db = new Database(':memory:');
+  const context = createContext(new Materialite(), db);
+
+  db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
+
+  const source = context.getSource('foo', undefined);
+  source.add({id: 1, name: 'one'});
+  source.add({id: 2, name: 'two'});
+  source.add({id: 3, name: 'three'});
+
+  const stmt = db.prepare('SELECT * FROM foo');
+  const rows = stmt.all();
+  expect(rows).toEqual([
+    {id: 1, name: 'one'},
+    {id: 2, name: 'two'},
+    {id: 3, name: 'three'},
+  ]);
+});
+
+test('delete', () => {
+  const db = new Database(':memory:');
+  const context = createContext(new Materialite(), db);
+
+  db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
+
+  const source = context.getSource('foo', undefined);
+  source.add({id: 1, name: 'one'});
+  source.add({id: 2, name: 'two'});
+  source.add({id: 3, name: 'three'});
+
+  source.delete({id: 2, name: 'two'});
+
+  const stmt = db.prepare('SELECT * FROM foo');
+  const rows = stmt.all();
+  expect(rows).toEqual([
+    {id: 1, name: 'one'},
+    {id: 3, name: 'three'},
+  ]);
+});
+
 describe('message upstream', () => {
-  test('bare select', () => {});
+  const db = new Database(':memory:');
+  const context = createContext(new Materialite(), db);
+  db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
+
+  const source = context.getSource('foo', undefined);
+  source.add({id: 1, name: 'one'});
+  source.add({id: 2, name: 'two'});
+  source.add({id: 3, name: 'three'});
+
+  test.each([
+    {
+      name: 'bare selects',
+      sql: 'SELECT * FROM foo',
+      message: {type: 'pull', id: 1, hoistedConditions: []} as const,
+    },
+    {
+      name: 'select with conditions',
+      sql: 'SELECT * FROM foo WHERE id = 1',
+      message: {
+        type: 'pull',
+        id: 1,
+        hoistedConditions: [
+          {
+            selector: ['foo', 'id'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      } as const,
+    },
+    {
+      name: 'select with ordering',
+      sql: 'SELECT * FROM foo ORDER BY id DESC',
+      message: {
+        type: 'pull',
+        id: 1,
+        hoistedConditions: [],
+        order: [[['foo', 'id']], 'desc'],
+      } as const,
+    },
+  ])('$name', ({sql, message}) => {
+    const stmt = db.prepare(sql);
+    const rows = stmt.all();
+
+    let items: PipelineEntity[] = [];
+    source.stream.messageUpstream(message, {
+      newDifference: (_version, data) => {
+        items = [...data].map(d => d[0]);
+      },
+      commit: () => {},
+    });
+
+    expect(rows).toEqual(items);
+  });
+
   test('not consuming the entire iterator', () => {
     // 1. huge table. Get `1` perf about same as `limit 1`
     // 2. re-query the same source after early bail on `iterate`
   });
-  test('hoisted conditions', () => {});
-  test('different ordering', () => {});
 });
