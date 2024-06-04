@@ -1,8 +1,3 @@
-// Takes hoisted info and crafts correct query.
-// Takes `add` and `delete` events and writes to underlying table.
-// Holds prepared statements for these things
-// So we need table schema to prepare the right statement.
-
 import type {
   Ordering,
   Primitive,
@@ -134,15 +129,6 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
   }
 
   #sendHistory(msg: PullMsg): void {
-    // grab all the hoisted conditions for this source
-    // compile a SQL string
-    // ask the cache for the statement
-    // run it to send history down.
-    // all this should be in a tx we can pass down to....
-    // so the pipeline is in the same SQLite TX since it'll be asking for joins and we're going
-    // to allow a writer to proceed potentially?
-    // Maybe not for v1. Writers are blocked until all pipelines are done.
-    // So no need to pass the tx.
     const hoistedConditions = msg?.hoistedConditions;
     const conditionsForThisSource = (hoistedConditions || []).filter(
       c => c.selector[0] === this.#name,
