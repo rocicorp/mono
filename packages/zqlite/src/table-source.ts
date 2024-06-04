@@ -96,7 +96,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
     for (const [v, delta] of pending) {
       if (delta > 0) {
         insertStmt.run(...this.#cols.map(c => v[c]));
-      } else {
+      } else if (delta < 0) {
         deleteStmt.run(v.id);
       }
     }
