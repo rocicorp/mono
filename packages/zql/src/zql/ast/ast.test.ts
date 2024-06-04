@@ -26,7 +26,7 @@ describe('zql/ast', () => {
               op: '=',
               value: {type: 'value', value: 1234},
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -41,7 +41,7 @@ describe('zql/ast', () => {
             op: '=',
             value: {type: 'value', value: 1234},
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -83,7 +83,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
           {
             table: 'issues',
@@ -121,7 +121,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -160,7 +160,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -178,11 +178,8 @@ describe('zql/ast', () => {
               conditions: [],
             },
             orderBy: [
-              [
-                ['issues', 'id'],
-                ['issues', 'name'],
-              ],
-              'asc',
+              [['issues', 'id'], 'asc'],
+              [['issues', 'name'], 'asc'],
             ],
           },
           {
@@ -197,11 +194,8 @@ describe('zql/ast', () => {
               conditions: [],
             },
             orderBy: [
-              [
-                ['issues', 'id'],
-                ['issues', 'name'],
-              ],
-              'asc',
+              [['issues', 'id'], 'asc'],
+              [['issues', 'name'], 'asc'],
             ],
           },
         ],
@@ -212,11 +206,8 @@ describe('zql/ast', () => {
             [['issues', 'name'], 'n'],
           ],
           orderBy: [
-            [
-              ['issues', 'id'],
-              ['issues', 'name'],
-            ],
-            'asc',
+            [['issues', 'id'], 'asc'],
+            [['issues', 'name'], 'asc'],
           ],
         },
       },
@@ -248,7 +239,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
           {
             table: 'issues',
@@ -274,7 +265,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -301,7 +292,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -343,7 +334,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
           {
             table: 'issues',
@@ -381,7 +372,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -420,7 +411,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -474,7 +465,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -525,7 +516,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -579,7 +570,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
           {
             table: 'issues',
@@ -629,7 +620,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -680,7 +671,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -740,7 +731,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
           {
             table: 'issues',
@@ -796,7 +787,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -853,7 +844,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
       {
@@ -973,7 +964,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
           {
             // AST with different but equivalent nesting of AND's and OR's
@@ -1109,7 +1100,7 @@ describe('zql/ast', () => {
                 },
               ],
             },
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
           },
         ],
         normalized: {
@@ -1209,7 +1200,7 @@ describe('zql/ast', () => {
               },
             ],
           },
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       },
     ];
@@ -1222,13 +1213,13 @@ describe('zql/ast', () => {
         {
           table: 'issues',
           select: [[['issues', 'id'], 'alias']],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
         table: 'issues',
         select: [[['issues', 'id'], 'alias']],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     {
@@ -1238,14 +1229,14 @@ describe('zql/ast', () => {
           schema: 'zero',
           table: 'clients',
           select: [[['issues', 'id'], 'alias']],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
         schema: 'zero',
         table: 'clients',
         select: [[['issues', 'id'], 'alias']],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     {
@@ -1257,7 +1248,7 @@ describe('zql/ast', () => {
             [['issues', 'id'], 'id_alias'],
             [['issues', 'name'], 'a_name'],
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
         {
           table: 'issues',
@@ -1265,7 +1256,7 @@ describe('zql/ast', () => {
             [['issues', 'name'], 'a_name'],
             [['issues', 'id'], 'id_alias'],
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
@@ -1274,7 +1265,7 @@ describe('zql/ast', () => {
           [['issues', 'id'], 'id_alias'],
           [['issues', 'name'], 'a_name'],
         ],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     {
@@ -1283,13 +1274,13 @@ describe('zql/ast', () => {
         {
           table: 'issues',
           aggregate: [{aggregate: 'count', alias: 'num'}],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
         table: 'issues',
         aggregate: [{aggregate: 'count', alias: 'num'}],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     {
@@ -1305,7 +1296,7 @@ describe('zql/ast', () => {
               alias: 'maxPri',
             },
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
         {
           table: 'issues',
@@ -1317,7 +1308,7 @@ describe('zql/ast', () => {
             },
             {aggregate: 'count', alias: 'num'},
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
@@ -1330,7 +1321,7 @@ describe('zql/ast', () => {
             alias: 'maxPri',
           },
         ],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     {
@@ -1346,7 +1337,7 @@ describe('zql/ast', () => {
             ['issues', 'id'],
             ['issues', 'name'],
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
         {
           table: 'issues',
@@ -1358,7 +1349,7 @@ describe('zql/ast', () => {
             ['issues', 'name'],
             ['issues', 'id'],
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
@@ -1371,7 +1362,7 @@ describe('zql/ast', () => {
           ['issues', 'id'],
           ['issues', 'name'],
         ],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     {
@@ -1389,11 +1380,8 @@ describe('zql/ast', () => {
           ],
           // ORDER BY expression order must be preserved.
           orderBy: [
-            [
-              ['issues', 'dueDate'],
-              ['issues', 'priority'],
-            ],
-            'desc',
+            [['issues', 'dueDate'], 'desc'],
+            [['issues', 'priority'], 'desc'],
           ],
           limit: 10,
         },
@@ -1410,11 +1398,8 @@ describe('zql/ast', () => {
         ],
         // ORDER BY expression order must be preserved.
         orderBy: [
-          [
-            ['issues', 'dueDate'],
-            ['issues', 'priority'],
-          ],
-          'desc',
+          [['issues', 'dueDate'], 'desc'],
+          [['issues', 'priority'], 'desc'],
         ],
         limit: 10,
       },
@@ -1434,11 +1419,8 @@ describe('zql/ast', () => {
           ],
           // ORDER BY expression order must be preserved.
           orderBy: [
-            [
-              ['issues', 'priority'],
-              ['issues', 'dueDate'],
-            ],
-            'desc',
+            [['issues', 'priority'], 'desc'],
+            [['issues', 'dueDate'], 'desc'],
           ],
           limit: 10,
         },
@@ -1455,11 +1437,8 @@ describe('zql/ast', () => {
         ],
         // ORDER BY expression order must be preserved.
         orderBy: [
-          [
-            ['issues', 'priority'],
-            ['issues', 'dueDate'],
-          ],
-          'desc',
+          [['issues', 'priority'], 'desc'],
+          [['issues', 'dueDate'], 'desc'],
         ],
         limit: 10,
       },
@@ -1482,7 +1461,7 @@ describe('zql/ast', () => {
                   [['issues', 'id'], 'id_alias'],
                   [['issues', 'name'], 'b_alias'],
                 ],
-                orderBy: [[['issues', 'id']], 'asc'],
+                orderBy: [[['issues', 'id'], 'asc']],
               },
               as: 'owner',
               on: [
@@ -1491,7 +1470,7 @@ describe('zql/ast', () => {
               ],
             },
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
         {
           table: 'issues',
@@ -1508,7 +1487,7 @@ describe('zql/ast', () => {
                   [['issues', 'name'], 'b_alias'],
                   [['issues', 'id'], 'id_alias'],
                 ],
-                orderBy: [[['issues', 'id']], 'asc'],
+                orderBy: [[['issues', 'id'], 'asc']],
               },
               as: 'owner',
               on: [
@@ -1517,7 +1496,7 @@ describe('zql/ast', () => {
               ],
             },
           ],
-          orderBy: [[['issues', 'id']], 'asc'],
+          orderBy: [[['issues', 'id'], 'asc']],
         },
       ],
       normalized: {
@@ -1535,7 +1514,7 @@ describe('zql/ast', () => {
                 [['issues', 'id'], 'id_alias'],
                 [['issues', 'name'], 'b_alias'],
               ],
-              orderBy: [[['issues', 'id']], 'asc'],
+              orderBy: [[['issues', 'id'], 'asc']],
             },
             as: 'owner',
             on: [
@@ -1544,7 +1523,7 @@ describe('zql/ast', () => {
             ],
           },
         ],
-        orderBy: [[['issues', 'id']], 'asc'],
+        orderBy: [[['issues', 'id'], 'asc']],
       },
     },
     ...conditionCases('where'),
@@ -1559,7 +1538,7 @@ describe('zql/ast', () => {
               type: 'left',
               other: {
                 table: 'issueLabel',
-                orderBy: [[['issueLabel', 'id']], 'asc'],
+                orderBy: [[['issueLabel', 'id'], 'asc']],
               },
               as: 'issueLabel',
               on: [
@@ -1571,7 +1550,7 @@ describe('zql/ast', () => {
               type: 'left',
               other: {
                 table: 'label',
-                orderBy: [[['label', 'id']], 'asc'],
+                orderBy: [[['label', 'id'], 'asc']],
               },
               as: 'label',
               on: [
@@ -1621,7 +1600,7 @@ describe('zql/ast', () => {
               type: 'left',
               other: {
                 table: 'issueLabel',
-                orderBy: [[['issueLabel', 'id']], 'asc'],
+                orderBy: [[['issueLabel', 'id'], 'asc']],
               },
               as: 'issueLabel',
               on: [
@@ -1633,7 +1612,7 @@ describe('zql/ast', () => {
               type: 'left',
               other: {
                 table: 'label',
-                orderBy: [[['label', 'id']], 'asc'],
+                orderBy: [[['label', 'id'], 'asc']],
               },
               as: 'label',
               on: [
@@ -1695,7 +1674,7 @@ describe('zql/ast', () => {
             type: 'left',
             other: {
               table: 'issueLabel',
-              orderBy: [[['issueLabel', 'id']], 'asc'],
+              orderBy: [[['issueLabel', 'id'], 'asc']],
             },
             as: 'issueLabel',
             on: [
@@ -1707,7 +1686,7 @@ describe('zql/ast', () => {
             type: 'left',
             other: {
               table: 'label',
-              orderBy: [[['label', 'id']], 'asc'],
+              orderBy: [[['label', 'id'], 'asc']],
             },
             as: 'label',
             on: [

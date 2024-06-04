@@ -1,9 +1,9 @@
+import {assert} from 'shared/src/asserts.js';
 import {expect, test} from 'vitest';
 import {z} from 'zod';
 import {makeTestContext} from '../context/test-context.js';
 import {makeComparator} from '../ivm/compare.js';
 import {EntityQuery, astForTesting as ast} from './entity-query.js';
-import {assert} from 'shared/src/asserts.js';
 
 const e1 = z.object({
   id: z.string(),
@@ -63,7 +63,6 @@ test('sorted materialization', async () => {
     id: 'c',
     n: 1,
   });
-  await Promise.resolve();
 
   expect(await ascStatement.exec()).toEqual([
     {id: 'c', n: 1},
@@ -97,7 +96,6 @@ test('sorting is stable via suffixing the primary key to the order', async () =>
     id: 'c',
     n: 1,
   });
-  await Promise.resolve();
   expect(await ascStatement.exec()).toEqual([
     {id: 'a', n: 1},
     {id: 'b', n: 1},
@@ -138,8 +136,10 @@ test('makeComparator', () => {
   function check(values1: unknown[], values2: unknown[], expected: number) {
     expect(
       makeComparator<Record<string, unknown>>(
-        Array.from({length: values1.length}).map((_, i) => ['x', 'field' + i]),
-        'asc',
+        Array.from({length: values1.length}).map((_, i) => [
+          ['x', 'field' + i],
+          'asc',
+        ]),
       )(makeObject(values1), makeObject(values2)),
     ).toBe(expected);
   }
@@ -188,7 +188,7 @@ test('ensure we get callbacks when subscribing and unsubscribing', async () => {
     type: 'added',
     ast: {
       ...ast(q),
-      orderBy: [[['e1', 'id']], 'asc'],
+      orderBy: [[['e1', 'id'], 'asc']],
     },
   });
 
@@ -200,7 +200,7 @@ test('ensure we get callbacks when subscribing and unsubscribing', async () => {
       type: 'removed',
       ast: {
         ...ast(q),
-        orderBy: [[['e1', 'id']], 'asc'],
+        orderBy: [[['e1', 'id'], 'asc']],
       },
     },
   ]);
@@ -223,7 +223,7 @@ test('preloaded resolves to true when subscription is got', async () => {
     type: 'added',
     ast: {
       ...ast(q),
-      orderBy: [[['e1', 'id']], 'asc'],
+      orderBy: [[['e1', 'id'], 'asc']],
     },
   });
 
@@ -251,7 +251,7 @@ test('preloaded resolves to true when subscription is got', async () => {
       type: 'removed',
       ast: {
         ...ast(q),
-        orderBy: [[['e1', 'id']], 'asc'],
+        orderBy: [[['e1', 'id'], 'asc']],
       },
     },
   ]);
@@ -274,7 +274,7 @@ test('preloaded resolves to false if preload is cleanedup before query is ever g
     type: 'added',
     ast: {
       ...ast(q),
-      orderBy: [[['e1', 'id']], 'asc'],
+      orderBy: [[['e1', 'id'], 'asc']],
     },
   });
 
@@ -292,7 +292,7 @@ test('preloaded resolves to false if preload is cleanedup before query is ever g
       type: 'removed',
       ast: {
         ...ast(q),
-        orderBy: [[['e1', 'id']], 'asc'],
+        orderBy: [[['e1', 'id'], 'asc']],
       },
     },
   ]);

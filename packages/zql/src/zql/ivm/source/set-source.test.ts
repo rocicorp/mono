@@ -1,13 +1,14 @@
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
+import type {Ordering} from '../../ast/ast.js';
 import type {Listener} from '../graph/difference-stream.js';
 import type {PullMsg} from '../graph/message.js';
 import {Materialite} from '../materialite.js';
 
 type E = {id: number};
 
-const ordering = [[['test', 'id']], 'asc'] as const;
-const descOrdering = [[['test', 'id']], 'desc'] as const;
+const ordering: Ordering = [[['test', 'id'], 'asc']];
+const descOrdering: Ordering = [[['test', 'id'], 'desc']];
 const comparator = (l: E, r: E) => l.id - r.id;
 const numberComparator = (l: number, r: number) => l - r;
 
@@ -197,7 +198,7 @@ test('history requests with an alternate ordering are fulfilled by that ordering
       {
         id: 1,
         type: 'pull',
-        order: [[['e2', 'id']], 'asc'],
+        order: [[['e2', 'id'], 'asc']],
         hoistedConditions: [],
       },
       listener,
@@ -213,11 +214,8 @@ test('history requests with an alternate ordering are fulfilled by that ordering
         id: 2,
         type: 'pull',
         order: [
-          [
-            ['e2', 'x'],
-            ['e2', 'id'],
-          ],
-          'asc',
+          [['e2', 'x'], 'asc'],
+          [['e2', 'id'], 'asc'],
         ],
         hoistedConditions: [],
       },
@@ -239,11 +237,8 @@ test('history requests with an alternate ordering are fulfilled by that ordering
         id: 3,
         type: 'pull',
         order: [
-          [
-            ['e2', 'x'],
-            ['e2', 'id'],
-          ],
-          'asc',
+          [['e2', 'x'], 'asc'],
+          [['e2', 'id'], 'asc'],
         ],
         hoistedConditions: [],
       },
@@ -294,11 +289,8 @@ describe('history requests with hoisted filters', () => {
         id,
         type: 'pull',
         order: [
-          [
-            ['e', 'x'],
-            ['e', 'id'],
-          ],
-          'asc',
+          [['e', 'x'], 'asc'],
+          [['e', 'id'], 'asc'],
         ],
         hoistedConditions: [
           {
@@ -391,7 +383,7 @@ describe('history requests with hoisted filters', () => {
         {
           id: 1,
           type: 'pull',
-          order: [[['e', 'id']], 'desc'],
+          order: [[['e', 'id'], 'desc']],
           hoistedConditions: [
             {
               selector: ['e', 'id'],
@@ -409,7 +401,7 @@ describe('history requests with hoisted filters', () => {
         {
           id: 1,
           type: 'pull',
-          order: [[['e', 'id']], 'desc'],
+          order: [[['e', 'id'], 'desc']],
           hoistedConditions: [
             {
               selector: ['e', 'id'],
@@ -427,7 +419,7 @@ describe('history requests with hoisted filters', () => {
         {
           id: 1,
           type: 'pull',
-          order: [[['e', 'id']], 'desc'],
+          order: [[['e', 'id'], 'desc']],
           hoistedConditions: [
             {
               selector: ['e', 'id'],
@@ -450,11 +442,8 @@ describe('history requests with hoisted filters', () => {
         id: 1,
         type: 'pull',
         order: [
-          [
-            ['e', 'x'],
-            ['e', 'id'],
-          ],
-          'asc',
+          [['e', 'x'], 'asc'],
+          [['e', 'id'], 'asc'],
         ],
         hoistedConditions: [
           {
@@ -473,11 +462,8 @@ describe('history requests with hoisted filters', () => {
         id: 1,
         type: 'pull',
         order: [
-          [
-            ['e', 'y'],
-            ['e', 'id'],
-          ],
-          'asc',
+          [['e', 'y'], 'asc'],
+          [['e', 'id'], 'asc'],
         ],
         hoistedConditions: [
           {
@@ -497,11 +483,8 @@ describe('history requests with hoisted filters', () => {
           id: 1,
           type: 'pull',
           order: [
-            [
-              ['e', 'x'],
-              ['e', 'id'],
-            ],
-            'asc',
+            [['e', 'x'], 'asc'],
+            [['e', 'id'], 'asc'],
           ],
           hoistedConditions: [
             {
@@ -522,11 +505,8 @@ describe('history requests with hoisted filters', () => {
           id: 1,
           type: 'pull',
           order: [
-            [
-              ['e', 'y'],
-              ['e', 'id'],
-            ],
-            'asc',
+            [['e', 'y'], 'asc'],
+            [['e', 'id'], 'asc'],
           ],
           hoistedConditions: [
             {

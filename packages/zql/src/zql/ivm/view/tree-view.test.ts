@@ -7,7 +7,7 @@ import type {Comparator} from '../types.js';
 import {TreeView} from './tree-view.js';
 
 const numberComparator = (l: number, r: number) => l - r;
-const ordering = [[['x', 'id']], 'asc'] as const;
+const ordering = [[['x', 'id'], 'asc']] as const;
 
 type Selected = {id: string};
 test('asc and descComparator on Entities', () => {
@@ -19,42 +19,24 @@ test('asc and descComparator on Entities', () => {
     'x',
   );
   const orderBy = [
-    [
-      ['x', 'n'],
-      ['x', 'id'],
-    ],
-    'asc',
+    [['x', 'n'], 'asc'],
+    [['x', 'id'], 'asc'],
   ] as const;
   const view = new TreeView<Selected>(
     context,
     s.stream,
-    makeComparator(
-      [
-        ['x', 'n'],
-        ['x', 'id'],
-      ],
-      'asc',
-    ),
+    makeComparator(orderBy),
     orderBy,
   );
 
   const orderBy2 = [
-    [
-      ['x', 'n'],
-      ['x', 'id'],
-    ],
-    'desc',
+    [['x', 'n'], 'desc'],
+    [['x', 'id'], 'desc'],
   ] as const;
   const descView = new TreeView<Selected>(
     context,
     s.stream,
-    makeComparator(
-      [
-        ['x', 'n'],
-        ['x', 'id'],
-      ],
-      'desc',
-    ),
+    makeComparator(orderBy2),
     orderBy2,
   );
 
@@ -87,7 +69,7 @@ test('add & remove', () => {
       const {materialite} = context;
       const source = materialite.newSetSource<{x: number}>(
         (l, r) => l.x - r.x,
-        [[['test', 'x']], 'asc'] as const,
+        [[['test', 'x'], 'asc']],
         'test',
       );
       const view = new TreeView(
@@ -115,7 +97,7 @@ test('replace', () => {
     fc.property(fc.uniqueArray(fc.integer()), arr => {
       const context = makeTestContext();
       const {materialite} = context;
-      const orderBy = [[['test', 'x']], 'asc'] as const;
+      const orderBy = [[['test', 'x'], 'asc']] as const;
       const source = materialite.newSetSource<{x: number}>(
         (l, r) => l.x - r.x,
         orderBy,
@@ -155,7 +137,7 @@ test('replace outside viewport', () => {
   type Item = {id: number; s: string};
   const context = makeTestContext();
   const {materialite} = context;
-  const orderBy = [[['test', 'x']], 'asc'] as const;
+  const orderBy = [[['test', 'x'], 'asc']] as const;
   const comparator: Comparator<Item> = (l, r) => l.id - r.id;
   const source = materialite.newSetSource<Item>(comparator, orderBy, 'test');
   const view = new TreeView(context, source.stream, comparator, orderBy, 5);

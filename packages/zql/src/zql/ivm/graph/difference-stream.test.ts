@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
-import {DifferenceStream} from './difference-stream.js';
 import {Materialite} from '../materialite.js';
+import {DifferenceStream} from './difference-stream.js';
 import {createPullMessage, createPullResponseMessage} from './message.js';
 import {DebugOperator} from './operators/debug-operator.js';
 
@@ -130,7 +130,7 @@ test('cleaning up the only user of a stream cleans up the entire pipeline', () =
   const materialite = new Materialite();
   const set = materialite.newSetSource<Elem>(
     (l, r) => l.x - r.x,
-    [[['elem', 'x']], 'asc'],
+    [[['elem', 'x'], 'asc']],
     'elem',
   );
 
@@ -153,7 +153,7 @@ test('cleaning up the only user of a stream cleans up the entire pipeline but st
   const materialite = new Materialite();
   const set = materialite.newSetSource<Elem>(
     (l, r) => l.x - r.x,
-    [[['elem', 'x']], 'asc'],
+    [[['elem', 'x'], 'asc']],
     'elem',
   );
 
@@ -227,7 +227,7 @@ test('replying to a message only notifies along the requesting path', () => {
   x.setUpstream(s2Dbg);
   s3.debug(() => notified.push(6));
 
-  const msg = createPullMessage([[], 'asc']);
+  const msg = createPullMessage(undefined);
 
   x.messageUpstream(msg, {
     commit: () => {},

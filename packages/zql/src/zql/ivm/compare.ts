@@ -1,5 +1,5 @@
 import {unreachable} from 'shared/src/asserts.js';
-import type {Selector} from '../ast/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import {getValueFromEntity} from './source/util.js';
 
 export function compareEntityFields<T>(lVal: T, rVal: T) {
@@ -27,23 +27,21 @@ export function compareEntityFields<T>(lVal: T, rVal: T) {
 }
 
 export function makeComparator<T extends object>(
-  qualifiedColumns: readonly Selector[],
-  direction: 'asc' | 'desc',
+  orderBy: Ordering,
 ): (l: T, r: T) => number {
   const comparator = (l: T, r: T) => {
-    let comp = 0;
-    for (const qualifiedColumn of qualifiedColumns) {
-      comp = compareEntityFields(
-        getValueFromEntity(l as Record<string, unknown>, qualifiedColumn),
-        getValueFromEntity(r as Record<string, unknown>, qualifiedColumn),
+    for (const [selector, direction] of orderBy) {
+      const comp = compareEntityFields(
+        getValueFromEntity(l as Record<string, unknown>, selector),
+        getValueFromEntity(r as Record<string, unknown>, selector),
       );
       if (comp !== 0) {
-        return comp;
+        return direction === 'asc' ? comp : -comp;
       }
     }
 
-    return comp;
+    return 0;
   };
 
-  return direction === 'asc' ? comparator : (l, r) => comparator(r, l);
+  return comparator;
 }

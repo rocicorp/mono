@@ -113,7 +113,7 @@ export function inOrder<T extends object>(
 ) {
   const first = buffer[0];
   const order = must(first[1].order);
-  const comparator = makeComparator(order[0], order[1]);
+  const comparator = makeComparator(order);
 
   const iterables = buffer.map(r => r[0]);
   return iterInOrder(iterables, (l, r) => comparator(l[0], r[0]));

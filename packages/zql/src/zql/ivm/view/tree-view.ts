@@ -3,7 +3,6 @@ import {must} from 'shared/src/must.js';
 import BTree from 'sorted-btree-roci';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
-import {fieldsMatch} from '../../query/statement.js';
 import {makeComparator} from '../compare.js';
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import {Reply, createPullMessage} from '../graph/message.js';
@@ -141,12 +140,11 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     limit: number,
   ): IterableIterator<Entry<T>> {
     const order = must(reply.order);
-    const fields = order?.[0] ?? [];
     const iterator = data[Symbol.iterator]();
     let i = 0;
     let last: T | undefined = undefined;
 
-    if (this.#order === undefined || fieldsMatch(fields, this.#order[0])) {
+    if (this.#order === undefined || selectorsMatch(order, this.#order)) {
       return {
         [Symbol.iterator]() {
           return this;
@@ -170,16 +168,19 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
     // e.g., [modified] vs [modified, created]
     // in which case we process until we hit the next thing after
     // the source order after we limit.
-    if (!selectorsAreEqual(fields[0], this.#order[0][0])) {
+    if (
+      order.length === 0 ||
+      !selectorsAreEqual(order[0][0], this.#order[0][0])
+    ) {
       throw new Error(
-        `Order must overlap on at least one field! Got: ${fields[0]} | ${
+        `Order must overlap on at least one field! Got: ${order[0]?.[0]} | ${
           this.#order[0][0]
         }`,
       );
     }
 
     // Partial order overlap
-    const responseComparator = makeComparator(order[0], order[1]);
+    const responseComparator = makeComparator(order);
     return {
       [Symbol.iterator]() {
         return this;
@@ -344,17 +345,27 @@ function orderingsAreCompatible(
   }
 
   // asc/desc differ.
-  if (sourceOrder[1] !== destOrder[1]) {
+  if (sourceOrder[0][1] !== destOrder[0][1]) {
     return false;
   }
 
-  const sourceFields = sourceOrder[0];
-  const destFields = destOrder[0];
-
   // If at least the left most field is the same, we're compatible.
-  if (selectorsAreEqual(sourceFields[0], destFields[0])) {
+  if (selectorsAreEqual(sourceOrder[0][0], destOrder[0][0])) {
     return true;
   }
 
   return false;
+}
+
+function selectorsMatch(left: Ordering, right: Ordering) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i++) {
+    // ignore direction
+    if (!selectorsAreEqual(left[i][0], right[i][0])) {
+      return false;
+    }
+  }
+  return true;
 }

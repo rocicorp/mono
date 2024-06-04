@@ -645,23 +645,20 @@ describe('ast', () => {
     // order methods update the ast
     expect(ast(q.asc('id'))).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'asc'],
+      orderBy: [[['e1', 'id'], 'asc']],
     } satisfies AST);
     expect(ast(q.desc('id'))).toEqual({
       table: 'e1',
-      orderBy: [[['e1', 'id']], 'desc'],
+      orderBy: [[['e1', 'id'], 'desc']],
     } satisfies AST);
     expect(ast(q.asc('id', 'a', 'b', 'c', 'd'))).toEqual({
       table: 'e1',
       orderBy: [
-        [
-          ['e1', 'id'],
-          ['e1', 'a'],
-          ['e1', 'b'],
-          ['e1', 'c'],
-          ['e1', 'd'],
-        ],
-        'asc',
+        [['e1', 'id'], 'asc'],
+        [['e1', 'a'], 'asc'],
+        [['e1', 'b'], 'asc'],
+        [['e1', 'c'], 'asc'],
+        [['e1', 'd'], 'asc'],
       ],
     } satisfies AST);
   });
@@ -1297,7 +1294,7 @@ describe('all references to columns are always qualified', () => {
       test: 'order by',
       q: q.asc('a'),
       expected: {
-        orderBy: [[['e1', 'a']], 'asc'],
+        orderBy: [[['e1', 'a'], 'asc']],
         table: 'e1',
       },
     },
