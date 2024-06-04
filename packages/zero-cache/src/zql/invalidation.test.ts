@@ -226,7 +226,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
         schema: 'zero',
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
       },
       filters: [
         {
@@ -253,7 +253,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
         aggregate: [
           {aggregate: 'min', field: ['foo', 'priority'], alias: 'ignored'},
         ],
-        orderBy: [[['foo', 'ignored']], 'asc'],
+        orderBy: [[['foo', 'ignored'], 'asc']],
       },
       filters: [
         {
@@ -278,7 +278,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         aggregate: [{aggregate: 'count', alias: 'ignored'}],
-        orderBy: [[['foo', 'ignored']], 'asc'],
+        orderBy: [[['foo', 'ignored'], 'asc']],
       },
       filters: [
         {
@@ -301,7 +301,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: and(
           cond(['foo', 'foo'], '=', 'bar'),
           cond(['foo', 'bar'], '=', 2),
@@ -332,7 +332,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: and(
           cond(['foo', 'foo'], '=', 'bar'),
           cond(['join.alias', 'baz'], '=', 3), // Ignored
@@ -364,7 +364,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: or(
           cond(['foo', 'foo'], '=', 'bar'),
           cond(['foo', 'bar'], '=', 2),
@@ -421,7 +421,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: or(
           cond(['foo', 'foo'], '=', 'bar'),
           cond(['foo', 'bar'], '=', 2),
@@ -465,7 +465,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: or(
           cond(['foo', 'foo'], '=', 'bar'),
           cond(['foo', 'foo'], '=', 'baz'),
@@ -508,7 +508,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: and(
           or(cond(['foo', 'a'], '=', 1), cond(['foo', 'b'], '=', 2)),
           or(cond(['foo', 'c'], '=', 3), cond(['foo', 'd'], '=', 4)),
@@ -630,7 +630,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: and(
           or(cond(['foo', 'foo'], '=', 'bar'), cond(['foo', 'bar'], '=', 1)),
           or(cond(['foo', 'bar'], '=', 2), cond(['foo', 'do'], '=', 'foo')),
@@ -667,7 +667,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
       ast: {
         table: 'foo',
         select: [[['foo', 'id'], 'id']],
-        orderBy: [[['foo', 'id']], 'asc'],
+        orderBy: [[['foo', 'id'], 'asc']],
         where: and(
           cond(['foo', 'foo'], '=', 'bar'),
           cond(['foo', 'bar'], '=', 2),
@@ -683,7 +683,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
         {
           table: 'foo',
           select: [[['foo', 'id'], 'id']],
-          orderBy: [[['foo', 'id']], 'asc'],
+          orderBy: [[['foo', 'id'], 'asc']],
           where: and(
             or(cond(['foo', 'a'], '=', 1), cond(['foo', 'b'], '=', 2)),
             or(cond(['foo', 'c'], '=', 3), cond(['foo', 'd'], '=', 4)),

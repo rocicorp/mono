@@ -88,8 +88,10 @@ export class Normalized {
       query += `SELECT ${selection} FROM `;
     }
 
-    const getOrderByStr = ([names, dir]: Ordering) =>
-      ` ORDER BY ${names.map(x => `${selector(x)} ${dir}`).join(', ')}`;
+    const getOrderByStr = (ordering: Ordering) =>
+      ` ORDER BY ${ordering
+        .map(([x, dir]) => `${selector(x)} ${dir}`)
+        .join(', ')}`;
 
     if (moveOrderByAndLimit(ast)) {
       query += `(SELECT * FROM `;

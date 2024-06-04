@@ -1,4 +1,9 @@
-import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {
+  AST,
+  Condition,
+  Ordering,
+  Selector,
+} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {splitLastComponent} from '../services/view-syncer/queries.js';
 import type {AggLift, ServerAST} from './server-ast.js';
 
@@ -258,6 +263,9 @@ export function expandSubqueries(
         },
       ]);
   };
+  const addOrderBySelector = (orderingElement: Ordering[number]) =>
+    addSelector(orderingElement[0]);
+
   const selected = new Set<string>();
   // Add all referenced fields / selectors.
   select?.forEach(([selector, alias]) => {
@@ -273,7 +281,7 @@ export function expandSubqueries(
   getWhereColumns(where, []).forEach(selector => addSelector(selector));
   joins?.forEach(({on}) => on.forEach(part => addSelector(part)));
   groupBy?.forEach(grouping => addSelector(grouping));
-  orderBy?.[0].forEach(ordering => addSelector(ordering));
+  orderBy?.forEach(addOrderBySelector);
   aggregate?.forEach(agg => {
     if (agg.field !== undefined) {
       addSelector(agg.field);
@@ -447,6 +455,11 @@ export function reAliasAndBubbleSelections(
       : [from, newCol];
   };
 
+  const renameSelectorsInOrderingElement = ([
+    selector,
+    dir,
+  ]: Ordering[number]): Ordering[number] => [renameSelector(selector), dir];
+
   const renameAggLift = (alias: string): string =>
     `${ast.schema ?? 'public'}/${alias}`;
 
@@ -491,7 +504,7 @@ export function reAliasAndBubbleSelections(
     })),
     aggregate: undefined,
     groupBy: groupBy?.map(renameSelector),
-    orderBy: orderBy ? [orderBy[0].map(renameSelector), orderBy[1]] : undefined,
+    orderBy: orderBy?.map(renameSelectorsInOrderingElement),
   };
 }
 
