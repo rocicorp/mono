@@ -11,17 +11,22 @@ export function sourcesAreIdentical(
     return false;
   }
 
-  if (sourceAOrder[0].length !== sourceBOrder[0].length) {
+  return orderingsAreEqual(sourceAOrder, sourceBOrder);
+}
+
+export function orderingsAreEqual(a: Ordering, b: Ordering) {
+  if (a.length !== b.length) {
     return false;
   }
-
-  if (sourceAOrder[1] !== sourceBOrder[1]) {
-    return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i][1] !== b[i][1]) {
+      return false;
+    }
+    if (!selectorsAreEqual(a[i][0], b[i][0])) {
+      return false;
+    }
   }
-
-  return sourceAOrder[0].every((col, i) =>
-    selectorsAreEqual(sourceBOrder[0][i], col),
-  );
+  return true;
 }
 
 export function selectorsAreEqual(l: Selector, r: Selector) {
@@ -41,7 +46,7 @@ export function selectorArraysAreEqual(
 export function getValueFromEntity(
   entity: Record<string, unknown>,
   qualifiedColumn: readonly [table: string | null, column: string],
-) {
+): unknown {
   if (isJoinResult(entity) && qualifiedColumn[0] !== null) {
     if (qualifiedColumn[1] === '*') {
       return (entity as Record<string, unknown>)[qualifiedColumn[0]];

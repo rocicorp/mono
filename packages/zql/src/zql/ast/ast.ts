@@ -6,11 +6,11 @@ import {defined} from 'shared/src/arrays.js';
 
 export type Selector = readonly [table: string, column: string];
 
-export type Ordering = readonly [
-  // TODO(mlaw): table being nullable is temporary until we fixup order-by application for joined tables
-  fields: readonly Selector[],
+export type Ordering = readonly (readonly [
+  field: Selector,
   direction: 'asc' | 'desc',
-];
+])[];
+
 export type Primitive = string | number | boolean | null;
 export type PrimitiveArray = string[] | number[] | boolean[];
 

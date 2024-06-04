@@ -4,7 +4,7 @@ import {
   buildPipeline,
   pullUsedSources,
 } from '../ast-to-ivm/pipeline-builder.js';
-import type {AST, Ordering, Selector} from '../ast/ast.js';
+import type {AST, Ordering} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {makeComparator} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -130,6 +130,7 @@ export class Statement<Return> implements IStatement<Return> {
 async function createMaterialization<Return>(ast: AST, context: Context) {
   const {orderBy, limit} = ast;
   assert(orderBy);
+  assert(orderBy.length > 0);
 
   const usedSources = pullUsedSources(ast, new Set<string>());
   const promises: PromiseLike<void>[] = [];
@@ -161,23 +162,10 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
     pipeline as unknown as DifferenceStream<
       Return extends [] ? Return[number] : never
     >,
-    makeComparator<Record<string, unknown>>(orderBy[0], orderBy[1]),
+    makeComparator<Record<string, unknown>>(orderBy),
     orderBy,
     limit,
   ) as unknown as View<Return extends [] ? Return[number] : Return>;
   view.pullHistoricalData();
   return view;
-}
-
-export function fieldsMatch(
-  left: readonly Selector[],
-  right: readonly Selector[],
-) {
-  return (
-    left.length === right.length &&
-    left.every(
-      (leftItem, i) =>
-        leftItem[0] === right[i][0] && leftItem[1] === right[i][1],
-    )
-  );
 }

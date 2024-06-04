@@ -29,7 +29,7 @@ export class TestContext implements Context {
     if (!this.#sources.has(name)) {
       const source = this.materialite.newSetSource(
         (l: T, r: T) => compareUTF8(l.id as string, r.id as string),
-        [[[name, 'id']], 'asc'],
+        [[[name, 'id'], 'asc']],
         name,
       ) as unknown as Source<PipelineEntity>;
       source.seed([]);
@@ -70,7 +70,7 @@ export class InfiniteSourceContext implements Context {
     } else {
       source = this.materialite.newSetSource<X>(
         (l: X, r: X) => compareUTF8(l.id as string, r.id as string),
-        [[[name, 'id']], 'asc'],
+        [[[name, 'id'], 'asc']],
         name,
       ) as unknown as Source<PipelineEntity>;
       source.seed([]);
@@ -174,8 +174,7 @@ class InfiniteSource<T extends PipelineEntity> implements Source<T> {
           this.#materialite.getVersion(),
           this.#iterable,
           createPullResponseMessage(message, this.#name, [
-            [[this.#name, 'id']],
-            'asc',
+            [[this.#name, 'id'], 'asc'],
           ]),
         );
         break;

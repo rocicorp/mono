@@ -1,20 +1,20 @@
-import {expect, test, vi} from 'vitest';
-import {QueryManager} from './query-manager.js';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
-import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
 import {
-  type ScanOptions,
+  DeepReadonly,
+  IndexKey,
+  ReadonlyJSONValue,
+  ScanNoIndexOptions,
+  ScanResult,
+  makeScanResult,
   type ReadTransaction,
   type ScanIndexOptions,
-  makeScanResult,
-  ReadonlyJSONValue,
-  ScanResult,
-  IndexKey,
-  ScanNoIndexOptions,
-  DeepReadonly,
+  type ScanOptions,
 } from 'replicache';
 import type {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
+import {expect, test, vi} from 'vitest';
+import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
 import {toGotQueriesKey} from './keys.js';
+import {QueryManager} from './query-manager.js';
 
 function createExperimentalWatchMock() {
   return vi.fn<
@@ -33,7 +33,7 @@ test('add', () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
   queryManager.add(ast);
   expect(send).toBeCalledTimes(1);
@@ -43,7 +43,7 @@ test('add', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3o852oxdcga5g',
+          hash: 'vgoxbdhr8m7c',
           ast: {
             table: 'issues',
             alias: undefined,
@@ -55,7 +55,7 @@ test('add', () => {
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
             limit: undefined,
             schema: undefined,
           } satisfies AST,
@@ -78,7 +78,7 @@ test('remove', () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
 
   const remove1 = queryManager.add(ast);
@@ -89,7 +89,7 @@ test('remove', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3o852oxdcga5g',
+          hash: 'vgoxbdhr8m7c',
           ast: {
             table: 'issues',
             alias: undefined,
@@ -102,7 +102,7 @@ test('remove', () => {
             joins: undefined,
             groupBy: undefined,
             schema: undefined,
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
             limit: undefined,
           } satisfies AST,
         },
@@ -123,7 +123,7 @@ test('remove', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '3o852oxdcga5g',
+          hash: 'vgoxbdhr8m7c',
         },
       ],
     },
@@ -194,7 +194,7 @@ test('getQueriesPatch', async () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
   queryManager.add(ast1);
   // hash 1wpmhwzkyaqrd
@@ -204,13 +204,13 @@ test('getQueriesPatch', async () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'desc'],
+    orderBy: [[['issues', 'id'], 'desc']],
   };
   queryManager.add(ast2);
 
   const testReadTransaction = new TestTransaction();
   testReadTransaction.scanEntries = [
-    ['d/client1/3o852oxdcga5g', 'unused'],
+    ['d/client1/vgoxbdhr8m7c', 'unused'],
     ['d/client1/shouldBeDeleted', 'unused'],
   ];
 
@@ -222,7 +222,7 @@ test('getQueriesPatch', async () => {
     },
     {
       op: 'put',
-      hash: '1ld7py8mkar54',
+      hash: '34gh23e9vauns',
       ast: {
         table: 'issues',
         alias: undefined,
@@ -234,7 +234,7 @@ test('getQueriesPatch', async () => {
         where: undefined,
         joins: undefined,
         groupBy: undefined,
-        orderBy: [[['issues', 'id']], 'desc'],
+        orderBy: [[['issues', 'id'], 'desc']],
         limit: undefined,
         schema: undefined,
       } satisfies AST,
@@ -244,7 +244,7 @@ test('getQueriesPatch', async () => {
 });
 
 test('gotCallback, query already got', async () => {
-  const queryHash = '3o852oxdcga5g';
+  const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -264,7 +264,7 @@ test('gotCallback, query already got', async () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
 
   const gotCalback1 = vi.fn<[boolean], void>();
@@ -288,7 +288,7 @@ test('gotCallback, query already got', async () => {
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
             limit: undefined,
             schema: undefined,
           } satisfies AST,
@@ -315,7 +315,7 @@ test('gotCallback, query already got', async () => {
 });
 
 test('gotCallback, query got after add', async () => {
-  const queryHash = '3o852oxdcga5g';
+  const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -328,7 +328,7 @@ test('gotCallback, query got after add', async () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
 
   const gotCalback1 = vi.fn<[boolean], void>();
@@ -352,7 +352,7 @@ test('gotCallback, query got after add', async () => {
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
             limit: undefined,
             schema: undefined,
           } satisfies AST,
@@ -379,7 +379,7 @@ test('gotCallback, query got after add', async () => {
 });
 
 test('gotCallback, query got after add then removed', async () => {
-  const queryHash = '3o852oxdcga5g';
+  const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -392,7 +392,7 @@ test('gotCallback, query got after add then removed', async () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
 
   const gotCalback1 = vi.fn<[boolean], void>();
@@ -416,7 +416,7 @@ test('gotCallback, query got after add then removed', async () => {
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
             limit: undefined,
             schema: undefined,
           } satisfies AST,
@@ -453,7 +453,7 @@ test('gotCallback, query got after add then removed', async () => {
 });
 
 test('gotCallback, query got after subscription removed', async () => {
-  const queryHash = '3o852oxdcga5g';
+  const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -466,7 +466,7 @@ test('gotCallback, query got after subscription removed', async () => {
       [['issues', 'id'], 'id'],
       [['issues', 'name'], 'name'],
     ],
-    orderBy: [[['issues', 'id']], 'asc'],
+    orderBy: [[['issues', 'id'], 'asc']],
   };
 
   const gotCalback1 = vi.fn<[boolean], void>();
@@ -490,7 +490,7 @@ test('gotCallback, query got after subscription removed', async () => {
             where: undefined,
             joins: undefined,
             groupBy: undefined,
-            orderBy: [[['issues', 'id']], 'asc'],
+            orderBy: [[['issues', 'id'], 'asc']],
             limit: undefined,
             schema: undefined,
           } satisfies AST,

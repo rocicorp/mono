@@ -114,9 +114,8 @@ export class Normalized {
       query += ` GROUP BY ${groupBy.map(x => selector(x)).join(', ')}`;
     }
     if (orderBy) {
-      const [names, dir] = orderBy;
-      query += ` ORDER BY ${names
-        .map(x => `${selector(x)} ${dir}`)
+      query += ` ORDER BY ${orderBy
+        .map(([x, dir]) => `${selector(x)} ${dir}`)
         .join(', ')}`;
     }
     if (limit !== undefined) {

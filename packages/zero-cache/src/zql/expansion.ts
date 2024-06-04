@@ -1,4 +1,9 @@
-import type {AST, Condition, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {
+  AST,
+  Condition,
+  Ordering,
+  Selector,
+} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import type {ServerAST, SubQuery} from './server-ast.js';
 
@@ -235,6 +240,9 @@ export function expandSubqueries(
     const [from] = selector;
     selectors.get(from)?.push(selector) ?? selectors.set(from, [selector]);
   };
+  const addOrderBySelector = (orderingElement: Ordering[number]) =>
+    addSelector(orderingElement[0]);
+
   const selected = new Set<string>();
   // Add all referenced fields / selectors.
   select?.forEach(([selector, alias]) => {
@@ -246,7 +254,7 @@ export function expandSubqueries(
   getWhereColumns(where, []).forEach(selector => addSelector(selector));
   joins?.forEach(({on}) => on.forEach(part => addSelector(part)));
   groupBy?.forEach(grouping => addSelector(grouping));
-  orderBy?.[0].forEach(ordering => addSelector(ordering));
+  orderBy?.forEach(addOrderBySelector);
   aggregate?.forEach(agg => {
     if (agg.field !== undefined) {
       addSelector(agg.field);
@@ -384,6 +392,11 @@ export function reAliasAndBubbleSelections(
       : [from, newCol];
   };
 
+  const renameSelectorsInOrderingElement = ([
+    selector,
+    dir,
+  ]: Ordering[number]): Ordering[number] => [renameSelector(selector), dir];
+
   // Return a modified AST with all selectors realiased (SELECT, ON, GROUP BY, ORDER BY),
   // and bubble up all selected aliases to the `exports` Map.
   const exported = new Set<string>();
@@ -416,6 +429,6 @@ export function reAliasAndBubbleSelections(
       on: [renameSelector(join.on[0]), renameSelector(join.on[1])],
     })),
     groupBy: groupBy?.map(renameSelector),
-    orderBy: orderBy ? [orderBy[0].map(renameSelector), orderBy[1]] : undefined,
+    orderBy: orderBy?.map(renameSelectorsInOrderingElement),
   };
 }

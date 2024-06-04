@@ -15,12 +15,11 @@ function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
 
 export const selectorSchema = readonly(v.tuple([v.string(), v.string()]));
 
-export const orderingSchema = readonly(
-  v.tuple([
-    readonly(v.array(selectorSchema)),
-    v.union(v.literal('asc'), v.literal('desc')),
-  ]),
+const orderingElementSchema = readonly(
+  v.tuple([selectorSchema, v.union(v.literal('asc'), v.literal('desc'))]),
 );
+
+export const orderingSchema = readonly(v.array(orderingElementSchema));
 
 export const primitiveSchema = v.union(
   v.string(),

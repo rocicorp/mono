@@ -3,11 +3,11 @@ import type {
   AST,
   Aggregation,
   Condition,
+  HavingCondition,
   Join,
-  SimpleCondition,
   Ordering,
   Selector,
-  HavingCondition,
+  SimpleCondition,
   SimpleHavingCondition,
 } from '../ast/ast.js';
 import {DifferenceStream, concat} from '../ivm/graph/difference-stream.js';
@@ -60,7 +60,7 @@ export function buildPipeline(
     ) as unknown as DifferenceStream<PipelineEntity>;
   }
   // if there was no group-by then we could be aggregating the entire table
-  else if (ast.aggregate) {
+  else if (ast.aggregate && ast.aggregate.length > 0) {
     ret = applyFullTableAggregation(
       ret as DifferenceStream<PipelineEntity>,
       ast.aggregate,

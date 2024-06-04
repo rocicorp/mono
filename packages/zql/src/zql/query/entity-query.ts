@@ -1,19 +1,19 @@
 import {must} from 'shared/src/must.js';
 import type {
   AST,
+  Selector as ASTSelector,
   Aggregation,
   Condition,
   EqualityOps,
+  HavingCondition,
   InOps,
   LikeOps,
   OrderOps,
-  SetOps,
-  SimpleOperator,
-  Selector as ASTSelector,
+  Ordering,
   Primitive,
   PrimitiveArray,
-  HavingCondition,
-  Ordering,
+  SetOps,
+  SimpleOperator,
 } from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {Misuse} from '../error/misuse.js';
@@ -265,21 +265,23 @@ export class EntityQuery<From extends FromSet, Return = []> {
   ): EntityQuery<From, CombineSelections<From, Fields>[]> {
     const seen = new Set(this.#ast.select?.map(s => s[1]));
     const aggregate: Aggregation[] = [];
-    const select = [...(this.#ast.select ?? [])];
+    const ast = this.#ast;
+    const select = ast.select ? [...ast.select] : [];
+
     for (const more of x) {
       if (!isAggregate(more)) {
         if (seen.has(more)) {
           continue;
         }
         seen.add(more);
-        select.push([qualifySelector(this.#ast, more), more]);
+        select.push([qualifySelector(ast, more), more]);
 
         continue;
       }
       aggregate.push({
         field:
           more.field !== undefined
-            ? qualifySelector(this.#ast, more.field)
+            ? qualifySelector(ast, more.field)
             : undefined,
         alias: more.alias,
         aggregate: more.aggregate,
@@ -290,8 +292,8 @@ export class EntityQuery<From extends FromSet, Return = []> {
       this.#context,
       this.#name,
       {
-        ...this.#ast,
-        select: [...select],
+        ...ast,
+        select,
         aggregate,
       },
     );
@@ -484,14 +486,14 @@ export class EntityQuery<From extends FromSet, Return = []> {
   asc(...x: SimpleSelector<From>[]) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'asc'],
+      orderBy: x.map(x => [qualifySelector(this.#ast, x), 'asc']),
     });
   }
 
   desc(...x: SimpleSelector<From>[]) {
     return new EntityQuery<From, Return>(this.#context, this.#name, {
       ...this.#ast,
-      orderBy: [x.map(x => qualifySelector(this.#ast, x)), 'desc'],
+      orderBy: x.map(x => [qualifySelector(this.#ast, x), 'desc']),
     });
   }
 
@@ -721,22 +723,30 @@ export function makeOrderingDeterministic(
   ast: AST,
   order: Ordering | undefined,
 ): Ordering {
-  if (order === undefined) {
-    order = [[[ast.table, 'id']], 'asc'];
-  }
-  const required = getRequiredOrderFieldsForDeterministicOrdering(ast);
+  const requiredOrderFields =
+    getRequiredOrderFieldsForDeterministicOrdering(ast);
 
-  const selectors = [...order[0]];
-  for (const selector of selectors) {
-    const key = selector.join('.');
-    required.delete(key);
-  }
-
-  for (const selector of required.values()) {
-    selectors.push(selector);
+  if (order) {
+    for (const [selector] of order) {
+      const key = selector.join('.');
+      requiredOrderFields.delete(key);
+    }
+  } else {
+    requiredOrderFields.delete(`${ast.table}.id`);
+    order = [[[ast.table, 'id'], 'asc']];
   }
 
-  return [selectors, order[1]];
+  if (requiredOrderFields.size === 0) {
+    return order;
+  }
+
+  const defaultDirection = order[0][1];
+  const newOrder = [...order];
+  for (const selector of requiredOrderFields.values()) {
+    newOrder.push([selector, defaultDirection]);
+  }
+
+  return newOrder;
 }
 
 function getRequiredOrderFieldsForDeterministicOrdering(
@@ -755,8 +765,11 @@ function getRequiredOrderFieldsForDeterministicOrdering(
   // TODO(mlaw): this'll change with compound primary keys
   ret.set(ast.table + '.id', [ast.table, 'id']);
 
-  for (const join of ast.joins || []) {
-    ret.set(join.as + '.id', [join.as, 'id']);
+  const {joins} = ast;
+  if (joins) {
+    for (const join of joins) {
+      ret.set(join.as + '.id', [join.as, 'id']);
+    }
   }
 
   return ret;

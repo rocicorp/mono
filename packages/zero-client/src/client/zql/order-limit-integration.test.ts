@@ -1,20 +1,20 @@
-import {describe, expect, test} from 'vitest';
 import {canonicalComparator} from '@rocicorp/zql/src/zql/context/zero-context.js';
+import {makeComparator} from '@rocicorp/zql/src/zql/ivm/compare.js';
+import {Comparator, joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
+import {describe, expect, test} from 'vitest';
+import {must} from '../../../../shared/src/must.js';
 import {
   Album,
   Artist,
+  Track,
+  TrackArtist,
   bulkSet,
   createRandomAlbums,
   createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
   newZero,
-  Track,
-  TrackArtist,
 } from './integration-test-util.js';
-import {makeComparator} from '@rocicorp/zql/src/zql/ivm/compare.js';
-import {must} from '../../../../shared/src/must.js';
-import {Comparator, joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
 
 describe('sorting and limiting with different query operations', async () => {
   const z = newZero();
@@ -100,13 +100,10 @@ describe('sorting and limiting with different query operations', async () => {
       expected: () =>
         artists
           .sort(
-            makeComparator(
-              [
-                ['artist', 'name'],
-                ['artist', 'id'],
-              ],
-              'asc',
-            ),
+            makeComparator([
+              [['artist', 'name'], 'asc'],
+              [['artist', 'id'], 'asc'],
+            ]),
           )
           .slice(0, 10),
     },
@@ -116,13 +113,10 @@ describe('sorting and limiting with different query operations', async () => {
       expected: () =>
         artists
           .sort(
-            makeComparator(
-              [
-                ['artist', 'name'],
-                ['artist', 'id'],
-              ],
-              'desc',
-            ),
+            makeComparator([
+              [['artist', 'name'], 'desc'],
+              [['artist', 'id'], 'desc'],
+            ]),
           )
           .slice(0, 10),
     },
@@ -137,13 +131,10 @@ describe('sorting and limiting with different query operations', async () => {
         tracks
           .filter(t => t.title > 'F')
           .sort(
-            makeComparator(
-              [
-                ['track', 'title'],
-                ['tracl', 'id'],
-              ],
-              'asc',
-            ),
+            makeComparator([
+              [['track', 'title'], 'asc'],
+              [['tracl', 'id'], 'asc'],
+            ]),
           )
           .slice(0, 3),
     },
@@ -157,13 +148,10 @@ describe('sorting and limiting with different query operations', async () => {
         albums
           .map(joinAlbumToArtist)
           .sort(
-            makeComparator(
-              [
-                ['album', 'id'],
-                ['artist', 'id'],
-              ],
-              'asc',
-            ),
+            makeComparator([
+              [['album', 'id'], 'asc'],
+              [['artist', 'id'], 'asc'],
+            ]),
           )
           .slice(0, 10),
     },
@@ -189,14 +177,11 @@ describe('sorting and limiting with different query operations', async () => {
         albums
           .map(joinAlbumToArtist)
           .sort(
-            makeComparator(
-              [
-                ['album', 'title'],
-                ['album', 'id'],
-                ['artist', 'id'],
-              ],
-              'asc',
-            ),
+            makeComparator([
+              [['album', 'title'], 'asc'],
+              [['album', 'id'], 'asc'],
+              [['artist', 'id'], 'asc'],
+            ]),
           )
           .slice(0, 10),
     },
@@ -208,13 +193,10 @@ describe('sorting and limiting with different query operations', async () => {
           .desc('album.title')
           .limit(10),
       expected: (): {artist: Artist; album: Album}[] => {
-        const c = makeComparator(
-          [
-            ['album', 'title'],
-            ['album', 'id'],
-          ],
-          'desc',
-        );
+        const c = makeComparator([
+          [['album', 'title'], 'desc'],
+          [['album', 'id'], 'desc'],
+        ]);
         return albums.map(joinAlbumToArtist).sort(c).slice(0, 10);
       },
     },
@@ -226,14 +208,11 @@ describe('sorting and limiting with different query operations', async () => {
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
           .asc('track.title', 'artist.name'),
       expected: () => {
-        const c = makeComparator(
-          [
-            ['track', 'title'],
-            ['artist', 'name'],
-            ['track', 'id'],
-          ],
-          'asc',
-        );
+        const c = makeComparator([
+          [['track', 'title'], 'asc'],
+          [['artist', 'name'], 'asc'],
+          [['track', 'id'], 'asc'],
+        ]);
         return tracks.flatMap(joinTrackToArtists).sort(c);
       },
     },
@@ -245,14 +224,11 @@ describe('sorting and limiting with different query operations', async () => {
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
           .desc('track.title', 'artist.name'),
       expected: () => {
-        const c = makeComparator(
-          [
-            ['track', 'title'],
-            ['artist', 'name'],
-            ['track', 'id'],
-          ],
-          'desc',
-        );
+        const c = makeComparator([
+          [['track', 'title'], 'desc'],
+          [['artist', 'name'], 'desc'],
+          [['track', 'id'], 'desc'],
+        ]);
         return tracks.flatMap(joinTrackToArtists).sort(c);
       },
     },
@@ -272,22 +248,16 @@ describe('sorting and limiting with different query operations', async () => {
         z.query.track.groupBy('track.albumId').desc('track.title').limit(10),
       expected: () =>
         groupTracksByAlbum(
-          makeComparator(
-            [
-              ['track', 'title'],
-              ['track', 'albumId'],
-            ],
-            'desc',
-          ),
+          makeComparator([
+            [['track', 'title'], 'desc'],
+            [['track', 'albumId'], 'desc'],
+          ]),
         )
           .sort(
-            makeComparator(
-              [
-                ['track', 'title'],
-                ['track', 'albumId'],
-              ],
-              'desc',
-            ),
+            makeComparator([
+              [['track', 'title'], 'desc'],
+              [['track', 'albumId'], 'desc'],
+            ]),
           )
           .slice(0, 10),
     },
@@ -300,16 +270,13 @@ describe('sorting and limiting with different query operations', async () => {
           .limit(10)
           .asc('track.title', 'artist.name'),
       expected: () => {
-        const c = makeComparator(
-          [
-            ['track', 'title'],
-            ['artist', 'name'],
-            ['track', 'id'],
-            ['trackArtist', 'id'],
-            ['artist', 'id'],
-          ],
-          'asc',
-        );
+        const c = makeComparator([
+          [['track', 'title'], 'asc'],
+          [['artist', 'name'], 'asc'],
+          [['track', 'id'], 'asc'],
+          [['trackArtist', 'id'], 'asc'],
+          [['artist', 'id'], 'asc'],
+        ]);
         return tracks.flatMap(joinTrackToArtists).sort(c).slice(0, 10);
       },
     },
@@ -322,16 +289,13 @@ describe('sorting and limiting with different query operations', async () => {
           .desc('track.title', 'artist.name')
           .limit(10),
       expected: () => {
-        const c = makeComparator(
-          [
-            ['track', 'title'],
-            ['artist', 'name'],
-            ['track', 'id'],
-            ['trackArtist', 'id'],
-            ['artist', 'id'],
-          ],
-          'desc',
-        );
+        const c = makeComparator([
+          [['track', 'title'], 'desc'],
+          [['artist', 'name'], 'desc'],
+          [['track', 'id'], 'desc'],
+          [['trackArtist', 'id'], 'desc'],
+          [['artist', 'id'], 'desc'],
+        ]);
         return tracks.flatMap(joinTrackToArtists).sort(c).slice(0, 10);
       },
     },

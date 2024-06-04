@@ -1,6 +1,6 @@
 import {expect, vi} from 'vitest';
 import {DifferenceStream} from '../difference-stream.js';
-import {createPullResponseMessage, PullMsg} from '../message.js';
+import {PullMsg, createPullResponseMessage} from '../message.js';
 
 export type Track = {
   id: string;
@@ -63,7 +63,7 @@ export function orderIsRemovedFromRequest(join: 'leftJoin' | 'join') {
     id: 1,
     hoistedConditions: [],
     type: 'pull',
-    order: [[['intentional-nonsense', 'x']], 'asc'],
+    order: [[['intentional-nonsense', 'x'], 'asc']],
   };
   const listener = {
     commit() {},
@@ -101,7 +101,7 @@ export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
     id: 1,
     hoistedConditions: [],
     type: 'pull',
-    order: [[['intentional-nonsense', 'x']], 'asc'],
+    order: [[['intentional-nonsense', 'x'], 'asc']],
   };
   const listener = {
     commit() {},
@@ -109,12 +109,10 @@ export function orderIsRemovedFromReply(join: 'leftJoin' | 'join') {
   };
   output.messageUpstream(msg, listener);
   const trackReply = createPullResponseMessage(msg, 'track', [
-    [['track', 'id']],
-    'asc',
+    [['track', 'id'], 'asc'],
   ]);
   const albumReply = createPullResponseMessage(msg, 'title', [
-    [['title', 'id']],
-    'asc',
+    [['title', 'id'], 'asc'],
   ]);
 
   trackInput.newDifference(1, [], trackReply);

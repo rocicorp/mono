@@ -71,7 +71,7 @@ class ZeroSource {
   constructor(materialite: Materialite, name: string, addWatch: AddWatch) {
     this.#canonicalSource = materialite.newSetSource<Entity>(
       canonicalComparator,
-      [[[name, 'id']], 'asc'],
+      [[[name, 'id'], 'asc']],
       name,
     );
     addWatch(name, this.#handleDiff);

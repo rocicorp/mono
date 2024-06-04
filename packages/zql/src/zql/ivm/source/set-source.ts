@@ -1,21 +1,21 @@
 import {must} from 'shared/src/must.js';
+import type {ISortedMap} from 'sorted-btree-roci';
+import BTree from 'sorted-btree-roci';
 import type {Ordering, Primitive, Selector} from '../../ast/ast.js';
+import {gen} from '../../util/iterables.js';
+import {makeComparator} from '../compare.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {
-  createPullResponseMessage,
   HoistedCondition,
   PullMsg,
   Request,
+  createPullResponseMessage,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry, Multiset} from '../multiset.js';
 import type {Comparator, PipelineEntity, Version} from '../types.js';
-import type {Source, SourceInternal} from './source.js';
-import type {ISortedMap} from 'sorted-btree-roci';
-import BTree from 'sorted-btree-roci';
-import {gen} from '../../util/iterables.js';
-import {makeComparator} from '../compare.js';
 import {SourceHashIndex} from './source-hash-index.js';
+import type {Source, SourceInternal} from './source.js';
 
 /**
  * A source that remembers what values it contains.
@@ -269,7 +269,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     // Is there a range constraint against the ordered field?
     if (orderForReply !== undefined) {
       const range = getRange(conditionsForThisSource, orderForReply);
-      if (request.order === undefined || request.order[1] === 'asc') {
+      if (request.order === undefined || request.order[0][1] === 'asc') {
         this.#stream.newDifference(
           this._materialite.getVersion(),
           gen(() =>
@@ -284,10 +284,10 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       }
 
       const maybeKey = maybeGetKey<T>(range.field, range.top);
-      if (maybeKey !== undefined && newSort.#order[0].length > 1) {
+      if (maybeKey !== undefined && newSort.#order.length > 1) {
         const entriesBelow = newSort.#tree.entries(maybeKey);
         let key: T | undefined;
-        const specialComparator = makeComparator<T>([range.field], 'asc');
+        const specialComparator = makeComparator<T>([[range.field, 'asc']]);
         for (const entry of entriesBelow) {
           if (specialComparator(entry[0], maybeKey) > 0) {
             key = entry[0];
@@ -335,31 +335,45 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       return [this, this.#order];
     }
     // only retain fields relevant to this source.
-    const firstField = ordering[0][0];
+    const firstSelector = ordering[0][0];
 
-    if (firstField[0] !== this.#name) {
+    if (firstSelector[0] !== this.#name) {
       return [this, this.#order];
     }
 
-    const key = firstField[1];
+    const key = firstSelector[1];
     // this is the canonical sort.
     if (key === 'id') {
       return [this, this.#order];
     }
     const alternateSort = this.#sorts.get(key);
-    const fields: Selector[] = [firstField, [this.#name, 'id']];
     if (alternateSort !== undefined) {
-      return [alternateSort, [fields, ordering[1]]];
+      const newOrdering: Ordering = [
+        ordering[0],
+        [[this.#name, 'id'], ordering[0][1]],
+      ];
+      return [alternateSort, newOrdering];
     }
 
     // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
     // We do not need a separate source.
     // Must append id for uniqueness.
-    const newComparator = makeComparator(fields, 'asc');
-    const source = this.withNewOrdering(newComparator, [fields, 'asc']);
+    const orderBy: Ordering = [
+      [firstSelector, 'asc'],
+      [[this.#name, 'id'], 'asc'],
+    ];
+    const newComparator = makeComparator(orderBy);
+    const source = this.withNewOrdering(newComparator, orderBy);
 
     this.#sorts.set(key, source);
-    return [source, [fields, ordering[1]]];
+    const dir = ordering[0][1];
+    const orderByKeepDirection: Ordering = [
+      [firstSelector, dir],
+      [[this.#name, 'id'], dir],
+    ];
+
+    return [source, orderByKeepDirection];
+    2;
   }
 
   // TODO: in the future we should collapse hash and sorted indices
@@ -414,7 +428,7 @@ function asEntries<T>(
   message?: Request | undefined,
 ): Multiset<T> {
   if (message?.order) {
-    if (message.order[1] === 'desc') {
+    if (message.order[0][1] === 'desc') {
       return gen(() => genFromBTreeEntries(m.entriesReversed()));
     }
   }
@@ -457,6 +471,7 @@ function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
   const sourceOrderFields = sourceOrder[0];
   const firstOrderField = sourceOrderFields[0];
 
+  // TODO: Does this work correctly with multiple conditions?
   for (const c of conditions) {
     if (c.selector[1] === firstOrderField[1]) {
       if (c.op === '>' || c.op === '>=' || c.op === '=') {
@@ -476,38 +491,38 @@ function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
 }
 
 function createEndPredicateAsc<T extends object>(
-  field: Selector,
+  selector: Selector,
   end: unknown,
 ): ((t: T) => boolean) | undefined {
   if (end === undefined) {
     return undefined;
   }
-  const comp = makeComparator<T>([field], 'asc');
+  const comp = makeComparator<T>([[selector, 'asc']]);
   return t => {
-    const cmp = comp(t, {[field[1]]: end} as T);
+    const cmp = comp(t, {[selector[1]]: end} as T);
     return cmp > 0;
   };
 }
 
 function createEndPredicateDesc<T extends object>(
-  field: Selector,
+  selector: Selector,
   end: unknown,
 ): ((t: T) => boolean) | undefined {
   if (end === undefined) {
     return undefined;
   }
-  const comp = makeComparator<T>([field], 'asc');
+  const comp = makeComparator<T>([[selector, 'asc']]);
   return t => {
-    const cmp = comp(t, {[field[1]]: end} as T);
+    const cmp = comp(t, {[selector[1]]: end} as T);
     return cmp < 0;
   };
 }
 
-function maybeGetKey<T>(field: Selector, value: unknown): T | undefined {
+function maybeGetKey<T>(selector: Selector, value: unknown): T | undefined {
   if (value === undefined) {
     return undefined;
   }
   return {
-    [field[1]]: value,
+    [selector[1]]: value,
   } as T;
 }
