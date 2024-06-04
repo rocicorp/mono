@@ -294,6 +294,12 @@ export type AliasInfo = {
 
 const aliasFirstChar = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+/**
+ * Parses the aliases created by the query expansion step into the information
+ * necessary to construct the individual rows from each result. The aliases are
+ * minified and mapped to their {@link AliasInfo} objects to reduce the
+ * serialization and memory overhead per result.
+ */
 // Exported for testing.
 export function minifyAliases(ast: ServerAST): {
   ast: ServerAST;
