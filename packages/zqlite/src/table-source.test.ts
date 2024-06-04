@@ -47,7 +47,8 @@ test('delete', () => {
 
 describe('message upstream', () => {
   const db = new Database(':memory:');
-  const context = createContext(new Materialite(), db);
+  const m = new Materialite();
+  const context = createContext(m, db);
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 
   const source = context.getSource('foo', undefined);
@@ -91,12 +92,15 @@ describe('message upstream', () => {
     const rows = stmt.all();
 
     let items: PipelineEntity[] = [];
-    source.stream.messageUpstream(message, {
-      newDifference: (_version, data) => {
-        items = [...data].map(d => d[0]);
-      },
-      commit: () => {},
-    });
+
+    m.tx(() =>
+      source.stream.messageUpstream(message, {
+        newDifference: (_version, data) => {
+          items = [...data].map(d => d[0]);
+        },
+        commit: () => {},
+      }),
+    );
 
     expect(rows).toEqual(items);
   });

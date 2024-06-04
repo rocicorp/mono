@@ -91,6 +91,7 @@ export class DifferenceStream<T extends PipelineEntity> {
 
   newDifference(version: Version, data: Multiset<T>, reply: Reply | undefined) {
     if (reply) {
+      console.log('GETTING REQUESTORS');
       const requestors = this.#requestors.get(reply.replyingTo);
       for (const requestor of must(requestors)) {
         requestor.newDifference(version, data, reply);
@@ -128,6 +129,7 @@ export class DifferenceStream<T extends PipelineEntity> {
           }
         }
       }
+      console.log('CLEARING REQUESTORS');
       this.#requestors.clear();
     } else {
       for (const listener of this.#downstreams) {
