@@ -147,12 +147,12 @@ function getSupportedGroupByTable(
   });
 
   if (orderBy) {
-    orderBy[0].forEach(s => {
+    for (const [selector] of orderBy) {
       assert(
-        s[0] === groupByTable,
-        `ORDER BY ${s} does not match GROUP BY table ${groupByTable}`,
+        selector[0] === groupByTable,
+        `ORDER BY ${selector} does not match GROUP BY table ${groupByTable}`,
       );
-    });
+    }
   }
 
   assertAllWheresAgainst(groupByTable, where);

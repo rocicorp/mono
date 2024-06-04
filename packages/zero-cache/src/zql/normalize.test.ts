@@ -40,7 +40,7 @@ describe('zql/normalize-query-hash', () => {
             alias: 'issues_alias',
           },
           select: [[['issues_alias', 'id'], 'id']],
-          orderBy: [[['issues_alias', 'id']], 'asc'],
+          orderBy: [[['issues_alias', 'id'], 'asc']],
         },
       ],
       query:

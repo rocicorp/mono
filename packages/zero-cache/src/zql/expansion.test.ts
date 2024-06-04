@@ -139,11 +139,8 @@ describe('zql/expansion', () => {
               ),
             ),
             orderBy: [
-              [
-                ['issues', 'date'],
-                ['issues', 'priority'],
-              ],
-              'asc',
+              [['issues', 'date'], 'asc'],
+              [['issues', 'priority'], 'asc'],
             ],
           },
         },
@@ -280,11 +277,8 @@ describe('zql/expansion', () => {
               ),
             ),
             orderBy: [
-              [
-                ['issues', 'date'],
-                ['issues', 'priority'],
-              ],
-              'asc',
+              [['issues', 'date'], 'asc'],
+              [['issues', 'priority'], 'asc'],
             ],
           },
         },

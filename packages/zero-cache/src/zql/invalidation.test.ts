@@ -258,7 +258,7 @@ describe('zql/invalidation hashes filters and hashes', () => {
             schema: 'zero',
             table: 'foo',
             select: [[['foo', 'id'], 'id']],
-            orderBy: [[['foo', 'id']], 'asc'],
+            orderBy: [[['foo', 'id'], 'asc']],
           },
           alias: 'foo',
         },

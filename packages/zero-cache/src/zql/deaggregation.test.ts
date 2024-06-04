@@ -46,7 +46,7 @@ describe('zql/deaggregation', () => {
           },
         ],
         groupBy: [['issues', 'id']],
-        orderBy: [[['issues', 'modified']], 'desc'],
+        orderBy: [[['issues', 'modified'], 'desc']],
       },
       original: `
       SELECT 
