@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 import {assert, unreachable} from 'shared/src/asserts.js';
+import {ReadonlyJSONValue, deepEqual} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import type {Storage} from '../../storage/storage.js';
@@ -169,14 +170,20 @@ export class CVRUpdater {
     void this._writes.put(this._paths.lastActive(), this._cvr.lastActive);
   }
 
+  // Exposed for testing.
+  numPendingWrites() {
+    return this._writes.pendingSize();
+  }
+
   async flush(lc: LogContext, lastActive = new Date()): Promise<CVRSnapshot> {
     const start = Date.now();
 
     this.#setLastActive(lastActive);
+    const numEntries = this._writes.pendingSize();
     await this._writes.flush(); // Calls put() and del() with a final `await`
     await this._directStorage.flush(); // DurableObjectStorage.sync();
 
-    lc.debug?.(`flushed CVR (${Date.now() - start} ms)`);
+    lc.debug?.(`flushed ${numEntries} CVR entries (${Date.now() - start} ms)`);
     return this._cvr;
   }
 }
@@ -671,7 +678,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const catchupRowPatches = await this.#catchupRowPatches;
     lc.debug?.(`processing ${catchupRowPatches.size} row patches`);
     for (const [path, rowPatch] of catchupRowPatches) {
-      if (this._writes.pendingDelete(path)) {
+      if (this._writes.isPendingDelete(path)) {
         continue; // row patch has been replaced.
       }
       const toVersion = this._paths.versionFromPatchPath(path);
@@ -714,7 +721,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     };
 
     for (const [path, patchRecord] of catchupConfigPatches) {
-      if (this._writes.pendingDelete(path)) {
+      if (this._writes.isPendingDelete(path)) {
         continue; // config patch has been replaced.
       }
       const toVersion = this._paths.versionFromPatchPath(path);
@@ -743,7 +750,25 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       existing.queriedColumns &&
       Object.keys(existing.queriedColumns).every(col => newQueriedColumns[col])
     ) {
-      return null; // No columns deleted.
+      if (received) {
+        const pending = this._writes.getPending(rowRecordPath);
+        if (
+          pending?.op === 'put' &&
+          deepEqual(
+            pending.value as ReadonlyJSONValue,
+            existing as ReadonlyJSONValue,
+          )
+        ) {
+          // Remove no-op writes from the WriteCache.
+          this._writes.cancelPending(rowRecordPath);
+          this._writes.cancelPending(
+            this._paths.rowPatch(existing.patchVersion, existing.id),
+          );
+        }
+      }
+
+      // No columns deleted.
+      return null;
     }
     const patchVersion = this.#assertNewVersion();
     const {id, rowVersion} = existing;
@@ -799,7 +824,10 @@ function mergeQueriedColumns(
           continue; // removeIDs from existing row.
         }
         if (!merged[col]?.includes(id)) {
-          (merged[col] ??= []).push(id);
+          const len = (merged[col] ??= []).push(id);
+          if (len > 1) {
+            merged[col].sort(); // Determinism is needed for diffing.
+          }
         }
       }
     }

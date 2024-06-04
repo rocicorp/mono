@@ -1,4 +1,4 @@
-import {Lock} from '@rocicorp/lock';
+import type {LogContext} from '@rocicorp/logger';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {randInt} from 'shared/src/rand.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
@@ -22,11 +22,11 @@ import {
 import type {RegisterInvalidationFiltersResponse} from './replicator.js';
 import {CREATE_INVALIDATION_TABLES} from './schema/invalidation.js';
 import {CREATE_REPLICATION_TABLES} from './schema/replication.js';
+import {TransactionTrainService} from './transaction-train.js';
 import {TableTracker, type RowChange} from './types/table-tracker.js';
 
 describe('replicator/invalidation', () => {
   let db: PostgresDB;
-  let invalidator: Invalidator;
 
   const FOO_SPEC1 = normalizeFilterSpec({
     schema: 'public',
@@ -59,6 +59,10 @@ describe('replicator/invalidation', () => {
   const NOW = new Date(Date.UTC(2024, 4, 1, 2, 3, 4));
 
   describe('registration', () => {
+    let train: TransactionTrainService;
+    let lc: LogContext;
+    let invalidator: Invalidator;
+
     beforeEach(async () => {
       db = await testDBs.create('invalidation_test');
       await db.unsafe(
@@ -66,11 +70,13 @@ describe('replicator/invalidation', () => {
           CREATE_INVALIDATION_TABLES +
           CREATE_REPLICATION_TABLES,
       );
-
-      invalidator = new Invalidator(db, new Lock(), new InvalidationFilters());
+      lc = createSilentLogContext();
+      train = new TransactionTrainService(lc, db);
+      invalidator = new Invalidator(db, train, new InvalidationFilters());
     });
 
     afterEach(async () => {
+      await train.stop();
       await testDBs.drop(db);
     });
 
@@ -206,7 +212,7 @@ describe('replicator/invalidation', () => {
       test(c.name, async () => {
         await initDB(db, c.setupStmts, c.setup);
 
-        const lc = createSilentLogContext();
+        void train.run();
         const resp = await invalidator.registerInvalidationFilters(
           lc,
           {specs: c.specs},
@@ -220,6 +226,9 @@ describe('replicator/invalidation', () => {
   });
 
   describe('invalidation-processor', () => {
+    let lc: LogContext;
+    let train: TransactionTrainService;
+
     beforeEach(async () => {
       db = await testDBs.create('invalidation_test');
       await db.unsafe(
@@ -239,19 +248,19 @@ describe('replicator/invalidation', () => {
         `,
       );
 
-      const invalidator = new Invalidator(
-        db,
-        new Lock(),
-        new InvalidationFilters(),
-      );
+      lc = createSilentLogContext();
+      train = new TransactionTrainService(lc, db);
+      void train.run();
+      const invalidator = new Invalidator(db, train, new InvalidationFilters());
       await invalidator.registerInvalidationFilters(
-        createSilentLogContext(),
+        lc,
         {specs: [FOO_SPEC1, FOO_SPEC2, BAR_SPEC1, BAR_SPEC2]},
         NOW,
       );
     });
 
     afterEach(async () => {
+      await train.stop();
       await testDBs.drop(db);
     });
 
@@ -537,7 +546,6 @@ describe('replicator/invalidation', () => {
           }
         }
 
-        const lc = createSilentLogContext();
         const {exportSnapshot, cleanupExport, setSnapshot} =
           synchronizedSnapshots();
         const writer = new TransactionPool(
@@ -554,10 +562,11 @@ describe('replicator/invalidation', () => {
           1, // start with 1 worker
           2, // but allow growing the pool to 2 workers
         );
-        const done = Promise.all([writer.run(db), readers.run(db)]);
+        void writer.run(db);
+        void readers.run(db);
 
         const processor = new InvalidationProcessor(new InvalidationFilters());
-        processor.processInitTasks(readers, writer);
+        processor.processInitTasks(readers, null);
 
         const fooTable = new TableTracker('public', 'foo', {id: {typeOid: 23}});
         const barTable = new TableTracker('public', 'bar', {id: {typeOid: 25}});
@@ -580,9 +589,14 @@ describe('replicator/invalidation', () => {
           fooTable,
           barTable,
         ]);
+
+        // Let the readers finish first so that it can capture the exported
+        // snapshot. If the writer is otherwise set done too early, the reader
+        // will not be able to set its snapshot and Postgres will throw.
         readers.setDone();
+        await readers.done();
         writer.setDone();
-        await done;
+        await writer.done();
 
         const index =
           await db`SELECT hash, "stateVersion" FROM _zero."InvalidationIndex"`;

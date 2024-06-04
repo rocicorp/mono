@@ -1,4 +1,4 @@
-import {Lock} from '@rocicorp/lock';
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {sleep} from 'shared/src/sleep.js';
@@ -24,33 +24,38 @@ import type {RowChange, VersionChange} from './replicator.js';
 import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
+import {TransactionTrainService} from './transaction-train.js';
 import {toLexiVersion} from './types/lsn.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 
 describe('replicator/incremental-sync', () => {
+  let lc: LogContext;
   let upstream: PostgresDB;
   let replica: PostgresDB;
+  let train: TransactionTrainService;
   let syncer: IncrementalSyncer;
   let invalidator: Invalidator;
 
   beforeEach(async () => {
+    lc = createSilentLogContext();
     upstream = await testDBs.create('incremental_sync_test_upstream');
     replica = await testDBs.create('incremental_sync_test_replica');
-    const txSerializer = new Lock();
+    train = new TransactionTrainService(lc, replica);
     const invalidationFilters = new InvalidationFilters();
     syncer = new IncrementalSyncer(
       getConnectionURI(upstream, 'external'),
       REPLICA_ID,
       replica,
-      txSerializer,
+      train,
       invalidationFilters,
     );
-    invalidator = new Invalidator(replica, txSerializer, invalidationFilters);
+    invalidator = new Invalidator(replica, train, invalidationFilters);
   });
 
   afterEach(async () => {
-    await syncer.stop(createSilentLogContext());
+    await train.stop();
+    await syncer.stop(lc);
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(replica, upstream);
   });
@@ -1947,7 +1952,6 @@ describe('replicator/incremental-sync', () => {
       await initDB(upstream, c.setupUpstream);
       await initDB(replica, c.setupReplica);
 
-      const lc = createSilentLogContext();
       await setupUpstream(lc, upstream, replicationSlot(REPLICA_ID));
       await replica.begin(tx =>
         setupReplicationTables(
@@ -1961,6 +1965,7 @@ describe('replicator/incremental-sync', () => {
 
       expect(await queryLastLSN(replica)).toBeNull();
 
+      void train.run();
       if (c.invalidationFilters?.length) {
         const specs = c.invalidationFilters.map(spec =>
           normalizeFilterSpec(spec),

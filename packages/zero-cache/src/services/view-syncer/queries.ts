@@ -1,8 +1,8 @@
 import type {AST, Selector} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
+import {deaggregateArrays} from '../../zql/deaggregation.js';
 import {
-  AGG_LIFT_SUFFIX,
   ALIAS_COMPONENT_SEPARATOR,
   expandSelection,
 } from '../../zql/expansion.js';
@@ -11,11 +11,11 @@ import {
   type InvalidationInfo,
 } from '../../zql/invalidation.js';
 import {Normalized} from '../../zql/normalize.js';
+import type {ServerAST} from '../../zql/server-ast.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
 import {CVRPaths} from './schema/paths.js';
 import type {QueryRecord, RowID, RowRecord} from './schema/types.js';
-import {joinIterables} from 'shared/src/iterables.js';
 
 export class InvalidQueryError extends Error {}
 
@@ -39,6 +39,7 @@ export type TransformedQuery = {
   readonly queryIDs: readonly string[];
   readonly transformedAST: Normalized;
   readonly transformationHash: string;
+  readonly columnAliases: Map<string, AliasInfo>;
   readonly invalidationInfo: InvalidationInfo;
 };
 
@@ -47,6 +48,16 @@ export class QueryHandler {
 
   constructor(tables: readonly TableSpec[]) {
     this.#tables = new TableSchemas(tables);
+  }
+
+  #getTableSpecOrError(schema = 'public', table: string, ast: AST) {
+    const t = this.#tables.spec(schema, table);
+    if (!t) {
+      throw new InvalidQueryError(
+        `Unknown table "${table}" in ${JSON.stringify(ast)}`,
+      );
+    }
+    return t;
   }
 
   /**
@@ -68,20 +79,22 @@ export class QueryHandler {
         schema = 'public',
         table: string,
       ): Selector[] => {
-        const t = this.#tables.spec(schema, table);
-        if (!t) {
-          throw new InvalidQueryError(
-            `Unknown table "${table}" in ${JSON.stringify(q.ast)}`,
-          );
-        }
+        const t = this.#getTableSpecOrError(schema, table, q.ast);
         return [
           ...t.primaryKey.map(pk => [table, pk] as const),
           [table, ZERO_VERSION_COLUMN_NAME] as const,
         ];
       };
 
-      const expanded = expandSelection(q.ast, requiredColumns);
-      const transformedAST = new Normalized(expanded);
+      const isPrimaryKey = (schema = 'public', table: string, col: string) => {
+        const t = this.#getTableSpecOrError(schema, table, q.ast);
+        return t.primaryKey.length === 1 && t.primaryKey[0] === col;
+      };
+
+      const deaggregated = deaggregateArrays(q.ast, isPrimaryKey);
+      const expanded = expandSelection(deaggregated, requiredColumns);
+      const {ast: minified, columnAliases} = minifyAliases(expanded);
+      const transformedAST = new Normalized(minified);
       const transformationHash = transformedAST.hash();
 
       const exists = transformed.get(transformationHash);
@@ -93,6 +106,7 @@ export class QueryHandler {
           queryIDs: [q.id],
           transformedAST,
           transformationHash,
+          columnAliases,
           invalidationInfo,
         });
       }
@@ -104,8 +118,12 @@ export class QueryHandler {
    * Returns an object for deconstructing each result from executed queries
    * into its constituent tables and rows.
    */
-  resultParser(cvrID: string) {
-    return new ResultParser(this.#tables, cvrID);
+  resultParser(
+    cvrID: string,
+    queryIDs: readonly string[],
+    columnAliases: Map<string, AliasInfo>,
+  ) {
+    return new ResultParser(this.#tables, cvrID, queryIDs, columnAliases);
   }
 
   tableSpec(schema: string, table: string) {
@@ -121,10 +139,25 @@ export type ParsedRow = {
 class ResultParser {
   readonly #tables: TableSchemas;
   readonly #paths: CVRPaths;
+  readonly #queryIDs: readonly string[];
+  readonly #columnAliases: Map<string, AliasInfo>;
+  // Maps sub-query names to row-paths to dedupe redundant rows from deaggregations.
+  readonly #subQueryRows = new Map<string, Set<string>>();
 
-  constructor(tables: TableSchemas, cvrID: string) {
+  /**
+   * @param queryIDs The query ID(s) with which the query is associated. See
+   *        {@link TransformedQuery.queryIDs} for why there may be more than one.
+   */
+  constructor(
+    tables: TableSchemas,
+    cvrID: string,
+    queryIDs: readonly string[],
+    columnAliases: Map<string, AliasInfo>,
+  ) {
     this.#tables = tables;
     this.#paths = new CVRPaths(cvrID);
+    this.#queryIDs = queryIDs;
+    this.#columnAliases = columnAliases;
   }
 
   /**
@@ -135,59 +168,34 @@ class ResultParser {
    *
    * Returns a mapping from the CVR row record path to {@link ParsedRow}.
    *
-   * @param queryIDs The query ID(s) with which the query is associated. See
-   *        {@link TransformedQuery.queryIDs} for why there may be more than one.
    */
-  parseResults(
-    queryIDs: readonly string[],
-    results: readonly JSONObject[],
-  ): Map<string, ParsedRow> {
+  parseResults(results: readonly JSONObject[]): Map<string, ParsedRow> {
+    type ExtractedRow = {
+      aliasInfo: AliasInfo;
+      rowWithVersion: JSONObject;
+    };
+
     const parsed = new Map<string, ParsedRow>(); // Maps CVRPath.row() => RowResult
     for (const result of results) {
-      // Partitions the values of the full result into individual "subquery/table" keys.
-      // For example, a result:
-      // ```
-      // {
-      //   "public/issues/id": 1,
-      //   "public/issues/name": "foo",
-      //   "owner/public/users/id": 3,
-      //   "owner/public/users/name: "moar",
-      //   "parent/public/issues/id": 5,
-      //   "parent/public/issues/name" "trix",
-      // }
-      // ```
-      //
-      // is partitioned into:
-      //
-      // ```
-      // "public/issues": {id: 1, name: "foo"}
-      // "owners/public/users": {id: 3, name: "moar"}
-      // "parent/public/issues": {id: 5, name: "trix"}
-      //```
-      const rows = new Map<string, JSONObject>();
-      const aggLifts: [rowAlias: string, value: JSONObject][] = [];
+      const rows = new Map<string, ExtractedRow>();
 
       for (const [alias, value] of Object.entries(result)) {
-        const [rowAlias, columnName] = splitLastComponent(alias);
-        if (columnName === AGG_LIFT_SUFFIX) {
-          if (Array.isArray(value)) {
-            for (const row of value) {
-              aggLifts.push([rowAlias, row as JSONObject]);
-            }
-          }
-        } else {
-          rows.set(rowAlias, {
-            ...rows.get(rowAlias),
-            [columnName]: value,
-          });
+        const aliasInfo = this.#columnAliases.get(alias);
+        assert(aliasInfo, `Unexpected column alias ${alias}`);
+
+        const {rowAlias, column} = aliasInfo;
+        let row = rows.get(rowAlias);
+        if (!row) {
+          row = {aliasInfo, rowWithVersion: {}};
+          rows.set(rowAlias, row);
         }
+        row.rowWithVersion = {...row.rowWithVersion, [column]: value};
       }
 
       // Now, merge each row into its corresponding RowResult by row key.
-      for (const [rowAlias, rowWithVersion] of joinIterables(
-        rows.entries(),
-        aggLifts,
-      )) {
+      for (const extractedRow of rows.values()) {
+        const {aliasInfo, rowWithVersion} = extractedRow;
+
         // Exclude the _0_version column from what is sent to the client.
         const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
         if (rowVersion === null) {
@@ -198,10 +206,18 @@ class ResultParser {
           throw new Error(`Invalid _0_version in ${stringify(rowWithVersion)}`);
         }
 
-        const [prefix, table] = splitLastComponent(rowAlias);
-        const [_, schema] = splitLastComponent(prefix);
+        const {subQueryName, schema, table} = aliasInfo;
         const id = this.#tables.rowID(schema, table, row);
         const key = this.#paths.row(id);
+
+        let subQuery = this.#subQueryRows.get(subQueryName);
+        if (!subQuery) {
+          subQuery = new Set();
+          this.#subQueryRows.set(subQueryName, subQuery);
+        } else if (subQuery.has(key)) {
+          continue; // Redundant row for this sub-query (i.e. from de-aggregation)
+        }
+        subQuery.add(key);
 
         let rowResult = parsed.get(key);
         if (!rowResult) {
@@ -215,7 +231,7 @@ class ResultParser {
           rowResult.record.queriedColumns ??= {}; // Appease the compiler
           rowResult.record.queriedColumns[col] = union(
             rowResult.record.queriedColumns[col],
-            queryIDs,
+            this.#queryIDs,
           );
         }
         rowResult.contents = {...rowResult.contents, ...row};
@@ -266,4 +282,59 @@ export function splitLastComponent(
   return lastSlash < 0
     ? ['', str]
     : [str.substring(0, lastSlash), str.substring(lastSlash + 1)];
+}
+
+export type AliasInfo = {
+  rowAlias: string;
+  subQueryName: string;
+  schema: string;
+  table: string;
+  column: string;
+};
+
+const aliasFirstChar = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * Parses the aliases created by the query expansion step into the information
+ * necessary to construct the individual rows from each result. The aliases are
+ * minified and mapped to their {@link AliasInfo} objects to reduce the
+ * serialization and memory overhead per result.
+ */
+// Exported for testing.
+export function minifyAliases(ast: ServerAST): {
+  ast: ServerAST;
+  columnAliases: Map<string, AliasInfo>;
+} {
+  let aliasCount = 0;
+  const columnAliases = new Map<string, AliasInfo>();
+
+  const reAlias = (orig: string) => {
+    const cycle = Math.floor(aliasCount / aliasFirstChar.length);
+    const newAlias =
+      cycle === 0
+        ? aliasFirstChar[aliasCount]
+        : aliasFirstChar[aliasCount % aliasFirstChar.length] + String(cycle);
+    aliasCount++;
+
+    const parts = orig.split(ALIAS_COMPONENT_SEPARATOR);
+    assert(parts.length >= 3);
+    columnAliases.set(newAlias, {
+      rowAlias: orig.substring(0, orig.lastIndexOf(ALIAS_COMPONENT_SEPARATOR)),
+      subQueryName: parts
+        .slice(0, parts.length - 3)
+        .join(ALIAS_COMPONENT_SEPARATOR),
+      schema: parts.at(-3)!,
+      table: parts.at(-2)!,
+      column: parts.at(-1)!,
+    });
+    return newAlias;
+  };
+
+  return {
+    ast: {
+      ...ast,
+      select: (ast.select ?? []).map(s => [s[0], reAlias(s[1])] as const),
+    },
+    columnAliases,
+  };
 }

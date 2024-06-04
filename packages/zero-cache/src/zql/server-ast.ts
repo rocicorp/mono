@@ -1,13 +1,13 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 
-export type AggLift = {
-  selectors: {
-    column: string;
-    alias: string;
-  }[];
-  table: string;
-  alias: string;
+// Replace this with the `subQueries` field if support is added in the base AST type.
+export type SubQuery = {
+  readonly ast: ServerAST;
+  readonly alias: string;
 };
+
 export type ServerAST = AST & {
-  aggLift?: AggLift[] | undefined;
+  // At the moment, only a single subQuery is supported,
+  // and it overrides the AST's `table`.
+  subQuery?: SubQuery | undefined;
 };

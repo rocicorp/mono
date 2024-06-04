@@ -1,6 +1,6 @@
 import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {describe, expect, test} from 'vitest';
-import {deaggregate} from './deaggregation.js';
+import {deaggregateArrays} from './deaggregation.js';
 import {Normalized} from './normalize.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
 
@@ -26,56 +26,45 @@ describe('zql/deaggregation', () => {
       name: 'array in top-level select',
       ast: {
         table: 'issues',
-        select: [[['issues', 'title'], 'theTitle']],
+        select: [[['issues', 'id'], 'issues.id']],
         aggregate: [
-          {aggregate: 'array', field: ['issues', 'label'], alias: 'ignored'},
-        ],
-        groupBy: [['issues', 'title']],
-      },
-      original: `
-      SELECT issues.title AS "theTitle", array_agg(issues.label) AS "array_agg(issues.label)" 
-        FROM issues GROUP BY issues.title`,
-      afterDeaggregation: `
-      SELECT issues.label AS label, issues.title AS "theTitle" FROM issues
-      `,
-    },
-    {
-      name: 'array in nested select',
-      ast: {
-        table: 'issues',
-        select: [[['issues', 'title'], 'theTitle']],
-        aggregate: [
-          {aggregate: 'array', field: ['issues', 'label'], alias: 'ignored'},
+          {
+            aggregate: 'array',
+            field: ['issueLabels', 'labelID'],
+            alias: 'ignored',
+          },
         ],
         joins: [
           {
-            type: 'inner',
-            other: {
-              table: 'users',
-              aggregate: [
-                {aggregate: 'array', field: ['users', 'role'], alias: 'igno'},
-              ],
-              groupBy: [['users', 'id']],
-            },
-            as: 'users',
+            type: 'left',
+            other: {table: 'issueLabels'},
+            as: 'issueLabels',
             on: [
-              ['issues', 'user_id'],
-              ['users', 'id'],
+              ['issues', 'id'],
+              ['issueLabels', 'issueID'],
             ],
           },
         ],
-        groupBy: [['issues', 'title']],
+        groupBy: [['issues', 'id']],
+        orderBy: [[['issues', 'modified']], 'desc'],
       },
       original: `
-      SELECT issues.title AS "theTitle", array_agg(issues.label) AS "array_agg(issues.label)" FROM issues
-        INNER JOIN SELECT array_agg(users.role) AS "array_agg(users.role)" FROM users GROUP BY users.id
-        AS users ON issues.user_id = users.id
-      GROUP BY issues.title      
+      SELECT 
+        issues.id AS "issues.id", 
+        array_agg("issueLabels"."labelID") AS "array_agg(""issueLabels"".""labelID"")" 
+      FROM issues 
+      LEFT JOIN "issueLabels" AS "issueLabels" ON issues.id = "issueLabels"."issueID" 
+      GROUP BY issues.id ORDER BY issues.modified desc
       `,
       afterDeaggregation: `
-      SELECT issues.label AS label, issues.title AS "theTitle" FROM issues
-        INNER JOIN (SELECT users.role AS role FROM users) AS users 
-      ON issues.user_id = users.id
+      SELECT 
+         "issueLabels"."labelID" AS "labelID", 
+         issues."issues.id" AS "issues.id" FROM 
+       (SELECT issues.id AS "issues.id" FROM issues 
+        ORDER BY issues.modified desc) 
+      AS issues 
+      LEFT JOIN "issueLabels" AS "issueLabels" 
+      ON issues."issues.id" = "issueLabels"."issueID"
       `,
     },
   ];
@@ -85,7 +74,7 @@ describe('zql/deaggregation', () => {
       expect(new Normalized(c.ast).query().query).toBe(
         stripCommentsAndWhitespace(c.original),
       );
-      const deaggregated = deaggregate(c.ast);
+      const deaggregated = deaggregateArrays(c.ast, () => true);
       expect(new Normalized(deaggregated).query().query).toBe(
         stripCommentsAndWhitespace(c.afterDeaggregation ?? c.original),
       );

@@ -797,6 +797,8 @@ describe('view-syncer/cvr', () => {
         },
       ]);
 
+      expect(updater.numPendingWrites()).toBe(11);
+
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
         lc,
@@ -843,13 +845,13 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           patchVersion: updated.version,
-          queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           id: ROW_ID2,
           patchVersion: {stateVersion: '1a0'},
-          queriedColumns: {id: ['twoHash', 'oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
@@ -895,7 +897,7 @@ describe('view-syncer/cvr', () => {
       [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
         id: ROW_ID1,
         patchVersion: {stateVersion: '1aa', minorVersion: 1},
-        queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+        queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
         rowVersion: '03',
       } satisfies RowRecord,
       [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
@@ -1064,6 +1066,8 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
+      expect(updater.numPendingWrites()).toBe(11);
+
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
         lc,
@@ -1108,14 +1112,14 @@ describe('view-syncer/cvr', () => {
         [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
           id: ROW_ID1,
           patchVersion: updated.version,
-          queriedColumns: {id: ['twoHash', 'oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash']},
           rowVersion: '03',
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
           patchVersion: updated.version,
           id: ROW_ID2,
           rowVersion: '09',
-          queriedColumns: {id: ['twoHash', 'oneHash']},
+          queriedColumns: {id: ['oneHash', 'twoHash']},
         } satisfies RowRecord,
         [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
           id: ROW_ID3,
@@ -1385,6 +1389,8 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
+      expect(updater.numPendingWrites()).toBe(12);
+
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
         lc,
@@ -1614,6 +1620,8 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
+      expect(updater.numPendingWrites()).toBe(10);
+
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
         lc,
@@ -1675,6 +1683,282 @@ describe('view-syncer/cvr', () => {
           op: 'del',
           id: 'oneHash',
         } satisfies QueryPatch,
+      });
+    });
+  });
+
+  test('unchanged queries', async () => {
+    const initialState = {
+      ['/vs/cvr/abc123/m/version']: {
+        stateVersion: '1ba',
+      } satisfies CVRVersion,
+      ['/vs/cvr/abc123/m/lastActive']: {
+        epochMillis: Date.UTC(2024, 3, 23),
+      } satisfies LastActive,
+      ['/vs/cvr/abc123/m/q/oneHash']: {
+        id: 'oneHash',
+        ast: {table: 'issues'},
+        desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+        transformationHash: 'oneServerHash',
+        transformationVersion: {stateVersion: '1aa'},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
+      } satisfies QueryRecord,
+      ['/vs/cvr/abc123/m/q/twoHash']: {
+        id: 'twoHash',
+        ast: {table: 'issues'},
+        desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+        transformationHash: 'twoServerHash',
+        transformationVersion: {stateVersion: '1aa'},
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
+      } satisfies QueryRecord,
+      [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
+        type: 'query',
+        op: 'del', // Already in CVRs from "189"
+        id: 'already-deleted',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
+        type: 'query',
+        op: 'del',
+        id: 'catchup-delete',
+      } satisfies QueryPatch,
+      [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '189'},
+        id: IN_OLD_PATCH_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
+        patchVersion: {stateVersion: '1ba'},
+        id: DELETED_ROW_ID,
+        rowVersion: '03',
+        queriedColumns: null,
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
+        id: ROW_ID1,
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
+        rowVersion: '03',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
+        patchVersion: {stateVersion: '1a0'},
+        id: ROW_ID2,
+        rowVersion: '03',
+        queriedColumns: {id: ['twoHash']},
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
+        id: ROW_ID3,
+        patchVersion: {stateVersion: '1aa', minorVersion: 1},
+        queriedColumns: {id: ['oneHash']},
+        rowVersion: '09',
+      } satisfies RowRecord,
+      [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Already in CVRs from "189"
+        id: IN_OLD_PATCH_ROW_ID,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
+        type: 'row',
+        op: 'del', // Needs to be picked up by catchup.
+        id: DELETED_ROW_ID,
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        rowVersion: '03',
+        columns: ['id', 'name'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID2,
+        rowVersion: '03',
+        columns: ['id'],
+      } satisfies RowPatch,
+      [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID3,
+        rowVersion: '09',
+        columns: ['id'],
+      } satisfies RowPatch,
+      ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
+    };
+
+    await runWithDurableObjectStorage(async storage => {
+      await initStorage(storage, initialState);
+
+      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const updater = new CVRQueryDrivenUpdater(
+        new DurableStorage(storage),
+        cvr,
+        '1ba',
+      );
+
+      updater.trackQueries(
+        lc,
+        [
+          {id: 'oneHash', transformationHash: 'oneServerHash'},
+          {id: 'twoHash', transformationHash: 'twoServerHash'},
+        ],
+        [],
+        {stateVersion: '189'},
+      );
+      expect(
+        await updater.received(
+          lc,
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['oneHash'], name: ['oneHash']},
+                },
+                contents: {id: 'existing-patch'},
+              },
+            ],
+          ]),
+        ),
+      ).toEqual([
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'existing-patch'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
+      expect(
+        await updater.received(
+          lc,
+          new Map([
+            [
+              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              {
+                record: {
+                  id: ROW_ID1,
+                  rowVersion: '03',
+                  queriedColumns: {id: ['twoHash']},
+                },
+                contents: {id: 'existing-patch'},
+              },
+            ],
+          ]),
+        ),
+      ).toEqual([
+        {
+          toVersion: {stateVersion: '1aa', minorVersion: 1},
+          patch: {
+            type: 'row',
+            op: 'merge',
+            id: ROW_ID1,
+            contents: {id: 'existing-patch'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
+      await updater.received(
+        lc,
+        new Map([
+          [
+            `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
+            {
+              record: {
+                id: ROW_ID3,
+                rowVersion: '09',
+                queriedColumns: {id: ['oneHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+      await updater.received(
+        lc,
+        new Map([
+          [
+            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+            {
+              record: {
+                id: ROW_ID2,
+                rowVersion: '03',
+                queriedColumns: {id: ['twoHash']},
+              },
+              contents: {
+                /* ignored */
+              },
+            },
+          ],
+        ]),
+      );
+
+      expect(await updater.deleteUnreferencedColumnsAndRows(lc)).toEqual([
+        {
+          patch: {
+            type: 'row',
+            op: 'constrain',
+            id: ROW_ID2,
+            columns: ['id'],
+          },
+          toVersion: {stateVersion: '1a0'}, // Same patch.
+        },
+        {
+          patch: {
+            type: 'row',
+            op: 'constrain',
+            id: ROW_ID1,
+            columns: ['id', 'name'],
+          },
+          toVersion: {stateVersion: '1aa', minorVersion: 1}, // Same patch.
+        },
+        {
+          patch: {
+            type: 'row',
+            op: 'constrain',
+            id: ROW_ID3,
+            columns: ['id'],
+          },
+          toVersion: {stateVersion: '1aa', minorVersion: 1}, // Same patch.
+        },
+        {
+          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
+          toVersion: {stateVersion: '1ba'},
+        },
+      ] satisfies PatchToVersion[]);
+      expect(await updater.generateConfigPatches(lc)).toEqual([
+        {
+          patch: {type: 'query', op: 'del', id: 'catchup-delete'},
+          toVersion: {stateVersion: '19z'},
+        },
+      ] satisfies PatchToVersion[]);
+
+      // No writes!
+      expect(updater.numPendingWrites()).toBe(0);
+
+      // Only the last active time should change.
+      const updated = await updater.flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 23, 1)),
+      );
+      expect(updated).toEqual({
+        ...cvr,
+        lastActive: {epochMillis: 1713834000000},
+      } satisfies CVRSnapshot);
+
+      // Verify round tripping.
+      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      expect(reloaded).toEqual(updated);
+
+      await expectStorage(storage, {
+        ...initialState,
+        ['/vs/cvr/abc123/m/lastActive']: {
+          epochMillis: Date.UTC(2024, 3, 23, 1),
+        } satisfies LastActive,
       });
     });
   });
