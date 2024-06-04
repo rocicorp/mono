@@ -68,6 +68,9 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
+        if (this.#pending.length === 0) {
+          return;
+        }
         for (let i = 0; i < this.#pending.length; i++) {
           const [val, mult] = must(this.#pending[i]);
           // small optimization to reduce operations for replace
