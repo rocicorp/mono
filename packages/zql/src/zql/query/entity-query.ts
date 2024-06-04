@@ -726,13 +726,22 @@ export function makeOrderingDeterministic(
   const requiredOrderFields =
     getRequiredOrderFieldsForDeterministicOrdering(ast);
 
-  const newOrder = order ? [...order] : [];
-  for (const [selector] of newOrder) {
-    const key = selector.join('.');
-    requiredOrderFields.delete(key);
+  if (order) {
+    for (const [selector] of order) {
+      const key = selector.join('.');
+      requiredOrderFields.delete(key);
+    }
+  } else {
+    requiredOrderFields.delete(`${ast.table}.id`);
+    order = [[[ast.table, 'id'], 'asc']];
   }
 
-  const defaultDirection = newOrder[0]?.[1] ?? 'asc';
+  if (requiredOrderFields.size === 0) {
+    return order;
+  }
+
+  const defaultDirection = order[0][1];
+  const newOrder = [...order];
   for (const selector of requiredOrderFields.values()) {
     newOrder.push([selector, defaultDirection]);
   }

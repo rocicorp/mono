@@ -453,11 +453,11 @@ suite('initConnection', () => {
             {
               ast: {
                 aggregate: [],
-                orderBy: [[['e', 'id']], 'asc'],
+                orderBy: [[['e', 'id'], 'asc']],
                 select: [[['e', '*'], '*']],
                 table: 'e',
               } satisfies AST,
-              hash: '2dytaxdo1gtrn',
+              hash: '3v64kj3849ubl',
               op: 'put',
             },
           ],
