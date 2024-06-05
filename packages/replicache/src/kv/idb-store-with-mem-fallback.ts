@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {navigator} from 'shared/src/navigator.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
 import {IDBStore} from './idb-store.js';
 import {MemStore, dropMemStore} from './mem-store.js';
@@ -76,7 +77,7 @@ function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
 }
 
 function isFirefox(): boolean {
-  return navigator.userAgent.includes('Firefox');
+  return navigator?.userAgent.includes('Firefox') ?? false;
 }
 
 export function newIDBStoreWithMemFallback(
