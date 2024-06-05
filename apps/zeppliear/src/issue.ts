@@ -224,7 +224,7 @@ export async function deleteIssueComment(
   issueID: string,
 ): Promise<void> {
   await zero.mutate(async m => {
-    await m.comment.delete(id);
+    await m.comment.delete({id});
     await m.issue.update({
       id: issueID,
       modified: getModifiedDate(),
