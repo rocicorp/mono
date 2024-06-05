@@ -2,12 +2,15 @@
 
 // Firebase and Jest do not correctly setup the global crypto object.
 
+// Don't inline this. It is done this way to prevent TS from type checking the
+// module as well as to prevent esbuild (actually web-dev-server which does not
+// support external) from trying to resolve the module.
+const cryptoNodeModuleName = 'crypto';
+
 const localCrypto =
   typeof crypto !== 'undefined'
     ? crypto
-    : // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore Fallback for Node etc
-      ((await import('crypto')).webcrypto as Crypto);
+    : ((await import(cryptoNodeModuleName)).webcrypto as Crypto);
 
 export function getRandomValues<T extends ArrayBufferView | null>(array: T): T {
   return localCrypto.getRandomValues(array);
