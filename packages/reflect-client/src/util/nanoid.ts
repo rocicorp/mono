@@ -1,3 +1,5 @@
+import * as crypto from 'shared/src/crypto.js';
+
 // This is taken from https://github.com/ai/nanoid/blob/main/index.browser.js We
 // copy this because we want to use `--platform=neutral` which doesn't work with
 // the npm package
