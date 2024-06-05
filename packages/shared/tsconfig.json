@@ -1,8 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    // For crypto when running under jest
-    "lib": ["dom"]
+    "noEmit": true
   },
   "include": ["src/**/*.ts", "src/**/*.js"]
 }
