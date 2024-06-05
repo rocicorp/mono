@@ -3,7 +3,15 @@
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "paths": {
+      "@rocicorp/zql": ["../../packages/zql/src/mod.ts"],
+      "@rocicorp/zql/src/*": ["../../packages/zql/src/*"],
+      "shared/src/*": ["../../packages/shared/src/*"],
+      "zero-client": ["../../packages/zero-client/src/mod.ts"],
+      "replicache": ["../../packages/replicache/src/mod.ts"],
+      "replicache/src/*": ["../../packages/replicache/src/*"]
+    }
   },
   "references": [{"path": "./tsconfig.node.json"}],
   "include": ["src"]
