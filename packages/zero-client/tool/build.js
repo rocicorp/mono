@@ -33,10 +33,13 @@ async function buildPackages() {
   const define = makeDefine();
 
   fs.rmSync(basePath('out'), {recursive: true, force: true});
+  const external = await getExternalFromPackageJSON(import.meta.url);
+  // crypto is used as a fallback in older node versions
+  external.push('node:*', 'crypto');
 
   await esbuild.build({
     ...shared,
-    external: await getExternalFromPackageJSON(import.meta.url),
+    external,
     platform: 'browser',
     define: {
       ...define,
