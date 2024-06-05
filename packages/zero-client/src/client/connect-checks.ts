@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {navigator} from 'shared/src/navigator.js';
 import {sleep} from 'shared/src/sleep.js';
 import {nanoid} from '../util/nanoid.js';
 import {
@@ -24,7 +25,7 @@ export async function checkConnectivity(
   const id = nanoid();
   lc = lc.withContext('connectCheckID', id).withContext('checkReason', reason);
   lc.info?.('Starting connectivity checks', {
-    navigatorOnline: navigator.onLine,
+    navigatorOnline: navigator?.onLine,
   });
   const socketOrigin = toWSString(server);
   const cfChecks: Checks = {
@@ -80,7 +81,7 @@ export async function checkConnectivity(
       (checkName, i) => `${checkName}=${results[i].success}\n`,
     ),
     {
-      navigatorOnline: navigator.onLine,
+      navigatorOnline: navigator?.onLine,
     },
   );
   lc.info?.(
@@ -89,7 +90,7 @@ export async function checkConnectivity(
       (checkName, i) => `${checkName}=${results[i].detail}\n`,
     ),
     {
-      navigatorOnline: navigator.onLine,
+      navigatorOnline: navigator?.onLine,
     },
   );
 }
