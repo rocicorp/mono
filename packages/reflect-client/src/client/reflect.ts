@@ -43,6 +43,7 @@ import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
 import {getWindow} from 'shared/src/get-window.js';
+import {navigator} from 'shared/src/navigator.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import * as valita from 'shared/src/valita.js';
 import {nanoid} from '../util/nanoid.js';
@@ -637,7 +638,7 @@ export class Reflect<MD extends MutatorDefs> {
       const now = Date.now();
       const timeToOpenMs = now - this.#connectStart;
       l.info?.('Got socket open event', {
-        navigatorOnline: navigator.onLine,
+        navigatorOnline: navigator?.onLine,
         timeToOpenMs,
       });
     }
@@ -729,7 +730,7 @@ export class Reflect<MD extends MutatorDefs> {
     this.#metrics.setConnected(timeToConnectMs ?? 0, totalTimeToConnectMs ?? 0);
 
     lc.info?.('Connected', {
-      navigatorOnline: navigator.onLine,
+      navigatorOnline: navigator?.onLine,
       timeToConnectMs,
       totalTimeToConnectMs,
       connectMsgLatencyMs,
@@ -767,7 +768,7 @@ export class Reflect<MD extends MutatorDefs> {
 
     const wsid = nanoid();
     l = addWebSocketIDToLogContext(wsid, l);
-    l.info?.('Connecting...', {navigatorOnline: navigator.onLine});
+    l.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
 
     this.#setConnectionState(ConnectionState.Connecting);
 
@@ -837,7 +838,7 @@ export class Reflect<MD extends MutatorDefs> {
       this.#connectErrorCount++;
     }
     l.info?.('disconnecting', {
-      navigatorOnline: navigator.onLine,
+      navigatorOnline: navigator?.onLine,
       reason,
       connectStart: this.#connectStart,
       totalToConnectStart: this.#totalToConnectStart,

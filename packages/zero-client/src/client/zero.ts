@@ -24,6 +24,7 @@ import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
 import {must} from 'shared/src/must.js';
+import {navigator} from 'shared/src/navigator.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import * as valita from 'shared/src/valita.js';
@@ -658,7 +659,7 @@ export class Zero<QD extends QueryDefs> {
       const now = Date.now();
       const timeToOpenMs = now - this.#connectStart;
       l.info?.('Got socket open event', {
-        navigatorOnline: navigator.onLine,
+        navigatorOnline: navigator?.onLine,
         timeToOpenMs,
       });
     }
@@ -753,7 +754,7 @@ export class Zero<QD extends QueryDefs> {
     this.#metrics.setConnected(timeToConnectMs ?? 0, totalTimeToConnectMs ?? 0);
 
     lc.info?.('Connected', {
-      navigatorOnline: navigator.onLine,
+      navigatorOnline: navigator?.onLine,
       timeToConnectMs,
       totalTimeToConnectMs,
       connectMsgLatencyMs,
@@ -801,7 +802,7 @@ export class Zero<QD extends QueryDefs> {
 
     const wsid = nanoid();
     l = addWebSocketIDToLogContext(wsid, l);
-    l.info?.('Connecting...', {navigatorOnline: navigator.onLine});
+    l.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
 
     this.#setConnectionState(ConnectionState.Connecting);
 
@@ -879,7 +880,7 @@ export class Zero<QD extends QueryDefs> {
       this.#connectErrorCount++;
     }
     l.info?.('disconnecting', {
-      navigatorOnline: navigator.onLine,
+      navigatorOnline: navigator?.onLine,
       reason,
       connectStart: this.#connectStart,
       totalToConnectStart: this.#totalToConnectStart,
