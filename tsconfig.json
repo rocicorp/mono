@@ -21,6 +21,26 @@
     "resolveJsonModule": true,
     "incremental": true,
     "ignoreDeprecations": "5.0",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": "./packages/",
+    "paths": {
+      "@rocicorp/zql": ["zql/src/mod.ts"],
+      "@rocicorp/zql/src/*": ["zql/src/*"],
+      "cf-shared/src/*": ["../cf-shared/src/*"],
+      "datadog": ["datadog/src/mod.ts"],
+      "datadog/src/*": ["datadog/src/*"],
+      "reflect-protocol": ["reflect-protocol/src/mod.ts"],
+      "reflect-protocol/src/*": ["reflect-protocol/src/*"],
+      "reflect-react": ["reflect-react/src/mod.ts"],
+      "reflect-shared": ["reflect-shared/src/mod.ts"],
+      "reflect-shared/src/*": ["reflect-shared/src/*"],
+      "replicache": ["replicache/src/mod.ts"],
+      "replicache/src/*": ["replicache/src/*"],
+      "shared/src/*": ["shared/src/*"],
+      "zero-client": ["zero-client/src/mod.ts"],
+      "zero-client/src/*": ["zero-client/src/*"],
+      "zero-protocol": ["zero-protocol/src/mod.ts"],
+      "zero-protocol/src/*": ["zero-protocol/src/*"]
+    }
   }
 }
