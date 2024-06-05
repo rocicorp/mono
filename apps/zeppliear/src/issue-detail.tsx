@@ -8,6 +8,7 @@ import {
 import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
+import {must} from 'shared/src/must.js';
 import type {EntityQuery} from 'zero-client';
 import type {Collections} from './app.jsx';
 import ArrowIcon from './assets/icons/arrow.svg?react';
@@ -215,7 +216,7 @@ export default function IssueDetail({
   };
 
   const handleDeleteConfirm = async () => {
-    await zero.mutate.issue.delete({id: detailIssueID});
+    await zero.mutate.issue.delete({id: must(detailIssueID)});
     handleDismiss();
     handleClose();
   };
