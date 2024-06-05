@@ -48,8 +48,8 @@ test('sorted materialization', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
-  const ascStatement = q.select('id').asc('n').prepare();
-  const descStatement = q.select('id').desc('n').prepare();
+  const ascStatement = q.select('id').orderBy('n', 'asc').prepare();
+  const descStatement = q.select('id').orderBy('n', 'desc').prepare();
 
   context.getSource<E1>('e1').add({
     id: 'a',
@@ -81,8 +81,8 @@ test('sorting is stable via suffixing the primary key to the order', async () =>
   type E1 = z.infer<typeof e1>;
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
 
-  const ascStatement = q.select('id').asc('n').prepare();
-  const descStatement = q.select('id').desc('n').prepare();
+  const ascStatement = q.select('id').orderBy('n', 'asc').prepare();
+  const descStatement = q.select('id').orderBy('n', 'desc').prepare();
 
   context.getSource<E1>('e1').add({
     id: 'a',

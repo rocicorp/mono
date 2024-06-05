@@ -318,7 +318,7 @@ function commentBaseQuery(z: Zero<Collections>) {
       'comment.body',
       'member.name',
     )
-    .asc('comment.created');
+    .orderBy('comment.created', 'asc');
 }
 
 export function commentsForIssuesQuery(
@@ -339,27 +339,23 @@ export function orderQuery<R>(
   order: Order,
   reverse: boolean,
 ) {
-  const methodName = (d: 'asc' | 'desc') => {
-    if (!reverse) {
-      return d;
-    }
-    return d === 'asc' ? 'desc' : 'asc';
-  };
-
-  type F = (typeof issueQuery)['desc' | 'asc'];
-  const desc: F = (...cols) => issueQuery[methodName('desc')](...cols);
-  const asc: F = (...cols) => issueQuery[methodName('asc')](...cols);
+  const dir = (def: 'desc' | 'asc') =>
+    reverse ? (def === 'desc' ? 'asc' : 'desc') : def;
 
   switch (order) {
     case Order.Created:
-      return desc('issue.created');
+      return issueQuery.orderBy('issue.created', dir('desc'));
     case Order.Modified:
-      return desc('issue.modified');
+      return issueQuery.orderBy('issue.modified', dir('desc'));
     case Order.Status:
-      return desc('issue.status', 'issue.modified');
+      return issueQuery
+        .orderBy('issue.status', dir('desc'))
+        .orderBy('issue.modified', dir('desc'));
     case Order.Priority:
-      return desc('issue.priority', 'issue.modified');
+      return issueQuery
+        .orderBy('issue.priority', dir('desc'))
+        .orderBy('issue.modified', dir('desc'));
     case Order.Kanban:
-      return asc('issue.kanbanOrder');
+      return issueQuery.orderBy('issue.kanbanOrder', dir('asc'));
   }
 }

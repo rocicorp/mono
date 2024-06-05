@@ -51,7 +51,7 @@ describe('a limited window is correctly maintained over differences', () => {
   });
 
   test('adding values above the established window (desc)', async () => {
-    const stmt = q.select('id').desc('id').limit(5).prepare();
+    const stmt = q.select('id').orderBy('id', 'desc').limit(5).prepare();
     const data = await stmt.exec();
 
     expect(data.map(x => x.id)).toEqual(['v', 't', 'r', 'p', 'n']);
@@ -66,7 +66,7 @@ describe('a limited window is correctly maintained over differences', () => {
   });
 
   test('adding values below the established window (desc)', async () => {
-    const stmt = q.select('id').desc('id').limit(5).prepare();
+    const stmt = q.select('id').orderBy('id', 'desc').limit(5).prepare();
     const data = await stmt.exec();
 
     expect(data.map(x => x.id)).toEqual(['v', 't', 'r', 'p', 'n']);
@@ -96,7 +96,7 @@ describe('a limited window is correctly maintained over differences', () => {
   });
 
   test('adding values inside the established window (desc)', async () => {
-    const stmt = q.select('id').desc('id').limit(5).prepare();
+    const stmt = q.select('id').orderBy('id', 'desc').limit(5).prepare();
     const data = await stmt.exec();
 
     expect(data.map(x => x.id)).toEqual(['v', 't', 'r', 'p', 'n']);

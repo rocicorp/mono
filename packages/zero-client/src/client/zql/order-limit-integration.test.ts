@@ -96,7 +96,7 @@ describe('sorting and limiting with different query operations', async () => {
     },
     {
       name: 'Select with a limit and orderBy, asc',
-      query: () => z.query.artist.asc('artist.name').limit(10),
+      query: () => z.query.artist.orderBy('artist.name', 'asc').limit(10),
       expected: () =>
         artists
           .sort(
@@ -109,7 +109,7 @@ describe('sorting and limiting with different query operations', async () => {
     },
     {
       name: 'Select with a limit and orderBy, desc',
-      query: () => z.query.artist.desc('artist.name').limit(10),
+      query: () => z.query.artist.orderBy('artist.name', 'desc').limit(10),
       expected: () =>
         artists
           .sort(
@@ -124,7 +124,7 @@ describe('sorting and limiting with different query operations', async () => {
       name: 'Select with limit, orderBy and constraint on orderBy field',
       query: () =>
         z.query.track
-          .asc('track.title')
+          .orderBy('track.title', 'asc')
           .where('track.title', '>', 'F')
           .limit(3),
       expected: () =>
@@ -160,7 +160,7 @@ describe('sorting and limiting with different query operations', async () => {
       query: () =>
         z.query.album
           .join(z.query.artist, 'artist', 'artistId', 'id')
-          .desc('album.id'),
+          .orderBy('album.id', 'desc'),
       expected: (): {artist: Artist; album: Album}[] =>
         albums
           .map(joinAlbumToArtist)
@@ -171,7 +171,7 @@ describe('sorting and limiting with different query operations', async () => {
       query: () =>
         z.query.album
           .join(z.query.artist, 'artist', 'artistId', 'id')
-          .asc('album.title')
+          .orderBy('album.title', 'asc')
           .limit(10),
       expected: (): {artist: Artist; album: Album}[] =>
         albums
@@ -190,7 +190,7 @@ describe('sorting and limiting with different query operations', async () => {
       query: () =>
         z.query.album
           .join(z.query.artist, 'artist', 'artistId', 'id')
-          .desc('album.title')
+          .orderBy('album.title', 'desc')
           .limit(10),
       expected: (): {artist: Artist; album: Album}[] => {
         const c = makeComparator([
@@ -206,7 +206,8 @@ describe('sorting and limiting with different query operations', async () => {
         z.query.track
           .join(z.query.trackArtist, 'trackArtist', 'id', 'trackId')
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
-          .asc('track.title', 'artist.name'),
+          .orderBy('track.title', 'asc')
+          .orderBy('artist.name', 'asc'),
       expected: () => {
         const c = makeComparator([
           [['track', 'title'], 'asc'],
@@ -222,7 +223,8 @@ describe('sorting and limiting with different query operations', async () => {
         z.query.track
           .join(z.query.trackArtist, 'trackArtist', 'id', 'trackId')
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
-          .desc('track.title', 'artist.name'),
+          .orderBy('track.title', 'desc')
+          .orderBy('artist.name', 'desc'),
       expected: () => {
         const c = makeComparator([
           [['track', 'title'], 'desc'],
@@ -245,7 +247,10 @@ describe('sorting and limiting with different query operations', async () => {
     {
       name: 'group-by limit 10 desc',
       query: () =>
-        z.query.track.groupBy('track.albumId').desc('track.title').limit(10),
+        z.query.track
+          .groupBy('track.albumId')
+          .orderBy('track.title', 'desc')
+          .limit(10),
       expected: () =>
         groupTracksByAlbum(
           makeComparator([
@@ -268,7 +273,8 @@ describe('sorting and limiting with different query operations', async () => {
           .join(z.query.trackArtist, 'trackArtist', 'id', 'trackId')
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
           .limit(10)
-          .asc('track.title', 'artist.name'),
+          .orderBy('track.title', 'asc')
+          .orderBy('artist.name', 'asc'),
       expected: () => {
         const c = makeComparator([
           [['track', 'title'], 'asc'],
@@ -286,7 +292,8 @@ describe('sorting and limiting with different query operations', async () => {
         z.query.track
           .join(z.query.trackArtist, 'trackArtist', 'id', 'trackId')
           .join(z.query.artist, 'artist', 'trackArtist.artistId', 'id')
-          .desc('track.title', 'artist.name')
+          .orderBy('track.title', 'desc')
+          .orderBy('artist.name', 'desc')
           .limit(10),
       expected: () => {
         const c = makeComparator([
