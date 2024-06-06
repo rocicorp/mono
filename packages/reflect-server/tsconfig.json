@@ -6,6 +6,7 @@
     "baseUrl": "../",
     "paths": {
       "cf-shared/src/*": ["cf-shared/src/*"],
+      "datadog": ["datadog/src/mod.ts"],
       "reflect-shared/src/*": ["reflect-shared/src/*"],
       "reflect-protocol": ["reflect-protocol/src/mod.ts"],
       "reflect-protocol/src/*": ["reflect-protocol/src/*"],
