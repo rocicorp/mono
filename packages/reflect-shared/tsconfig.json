@@ -1,10 +1,4 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "paths": {
-      "replicache": ["../replicache/src/mod.ts"],
-      "replicache/src/*": ["../replicache/src/*"]
-    }
-  },
   "include": ["src/**/*.ts", "src/**/*.js"]
 }

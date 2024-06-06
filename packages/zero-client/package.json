@@ -45,7 +45,7 @@
     "out"
   ],
   "exports": {
-    ".": "./out/zero-client.js"
+    ".": "./src/mod.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

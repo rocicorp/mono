@@ -2,6 +2,7 @@
 
 import {nodeResolve} from '@rollup/plugin-node-resolve';
 import dts from 'rollup-plugin-dts';
+import tsConfigPaths from 'rollup-plugin-tsconfig-paths';
 
 // We only use rollup for creating a bundled d.ts file.
 // We use esbuild for building the actual code.
@@ -20,6 +21,7 @@ export function makeInputOptions(input, outputFile) {
     },
     external: ['@rocicorp/lock', '@rocicorp/logger', '@rocicorp/resolver'],
     plugins: [
+      tsConfigPaths(),
       nodeResolve(),
       dts({
         respectExternal: true,

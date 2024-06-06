@@ -24,6 +24,8 @@ export const jestConfig = {
   },
   moduleNameMapper: {
     '^cf-shared/(.*)\\.js$': '<rootDir>/../../packages/cf-shared/$1',
+    '^datadog$': '<rootDir>/../../packages/datadog/src/mod.ts',
+    '^datadog/(.*)\\.js$': '<rootDir>/../../packages/datadog/$1',
     '^shared/(.*)\\.js$': '<rootDir>/../../packages/shared/$1',
     '^reflect-shared/(.*)\\.js$': '<rootDir>/../../packages/reflect-shared/$1',
     '^reflect-protocol/(.*)\\.js$':
