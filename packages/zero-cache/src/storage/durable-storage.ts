@@ -1,7 +1,3 @@
-import type {
-  DurableObjectListOptions,
-  DurableObjectStorage,
-} from '@cloudflare/workers-types';
 import {compareUTF8} from 'compare-utf8';
 import type * as valita from 'shared/src/valita.js';
 import type {JSONValue} from '../types/bigint-json.js';
@@ -15,6 +11,10 @@ import {
 } from './data.js';
 import {batchScan, scan} from './scan-storage.js';
 import type {ListOptions, Storage} from './storage.js';
+import {
+  DurableObjectListOptions,
+  FakeDurableObjectStorage,
+} from '../test/fake-do.js';
 
 // DurableObjects has a lot of clever optimizations for simplifying the
 // concurrency semantics of a single application writing to shared state:
@@ -41,33 +41,37 @@ const ioOptions = {
  * Implements the Storage interface in terms of the database.
  */
 export class DurableStorage implements Storage {
-  readonly #durable: DurableObjectStorage;
+  readonly #durable: FakeDurableObjectStorage;
 
-  constructor(durable: DurableObjectStorage) {
-    this.#durable = durable;
+  constructor(durable?: FakeDurableObjectStorage | undefined) {
+    if (!durable) {
+      this.#durable = new FakeDurableObjectStorage();
+    } else {
+      this.#durable = durable;
+    }
   }
 
   put<T extends JSONValue>(key: string, value: T): Promise<void> {
-    return putEntry(this.#durable, key, value, ioOptions);
+    return putEntry(this.#durable, key, value);
   }
 
   putEntries<T extends JSONValue>(entries: Record<string, T>): Promise<void> {
-    return this.#durable.put(entries, ioOptions);
+    return this.#durable.put(entries);
   }
 
   del(key: string): Promise<void> {
-    return delEntry(this.#durable, key, ioOptions);
+    return delEntry(this.#durable, key);
   }
 
   delEntries(keys: string[]): Promise<void> {
-    return this.#durable.delete(keys, ioOptions).then(() => undefined);
+    return this.#durable.delete(keys).then(() => undefined);
   }
 
   get<T extends JSONValue>(
     key: string,
     schema: valita.Type<T>,
   ): Promise<T | undefined> {
-    return getEntry(this.#durable, key, schema, ioOptions);
+    return getEntry(this.#durable, key, schema);
   }
 
   /**
@@ -84,7 +88,7 @@ export class DurableStorage implements Storage {
   ): Promise<Map<string, T>> {
     // Simple case that does not require partitioning.
     if (keys.length <= MAX_ENTRIES_TO_GET) {
-      return getEntries(this.#durable, keys, schema, ioOptions);
+      return getEntries(this.#durable, keys, schema);
     }
     // Partition the keys in groups no larger than MAX_ENTRIES_TO_GET.
     const partitionedKeys = [];
@@ -96,7 +100,7 @@ export class DurableStorage implements Storage {
     // Perform parallel getEntries()
     const partitionedEntries = await Promise.all(
       partitionedKeys.map(partition =>
-        getEntries(this.#durable, partition, schema, ioOptions),
+        getEntries(this.#durable, partition, schema),
       ),
     );
     // Merge and sort to adhere to the sorted-key guarantee of Durable Object APIs.
@@ -157,7 +161,7 @@ function doListOptions(opts: ListOptions): DurableObjectListOptions {
     if (exclusive) {
       doOpts.startAfter = key;
     } else {
-      doOpts.start = key;
+      doOpts.start = {key, exclusive: true};
     }
   }
 

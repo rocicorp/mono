@@ -1,6 +1,5 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
-import {DurableStorage} from '../../storage/durable-storage.js';
 import {
   expectStorage,
   initStorage,
@@ -28,6 +27,7 @@ import type {
   RowPatch,
   RowRecord,
 } from './schema/types.js';
+import {DurableStorage} from '../../storage/durable-storage.js';
 
 describe('view-syncer/cvr', () => {
   const lc = createSilentLogContext();

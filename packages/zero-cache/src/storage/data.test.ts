@@ -44,7 +44,7 @@ test('getEntry', async () => {
         await storage.put('foo', c.validSchema ? 42 : {});
       }
 
-      const promise = getEntry(storage, 'foo', numberToString, {});
+      const promise = getEntry(storage, 'foo', numberToString);
       let result: string | undefined;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let error: any | undefined;
@@ -71,42 +71,34 @@ test('getEntry', async () => {
 
 test('getEntry RoundTrip types', async () => {
   await runWithDurableObjectStorage(async storage => {
-    await putEntry(storage, 'boolean', true, {});
-    await putEntry(storage, 'number', 42, {});
-    await putEntry(storage, 'string', 'foo', {});
-    await putEntry(storage, 'array', [1, 2, 3], {});
-    await putEntry(storage, 'object', {a: 1, b: 2}, {});
-    await putEntry(storage, 'bigint', 987654321234567898765432123456789n, {});
-    await putEntry(
-      storage,
-      'bigintJSON',
-      {bigint: 987654321234567898765432123456789n},
-      {},
-    );
+    await putEntry(storage, 'boolean', true);
+    await putEntry(storage, 'number', 42);
+    await putEntry(storage, 'string', 'foo');
+    await putEntry(storage, 'array', [1, 2, 3]);
+    await putEntry(storage, 'object', {a: 1, b: 2});
+    await putEntry(storage, 'bigint', 987654321234567898765432123456789n);
+    await putEntry(storage, 'bigintJSON', {
+      bigint: 987654321234567898765432123456789n,
+    });
 
-    expect(await getEntry(storage, 'boolean', valita.boolean(), {})).toEqual(
-      true,
-    );
-    expect(await getEntry(storage, 'number', valita.number(), {})).toEqual(42);
-    expect(await getEntry(storage, 'number', numberToString, {})).toEqual('42');
-    expect(await getEntry(storage, 'string', valita.string(), {})).toEqual(
-      'foo',
-    );
+    expect(await getEntry(storage, 'boolean', valita.boolean())).toEqual(true);
+    expect(await getEntry(storage, 'number', valita.number())).toEqual(42);
+    expect(await getEntry(storage, 'number', numberToString)).toEqual('42');
+    expect(await getEntry(storage, 'string', valita.string())).toEqual('foo');
     expect(
-      await getEntry(storage, 'array', valita.array(valita.number()), {}),
+      await getEntry(storage, 'array', valita.array(valita.number())),
     ).toEqual([1, 2, 3]);
     expect(
       await getEntry(
         storage,
         'object',
         valita.object({a: valita.number(), b: valita.number()}),
-        {},
       ),
     ).toEqual({a: 1, b: 2});
-    expect(await getEntry(storage, 'bigint', valita.bigint(), {})).toEqual(
+    expect(await getEntry(storage, 'bigint', valita.bigint())).toEqual(
       987654321234567898765432123456789n,
     );
-    expect(await getEntry(storage, 'bigintJSON', bigintJSON, {})).toEqual({
+    expect(await getEntry(storage, 'bigintJSON', bigintJSON)).toEqual({
       bigint: 987654321234567898765432123456789n,
     });
   });
@@ -114,17 +106,16 @@ test('getEntry RoundTrip types', async () => {
 
 test('getEntries', async () => {
   await runWithDurableObjectStorage(async storage => {
-    await putEntry(storage, 'a', 'b', {});
-    await putEntry(storage, 'c', 'is', {});
-    await putEntry(storage, 'easy', 'as', {});
-    await putEntry(storage, '1', '2', {});
-    await putEntry(storage, '3', '!', {});
+    await putEntry(storage, 'a', 'b');
+    await putEntry(storage, 'c', 'is');
+    await putEntry(storage, 'easy', 'as');
+    await putEntry(storage, '1', '2');
+    await putEntry(storage, '3', '!');
 
     const entries = await getEntries(
       storage,
       ['a', 'b', 'c', 'is', 'easy', 'as', '1', '2', '3'],
       valita.string(),
-      {},
     );
 
     // Note: Also verifies that iteration order is sorted in UTF-8.
@@ -140,17 +131,16 @@ test('getEntries', async () => {
 
 test('getEntries schema chaining', async () => {
   await runWithDurableObjectStorage(async storage => {
-    await putEntry(storage, 'a', '1', {});
+    await putEntry(storage, 'a', '1');
     // Make normalization apparent midway through the Map to verify
     // that the result still follows iteration order.
-    await putEntry(storage, 'b', 2, {});
-    await putEntry(storage, 'c', '3', {});
+    await putEntry(storage, 'b', 2);
+    await putEntry(storage, 'c', '3');
 
     const entries = await getEntries(
       storage,
       ['a', 'b', 'c', 'is', 'easy', 'as', '1', '2', '3'],
       numberToString,
-      {},
     );
 
     // Note: Also verifies that iteration order is sorted in UTF-8.
@@ -238,9 +228,9 @@ test('listEntries ordering', async () => {
   await runWithDurableObjectStorage(async storage => {
     // Use these keys to test collation: Z,𝙕,Ｚ, from
     // https://github.com/rocicorp/compare-utf8/blob/b0b21f235d3227b42e565708647649c160fabacb/src/index.test.js#L63-L71
-    await putEntry(storage, 'Z', 1, {});
-    await putEntry(storage, '𝙕', 2, {});
-    await putEntry(storage, 'Ｚ', 3, {});
+    await putEntry(storage, 'Z', 1);
+    await putEntry(storage, '𝙕', 2);
+    await putEntry(storage, 'Ｚ', 3);
 
     const entriesMap = await listEntries(storage, valita.number(), {});
     const entries = Array.from(entriesMap);
@@ -276,10 +266,10 @@ test('putEntry', async () => {
 
       let res: Promise<void>;
       if (c.duplicate) {
-        await putEntry(storage, 'foo', 41, {});
-        res = putEntry(storage, 'foo', 42, {});
+        await putEntry(storage, 'foo', 41);
+        res = putEntry(storage, 'foo', 42);
       } else {
-        res = putEntry(storage, 'foo', 42, {});
+        res = putEntry(storage, 'foo', 42);
       }
 
       await res.catch(() => ({}));
@@ -313,7 +303,7 @@ test('delEntry', async () => {
         await storage.put('foo', 42);
       }
 
-      await delEntry(storage, 'foo', {});
+      await delEntry(storage, 'foo');
       const value = await storage.get('foo');
       expect(value).toBeUndefined();
     }

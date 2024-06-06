@@ -43,7 +43,7 @@ describe('view-syncer/migrations', () => {
         );
 
         const storageState = Object.fromEntries(
-          (await storage.list()).entries(),
+          (await storage.list({})).entries(),
         );
         expect(c.postState).toEqual(storageState);
       });

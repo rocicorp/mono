@@ -1,16 +1,33 @@
-import type {
-  DurableObjectListOptions,
-  DurableObjectStorage,
-} from '@cloudflare/workers-types';
 import {compareUTF8} from 'compare-utf8';
 
+export type DurableObjectListOptions = {
+  allowConcurrency?: boolean | undefined;
+  /** Only include keys starting with `prefix`. */
+  prefix?: string | undefined;
+  /** Only include up to `limit` results. */
+  limit?: number | undefined;
+  /** When provided the scan starts at this key. */
+  start?:
+    | {
+        key: string;
+        /** Whether the `key` is exclusive or inclusive. */
+        exclusive?: boolean | undefined;
+      }
+    | undefined;
+
+  /** Exclusive end */
+  end?: string | undefined;
+  reverse?: boolean | undefined;
+  startAfter?: string | undefined;
+};
+
 export function runWithFakeDurableObjectStorage<R>(
-  fn: (storage: DurableObjectStorage) => R | Promise<R>,
+  fn: (storage: FakeDurableObjectStorage) => R | Promise<R>,
 ): Promise<R> {
   return Promise.resolve(fn(new FakeDurableObjectStorage()));
 }
 
-export class FakeDurableObjectStorage implements DurableObjectStorage {
+export class FakeDurableObjectStorage {
   readonly #entries = new Map<string, unknown>();
 
   get<T = unknown>(key: string): Promise<T | undefined>;
@@ -29,14 +46,14 @@ export class FakeDurableObjectStorage implements DurableObjectStorage {
 
   // eslint-disable-next-line require-await
   async list<T = unknown>(
-    options: DurableObjectListOptions = {},
+    options: DurableObjectListOptions,
   ): Promise<Map<string, T>> {
     const {prefix, start, startAfter, end, reverse, limit} = options;
     const keys = [...this.#entries.keys()]
       .filter(
         k =>
           (!prefix || k.startsWith(prefix)) &&
-          (!start || compareUTF8(start, k) <= 0) &&
+          (!start || compareUTF8(start.key, k) <= 0) &&
           (!startAfter || compareUTF8(startAfter, k) < 0) &&
           (!end || compareUTF8(end, k) > 0),
       )

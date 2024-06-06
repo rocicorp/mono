@@ -1,23 +1,24 @@
+import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
+import websocket, {WebSocket} from '@fastify/websocket';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {BaseContext, Router, bodyOnly, post} from 'cf-shared/src/router.js';
 import {streamOut} from '../types/streams.js';
 import {
   REGISTER_FILTERS_PATTERN,
   REPLICATOR_STATUS_PATTERN,
   VERSION_CHANGES_PATTERN,
 } from './paths.js';
-import {registerInvalidationFiltersRequest} from './replicator/replicator.js';
+import type {RegisterInvalidationFiltersRequest} from './replicator/replicator.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-
+import type {DurableStorage} from '../storage/durable-storage.js';
 export class ReplicatorDO {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
-  readonly #router = new Router();
+  #fastify: FastifyInstance;
 
   constructor(
     logSink: LogSink,
     logLevel: LogLevel,
-    state: DurableObjectState,
+    storage: DurableStorage,
     env: ServiceRunnerEnv,
   ) {
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
@@ -25,45 +26,62 @@ export class ReplicatorDO {
       'ReplicatorDO',
     );
     this.#lc = lc;
-    this.#serviceRunner = new ServiceRunner(lc, state, env, true);
+    this.#serviceRunner = new ServiceRunner(lc, storage, env, true);
+    this.#fastify = Fastify();
     void (async () => {
-      const traceResponse = await fetch('https://cloudflare.com/cdn-cgi/trace');
-      const traceText = await traceResponse.text();
-      lc.info?.('Location information:\n', traceText);
+      this.#fastify = Fastify();
+      await this.#fastify.register(websocket);
     })();
 
     this.#initRoutes();
   }
 
-  #initRoutes() {
-    this.#router.register(REGISTER_FILTERS_PATTERN, this.#registerFilters);
-    this.#router.register(VERSION_CHANGES_PATTERN, this.#versionChanges);
-    this.#router.register(REPLICATOR_STATUS_PATTERN, this.#status);
+  start() {
+    this.#fastify.listen({port: 3001}, (err, address) => {
+      if (err) {
+        this.#lc.error?.('Error starting server:', err);
+        process.exit(1);
+      }
+      this.#lc.info?.(`Server listening at ${address}`);
+    });
   }
 
-  #status = post().handleJSON(async () => {
-    const replicator = await this.#serviceRunner.getReplicator();
-    return replicator.status();
-  });
+  #initRoutes() {
+    this.#fastify.post(REPLICATOR_STATUS_PATTERN, this.#status);
+    this.#fastify.post(
+      REGISTER_FILTERS_PATTERN,
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const replicator = await this.#serviceRunner.getReplicator();
+        const response = await replicator.registerInvalidationFilters(
+          request.body as RegisterInvalidationFiltersRequest, //this needs to validate and not cast
+        );
+        await reply.send(response);
+      },
+    );
+    this.#fastify.get(
+      VERSION_CHANGES_PATTERN,
+      {websocket: true},
+      this.#versionChanges,
+    );
+  }
 
-  #registerFilters = post()
-    .with(bodyOnly(registerInvalidationFiltersRequest))
-    .handleJSON(async ctx => {
-      const replicator = await this.#serviceRunner.getReplicator();
-      return replicator.registerInvalidationFilters(ctx.body);
-    });
+  #status = async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const status = await this.#serviceRunner.status();
+      await reply.send(JSON.stringify(status));
+    } catch (error) {
+      this.#lc.error?.('Error in status handler:', error);
+      await reply
+        .status(500)
+        .send(error instanceof Error ? error.message : String(error));
+    }
+  };
 
-  #versionChanges = async (
-    _: BaseContext,
-    request: Request,
-  ): Promise<Response> => {
-    if (request.headers.get('Upgrade') !== 'websocket') {
+  #versionChanges = async (socket: WebSocket, request: FastifyRequest) => {
+    if (request.headers['upgrade'] !== 'websocket') {
       this.#lc.info?.('Missing Upgrade header for', request.url);
       return new Response('expected WebSocket Upgrade header', {status: 400});
     }
-
-    const {0: clientWS, 1: serverWS} = new WebSocketPair();
-    serverWS.accept();
 
     const replicator = await this.#serviceRunner.getReplicator();
     const subscription = await replicator.versionChanges();
@@ -71,7 +89,7 @@ export class ReplicatorDO {
     void streamOut(
       this.#lc.withContext('stream', 'VersionChange'),
       subscription,
-      serverWS,
+      socket,
     );
 
     // Sec-WebSocket-Protocol is used as a mechanism for sending `auth`
@@ -81,28 +99,14 @@ export class ReplicatorDO {
     // Sec-WebSocket-Protocol request header, to indicate support for the
     // protocol, otherwise the client will close the connection.
     const responseHeaders = new Headers();
-    const protocol = request.headers.get('Sec-WebSocket-Protocol');
+    const protocol = request.headers['sec-websocket-protocol'];
     if (protocol) {
-      responseHeaders.set('Sec-WebSocket-Protocol', protocol);
+      socket.setProtocol(protocol);
     }
-    return new Response(null, {
+    return {
       status: 101,
-      webSocket: clientWS,
+      webSocket: socket,
       headers: responseHeaders,
-    });
+    };
   };
-
-  async fetch(request: Request): Promise<Response> {
-    const lc = this.#lc.withContext('url', request.url);
-    lc.info?.('Handling request:', request.url);
-
-    try {
-      return await this.#router.dispatch(request, {lc});
-    } catch (e) {
-      lc.error?.('Unhandled exception in fetch', e);
-      return new Response(e instanceof Error ? e.message : String(e), {
-        status: 500,
-      });
-    }
-  }
 }

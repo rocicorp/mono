@@ -13,19 +13,24 @@ import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
+import type {FastifyRequest} from 'fastify';
+import type {WebSocket} from '@fastify/websocket';
+import {CloseEvent, ErrorEvent, MessageEvent, WebSocket as ws} from 'ws';
 
 export function handleConnection(
   lc: LogContext,
   serviceRunner: ServiceRunner,
   clientConnections: Map<string, Connection>,
-  request: Request,
-): Response {
-  if (request.headers.get('Upgrade') !== 'websocket') {
+  socket: WebSocket,
+  request: FastifyRequest,
+) {
+  // Access headers directly as object properties
+  if (request.headers['upgrade'] !== 'websocket') {
     lc.info?.('Missing Upgrade header for', request.url);
-    return new Response('expected WebSocket Upgrade header', {status: 400});
+    return {status: 400, body: 'Expected WebSocket Upgrade header'};
   }
-
-  const {0: clientWS, 1: serverWS} = new WebSocketPair();
+  const serverWS = socket;
+  const clientWS = new ws('wss://example.com/path'); // Modify URL as needed
   const url = new URL(request.url);
   serverWS.accept();
 
@@ -64,15 +69,15 @@ export function handleConnection(
   // Sec-WebSocket-Protocol request header, to indicate support for the
   // protocol, otherwise the client will close the connection.
   const responseHeaders = new Headers();
-  const protocol = request.headers.get('Sec-WebSocket-Protocol');
+  const protocol = request.headers['sec-websocket-protocol'];
   if (protocol) {
     responseHeaders.set('Sec-WebSocket-Protocol', protocol);
   }
-  return new Response(null, {
+  return {
     status: 101,
     webSocket: clientWS,
     headers: responseHeaders,
-  });
+  };
 }
 
 /**
@@ -140,7 +145,7 @@ export class Connection {
     this.#outboundStream?.cancel();
     this.#outboundStream = undefined;
     this.#onClose();
-    if (this.#ws.readyState !== WebSocket.READY_STATE_CLOSED) {
+    if (this.#ws.readyState !== ws.CLOSED) {
       this.#ws.close();
     }
 
