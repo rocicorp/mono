@@ -2,7 +2,16 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["es2022"],
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"],
+    "baseUrl": "../",
+    "paths": {
+      "cf-shared/src/*": ["cf-shared/src/*"],
+      "datadog": ["datadog/src/mod.ts"],
+      "reflect-shared/src/*": ["reflect-shared/src/*"],
+      "reflect-protocol": ["reflect-protocol/src/mod.ts"],
+      "reflect-protocol/src/*": ["reflect-protocol/src/*"],
+      "shared/src/*": ["shared/src/*"]
+    }
   },
   "include": ["**/*.ts"]
 }
