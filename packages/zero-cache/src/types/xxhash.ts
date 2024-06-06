@@ -1,4 +1,4 @@
-import xxhash from './xxhash/index.js';
+import xxhash from 'xxhash-wasm';
 
 const {create64, h64} = await xxhash();
 
