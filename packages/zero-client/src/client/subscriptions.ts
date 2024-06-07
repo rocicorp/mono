@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
 import type {Diff} from 'replicache/src/btree/node.js';
 import {
   SubscriptionsManagerImpl,
@@ -8,6 +7,7 @@ import {
   type WatchCallback,
 } from 'replicache/src/subscriptions.js';
 import type {QueryInternal} from 'replicache/src/types.js';
+import type {Materialite} from 'zql/src/zql/ivm/materialite.js';
 
 type UnknownSubscription = Subscription<unknown>;
 

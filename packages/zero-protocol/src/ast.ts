@@ -6,8 +6,8 @@
  * are also required for recursive schema definitions.)
  */
 
-import type {Condition, Join} from '@rocicorp/zql/src/zql/ast/ast.js';
 import * as v from 'shared/src/valita.js';
+import type {Condition, Join} from 'zql/src/zql/ast/ast.js';
 
 function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
   return t as v.Type<Readonly<T>>;

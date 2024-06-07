@@ -1,5 +1,5 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {describe, expect, test} from 'vitest';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import {deaggregateArrays} from './deaggregation.js';
 import {Normalized} from './normalize.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
