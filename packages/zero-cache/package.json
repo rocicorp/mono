@@ -6,7 +6,6 @@
   "scripts": {
     "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-replicator.ts",
     "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-service-runner.ts",
-    "miniflare-test": "npm run build && vitest run --config vitest.config.miniflare.ts '.test.ts'",
     "node-test": "vitest run --config vitest.config.node.ts",
     "pg-test": "vitest run --config vitest.config.pg.ts",
     "all-test": "npm run build && vitest run --config vitest.config.miniflare.ts",
@@ -17,7 +16,8 @@
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "local": "node --loader ts-node/esm tool/local.ts"
+    "local": "node --loader ts-node/esm tool/local.ts",
+    "start": "concurrently --kill-others 'npm run start-replicator' 'npm run start-service-runner'"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
@@ -52,6 +52,7 @@
     "@types/ws": "^8.5.10",
     "@types/node": "^18.16.0",
     "cf-shared": "0.0.0",
+    "concurrently": "^8.2.1",
     "rollup-plugin-dts": "^5.3.0",
     "shared": "0.0.0",
     "typescript": "^5.4.2",
