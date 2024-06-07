@@ -22,9 +22,9 @@
   },
   "dependencies": {
     "@badrap/valita": "^0.3.0",
-    "@rocicorp/lock": "^1.0.3",
-    "@rocicorp/logger": "^5.2.1",
-    "@rocicorp/resolver": "^1.0.1",
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.2.2",
+    "@rocicorp/resolver": "^1.0.2",
     "esbuild": "^0.20.2",
     "miniflare": "^3.20231030.4"
   },

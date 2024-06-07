@@ -22,9 +22,9 @@
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
     "@postgresql-typed/oids": "^0.2.0",
-    "@rocicorp/lock": "^1.0.3",
-    "@rocicorp/logger": "^5.2.1",
-    "@rocicorp/resolver": "^1.0.1",
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.2.2",
+    "@rocicorp/resolver": "^1.0.2",
     "@rocicorp/zql": "0.0.0",
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",

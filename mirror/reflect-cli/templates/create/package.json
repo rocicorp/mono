@@ -10,7 +10,7 @@
     "watch": "concurrently --kill-others 'npx reflect dev --silence-startup-message' 'VITE_REFLECT_URL=http://127.0.0.1:8080/ npm run dev'"
   },
   "devDependencies": {
-    "@rocicorp/rails": "^0.7.0",
+    "@rocicorp/rails": "^0.10.0",
     "@rocicorp/reflect": "^{{reflectVersion}}",
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",

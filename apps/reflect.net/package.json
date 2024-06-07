@@ -32,7 +32,7 @@
     "generate-puzzle-pieces": "node raw-assets/puzzle-pieces/generate-puzzle-pieces.js"
   },
   "dependencies": {
-    "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/logger": "^5.2.2",
     "@rocicorp/reflect": "0.39.202405110706+9cdeac",
     "firebase": "9.23.0",
     "firebaseui": "^6.0.2",
@@ -52,7 +52,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rocicorp/rails": "^0.10.0",
-    "@rocicorp/resolver": "^1.0.1",
+    "@rocicorp/resolver": "^1.0.2",
     "@types/react": "18.2.13",
     "@types/react-dom": "18.2.6",
     "@types/react-scroll": "^1.8.6",
