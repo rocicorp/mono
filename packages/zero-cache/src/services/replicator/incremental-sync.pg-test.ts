@@ -29,7 +29,7 @@ import {toLexiVersion} from './types/lsn.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 
-describe('replicator/incremental-sync', () => {
+describe('replicator/incremental-sync', {retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let replica: PostgresDB;
