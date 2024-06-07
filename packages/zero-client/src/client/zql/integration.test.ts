@@ -342,7 +342,7 @@ test('order by single field', async () => {
       const compareAssignees = makeComparator('assignee', 'id');
       const stmt = z.query.issue
         .select('id', 'assignee')
-        .asc('assignee')
+        .orderBy('assignee', 'asc')
         .prepare();
       const rows = await stmt.exec();
       try {
@@ -361,7 +361,7 @@ test('order by id', async () => {
       const z = newZero();
       await Promise.all(issues.map(z.mutate.issue.create));
 
-      const stmt = z.query.issue.select('id').asc('id').prepare();
+      const stmt = z.query.issue.select('id').orderBy('id', 'asc').prepare();
       const rows = await stmt.exec();
       expect(rows).toEqual(issues.sort(compareIds));
 
@@ -380,7 +380,8 @@ test('order by compound fields', async () => {
       const compareExpected = makeComparator('assignee', 'created', 'id');
       const stmt = z.query.issue
         .select('id', 'assignee', 'created')
-        .asc('assignee', 'created')
+        .orderBy('assignee', 'asc')
+        .orderBy('created', 'asc')
         .prepare();
       const rows = await stmt.exec();
       expect(rows).toEqual(issues.sort(compareExpected));
@@ -398,7 +399,10 @@ test('order by optional field', async () => {
       await Promise.all(issues.map(z.mutate.issue.create));
 
       const compareExpected = makeComparator('closed', 'id');
-      const stmt = z.query.issue.select('id', 'closed').asc('closed').prepare();
+      const stmt = z.query.issue
+        .select('id', 'closed')
+        .orderBy('closed', 'asc')
+        .prepare();
       const rows = await stmt.exec();
       expect(rows).toEqual(issues.sort(compareExpected));
 
@@ -449,7 +453,10 @@ test('qualified selectors in order-by', async () => {
   const issues = defaultIssues;
   await Promise.all(issues.map(z.mutate.issue.create));
 
-  const stmt = z.query.issue.select('id').asc('issue.priority').prepare();
+  const stmt = z.query.issue
+    .select('id')
+    .orderBy('issue.priority', 'asc')
+    .prepare();
   const rows = await stmt.exec();
   expect(rows).toEqual([issues[0], issues[2], issues[1]]);
 

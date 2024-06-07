@@ -192,7 +192,7 @@ test('direct foreign key join: join a track to an album', async () => {
   const stmt2 = await z.query.track
     .join(z.query.album, 'album', 'albumId', 'id')
     .select('*')
-    .asc('track.id')
+    .orderBy('track.id', 'asc')
     .prepare();
 
   rows = await stmt2.exec();
@@ -356,7 +356,7 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
     .where('playlistTrack.playlistId', '=', '1')
     .groupBy('track.id')
     .select('track.*', agg.array('artists.*', 'artists'))
-    .asc('track.id')
+    .orderBy('track.id', 'asc')
     .prepare();
 
   const rows = await stmt.exec();
@@ -432,7 +432,7 @@ test('track list composition with lots and lots of data then tracking incrementa
     .join(z.query.artist, 'artists', 'trackArtist.artistId', 'id')
     .groupBy('track.id')
     .select('track.*', agg.array('artists.*', 'artists'))
-    .asc('track.id')
+    .orderBy('track.id', 'asc')
     .prepare();
   let rows = await stmt.exec();
   expect(rows.length).toBe(10_000);

@@ -44,7 +44,7 @@ describe('complex expressions', async () => {
       // id002 has a duplicate title of id001 but a higher id so it should be included.
       query: () =>
         z.query.track
-          .asc('title')
+          .orderBy('title', 'asc')
           .where(
             or(
               exp('title', '>', 'a'),
@@ -57,7 +57,7 @@ describe('complex expressions', async () => {
       name: 'cursor style, asc, starting from unique (id003)',
       query: () =>
         z.query.track
-          .asc('title')
+          .orderBy('title', 'asc')
           .where(
             or(
               exp('title', '>', 'a'),
@@ -71,7 +71,7 @@ describe('complex expressions', async () => {
       // attempt to get the page before id003.
       query: () =>
         z.query.track
-          .desc('title')
+          .orderBy('title', 'desc')
           .where(
             or(
               exp('title', '<', 'a'),
@@ -84,7 +84,7 @@ describe('complex expressions', async () => {
       name: 'cursor style desc, starting from unique (id004)',
       query: () =>
         z.query.track
-          .desc('title')
+          .orderBy('title', 'desc')
           .where(
             or(
               exp('title', '<', 'c'),
@@ -103,7 +103,8 @@ describe('complex expressions', async () => {
       name: 'cursor style with 2 orderings',
       query: () =>
         z.query.track
-          .asc('title', 'albumId')
+          .orderBy('title', 'asc')
+          .orderBy('albumId', 'asc')
           .where('title', 'IN', ['a', 'c'])
           .where(
             or(
@@ -123,7 +124,8 @@ describe('complex expressions', async () => {
       name: 'cursor style with 2 orderings, less overlap',
       query: () =>
         z.query.track
-          .asc('title', 'length')
+          .orderBy('title', 'asc')
+          .orderBy('length', 'asc')
           .where(
             or(
               exp('title', '>', 'a'),

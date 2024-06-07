@@ -1,4 +1,5 @@
 import {UndoManager} from '@rocicorp/undo';
+import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {createRoot} from 'react-dom/client';
 import {must} from 'shared/src/must.js';
 import {EntityQuery, FromSet, Zero} from 'zero-client';
@@ -13,10 +14,10 @@ import {
   type Label,
   type Member,
 } from './issue.js';
-import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
+
 async function preload(z: Zero<Collections>) {
   const allMembersPreload = z.query.member.select('id', 'name');
   allMembersPreload.prepare().preload();
@@ -48,15 +49,15 @@ async function preload(z: Zero<Collections>) {
     )
     .groupBy('issue.id');
 
-  const issueSorts: Parameters<typeof issueBaseQuery.desc>[] = [
-    ['issue.modified'],
-    ['issue.created'],
+  const issueSorts: Parameters<typeof issueBaseQuery.orderBy>[0][] = [
+    'issue.modified',
+    'issue.created',
   ];
 
   for (const issueSort of issueSorts) {
     await incrementalPreload(
-      `issues order by ${issueSort.join(', ')} desc`,
-      issueBaseQuery.desc(...issueSort) as TODO,
+      `issues order by ${issueSort} desc`,
+      issueBaseQuery.orderBy(issueSort, 'desc') as TODO,
       preloadIssueLimit,
       preloadIssueIncrement,
     );
@@ -65,11 +66,11 @@ async function preload(z: Zero<Collections>) {
   if (new URL(location.href).searchParams.get('commentPreload') === 'true') {
     console.log('Aggressive comment preload beginning!!!');
     let preloadStarted = false;
-    const aggresiveCommentPreloadLimit = 10000;
+    const aggressiveCommentPreloadLimit = 10000;
     const cleanup = z.query.issue
       .select('id')
-      .desc('issue.modified')
-      .limit(aggresiveCommentPreloadLimit)
+      .orderBy('issue.modified', 'desc')
+      .limit(aggressiveCommentPreloadLimit)
       .prepare()
       .subscribe(async (results, resultType) => {
         if (resultType === 'complete') {
@@ -91,7 +92,7 @@ async function preload(z: Zero<Collections>) {
                 'Aggressive comment preload progress',
                 preloaded,
                 '/',
-                aggresiveCommentPreloadLimit,
+                aggressiveCommentPreloadLimit,
               );
             }
           }

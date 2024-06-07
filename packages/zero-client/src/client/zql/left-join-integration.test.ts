@@ -40,7 +40,7 @@ test('left-join and aggregation to gather artists for a track', async () => {
     .leftJoin(z.query.album, 'album', 'track.albumId', 'id')
     .groupBy('track.id')
     .select('track.*', 'album.*', agg.array('artists.*', 'artists'))
-    .asc('track.id')
+    .orderBy('track.id', 'asc')
     .prepare();
 
   const rows = await stmt.exec();
@@ -268,7 +268,7 @@ test('left-join through junction edge', async () => {
     )
     .leftJoin(z.query.artist, 'artists', 'trackArtist.artistId', 'id')
     .select('track.*')
-    .asc('track.id')
+    .orderBy('track.id', 'asc')
     .prepare();
 
   const rows = await stmt.exec();
