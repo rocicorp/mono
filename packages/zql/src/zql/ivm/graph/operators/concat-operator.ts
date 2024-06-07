@@ -2,7 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {gen, iterInOrder} from '../../../util/iterables.js';
 import {makeComparator} from '../../compare.js';
-import type {Multiset} from '../../multiset.js';
+import type {Entry, Multiset} from '../../multiset.js';
 import {sourcesAreIdentical} from '../../source/util.js';
 import type {PipelineEntity} from '../../types.js';
 import type {DifferenceStream, Listener} from '../difference-stream.js';
@@ -110,7 +110,7 @@ export class ConcatOperator<T extends PipelineEntity> implements Operator {
 
 export function inOrder<T extends object>(
   buffer: [multiset: Multiset<T>, reply: Reply][],
-) {
+): IterableIterator<Entry<T>> {
   const first = buffer[0];
   const order = must(first[1].order);
   const comparator = makeComparator(order);
