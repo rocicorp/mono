@@ -26,6 +26,7 @@
     "paths": {
       "@rocicorp/zql": ["zql/src/mod.ts"],
       "@rocicorp/zql/src/*": ["zql/src/*"],
+      "btree": ["btree/b+tree.ts"],
       "cf-shared/src/*": ["../cf-shared/src/*"],
       "datadog": ["datadog/src/mod.ts"],
       "datadog/src/*": ["datadog/src/*"],
