@@ -1,5 +1,5 @@
 {
-  "name": "@rocicorp/zql",
+  "name": "zql",
   "version": "0.0.0",
   "description": "ZQL IVM Query library",
   "private": true,

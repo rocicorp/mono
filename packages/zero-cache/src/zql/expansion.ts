@@ -1,10 +1,5 @@
-import type {
-  AST,
-  Condition,
-  Ordering,
-  Selector,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
+import type {AST, Condition, Ordering, Selector} from 'zql/src/zql/ast/ast.js';
 import type {ServerAST, SubQuery} from './server-ast.js';
 
 /**

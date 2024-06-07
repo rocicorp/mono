@@ -1,12 +1,12 @@
 import {describe, expect, test} from 'vitest';
+import * as agg from 'zql/src/zql/query/agg.js';
+import {exp, or} from '../../../../zql/src/zql/query/entity-query.js';
 import {
   createRandomAlbums,
   createRandomArtists,
   createRandomTracks,
   newZero,
 } from './integration-test-util.js';
-import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
-import {exp, or} from '../../../../zql/src/zql/query/entity-query.js';
 
 describe('count', async () => {
   const z = newZero();

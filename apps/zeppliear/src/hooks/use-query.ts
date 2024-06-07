@@ -1,8 +1,8 @@
-import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
-import type {ResultType} from '@rocicorp/zql/src/zql/query/statement.js';
 import {useEffect, useRef, useState} from 'react';
 import type {EntityQuery} from 'zero-client';
-export type {ResultType} from '@rocicorp/zql/src/zql/query/statement.js';
+import type {FromSet} from 'zql/src/zql/query/entity-query.js';
+import type {ResultType} from 'zql/src/zql/query/statement.js';
+export type {ResultType} from 'zql/src/zql/query/statement.js';
 
 export function useQuery<From extends FromSet, Return>(
   q: EntityQuery<From, Return>,

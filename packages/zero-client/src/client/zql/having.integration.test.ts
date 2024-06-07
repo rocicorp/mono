@@ -1,12 +1,12 @@
 import {describe, expect, test} from 'vitest';
+import * as agg from 'zql/src/zql/query/agg.js';
 import {
   Artist,
-  bulkSet,
-  newZero,
   Track,
   TrackArtist,
+  bulkSet,
+  newZero,
 } from './integration-test-util.js';
-import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 
 describe('having against scalar', async () => {
   const z = newZero();

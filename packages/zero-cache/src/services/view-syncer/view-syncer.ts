@@ -1,7 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import type {
   ChangeDesiredQueriesBody,
@@ -9,6 +8,7 @@ import type {
   Downstream,
   InitConnectionMessage,
 } from 'zero-protocol';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import {initStorageSchema} from '../../storage/schema.js';
 import type {JSONObject} from '../../types/bigint-json.js';

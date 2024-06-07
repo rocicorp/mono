@@ -1,11 +1,5 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import type {Context as ZQLContext} from '@rocicorp/zql/src/zql/context/context.js';
-import {ZeroContext} from '@rocicorp/zql/src/zql/context/zero-context.js';
-import {Materialite} from '@rocicorp/zql/src/zql/ivm/materialite.js';
-import type {FromSet} from '@rocicorp/zql/src/zql/query/entity-query.js';
-import {EntityQuery} from '@rocicorp/zql/src/zql/query/entity-query.js';
-import type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
 import type {MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
@@ -53,6 +47,12 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from 'zero-protocol/src/pull.js';
+import type {Context as ZQLContext} from 'zql/src/zql/context/context.js';
+import {ZeroContext} from 'zql/src/zql/context/zero-context.js';
+import {Materialite} from 'zql/src/zql/ivm/materialite.js';
+import type {FromSet} from 'zql/src/zql/query/entity-query.js';
+import {EntityQuery} from 'zql/src/zql/query/entity-query.js';
+import type {Entity} from 'zql/src/zql/schema/entity-schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {

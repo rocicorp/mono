@@ -1,9 +1,9 @@
-import {joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
-import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
-import {exp, not, or} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import fc from 'fast-check';
 import * as v from 'shared/src/valita.js';
 import {expect, test} from 'vitest';
+import {joinSymbol} from 'zql/src/zql/ivm/types.js';
+import * as agg from 'zql/src/zql/query/agg.js';
+import {exp, not, or} from 'zql/src/zql/query/entity-query.js';
 import {nanoid} from '../../util/nanoid.js';
 import {ENTITIES_KEY_PREFIX} from '../keys.js';
 import {Zero, getInternalReplicacheImplForTesting} from '../zero.js';

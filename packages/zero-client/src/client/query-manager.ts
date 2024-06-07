@@ -1,12 +1,12 @@
-import {AST, normalizeAST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import type {ClientID} from 'replicache';
-import type {ChangeDesiredQueriesMessage, QueriesPatch} from 'zero-protocol';
-import type {ReadTransaction} from '../mod.js';
-import xxh from 'xxhashjs';
-import {GOT_QUERIES_KEY_PREFIX, desiredQueriesPrefixForClient} from './keys.js';
 import type {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import {must} from 'shared/src/must.js';
-import type {GotCallback} from '@rocicorp/zql/src/zql/context/context.js';
+import xxh from 'xxhashjs';
+import type {ChangeDesiredQueriesMessage, QueriesPatch} from 'zero-protocol';
+import {AST, normalizeAST} from 'zql/src/zql/ast/ast.js';
+import type {GotCallback} from 'zql/src/zql/context/context.js';
+import type {ReadTransaction} from '../mod.js';
+import {GOT_QUERIES_KEY_PREFIX, desiredQueriesPrefixForClient} from './keys.js';
 
 const defaultGotCallback = () => {};
 

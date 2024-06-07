@@ -1,8 +1,3 @@
-export type {Entity} from '@rocicorp/zql/src/zql/schema/entity-schema.js';
-export type {
-  EntityQuery,
-  FromSet,
-} from '@rocicorp/zql/src/zql/query/entity-query.js';
 export {
   IDBNotFoundError,
   TransactionClosedError,
@@ -63,5 +58,7 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from 'replicache';
+export type {EntityQuery, FromSet} from 'zql/src/zql/query/entity-query.js';
+export type {Entity} from 'zql/src/zql/schema/entity-schema.js';
 export type {ZeroOptions} from './client/options.js';
-export {Zero, QueryDefs} from './client/zero.js';
+export {QueryDefs, Zero} from './client/zero.js';

@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {compareUTF8} from 'compare-utf8';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {ReadonlyJSONValue, deepEqual} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import type {Storage} from '../../storage/storage.js';
 import {WriteCache} from '../../storage/write-cache.js';

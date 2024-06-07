@@ -24,8 +24,6 @@
     "skipLibCheck": true,
     "baseUrl": "./packages/",
     "paths": {
-      "@rocicorp/zql": ["zql/src/mod.ts"],
-      "@rocicorp/zql/src/*": ["zql/src/*"],
       "cf-shared/src/*": ["../cf-shared/src/*"],
       "datadog": ["datadog/src/mod.ts"],
       "datadog/src/*": ["datadog/src/*"],
@@ -40,7 +38,9 @@
       "zero-client": ["zero-client/src/mod.ts"],
       "zero-client/src/*": ["zero-client/src/*"],
       "zero-protocol": ["zero-protocol/src/mod.ts"],
-      "zero-protocol/src/*": ["zero-protocol/src/*"]
+      "zero-protocol/src/*": ["zero-protocol/src/*"],
+      "zql": ["zql/src/mod.ts"],
+      "zql/src/*": ["zql/src/*"]
     }
   }
 }

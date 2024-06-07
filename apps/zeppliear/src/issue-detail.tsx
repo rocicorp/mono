@@ -1,15 +1,10 @@
 import {Delete as DeleteIcon, Edit as EditIcon} from '@mui/icons-material';
-import {
-  WhereCondition,
-  and,
-  exp,
-  or,
-} from '@rocicorp/zql/src/zql/query/entity-query.js';
 import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
 import {must} from 'shared/src/must.js';
 import type {EntityQuery} from 'zero-client';
+import {WhereCondition, and, exp, or} from 'zql/src/zql/query/entity-query.js';
 import type {Collections} from './app.jsx';
 import ArrowIcon from './assets/icons/arrow.svg?react';
 import DefaultAvatarIcon from './assets/icons/avatar.svg?react';

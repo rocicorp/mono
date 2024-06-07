@@ -1,4 +1,4 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 
 // Replace this with the `subQueries` field if support is added in the base AST type.
 export type SubQuery = {

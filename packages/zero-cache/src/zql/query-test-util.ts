@@ -5,7 +5,7 @@ import type {
   Selector,
   SimpleCondition,
   SimpleOperator,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
+} from 'zql/src/zql/ast/ast.js';
 
 // Readability helpers
 export function and(...conditions: Condition[]): Conjunction {
