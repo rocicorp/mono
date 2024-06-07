@@ -33,13 +33,11 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
  */
 async function buildReplicache(options) {
   const define = await makeDefine(options.mode);
-  const {ext, mode, external = [], ...restOfOptions} = options;
-  // crypto is used as a fallback in older node versions
-  external.push('node:*', 'crypto');
+  const {ext, mode, external, ...restOfOptions} = options;
   const outfile = path.join(dirname, '..', 'out', 'replicache.' + ext);
   const result = await esbuild.build({
     ...sharedOptions(options.minify, metafile),
-    external,
+    ...(external ? {external} : {}),
     ...restOfOptions,
     format: 'esm',
     // Use neutral to remove the automatic define for process.env.NODE_ENV

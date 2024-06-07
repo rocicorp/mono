@@ -1,4 +1,3 @@
-import * as crypto from 'shared/src/crypto.js';
 import type {ClientID} from './ids.js';
 
 let sessionID = '';

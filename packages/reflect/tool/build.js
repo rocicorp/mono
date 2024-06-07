@@ -115,7 +115,7 @@ async function buildPackages() {
     'reflect-shared',
     'reflect-react',
   );
-  external.push('node:*', 'crypto');
+  external.push('node:diagnostics_channel');
 
   await esbuild.build({
     ...shared,
