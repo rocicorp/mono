@@ -228,6 +228,7 @@ class ReplicatorStub implements Replicator {
         ':version',
         'v0',
       )}`,
+
       {method: 'POST'},
     );
     const data = await res.json();
@@ -246,6 +247,9 @@ class ReplicatorStub implements Replicator {
       )}`,
       {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(req),
       },
     );

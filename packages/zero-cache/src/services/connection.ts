@@ -24,7 +24,10 @@ export function handleConnection(
   socket: WebSocket,
   request: FastifyRequest,
 ) {
-  const url = new URL(request.url);
+  const url = new URL(
+    request.url,
+    request.headers.origin ?? 'http://localhost',
+  );
 
   const {params, error} = getConnectParams(url);
 

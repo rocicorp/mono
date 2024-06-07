@@ -7,9 +7,10 @@ import {
   REPLICATOR_STATUS_PATTERN,
   VERSION_CHANGES_PATTERN,
 } from './paths.js';
-import type {RegisterInvalidationFiltersRequest} from './replicator/replicator.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 import type {DurableStorage} from '../storage/durable-storage.js';
+import type {RegisterInvalidationFiltersRequest} from './replicator/replicator.js';
+
 export class ReplicatorDO {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
@@ -46,10 +47,14 @@ export class ReplicatorDO {
     this.#fastify.post(REPLICATOR_STATUS_PATTERN, this.#status);
     this.#fastify.post(
       REGISTER_FILTERS_PATTERN,
-      async (request: FastifyRequest, reply: FastifyReply) => {
+      async (
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        request: FastifyRequest<{Body: RegisterInvalidationFiltersRequest}>,
+        reply: FastifyReply,
+      ) => {
         const replicator = await this.#serviceRunner.getReplicator();
         const response = await replicator.registerInvalidationFilters(
-          request.body as RegisterInvalidationFiltersRequest, //this needs to validate and not cast
+          request.body,
         );
         await reply.send(response);
       },
