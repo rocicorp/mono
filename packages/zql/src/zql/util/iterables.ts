@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 
-export function gen<T>(generator: () => Iterator<T>) {
+export function gen<T>(generator: () => Iterator<T>): Iterable<T> {
   return {
     [Symbol.iterator]() {
       return generator();
@@ -8,27 +8,30 @@ export function gen<T>(generator: () => Iterator<T>) {
   };
 }
 
-export function genConcat<T>(iters: Iterable<T>[]) {
+export function genConcat<T>(iterables: Iterable<T>[]): Iterable<T> {
   return {
     *[Symbol.iterator]() {
-      for (const iter of iters) {
+      for (const iter of iterables) {
         yield* iter;
       }
     },
   };
 }
 
-export function genMap<T, U>(s: Iterable<T>, cb: (x: T) => U) {
+export function genMap<T, U>(
+  iterable: Iterable<T>,
+  cb: (x: T) => U,
+): Iterable<U> {
   return {
     *[Symbol.iterator]() {
-      for (const x of s) {
+      for (const x of iterable) {
         yield cb(x);
       }
     },
   };
 }
 
-export function genCached<T>(s: Iterable<T>) {
+export function genCached<T>(s: Iterable<T>): Iterable<T> {
   const cache: T[] = [];
 
   // we have to start it outside so it doesn't get re-started
@@ -67,21 +70,12 @@ export function genCached<T>(s: Iterable<T>) {
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   f: (x: T) => x is S,
-): {
-  [Symbol.iterator](): Generator<S, void, unknown>;
-};
-export function genFilter<T>(
-  s: Iterable<T>,
-  f: (x: T) => boolean,
-): {
-  [Symbol.iterator](): Generator<T, void, unknown>;
-};
+): Iterable<S>;
+export function genFilter<T>(s: Iterable<T>, f: (x: T) => boolean): Iterable<T>;
 export function genFilter<S extends T, T>(
   s: Iterable<T>,
   cb: (x: T) => boolean,
-): {
-  [Symbol.iterator](): Generator<S, void, unknown>;
-} {
+): Iterable<S> {
   return {
     *[Symbol.iterator]() {
       for (const x of s) {
@@ -96,7 +90,7 @@ export function genFilter<S extends T, T>(
 export function genFlatMap<T, U>(
   iter: Iterable<T>,
   f: (t: T, index: number) => Iterable<U>,
-) {
+): Iterable<U> {
   return {
     *[Symbol.iterator]() {
       let index = 0;
@@ -120,7 +114,7 @@ export function* mapIter<T, U>(
 export function* iterInOrder<T>(
   iterables: Iterable<T>[],
   comparator: (l: T, r: T) => number,
-) {
+): IterableIterator<T> {
   const iterators = iterables.map(i => i[Symbol.iterator]());
   try {
     const current = iterators.map(i => i.next());
