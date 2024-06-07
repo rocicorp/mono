@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-replicator.ts",
+    "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-service-runner.ts",
     "miniflare-test": "npm run build && vitest run --config vitest.config.miniflare.ts '.test.ts'",
     "node-test": "vitest run --config vitest.config.node.ts",
     "pg-test": "vitest run --config vitest.config.pg.ts",

@@ -21,8 +21,8 @@ function createReplicatorDO<Env extends ServiceRunnerEnv>(
       const {logSink, logLevel} = getOptions(env);
       super(logSink, logLevel, storage, env);
     }
-    start() {
-      super.start();
+    async start() {
+      await super.start();
     }
   };
 }
@@ -34,4 +34,4 @@ const replicatorInstance = new (createReplicatorDO((env: ServiceRunnerEnv) => ({
   logSink: createLogSink(env),
 })))(stroage, env);
 
-replicatorInstance.start();
+void replicatorInstance.start();

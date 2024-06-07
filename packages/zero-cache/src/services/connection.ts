@@ -15,7 +15,7 @@ import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
 import type {FastifyRequest} from 'fastify';
 import type {WebSocket} from '@fastify/websocket';
-import {CloseEvent, ErrorEvent, MessageEvent, WebSocket as ws} from 'ws';
+import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 
 export function handleConnection(
   lc: LogContext,
@@ -24,60 +24,25 @@ export function handleConnection(
   socket: WebSocket,
   request: FastifyRequest,
 ) {
-  // Access headers directly as object properties
-  if (request.headers['upgrade'] !== 'websocket') {
-    lc.info?.('Missing Upgrade header for', request.url);
-    return {status: 400, body: 'Expected WebSocket Upgrade header'};
-  }
-  const serverWS = socket;
-  const clientWS = new ws('wss://example.com/path'); // Modify URL as needed
   const url = new URL(request.url);
-  serverWS.accept();
 
   const {params, error} = getConnectParams(url);
 
   if (error !== null) {
-    sendError(lc, serverWS, [
-      'error',
-      ErrorKind.InvalidConnectionRequest,
-      error,
-    ]);
+    sendError(lc, socket, ['error', ErrorKind.InvalidConnectionRequest, error]);
   } else {
     const {clientID} = params;
     const existing = clientConnections.get(clientID);
     if (existing) {
       existing.close();
     }
-    const connection = new Connection(
-      lc,
-      serviceRunner,
-      params,
-      serverWS,
-      () => {
-        if (clientConnections.get(clientID) === connection) {
-          clientConnections.delete(clientID);
-        }
-      },
-    );
+    const connection = new Connection(lc, serviceRunner, params, socket, () => {
+      if (clientConnections.get(clientID) === connection) {
+        clientConnections.delete(clientID);
+      }
+    });
     clientConnections.set(clientID, connection);
   }
-
-  // Sec-WebSocket-Protocol is used as a mechanism for sending `auth`
-  // since custom headers are not supported by the browser WebSocket API, the
-  // Sec-WebSocket-Protocol semantics must be followed. Send a
-  // Sec-WebSocket-Protocol response header with a value matching the
-  // Sec-WebSocket-Protocol request header, to indicate support for the
-  // protocol, otherwise the client will close the connection.
-  const responseHeaders = new Headers();
-  const protocol = request.headers['sec-websocket-protocol'];
-  if (protocol) {
-    responseHeaders.set('Sec-WebSocket-Protocol', protocol);
-  }
-  return {
-    status: 101,
-    webSocket: clientWS,
-    headers: responseHeaders,
-  };
 }
 
 /**
@@ -145,7 +110,7 @@ export class Connection {
     this.#outboundStream?.cancel();
     this.#outboundStream = undefined;
     this.#onClose();
-    if (this.#ws.readyState !== ws.CLOSED) {
+    if (this.#ws.readyState !== this.#ws.CLOSED) {
       this.#ws.close();
     }
 

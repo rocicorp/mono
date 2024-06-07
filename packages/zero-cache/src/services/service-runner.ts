@@ -224,7 +224,7 @@ class ReplicatorStub implements Replicator {
   async status() {
     const lc = this.#lc.withContext('method', 'status');
     const res = await fetch(
-      `https://${this.#host}${REPLICATOR_STATUS_PATTERN.replace(
+      `http://${this.#host}${REPLICATOR_STATUS_PATTERN.replace(
         ':version',
         'v0',
       )}`,
@@ -240,7 +240,7 @@ class ReplicatorStub implements Replicator {
   ): Promise<RegisterInvalidationFiltersResponse> {
     const lc = this.#lc.withContext('method', 'registerInvalidationFilters');
     const res = await fetch(
-      `https://${this.#host}${REGISTER_FILTERS_PATTERN.replace(
+      `http://${this.#host}${REGISTER_FILTERS_PATTERN.replace(
         ':version',
         'v0',
       )}`,
@@ -262,7 +262,7 @@ class ReplicatorStub implements Replicator {
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
     const lc = this.#lc.withContext('method', 'versionChanges');
     const ws = new WebSocket(
-      `https://${this.#host}${VERSION_CHANGES_PATTERN.replace(
+      `http://${this.#host}${VERSION_CHANGES_PATTERN.replace(
         ':version',
         'v0',
       )}`,

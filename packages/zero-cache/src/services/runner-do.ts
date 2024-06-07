@@ -26,12 +26,6 @@ export class ServiceRunnerDO {
     this.#lc = lc;
 
     this.#fastify = Fastify();
-    void (async () => {
-      this.#fastify = Fastify();
-      await this.#fastify.register(websocket);
-    })();
-    this.#fastify.get(CONNECT_URL_PATTERN, {websocket: true}, this.#connect);
-    this.#fastify.get(STATUS_URL_PATTERN, this.#status);
   }
 
   #connect = async (socket: WebSocket, request: FastifyRequest) => {
@@ -62,7 +56,10 @@ export class ServiceRunnerDO {
         .send(error instanceof Error ? error.message : String(error));
     }
   };
-  start() {
+  async start() {
+    await this.#fastify.register(websocket);
+    this.#fastify.get(CONNECT_URL_PATTERN, {websocket: true}, this.#connect);
+    this.#fastify.get(STATUS_URL_PATTERN, this.#status);
     this.#fastify.listen({port: 3000}, (err, address) => {
       if (err) {
         this.#lc.error?.('Error starting server:', err);

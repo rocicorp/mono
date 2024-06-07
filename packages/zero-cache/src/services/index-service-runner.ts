@@ -21,19 +21,18 @@ function createServiceRunnerDO<Env extends ServiceRunnerEnv>(
       const {logSink, logLevel} = getOptions(env);
       super(logSink, logLevel, storage, env);
     }
-    start() {
-      super.start();
+    async start() {
+      await super.start();
     }
   };
 }
 
 const storage = new DurableStorage();
 const env = process.env as unknown as ServiceRunnerEnv;
-
 const runnerInstance = new (createServiceRunnerDO((env: ServiceRunnerEnv) => ({
   logLevel: getLogLevel(env),
   logSink: createLogSink(env),
 })))(storage, env);
 
 // Now you can call start on these instances
-runnerInstance.start();
+void runnerInstance.start();

@@ -28,15 +28,11 @@ export class ReplicatorDO {
     this.#lc = lc;
     this.#serviceRunner = new ServiceRunner(lc, storage, env, true);
     this.#fastify = Fastify();
-    void (async () => {
-      this.#fastify = Fastify();
-      await this.#fastify.register(websocket);
-    })();
-
-    this.#initRoutes();
   }
 
-  start() {
+  async start() {
+    await this.#fastify.register(websocket);
+    this.#initRoutes();
     this.#fastify.listen({port: 3001}, (err, address) => {
       if (err) {
         this.#lc.error?.('Error starting server:', err);
@@ -77,12 +73,7 @@ export class ReplicatorDO {
     }
   };
 
-  #versionChanges = async (socket: WebSocket, request: FastifyRequest) => {
-    if (request.headers['upgrade'] !== 'websocket') {
-      this.#lc.info?.('Missing Upgrade header for', request.url);
-      return new Response('expected WebSocket Upgrade header', {status: 400});
-    }
-
+  #versionChanges = async (socket: WebSocket) => {
     const replicator = await this.#serviceRunner.getReplicator();
     const subscription = await replicator.versionChanges();
 
@@ -91,22 +82,5 @@ export class ReplicatorDO {
       subscription,
       socket,
     );
-
-    // Sec-WebSocket-Protocol is used as a mechanism for sending `auth`
-    // since custom headers are not supported by the browser WebSocket API, the
-    // Sec-WebSocket-Protocol semantics must be followed. Send a
-    // Sec-WebSocket-Protocol response header with a value matching the
-    // Sec-WebSocket-Protocol request header, to indicate support for the
-    // protocol, otherwise the client will close the connection.
-    const responseHeaders = new Headers();
-    const protocol = request.headers['sec-websocket-protocol'];
-    if (protocol) {
-      socket.setProtocol(protocol);
-    }
-    return {
-      status: 101,
-      webSocket: socket,
-      headers: responseHeaders,
-    };
   };
 }
