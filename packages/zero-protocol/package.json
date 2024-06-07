@@ -15,7 +15,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
-    "@rocicorp/zql": "0.0.0",
+    "zql": "0.0.0",
     "shared": "0.0.0",
     "typescript": "^5.4.2"
   },

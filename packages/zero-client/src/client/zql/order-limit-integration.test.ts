@@ -1,7 +1,7 @@
-import {canonicalComparator} from '@rocicorp/zql/src/zql/context/zero-context.js';
-import {makeComparator} from '@rocicorp/zql/src/zql/ivm/compare.js';
-import {Comparator, joinSymbol} from '@rocicorp/zql/src/zql/ivm/types.js';
 import {describe, expect, test} from 'vitest';
+import {canonicalComparator} from 'zql/src/zql/context/zero-context.js';
+import {makeComparator} from 'zql/src/zql/ivm/compare.js';
+import {Comparator, joinSymbol} from 'zql/src/zql/ivm/types.js';
 import {must} from '../../../../shared/src/must.js';
 import {
   Album,

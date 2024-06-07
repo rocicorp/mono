@@ -1,5 +1,5 @@
-import type {Condition, Primitive} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {describe, expect, test} from 'vitest';
+import type {Condition, Primitive} from 'zql/src/zql/ast/ast.js';
 import {
   NormalizedInvalidationFilterSpec,
   invalidationHash,

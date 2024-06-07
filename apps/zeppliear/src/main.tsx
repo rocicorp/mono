@@ -1,8 +1,8 @@
 import {UndoManager} from '@rocicorp/undo';
-import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import {createRoot} from 'react-dom/client';
 import {must} from 'shared/src/must.js';
 import {EntityQuery, FromSet, Zero} from 'zero-client';
+import * as agg from 'zql/src/zql/query/agg.js';
 import App, {Collections} from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
 import './index.css';
