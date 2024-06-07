@@ -1,4 +1,3 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {
   DeepReadonly,
   IndexKey,
@@ -13,6 +12,7 @@ import {
 import type {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import {expect, test, vi} from 'vitest';
 import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import {toGotQueriesKey} from './keys.js';
 import {QueryManager} from './query-manager.js';
 

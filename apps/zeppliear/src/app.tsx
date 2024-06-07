@@ -1,10 +1,10 @@
 import type {UndoManager} from '@rocicorp/undo';
-import * as agg from '@rocicorp/zql/src/zql/query/agg.js';
 import classnames from 'classnames';
 import {pickBy} from 'lodash';
 import {memo, useCallback, useEffect, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
 import type {EntityQuery, Zero} from 'zero-client';
+import * as agg from 'zql/src/zql/query/agg.js';
 import {getIssueOrder, getViewStatuses} from './filters.js';
 import {
   FiltersState,

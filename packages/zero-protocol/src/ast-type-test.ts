@@ -1,3 +1,4 @@
+import type * as v from 'shared/src/valita.js';
 import type {
   AST,
   Aggregate,
@@ -15,7 +16,7 @@ import type {
   SetOps,
   SimpleCondition,
   SimpleOperator,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
+} from 'zql/src/zql/ast/ast.js';
 import type {
   aggregateSchema,
   aggregationSchema,
@@ -34,11 +35,10 @@ import type {
   simpleConditionSchema,
   simpleOperatorSchema,
 } from './ast.js';
-import type * as v from 'shared/src/valita.js';
 
 /**
  * The following ensures the AST schemas in zero-protocol are in sync
- * with the AST types from '@rocicorp/zql/src/zql/ast/ast.js'.
+ * with the AST types from 'zql/src/zql/ast/ast.js'.
  */
 (t: Selector, inferredT: v.Infer<typeof selectorSchema>) => {
   t satisfies v.Infer<typeof selectorSchema>;

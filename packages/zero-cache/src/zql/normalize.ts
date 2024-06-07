@@ -1,12 +1,12 @@
+import {ident} from 'pg-format';
+import type {JSONValue} from 'postgres';
+import {assert} from 'shared/src/asserts.js';
 import {
   Aggregate,
   normalizeAST,
   Selector,
   type Condition,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
-import {ident} from 'pg-format';
-import type {JSONValue} from 'postgres';
-import {assert} from 'shared/src/asserts.js';
+} from 'zql/src/zql/ast/ast.js';
 import {create64} from '../types/xxhash.js';
 import type {ServerAST} from './server-ast.js';
 

@@ -1,9 +1,9 @@
-import type {AST} from '@rocicorp/zql/src/zql/ast/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Downstream, PokePartBody} from 'zero-protocol';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import {DurableStorage} from '../../storage/durable-storage.js';
 import {testDBs} from '../../test/db.js';

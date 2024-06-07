@@ -1,12 +1,12 @@
+import {compareUTF8} from 'compare-utf8';
+import {defined} from 'shared/src/arrays.js';
 import type {
   Condition,
   Primitive,
   Selector,
   SimpleCondition,
   SimpleOperator,
-} from '@rocicorp/zql/src/zql/ast/ast.js';
-import {compareUTF8} from 'compare-utf8';
-import {defined} from 'shared/src/arrays.js';
+} from 'zql/src/zql/ast/ast.js';
 import {BigIntJSON} from '../types/bigint-json.js';
 import {
   NormalizedInvalidationFilterSpec,
