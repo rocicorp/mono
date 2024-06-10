@@ -24,6 +24,7 @@
     "skipLibCheck": true,
     "baseUrl": "./packages/",
     "paths": {
+      "btree": ["btree/b+tree.ts"],
       "cf-shared/src/*": ["../cf-shared/src/*"],
       "datadog": ["datadog/src/mod.ts"],
       "datadog/src/*": ["datadog/src/*"],

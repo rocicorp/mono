@@ -1,6 +1,6 @@
+import type {ISortedMap} from 'btree';
+import BTree from 'btree';
 import {must} from 'shared/src/must.js';
-import type {ISortedMap} from 'sorted-btree-roci';
-import BTree from 'sorted-btree-roci';
 import type {Ordering, Primitive, Selector} from '../../ast/ast.js';
 import {gen} from '../../util/iterables.js';
 import {makeComparator} from '../compare.js';
