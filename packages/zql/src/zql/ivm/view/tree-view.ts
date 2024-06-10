@@ -1,6 +1,6 @@
+import BTree from 'btree';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
-import BTree from 'sorted-btree-roci';
 import type {Ordering} from '../../ast/ast.js';
 import type {Context} from '../../context/context.js';
 import {makeComparator} from '../compare.js';

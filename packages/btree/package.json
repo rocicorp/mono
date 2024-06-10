@@ -1,15 +1,13 @@
 {
-  "name": "sorted-btree-roci",
+  "name": "btree",
+  "private": true,
   "version": "0.0.0",
   "description": "A sorted list of key-value pairs in a fast, typed in-memory B+ tree with a powerful API.",
   "main": "b+tree.js",
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "build": "tsc",
-    "prepare": "npm run build",
     "check-types": "tsc --noEmit",
-    "safePublish": "npm run build && testpack && npm publish",
     "benchmark": "npm run build && node benchmarks.js"
   },
   "files": [

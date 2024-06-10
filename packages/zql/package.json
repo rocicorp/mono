@@ -20,6 +20,7 @@
     "@rocicorp/logger": "^5.2.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rocicorp/rails": "^0.10.0",
+    "btree": "0.0.0",
     "fast-check": "^3.18.0",
     "nanoid": "^4.0.2",
     "playwright": "^1.43.1",
@@ -34,7 +35,6 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
-    "compare-utf8": "^0.1.1",
-    "sorted-btree-roci": "0.0.0"
+    "compare-utf8": "^0.1.1"
   }
 }
