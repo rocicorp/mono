@@ -32,6 +32,10 @@ export class Statement<Return> implements IStatement<Return> {
     this.#context = context;
   }
 
+  get view() {
+    return this.#materialization;
+  }
+
   #getMaterialization(): PromiseLike<View<Return>> {
     if (this.#materialization === undefined) {
       this.#materialization = createMaterialization(this.#ast, this.#context);
