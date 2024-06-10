@@ -89,6 +89,10 @@ export class DifferenceStream<T extends PipelineEntity> {
     return this;
   }
 
+  get numDownstreams() {
+    return this.#downstreams.size;
+  }
+
   newDifference(version: Version, data: Multiset<T>, reply: Reply | undefined) {
     if (reply) {
       const requestors = this.#requestors.get(reply.replyingTo);
