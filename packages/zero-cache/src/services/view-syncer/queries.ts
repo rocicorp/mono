@@ -175,27 +175,25 @@ class ResultParser {
       rowWithVersion: JSONObject;
     };
 
-    const parsed = new Map<string, ParsedRow>(); // Maps CVRPath.row() => RowResult
+    const parsed = new Map<string, ParsedRow>(); // Maps CVRPath.row() => ParsedRow
     for (const result of results) {
-      const rows = new Map<string, ExtractedRow>();
-
+      // Partition the result's column-aliases into their respective sub-queried rows.
+      const subQueries = new Map<string, ExtractedRow>();
       for (const [alias, value] of Object.entries(result)) {
         const aliasInfo = this.#columnAliases.get(alias);
         assert(aliasInfo, `Unexpected column alias ${alias}`);
 
-        const {rowAlias, column} = aliasInfo;
-        let row = rows.get(rowAlias);
+        const {subQueryName, column} = aliasInfo;
+        let row = subQueries.get(subQueryName);
         if (!row) {
           row = {aliasInfo, rowWithVersion: {}};
-          rows.set(rowAlias, row);
+          subQueries.set(subQueryName, row);
         }
         row.rowWithVersion = {...row.rowWithVersion, [column]: value};
       }
 
-      // Now, merge each row into its corresponding RowResult by row key.
-      for (const extractedRow of rows.values()) {
-        const {aliasInfo, rowWithVersion} = extractedRow;
-
+      // Now, merge each row into its corresponding ParsedRow by row key.
+      for (const {aliasInfo, rowWithVersion} of subQueries.values()) {
         // Exclude the _0_version column from what is sent to the client.
         const {[ZERO_VERSION_COLUMN_NAME]: rowVersion, ...row} = rowWithVersion;
         if (rowVersion === null) {
@@ -285,7 +283,6 @@ export function splitLastComponent(
 }
 
 export type AliasInfo = {
-  rowAlias: string;
   subQueryName: string;
   schema: string;
   table: string;
@@ -319,7 +316,6 @@ export function minifyAliases(ast: ServerAST): {
     const parts = orig.split(ALIAS_COMPONENT_SEPARATOR);
     assert(parts.length >= 3);
     columnAliases.set(newAlias, {
-      rowAlias: orig.substring(0, orig.lastIndexOf(ALIAS_COMPONENT_SEPARATOR)),
       subQueryName: parts
         .slice(0, parts.length - 3)
         .join(ALIAS_COMPONENT_SEPARATOR),

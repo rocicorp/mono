@@ -703,6 +703,35 @@ describe('db/transaction-pool', () => {
     });
   });
 
+  test('snapshot synchronization error handling', async () => {
+    const {exportSnapshot, cleanupExport, setSnapshot} =
+      synchronizedSnapshots();
+    const leader = new TransactionPool(
+      lc,
+      Mode.SERIALIZABLE,
+      exportSnapshot,
+      cleanupExport,
+    );
+    const followers = new TransactionPool(
+      lc,
+      Mode.READONLY,
+      setSnapshot,
+      undefined,
+      3,
+    );
+
+    const err = new Error('oh nose');
+
+    leader.fail(err);
+    followers.fail(err);
+
+    const result = await Promise.all([leader.run(db), followers.run(db)]).catch(
+      e => e,
+    );
+
+    expect(result).toBe(err);
+  });
+
   test('sharedReadOnlySnapshot', async () => {
     const processing = new Queue<boolean>();
     const readTask = () => async (tx: postgres.TransactionSql) => {
