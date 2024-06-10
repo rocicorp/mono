@@ -66,9 +66,11 @@ export class TransactionPool {
   /**
    * @param init A {@link Task} that is run in each Transaction before it begins
    *             processing general tasks. This can be used to to set the transaction
-   *             mode, export/set snapshots, etc.
+   *             mode, export/set snapshots, etc. This will be run even if
+   *             {@link fail} has been called on the pool.
    * @param cleanup A {@link Task} that is run in each Transaction before it closes.
-   *                This may be skipped if {@link fail} is called.
+   *                This will be run even if {@link fail} has been called, or if a
+   *                preceding Task threw an Error.
    * @param initialWorkers The initial number of transaction workers to process tasks.
    *                       This is the steady state number of workers that will be kept
    *                       alive if the TransactionPool is long lived.
@@ -231,18 +233,25 @@ export class TransactionPool {
           ? {task: this.#init}
           : await this.#tasks.dequeue(timeoutTask, timeoutMs);
 
-        while (task !== 'done') {
-          if (this.#failure || task instanceof Error) {
-            await Promise.allSettled(pending); // avoid unhandled rejections
-            throw this.#failure ?? task;
-          }
-          await executeTask(task);
+        try {
+          while (task !== 'done') {
+            if (
+              task instanceof Error ||
+              (task.task !== this.#init && this.#failure)
+            ) {
+              await Promise.allSettled(pending); // avoid unhandled rejections
+              throw this.#failure ?? task;
+            }
+            await executeTask(task);
 
-          // await the next task.
-          task = await this.#tasks.dequeue(timeoutTask, timeoutMs);
-        }
-        if (this.#cleanup) {
-          await executeTask({task: this.#cleanup});
+            // await the next task.
+            task = await this.#tasks.dequeue(timeoutTask, timeoutMs);
+          }
+        } finally {
+          // Execute the cleanup task even on failure.
+          if (this.#cleanup) {
+            await executeTask({task: this.#cleanup});
+          }
         }
 
         lc.debug?.('worker done');
