@@ -10,7 +10,6 @@ import {DurableStorage} from '../storage/durable-storage.js';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
-import {Subscription} from '../types/subscription.js';
 import {
   InvalidationWatcher,
   InvalidationWatcherService,
@@ -279,10 +278,6 @@ class ReplicatorStub implements Replicator {
     }
     ws.accept();
 
-    const subscription: Subscription<VersionChange> =
-      new Subscription<VersionChange>({cleanup: () => closer.close()});
-    const closer = streamIn(lc, ws, subscription, versionChangeSchema);
-
-    return subscription;
+    return streamIn(lc, ws, versionChangeSchema);
   }
 }
