@@ -61,4 +61,4 @@ export type {
 export type {EntityQuery, FromSet} from 'zql/src/zql/query/entity-query.js';
 export type {Entity} from 'zql/src/zql/schema/entity-schema.js';
 export type {ZeroOptions} from './client/options.js';
-export {QueryDefs, Zero} from './client/zero.js';
+export {Zero, type QueryDefs} from './client/zero.js';
