@@ -24,7 +24,7 @@
     "@mui/icons-material": "^5.5.1",
     "@mui/material": "^5.5.2",
     "@mui/utils": "^5.4.4",
-    "@rocicorp/undo": "^0.2.0",
+    "@rocicorp/undo": "^0.2.1",
     "@tailwindcss/forms": "^0.5.0",
     "@tailwindcss/line-clamp": "^0.3.1",
     "@uidotdev/usehooks": "^2.4.1",

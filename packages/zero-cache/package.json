@@ -22,10 +22,9 @@
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
     "@postgresql-typed/oids": "^0.2.0",
-    "@rocicorp/lock": "^1.0.3",
-    "@rocicorp/logger": "^5.2.1",
-    "@rocicorp/resolver": "^1.0.1",
-    "zql": "0.0.0",
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.2.2",
+    "@rocicorp/resolver": "^1.0.2",
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",
     "eventemitter3": "^5.0.1",
@@ -35,7 +34,8 @@
     "pg-logical-replication": "^2.0.5",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
-    "zero-protocol": "0.0.0"
+    "zero-protocol": "0.0.0",
+    "zql": "0.0.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.2.0",

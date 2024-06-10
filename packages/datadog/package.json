@@ -5,8 +5,8 @@
   "type": "module",
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
-    "@rocicorp/lock": "^1.0.3",
-    "@rocicorp/logger": "^5.2.1",
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.2.2",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/node-fetch": "^2.6.2",
     "cross-fetch": "^3.1.5",

@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@badrap/valita": "^0.3.0",
-    "@rocicorp/lock": "^1.0.3",
-    "@rocicorp/logger": "^5.2.1"
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.2.2"
   },
   "//1": "Note: we need these precise versions of miniflare and jest-environment-miniflare due to: https://github.com/rocicorp/reflect-server/issues/148",
   "devDependencies": {
