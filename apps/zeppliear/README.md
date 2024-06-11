@@ -6,27 +6,28 @@ Built with Zero and [Vite](https://vitejs.dev/),).
 
 Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
-# To run wrangler worker locally
+# To run fastify replicator and sync-runner locally
 
-update .dev.vars URIs to point to your internal ip address (169._._._ or 192._._._) do not use the 127.0.0.1 address
+update .env URIs to point to your internal ip address (169._._._ or 192._._._) do not use the 127.0.0.1 address
 
 ```
 UPSTREAM_URI = "postgresql://user:password@add.your.host.ip:6432/postgres"
 SYNC_REPLICA_URI = "postgres://user:password@add.your.host.ip:6433/postgres"
+REPLICATOR_HOST="127.0.0.1:3001"
 ```
 
-Open two windows one with docker-compose and the other wrangler:
+Open two windows one with docker-compose and the other workers:
 
 ```
 cd docker && docker-compose up
-npx wrangler dev --ip 0.0.0.0
+npm run start-workers
 ```
 
 # To run web locally
 
 ```
 npm install
-VITE_PUBLIC_SERVER='http://localhost:8787' npm run dev
+VITE_PUBLIC_SERVER="http://127.0.0.1:3000" npm run dev
 ```
 
 After you have visted the local website and the sync / replica tables have populated.
