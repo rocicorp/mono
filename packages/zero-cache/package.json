@@ -4,23 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.js",
-    "miniflare-test": "npm run build && vitest run --config vitest.config.miniflare.ts '.test.ts'",
+    "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-replicator.ts",
+    "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-service-runner.ts",
     "node-test": "vitest run --config vitest.config.node.ts",
     "pg-test": "vitest run --config vitest.config.pg.ts",
     "all-test": "npm run build && vitest run --config vitest.config.miniflare.ts",
-    "miniflare-test:watch": "vitest --config vitest.config.miniflare.ts",
     "node-test:watch": "vitest --config vitest.config.node.ts",
     "pg-test:watch": "vitest --config vitest.config.pg.ts",
-    "test": "npm run miniflare-test && npm run node-test && npm run pg-test",
+    "test": "npm run node-test && npm run pg-test",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "local": "node --loader ts-node/esm tool/local.ts"
+    "local": "node --loader ts-node/esm tool/local.ts",
+    "start": "concurrently --kill-others 'npm run start-replicator' 'npm run start-service-runner'"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
+    "@fastify/cors": "^9.0.1",
+    "@fastify/websocket": "^10.0.1",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.2.2",
@@ -28,6 +30,7 @@
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",
     "eventemitter3": "^5.0.1",
+    "fastify": "^4.27.0",
     "json-custom-numbers": "^3.1.1",
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",
@@ -35,23 +38,26 @@
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
     "zero-protocol": "0.0.0",
-    "zql": "0.0.0"
+    "zql": "0.0.0",
+    "xxhash-wasm": "^1.0.2"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.2.0",
-    "@cloudflare/workers-types": "^4.20231010.0",
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/pg": "^8.11.2",
     "@types/pg-format": "^1.0.5",
-    "@types/xxhashjs": "^0.2.4",
+    "@types/ws": "^8.5.10",
+    "@types/node": "^18.16.0",
     "cf-shared": "0.0.0",
+    "concurrently": "^8.2.1",
     "rollup-plugin-dts": "^5.3.0",
     "shared": "0.0.0",
     "typescript": "^5.4.2",
-    "vitest": "1.3.0"
+    "vitest": "1.3.0",
+    "ts-node": "^10.9.1"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

@@ -1,12 +1,7 @@
-import type {
-  DurableObjectLocationHint,
-  Fetcher,
-} from '@cloudflare/workers-types';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
-import {DurableStorage} from '../storage/durable-storage.js';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
@@ -15,7 +10,6 @@ import {
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
 import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
-import {getDOLocation} from './location.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
 import {
   REGISTER_FILTERS_PATTERN,
@@ -34,22 +28,21 @@ import {
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
 import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
-
+import type {DurableStorage} from '../storage/durable-storage.js';
+import WebSocket from 'ws';
 export interface ServiceRunnerEnv {
-  runnerDO: DurableObjectNamespace;
-  replicatorDO: DurableObjectNamespace;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   UPSTREAM_URI: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   SYNC_REPLICA_URI: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DO_LOCATION_HINT: DurableObjectLocationHint;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   LOG_LEVEL: LogLevel;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_LOGS_API_KEY?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   DATADOG_SERVICE_LABEL?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  REPLICATOR_HOST?: string;
 }
 
 const REPLICATOR_ID = 'r1';
@@ -72,12 +65,12 @@ export class ServiceRunner
 
   constructor(
     lc: LogContext,
-    state: DurableObjectState,
+    storage: DurableStorage,
     env: ServiceRunnerEnv,
     runReplicator: boolean,
   ) {
     this.#lc = lc;
-    this.#storage = new DurableStorage(state.storage);
+    this.#storage = storage;
     this.#env = env;
     // Connections are capped to stay within the DO limit of 6 TCP connections.
     // Note that the Replicator uses one extra connection for replication.
@@ -136,9 +129,10 @@ export class ServiceRunner
   }
 
   #getReplicatorStub(): ReplicatorStub {
-    const id = this.#env.replicatorDO.idFromName(REPLICATOR_ID);
-    const stub = this.#env.replicatorDO.get(id, getDOLocation(this.#env));
-    return new ReplicatorStub(this.#lc, stub);
+    if (!this.#env.REPLICATOR_HOST) {
+      throw new Error('REPLICATOR_HOST not set');
+    }
+    return new ReplicatorStub(this.#lc, this.#env.REPLICATOR_HOST);
   }
 
   getViewSyncer(clientGroupID: string): ViewSyncer {
@@ -221,20 +215,20 @@ export class ServiceRunner
 
 class ReplicatorStub implements Replicator {
   readonly #lc: LogContext;
-  readonly #stub: Fetcher;
-
-  constructor(lc: LogContext, stub: Fetcher) {
+  readonly #host: string;
+  constructor(lc: LogContext, host: string) {
     this.#lc = lc.withContext('stub', 'Replicator');
-    this.#stub = stub;
+    this.#host = host;
   }
 
   async status() {
     const lc = this.#lc.withContext('method', 'status');
-    const res = await this.#stub.fetch(
-      `https://unused.dev${REPLICATOR_STATUS_PATTERN.replace(
+    const res = await fetch(
+      `http://${this.#host}${REPLICATOR_STATUS_PATTERN.replace(
         ':version',
         'v0',
       )}`,
+
       {method: 'POST'},
     );
     const data = await res.json();
@@ -246,10 +240,16 @@ class ReplicatorStub implements Replicator {
     req: RegisterInvalidationFiltersRequest,
   ): Promise<RegisterInvalidationFiltersResponse> {
     const lc = this.#lc.withContext('method', 'registerInvalidationFilters');
-    const res = await this.#stub.fetch(
-      `https://unused.dev${REGISTER_FILTERS_PATTERN.replace(':version', 'v0')}`,
+    const res = await fetch(
+      `http://${this.#host}${REGISTER_FILTERS_PATTERN.replace(
+        ':version',
+        'v0',
+      )}`,
       {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(req),
       },
     );
@@ -263,21 +263,15 @@ class ReplicatorStub implements Replicator {
     return v.parse(data, registerInvalidationFiltersResponse);
   }
 
-  async versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
+  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
     const lc = this.#lc.withContext('method', 'versionChanges');
-    const res = await this.#stub.fetch(
-      `https://unused.dev${VERSION_CHANGES_PATTERN.replace(':version', 'v0')}`,
-      {headers: {upgrade: 'websocket'}},
+    const ws = new WebSocket(
+      `http://${this.#host}${VERSION_CHANGES_PATTERN.replace(
+        ':version',
+        'v0',
+      )}`,
     );
 
-    const ws = res.webSocket;
-    if (!ws) {
-      throw new Error(
-        `server did not accept WebSocket: ${res.status}: ${await res.text()}`,
-      );
-    }
-    ws.accept();
-
-    return streamIn(lc, ws, versionChangeSchema);
+    return Promise.resolve(streamIn(lc, ws, versionChangeSchema));
   }
 }

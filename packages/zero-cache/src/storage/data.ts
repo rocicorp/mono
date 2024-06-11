@@ -1,20 +1,17 @@
-import type {
-  DurableObjectGetOptions,
-  DurableObjectListOptions,
-  DurableObjectPutOptions,
-  DurableObjectStorage,
-} from '@cloudflare/workers-types';
 import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import type {JSONValue} from '../types/bigint-json.js';
+import type {
+  DurableObjectListOptions,
+  FakeDurableObjectStorage,
+} from '../test/fake-do.js';
 
 export async function getEntry<T extends JSONValue>(
-  durable: DurableObjectStorage,
+  durable: FakeDurableObjectStorage,
   key: string,
   schema: valita.Type<T>,
-  options: DurableObjectGetOptions,
 ): Promise<T | undefined> {
-  const value = await durable.get(key, options);
+  const value = await durable.get(key);
   if (value === undefined) {
     return undefined;
   }
@@ -25,21 +22,20 @@ export async function getEntry<T extends JSONValue>(
 export const MAX_ENTRIES_TO_GET = 128;
 
 export async function getEntries<T extends JSONValue>(
-  durable: DurableObjectStorage,
+  durable: FakeDurableObjectStorage,
   keys: string[],
   schema: valita.Type<T>,
-  options: DurableObjectGetOptions,
 ): Promise<Map<string, T>> {
   assert(
     keys.length <= MAX_ENTRIES_TO_GET,
     `Cannot get more than ${MAX_ENTRIES_TO_GET} entries`,
   );
-  const values = await durable.get(keys, options);
+  const values = await durable.get(keys);
   return validateOrNormalize(values, schema);
 }
 
 export async function listEntries<T extends JSONValue>(
-  durable: DurableObjectStorage,
+  durable: FakeDurableObjectStorage,
   schema: valita.Type<T>,
   options: DurableObjectListOptions,
 ): Promise<Map<string, T>> {
@@ -83,18 +79,16 @@ function validateOrNormalize<T>(
 }
 
 export function putEntry<T extends JSONValue>(
-  durable: DurableObjectStorage,
+  durable: FakeDurableObjectStorage,
   key: string,
   value: T,
-  options: DurableObjectPutOptions,
 ): Promise<void> {
-  return durable.put(key, value, options);
+  return durable.put(key, value);
 }
 
 export function delEntry(
-  durable: DurableObjectStorage,
+  durable: FakeDurableObjectStorage,
   key: string,
-  options: DurableObjectPutOptions,
 ): Promise<void> {
-  return durable.delete(key, options).then(() => undefined);
+  return durable.delete(key).then(() => undefined);
 }

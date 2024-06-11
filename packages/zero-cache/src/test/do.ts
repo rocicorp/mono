@@ -1,19 +1,15 @@
-import type {DurableObjectStorage} from '@cloudflare/workers-types';
-import {env, runInDurableObject} from 'cloudflare:test';
 import {expect} from 'vitest';
 import type {JSONObject} from '../types/bigint-json.js';
+import {FakeDurableObjectStorage} from './fake-do.js';
 
 export function runWithDurableObjectStorage<R>(
-  fn: (storage: DurableObjectStorage) => R | Promise<R>,
-): Promise<R> {
-  const {runnerDO} = env;
-  const id = runnerDO.newUniqueId();
-  const stub = runnerDO.get(id);
-  return runInDurableObject(stub, (_, {storage}) => fn(storage));
+  fn: (storage: FakeDurableObjectStorage) => R | Promise<R>,
+): R | Promise<R> {
+  return fn(new FakeDurableObjectStorage());
 }
 
 export async function initStorage(
-  storage: DurableObjectStorage,
+  storage: FakeDurableObjectStorage,
   entries: Record<string, JSONObject>,
 ) {
   await storage.deleteAll();
@@ -21,7 +17,7 @@ export async function initStorage(
 }
 
 export async function expectStorage(
-  storage: DurableObjectStorage,
+  storage: FakeDurableObjectStorage,
   entries: Record<string, JSONObject>,
   prefix = '',
 ) {

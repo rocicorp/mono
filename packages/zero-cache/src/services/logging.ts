@@ -1,5 +1,5 @@
 import {TeeLogSink, consoleLogSink} from '@rocicorp/logger';
-import {DatadogLogSink} from 'datadog';
+import {DatadogLogSink} from 'datadog/src/datadog-log-sink.js';
 import type {ServiceRunnerEnv} from './service-runner.js';
 
 const DEFAULT_LOG_LEVEL = 'info';

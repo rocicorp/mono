@@ -3,6 +3,8 @@ import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import {BigIntJSON, type JSONObject} from './bigint-json.js';
 import {Subscription} from './subscription.js';
+import type {WebSocket} from '@fastify/websocket';
+import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 
 export type CancelableAsyncIterable<T> = AsyncIterable<T> & {
   /**
@@ -28,7 +30,7 @@ export async function streamOut<T extends JSONObject>(
   const closer = new WebSocketCloser(lc, sink, source);
 
   const acks = new Queue<Ack>();
-  sink.addEventListener('message', e => {
+  sink.addEventListener('message', (e: {data: string}) => {
     try {
       if (typeof e.data !== 'string') {
         throw new Error('Expected string message');
@@ -105,16 +107,16 @@ class WebSocketCloser<T> {
   readonly #lc: LogContext;
   readonly #ws: WebSocket;
   readonly #stream: CancelableAsyncIterable<T>;
-  readonly #closeHandler: EventListenerOrEventListenerObject<CloseEvent>;
-  readonly #errorHandler: EventListenerOrEventListenerObject<ErrorEvent>;
-  readonly #messageHandler: EventListenerOrEventListenerObject<MessageEvent> | null;
+  readonly #closeHandler: (e: CloseEvent) => void;
+  readonly #errorHandler: (e: ErrorEvent) => void;
+  readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
   #closed = false;
 
   constructor(
     lc: LogContext,
     ws: WebSocket,
     stream: CancelableAsyncIterable<T>,
-    messageHandler?: EventListenerOrEventListenerObject<MessageEvent>,
+    messageHandler?: (e: MessageEvent) => void | undefined,
   ) {
     this.#lc = lc;
     this.#ws = ws;
@@ -156,7 +158,7 @@ class WebSocketCloser<T> {
       this.#ws.removeEventListener('message', this.#messageHandler);
     }
     this.#stream.cancel();
-    if (this.#ws.readyState !== WebSocket.READY_STATE_CLOSED) {
+    if (this.#ws.readyState !== this.#ws.CLOSED) {
       this.#ws.close();
     }
   }

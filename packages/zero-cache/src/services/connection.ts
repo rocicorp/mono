@@ -13,66 +13,41 @@ import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
 import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
+import type {FastifyRequest} from 'fastify';
+import type {WebSocket} from '@fastify/websocket';
+import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 
 export function handleConnection(
   lc: LogContext,
   serviceRunner: ServiceRunner,
   clientConnections: Map<string, Connection>,
-  request: Request,
-): Response {
-  if (request.headers.get('Upgrade') !== 'websocket') {
-    lc.info?.('Missing Upgrade header for', request.url);
-    return new Response('expected WebSocket Upgrade header', {status: 400});
-  }
-
-  const {0: clientWS, 1: serverWS} = new WebSocketPair();
-  const url = new URL(request.url);
-  serverWS.accept();
+  socket: WebSocket,
+  request: FastifyRequest,
+) {
+  const url = new URL(
+    request.url,
+    request.headers.origin ?? 'http://localhost',
+  );
 
   const {params, error} = getConnectParams(url);
 
   if (error !== null) {
-    sendError(lc, serverWS, [
-      'error',
-      ErrorKind.InvalidConnectionRequest,
-      error,
-    ]);
+    sendError(lc, socket, ['error', ErrorKind.InvalidConnectionRequest, error]);
   } else {
     const {clientID} = params;
     const existing = clientConnections.get(clientID);
     if (existing) {
       existing.close();
     }
-    const connection = new Connection(
-      lc,
-      serviceRunner,
-      params,
-      serverWS,
-      () => {
-        if (clientConnections.get(clientID) === connection) {
-          clientConnections.delete(clientID);
-        }
-      },
-    );
+    const connection = new Connection(lc, serviceRunner, params, socket, () => {
+      if (clientConnections.get(clientID) === connection) {
+        clientConnections.delete(clientID);
+      }
+    });
     clientConnections.set(clientID, connection);
   }
 
-  // Sec-WebSocket-Protocol is used as a mechanism for sending `auth`
-  // since custom headers are not supported by the browser WebSocket API, the
-  // Sec-WebSocket-Protocol semantics must be followed. Send a
-  // Sec-WebSocket-Protocol response header with a value matching the
-  // Sec-WebSocket-Protocol request header, to indicate support for the
-  // protocol, otherwise the client will close the connection.
-  const responseHeaders = new Headers();
-  const protocol = request.headers.get('Sec-WebSocket-Protocol');
-  if (protocol) {
-    responseHeaders.set('Sec-WebSocket-Protocol', protocol);
-  }
-  return new Response(null, {
-    status: 101,
-    webSocket: clientWS,
-    headers: responseHeaders,
-  });
+  //TODO: will need to handle Sec-WebSocket-Protocol for auth
 }
 
 /**
@@ -140,7 +115,7 @@ export class Connection {
     this.#outboundStream?.cancel();
     this.#outboundStream = undefined;
     this.#onClose();
-    if (this.#ws.readyState !== WebSocket.READY_STATE_CLOSED) {
+    if (this.#ws.readyState !== this.#ws.CLOSED) {
       this.#ws.close();
     }
 
