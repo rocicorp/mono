@@ -148,3 +148,5 @@ describe('complex expressions', async () => {
     expect(rows).toEqual(expected);
   });
 });
+
+// fast-check variants of these tests in the `zql` package
