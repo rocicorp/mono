@@ -32,6 +32,10 @@ export class Statement<Return> implements IStatement<Return> {
     this.#context = context;
   }
 
+  get ast() {
+    return this.#ast;
+  }
+
   get view() {
     return this.#materialization;
   }
