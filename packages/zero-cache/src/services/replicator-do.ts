@@ -68,7 +68,7 @@ export class ReplicatorDO {
 
   #status = async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const status = await this.#serviceRunner.status();
+      const status = (await this.#serviceRunner.getReplicator()).status();
       await reply.send(JSON.stringify(status));
     } catch (error) {
       this.#lc.error?.('Error in status handler:', error);
