@@ -56,6 +56,7 @@ export class ServiceRunnerDO {
         .send(error instanceof Error ? error.message : String(error));
     }
   };
+
   async start() {
     await this.#fastify.register(websocket);
     this.#fastify.get(CONNECT_URL_PATTERN, {websocket: true}, this.#connect);

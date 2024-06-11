@@ -46,6 +46,8 @@ export function handleConnection(
     });
     clientConnections.set(clientID, connection);
   }
+
+  //TODO: will need to handle Sec-WebSocket-Protocol for auth
 }
 
 /**
