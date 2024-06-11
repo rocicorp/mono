@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
 import {BigIntJSON, type JSONObject} from './bigint-json.js';
-import type {Subscription} from './subscription.js';
+import {Subscription} from './subscription.js';
 import type {WebSocket} from '@fastify/websocket';
 import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 
@@ -30,7 +30,7 @@ export async function streamOut<T extends JSONObject>(
   const closer = new WebSocketCloser(lc, sink, source);
 
   const acks = new Queue<Ack>();
-  sink.addEventListener('message', e => {
+  sink.addEventListener('message', (e: {data: string}) => {
     try {
       if (typeof e.data !== 'string') {
         throw new Error('Expected string message');

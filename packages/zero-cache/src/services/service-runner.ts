@@ -272,6 +272,6 @@ class ReplicatorStub implements Replicator {
       )}`,
     );
 
-    return streamIn(lc, ws, versionChangeSchema);
+    return Promise.resolve(streamIn(lc, ws, versionChangeSchema));
   }
 }
