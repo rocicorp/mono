@@ -30,13 +30,13 @@ export function makeComparator<T extends object>(
   orderBy: Ordering,
 ): (l: T, r: T) => number {
   const comparator = (l: T, r: T) => {
-    for (const [selector, direction] of orderBy) {
+    for (const orderPart of orderBy) {
       const comp = compareEntityFields(
-        getValueFromEntity(l as Record<string, unknown>, selector),
-        getValueFromEntity(r as Record<string, unknown>, selector),
+        getValueFromEntity(l as Record<string, unknown>, orderPart[0]),
+        getValueFromEntity(r as Record<string, unknown>, orderPart[0]),
       );
       if (comp !== 0) {
-        return direction === 'asc' ? comp : -comp;
+        return orderPart[1] === 'asc' ? comp : -comp;
       }
     }
 

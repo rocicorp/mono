@@ -28,7 +28,6 @@ export type JoinResult<
     : {[K in BAlias extends string ? BAlias : never]: BValue});
 
 export function isJoinResult(x: unknown): x is JoinResultBase {
-  return (
-    typeof x === 'object' && x !== null && (x as JoinResultBase)[joinSymbol]
-  );
+  // eslint-disable-next-line eqeqeq
+  return x != null && (x as JoinResultBase)[joinSymbol];
 }
