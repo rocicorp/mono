@@ -42,8 +42,11 @@ export type Mutator = (
 
 export async function benchZQL(
   preRun: Mutator | undefined,
-  queries: readonly // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [query: (queries: Queries) => EntityQuery<any, any>, times: number][],
+  queries: readonly (readonly [
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: (queries: Queries) => EntityQuery<any, any>,
+    times: number,
+  ])[],
   mutations: readonly (readonly [mutation: Mutator, times: number])[],
 ): Promise<number> {
   const z = newZero();

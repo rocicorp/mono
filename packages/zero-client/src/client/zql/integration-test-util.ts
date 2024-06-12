@@ -5,7 +5,7 @@ import type {
   PlaylistTrack,
   Track,
   TrackArtist,
-} from './benchmarks/setup.js';
+} from 'zql/src/zql/test-helpers/create-data.js';
 import {nanoid} from '../../util/nanoid.js';
 import {Zero} from '../zero.js';
 export {
@@ -13,7 +13,7 @@ export {
   createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
-} from './benchmarks/setup.js';
+} from 'zql/src/zql/test-helpers/create-data.js';
 export {Album, Artist, Playlist, PlaylistTrack, Track, TrackArtist};
 
 export function newZero() {

@@ -1,4 +1,4 @@
-export const cases = [
+export const singleTableCases = [
   {
     name: 'overlap title completely, overlap length partially.',
     tracks: [

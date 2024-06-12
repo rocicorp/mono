@@ -3,7 +3,7 @@ import {
   createRandomArtists,
   createRandomTracks,
   // linkTracksToArtists,
-} from './setup.js';
+} from 'zql/src/zql/test-helpers/create-data.js';
 import {Queries, benchSQLite, benchZQL, type BulkItems} from './bench.js';
 
 /*
