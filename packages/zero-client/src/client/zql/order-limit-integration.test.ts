@@ -21,7 +21,9 @@ describe('sorting and limiting with different query operations', async () => {
   const artists = createRandomArtists(50);
   const albums = createRandomAlbums(50, artists);
   const tracks = createRandomTracks(100, albums);
-  const trackArtists = linkTracksToArtists(artists, tracks);
+  const trackArtists = linkTracksToArtists(artists, tracks, {
+    allTracksMustHaveAnArtist: true,
+  });
   await bulkSet(z, {artists, albums, tracks, trackArtists});
 
   const indexedArtists = artists.reduce(

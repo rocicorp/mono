@@ -417,7 +417,9 @@ test('track list composition with lots and lots of data then tracking incrementa
   const artists = createRandomArtists(100);
   const albums = createRandomAlbums(100, artists);
   const tracks = createRandomTracks(10_000, albums);
-  const trackArtists = linkTracksToArtists(artists, tracks);
+  const trackArtists = linkTracksToArtists(artists, tracks, {
+    allTracksMustHaveAnArtist: true,
+  });
 
   await bulkSet(z, {
     tracks,
@@ -439,7 +441,9 @@ test('track list composition with lots and lots of data then tracking incrementa
 
   // add more tracks
   const newTracks = createRandomTracks(100, albums);
-  const newTrackArtists = linkTracksToArtists(artists, newTracks);
+  const newTrackArtists = linkTracksToArtists(artists, newTracks, {
+    allTracksMustHaveAnArtist: true,
+  });
 
   await bulkSet(z, {
     tracks: newTracks,
