@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import {makeComparator} from './compare.js';
 
 const objArbitrary = fc.record({
-  id: fc.string(),
+  id: fc.uuid(),
   title: fc.string(),
   albumId: fc.string(),
   length: fc.integer(),
