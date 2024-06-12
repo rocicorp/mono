@@ -1,8 +1,8 @@
 import type {ISortedMap} from 'btree';
 import BTree from 'btree';
+import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {Ordering, Primitive, Selector} from '../../ast/ast.js';
-import {gen} from '../../util/iterables.js';
 import {makeComparator} from '../compare.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {
@@ -12,19 +12,22 @@ import {
   createPullResponseMessage,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
-import type {Entry, Multiset} from '../multiset.js';
+import type {Entry} from '../multiset.js';
 import type {Comparator, PipelineEntity, Version} from '../types.js';
 import {SourceHashIndex} from './source-hash-index.js';
 import type {Source, SourceInternal} from './source.js';
 
+let id = 0;
+
 /**
  * A source that remembers what values it contains.
  *
- * This allows pipelines that are created after a source already
- * exists to be able to receive historical data.
+ * This allows pipelines that are created after a source already exists to be
+ * able to receive historical data.
  *
+ * The source ordering is only sorted by the primary key and for alternative
+ * sorts one field plus the id field to ensure stable sorts.
  */
-let id = 0;
 export class SetSource<T extends PipelineEntity> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
@@ -61,8 +64,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       },
       destroy: () => {},
     });
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+
     this.#tree = new BTree(undefined, comparator);
     this.comparator = comparator;
 
@@ -266,102 +268,58 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       return;
     }
 
-    const [newSort, orderForReply] =
-      this.#getOrCreateAndMaintainNewSort(request);
+    const newSort = this.#getOrCreateAndMaintainNewSort(request);
+    const orderForReply = request.order ?? this.#order;
 
     // Is there a range constraint against the ordered field?
-    if (orderForReply !== undefined) {
-      const range = getRange(conditionsForThisSource, orderForReply);
-      if (request.order === undefined || request.order[0][1] === 'asc') {
-        this.#stream.newDifference(
-          this._materialite.getVersion(),
-          gen(() =>
-            genFromBTreeEntries(
-              newSort.#tree.entries(maybeGetKey(range.field, range.bottom)),
-              createEndPredicateAsc(range.field, range.top),
-            ),
-          ),
-          createPullResponseMessage(request, this.#name, orderForReply),
-        );
-        return;
-      }
-
-      const maybeKey = maybeGetKey<T>(range.field, range.top);
-      if (maybeKey !== undefined && newSort.#order.length > 1) {
-        const entriesBelow = newSort.#tree.entries(maybeKey);
-        let key: T | undefined;
-        const specialComparator = makeComparator<T>([[range.field, 'asc']]);
-        for (const entry of entriesBelow) {
-          if (specialComparator(entry[0], maybeKey) > 0) {
-            key = entry[0];
-            break;
-          }
-        }
-        this.#stream.newDifference(
-          this._materialite.getVersion(),
-          gen(() =>
-            genFromBTreeEntries(
-              newSort.#tree.entriesReversed(key),
-              createEndPredicateDesc(range.field, range.bottom),
-            ),
-          ),
-          createPullResponseMessage(request, this.#name, orderForReply),
-        );
-      } else {
-        this.#stream.newDifference(
-          this._materialite.getVersion(),
-          gen(() =>
-            genFromBTreeEntries(
-              newSort.#tree.entriesReversed(maybeKey),
-              createEndPredicateDesc(range.field, range.bottom),
-            ),
-          ),
-          createPullResponseMessage(request, this.#name, orderForReply),
-        );
-      }
-
-      return;
-    }
+    const range = getRange(conditionsForThisSource, orderForReply);
+    // const atEnd = createEndPredicate(
+    //   range.field,
+    //   range.endValue,
+    //   orderForReply,
+    // );
 
     this.#stream.newDifference(
       this._materialite.getVersion(),
-      asEntries(newSort.#tree, request),
+      iterateBTreeWithOrder<T>(
+        newSort.#tree,
+        orderForReply,
+        range.startValue,
+        range.endValue,
+      ),
       createPullResponseMessage(request, this.#name, orderForReply),
     );
   }
 
-  #getOrCreateAndMaintainNewSort(
-    request: PullMsg,
-  ): [SetSource<T>, Ordering | undefined] {
-    const ordering = request.order;
+  #getOrCreateAndMaintainNewSort(request: PullMsg): SetSource<T> {
+    const ordering = request.order ?? this.#order;
     if (ordering === undefined) {
-      return [this, this.#order];
+      return this;
     }
     // only retain fields relevant to this source.
     const firstSelector = ordering[0][0];
 
     if (firstSelector[0] !== this.#name) {
-      return [this, this.#order];
+      return this;
     }
 
     const key = firstSelector[1];
     // this is the canonical sort.
     if (key === 'id') {
-      return [this, this.#order];
+      return this;
     }
     const alternateSort = this.#sorts.get(key);
     if (alternateSort !== undefined) {
-      const newOrdering: Ordering = [
-        ordering[0],
-        [[this.#name, 'id'], ordering[0][1]],
-      ];
-      return [alternateSort, newOrdering];
+      return alternateSort;
     }
 
-    // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
-    // We do not need a separate source.
-    // Must append id for uniqueness.
+    // We ignore asc/desc as directionality because the source is always `order
+    // by key asc, id asc`. `desc` is achieved by iterating backwards. The
+    // directions do not all need to be the same. The iterator knows how to deal
+    // with no uniform order.
+    //
     const orderBy: Ordering = [
+      // We append id for uniqueness.
       [firstSelector, 'asc'],
       [[this.#name, 'id'], 'asc'],
     ];
@@ -369,14 +327,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     const source = this.withNewOrdering(newComparator, orderBy);
 
     this.#sorts.set(key, source);
-    const dir = ordering[0][1];
-    const orderByKeepDirection: Ordering = [
-      [firstSelector, dir],
-      [[this.#name, 'id'], dir],
-    ];
-
-    return [source, orderByKeepDirection];
-    2;
+    return source;
   }
 
   // TODO: in the future we should collapse hash and sorted indices
@@ -417,42 +368,11 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
   }
 
   get(key: T): T | undefined {
-    const ret = this.#tree.get(key);
-    return ret;
+    return this.#tree.get(key);
   }
 
   toString(): string {
     return this.#name ?? `SetSource(${this.#id})`;
-  }
-}
-
-function asEntries<T>(
-  m: BTree<T, undefined>,
-  message?: Request | undefined,
-): Multiset<T> {
-  if (message?.order) {
-    if (message.order[0][1] === 'desc') {
-      return gen(() => genFromBTreeEntries(m.entriesReversed()));
-    }
-  }
-
-  return gen<Entry<T>>(() => genFromBTreeEntries(m.entries()));
-}
-
-function* genFromBTreeEntries<T>(
-  m: Iterable<[T, undefined]>,
-  end?: ((t: T) => boolean) | undefined,
-): Iterator<Entry<T>> {
-  for (const pair of m) {
-    if (end !== undefined) {
-      if (end(pair[0]) === false) {
-        yield [pair[0], 1];
-      } else {
-        return false;
-      }
-    } else {
-      yield [pair[0], 1];
-    }
   }
 }
 
@@ -468,64 +388,202 @@ function getPrimaryKeyEquality(
   return undefined;
 }
 
-function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
-  let top: unknown | undefined;
-  let bottom: unknown | undefined;
-  const sourceOrderFields = sourceOrder[0];
-  const firstOrderField = sourceOrderFields[0];
-
-  // TODO: Does this work correctly with multiple conditions?
+function getRange(
+  conditions: HoistedCondition[],
+  sourceOrder: Ordering,
+): {
+  field: Selector;
+  startValue: unknown | undefined;
+  endValue: unknown | undefined;
+} {
+  const field: Selector = sourceOrder[0][0];
+  let startValue: unknown | undefined;
+  let endValue: unknown | undefined;
   for (const c of conditions) {
-    if (c.selector[1] === firstOrderField[1]) {
+    if (c.selector[1] === field[1]) {
       if (c.op === '>' || c.op === '>=' || c.op === '=') {
-        bottom = c.value;
+        startValue = c.value;
       }
       if (c.op === '<' || c.op === '<=' || c.op === '=') {
-        top = c.value;
+        endValue = c.value;
       }
     }
   }
-
-  return {
-    field: firstOrderField,
-    bottom,
-    top,
-  };
+  const reversed = sourceOrder[0][1] === 'desc';
+  if (reversed) {
+    return {field, startValue: endValue, endValue: startValue};
+  }
+  return {field, startValue, endValue};
 }
 
-function createEndPredicateAsc<T extends object>(
+function createEndPredicate<T extends object>(
   selector: Selector,
   end: unknown,
+  order: Ordering,
 ): ((t: T) => boolean) | undefined {
   if (end === undefined) {
     return undefined;
   }
-  const comp = makeComparator<T>([[selector, 'asc']]);
-  return t => {
-    const cmp = comp(t, {[selector[1]]: end} as T);
-    return cmp > 0;
-  };
+  const comp = makeComparator<T>([order[0]]);
+  const r = {[selector[1]]: end} as T;
+  return t => comp(t, r) > 0;
 }
 
-function createEndPredicateDesc<T extends object>(
-  selector: Selector,
-  end: unknown,
-): ((t: T) => boolean) | undefined {
-  if (end === undefined) {
-    return undefined;
-  }
-  const comp = makeComparator<T>([[selector, 'asc']]);
-  return t => {
-    const cmp = comp(t, {[selector[1]]: end} as T);
-    return cmp < 0;
-  };
-}
-
-function maybeGetKey<T>(selector: Selector, value: unknown): T | undefined {
+function maybeGetKey<T extends object>(
+  order: Ordering,
+  value: unknown,
+): {
+  maybeStartKey: T | undefined;
+  maybeStartKeyComparator: Comparator<T> | undefined;
+} {
   if (value === undefined) {
-    return undefined;
+    return {maybeStartKey: undefined, maybeStartKeyComparator: undefined};
   }
-  return {
-    [selector[1]]: value,
+  const selector = order[0][0];
+  const key = selector[1];
+
+  const startKey = {
+    [key]: value,
   } as T;
+  return {
+    maybeStartKey: startKey,
+    maybeStartKeyComparator: makeComparator<T>(order.slice(0, 1)),
+  };
+}
+
+export function* iterateBTreeWithOrder<T extends object>(
+  tree: BTree<T, undefined>,
+  order: Ordering,
+  rangeStartValue?: unknown,
+  rangeEndValue?: unknown,
+): Iterable<Entry<T>> {
+  // The tree is always sorted asc by one field which is the first element of the order.
+
+  const atEnd = createEndPredicate(order[0][0], rangeEndValue, order);
+
+  const {maybeStartKey: startKey, maybeStartKeyComparator: startKeyComparator} =
+    maybeGetKey<T>(order, rangeStartValue);
+
+  const comp = makeComparator<Partial<T>>(order);
+  const compFirst =
+    order.length === 1 ? comp : makeComparator<T>(order.slice(0, 1));
+
+  const buffer: T[] = [];
+
+  /**
+   * This returns the entries iterator to use. It takes {@linkcode startKey}
+   * into account. Since we sort on the primary key and still support iterating
+   * over secondary keys in arbitrary direction we start the entries iterator at
+   * the first entry that matches the first selector of the startKey.
+   */
+  function getEntries(
+    tree: BTree<T, undefined>,
+    order: Ordering,
+    startKey: T | undefined,
+  ) {
+    const reversed = order[0][1] === 'desc';
+
+    if (!startKey) {
+      return reversed ? tree.entriesReversed() : tree.entries();
+    }
+
+    // XXX: If desc then we need find the previous?
+    if (reversed) {
+      for (const entry of tree.entries(startKey)) {
+        const value: T = entry[0];
+        if (compFirst(value, startKey) > 0) {
+          break;
+        }
+        startKey = value;
+      }
+      return tree.entriesReversed(startKey);
+    }
+
+    return tree.entries(startKey);
+
+    // if (startKey) {
+    //   const allAsc = order.every(o => o[1] === 'asc');
+    //   if (!allAsc) {
+    //     // If the direction of the sorts are not all the same we find the first
+    //     // entry that starts with the startKey (first field) and use that as the
+    //     // entry point to the BTree iterator
+    //     const fieldName = order[0][0][1] as keyof T;
+    //     const fakeKey = {
+    //       [fieldName]: startKey[fieldName],
+    //     };
+    //     const entries = tree.entries(fakeKey as T);
+
+    //     let iterStart = startKey;
+    //     for (const entry of entries) {
+    //       const value: T = entry[0];
+    //       if (compFirst(value, startKey) < 0) {
+    //         break;
+    //       }
+    //       iterStart = value;
+    //     }
+    //     return tree.entriesReversed(iterStart);
+
+    //     // for (const entry of entries) {
+    //     //   const value: T = entry[0];
+    //     //   const v = compFirst(partialStartKey as T, value);
+    //     //   if (v < 0) {
+    //     //     break;
+    //     //   }
+    //     //   startKey = value;
+    //     // }
+    //   }
+    // }
+    return reversed ? tree.entriesReversed(startKey) : tree.entries(startKey);
+  }
+
+  function* sortAndYieldBuffer(): Generator<Entry<T>, boolean> {
+    // TODO(arv): We should probably inline this since yield* is not free.
+    buffer.sort(comp);
+    for (const b of buffer) {
+      if (atEnd?.(b)) {
+        return true;
+      }
+      // startKey needs to be a real key that is in the tree.
+      if (!startKey) {
+        yield [b, 1];
+
+        // The problem here is that startKey might be partial... for example:
+        //
+        // {x: 1}
+        //
+        // and our data might be
+        //
+        // {id: 1, x: 1}
+        // {id: 2, x: 1}
+        // {id: 3, x: 1}
+        //
+        // if id is ordered asc {x: 1} is less than all so that is fine .
+        // if id is ordered desc {x: 1} is greater than all so that is a problem.
+        // What we really want is
+      } else {
+        assert(startKeyComparator);
+        if (startKeyComparator(startKey, b) <= 0) {
+          // We don't need to skip anymore
+          // startKey = undefined;
+          yield [b, 1];
+        }
+      }
+    }
+    buffer.length = 0;
+    return false;
+  }
+
+  const entries = getEntries(tree, order, startKey);
+  for (const entry of entries) {
+    const value: T = entry[0];
+
+    if (buffer.length > 0 && compFirst(buffer[0], value) !== 0) {
+      if (yield* sortAndYieldBuffer()) {
+        return;
+      }
+    }
+    buffer.push(value);
+  }
+
+  yield* sortAndYieldBuffer();
 }

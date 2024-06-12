@@ -1,9 +1,13 @@
+import BTree from 'btree';
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
 import type {Ordering} from '../../ast/ast.js';
+import {makeComparator} from '../compare.js';
 import type {Listener} from '../graph/difference-stream.js';
 import type {PullMsg} from '../graph/message.js';
 import {Materialite} from '../materialite.js';
+import type {Comparator} from '../types.js';
+import {iterateBTreeWithOrder} from './set-source.js';
 
 type E = {id: number};
 
@@ -72,8 +76,8 @@ test('on', () => {
   // We could track this in the source by checking if add events returned false
 });
 
-test('replace', async () => {
-  await fc.assert(
+test('replace', () => {
+  fc.assert(
     fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
       const source = m.newSetSource(comparator, ordering, 'test');
@@ -172,6 +176,7 @@ test('history requests with an alternate ordering are fulfilled by that ordering
   };
   const comparator = (l: E2, r: E2) => l.id - r.id;
 
+  const ordering: Ordering = [[['e2', 'id'], 'asc']];
   const m = new Materialite();
   const source = m.newSetSource(comparator, ordering, 'e2');
 
@@ -249,22 +254,155 @@ test('history requests with an alternate ordering are fulfilled by that ordering
   expect(items).toEqual(
     baseItems.concat({id: 4, x: 'd'}).sort((l, r) => l.x.localeCompare(r.x)),
   );
+
+  items.length = 0;
+
+  m.tx(() => {
+    source.stream.messageUpstream(
+      {
+        id: 3,
+        type: 'pull',
+        order: [
+          [['e2', 'x'], 'desc'],
+          [['e2', 'id'], 'desc'],
+        ],
+        hoistedConditions: [],
+      },
+      listener,
+    );
+  });
+
+  expect(items).toEqual(
+    baseItems.concat({id: 4, x: 'd'}).sort((l, r) => -l.x.localeCompare(r.x)),
+  );
+});
+
+describe('history requests with non uniform ordering', () => {
+  type E2 = {
+    id: number;
+    x: string;
+  };
+  const ordering: Ordering = [
+    [['e2', 'x'], 'desc'],
+    [['e2', 'id'], 'asc'],
+  ];
+  const m = new Materialite();
+  const comparator = makeComparator<E2>(ordering);
+  const source = m.newSetSource(comparator, ordering, 'e2');
+
+  const baseItems = [
+    {id: 1, x: 'c'},
+    {id: 2, x: 'b'},
+    {id: 3, x: 'a'},
+    {id: 4, x: 'a'},
+    {id: 5, x: 'a'},
+    {id: 6, x: 'b'},
+  ];
+  m.tx(() => {
+    source.seed(baseItems);
+  });
+
+  const items: E2[] = [];
+  const listener: Listener<E2> = {
+    commit(_version) {},
+    newDifference(_version, multiset, _reply) {
+      for (const item of multiset) {
+        items.push(item[0]);
+      }
+    },
+  };
+
+  test.each([
+    {
+      name: 'order by x desc, id asc',
+      order: [
+        [['e2', 'x'], 'desc'],
+        [['e2', 'id'], 'asc'],
+      ],
+      expected: [
+        {id: 1, x: 'c'},
+        {id: 2, x: 'b'},
+        {id: 6, x: 'b'},
+        {id: 3, x: 'a'},
+        {id: 4, x: 'a'},
+        {id: 5, x: 'a'},
+      ],
+    },
+    {
+      name: 'order by x desc, id desc',
+      order: [
+        [['e2', 'x'], 'desc'],
+        [['e2', 'id'], 'desc'],
+      ],
+      expected: [
+        {id: 1, x: 'c'},
+        {id: 6, x: 'b'},
+        {id: 2, x: 'b'},
+        {id: 5, x: 'a'},
+        {id: 4, x: 'a'},
+        {id: 3, x: 'a'},
+      ],
+    },
+    {
+      name: 'order by x asc, id asc',
+      order: [
+        [['e2', 'x'], 'asc'],
+        [['e2', 'id'], 'asc'],
+      ],
+      expected: [
+        {id: 3, x: 'a'},
+        {id: 4, x: 'a'},
+        {id: 5, x: 'a'},
+        {id: 2, x: 'b'},
+        {id: 6, x: 'b'},
+        {id: 1, x: 'c'},
+      ],
+    },
+    {
+      name: 'order by x asc, id desc',
+      order: [
+        [['e2', 'x'], 'asc'],
+        [['e2', 'id'], 'desc'],
+      ],
+      expected: [
+        {id: 5, x: 'a'},
+        {id: 4, x: 'a'},
+        {id: 3, x: 'a'},
+        {id: 6, x: 'b'},
+        {id: 2, x: 'b'},
+        {id: 1, x: 'c'},
+      ],
+    },
+  ] satisfies {name: string; order: Ordering; expected: readonly E2[]}[])(
+    '$name',
+    ({order, expected}) => {
+      items.length = 0;
+      m.tx(() => {
+        source.stream.messageUpstream(
+          {
+            id: 1,
+            type: 'pull',
+            order,
+            hoistedConditions: [],
+          },
+          listener,
+        );
+      });
+
+      expect(items).toEqual(expected);
+    },
+  );
 });
 
 describe('history requests with hoisted filters', () => {
-  const m = new Materialite();
-  const source = m.newSetSource(comparator, ordering, 'e');
-
-  const baseItems = [
+  type E = {id: number; x: string; y: string};
+  const baseItems: readonly E[] = [
     {id: 1, x: 'a', y: 'q'},
     {id: 2, x: 'b', y: 'q'},
     {id: 3, x: 'c', y: 'q'},
     {id: 4, x: 'd', y: 'r'},
     {id: 5, x: 'e', y: 'r'},
   ];
-  m.tx(() => {
-    source.seed(baseItems);
-  });
 
   test.each([
     {
@@ -496,7 +634,40 @@ describe('history requests with hoisted filters', () => {
         },
       ],
       // we only process items >= c. Yes, >=. Downstream filters will remove the off by one.
-      expected: [[baseItems[2], baseItems[3], baseItems[4]]],
+      expected: [
+        [
+          {id: 3, x: 'c', y: 'q'},
+          {id: 4, x: 'd', y: 'r'},
+          {id: 5, x: 'e', y: 'r'},
+        ],
+      ],
+    },
+    {
+      name: 'x asc w/ lower bound on x',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'asc'],
+            [['e', 'id'], 'desc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>',
+              value: 'c',
+            },
+          ],
+        },
+      ],
+      expected: [
+        [
+          {id: 3, x: 'c', y: 'q'},
+          {id: 4, x: 'd', y: 'r'},
+          {id: 5, x: 'e', y: 'r'},
+        ],
+      ],
     },
     {
       name: 'lookup on y w/ order-by y',
@@ -520,26 +691,1193 @@ describe('history requests with hoisted filters', () => {
       // only y values with `q` will be processed.
       expected: [baseItems.slice(0, 3)],
     },
+    {
+      name: 'lookup on x w/ order by x asc, id asc',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'asc'],
+            [['e', 'id'], 'asc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>=',
+              value: 'b',
+            },
+          ],
+        },
+      ],
+      seedItems: [
+        {id: 1, x: 'a', y: 'q'},
+        {id: 2, x: 'a', y: 'q'},
+        {id: 3, x: 'b', y: 'q'},
+        {id: 4, x: 'b', y: 'r'},
+        {id: 5, x: 'c', y: 'r'},
+        {id: 6, x: 'c', y: 'r'},
+      ],
+      expected: [
+        [
+          {id: 3, x: 'b', y: 'q'},
+          {id: 4, x: 'b', y: 'r'},
+          {id: 5, x: 'c', y: 'r'},
+          {id: 6, x: 'c', y: 'r'},
+        ],
+      ],
+    },
+
+    {
+      name: 'lookup on x w/ order by x desc, id asc',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'desc'],
+            [['e', 'id'], 'asc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>=',
+              value: 'b',
+            },
+          ],
+        },
+      ],
+      seedItems: [
+        {id: 1, x: 'a', y: 'q'},
+        {id: 2, x: 'a', y: 'q'},
+        {id: 3, x: 'b', y: 'q'},
+        {id: 4, x: 'b', y: 'r'},
+        {id: 5, x: 'c', y: 'r'},
+        {id: 6, x: 'c', y: 'r'},
+      ],
+      expected: [
+        [
+          {id: 5, x: 'c', y: 'r'},
+          {id: 6, x: 'c', y: 'r'},
+          {id: 3, x: 'b', y: 'q'},
+          {id: 4, x: 'b', y: 'r'},
+        ],
+      ],
+    },
+
+    {
+      name: 'lookup on x w/ order by x asc, id desc',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'asc'],
+            [['e', 'id'], 'desc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>=',
+              value: 'b',
+            },
+          ],
+        },
+      ],
+      seedItems: [
+        {id: 1, x: 'a', y: 'q'},
+        {id: 2, x: 'a', y: 'q'},
+        {id: 3, x: 'b', y: 'q'},
+        {id: 4, x: 'b', y: 'r'},
+        {id: 5, x: 'c', y: 'r'},
+        {id: 6, x: 'c', y: 'r'},
+      ],
+      expected: [
+        [
+          {id: 4, x: 'b', y: 'r'},
+          {id: 3, x: 'b', y: 'q'},
+          {id: 6, x: 'c', y: 'r'},
+          {id: 5, x: 'c', y: 'r'},
+        ],
+      ],
+    },
   ] satisfies {
     name: string;
     requests: PullMsg[];
-    expected: E[][];
-  }[])('$name', ({requests, expected}) => {
-    const items: E[] = [];
-    const listener: Listener<E> = {
-      commit(_version) {},
-      newDifference(_version, multiset, _reply) {
-        for (const item of multiset) {
+    expected: readonly (readonly E[])[];
+    seedItems?: readonly E[] | undefined;
+  }[])(
+    '$name',
+    ({
+      requests,
+      expected,
+      seedItems = baseItems,
+    }: {
+      name: string;
+      requests: PullMsg[];
+      expected: readonly (readonly E[])[];
+      seedItems?: readonly E[] | undefined;
+    }) => {
+      const ordering: Ordering = [[['e', 'id'], 'asc']];
+      const m = new Materialite();
+      const comparator = (l: E, r: E) => l.id - r.id;
+      const source = m.newSetSource(comparator, ordering, 'e');
+      m.tx(() => {
+        source.seed(seedItems);
+      });
+
+      const items: E[] = [];
+      const listener: Listener<E> = {
+        commit(_version) {},
+        newDifference(_version, multiset, _reply) {
+          for (const item of multiset) {
+            items.push(item[0]);
+          }
+        },
+      };
+      requests.forEach((request, i) => {
+        m.tx(() => {
+          source.stream.messageUpstream(request, listener);
+        });
+        expect(items).toEqual(expected[i]);
+        items.length = 0;
+      });
+    },
+  );
+});
+
+describe('iterateBTreeWithOrder', () => {
+  function makeTree<T>(values: T[], comparator: (l: T, r: T) => number) {
+    const tree = new BTree<T, undefined>([], comparator);
+    for (const item of values) {
+      tree.add(item, undefined);
+    }
+    return tree;
+  }
+
+  describe('no end condition', () => {
+    describe('single field', () => {
+      type Item = {x: number};
+      const tree = makeTree<Item>(
+        [{x: 0}, {x: 1}, {x: 2}, {x: 3}, {x: 4}],
+        (l, r) => l.x - r.x,
+      );
+
+      test('asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'asc']];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
           items.push(item[0]);
         }
-      },
-    };
-    requests.forEach((request, i) => {
-      m.tx(() => {
-        source.stream.messageUpstream(request, listener);
+
+        expect(items).toEqual([{x: 0}, {x: 1}, {x: 2}, {x: 3}, {x: 4}]);
       });
-      expect(items).toEqual(expected[i]);
-      items.length = 0;
+
+      test('desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'desc']];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 4}, {x: 3}, {x: 2}, {x: 1}, {x: 0}]);
+      });
+    });
+
+    describe('two fields', () => {
+      type Item = {id: number; y: number};
+      const orderBy: Ordering = [
+        [['test', 'y'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, y: 0},
+          {id: 1, y: 0},
+          {id: 2, y: 2},
+          {id: 3, y: 1},
+          {id: 4, y: 6},
+          {id: 5, y: 5},
+          {id: 6, y: 3},
+          {id: 7, y: 5},
+        ],
+        comparator,
+      );
+
+      test('order by y asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'asc'],
+          // Needs id to make it stable
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, y: 0},
+          {id: 1, y: 0},
+          {id: 3, y: 1},
+          {id: 2, y: 2},
+          {id: 6, y: 3},
+          {id: 5, y: 5},
+          {id: 7, y: 5},
+          {id: 4, y: 6},
+        ]);
+      });
+
+      test('order by y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 4, y: 6},
+          {id: 7, y: 5},
+          {id: 5, y: 5},
+          {id: 6, y: 3},
+          {id: 2, y: 2},
+          {id: 3, y: 1},
+          {id: 1, y: 0},
+          {id: 0, y: 0},
+        ]);
+      });
+
+      test('order by y asc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 1, y: 0},
+          {id: 0, y: 0},
+          {id: 3, y: 1},
+          {id: 2, y: 2},
+          {id: 6, y: 3},
+          {id: 7, y: 5},
+          {id: 5, y: 5},
+          {id: 4, y: 6},
+        ]);
+      });
+
+      test('order by y desc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 4, y: 6},
+          {id: 5, y: 5},
+          {id: 7, y: 5},
+          {id: 6, y: 3},
+          {id: 2, y: 2},
+          {id: 3, y: 1},
+          {id: 0, y: 0},
+          {id: 1, y: 0},
+        ]);
+      });
+    });
+
+    describe('three fields', () => {
+      type Item = {id: number; x: number; y: number};
+      // The tree ordering uses one key plus the id to ensure uniqueness.
+      const orderBy: Ordering = [
+        [['test', 'x'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, x: 0, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 7, x: 3, y: 0},
+        ],
+        comparator,
+      );
+
+      test('order by x asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 7, x: 3, y: 0},
+        ]);
+      });
+
+      test('order by x desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 0, x: 0, y: 0},
+        ]);
+      });
+
+      test('order by x desc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 0, x: 0, y: 0},
+        ]);
+      });
+
+      test('order by x asc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 7, x: 3, y: 0},
+        ]);
+      });
+
+      test('order by x asc, y asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 7, x: 3, y: 0},
+        ]);
+      });
+
+      test('order by x desc, y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 1, x: 2, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 0, x: 0, y: 0},
+        ]);
+      });
+
+      test('order by x asc, y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 1, x: 2, y: 0},
+          {id: 7, x: 3, y: 0},
+        ]);
+      });
+    });
+  });
+
+  describe('with end condition', () => {
+    // function makeAtEnd<T extends object>(order: Ordering, exclusiveItem: T) {
+    //   const comparator = makeComparator<T>(order);
+    //   return (other: T) => comparator(exclusiveItem, other) === 0;
+    // }
+
+    describe('single field', () => {
+      type Item = {x: number};
+      const tree = makeTree<Item>(
+        [{x: 0}, {x: 1}, {x: 2}, {x: 3}, {x: 4}],
+        (l, r) => l.x - r.x,
+      );
+
+      test('asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'asc']];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 0}, {x: 1}, {x: 2}]);
+      });
+
+      test('desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'desc']];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 4}, {x: 3}, {x: 2}]);
+      });
+    });
+
+    describe('two fields', () => {
+      type Item = {id: number; y: number};
+      const orderBy: Ordering = [
+        [['test', 'y'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, y: 0},
+          {id: 1, y: 0},
+          {id: 2, y: 2},
+          {id: 3, y: 1},
+          {id: 4, y: 6},
+          {id: 5, y: 5},
+          {id: 6, y: 3},
+          {id: 7, y: 5},
+        ],
+        comparator,
+      );
+
+      test('order by y asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 4)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, y: 0},
+          {id: 1, y: 0},
+          {id: 3, y: 1},
+          {id: 2, y: 2},
+          {id: 6, y: 3},
+        ]);
+      });
+
+      test('order by y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 4, y: 6},
+          {id: 7, y: 5},
+          {id: 5, y: 5},
+          {id: 6, y: 3},
+          {id: 2, y: 2},
+        ]);
+      });
+
+      test('order by y asc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 5)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 1, y: 0},
+          {id: 0, y: 0},
+          {id: 3, y: 1},
+          {id: 2, y: 2},
+          {id: 6, y: 3},
+          {id: 7, y: 5},
+          {id: 5, y: 5},
+        ]);
+      });
+
+      test('order by y desc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 3)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 4, y: 6},
+          {id: 5, y: 5},
+          {id: 7, y: 5},
+          {id: 6, y: 3},
+        ]);
+      });
+    });
+
+    describe('three fields', () => {
+      type Item = {id: number; x: number; y: number};
+      // The tree ordering uses one key plus the id to ensure uniqueness.
+      const orderBy: Ordering = [
+        [['test', 'x'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, x: 0, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 7, x: 3, y: 0},
+        ],
+        comparator,
+      );
+
+      test('order by x asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 1)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+        ]);
+      });
+
+      test('order by x desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+        ]);
+      });
+
+      test('order by x desc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          // {id: 2, x: 1, y: 0},
+          // {id: 3, x: 1, y: 1},
+          // {id: 4, x: 1, y: 2},
+          // {id: 0, x: 0, y: 0},
+        ]);
+      });
+
+      test('order by x asc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+          // {id: 7, x: 3, y: 0},
+        ]);
+      });
+
+      test('order by x asc, y asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          // {id: 7, x: 3, y: 0},
+        ]);
+      });
+
+      test('order by x desc, y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 1)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 1, x: 2, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          // {id: 0, x: 0, y: 0},
+        ]);
+      });
+
+      test('order by x asc, y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, undefined, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 1, x: 2, y: 0},
+        ]);
+      });
+    });
+  });
+
+  describe('with start and end condition', () => {
+    // function makeAtEnd<T extends object>(order: Ordering, exclusiveItem: T) {
+    //   const comparator = makeComparator<T>(order);
+    //   return (other: T) => comparator(exclusiveItem, other) === 0;
+    // }
+
+    describe('single field', () => {
+      type Item = {x: number};
+      const tree = makeTree<Item>(
+        [{x: 0}, {x: 1}, {x: 2}, {x: 3}, {x: 4}],
+        (l, r) => l.x - r.x,
+      );
+
+      test('asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'asc']];
+        for (const item of iterateBTreeWithOrder(tree, order, 1, 3)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 1}, {x: 2}, {x: 3}]);
+      });
+
+      test('desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'desc']];
+        for (const item of iterateBTreeWithOrder(tree, order, 3, 1)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 3}, {x: 2}, {x: 1}]);
+      });
+
+      test('asc in between', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'asc']];
+        for (const item of iterateBTreeWithOrder(tree, order, 1.5, 2.5)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 2}]);
+      });
+
+      test('desc in between', () => {
+        const items: Item[] = [];
+        const order: Ordering = [[['test', 'x'], 'desc']];
+        for (const item of iterateBTreeWithOrder(tree, order, 2.5, 1.5)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([{x: 2}]);
+      });
+    });
+
+    describe('two fields', () => {
+      type Item = {id: number; y: number};
+      const orderBy: Ordering = [
+        [['test', 'y'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, y: 0},
+          {id: 1, y: 0},
+          {id: 2, y: 2},
+          {id: 3, y: 1},
+          {id: 4, y: 6},
+          {id: 5, y: 5},
+          {id: 6, y: 3},
+          {id: 7, y: 5},
+        ],
+        comparator,
+      );
+
+      test('order by y asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'asc'],
+          // Needs id to make it stable
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 1, 5)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 3, y: 1},
+          {id: 2, y: 2},
+          {id: 6, y: 3},
+          {id: 5, y: 5},
+          {id: 7, y: 5},
+        ]);
+      });
+
+      test('order by y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 5, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, y: 5},
+          {id: 5, y: 5},
+          {id: 6, y: 3},
+          {id: 2, y: 2},
+        ]);
+      });
+
+      test('order by y asc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 0, 5)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 1, y: 0},
+          {id: 0, y: 0},
+          {id: 3, y: 1},
+          {id: 2, y: 2},
+          {id: 6, y: 3},
+          {id: 7, y: 5},
+          {id: 5, y: 5},
+          // {id: 4, y: 6},
+        ]);
+      });
+
+      test('order by y desc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 5, 3)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 5, y: 5},
+          {id: 7, y: 5},
+          {id: 6, y: 3},
+        ]);
+      });
+    });
+
+    describe('three fields', () => {
+      type Item = {id: number; x: number; y: number};
+      // The tree ordering uses one key plus the id to ensure uniqueness.
+      const orderBy: Ordering = [
+        [['test', 'x'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, x: 0, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 7, x: 3, y: 0},
+        ],
+        comparator,
+      );
+
+      test('order by x asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 1, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+        ]);
+      });
+
+      test('order by x desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 2, 1)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+        ]);
+      });
+
+      test('order by x desc, id desc 2', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 2, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+        ]);
+      });
+
+      test('order by x desc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'id'], 'asc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 3, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 7, x: 3, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+        ]);
+      });
+
+      test('order by x asc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 1, 2)) {
+          items.push(item[0]);
+        }
+        expect(items).toEqual([
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+        ]);
+      });
+
+      test('order by x asc, y asc, id asc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'y'], 'asc'],
+          [['test', 'id'], 'asc'],
+        ];
+
+        for (const item of iterateBTreeWithOrder(tree, order, 1, 2)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+        ]);
+      });
+
+      test('order by x desc, y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'desc'],
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 2, 1)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 1, x: 2, y: 0},
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+        ]);
+      });
+
+      test('order by x asc, y desc, id desc', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'y'], 'desc'],
+          [['test', 'id'], 'desc'],
+        ];
+        for (const item of iterateBTreeWithOrder(tree, order, 1, 2)) {
+          items.push(item[0]);
+        }
+        expect(items).toEqual([
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 1, x: 2, y: 0},
+        ]);
+      });
+    });
+
+    describe('non existing start key', () => {
+      type Item = {id: number; x: number; y: number};
+      // The tree ordering uses one key plus the id to ensure uniqueness.
+      const orderBy: Ordering = [
+        [['test', 'x'], 'asc'],
+        [['test', 'id'], 'asc'],
+      ];
+      const comparator: Comparator<Item> = makeComparator(orderBy);
+      const tree = makeTree<Item>(
+        [
+          {id: 0, x: 0, y: 0},
+          {id: 1, x: 2, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 7, x: 3, y: 0},
+        ],
+        comparator,
+      );
+
+      test('order by x asc, id desc where x >= 1', () => {
+        const items: Item[] = [];
+        const order: Ordering = [
+          [['test', 'x'], 'asc'],
+          [['test', 'id'], 'desc'],
+        ];
+
+        expect([...tree.entries()].map(([item]) => item)).toEqual([
+          {id: 0, x: 0, y: 0},
+          {id: 2, x: 1, y: 0},
+          {id: 3, x: 1, y: 1},
+          {id: 4, x: 1, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 5, x: 2, y: 2},
+          {id: 6, x: 2, y: 1},
+          {id: 7, x: 3, y: 0},
+        ]);
+
+        for (const item of iterateBTreeWithOrder(tree, order, 1, undefined)) {
+          items.push(item[0]);
+        }
+
+        expect(items).toEqual([
+          {id: 4, x: 1, y: 2},
+          {id: 3, x: 1, y: 1},
+          {id: 2, x: 1, y: 0},
+          {id: 6, x: 2, y: 1},
+          {id: 5, x: 2, y: 2},
+          {id: 1, x: 2, y: 0},
+          {id: 7, x: 3, y: 0},
+        ]);
+
+        // {id: 0, x: 0, y: 0},
+        // {id: 2, x: 1, y: 0},
+        // {id: 3, x: 1, y: 1},
+        // {id: 4, x: 1, y: 2},
+        // {id: 1, x: 2, y: 0},
+        // {id: 5, x: 2, y: 2},
+        // {id: 6, x: 2, y: 1},
+        // {id: 7, x: 3, y: 0},
+      });
     });
   });
 });
