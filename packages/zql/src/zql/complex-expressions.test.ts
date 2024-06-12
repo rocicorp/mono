@@ -1,15 +1,9 @@
 import fc from 'fast-check';
 import {test, expect} from 'vitest';
 import {TestContext} from './context/test-context.js';
-import {cases} from './prev-next-test-cases.js';
+import {singleTableCases} from './prev-next-test-cases.js';
 import {and, EntityQuery, exp, or} from './query/entity-query.js';
-
-type Track = Readonly<{
-  id: string;
-  title: string;
-  albumId: string;
-  length: number;
-}>;
+import type {Track} from './test-helpers/create-data.js';
 
 const trackArbitrary: fc.Arbitrary<Track[]> = fc.array(
   fc.record({
@@ -23,18 +17,21 @@ const trackArbitrary: fc.Arbitrary<Track[]> = fc.array(
   },
 );
 
-test('complex paging against 3 fields', async () => {
-  await fc.assert(fc.asyncProperty(trackArbitrary, fc.gen(), checkIt));
+test('3 field paging', async () => {
+  await fc.assert(fc.asyncProperty(trackArbitrary, fc.gen(), checkSingleTable));
 });
 
-test.each(cases)('Complex paging - $name', async ({tracks}) => {
+test.each(singleTableCases)('3 field paging - $name', async ({tracks}) => {
   for (let i = 0; i < tracks.length; i++) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await checkIt(tracks, (() => i) as any);
+    await checkSingleTable(tracks, (() => i) as any);
   }
 });
 
-async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
+async function checkSingleTable(
+  tracks: readonly Track[],
+  gen: fc.GeneratorValue,
+) {
   const context = new TestContext();
   const trackSource = context.getSource('track');
   context.materialite.tx(() => {
@@ -71,27 +68,7 @@ async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
   const rows = await stmt.exec();
   stmt.destroy();
 
-  const sortedTracks = tracks.concat().sort((a, b) => {
-    if (a.title < b.title) {
-      return -1;
-    }
-    if (a.title > b.title) {
-      return 1;
-    }
-    if (a.length < b.length) {
-      return -1;
-    }
-    if (a.length > b.length) {
-      return 1;
-    }
-    if (a.id < b.id) {
-      return -1;
-    }
-    if (a.id > b.id) {
-      return 1;
-    }
-    return 0;
-  });
+  const sortedTracks = tracks.concat().sort(titleLengthIdComparator);
 
   const sortedTrackIndex = sortedTracks.findIndex(t => t.id === randomTrack.id);
   const nextTwo = sortedTracks.slice(
@@ -100,3 +77,30 @@ async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
   );
   expect(rows).toEqual(nextTwo);
 }
+
+const titleLengthIdComparator = (a: Track, b: Track) => {
+  if (a.title < b.title) {
+    return -1;
+  }
+  if (a.title > b.title) {
+    return 1;
+  }
+  if (a.length < b.length) {
+    return -1;
+  }
+  if (a.length > b.length) {
+    return 1;
+  }
+  if (a.id < b.id) {
+    return -1;
+  }
+  if (a.id > b.id) {
+    return 1;
+  }
+  return 0;
+};
+
+const titleLengthIdComparatorFromJoinResult = (
+  a: {track: Track},
+  b: {track: Track},
+) => titleLengthIdComparator(a.track, b.track);
