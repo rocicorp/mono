@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {and, exp, or} from 'zql/src/zql/query/entity-query.js';
-import {cases} from 'zql/src/zql/prev-next-test-cases.js';
+import {singleTableCases} from 'zql/src/zql/prev-next-test-cases.js';
 import {bulkSet, newZero} from './integration-test-util.js';
 import fc from 'fast-check';
 
@@ -239,7 +239,7 @@ async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
   await z.close();
 }
 
-test.each(cases)('Complex paging - $name', async ({tracks}) => {
+test.each(singleTableCases)('Complex paging - $name', async ({tracks}) => {
   for (let i = 0; i < tracks.length; i++) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await checkIt(tracks, (() => i) as any);

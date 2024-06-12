@@ -21,7 +21,7 @@ const suite = async () => {
     const tracks = createRandomTracks(
       n,
       createRandomAlbums(1, createRandomArtists(1)),
-      true,
+      {autoIncr: true},
     );
     return async (upsertMany: (data: BulkItems) => Promise<void>) => {
       await upsertMany({tracks});
@@ -31,7 +31,7 @@ const suite = async () => {
     const tracks = createRandomTracks(
       n,
       createRandomAlbums(1, createRandomArtists(1)),
-      true,
+      {autoIncr: true},
     );
     const stride = n / titles.length;
     for (let i = 0; i < n; i += stride) {

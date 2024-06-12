@@ -36,6 +36,9 @@ export type PlaylistTrack = {
   position: number;
 };
 
+// Note: we should update these data generators to generate based on fast-check `gen` functions
+// so we can get deterministic data to help debug test failures.
+
 export function createRandomArtists(
   n: number,
   autoIncr: boolean = false,
@@ -62,16 +65,31 @@ export function createRandomAlbums(
   }));
 }
 
+type CreateTrackOptions = {
+  autoIncr?: boolean | undefined;
+  titles?: string[] | undefined;
+  lengths?: number[] | undefined;
+};
 export function createRandomTracks(
   n: number,
   albums: Album[],
-  autoIncr: boolean = false,
+  {autoIncr, titles, lengths}: CreateTrackOptions = {
+    autoIncr: false,
+  },
 ): Track[] {
   let id = 0;
   return Array.from({length: n}, () => ({
     id: autoIncr ? `${++id}` : nanoid(),
-    title: autoIncr ? `Track ${id}` : nanoid(),
-    length: autoIncr ? id * 1000 : Math.floor(Math.random() * 300000) + 1000,
+    title: titles
+      ? titles[Math.floor(Math.random() * titles.length)]
+      : autoIncr
+      ? `Track ${id}`
+      : nanoid(),
+    length: lengths
+      ? lengths[Math.floor(Math.random() * lengths.length)]
+      : autoIncr
+      ? id * 1000
+      : Math.floor(Math.random() * 300000) + 1000,
     albumId: autoIncr
       ? albums[0].id
       : albums[Math.floor(Math.random() * albums.length)].id,
@@ -83,11 +101,12 @@ export function linkTracksToArtists(
   tracks: Track[],
   assignAll: boolean = false,
 ): TrackArtist[] {
-  // assign each track to 1-3 artists
+  // assign each track to 0-3 artists
+  // 0 is important to flex left join
   return tracks.flatMap(t => {
     const numArtists = assignAll
       ? artists.length
-      : Math.floor(Math.random() * 3) + 1;
+      : Math.floor(Math.random() * 4);
     const artistsForTrack = new Set<string>();
     while (artistsForTrack.size < numArtists) {
       artistsForTrack.add(

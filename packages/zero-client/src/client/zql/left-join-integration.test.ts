@@ -18,7 +18,7 @@ test('left-join and aggregation to gather artists for a track', async () => {
 
   const artists = createRandomArtists(5, true);
   const albums = createRandomAlbums(2, artists, true);
-  const tracks = createRandomTracks(5, albums, true);
+  const tracks = createRandomTracks(5, albums, {autoIncr: true});
   // only link the first 2 tracks to artists
   const trackArtists = linkTracksToArtists(artists, tracks.slice(0, 2), true);
 
