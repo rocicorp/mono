@@ -3,6 +3,7 @@ import BTree from 'btree';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {Ordering, Primitive, Selector} from '../../ast/ast.js';
+import {gen} from '../../util/iterables.js';
 import {makeComparator} from '../compare.js';
 import {DifferenceStream} from '../graph/difference-stream.js';
 import {
@@ -281,11 +282,13 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     this.#stream.newDifference(
       this._materialite.getVersion(),
-      iterateBTreeWithOrder<T>(
-        newSort.#tree,
-        orderForReply,
-        range.startValue,
-        range.endValue,
+      gen(() =>
+        iterateBTreeWithOrder<T>(
+          newSort.#tree,
+          orderForReply,
+          range.startValue,
+          range.endValue,
+        ),
       ),
       createPullResponseMessage(request, this.#name, orderForReply),
     );
@@ -456,7 +459,7 @@ export function* iterateBTreeWithOrder<T extends object>(
   order: Ordering,
   rangeStartValue?: unknown,
   rangeEndValue?: unknown,
-): Iterable<Entry<T>> {
+): IterableIterator<Entry<T>> {
   // The tree is always sorted asc by one field which is the first element of the order.
 
   const atEnd = createEndPredicate(order[0][0], rangeEndValue, order);
@@ -533,7 +536,7 @@ export function* iterateBTreeWithOrder<T extends object>(
     //     // }
     //   }
     // }
-    return reversed ? tree.entriesReversed(startKey) : tree.entries(startKey);
+    // return reversed ? tree.entriesReversed(startKey) : tree.entries(startKey);
   }
 
   function* sortAndYieldBuffer(): Generator<Entry<T>, boolean> {
