@@ -14,7 +14,16 @@ export function sourcesAreIdentical(
   return orderingsAreEqual(sourceAOrder, sourceBOrder);
 }
 
-export function orderingsAreEqual(a: Ordering, b: Ordering) {
+export function orderingsAreEqual(
+  a: Ordering | undefined,
+  b: Ordering | undefined,
+) {
+  if (a === b) {
+    return true;
+  }
+  if (a === undefined || b === undefined) {
+    return false;
+  }
   if (a.length !== b.length) {
     return false;
   }
@@ -29,7 +38,10 @@ export function orderingsAreEqual(a: Ordering, b: Ordering) {
   return true;
 }
 
-export function selectorsAreEqual(l: Selector, r: Selector) {
+export function selectorsAreEqual(
+  l: readonly [string | null, string],
+  r: readonly [string | null, string],
+) {
   return l[0] === r[0] && l[1] === r[1];
 }
 
