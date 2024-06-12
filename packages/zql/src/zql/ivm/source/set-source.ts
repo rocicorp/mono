@@ -1,6 +1,7 @@
 import type {ISortedMap} from 'btree';
 import BTree from 'btree';
 import {must} from 'shared/src/must.js';
+import {assert} from '../../../../../shared/src/asserts.js';
 import type {Ordering, Primitive, Selector} from '../../ast/ast.js';
 import {gen} from '../../util/iterables.js';
 import {makeComparator} from '../compare.js';
@@ -10,12 +11,14 @@ import {
   PullMsg,
   Request,
   createPullResponseMessage,
+  conditionsMatch,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry} from '../multiset.js';
 import type {Comparator, PipelineEntity, Version} from '../types.js';
 import {SourceHashIndex} from './source-hash-index.js';
 import type {Source, SourceInternal} from './source.js';
+import {orderingsAreEqual} from './util.js';
 
 /**
  * A source that remembers what values it contains.
@@ -39,7 +42,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
   protected readonly _materialite: MaterialiteForSourceInternal;
   #id = id++;
-  #historyRequests: Array<PullMsg> = [];
+  #historyRequests: Map<number, PullMsg> = new Map();
   #tree: BTree<T, undefined>;
   #seeded = false;
   #pending: Entry<T>[] = [];
@@ -68,9 +71,22 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
-        if (this.#pending.length === 0) {
+        if (this.#pending.length === 0 && this.#historyRequests.size === 0) {
           return;
         }
+
+        if (this.#historyRequests.size > 0) {
+          assert(
+            this.#pending.length === 0,
+            'It should be impossible to have pending changes and history requests in the same transaction.',
+          );
+          for (const request of this.#historyRequests.values()) {
+            this.#sendHistory(request);
+          }
+          this.#historyRequests.clear();
+          return;
+        }
+
         for (let i = 0; i < this.#pending.length; i++) {
           const [val, mult] = must(this.#pending[i]);
           // small optimization to reduce operations for replace
@@ -134,7 +150,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       this.#name,
     ) as this;
     if (this.#seeded) {
-      ret.seed(this.#tree.keys());
+      ret.seed(this.#tree.keys(), true);
     }
     return ret;
   }
@@ -201,7 +217,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
    * This can happen since `experimentalWatch` will asynchronously call us
    * back with the seed/initial values.
    */
-  seed(values: Iterable<T>): this {
+  seed(values: Iterable<T>, derived: boolean = false): this {
     // TODO: invariant to ensure we are in a tx.
     for (const v of values) {
       this.#tree = this.#tree.with(v, undefined, true);
@@ -213,15 +229,11 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       }
     }
 
-    this._materialite.addDirtySource(this.#internal);
+    if (!derived) {
+      this._materialite.addDirtySource(this.#internal);
+    }
 
     this.#seeded = true;
-    // Notify views that requested history, if any.
-    for (const request of this.#historyRequests) {
-      this.#sendHistory(request);
-    }
-    this.#historyRequests = [];
-
     return this;
   }
 
@@ -230,12 +242,10 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     switch (message.type) {
       case 'pull': {
         this._materialite.addDirtySource(this.#internal);
-        if (this.#seeded) {
-          // Already seeded? Immediately reply with history.
-          this.#sendHistory(message);
-        } else {
-          this.#historyRequests.push(message);
-        }
+        this.#historyRequests.set(
+          message.id,
+          mergeRequests(message, this.#historyRequests.get(message.id)),
+        );
         break;
       }
     }
@@ -502,4 +512,34 @@ function maybeGetKey<T>(selector: Selector, value: unknown): T | undefined {
   return {
     [selector[1]]: value,
   } as T;
+}
+
+function mergeRequests(a: Request, b: Request | undefined) {
+  if (b === undefined) {
+    return a;
+  }
+
+  let rmConditions = false;
+  if (!conditionsMatch(a.hoistedConditions, b.hoistedConditions)) {
+    rmConditions = true;
+  }
+  let rmOrder = false;
+  if (!orderingsAreEqual(a.order, b.order)) {
+    rmOrder = true;
+  }
+
+  if (rmConditions || rmOrder) {
+    const ret = {
+      ...a,
+    };
+    if (rmConditions) {
+      ret.hoistedConditions = [];
+    }
+    if (rmOrder) {
+      ret.order = undefined;
+    }
+    return ret;
+  }
+
+  return a;
 }

@@ -32,7 +32,7 @@ export class TestContext implements Context {
         [[[name, 'id'], 'asc']],
         name,
       ) as unknown as Source<PipelineEntity>;
-      source.seed([]);
+      source.seed([], false);
       this.#sources.set(name, source);
     }
     return this.#sources.get(name)! as unknown as Source<T>;
@@ -73,7 +73,7 @@ export class InfiniteSourceContext implements Context {
         [[[name, 'id'], 'asc']],
         name,
       ) as unknown as Source<PipelineEntity>;
-      source.seed([]);
+      source.seed([], false);
       this.#sources.set(name, source);
     }
     this.#sources.set(name, source);

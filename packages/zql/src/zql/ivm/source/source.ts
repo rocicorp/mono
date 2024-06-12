@@ -15,7 +15,7 @@ export interface Source<T extends PipelineEntity> {
   ): SourceHashIndex<K, T>;
 
   // We could remove `seed` and implicitly deduce it from the `add` method
-  seed(values: Iterable<T>): this;
+  seed(values: Iterable<T>, derived: boolean): this;
   isSeeded(): boolean;
   awaitSeeding(): PromiseLike<void>;
 }

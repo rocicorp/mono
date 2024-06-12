@@ -1,4 +1,5 @@
 import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
+import {selectorsAreEqual} from '../source/util.js';
 
 export type Request = PullMsg;
 
@@ -108,4 +109,30 @@ export function createPullResponseMessage(
     order,
     contiguousGroup: [],
   };
+}
+
+export function conditionsMatch(
+  a: readonly HoistedCondition[],
+  b: readonly HoistedCondition[],
+) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  if (a === b) {
+    return true;
+  }
+
+  for (let i = 0; i < a.length; ++i) {
+    const aCondition = a[i];
+    const bCondition = b[i];
+    if (
+      aCondition.op !== bCondition.op ||
+      !selectorsAreEqual(aCondition.selector, bCondition.selector) ||
+      aCondition.value !== bCondition.value
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
