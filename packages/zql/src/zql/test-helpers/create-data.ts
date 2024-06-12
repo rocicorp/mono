@@ -96,16 +96,24 @@ export function createRandomTracks(
   }));
 }
 
+export type LinkTrackArtistOptions = {
+  assignAll?: boolean | undefined;
+  allTracksMustHaveAnArtist?: boolean | undefined;
+};
 export function linkTracksToArtists(
   artists: Artist[],
   tracks: Track[],
-  assignAll: boolean = false,
+  options: LinkTrackArtistOptions = {
+    assignAll: false,
+  },
 ): TrackArtist[] {
   // assign each track to 0-3 artists
   // 0 is important to flex left join
   return tracks.flatMap(t => {
-    const numArtists = assignAll
+    const numArtists = options.assignAll
       ? artists.length
+      : options.allTracksMustHaveAnArtist
+      ? Math.floor(Math.random() * 3) + 1
       : Math.floor(Math.random() * 4);
     const artistsForTrack = new Set<string>();
     while (artistsForTrack.size < numArtists) {

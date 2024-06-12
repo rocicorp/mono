@@ -20,7 +20,9 @@ test('left-join and aggregation to gather artists for a track', async () => {
   const albums = createRandomAlbums(2, artists, true);
   const tracks = createRandomTracks(5, albums, {autoIncr: true});
   // only link the first 2 tracks to artists
-  const trackArtists = linkTracksToArtists(artists, tracks.slice(0, 2), true);
+  const trackArtists = linkTracksToArtists(artists, tracks.slice(0, 2), {
+    assignAll: true,
+  });
 
   await bulkSet(z, {
     tracks,

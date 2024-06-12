@@ -199,12 +199,33 @@ async function checkDoubleLeftJoinGroupBy(
       sortedTrackIndex + 1,
       sortedTrackIndex + 3,
     );
-    expect(
-      rows.map(t => ({
-        track: t.track,
-        artists: t.artists,
-      })),
-    ).toEqual(nextTwo);
+
+    try {
+      expect(
+        rows.map(t => ({
+          track: t.track,
+          artists: t.artists,
+        })),
+      ).toEqual(nextTwo);
+    } catch (e) {
+      const allRows = await trackQuery
+        .leftJoin(
+          trackArtistQuery,
+          'trackArtist',
+          'track.id',
+          'trackArtist.trackId',
+        )
+        .leftJoin(artistQuery, 'artist', 'trackArtist.artistId', 'artist.id')
+        .select('track.*', agg.array('artist.*', 'artists'))
+        .orderBy('track.title', 'asc')
+        .orderBy('track.length', 'asc')
+        .groupBy('track.id')
+        .prepare()
+        .exec();
+      console.log('ALL ROWS: (no cursor)', allRows);
+      console.log('EXPECTED:', expectedResult);
+      throw e;
+    }
 
     stmt.destroy();
   }
