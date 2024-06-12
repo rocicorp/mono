@@ -36,11 +36,11 @@ export type Z = ReturnType<typeof newZero>;
 export async function bulkSet(
   z: Z,
   items: {
-    tracks?: Track[] | undefined;
-    albums?: Album[] | undefined;
-    artists?: Artist[] | undefined;
-    playlists?: Playlist[] | undefined;
-    trackArtists?: TrackArtist[] | undefined;
+    tracks?: readonly Track[] | undefined;
+    albums?: readonly Album[] | undefined;
+    artists?: readonly Artist[] | undefined;
+    playlists?: readonly Playlist[] | undefined;
+    trackArtists?: readonly TrackArtist[] | undefined;
   },
 ) {
   const promises: Promise<void>[] = [];

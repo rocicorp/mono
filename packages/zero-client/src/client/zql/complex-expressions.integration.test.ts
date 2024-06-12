@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
-import {and, exp, or} from '../../../../zql/src/zql/query/entity-query.js';
+import {and, exp, or} from 'zql/src/zql/query/entity-query.js';
+import {cases} from 'zql/src/zql/prev-next-test-cases.js';
 import {bulkSet, newZero} from './integration-test-util.js';
 import fc from 'fast-check';
 
@@ -169,11 +170,11 @@ const trackArbitrary: fc.Arbitrary<Track[]> = fc.array(
   },
 );
 
-test('complex expressions', async () => {
+test('fast check 3 field order by', async () => {
   await fc.assert(fc.asyncProperty(trackArbitrary, fc.gen(), checkIt));
 });
 
-async function checkIt(tracks: Track[], gen: fc.GeneratorValue) {
+async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
   const z = newZero();
   await bulkSet(z, {
     tracks,
@@ -237,3 +238,10 @@ async function checkIt(tracks: Track[], gen: fc.GeneratorValue) {
   expect(rows).toEqual(nextTwo);
   await z.close();
 }
+
+test.each(cases)('Complex paging - $name', async ({tracks}) => {
+  for (let i = 0; i < tracks.length; i++) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await checkIt(tracks, (() => i) as any);
+  }
+});

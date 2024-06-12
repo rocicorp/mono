@@ -1,14 +1,15 @@
 import fc from 'fast-check';
 import {test, expect} from 'vitest';
 import {TestContext} from './context/test-context.js';
+import {cases} from './prev-next-test-cases.js';
 import {and, EntityQuery, exp, or} from './query/entity-query.js';
 
-type Track = {
+type Track = Readonly<{
   id: string;
   title: string;
   albumId: string;
   length: number;
-};
+}>;
 
 const trackArbitrary: fc.Arbitrary<Track[]> = fc.array(
   fc.record({
@@ -22,11 +23,18 @@ const trackArbitrary: fc.Arbitrary<Track[]> = fc.array(
   },
 );
 
-test('complex expressions', async () => {
+test('complex paging against 3 fields', async () => {
   await fc.assert(fc.asyncProperty(trackArbitrary, fc.gen(), checkIt));
 });
 
-async function checkIt(tracks: Track[], gen: fc.GeneratorValue) {
+test.each(cases)('Complex paging - $name', async ({tracks}) => {
+  for (let i = 0; i < tracks.length; i++) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await checkIt(tracks, (() => i) as any);
+  }
+});
+
+async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
   const context = new TestContext();
   const trackSource = context.getSource('track');
   context.materialite.tx(() => {
