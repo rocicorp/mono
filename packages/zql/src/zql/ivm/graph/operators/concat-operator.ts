@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
-import {gen, iterInOrder} from '../../../util/iterables.js';
+import {genCached, iterInOrder} from '../../../util/iterables.js';
 import {makeComparator} from '../../compare.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import {sourcesAreIdentical} from '../../source/util.js';
@@ -78,7 +78,7 @@ export class ConcatOperator<T extends PipelineEntity> implements Operator {
     } else {
       this.#output.newDifference(
         this.#replyVersion,
-        gen(() => inOrder(this.#replyBuffer)),
+        genCached(inOrder(this.#replyBuffer)),
         first[1],
       );
     }

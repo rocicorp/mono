@@ -41,7 +41,7 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
     */
 
     const entriesCache = this.#entriesCache;
-    return genFilter(
+    const ret = genFilter(
       genCached(
         genMap(multiset, (entry): Entry<T> | undefined => {
           if (entry[1] === 0) {
@@ -92,6 +92,8 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
       ),
       (x): x is Entry<T> => x !== undefined,
     );
+
+    return ret;
   }
 
   messageUpstream(message: Request): void {
