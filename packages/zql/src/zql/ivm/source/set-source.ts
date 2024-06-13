@@ -514,7 +514,9 @@ function maybeGetKey<T>(selector: Selector, value: unknown): T | undefined {
   } as T;
 }
 
-function mergeRequests(a: Request, b: Request | undefined) {
+// TODO(mlaw): request selectors and orderings need to be de-aliased on the way up
+// the graph.
+export function mergeRequests(a: Request, b: Request | undefined) {
   if (b === undefined) {
     return a;
   }
@@ -533,7 +535,7 @@ function mergeRequests(a: Request, b: Request | undefined) {
       ...a,
     };
     if (intersectedConditions !== a.hoistedConditions) {
-      ret.hoistedConditions = [];
+      ret.hoistedConditions = intersectedConditions;
     }
     if (commonOrderPrefix !== a.order) {
       ret.order = commonOrderPrefix;

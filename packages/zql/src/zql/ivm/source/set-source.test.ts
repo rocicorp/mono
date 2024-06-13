@@ -4,6 +4,7 @@ import type {Ordering} from '../../ast/ast.js';
 import type {Listener} from '../graph/difference-stream.js';
 import type {PullMsg} from '../graph/message.js';
 import {Materialite} from '../materialite.js';
+import {mergeRequests} from './set-source.js';
 
 type E = {id: number};
 
@@ -541,5 +542,166 @@ describe('history requests with hoisted filters', () => {
       expect(items).toEqual(expected[i]);
       items.length = 0;
     });
+  });
+});
+
+describe('merge requests', () => {
+  test.each([
+    {
+      name: 'no conditions or order',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'disjoint values',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 2,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'disjoint selectors',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'boo'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'disjoint operators',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'partial overlap',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 2,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 3,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+    },
+  ] as const)('$name', ({reqA, reqB, expected}) => {
+    expect(mergeRequests(reqA, reqB)).toEqual(expected);
   });
 });
