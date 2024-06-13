@@ -349,15 +349,14 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     }
     const alternateSort = this.#sorts.get(key);
     if (alternateSort !== undefined) {
-      const newOrdering: Ordering = [
-        ordering[0],
-        [[this.#name, 'id'], ordering[0][1]],
-      ];
-      return [alternateSort, newOrdering];
+      // We omit the `id` part when responding to the view so the view can correctly
+      // iterate past the common prefix.
+      const orderForReply: Ordering = [ordering[0]];
+      return [alternateSort, orderForReply];
     }
 
-    // We ignore asc/desc as directionality can be achieved by reversing the order of iteration.
-    // We do not need a separate source.
+    // We ignore asc/desc as directionality can be achieved by reversing the order of iteration
+    // rather than creating a separate source.
     // Must append id for uniqueness.
     const orderBy: Ordering = [
       [firstSelector, 'asc'],
@@ -367,13 +366,11 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     const source = this.withNewOrdering(newComparator, orderBy);
 
     this.#sorts.set(key, source);
-    const dir = ordering[0][1];
-    const orderByKeepDirection: Ordering = [
-      [firstSelector, dir],
-      [[this.#name, 'id'], dir],
-    ];
+    // We omit the `id` part when responding to the view so the view can correctly
+    // iterate past the common prefix.
+    const orderForReply: Ordering = [ordering[0]];
 
-    return [source, orderByKeepDirection];
+    return [source, orderForReply];
     2;
   }
 
