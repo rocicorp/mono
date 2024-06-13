@@ -110,6 +110,7 @@ export function createPullResponseMessage(
   };
 }
 
+// TODO: we can merge and expand inequalities and `INs`
 export function intersectConditions(
   a: readonly HoistedCondition[],
   b: readonly HoistedCondition[],
@@ -139,6 +140,10 @@ export function intersectConditions(
     if (existing && existing.find(v => v === cond.value) !== undefined) {
       intersection.push(cond);
     }
+  }
+
+  if (intersection.length === a.length) {
+    return a;
   }
 
   return intersection;

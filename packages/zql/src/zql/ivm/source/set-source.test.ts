@@ -851,6 +851,26 @@ describe('merge requests', () => {
         ],
       },
     },
+    {
+      name: 'previous issue page - zeppliear',
+      reqA: {
+        id: 5,
+        type: 'pull',
+        hoistedConditions: [
+          {selector: ['issue', 'modified'], op: '>', value: 5004533700000},
+          {selector: ['issue', 'status'], op: 'IN', value: [1, 2, 3, 4, 5]},
+        ],
+      },
+      reqB: {
+        id: 5,
+        type: 'pull',
+        hoistedConditions: [
+          {selector: ['issue', 'id'], op: '>=', value: 'ysHxepAl0J_dup6'},
+          {selector: ['issue', 'modified'], op: '=', value: 5004533700000},
+          {selector: ['issue', 'status'], op: 'IN', value: [1, 2, 3, 4, 5]},
+        ],
+      },
+    },
   ] as const)('$name', ({reqA, reqB, expected}) => {
     expect(mergeRequests(reqA, reqB)).toEqual(expected);
   });

@@ -515,6 +515,7 @@ export function mergeRequests(a: Request, b: Request | undefined) {
     if (commonOrderPrefix !== a.order) {
       ret.order = commonOrderPrefix;
     }
+
     return ret;
   }
 
