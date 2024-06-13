@@ -1,4 +1,4 @@
-import type {Ordering, Selector} from '../../ast/ast.js';
+import type {Ordering, OrderPart, Selector} from '../../ast/ast.js';
 import {isJoinResult} from '../types.js';
 
 export function sourcesAreIdentical(
@@ -12,6 +12,35 @@ export function sourcesAreIdentical(
   }
 
   return orderingsAreEqual(sourceAOrder, sourceBOrder);
+}
+
+export function getCommonPrefixOrdering(
+  a: Ordering | undefined,
+  b: Ordering | undefined,
+): Ordering | undefined {
+  if (a === b) {
+    return a;
+  }
+  if (a === undefined || b === undefined) {
+    return undefined;
+  }
+  const minLength = Math.min(a.length, b.length);
+  let i = 0;
+  for (; i < minLength; ++i) {
+    if (a[i][1] !== b[i][1]) {
+      break;
+    }
+  }
+
+  if (i === 0) {
+    return undefined;
+  }
+
+  const ret: OrderPart[] = [];
+  for (let j = 0; j < i; ++j) {
+    ret.push(a[i]);
+  }
+  return ret;
 }
 
 export function orderingsAreEqual(

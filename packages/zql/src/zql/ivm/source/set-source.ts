@@ -11,14 +11,14 @@ import {
   PullMsg,
   Request,
   createPullResponseMessage,
-  conditionsMatch,
+  intersectConditions,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry} from '../multiset.js';
 import type {Comparator, PipelineEntity, Version} from '../types.js';
 import {SourceHashIndex} from './source-hash-index.js';
 import type {Source, SourceInternal} from './source.js';
-import {orderingsAreEqual} from './util.js';
+import {getCommonPrefixOrdering} from './util.js';
 
 /**
  * A source that remembers what values it contains.
@@ -519,24 +519,24 @@ function mergeRequests(a: Request, b: Request | undefined) {
     return a;
   }
 
-  let rmConditions = false;
-  if (!conditionsMatch(a.hoistedConditions, b.hoistedConditions)) {
-    rmConditions = true;
-  }
-  let rmOrder = false;
-  if (!orderingsAreEqual(a.order, b.order)) {
-    rmOrder = true;
-  }
+  const intersectedConditions = intersectConditions(
+    a.hoistedConditions,
+    b.hoistedConditions,
+  );
+  const commonOrderPrefix = getCommonPrefixOrdering(a.order, b.order);
 
-  if (rmConditions || rmOrder) {
+  if (
+    intersectedConditions !== a.hoistedConditions ||
+    commonOrderPrefix !== a.order
+  ) {
     const ret = {
       ...a,
     };
-    if (rmConditions) {
+    if (intersectedConditions !== a.hoistedConditions) {
       ret.hoistedConditions = [];
     }
-    if (rmOrder) {
-      ret.order = undefined;
+    if (commonOrderPrefix !== a.order) {
+      ret.order = commonOrderPrefix;
     }
     return ret;
   }

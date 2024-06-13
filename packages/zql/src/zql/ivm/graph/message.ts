@@ -111,6 +111,38 @@ export function createPullResponseMessage(
   };
 }
 
+export function intersectConditions(
+  a: readonly HoistedCondition[],
+  b: readonly HoistedCondition[],
+) {
+  if (a === b) {
+    return a;
+  }
+
+  const valueMap = new Map<string, unknown[]>();
+
+  for (const cond of a) {
+    const key = cond.op + '-' + cond.selector.join(',');
+    const existing = valueMap.get(key);
+    if (existing) {
+      existing.push(a);
+    } else {
+      valueMap.set(key, [a]);
+    }
+  }
+
+  const intersection: HoistedCondition[] = [];
+  for (const cond of b) {
+    const key = cond.op + '-' + cond.selector.join(',');
+    const existing = valueMap.get(key);
+    if (existing && existing.find(v => v === cond.value)) {
+      intersection.push(cond);
+    }
+  }
+
+  return intersection;
+}
+
 export function conditionsMatch(
   a: readonly HoistedCondition[],
   b: readonly HoistedCondition[],
