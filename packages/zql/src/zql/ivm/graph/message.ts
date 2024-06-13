@@ -1,5 +1,4 @@
 import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
-import {selectorsAreEqual} from '../source/util.js';
 
 export type Request = PullMsg;
 
@@ -120,51 +119,27 @@ export function intersectConditions(
   }
 
   const valueMap = new Map<string, unknown[]>();
+  const makeKey = (cond: HoistedCondition) =>
+    cond.op + '-' + cond.selector.join(',');
 
   for (const cond of a) {
-    const key = cond.op + '-' + cond.selector.join(',');
+    const key = makeKey(cond);
     const existing = valueMap.get(key);
     if (existing) {
-      existing.push(a);
+      existing.push(cond.value);
     } else {
-      valueMap.set(key, [a]);
+      valueMap.set(key, [cond.value]);
     }
   }
 
   const intersection: HoistedCondition[] = [];
   for (const cond of b) {
-    const key = cond.op + '-' + cond.selector.join(',');
+    const key = makeKey(cond);
     const existing = valueMap.get(key);
-    if (existing && existing.find(v => v === cond.value)) {
+    if (existing && existing.find(v => v === cond.value) !== undefined) {
       intersection.push(cond);
     }
   }
 
   return intersection;
-}
-
-export function conditionsMatch(
-  a: readonly HoistedCondition[],
-  b: readonly HoistedCondition[],
-) {
-  if (a.length !== b.length) {
-    return false;
-  }
-  if (a === b) {
-    return true;
-  }
-
-  for (let i = 0; i < a.length; ++i) {
-    const aCondition = a[i];
-    const bCondition = b[i];
-    if (
-      aCondition.op !== bCondition.op ||
-      !selectorsAreEqual(aCondition.selector, bCondition.selector) ||
-      aCondition.value !== bCondition.value
-    ) {
-      return false;
-    }
-  }
-
-  return true;
 }
