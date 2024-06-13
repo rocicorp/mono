@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import * as v from 'shared/src/valita.js';
 import {expect, test} from 'vitest';
+import {makeComparator as makeComparatorUsingOrder} from 'zql/src/zql/ivm/compare.js';
 import {joinSymbol} from 'zql/src/zql/ivm/types.js';
 import * as agg from 'zql/src/zql/query/agg.js';
 import {exp, not, or} from 'zql/src/zql/query/entity-query.js';
@@ -388,6 +389,40 @@ test('order by compound fields', async () => {
 
       await z.close();
     }),
+    {interruptAfterTimeLimit: 4000},
+  );
+});
+
+test('order by compound fields asc & desc', async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      uniqueNonEmptyIssuesArbitrary,
+      fc.array(
+        fc.boolean().map(b => (b ? 'asc' : 'desc')),
+        {minLength: 3, maxLength: 3},
+      ),
+      async (issues, directions) => {
+        const z = newZero();
+        await Promise.all(issues.map(z.mutate.issue.create));
+
+        const order = [
+          [['issue', 'assignee'], directions[0]],
+          [['issue', 'created'], directions[1]],
+          [['issue', 'id'], directions[2]],
+        ] as const;
+        const compareExpected = makeComparatorUsingOrder(order);
+        const stmt = z.query.issue
+          .select('id', 'assignee', 'created')
+          .orderBy('assignee', directions[0])
+          .orderBy('created', directions[1])
+          .orderBy('id', directions[2])
+          .prepare();
+        const rows = await stmt.exec();
+        expect(rows).toEqual(issues.sort(compareExpected));
+
+        await z.close();
+      },
+    ),
     {interruptAfterTimeLimit: 4000},
   );
 });
