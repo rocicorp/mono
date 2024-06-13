@@ -57,7 +57,6 @@ export class ServiceRunnerDO {
   };
 
   async start() {
-    await this.#serviceRunner.getReplicator()
     await this.#fastify.register(websocket);
     this.#fastify.get(CONNECT_URL_PATTERN, {websocket: true}, this.#connect);
     this.#fastify.get(STATUS_URL_PATTERN, this.#status);

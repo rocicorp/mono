@@ -32,6 +32,7 @@ export class ReplicatorDO {
   }
 
   async start() {
+    await this.#serviceRunner.getReplicator();
     await this.#fastify.register(websocket);
     this.#initRoutes();
     this.#fastify.listen({port: 3001}, (err, address) => {
