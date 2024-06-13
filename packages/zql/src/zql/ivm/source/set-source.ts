@@ -279,23 +279,26 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     const [newSort, orderForReply] =
       this.#getOrCreateAndMaintainNewSort(request);
 
+    const version = this._materialite.getVersion();
+    const reply = createPullResponseMessage(request, this.#name, orderForReply);
+
     // Is there a range constraint against the ordered field?
     const range = getRange(conditionsForThisSource, orderForReply);
     if (request.order === undefined || request.order[0][1] === 'asc') {
       this.#stream.newDifference(
-        this._materialite.getVersion(),
+        version,
         gen(() =>
           genFromBTreeEntries(
             newSort.#tree.entries(maybeGetKey(range.field, range.bottom)),
-            createEndPredicateAsc(range.field, range.top),
+            createEndPredicate(range.field, range.top, 'asc'),
           ),
         ),
-        createPullResponseMessage(request, this.#name, orderForReply),
+        reply,
       );
       return;
     }
 
-    const maybeKey = maybeGetKey<T>(range.field, range.top);
+    let maybeKey = maybeGetKey<T>(range.field, range.top);
     if (maybeKey !== undefined && newSort.#order.length > 1) {
       const entriesBelow = newSort.#tree.entries(maybeKey);
       let key: T | undefined;
@@ -306,28 +309,18 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
           break;
         }
       }
-      this.#stream.newDifference(
-        this._materialite.getVersion(),
-        gen(() =>
-          genFromBTreeEntries(
-            newSort.#tree.entriesReversed(key),
-            createEndPredicateDesc(range.field, range.bottom),
-          ),
-        ),
-        createPullResponseMessage(request, this.#name, orderForReply),
-      );
-    } else {
-      this.#stream.newDifference(
-        this._materialite.getVersion(),
-        gen(() =>
-          genFromBTreeEntries(
-            newSort.#tree.entriesReversed(maybeKey),
-            createEndPredicateDesc(range.field, range.bottom),
-          ),
-        ),
-        createPullResponseMessage(request, this.#name, orderForReply),
-      );
+      maybeKey = key;
     }
+    this.#stream.newDifference(
+      version,
+      gen(() =>
+        genFromBTreeEntries(
+          newSort.#tree.entriesReversed(maybeKey),
+          createEndPredicate(range.field, range.bottom, 'desc'),
+        ),
+      ),
+      reply,
+    );
   }
 
   #getOrCreateAndMaintainNewSort(request: PullMsg): [SetSource<T>, Ordering] {
@@ -474,32 +467,17 @@ function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
   };
 }
 
-function createEndPredicateAsc<T extends object>(
+function createEndPredicate<T extends object>(
   selector: Selector,
   end: unknown,
+  dir: 'asc' | 'desc',
 ): ((t: T) => boolean) | undefined {
   if (end === undefined) {
     return undefined;
   }
-  const comp = makeComparator<T>([[selector, 'asc']]);
-  return t => {
-    const cmp = comp(t, {[selector[1]]: end} as T);
-    return cmp > 0;
-  };
-}
-
-function createEndPredicateDesc<T extends object>(
-  selector: Selector,
-  end: unknown,
-): ((t: T) => boolean) | undefined {
-  if (end === undefined) {
-    return undefined;
-  }
-  const comp = makeComparator<T>([[selector, 'asc']]);
-  return t => {
-    const cmp = comp(t, {[selector[1]]: end} as T);
-    return cmp < 0;
-  };
+  const comp = makeComparator<T>([[selector, dir]]);
+  const r = {[selector[1]]: end} as T;
+  return l => comp(l, r) > 0;
 }
 
 function maybeGetKey<T>(selector: Selector, value: unknown): T | undefined {

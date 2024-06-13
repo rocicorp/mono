@@ -485,9 +485,6 @@ export class EntityQuery<From extends FromSet, Return = []> {
 
   orderBy(selector: SimpleSelector<From>, dir: 'asc' | 'desc' = 'asc') {
     const ast = this.#ast;
-    if (ast.orderBy && ast.orderBy.length > 1 && ast.orderBy[0][1] !== dir) {
-      throw new Misuse('Cannot mix ASC and DESC in ORDER BY (yet!)');
-    }
     const entry = [qualifySelector(ast, selector), dir] as const;
     const orderBy = ast.orderBy ? [...ast.orderBy, entry] : [entry];
     return new EntityQuery<From, Return>(this.#context, this.#name, {

@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import * as agg from 'zql/src/zql/query/agg.js';
-import {exp, or} from '../../../../zql/src/zql/query/entity-query.js';
+import {exp, or} from 'zql/src/zql/query/entity-query.js';
 import {
   createRandomAlbums,
   createRandomArtists,

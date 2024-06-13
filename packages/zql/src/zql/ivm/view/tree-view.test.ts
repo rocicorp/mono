@@ -98,17 +98,13 @@ test('replace', () => {
       const context = makeTestContext();
       const {materialite} = context;
       const orderBy = [[['test', 'x'], 'asc']] as const;
+      const comparator: Comparator<{x: number}> = (l, r) => l.x - r.x;
       const source = materialite.newSetSource<{x: number}>(
-        (l, r) => l.x - r.x,
+        comparator,
         orderBy,
         'test',
       );
-      const view = new TreeView(
-        context,
-        source.stream,
-        (l, r) => l.x - r.x,
-        orderBy,
-      );
+      const view = new TreeView(context, source.stream, comparator, orderBy);
 
       materialite.tx(() => {
         arr.forEach(x => source.add({x}));

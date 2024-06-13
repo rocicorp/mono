@@ -73,8 +73,8 @@ test('on', () => {
   // We could track this in the source by checking if add events returned false
 });
 
-test('replace', async () => {
-  await fc.assert(
+test('replace', () => {
+  fc.assert(
     fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
       const source = m.newSetSource(comparator, ordering, 'test');
@@ -173,6 +173,7 @@ test('history requests with an alternate ordering are fulfilled by that ordering
   };
   const comparator = (l: E2, r: E2) => l.id - r.id;
 
+  const ordering: Ordering = [[['e2', 'id'], 'asc']];
   const m = new Materialite();
   const source = m.newSetSource(comparator, ordering, 'e2');
 
@@ -250,22 +251,38 @@ test('history requests with an alternate ordering are fulfilled by that ordering
   expect(items).toEqual(
     baseItems.concat({id: 4, x: 'd'}).sort((l, r) => l.x.localeCompare(r.x)),
   );
+
+  items.length = 0;
+
+  m.tx(() => {
+    source.stream.messageUpstream(
+      {
+        id: 3,
+        type: 'pull',
+        order: [
+          [['e2', 'x'], 'desc'],
+          [['e2', 'id'], 'desc'],
+        ],
+        hoistedConditions: [],
+      },
+      listener,
+    );
+  });
+
+  expect(items).toEqual(
+    baseItems.concat({id: 4, x: 'd'}).sort((l, r) => -l.x.localeCompare(r.x)),
+  );
 });
 
 describe('history requests with hoisted filters', () => {
-  const m = new Materialite();
-  const source = m.newSetSource(comparator, ordering, 'e');
-
-  const baseItems = [
+  type E = {id: number; x: string; y: string};
+  const baseItems: readonly E[] = [
     {id: 1, x: 'a', y: 'q'},
     {id: 2, x: 'b', y: 'q'},
     {id: 3, x: 'c', y: 'q'},
     {id: 4, x: 'd', y: 'r'},
     {id: 5, x: 'e', y: 'r'},
   ];
-  m.tx(() => {
-    source.seed(baseItems);
-  });
 
   test.each([
     {
@@ -521,28 +538,161 @@ describe('history requests with hoisted filters', () => {
       // only y values with `q` will be processed.
       expected: [baseItems.slice(0, 3)],
     },
+    {
+      name: 'lookup on x w/ order by x asc, id asc',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'asc'],
+            [['e', 'id'], 'asc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>=',
+              value: 'b',
+            },
+          ],
+        },
+      ],
+      seedItems: [
+        {id: 1, x: 'a', y: 'q'},
+        {id: 2, x: 'a', y: 'q'},
+        {id: 3, x: 'b', y: 'q'},
+        {id: 4, x: 'b', y: 'r'},
+        {id: 5, x: 'c', y: 'r'},
+        {id: 6, x: 'c', y: 'r'},
+      ],
+      expected: [
+        [
+          {id: 3, x: 'b', y: 'q'},
+          {id: 4, x: 'b', y: 'r'},
+          {id: 5, x: 'c', y: 'r'},
+          {id: 6, x: 'c', y: 'r'},
+        ],
+      ],
+    },
+
+    {
+      name: 'lookup on x w/ order by x desc, id asc',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'desc'],
+            [['e', 'id'], 'asc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>=',
+              value: 'b',
+            },
+          ],
+        },
+      ],
+      seedItems: [
+        {id: 1, x: 'a', y: 'q'},
+        {id: 2, x: 'a', y: 'q'},
+        {id: 3, x: 'b', y: 'q'},
+        {id: 4, x: 'b', y: 'r'},
+        {id: 5, x: 'c', y: 'r'},
+        {id: 6, x: 'c', y: 'r'},
+      ],
+      expected: [
+        [
+          // The result is ordered x desc, id desc
+          {id: 6, x: 'c', y: 'r'},
+          {id: 5, x: 'c', y: 'r'},
+          {id: 4, x: 'b', y: 'r'},
+          {id: 3, x: 'b', y: 'q'},
+        ],
+      ],
+    },
+
+    {
+      name: 'lookup on x w/ order by x asc, id desc',
+      requests: [
+        {
+          id: 1,
+          type: 'pull',
+          order: [
+            [['e', 'x'], 'asc'],
+            [['e', 'id'], 'desc'],
+          ],
+          hoistedConditions: [
+            {
+              selector: ['e', 'x'],
+              op: '>=',
+              value: 'b',
+            },
+          ],
+        },
+      ],
+      seedItems: [
+        {id: 1, x: 'a', y: 'q'},
+        {id: 2, x: 'a', y: 'q'},
+        {id: 3, x: 'b', y: 'q'},
+        {id: 4, x: 'b', y: 'r'},
+        {id: 5, x: 'c', y: 'r'},
+        {id: 6, x: 'c', y: 'r'},
+      ],
+      expected: [
+        [
+          // The result is ordered x asc, id asc
+          {id: 3, x: 'b', y: 'q'},
+          {id: 4, x: 'b', y: 'r'},
+          {id: 5, x: 'c', y: 'r'},
+          {id: 6, x: 'c', y: 'r'},
+        ],
+      ],
+    },
   ] satisfies {
     name: string;
     requests: PullMsg[];
-    expected: E[][];
-  }[])('$name', ({requests, expected}) => {
-    const items: E[] = [];
-    const listener: Listener<E> = {
-      commit(_version) {},
-      newDifference(_version, multiset, _reply) {
-        for (const item of multiset) {
-          items.push(item[0]);
-        }
-      },
-    };
-    requests.forEach((request, i) => {
+    expected: readonly (readonly E[])[];
+    seedItems?: readonly E[] | undefined;
+  }[])(
+    '$name',
+    ({
+      requests,
+      expected,
+      seedItems = baseItems,
+    }: {
+      name: string;
+      requests: PullMsg[];
+      expected: readonly (readonly E[])[];
+      seedItems?: readonly E[] | undefined;
+    }) => {
+      const ordering: Ordering = [[['e', 'id'], 'asc']];
+      const m = new Materialite();
+      const comparator = (l: E, r: E) => l.id - r.id;
+      const source = m.newSetSource(comparator, ordering, 'e');
       m.tx(() => {
-        source.stream.messageUpstream(request, listener);
+        source.seed(seedItems);
       });
-      expect(items).toEqual(expected[i]);
-      items.length = 0;
-    });
-  });
+
+      const items: E[] = [];
+      const listener: Listener<E> = {
+        commit(_version) {},
+        newDifference(_version, multiset, _reply) {
+          for (const item of multiset) {
+            items.push(item[0]);
+          }
+        },
+      };
+      requests.forEach((request, i) => {
+        m.tx(() => {
+          source.stream.messageUpstream(request, listener);
+        });
+        expect(items).toEqual(expected[i]);
+        items.length = 0;
+      });
+    },
+  );
 });
 
 describe('merge requests', () => {
