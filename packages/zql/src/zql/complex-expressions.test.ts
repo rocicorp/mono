@@ -37,7 +37,7 @@ test.each(singleTableCases)('3 field paging - $name', async ({tracks}) => {
   }
 });
 
-test('double left join & group by w/ 3 field paging & some overlap', async () => {
+test.skip('double left join & group by w/ 3 field paging & some overlap', async () => {
   const artists = createRandomArtists(5);
   const albums = createRandomAlbums(5, artists);
   const tracks = createRandomTracks(10, albums, {

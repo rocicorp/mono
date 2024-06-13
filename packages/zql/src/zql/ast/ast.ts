@@ -6,10 +6,8 @@ import {defined} from 'shared/src/arrays.js';
 
 export type Selector = readonly [table: string, column: string];
 
-export type Ordering = readonly (readonly [
-  field: Selector,
-  direction: 'asc' | 'desc',
-])[];
+export type OrderPart = readonly [field: Selector, direction: 'asc' | 'desc'];
+export type Ordering = readonly OrderPart[];
 
 export type Primitive = string | number | boolean | null;
 export type PrimitiveArray = string[] | number[] | boolean[];
