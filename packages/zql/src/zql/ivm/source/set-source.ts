@@ -12,7 +12,7 @@ import {
   createPullResponseMessage,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
-import type {Entry, Multiset} from '../multiset.js';
+import type {Entry} from '../multiset.js';
 import type {Comparator, PipelineEntity, Version} from '../types.js';
 import {SourceHashIndex} from './source-hash-index.js';
 import type {Source, SourceInternal} from './source.js';
@@ -270,69 +270,57 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       this.#getOrCreateAndMaintainNewSort(request);
 
     // Is there a range constraint against the ordered field?
-    if (orderForReply !== undefined) {
-      const range = getRange(conditionsForThisSource, orderForReply);
-      if (request.order === undefined || request.order[0][1] === 'asc') {
-        this.#stream.newDifference(
-          this._materialite.getVersion(),
-          gen(() =>
-            genFromBTreeEntries(
-              newSort.#tree.entries(maybeGetKey(range.field, range.bottom)),
-              createEndPredicateAsc(range.field, range.top),
-            ),
+    const range = getRange(conditionsForThisSource, orderForReply);
+    if (request.order === undefined || request.order[0][1] === 'asc') {
+      this.#stream.newDifference(
+        this._materialite.getVersion(),
+        gen(() =>
+          genFromBTreeEntries(
+            newSort.#tree.entries(maybeGetKey(range.field, range.bottom)),
+            createEndPredicateAsc(range.field, range.top),
           ),
-          createPullResponseMessage(request, this.#name, orderForReply),
-        );
-        return;
-      }
-
-      const maybeKey = maybeGetKey<T>(range.field, range.top);
-      if (maybeKey !== undefined && newSort.#order.length > 1) {
-        const entriesBelow = newSort.#tree.entries(maybeKey);
-        let key: T | undefined;
-        const specialComparator = makeComparator<T>([[range.field, 'asc']]);
-        for (const entry of entriesBelow) {
-          if (specialComparator(entry[0], maybeKey) > 0) {
-            key = entry[0];
-            break;
-          }
-        }
-        this.#stream.newDifference(
-          this._materialite.getVersion(),
-          gen(() =>
-            genFromBTreeEntries(
-              newSort.#tree.entriesReversed(key),
-              createEndPredicateDesc(range.field, range.bottom),
-            ),
-          ),
-          createPullResponseMessage(request, this.#name, orderForReply),
-        );
-      } else {
-        this.#stream.newDifference(
-          this._materialite.getVersion(),
-          gen(() =>
-            genFromBTreeEntries(
-              newSort.#tree.entriesReversed(maybeKey),
-              createEndPredicateDesc(range.field, range.bottom),
-            ),
-          ),
-          createPullResponseMessage(request, this.#name, orderForReply),
-        );
-      }
-
+        ),
+        createPullResponseMessage(request, this.#name, orderForReply),
+      );
       return;
     }
 
-    this.#stream.newDifference(
-      this._materialite.getVersion(),
-      asEntries(newSort.#tree, request),
-      createPullResponseMessage(request, this.#name, orderForReply),
-    );
+    const maybeKey = maybeGetKey<T>(range.field, range.top);
+    if (maybeKey !== undefined && newSort.#order.length > 1) {
+      const entriesBelow = newSort.#tree.entries(maybeKey);
+      let key: T | undefined;
+      const specialComparator = makeComparator<T>([[range.field, 'asc']]);
+      for (const entry of entriesBelow) {
+        if (specialComparator(entry[0], maybeKey) > 0) {
+          key = entry[0];
+          break;
+        }
+      }
+      this.#stream.newDifference(
+        this._materialite.getVersion(),
+        gen(() =>
+          genFromBTreeEntries(
+            newSort.#tree.entriesReversed(key),
+            createEndPredicateDesc(range.field, range.bottom),
+          ),
+        ),
+        createPullResponseMessage(request, this.#name, orderForReply),
+      );
+    } else {
+      this.#stream.newDifference(
+        this._materialite.getVersion(),
+        gen(() =>
+          genFromBTreeEntries(
+            newSort.#tree.entriesReversed(maybeKey),
+            createEndPredicateDesc(range.field, range.bottom),
+          ),
+        ),
+        createPullResponseMessage(request, this.#name, orderForReply),
+      );
+    }
   }
 
-  #getOrCreateAndMaintainNewSort(
-    request: PullMsg,
-  ): [SetSource<T>, Ordering | undefined] {
+  #getOrCreateAndMaintainNewSort(request: PullMsg): [SetSource<T>, Ordering] {
     const ordering = request.order;
     if (ordering === undefined) {
       return [this, this.#order];
@@ -426,19 +414,6 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
   }
 }
 
-function asEntries<T>(
-  m: BTree<T, undefined>,
-  message?: Request | undefined,
-): Multiset<T> {
-  if (message?.order) {
-    if (message.order[0][1] === 'desc') {
-      return gen(() => genFromBTreeEntries(m.entriesReversed()));
-    }
-  }
-
-  return gen<Entry<T>>(() => genFromBTreeEntries(m.entries()));
-}
-
 function* genFromBTreeEntries<T>(
   m: Iterable<[T, undefined]>,
   end?: ((t: T) => boolean) | undefined,
@@ -471,8 +446,7 @@ function getPrimaryKeyEquality(
 function getRange(conditions: HoistedCondition[], sourceOrder: Ordering) {
   let top: unknown | undefined;
   let bottom: unknown | undefined;
-  const sourceOrderFields = sourceOrder[0];
-  const firstOrderField = sourceOrderFields[0];
+  const firstOrderField = sourceOrder[0][0];
 
   // TODO: Does this work correctly with multiple conditions?
   for (const c of conditions) {
