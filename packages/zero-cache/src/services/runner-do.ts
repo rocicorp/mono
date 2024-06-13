@@ -24,7 +24,6 @@ export class ServiceRunnerDO {
     );
     this.#serviceRunner = new ServiceRunner(lc, state, env, false);
     this.#lc = lc;
-
     this.#fastify = Fastify();
   }
 
