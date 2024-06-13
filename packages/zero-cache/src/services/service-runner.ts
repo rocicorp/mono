@@ -86,14 +86,6 @@ export class ServiceRunner
       max: 4,
     });
     this.#runReplicator = runReplicator;
-
-    if (!runReplicator) {
-      // Ping the replicator to bootstrap the replication process for new replicas.
-      void this.#getReplicatorStub()
-        .status()
-        .then(res => lc.info?.(`Replicator status`, res))
-        .catch(e => lc.error?.('Error pinging replicator', e));
-    }
     this.#warmUpConnections();
   }
 

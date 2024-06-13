@@ -17,7 +17,7 @@
     "wrangler-sandbox": "npx wrangler --config wrangler.toml --env=sandbox",
     "worker-logs-sandbox": "npm run wrangler-sandbox -- tail",
     "worker-logs-prod": "npm run wrangler-prod -- tail",
-    "start-workers": "concurrently --kill-others 'npm run start-replicator' 'npm run start-service-runner'",
+    "start-workers": "concurrently --kill-others 'npm run start-replicator' 'sleep 3;npm run start-service-runner'",
     "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ../../packages/zero-cache/src/services/index-replicator.ts",
     "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ../../packages/zero-cache/src/services/index-service-runner.ts"
   },
