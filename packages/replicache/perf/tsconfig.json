@@ -1,8 +1,0 @@
-{
-  "extends": "../tsconfig.json",
-  "include": ["*.ts", "*.js"],
-  "exclude": ["node_modules", "runner.js"],
-  "compilerOptions": {
-    "noEmit": true
-  }
-}

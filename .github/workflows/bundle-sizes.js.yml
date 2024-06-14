@@ -25,7 +25,7 @@ jobs:
 
       # Builds bundles then measures bundles sizes and stores them to a file
       - name: Measure bundles
-        run: node perf/bundle-sizes --bundles replicache.mjs replicache.mjs.br replicache.min.mjs replicache.min.mjs.br | tee bundle-sizes.json
+        run: node tool/bundle-sizes.js --bundles replicache.mjs replicache.mjs.br replicache.min.mjs replicache.min.mjs.br | tee bundle-sizes.json
         working-directory: packages/replicache
 
       # Run `github-action-benchmark` action

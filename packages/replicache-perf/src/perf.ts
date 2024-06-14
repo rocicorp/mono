@@ -1,16 +1,16 @@
-import {benchmarks as replicacheBenchmarks} from './replicache.js';
-import {benchmarkIDBRead, benchmarkIDBWrite} from './idb.js';
-import {benchmarks as hashBenchmarks} from './hash.js';
-import {benchmarks as storageBenchmarks} from './storage.js';
-import {benchmarks as compareBenchmarks} from './compare-utf8.js';
-import {benchmarks as uuidBenchmarks} from './uuid.js';
-import {benchmarks as mapLoopBenchmarks} from './map-loop.js';
+import {benchmarks as compareBenchmarks} from './benchmarks/compare-utf8.js';
+import {benchmarks as hashBenchmarks} from './benchmarks/hash.js';
+import {benchmarkIDBRead, benchmarkIDBWrite} from './benchmarks/idb.js';
+import {benchmarks as replicacheBenchmarks} from './benchmarks/replicache.js';
+import {benchmarks as storageBenchmarks} from './benchmarks/storage.js';
+import {benchmarks as uuidBenchmarks} from './benchmarks/uuid.js';
+import type {RandomDataType} from './data.js';
 import {
   formatAsBenchmarkJS,
   formatAsReplicache,
   formatVariance,
 } from './format.js';
-import type {RandomDataType} from './data.js';
+import {benchmarks as mapLoopBenchmarks} from './map-loop.js';
 
 export type Benchmark = {
   name: string;

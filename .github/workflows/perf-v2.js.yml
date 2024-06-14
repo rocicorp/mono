@@ -28,16 +28,16 @@ jobs:
 
       - run: npx playwright install --with-deps
 
-      - run: npm run build-perf
-        working-directory: packages/replicache
+      - run: npm run build
+        working-directory: packages/replicache-perf
 
       # Run benchmark and stores the output to a file
       - name: Run benchmark
         run: |
-          node perf/runner.js --format=json | tee perf-temp-output.json
+          node src/runner.js --format=json | tee perf-temp-output.json
           node tool/split-perf.js perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
-        working-directory: packages/replicache
+        working-directory: packages/replicache-perf
 
       # Run `github-action-benchmark` action
       - name: Store benchmark result
@@ -46,7 +46,7 @@ jobs:
           # What benchmark tool the output.json came from
           tool: 'customSmallerIsBetter'
           # Where the output from the benchmark tool is stored
-          output-file-path: packages/replicache/perf-v2-output.json
+          output-file-path: packages/replicache-perf/perf-v2-output.json
           # Workflow will fail when an alert happens
           fail-on-alert: true
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
@@ -61,7 +61,7 @@ jobs:
           # What benchmark tool the output.json came from
           tool: 'customSmallerIsBetter'
           # Where the output from the benchmark tool is stored
-          output-file-path: packages/replicache/perf-v2-p95-output.json
+          output-file-path: packages/replicache-perf/perf-v2-p95-output.json
           # Workflow will NOT fail when an alert happens
           fail-on-alert: false
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}

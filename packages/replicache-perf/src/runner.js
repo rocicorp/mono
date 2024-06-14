@@ -10,8 +10,8 @@ import getPort from 'get-port';
 import * as os from 'os';
 import * as path from 'path';
 import * as playwright from 'playwright';
+import {makeDefine} from 'shared/src/build.js';
 import {fileURLToPath} from 'url';
-import {makeDefine} from '../../shared/src/build.js';
 
 /** @typedef {'chromium' | 'firefox' | 'webkit'} Browser */
 
@@ -150,6 +150,21 @@ async function main() {
   }
 
   const port = await getPort();
+
+  // /** @type {import('@web/dev-server-core').Plugin}  */
+  // const pathsPlugin = {
+  //   name: 'paths',
+  //   resolveImport({source}) {
+  //     if (source.startsWith('replicache/')) {
+  //       const rv = path.join(rootDir, '..', source.replace(/\.js$/, '.ts'));
+  //       console.log(source + ' -> ' + rv);
+  //       return rv;
+  //     }
+  //     console.log(source);
+  //     return;
+  //   },
+  // };
+
   const server = await startDevServer({
     config: {
       nodeResolve: true,
@@ -160,8 +175,9 @@ async function main() {
         esbuildPlugin({
           ts: true,
           target: 'es2022',
-          define: await makeDefine('release'),
+          define: makeDefine('release'),
         }),
+        // pathsPlugin,
       ],
     },
     readCliArgs: false,
@@ -200,7 +216,7 @@ async function main() {
       process.exit(1);
     });
 
-    await page.goto(`http://127.0.0.1:${port}/perf/index.html`);
+    await page.goto(`http://127.0.0.1:${port}/index.html`);
 
     await runInBrowser(browser, page, options);
 
@@ -238,7 +254,7 @@ async function runInBrowser(browser, page, options) {
   async function waitForBenchmarks() {
     await page.waitForFunction('typeof benchmarks !==  "undefined"', null, {
       // There is no need to wait for 30s. Things fail much faster.
-      timeout: 1000,
+      timeout: 1000_000,
     });
   }
 

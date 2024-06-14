@@ -1,7 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.js';
-import {deepEqual} from 'shared/src/json.js';
-import {dropIDBStoreWithMemFallback} from '../src/kv/idb-store-with-mem-fallback.js';
+import {dropIDBStoreWithMemFallback} from 'replicache/src/kv/idb-store-with-mem-fallback.js';
 import {
   IndexDefinitions,
   JSONValue,
@@ -11,16 +9,18 @@ import {
   ReplicacheOptions,
   TEST_LICENSE_KEY,
   WriteTransaction,
-} from '../src/mod.js';
-import {ReplicacheImpl} from '../src/replicache-impl.js';
-import {uuid} from '../src/uuid.js';
+} from 'replicache/src/mod.js';
+import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
+import {uuid} from 'replicache/src/uuid.js';
+import {assert} from 'shared/src/asserts.js';
+import {deepEqual} from 'shared/src/json.js';
 import {
   TestDataObject,
   getTmcwData,
   jsonArrayTestData,
   jsonObjectTestData,
-} from './data.js';
-import type {Bencher, Benchmark} from './perf.js';
+} from '../data.js';
+import type {Bencher, Benchmark} from '../perf.js';
 
 const valSize = 1024;
 

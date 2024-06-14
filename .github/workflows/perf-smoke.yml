@@ -30,10 +30,10 @@ jobs:
       - name: Install Playwright Deps
         run: npx playwright install --with-deps
 
-      - run: npm run build-perf
-        working-directory: packages/replicache
+      - run: npm run build
+        working-directory: packages/replicache-perf
 
       - name: Run benchmark
         run: |
-          node packages/replicache/perf/runner.js --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
+          node packages/replicache-perf/src/runner.js --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
         shell: bash

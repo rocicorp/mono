@@ -1,0 +1,35 @@
+{
+  "private": true,
+  "scripts": {
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "build": "node tool/build.js",
+    "perf": "npm run build && node src/runner.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "@types/command-line-usage": "^5.0.2",
+    "@web/dev-server": "^0.4.4",
+    "@web/dev-server-esbuild": "^1.0.2",
+    "@web/dev-server-import-maps": "^0.2.1",
+    "command-line-args": "^5.2.1",
+    "command-line-usage": "^6.1.2",
+    "esbuild": "^0.20.2",
+    "get-port": "^7.0.0",
+    "hash-wasm": "^4.9.0",
+    "idb": "^7.0.1",
+    "playwright": "^1.43.1",
+    "replicache": "15.0.0",
+    "shared": "0.0.0",
+    "typescript": "^5.4.2",
+    "xbytes": "^1.7.0"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
-import {makeRandomASCIIStrings, makeRandomStrings} from './data.js';
-import type {Benchmark} from './perf.js';
+import {makeRandomASCIIStrings, makeRandomStrings} from '../data.js';
+import type {Benchmark} from '../perf.js';
 
 const encoder = new TextEncoder();
 

@@ -1,6 +1,6 @@
-import {uuid} from '../src/uuid.js';
-import {randomString} from './data.js';
-import type {Benchmark} from './perf.js';
+import {uuid} from 'replicache/src/uuid.js';
+import {randomString} from '../data.js';
+import type {Benchmark} from '../perf.js';
 
 export function benchmarks(): Benchmark[] {
   return [localStorageRead(), localStorageWrite()];
