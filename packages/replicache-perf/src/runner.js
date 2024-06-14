@@ -151,20 +151,6 @@ async function main() {
 
   const port = await getPort();
 
-  // /** @type {import('@web/dev-server-core').Plugin}  */
-  // const pathsPlugin = {
-  //   name: 'paths',
-  //   resolveImport({source}) {
-  //     if (source.startsWith('replicache/')) {
-  //       const rv = path.join(rootDir, '..', source.replace(/\.js$/, '.ts'));
-  //       console.log(source + ' -> ' + rv);
-  //       return rv;
-  //     }
-  //     console.log(source);
-  //     return;
-  //   },
-  // };
-
   const server = await startDevServer({
     config: {
       nodeResolve: true,
@@ -177,7 +163,6 @@ async function main() {
           target: 'es2022',
           define: makeDefine('release'),
         }),
-        // pathsPlugin,
       ],
     },
     readCliArgs: false,
