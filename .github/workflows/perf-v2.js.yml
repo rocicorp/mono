@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'packages/replicache/**'
+      - 'packages/replicache-perf/**'
 
 jobs:
   benchmark:
