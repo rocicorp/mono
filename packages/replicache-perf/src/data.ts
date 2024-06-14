@@ -168,7 +168,7 @@ type TmcwData = {
 
 export async function getTmcwData(): Promise<TmcwData> {
   const response = await fetch(
-    new URL('./resources/tmcw.json', import.meta.url),
+    new URL('../resources/tmcw.json', import.meta.url),
   );
   return response.json();
 }
