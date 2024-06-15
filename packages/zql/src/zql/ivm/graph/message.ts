@@ -1,4 +1,10 @@
-import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
+import type {
+  Ordering,
+  Primitive,
+  Selector,
+  SimpleOperator,
+} from '../../ast/ast.js';
+import {compareEntityFields} from '../compare.js';
 
 export type Request = PullMsg;
 
@@ -111,7 +117,7 @@ export function createPullResponseMessage(
 }
 
 // TODO: we can merge and expand inequalities and `INs`
-export function intersectConditions(
+export function mergeConditionLists(
   a: readonly HoistedCondition[],
   b: readonly HoistedCondition[],
 ) {
@@ -119,32 +125,156 @@ export function intersectConditions(
     return a;
   }
 
-  const valueMap = new Map<string, unknown[]>();
-  const makeKey = (cond: HoistedCondition) =>
-    cond.op + '-' + cond.selector.join(',');
+  const aConditionsBySelector = new Map<string, HoistedCondition[]>();
 
-  for (const cond of a) {
-    const key = makeKey(cond);
-    const existing = valueMap.get(key);
+  const makeKey = (selector: readonly [string | null, string]) =>
+    selector.join(',');
+  for (const condition of a) {
+    const key = makeKey(condition.selector);
+    const existing = aConditionsBySelector.get(key);
     if (existing) {
-      existing.push(cond.value);
+      existing.push(condition);
     } else {
-      valueMap.set(key, [cond.value]);
+      aConditionsBySelector.set(key, [condition]);
     }
   }
 
-  const intersection: HoistedCondition[] = [];
-  for (const cond of b) {
-    const key = makeKey(cond);
-    const existing = valueMap.get(key);
-    if (existing && existing.find(v => v === cond.value) !== undefined) {
-      intersection.push(cond);
+  const conditionsToMerge = new Map<string, HoistedCondition[]>();
+  for (const condition of b) {
+    const key = makeKey(condition.selector);
+    const aExisting = aConditionsBySelector.get(key);
+    if (!aExisting) {
+      continue;
+    }
+
+    conditionsToMerge.set(key, aExisting);
+    aExisting.push(condition);
+  }
+
+  const ret: HoistedCondition[] = [];
+  for (const conditions of conditionsToMerge.values()) {
+    const merged = mergeConditionsForSameSelector(conditions);
+    if (merged !== undefined) {
+      ret.push(merged);
     }
   }
 
-  if (intersection.length === a.length) {
-    return a;
+  return ret;
+}
+
+/**
+ * Rules:
+ * 1. a > x, a < y -> undefined
+ * 2. a > x, a > y -> a > min(x, y)
+ * 3. a < x, a < y -> a < max(x, y)
+ * 4. a > x, a = y -> y < x ? a >= y : a > x
+ * 5. a > x, a >= y -> y < x ? a >= y : a > x
+ * 6. a < x, a <= y ->
+ * 7. a < x, a = y ->
+ * 8. a = x, a != y -> undefined
+ * 9. a < x, a != y -> (range split around y?)
+ */
+export function mergeConditionsForSameSelector(
+  conditions: HoistedCondition[],
+): HoistedCondition | undefined {
+  if (conditions.length === 0) {
+    return undefined;
+  }
+  if (conditions.length === 1) {
+    return conditions[0];
   }
 
-  return intersection;
+  const ret = {
+    ...conditions[0],
+  };
+
+  for (let i = 1; i < conditions.length; ++i) {
+    const cond = conditions[i];
+
+    if (cond.op === ret.op && cond.value === ret.value) {
+      continue;
+    }
+
+    switch (ret.op) {
+      case '<': {
+        switch (cond.op) {
+          case '<':
+            ret.value = max(ret.value, cond.value);
+            break;
+          case '<=':
+            if (compareEntityFields(ret.value, cond.value) <= 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) <= 0) {
+              ret.value = cond.value;
+              ret.op = '<=';
+            }
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      }
+      case '<=': {
+        switch (cond.op) {
+          case '<':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '<=':
+            ret.value = max(ret.value, cond.value);
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) <= 0) {
+              ret.value = cond.value;
+            }
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      }
+      case '=':
+        switch (cond.op) {
+          case '<':
+            break;
+          case '<=':
+            break;
+          case '>':
+            break;
+          case '>=':
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      case '>':
+        break;
+      case '>=':
+        break;
+      case '!=':
+        break;
+    }
+  }
+
+  return ret;
+}
+
+function min(l: unknown, r: unknown) {
+  const comp = compareEntityFields(l, r);
+  if (comp <= 0) {
+    return l;
+  }
+}
+
+function max(l: unknown, r: unknown) {
+  const comp = compareEntityFields(l, r);
+  if (comp < 0) {
+    return r;
+  }
 }
