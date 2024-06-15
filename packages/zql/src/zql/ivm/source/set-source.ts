@@ -11,7 +11,7 @@ import {
   PullMsg,
   Request,
   createPullResponseMessage,
-  intersectConditions,
+  mergeConditions,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry} from '../multiset.js';
@@ -496,7 +496,7 @@ export function mergeRequests(a: Request, b: Request | undefined) {
     return a;
   }
 
-  const intersectedConditions = intersectConditions(
+  const intersectedConditions = mergeConditions(
     a.hoistedConditions,
     b.hoistedConditions,
   );
