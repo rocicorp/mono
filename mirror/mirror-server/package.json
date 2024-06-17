@@ -67,7 +67,7 @@
     "shared"
   ],
   "engines": {
-    "node": "18"
+    "node": ">=18"
   },
   "files": [
     "out"
