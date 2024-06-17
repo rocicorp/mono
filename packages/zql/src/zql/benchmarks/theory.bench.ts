@@ -15,9 +15,38 @@ type Issue = {
   id: string;
   title: string;
 };
-const tableScanWithCompareTheory = (collection: Map<string, Issue>) => {
+type Label = {
+  id: string;
+  name: string;
+};
+type IssueLabel = {
+  id: string;
+  issueId: string;
+  labelId: string;
+};
+
+type TheoryInput = {
+  issueMap: Map<string, Issue>;
+  issueLabelMap: Map<string, IssueLabel[]>;
+  labelMap: Map<string, Label>;
+  issueArray: Issue[];
+  issuesByTitle: Issue[];
+  issueLabelArray: IssueLabel[];
+  labelArray: Label[];
+};
+
+const makeQueries = (context: TestContext) => ({
+  issueQuery: new EntityQuery<{issue: Issue}>(context, 'issue'),
+  issueLabelQuery: new EntityQuery<{issueLabel: IssueLabel}>(
+    context,
+    'issueLabel',
+  ),
+  labelQuery: new EntityQuery<{label: Label}>(context, 'label'),
+});
+
+const tableScanWithCompareTheory = ({issueMap}: TheoryInput) => {
   const ret: Issue[] = [];
-  for (const issue of collection.values()) {
+  for (const issue of issueMap.values()) {
     if (issue.title === 'Issue 5000') {
       ret.push(issue);
     }
@@ -41,13 +70,13 @@ describe.each([
     getZql: (context: TestContext) =>
       new EntityQuery<{issue: Issue}>(context, 'issue')
         .select('id')
-        .where('id', '=', '000500'),
+        .where('id', '=', '005000'),
     zqlExpected: (_: Issue[]) => {},
-    theoryQuery: (collection: Map<string, Issue>) => collection.get('000500'),
-    theoryUnplanned: (collection: Map<string, Issue>) => {
+    theoryQuery: ({issueMap}: TheoryInput) => issueMap.get('005000'),
+    theoryUnplanned: ({issueMap}: TheoryInput) => {
       const ret = [];
-      for (const issue of collection.values()) {
-        if (issue.id === '000500') {
+      for (const issue of issueMap.values()) {
+        if (issue.id === '005000') {
           ret.push(issue);
           // totally unplanned has no idea if anything is unique. must full scan. No break.
         }
@@ -69,17 +98,17 @@ describe.each([
     getZql: (context: TestContext) =>
       new EntityQuery<{issue: Issue}>(context, 'issue').select('*').limit(1),
     zqlExpected: (_: Issue[]) => {},
-    theoryQuery: (collection: Map<string, Issue>) => {
+    theoryQuery: ({issueMap}: TheoryInput) => {
       const ret: Issue[] = [];
-      for (const issue of collection.values()) {
+      for (const issue of issueMap.values()) {
         ret.push(issue);
         break;
       }
       return ret;
     },
-    theoryUnplanned: (collection: Map<string, Issue>) => {
+    theoryUnplanned: ({issueMap}: TheoryInput) => {
       const ret: Issue[] = [];
-      for (const issue of collection.values()) {
+      for (const issue of issueMap.values()) {
         ret.push(issue);
       }
       return ret.sort((a, b) => compareUTF8(a.id, b.id)).slice(0, 1);
@@ -103,14 +132,14 @@ describe.each([
         .orderBy('id', 'desc')
         .limit(1),
     zqlExpected: (_: Issue[]) => {},
-    theoryQuery: (_: Map<string, Issue>, collection: Issue[]) => {
+    theoryQuery: ({issueArray}: TheoryInput) => {
       const ret = [];
-      ret.push(collection[collection.length - 1]);
+      ret.push(issueArray[issueArray.length - 1]);
       return ret;
     },
-    theoryUnplanned: (collection: Map<string, Issue>) => {
+    theoryUnplanned: ({issueMap}: TheoryInput) => {
       const ret: Issue[] = [];
-      for (const issue of collection.values()) {
+      for (const issue of issueMap.values()) {
         ret.push(issue);
       }
       return ret.sort((a, b) => compareUTF8(b.id, a.id)).slice(0, 1);
@@ -152,10 +181,10 @@ describe.each([
     getZql: (context: TestContext) =>
       new EntityQuery<{issue: Issue}>(context, 'issue').select('*'),
     zqlExpected: (_: Issue[]) => {},
-    theoryQuery: (_: Map<string, Issue>, collection: Issue[]) => collection,
-    theoryUnplanned: (collection: Map<string, Issue>) => {
+    theoryQuery: ({issueArray}: TheoryInput) => issueArray,
+    theoryUnplanned: ({issueMap}: TheoryInput) => {
       const ret: Issue[] = [];
-      for (const issue of collection.values()) {
+      for (const issue of issueMap.values()) {
         ret.push(issue);
       }
       ret.sort((a, b) => compareUTF8(a.id, b.id));
@@ -178,34 +207,136 @@ describe.each([
         .select('*')
         .orderBy('id', 'desc'),
     zqlExpected: (_: Issue[]) => {},
-    theoryQuery: (_: Map<string, Issue>, collection: Issue[]) => {
+    theoryQuery: ({issueArray}: TheoryInput) => {
       const ret: Issue[] = [];
-      for (let i = collection.length - 1; i >= 0; --i) {
-        ret.push(collection[i]);
+      for (let i = issueArray.length - 1; i >= 0; --i) {
+        ret.push(issueArray[i]);
       }
       return ret;
     },
-    theoryUnplanned: (collection: Map<string, Issue>) => {
+    theoryUnplanned: ({issueMap}: TheoryInput) => {
       const ret: Issue[] = [];
-      for (const issue of collection.values()) {
+      for (const issue of issueMap.values()) {
         ret.push(issue);
       }
       return ret.sort((a, b) => compareUTF8(b.id, a.id));
     },
   },
-])(`$name`, async ({getZql, theoryQuery, theoryUnplanned}) => {
+  {
+    name: 'issues and labels, sorted by title, first 100',
+    getZql: (context: TestContext) => {
+      const {issueQuery, issueLabelQuery, labelQuery} = makeQueries(context);
+      return issueQuery
+        .join(issueLabelQuery, 'issueLabel', 'issue.id', 'issueLabel.issueId')
+        .leftJoin(labelQuery, 'label', 'issueLabel.labelId', 'label.id')
+        .orderBy('issue.title', 'asc')
+        .limit(100);
+    },
+    zqlExpected: () => {},
+    theoryQuery: ({issuesByTitle, issueLabelMap, labelMap}: TheoryInput) => {
+      const ret: {
+        issue: Issue;
+        label?: Label | undefined;
+      }[] = [];
+      for (let i = 0; i < 100; ++i) {
+        const issue = issuesByTitle[i];
+        const issueLabels = issueLabelMap.get(issue.id);
+        if (issueLabels === undefined) {
+          ret.push({
+            issue,
+          });
+        } else {
+          for (const issueLabel of issueLabels) {
+            ret.push({
+              issue,
+              label: labelMap.get(issueLabel.labelId),
+            });
+          }
+        }
+      }
+      return ret;
+    },
+    theoryUnplanned: ({
+      issueArray,
+      issueLabelArray,
+      labelArray,
+    }: TheoryInput) => {
+      const ret: {
+        issue: Issue;
+        label?: Label;
+      }[] = [];
+
+      for (const issue of issueArray) {
+        const row: (typeof ret)[number] = {
+          issue,
+        };
+        for (const issueLabel of issueLabelArray) {
+          if (issueLabel.issueId === issue.id) {
+            for (const label of labelArray) {
+              if (issueLabel.labelId === label.id) {
+                row.label = label;
+                break;
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      return ret
+        .sort((l, r) => l.issue.title.localeCompare(r.issue.title))
+        .slice(0, 100);
+    },
+  },
+])(`$name`, ({getZql, theoryQuery, theoryUnplanned}) => {
   const context = new TestContext();
   const source = context.getSource<Issue>('issue');
+  const labelSource = context.getSource<Label>('label');
+  const issueLabelSource = context.getSource<IssueLabel>('issueLabel');
   const theoryMap = new Map<string, Issue>();
+  const theoryLabelMap = new Map<string, Label>();
+  const theoryIssueLabelMap = new Map<string, IssueLabel[]>();
   const theoryArray: Issue[] = [];
+  const labelArray: Label[] = [];
+  const issueLabelArray: IssueLabel[] = [];
 
   for (let i = 0; i < 10_000; ++i) {
     const issue = {id: i.toString().padStart(6, '0'), title: `Issue ${i}`};
     source.add(issue);
+    theoryArray.push(issue);
     theoryMap.set(issue.id, issue);
   }
 
-  const prepared = await getZql(context).prepare();
+  for (let i = 0; i < 10; ++i) {
+    const label = {id: i.toString().padStart(3, '0'), name: 'Label ${i}'};
+    labelSource.add(label);
+    labelArray.push(label);
+    theoryLabelMap.set(label.id, label);
+  }
+
+  for (let i = 0; i < 10_000; ++i) {
+    const numLabels = Math.floor(Math.random() * 4);
+    for (let j = 0; j < numLabels; ++j) {
+      const issueLabel = {
+        id: i.toString(),
+        issueId: i.toString().padStart(6, '0'),
+        labelId: (i % 10).toString().padStart(3, '0'),
+      };
+      issueLabelArray.push(issueLabel);
+      issueLabelSource.add(issueLabel);
+      const existing = theoryIssueLabelMap.get(issueLabel.issueId);
+      if (existing) {
+        existing.push(issueLabel);
+      } else {
+        theoryIssueLabelMap.set(issueLabel.issueId, [issueLabel]);
+      }
+    }
+  }
+  const issuesByTitle = theoryArray
+    .concat()
+    .sort((l, r) => l.title.localeCompare(r.title));
+
+  const prepared = getZql(context).prepare();
 
   bench('prepare and run', async () => {
     const stmt = getZql(context).prepare();
@@ -228,10 +359,26 @@ describe.each([
   source.stream.destroy();
 
   bench('theory', () => {
-    theoryQuery(theoryMap, theoryArray);
+    theoryQuery({
+      issueMap: theoryMap,
+      labelMap: theoryLabelMap,
+      issueLabelMap: theoryIssueLabelMap,
+      issueArray: theoryArray,
+      issuesByTitle,
+      issueLabelArray,
+      labelArray,
+    });
   });
 
   bench('theory unplanned', () => {
-    theoryUnplanned(theoryMap);
+    theoryUnplanned({
+      issueMap: theoryMap,
+      labelMap: theoryLabelMap,
+      issueLabelMap: theoryIssueLabelMap,
+      issueArray: theoryArray,
+      issuesByTitle,
+      issueLabelArray,
+      labelArray,
+    });
   });
 });
