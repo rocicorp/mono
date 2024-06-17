@@ -324,6 +324,8 @@ export function mergeConditionsForSameSelector(
         break;
       default:
         // TODO: like expansion, in expansion, set operation expansion
+        // TODO: > x & < y -> between x and y if y > x
+        // TODO: many equality -> IN
         return undefined;
     }
   }
