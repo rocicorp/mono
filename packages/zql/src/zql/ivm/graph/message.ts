@@ -4,7 +4,7 @@ import type {
   Selector,
   SimpleOperator,
 } from '../../ast/ast.js';
-import {compareEntityFields} from '../compare.js';
+import { compareEntityFields } from '../compare.js';
 
 export type Request = PullMsg;
 
@@ -92,13 +92,6 @@ export function createPullMessage(order: Ordering | undefined): Request {
     type: 'pull',
     order,
     hoistedConditions: [],
-  };
-}
-
-export function forkPullMessage(original: Request): Request {
-  return {
-    ...original,
-    id: nextMessageID(),
   };
 }
 
