@@ -104,20 +104,18 @@ export default function IssueDetail({
     ])[0] ?? null;
 
   const {query, queryDeps, order} = issuesProps;
-  // const nextIssues = useQuery(
-  //   getNextIssueQuery(query, issue, order, 'fwd'),
-  //   queryDeps.concat(issue),
-  // );
-  const nextIssues: any[] = [];
+  const nextIssues = useQuery(
+    getNextIssueQuery(query, issue, order, 'fwd'),
+    queryDeps.concat(issue),
+  );
   const previousIssues = useQuery(
     getNextIssueQuery(query, issue, order, 'prev'),
     queryDeps.concat(issue),
   );
 
-  // const comments = useQuery(commentsForIssueQuery(zero, detailIssueID ?? ''), [
-  //   detailIssueID,
-  // ]);
-  const comments: any[] = [];
+  const comments = useQuery(commentsForIssueQuery(zero, detailIssueID ?? ''), [
+    detailIssueID,
+  ]);
 
   const handleClose = useCallback(() => {
     setDetailIssueID(null);
