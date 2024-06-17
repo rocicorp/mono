@@ -776,7 +776,37 @@ describe('merge requests', () => {
       },
     },
     {
-      name: 'disjoint operators',
+      name: 'disjoint columns',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'baz'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'widen >,=',
       reqA: {
         id: 1,
         type: 'pull',
@@ -802,7 +832,13 @@ describe('merge requests', () => {
       expected: {
         id: 1,
         type: 'pull',
-        hoistedConditions: [],
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>=',
+            value: 1,
+          },
+        ],
       },
     },
     {
@@ -869,6 +905,17 @@ describe('merge requests', () => {
           {selector: ['issue', 'modified'], op: '=', value: 5004533700000},
           {selector: ['issue', 'status'], op: 'IN', value: [1, 2, 3, 4, 5]},
         ],
+      },
+      expected: {
+        hoistedConditions: [
+          {
+            op: '>=',
+            selector: ['issue', 'modified'],
+            value: 5004533700000,
+          },
+        ],
+        id: 5,
+        type: 'pull',
       },
     },
   ] as const)('$name', ({reqA, reqB, expected}) => {

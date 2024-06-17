@@ -11,7 +11,7 @@ import {
   PullMsg,
   Request,
   createPullResponseMessage,
-  mergeConditions,
+  mergeConditionLists,
 } from '../graph/message.js';
 import type {MaterialiteForSourceInternal} from '../materialite.js';
 import type {Entry} from '../multiset.js';
@@ -496,21 +496,21 @@ export function mergeRequests(a: Request, b: Request | undefined) {
     return a;
   }
 
-  const intersectedConditions = mergeConditions(
+  const mergedConditions = mergeConditionLists(
     a.hoistedConditions,
     b.hoistedConditions,
   );
   const commonOrderPrefix = getCommonPrefixOrdering(a.order, b.order);
 
   if (
-    intersectedConditions !== a.hoistedConditions ||
+    mergedConditions !== a.hoistedConditions ||
     commonOrderPrefix !== a.order
   ) {
     const ret = {
       ...a,
     };
-    if (intersectedConditions !== a.hoistedConditions) {
-      ret.hoistedConditions = intersectedConditions;
+    if (mergedConditions !== a.hoistedConditions) {
+      ret.hoistedConditions = mergedConditions;
     }
     if (commonOrderPrefix !== a.order) {
       ret.order = commonOrderPrefix;

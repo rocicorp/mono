@@ -1,10 +1,5 @@
-import type {
-  Ordering,
-  Primitive,
-  Selector,
-  SimpleOperator,
-} from '../../ast/ast.js';
-import { compareEntityFields } from '../compare.js';
+import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
+import {compareEntityFields} from '../compare.js';
 
 export type Request = PullMsg;
 
@@ -109,7 +104,6 @@ export function createPullResponseMessage(
   };
 }
 
-// TODO: we can merge and expand inequalities and `INs`
 export function mergeConditionLists(
   a: readonly HoistedCondition[],
   b: readonly HoistedCondition[],
@@ -133,10 +127,27 @@ export function mergeConditionLists(
   }
 
   const conditionsToMerge = new Map<string, HoistedCondition[]>();
+  const ret: HoistedCondition[] = [];
+
   for (const condition of b) {
     const key = makeKey(condition.selector);
     const aExisting = aConditionsBySelector.get(key);
+    // If both queries do not share a constraint on the column
+    // then throw it out since it cannot be used to constrain returned history.
     if (!aExisting) {
+      continue;
+    }
+
+    // If both queries have an identical constraint, keep it as-is.
+    const perfectMatch = aExisting.findIndex(
+      a => a.op === condition.op && a.value === condition.value,
+    );
+    if (perfectMatch !== -1) {
+      ret.push(condition);
+      aExisting.splice(perfectMatch, 1);
+      if (aExisting.length === 0) {
+        aConditionsBySelector.delete(key);
+      }
       continue;
     }
 
@@ -144,8 +155,9 @@ export function mergeConditionLists(
     aExisting.push(condition);
   }
 
-  const ret: HoistedCondition[] = [];
   for (const conditions of conditionsToMerge.values()) {
+    // If both lists have identical conditions, keep those
+    // then do widening on the rest.
     const merged = mergeConditionsForSameSelector(conditions);
     if (merged !== undefined) {
       ret.push(merged);
@@ -235,23 +247,84 @@ export function mergeConditionsForSameSelector(
       case '=':
         switch (cond.op) {
           case '<':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            } else {
+              ret.op = '<=';
+            }
             break;
           case '<=':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            } else {
+              ret.op = '<=';
+            }
             break;
           case '>':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.op = '>=';
+            } else {
+              ret.op = '>';
+              ret.value = cond.value;
+            }
             break;
           case '>=':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.op = '>=';
+            } else {
+              ret.op = '>=';
+              ret.value = cond.value;
+            }
             break;
           default:
             return undefined;
         }
         break;
       case '>':
+        switch (cond.op) {
+          case '>':
+            ret.value = min(ret.value, cond.value);
+            break;
+          case '>=':
+            if (compareEntityFields(ret.value, cond.value) >= 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) >= 0) {
+              ret.value = cond.value;
+              ret.op = '>=';
+            }
+            break;
+          default:
+            return undefined;
+        }
         break;
       case '>=':
+        switch (cond.op) {
+          case '>':
+            if (compareEntityFields(ret.value, cond.value) > 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '>=':
+            ret.value = min(ret.value, cond.value);
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) > 0) {
+              ret.value = cond.value;
+              ret.op = '>=';
+            }
+            break;
+        }
         break;
-      case '!=':
-        break;
+      default:
+        // TODO: like expansion, in expansion, set operation expansion
+        return undefined;
     }
   }
 
@@ -263,6 +336,7 @@ function min(l: unknown, r: unknown) {
   if (comp <= 0) {
     return l;
   }
+  return r;
 }
 
 function max(l: unknown, r: unknown) {
@@ -270,4 +344,5 @@ function max(l: unknown, r: unknown) {
   if (comp < 0) {
     return r;
   }
+  return l;
 }
