@@ -1,4 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
+import {CustomKeyMap} from 'shared/src/custom-key-map.js';
+import {CustomKeySet} from 'shared/src/custom-key-set.js';
+import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import type {AST, Selector} from 'zql/src/zql/ast/ast.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
 import {deaggregateArrays} from '../../zql/deaggregation.js';
@@ -14,7 +17,6 @@ import {Normalized} from '../../zql/normalize.js';
 import type {ServerAST} from '../../zql/server-ast.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
-import {CVRPaths} from './schema/paths.js';
 import type {QueryRecord, RowID, RowRecord} from './schema/types.js';
 
 export class InvalidQueryError extends Error {}
@@ -119,11 +121,10 @@ export class QueryHandler {
    * into its constituent tables and rows.
    */
   resultParser(
-    cvrID: string,
     queryIDs: readonly string[],
     columnAliases: Map<string, AliasInfo>,
   ) {
-    return new ResultParser(this.#tables, cvrID, queryIDs, columnAliases);
+    return new ResultParser(this.#tables, queryIDs, columnAliases);
   }
 
   tableSpec(schema: string, table: string) {
@@ -138,11 +139,10 @@ export type ParsedRow = {
 
 class ResultParser {
   readonly #tables: TableSchemas;
-  readonly #paths: CVRPaths;
   readonly #queryIDs: readonly string[];
   readonly #columnAliases: Map<string, AliasInfo>;
   // Maps sub-query names to row-paths to dedupe redundant rows from deaggregations.
-  readonly #subQueryRows = new Map<string, Set<string>>();
+  readonly #subQueryRows = new Map<string, Set<RowID>>();
 
   /**
    * @param queryIDs The query ID(s) with which the query is associated. See
@@ -150,12 +150,10 @@ class ResultParser {
    */
   constructor(
     tables: TableSchemas,
-    cvrID: string,
     queryIDs: readonly string[],
     columnAliases: Map<string, AliasInfo>,
   ) {
     this.#tables = tables;
-    this.#paths = new CVRPaths(cvrID);
     this.#queryIDs = queryIDs;
     this.#columnAliases = columnAliases;
   }
@@ -169,13 +167,13 @@ class ResultParser {
    * Returns a mapping from the CVR row record path to {@link ParsedRow}.
    *
    */
-  parseResults(results: readonly JSONObject[]): Map<string, ParsedRow> {
+  parseResults(results: readonly JSONObject[]): Map<RowID, ParsedRow> {
     type ExtractedRow = {
       aliasInfo: AliasInfo;
       rowWithVersion: JSONObject;
     };
 
-    const parsed = new Map<string, ParsedRow>(); // Maps CVRPath.row() => ParsedRow
+    const parsed = new CustomKeyMap<RowID, ParsedRow>(rowIDHash);
     for (const result of results) {
       // Partition the result's column-aliases into their respective sub-queried rows.
       const subQueries = new Map<string, ExtractedRow>();
@@ -206,24 +204,23 @@ class ResultParser {
 
         const {subQueryName, schema, table} = aliasInfo;
         const id = this.#tables.rowID(schema, table, row);
-        const key = this.#paths.row(id);
 
         let subQuery = this.#subQueryRows.get(subQueryName);
         if (!subQuery) {
-          subQuery = new Set();
+          subQuery = new CustomKeySet<RowID>(id => rowIDHash(id));
           this.#subQueryRows.set(subQueryName, subQuery);
-        } else if (subQuery.has(key)) {
+        } else if (subQuery.has(id)) {
           continue; // Redundant row for this sub-query (i.e. from de-aggregation)
         }
-        subQuery.add(key);
+        subQuery.add(id);
 
-        let rowResult = parsed.get(key);
+        let rowResult = parsed.get(id);
         if (!rowResult) {
           rowResult = {
             record: {id, rowVersion, queriedColumns: {}},
             contents: {},
           };
-          parsed.set(key, rowResult);
+          parsed.set(id, rowResult);
         }
         for (const col of Object.keys(row)) {
           rowResult.record.queriedColumns ??= {}; // Appease the compiler

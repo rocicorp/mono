@@ -19,7 +19,7 @@ import type {
 import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
 import {getPublicationInfo} from '../replicator/tables/published.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
-import {loadCVR} from './cvr.js';
+import {DurableObjectCVRStore} from './durable-object-cvr-store.js';
 import {ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
@@ -190,7 +190,12 @@ describe('view-syncer/service', () => {
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    const cvr = await loadCVR(lc, new DurableStorage(storage), serviceID);
+    const cvrStore = new DurableObjectCVRStore(
+      lc,
+      new DurableStorage(storage),
+      serviceID,
+    );
+    const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -279,7 +284,12 @@ describe('view-syncer/service', () => {
     ]);
     expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
 
-    const cvr = await loadCVR(lc, new DurableStorage(storage), serviceID);
+    const cvrStore = new DurableObjectCVRStore(
+      lc,
+      new DurableStorage(storage),
+      serviceID,
+    );
+    const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -511,7 +521,12 @@ describe('view-syncer/service', () => {
     ]);
     expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
 
-    const cvr = await loadCVR(lc, new DurableStorage(storage), serviceID);
+    const cvrStore = new DurableObjectCVRStore(
+      lc,
+      new DurableStorage(storage),
+      serviceID,
+    );
+    const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -562,7 +577,12 @@ describe('view-syncer/service', () => {
     expect(err).not.toBeUndefined();
 
     // Bad client / query should not have been added to the CVR.
-    const cvr = await loadCVR(lc, new DurableStorage(storage), serviceID);
+    const cvrStore = new DurableObjectCVRStore(
+      lc,
+      new DurableStorage(storage),
+      serviceID,
+    );
+    const cvr = await cvrStore.load();
     expect(Object.keys(cvr.clients)).not.toContain('boo');
     expect(Object.keys(cvr.queries)).not.toContain('bad-query');
   });
@@ -596,7 +616,12 @@ describe('view-syncer/service', () => {
     expect(err).not.toBeUndefined();
 
     // Bad query should not have been added to the CVR.
-    const cvr = await loadCVR(lc, new DurableStorage(storage), serviceID);
+    const cvrStore = new DurableObjectCVRStore(
+      lc,
+      new DurableStorage(storage),
+      serviceID,
+    );
+    const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -646,7 +671,12 @@ describe('view-syncer/service', () => {
     // Everything else should succeed, however, because CVRs are agnostic to row
     // contents, and the data in the DB is technically "valid" (and available when
     // the protocol supports it).
-    const cvr = await loadCVR(lc, new DurableStorage(storage), serviceID);
+    const cvrStore = new DurableObjectCVRStore(
+      lc,
+      new DurableStorage(storage),
+      serviceID,
+    );
+    const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
         foo: {

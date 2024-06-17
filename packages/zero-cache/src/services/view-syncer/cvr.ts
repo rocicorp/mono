@@ -1,20 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
 import {assert, unreachable} from 'shared/src/asserts.js';
+import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {ReadonlyJSONValue, deepEqual} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
+import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {DurableStorage} from '../../storage/durable-storage.js';
-import type {Storage} from '../../storage/storage.js';
-import {WriteCache} from '../../storage/write-cache.js';
-import {LexiVersion, versionToLexi} from '../../types/lexi-version.js';
+import type {LexiVersion} from '../../types/lexi-version.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
+import type {CVRStore} from './cvr-store.js';
 import type {ParsedRow} from './queries.js';
-import {CVRPaths, lastActiveIndex} from './schema/paths.js';
 import {
-  ClientPatch,
   ClientQueryRecord,
-  CvrID,
   InternalQueryRecord,
   MetadataPatch,
   NullableCVRVersion,
@@ -23,11 +20,7 @@ import {
   RowPatch,
   RowRecord,
   cmpVersions,
-  metaRecordSchema,
-  metadataPatchSchema,
   oneAfter,
-  rowPatchSchema,
-  rowRecordSchema,
   type CVRVersion,
   type ClientRecord,
   type LastActive,
@@ -35,7 +28,7 @@ import {
 } from './schema/types.js';
 
 /** Internally used mutable CVR type. */
-type CVR = {
+export type CVR = {
   id: string;
   version: CVRVersion;
   lastActive: LastActive;
@@ -52,45 +45,6 @@ export type CVRSnapshot = {
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
 };
-
-/** Loads the CVR metadata from storage. */
-export async function loadCVR(
-  lc: LogContext,
-  storage: Storage,
-  id: string,
-): Promise<CVRSnapshot> {
-  const start = Date.now();
-  const cvr: CVR = {
-    id,
-    version: {stateVersion: versionToLexi(0)},
-    lastActive: {epochMillis: 0},
-    clients: {},
-    queries: {},
-  };
-
-  const paths = new CVRPaths(id);
-  const metaRecords = await storage.list(
-    {prefix: paths.metaPrefix()},
-    metaRecordSchema, // TODO: Consider an alternative API to union type + casting.
-  );
-  for (const [key, value] of metaRecords) {
-    if (key.endsWith('/version')) {
-      cvr.version = value as CVRVersion;
-    } else if (key.endsWith('/lastActive')) {
-      cvr.lastActive = value as LastActive;
-    } else if (key.includes('/c/')) {
-      const client = value as ClientRecord;
-      cvr.clients[client.id] = client;
-    } else if (key.includes('/q/')) {
-      const query = value as QueryRecord;
-      cvr.queries[query.id] = query;
-    }
-  }
-  lc.debug?.(
-    `loaded CVR (${Date.now() - start} ms), ${metaRecords.size} meta entries`,
-  );
-  return cvr;
-}
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
 
@@ -114,21 +68,18 @@ function assertNotInternal(
  * prevent the CVR from being garbage collected.
  */
 export class CVRUpdater {
-  protected readonly _directStorage: DurableStorage;
-  protected readonly _paths: CVRPaths;
-  protected readonly _writes: WriteCache;
   protected readonly _orig: CVRSnapshot;
   protected readonly _cvr: CVR;
+
+  protected readonly _cvrStore: CVRStore;
 
   /**
    * @param cvr The current CVR
    * @param stateVersion The db `stateVersion` of the InvalidationUpdate for which this CVR
    *                     is being updated, or absent for config-only updates.
    */
-  constructor(storage: DurableStorage, cvr: CVRSnapshot) {
-    this._directStorage = storage;
-    this._paths = new CVRPaths(cvr.id);
-    this._writes = new WriteCache(storage);
+  constructor(cvrStore: CVRStore, cvr: CVRSnapshot) {
+    this._cvrStore = cvrStore;
     this._orig = cvr;
     this._cvr = structuredClone(cvr) as CVR; // mutable deep copy
   }
@@ -136,7 +87,7 @@ export class CVRUpdater {
   protected _setVersion(version: CVRVersion) {
     assert(cmpVersions(this._cvr.version, version) < 0);
     this._cvr.version = version;
-    void this._writes.put(this._paths.version(), this._cvr.version);
+    this._cvrStore.putVersion(this._cvr.version);
     return version;
   }
 
@@ -156,32 +107,32 @@ export class CVRUpdater {
     const oldMillis = this._cvr.lastActive.epochMillis;
     const newMillis = now.getTime();
 
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    function isSameDay(d1: number, d2: number) {
+      return Math.floor(d1 / ONE_DAY) === Math.floor(d2 / ONE_DAY);
+    }
+
     // The global index has per-day granularity. Only update if the day changes.
-    const oldDay = lastActiveIndex.dayPrefix(oldMillis);
-    const newDay = lastActiveIndex.dayPrefix(newMillis);
-    if (oldDay !== newDay) {
-      void this._writes.del(lastActiveIndex.entry(this._cvr.id, oldMillis));
-      void this._writes.put(lastActiveIndex.entry(this._cvr.id, newMillis), {
-        id: this._cvr.id,
-      } satisfies CvrID);
+    if (!isSameDay(newMillis, oldMillis)) {
+      this._cvrStore.delLastActiveIndex(this._cvr.id, oldMillis);
+      this._cvrStore.putLastActiveIndex(this._cvr.id, newMillis);
     }
 
     this._cvr.lastActive = {epochMillis: newMillis};
-    void this._writes.put(this._paths.lastActive(), this._cvr.lastActive);
+    this._cvrStore.putLastActive(this._cvr.lastActive);
   }
 
   // Exposed for testing.
   numPendingWrites() {
-    return this._writes.pendingSize();
+    return this._cvrStore.numPendingWrites();
   }
 
   async flush(lc: LogContext, lastActive = new Date()): Promise<CVRSnapshot> {
     const start = Date.now();
 
     this.#setLastActive(lastActive);
-    const numEntries = this._writes.pendingSize();
-    await this._writes.flush(); // Calls put() and del() with a final `await`
-    await this._directStorage.flush(); // DurableObjectStorage.sync();
+    const numEntries = this._cvrStore.numPendingWrites();
+    await this._cvrStore.flush();
 
     lc.debug?.(`flushed ${numEntries} CVR entries (${Date.now() - start} ms)`);
     return this._cvr;
@@ -194,10 +145,6 @@ export class CVRUpdater {
  * but the `stateVersion` of the CVR does not change.
  */
 export class CVRConfigDrivenUpdater extends CVRUpdater {
-  constructor(storage: DurableStorage, cvr: CVRSnapshot) {
-    super(storage, cvr);
-  }
-
   #ensureClient(id: string): ClientRecord {
     let client = this._cvr.clients[id];
     if (client) {
@@ -208,12 +155,12 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client = {id, patchVersion: newVersion, desiredQueryIDs: []};
     this._cvr.clients[id] = client;
 
-    void this._writes.put(this._paths.client(client), client);
-    void this._writes.put(this._paths.clientPatch(newVersion, client), {
+    this._cvrStore.putClient(client);
+    this._cvrStore.putClientPatch(newVersion, client, {
       type: 'client',
       op: 'put',
       id,
-    } satisfies ClientPatch);
+    });
 
     const lmidsQuery: InternalQueryRecord = {
       id: CLIENT_LMID_QUERY_ID,
@@ -257,7 +204,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       internal: true,
     };
     this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
-    void this._writes.put(this._paths.query(lmidsQuery), lmidsQuery);
+    this._cvrStore.putQuery(lmidsQuery);
 
     return client;
   }
@@ -275,7 +222,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     }
     const newVersion = this._ensureNewVersion();
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
-    void this._writes.put(this._paths.client(client), client);
+    this._cvrStore.putClient(client);
 
     const added: {id: string; ast: AST}[] = [];
     for (const id of needed) {
@@ -287,11 +234,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvr.queries[id] = query;
       added.push({id, ast});
 
-      void this._writes.put(this._paths.query(query), query);
-      void this._writes.put(
-        this._paths.desiredQueryPatch(newVersion, query, client),
-        {type: 'query', op: 'put', id, clientID} satisfies QueryPatch,
-      );
+      this._cvrStore.putQuery(query);
+      this._cvrStore.putDesiredQueryPatch(newVersion, query, client, {
+        type: 'query',
+        op: 'put',
+        id,
+        clientID,
+      });
     }
     return added;
   }
@@ -306,7 +255,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     }
     const newVersion = this._ensureNewVersion();
     client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
-    void this._writes.put(this._paths.client(client), client);
+    this._cvrStore.putClient(client);
 
     for (const id of remove) {
       const query = this._cvr.queries[id];
@@ -318,15 +267,15 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       // Delete the old put-desired-patch
       const oldPutVersion = query.desiredBy[clientID];
       delete query.desiredBy[clientID];
-      void this._writes.del(
-        this._paths.desiredQueryPatch(oldPutVersion, query, client),
-      );
+      this._cvrStore.delDesiredQueryPatch(oldPutVersion, query, client);
 
-      void this._writes.put(this._paths.query(query), query);
-      void this._writes.put(
-        this._paths.desiredQueryPatch(newVersion, query, client),
-        {type: 'query', op: 'del', id, clientID} satisfies QueryPatch,
-      );
+      this._cvrStore.putQuery(query);
+      this._cvrStore.putDesiredQueryPatch(newVersion, query, client, {
+        type: 'query',
+        op: 'del',
+        id,
+        clientID,
+      });
     }
   }
 
@@ -356,21 +305,17 @@ type QueriedColumns = Record<string, string[]>;
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #removedOrExecutedQueryIDs = new Set<string>();
-  readonly #receivedRows = new Map<string, QueriedColumns>();
+  readonly #receivedRows = new CustomKeyMap<RowID, QueriedColumns>(rowIDHash);
   readonly #newConfigPatches: MetadataPatch[] = [];
-  #existingRows: Promise<Map<string, RowRecord>> | undefined;
-  #catchupRowPatches: Promise<Map<string, RowPatch>> | undefined;
-  #catchupConfigPatches: Promise<Map<string, MetadataPatch>> | undefined;
+  #existingRows: Promise<RowRecord[]> | undefined;
+  #catchupRowPatches: Promise<[RowPatch, CVRVersion][]> | undefined;
+  #catchupConfigPatches: Promise<[MetadataPatch, CVRVersion][]> | undefined;
 
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
    */
-  constructor(
-    storage: DurableStorage,
-    cvr: CVRSnapshot,
-    stateVersion: LexiVersion,
-  ) {
-    super(storage, cvr);
+  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, stateVersion: LexiVersion) {
+    super(cvrStore, cvr);
 
     assert(stateVersion >= cvr.version.stateVersion);
     if (stateVersion > cvr.version.stateVersion) {
@@ -400,36 +345,26 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
 
     if (cmpVersions(catchupFrom, this._orig.version) >= 0) {
-      this.#catchupRowPatches = Promise.resolve(new Map());
-      this.#catchupConfigPatches = Promise.resolve(new Map());
+      this.#catchupRowPatches = Promise.resolve([]);
+      this.#catchupConfigPatches = Promise.resolve([]);
     } else {
       const startingVersion = oneAfter(catchupFrom);
-      this.#catchupRowPatches = this._directStorage.list(
-        {
-          prefix: this._paths.rowPatchPrefix(),
-          start: {key: this._paths.rowPatchVersionPrefix(startingVersion)},
-        },
-        rowPatchSchema,
-      );
-      this.#catchupConfigPatches = this._directStorage.list(
-        {
-          prefix: this._paths.metadataPatchPrefix(),
-          start: {key: this._paths.metadataPatchVersionPrefix(startingVersion)},
-        },
-        metadataPatchSchema,
-      );
+      this.#catchupRowPatches =
+        this._cvrStore.catchupRowPatches(startingVersion);
+      this.#catchupConfigPatches =
+        this._cvrStore.catchupConfigPatches(startingVersion);
     }
     return this._cvr.version;
   }
 
   async #lookupRowsForExecutedAndRemovedQueries(
     lc: LogContext,
-  ): Promise<Map<string, RowRecord>> {
+  ): Promise<RowRecord[]> {
     const results = new Map<string, RowRecord>();
 
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config only changes.
-      return results;
+      return [];
     }
 
     // Currently this performs a full scan of the CVR row records. In the future this
@@ -440,21 +375,19 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // (1) We are interested in the existing storage state, and not pending mutations
     // (2) WriteCache.batchScan() (i.e. list()) will perform computationally expensive
     //     (and unnecessary) sorting over the entry Map to adhere to the DO contract.
-    const allRowRecords = this._directStorage.batchScan(
-      {prefix: this._paths.rowPrefix()},
-      rowRecordSchema,
-      2000, // Arbitrary batch size. Limits how many row records are in memory at a time.
-    );
+    const allRowRecords = this._cvrStore.allRowRecords();
+
     let total = 0;
     for await (const existingRows of allRowRecords) {
       total += existingRows.size;
-      for (const [path, existing] of existingRows) {
+      for (const existing of existingRows.values()) {
         if (existing.queriedColumns === null) {
           continue; // Tombstone
         }
         for (const queries of Object.values(existing.queriedColumns)) {
           if (queries.some(id => this.#removedOrExecutedQueryIDs.has(id))) {
-            results.set(path, existing);
+            const hash = rowIDHash(existing.id);
+            results.set(hash, existing);
             break;
           }
         }
@@ -468,7 +401,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         ...this.#removedOrExecutedQueryIDs,
       ]}`,
     );
-    return results;
+    return [...results.values()];
   }
 
   /**
@@ -489,16 +422,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         // client query: desired -> gotten
         query.patchVersion = transformationVersion;
         const queryPatch: QueryPatch = {type: 'query', op: 'put', id: query.id};
-        void this._writes.put(
-          this._paths.queryPatch(transformationVersion, {id: query.id}),
-          queryPatch,
-        );
+        this._cvrStore.putQueryPatch(transformationVersion, queryPatch);
         this.#newConfigPatches.push(queryPatch);
       }
 
       query.transformationHash = transformationHash;
       query.transformationVersion = transformationVersion;
-      void this._writes.put(this._paths.query(query), query);
+      this._cvrStore.putQuery(query);
     }
   }
 
@@ -521,18 +451,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     delete this._cvr.queries[queryID];
 
     const newVersion = this._ensureNewVersion();
-    void this._writes.del(this._paths.query({id: queryID}));
+    this._cvrStore.delQuery({id: queryID});
     const {patchVersion} = query;
     if (patchVersion) {
-      void this._writes.del(
-        this._paths.queryPatch(patchVersion, {id: queryID}),
-      );
+      this._cvrStore.delQueryPatch(patchVersion, {id: queryID});
     }
     const queryPatch: QueryPatch = {type: 'query', op: 'del', id: queryID};
-    void this._writes.put(
-      this._paths.queryPatch(newVersion, {id: queryID}),
-      queryPatch,
-    );
+    this._cvrStore.putQueryPatch(newVersion, queryPatch);
     this.#newConfigPatches.push(queryPatch);
   }
 
@@ -562,16 +487,14 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    */
   async received(
     _: LogContext,
-    rows: Map<string, ParsedRow>,
+    rows: Map<RowID, ParsedRow>,
   ): Promise<PatchToVersion[]> {
     const merges: PatchToVersion[] = [];
 
-    const existingRows = await this._writes.getEntries(
-      [...rows.keys()],
-      rowRecordSchema,
-    );
+    const existingRows: Map<RowID, RowRecord> =
+      await this._cvrStore.getMultipleRowEntries(rows.keys());
 
-    for (const [path, row] of rows) {
+    for (const [rowID, row] of rows) {
       const {
         contents,
         record: {id, rowVersion, queriedColumns},
@@ -579,10 +502,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       assert(queriedColumns !== null); // We never "receive" tombstones.
 
-      const existing = existingRows.get(path);
+      const existing = existingRows.get(rowID);
 
       // Accumulate all received columns to determine which columns to prune at the end.
-      const previouslyReceived = this.#receivedRows.get(path);
+      const previouslyReceived = this.#receivedRows.get(rowID);
       const merged = previouslyReceived
         ? mergeQueriedColumns(previouslyReceived, queriedColumns)
         : mergeQueriedColumns(
@@ -591,7 +514,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             this.#removedOrExecutedQueryIDs,
           );
 
-      this.#receivedRows.set(path, merged);
+      this.#receivedRows.set(rowID, merged);
 
       const patchVersion =
         existing?.rowVersion === rowVersion &&
@@ -600,17 +523,17 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           : this.#assertNewVersion();
 
       if (existing) {
-        void this._writes.del(this._paths.rowPatch(existing.patchVersion, id));
+        this._cvrStore.delRowPatch(existing);
       }
       const updated = {id, rowVersion, patchVersion, queriedColumns: merged};
-      void this._writes.put(path, updated satisfies RowRecord);
-      void this._writes.put(this._paths.rowPatch(patchVersion, id), {
+      this._cvrStore.putRowRecord(updated);
+      this._cvrStore.putRowPatch(patchVersion, {
         type: 'row',
         op: 'put',
         id,
         rowVersion,
         columns: Object.keys(merged),
-      } satisfies RowPatch);
+      });
 
       merges.push({
         patch: {
@@ -653,8 +576,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const patches: PatchToVersion[] = [];
 
     assert(this.#existingRows, `trackQueries() was not called`);
-    for (const [path, existing] of await this.#existingRows) {
-      const update = this.#deleteUnreferencedColumnsOrRow(path, existing);
+    for (const existing of await this.#existingRows) {
+      const update = this.#deleteUnreferencedColumnsOrRow(existing);
       if (update === null) {
         continue;
       }
@@ -676,12 +599,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // Now catch up clients with row patches that haven't been deleted.
     assert(this.#catchupRowPatches, `trackQueries must first be called`);
     const catchupRowPatches = await this.#catchupRowPatches;
-    lc.debug?.(`processing ${catchupRowPatches.size} row patches`);
-    for (const [path, rowPatch] of catchupRowPatches) {
-      if (this._writes.isPendingDelete(path)) {
-        continue; // row patch has been replaced.
+    lc.debug?.(`processing ${catchupRowPatches.length} row patches`);
+    for (const [rowPatch, toVersion] of catchupRowPatches) {
+      if (this._cvrStore.isRowPatchPendingDelete(rowPatch, toVersion)) {
+        continue;
       }
-      const toVersion = this._paths.versionFromPatchPath(path);
+
       const {id} = rowPatch;
       if (rowPatch.op === 'put') {
         const {columns} = rowPatch;
@@ -702,7 +625,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     assert(this.#catchupConfigPatches, `trackQueries must first be called`);
     const catchupConfigPatches = await this.#catchupConfigPatches;
-    lc.debug?.(`processing ${catchupConfigPatches.size} config patches`);
+    lc.debug?.(`processing ${catchupConfigPatches.length} config patches`);
 
     const convert = (patchRecord: MetadataPatch): Patch => {
       switch (patchRecord.type) {
@@ -720,11 +643,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
     };
 
-    for (const [path, patchRecord] of catchupConfigPatches) {
-      if (this._writes.isPendingDelete(path)) {
+    for (const [patchRecord, toVersion] of catchupConfigPatches) {
+      if (this._cvrStore.isPatchRecordPendingDelete(patchRecord, toVersion)) {
         continue; // config patch has been replaced.
       }
-      const toVersion = this._paths.versionFromPatchPath(path);
+
       patches.push({patch: convert(patchRecord), toVersion});
     }
     for (const patchRecord of this.#newConfigPatches) {
@@ -734,10 +657,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   #deleteUnreferencedColumnsOrRow(
-    rowRecordPath: string,
     existing: RowRecord,
   ): {id: RowID; columns?: string[]} | null {
-    const received = this.#receivedRows.get(rowRecordPath);
+    const received = this.#receivedRows.get(existing.id);
 
     const newQueriedColumns =
       received ?? // optimization: already merged in received()
@@ -751,7 +673,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       Object.keys(existing.queriedColumns).every(col => newQueriedColumns[col])
     ) {
       if (received) {
-        const pending = this._writes.getPending(rowRecordPath);
+        const pending = this._cvrStore.getPendingRowRecord(existing.id);
+
         if (
           pending?.op === 'put' &&
           deepEqual(
@@ -760,9 +683,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           )
         ) {
           // Remove no-op writes from the WriteCache.
-          this._writes.cancelPending(rowRecordPath);
-          this._writes.cancelPending(
-            this._paths.rowPatch(existing.patchVersion, existing.id),
+          this._cvrStore.cancelPendingRowRecord(existing.id);
+          this._cvrStore.cancelPendingRowPatch(
+            existing.patchVersion,
+            existing.id,
           );
         }
       }
@@ -780,25 +704,25 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       patchVersion,
       queriedColumns: op === 'put' ? newQueriedColumns : null,
     };
-    void this._writes.put(rowRecordPath, rowRecord);
-    void this._writes.del(this._paths.rowPatch(existing.patchVersion, id));
+    this._cvrStore.putRowRecord(rowRecord);
+    this._cvrStore.delRowPatch(existing);
 
     if (op === 'del') {
-      void this._writes.put(this._paths.rowPatch(patchVersion, id), {
+      this._cvrStore.putRowPatch(patchVersion, {
         type: 'row',
         op: 'del',
         id,
-      } satisfies RowPatch);
+      });
       return {id}; // DeleteOp
     }
 
-    void this._writes.put(this._paths.rowPatch(patchVersion, id), {
+    this._cvrStore.putRowPatch(patchVersion, {
       type: 'row',
       op: 'put',
       id,
       rowVersion,
       columns,
-    } satisfies RowPatch);
+    });
 
     return {id, columns}; // UpdateOp
   }
