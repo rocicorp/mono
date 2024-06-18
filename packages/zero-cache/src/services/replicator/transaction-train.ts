@@ -100,10 +100,10 @@ export class TransactionTrainService implements TransactionTrain {
       } finally {
         if (writer.isRunning()) {
           writer.setDone();
-          await writer.done(); // Required for correctness.
+          await writer.done(); // Required for correctness (row lock must be released).
         }
         if (readers.isRunning()) {
-          readers.setDone();
+          readers.unref(); // Allow the readers to be shared with ref counting.
         }
       }
     });

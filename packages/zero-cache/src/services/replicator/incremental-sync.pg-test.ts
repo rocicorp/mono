@@ -4,6 +4,11 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
+  Mode,
+  TransactionPool,
+  importSnapshot,
+} from 'zero-cache/src/db/transaction-pool.js';
+import {
   dropReplicationSlot,
   expectTables,
   getConnectionURI,
@@ -28,6 +33,7 @@ import {TransactionTrainService} from './transaction-train.js';
 import {toLexiVersion} from './types/lsn.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
+const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
 
 describe('replicator/incremental-sync', {retry: 3}, () => {
   let lc: LogContext;
@@ -67,8 +73,8 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     writeUpstream?: string[];
     invalidationFilters?: InvalidationFilterSpec[];
     expectedTransactions?: number;
-    expectedVersionChanges?: VersionChange[];
-    coalescedVersionChange?: VersionChange;
+    expectedVersionChanges?: Omit<VersionChange, 'prevSnapshotID'>[];
+    coalescedVersionChange?: Omit<VersionChange, 'prevSnapshotID'>;
     specs: Record<string, TableSpec>;
     data: Record<string, Record<string, unknown>[]>;
   };
@@ -1982,6 +1988,13 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         const versions: VersionChange[] = [];
         if (c.expectedTransactions) {
           for await (const v of incrementalVersionSubscription) {
+            // Verify that the snapshot ID can be imported.
+            const {init, imported} = importSnapshot(v.prevSnapshotID);
+            const txPool = new TransactionPool(lc, Mode.READONLY, init);
+            void txPool.run(replica);
+            await imported;
+            txPool.setDone();
+
             versions.push(v);
             if (versions.length === c.expectedTransactions) {
               break;
@@ -2032,13 +2045,13 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       await expectTables(replica, replaceVersions(c.data, versions));
 
       if (c.expectedVersionChanges) {
-        expect(await incrementalVersions).toEqual(
+        expect(await incrementalVersions).toMatchObject(
           c.expectedVersionChanges.map(v => convertVersionChange(v, versions)),
         );
       }
       if (c.coalescedVersionChange) {
         for await (const v of coalescedVersionSubscription) {
-          expect(v).toEqual(
+          expect(v).toMatchObject(
             convertVersionChange(c.coalescedVersionChange, versions),
           );
           break;
@@ -2048,7 +2061,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   }
 
   function convertVersionChange(
-    v: VersionChange,
+    v: Omit<VersionChange, 'prevSnapshotID'>,
     versions: string[],
   ): VersionChange {
     const convert = (val: string) => {
@@ -2058,6 +2071,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     return {
       newVersion: convert(v.newVersion),
       prevVersion: convert(v.prevVersion),
+      prevSnapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
       invalidations:
         v.invalidations === undefined
           ? undefined
@@ -2067,20 +2081,18 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       changes:
         v.changes === undefined
           ? undefined
-          : v.changes.map(
-              c =>
-                ({
-                  ...c,
-                  rowData:
-                    c.rowData === undefined
-                      ? undefined
-                      : {
-                          ...c.rowData,
-                          ['_0_version']: convert(
-                            c.rowData['_0_version'] as string,
-                          ),
-                        },
-                }) as RowChange,
+          : v.changes.map(c =>
+              c.rowData === undefined
+                ? c
+                : ({
+                    ...c,
+                    rowData: {
+                      ...c.rowData,
+                      ['_0_version']: convert(
+                        c.rowData['_0_version'] as string,
+                      ),
+                    },
+                  } as RowChange),
             ),
     };
   }

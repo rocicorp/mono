@@ -11,6 +11,8 @@ import type {VersionChange} from './replicator.js';
 import {setupReplicationTables} from './schema/replication.js';
 import {TransactionTrainService} from './transaction-train.js';
 
+const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
+
 describe('replicator/message-processor', () => {
   let lc: LogContext;
   let replica: PostgresDB;
@@ -69,7 +71,7 @@ describe('replicator/message-processor', () => {
     name: string;
     messages: Record<string, Pgoutput.Message[]>;
     acknowledged: string[];
-    versions: VersionChange[];
+    versions: Omit<VersionChange, 'prevSnapshotID'>[];
     replicated: Record<string, object[]>;
     expectFailure: boolean;
   };
@@ -426,7 +428,10 @@ describe('replicator/message-processor', () => {
         expect(await acknowledgements.dequeue()).toBe(lsn);
       }
       for (const version of c.versions) {
-        expect(await versionChanges.dequeue()).toEqual(version);
+        expect(await versionChanges.dequeue()).toMatchObject({
+          ...version,
+          prevSnapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
+        });
       }
       if (c.expectFailure) {
         expect(await failures.dequeue()).toBeInstanceOf(Error);

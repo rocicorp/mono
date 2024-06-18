@@ -74,6 +74,18 @@ export const versionChangeSchema = v.object({
   prevVersion: v.string(),
 
   /**
+   * The Postgres snapshot id of the database state at `prevVersion`, which can be
+   * accessed via the `SET TRANSACTION SNAPSHOT <snapshot-id>` statement. The
+   * Replicator will keep the snapshot ID valid (by holding a transaction open)
+   * until all subscribers have consumed the VersionChange, as communicated by the
+   * Subscription / CancelableAsyncIterable chain from the Replicator to the
+   * consumer(s), or until a timeout has elapsed. Subscribers should create
+   * snapshot transactions (as necessary) and ACK as soon as possible to free up
+   * Replicator resources.
+   */
+  prevSnapshotID: v.string(),
+
+  /**
    * A mapping from hex invalidation hash to the latest version in which
    * the invalidation occurred, if greater than `prevVersion`.
    *
