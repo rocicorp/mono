@@ -112,94 +112,65 @@ export function mergeConditionLists(
     return a;
   }
 
-  const aConditionsBySelector = new Map<string, HoistedCondition[]>();
+  const aConditionsBySelector = groupConditionsBySelector(a);
+  const bConditionsBySelector = groupConditionsBySelector(b);
+  const ret: HoistedCondition[] = [];
 
-  const makeKey = (selector: readonly [string | null, string]) =>
-    selector.join(',');
-  for (const condition of a) {
-    const key = makeKey(condition.selector);
-    const existing = aConditionsBySelector.get(key);
+  for (const [selector, aConditions] of aConditionsBySelector) {
+    const bConditions = bConditionsBySelector.get(selector);
+    if (bConditions) {
+      for (const aCondition of aConditions) {
+        const merged = mergeConditions(aCondition, bConditions);
+        if (merged) {
+          ret.push(merged);
+        }
+      }
+    }
+    // no corresponding b condition? throw it out.
+  }
+
+  return ret;
+}
+
+function groupConditionsBySelector(
+  conditions: readonly HoistedCondition[],
+): Map<string, HoistedCondition[]> {
+  const ret = new Map<string, HoistedCondition[]>();
+
+  for (const condition of conditions) {
+    const key = condition.selector.join(',');
+    const existing = ret.get(key);
     if (existing) {
       existing.push(condition);
     } else {
-      aConditionsBySelector.set(key, [condition]);
-    }
-  }
-
-  const conditionsToMerge = new Map<string, HoistedCondition[]>();
-  const ret: HoistedCondition[] = [];
-
-  for (const condition of b) {
-    const key = makeKey(condition.selector);
-    const aExisting = aConditionsBySelector.get(key);
-    // If both queries do not share a constraint on the column
-    // then throw it out since it cannot be used to constrain returned history.
-    if (!aExisting) {
-      continue;
-    }
-
-    // If both queries have an identical constraint, keep it as-is.
-    const perfectMatch = aExisting.findIndex(
-      a => a.op === condition.op && a.value === condition.value,
-    );
-    if (perfectMatch !== -1) {
-      ret.push(condition);
-      aExisting.splice(perfectMatch, 1);
-      if (aExisting.length === 0) {
-        aConditionsBySelector.delete(key);
-      }
-      continue;
-    }
-
-    conditionsToMerge.set(key, aExisting);
-    aExisting.push(condition);
-  }
-
-  for (const conditions of conditionsToMerge.values()) {
-    // If both lists have identical conditions, keep those
-    // then do widening on the rest.
-    const merged = mergeConditionsForSameSelector(conditions);
-    if (merged !== undefined) {
-      ret.push(merged);
+      ret.set(key, [condition]);
     }
   }
 
   return ret;
 }
 
-/**
- * Rules:
- * 1. a > x, a < y -> undefined
- * 2. a > x, a > y -> a > min(x, y)
- * 3. a < x, a < y -> a < max(x, y)
- * 4. a > x, a = y -> y < x ? a >= y : a > x
- * 5. a > x, a >= y -> y < x ? a >= y : a > x
- * 6. a < x, a <= y ->
- * 7. a < x, a = y ->
- * 8. a = x, a != y -> undefined
- * 9. a < x, a != y -> (range split around y?)
- */
-export function mergeConditionsForSameSelector(
-  conditions: HoistedCondition[],
+export function mergeConditions(
+  left: HoistedCondition,
+  right: HoistedCondition[],
 ): HoistedCondition | undefined {
-  if (conditions.length === 0) {
+  if (right.length === 0) {
     return undefined;
   }
-  if (conditions.length === 1) {
-    return conditions[0];
+  if (right.length === 1) {
+    if (left === right[0]) {
+      return left;
+    }
+    if (left.op === right[0].op && left.value === right[0].value) {
+      return left;
+    }
   }
 
   const ret = {
-    ...conditions[0],
+    ...left,
   };
 
-  for (let i = 1; i < conditions.length; ++i) {
-    const cond = conditions[i];
-
-    if (cond.op === ret.op && cond.value === ret.value) {
-      continue;
-    }
-
+  for (const cond of right) {
     switch (ret.op) {
       case '<': {
         switch (cond.op) {

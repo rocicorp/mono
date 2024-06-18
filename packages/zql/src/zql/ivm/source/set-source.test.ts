@@ -1345,8 +1345,8 @@ describe('merge requests', () => {
             value: 1,
           },
           {
-            selector: ['foo', 'bar'],
-            op: '=',
+            selector: ['foo', 'baz'],
+            op: '>',
             value: 2,
           },
         ],
@@ -1356,14 +1356,14 @@ describe('merge requests', () => {
         type: 'pull',
         hoistedConditions: [
           {
-            selector: ['foo', 'bar'],
-            op: '=',
-            value: 1,
+            selector: ['foo', 'baz'],
+            op: '>',
+            value: 3,
           },
           {
             selector: ['foo', 'bar'],
             op: '=',
-            value: 3,
+            value: 1,
           },
         ],
       },
@@ -1375,6 +1375,11 @@ describe('merge requests', () => {
             selector: ['foo', 'bar'],
             op: '=',
             value: 1,
+          },
+          {
+            op: '>',
+            selector: ['foo', 'baz'],
+            value: 2,
           },
         ],
       },

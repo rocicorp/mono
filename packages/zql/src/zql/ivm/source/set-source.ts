@@ -496,6 +496,10 @@ export function mergeRequests(a: Request, b: Request | undefined) {
     return a;
   }
 
+  if (a === b) {
+    return a;
+  }
+
   const mergedConditions = mergeConditionLists(
     a.hoistedConditions,
     b.hoistedConditions,
