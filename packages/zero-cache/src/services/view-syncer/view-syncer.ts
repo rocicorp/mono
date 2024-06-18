@@ -177,7 +177,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     lc.debug?.('initConnection', initConnectionMessage);
 
     // Setup the downstream connection.
-    const downstream = new Subscription<Downstream>({
+    const downstream = Subscription.create<Downstream>({
       cleanup: (_, err) => {
         err
           ? lc.error?.(`client closed with error`, err)

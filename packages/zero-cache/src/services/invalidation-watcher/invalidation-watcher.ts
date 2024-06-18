@@ -274,7 +274,7 @@ export class InvalidationWatcherService
     request: WatchRequest,
   ): Promise<CancelableAsyncIterable<QueryInvalidationUpdate>> {
     const subscription: Subscription<QueryInvalidationUpdate> =
-      new Subscription<QueryInvalidationUpdate>({
+      Subscription.create<QueryInvalidationUpdate>({
         // Coalescing {@link QueryInvalidationUpdate} messages is important in two contexts:
         //
         // * Capping the amount of outstanding work a subscriber has to process when

@@ -1,10 +1,10 @@
+import type {WebSocket} from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
+import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import {BigIntJSON, type JSONObject} from './bigint-json.js';
 import {Subscription} from './subscription.js';
-import type {WebSocket} from '@fastify/websocket';
-import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 
 export type CancelableAsyncIterable<T> = AsyncIterable<T> & {
   /**
@@ -69,13 +69,21 @@ export function streamIn<T extends JSONObject>(
   source: WebSocket,
   schema: v.Type<T>,
 ): CancelableAsyncIterable<T> {
-  const sink: Subscription<Streamed<T>> = new Subscription<Streamed<T>>({
-    consumed: msg => {
-      const ack: Ack = {consumedID: msg._streamID};
-      source.send(JSON.stringify(ack));
+  const sink: Subscription<T, Streamed<T>> = new Subscription<T, Streamed<T>>(
+    {
+      consumed: msg => {
+        const ack: Ack = {consumedID: msg._streamID};
+        source.send(JSON.stringify(ack));
+      },
+      cleanup: () => closer.close(),
     },
-    cleanup: () => closer.close(),
-  });
+    s => {
+      // Exclude the internal wire-protocol `_streamID` field from the message exposed in the Iterable.
+      const {_streamID, ...m} = s;
+      m satisfies Omit<Streamed<T>, '_streamID'>; // Documents that `m` is of type `T`,
+      return m as unknown as T; // which TypeScript can't yet figure out.
+    },
+  );
 
   const closer = new WebSocketCloser(lc, source, sink, handleMessage);
 
