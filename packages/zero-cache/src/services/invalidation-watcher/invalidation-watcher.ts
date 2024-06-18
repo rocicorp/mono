@@ -6,7 +6,7 @@ import {sleep} from 'shared/src/sleep.js';
 import {
   Mode,
   TransactionPool,
-  sharedReadOnlySnapshot,
+  sharedSnapshot,
 } from '../../db/transaction-pool.js';
 import {stringify} from '../../types/bigint-json.js';
 import {max, min, type LexiVersion} from '../../types/lexi-version.js';
@@ -456,7 +456,7 @@ export class InvalidationWatcherService
       lc.debug?.(`Reusing cached reader @${this.#latestReader.version}`);
       return this.#latestReader;
     }
-    const {init, cleanup} = sharedReadOnlySnapshot();
+    const {init, cleanup} = sharedSnapshot();
     const reader = new TransactionPool(lc, Mode.READONLY, init, cleanup, 1, 4); // TODO: Choose maxWorkers more intelligently / dynamically.
     reader.run(this.#replica).catch(e => lc.error?.(e));
 

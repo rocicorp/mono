@@ -9,7 +9,8 @@ import type {PostgresDB} from '../types/pg.js';
 import {
   Mode,
   TransactionPool,
-  sharedReadOnlySnapshot,
+  importSnapshot,
+  sharedSnapshot,
   synchronizedSnapshots,
 } from './transaction-pool.js';
 
@@ -732,14 +733,14 @@ describe('db/transaction-pool', () => {
     expect(result).toBe(err);
   });
 
-  test('sharedReadOnlySnapshot', async () => {
+  test('sharedSnapshot', async () => {
     const processing = new Queue<boolean>();
     const readTask = () => async (tx: postgres.TransactionSql) => {
       void processing.enqueue(true);
       return (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
     };
 
-    const {init, cleanup} = sharedReadOnlySnapshot();
+    const {init, cleanup} = sharedSnapshot();
     const pool = new TransactionPool(lc, Mode.READONLY, init, cleanup, 2, 5);
 
     // Start off with some existing values in the db.
@@ -782,6 +783,74 @@ describe('db/transaction-pool', () => {
 
     pool.setDone();
     await done;
+
+    await expectTables(db, {
+      ['public.foo']: [
+        {id: 1, val: null},
+        {id: 2, val: null},
+        {id: 3, val: null},
+        {id: 4, val: null},
+        {id: 5, val: null},
+        {id: 6, val: null},
+      ],
+    });
+  });
+
+  test('externally shared snapshot', async () => {
+    const processing = new Queue<boolean>();
+    const readTask = () => async (tx: postgres.TransactionSql) => {
+      void processing.enqueue(true);
+      return (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
+    };
+
+    const {init, cleanup, snapshotID} = sharedSnapshot();
+    const pool = new TransactionPool(lc, Mode.SERIALIZABLE, init, cleanup, 1);
+
+    // Start off with some existing values in the db.
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    // Run the pool.
+    const done = pool.run(db);
+
+    // Run the readers.
+    const {init: importInit, imported} = importSnapshot(await snapshotID);
+    const readers = new TransactionPool(lc, Mode.READONLY, importInit);
+    const readersDone = readers.run(db);
+    await imported;
+
+    const processed: Promise<number[]>[] = [];
+
+    // Process one read.
+    processed.push(pool.processReadTask(readTask()));
+
+    // Do some writes on the pool.
+    pool.process(tx => [
+      tx`
+    INSERT INTO foo (id) VALUES (4);
+    INSERT INTO foo (id) VALUES (5);
+    INSERT INTO foo (id) VALUES (6);
+    `.simple(),
+    ]);
+
+    // Process reads from the readers pool.
+    for (let i = 0; i < 5; i++) {
+      processed.push(readers.processReadTask(readTask()));
+    }
+
+    // Verify that the all reads only saw the initial snapshot.
+    const results = await Promise.all(processed);
+    for (const result of results) {
+      // [4, 5, 6] should not appear.
+      expect(result).toEqual([1, 2, 3]);
+    }
+
+    pool.setDone();
+    readers.setDone();
+    await Promise.all([done, readersDone]);
 
     await expectTables(db, {
       ['public.foo']: [
