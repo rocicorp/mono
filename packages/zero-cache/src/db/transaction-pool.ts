@@ -407,6 +407,9 @@ type SynchronizeSnapshotTasks = {
    * set to `ISOLATION LEVEL REPEATABLE READ` and `READ ONLY`.
    */
   setSnapshot: Task;
+
+  /** The ID of the shared snapshot. */
+  snapshotID: Promise<string>;
 };
 
 /**
@@ -452,18 +455,20 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
       await snapshotCaptured;
       return [];
     },
+
+    snapshotID: snapshotExported,
   };
 }
 
 /**
  * Returns `init` and `cleanup` {@link Task}s for a TransactionPool that ensure its workers
- * share a single `READ ONLY` view of the database. This is used for View Notifier and
- * View Syncer logic that allows multiple entities to perform parallel reads on the same
- * snapshot of the database.
+ * share a single view of the database. This is used for View Notifier and View Syncer logic
+ * that allows multiple entities to perform parallel reads on the same snapshot of the database.
  */
-export function sharedReadOnlySnapshot(): {
+export function sharedSnapshot(): {
   init: Task;
   cleanup: Task;
+  snapshotID: Promise<string>;
 } {
   const {
     promise: snapshotExported,
@@ -502,6 +507,28 @@ export function sharedReadOnlySnapshot(): {
       firstWorkerDone = true;
       return [];
     },
+
+    snapshotID: snapshotExported,
+  };
+}
+
+/**
+ * @returns An `init` Task for importing a snapshot from another transaction.
+ */
+export function importSnapshot(snapshotID: string): {
+  init: Task;
+  imported: Promise<void>;
+} {
+  const {promise: imported, resolve, reject} = resolver<void>();
+
+  return {
+    init: tx => {
+      const stmt = tx.unsafe(`SET TRANSACTION SNAPSHOT '${snapshotID}'`);
+      stmt.then(() => resolve(), reject);
+      return [stmt];
+    },
+
+    imported,
   };
 }
 
