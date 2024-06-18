@@ -52,9 +52,27 @@ import type {CancelableAsyncIterable} from './streams.js';
  *   is terminated, either explicitly via {@link Subscription.cancel cancel()} /
  *   {@link Subscription.fail fail()}, or implicitly when an iteration is exited via a
  *  `break`, `return`, or `throw` statement. All unconsumed messages are passed to the
- *   callback to facilitate bookkeeping.
+ *   call back to facilitate bookkeeping.
+ *
+ * @param T The external message type, published to the AsyncIterable
+ * @param M The internal message type used in the producer-side interfaces
+ *          (e.g. {@link push}, {@link Options.consumed}, {@link Options.coalesce},
+ *          and {@link Options.cleanup}). This is often the same as the external type
+ *          T, but may be diverged to facilitate internal bookkeeping.
  */
-export class Subscription<M> implements CancelableAsyncIterable<M> {
+export class Subscription<T, M = T> implements CancelableAsyncIterable<T> {
+  /**
+   * Convenience factory method for creating a {@link Subscription} with internal message type
+   * `M` as a subtype of `T`, defaulting to the same type. The default `publish` method publishes
+   * the message of type `M` directly to the AsyncIterable.
+   */
+  static create<T, M extends T = T>(
+    options: Options<M> = {},
+    publish: (m: M) => T = m => m,
+  ) {
+    return new Subscription(options, publish);
+  }
+
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
   readonly #consumers: Resolver<IteratorResult<M>>[] = [];
   // Messages waiting to be consumed.
@@ -66,12 +84,18 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
   #coalesce: ((curr: M, prev: M) => M) | undefined;
   #consumed: (prev: M) => void;
   #cleanup: (unconsumed: M[], err?: Error) => void;
+  #publish: (internal: M) => T;
 
-  constructor(options: Options<M> = {}) {
+  /**
+   * @param publish function for converting the internally pushed / coalesced message
+   *        of type `M` to the external type `T` exposed via async iteration.
+   */
+  constructor(options: Options<M> = {}, publish: (m: M) => T) {
     const {coalesce, consumed = () => {}, cleanup = () => {}} = options;
     this.#coalesce = coalesce;
     this.#consumed = consumed;
     this.#cleanup = cleanup;
+    this.#publish = publish;
   }
 
   /**
@@ -127,7 +151,7 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
     }
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<M> {
+  [Symbol.asyncIterator](): AsyncIterator<T> {
     let prev: M | undefined;
 
     const notifyPrevConsumed = () => {
@@ -144,10 +168,10 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
         const value = this.#messages.shift();
         if (value !== undefined) {
           prev = value;
-          return Promise.resolve({value});
+          return {value: this.#publish(value)};
         }
         if (this.#sentinel === 'canceled') {
-          return Promise.resolve({value: undefined, done: true});
+          return {value: undefined, done: true};
         }
         if (this.#sentinel) {
           return Promise.reject(this.#sentinel);
@@ -158,7 +182,7 @@ export class Subscription<M> implements CancelableAsyncIterable<M> {
         // Wait for push() (or termination) to resolve the consumer.
         const result = await consumer.promise;
         prev = result.done ? undefined : result.value;
-        return result;
+        return result.done ? result : {value: this.#publish(result.value)};
       },
 
       return: value => {

@@ -473,7 +473,7 @@ describe('invalidation-watcher', () => {
     test(c.name, async () => {
       await initDB(db, c.setupDB);
 
-      const versionChanges = new Subscription<VersionChange>();
+      const versionChanges = Subscription.create<VersionChange>();
       const registerFilterResponses = c.registerFilterResponses ?? [];
       const replicator: Replicator = {
         versionChanges: () => Promise.resolve(versionChanges),
@@ -548,7 +548,7 @@ describe('invalidation-watcher', () => {
       versionChanges: () => {
         void subscriptionOpened.enqueue(true);
         return Promise.resolve(
-          new Subscription<VersionChange>({
+          Subscription.create<VersionChange>({
             cleanup: () => void subscriptionClosed.enqueue(true),
           }),
         );

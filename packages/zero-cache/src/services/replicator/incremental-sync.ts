@@ -142,7 +142,7 @@ export class IncrementalSyncer {
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
     const subscribe = (v: VersionChange) => subscription.push(v);
     const subscription: Subscription<VersionChange> =
-      new Subscription<VersionChange>({
+      Subscription.create<VersionChange>({
         coalesce: (curr, prev) => ({
           newVersion: curr.newVersion,
           prevVersion: prev.prevVersion,

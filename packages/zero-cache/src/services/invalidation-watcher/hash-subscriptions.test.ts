@@ -7,7 +7,7 @@ describe('invalidation-watcher/hash-subscriptions', () => {
   test('add, remove, compute updates', () => {
     const hashes = new HashSubscriptions();
 
-    const sub1 = new Subscription<QueryInvalidationUpdate>();
+    const sub1 = Subscription.create<QueryInvalidationUpdate>();
     const req1 = {
       queries: {
         q1: {
@@ -20,7 +20,7 @@ describe('invalidation-watcher/hash-subscriptions', () => {
         },
       },
     };
-    const sub2 = new Subscription<QueryInvalidationUpdate>();
+    const sub2 = Subscription.create<QueryInvalidationUpdate>();
     const req2 = {
       queries: {
         q1: {
@@ -33,7 +33,7 @@ describe('invalidation-watcher/hash-subscriptions', () => {
         },
       },
     };
-    const sub3 = new Subscription<QueryInvalidationUpdate>();
+    const sub3 = Subscription.create<QueryInvalidationUpdate>();
     const req3 = {
       queries: {
         q1: {

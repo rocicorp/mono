@@ -1,3 +1,4 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
 import type {
   Downstream,
@@ -5,7 +6,6 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from 'zero-protocol';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {Subscription} from '../../types/subscription.js';
 import {ClientHandler, Patch, ensureSafeJSON} from './client-handler.js';
@@ -17,11 +17,10 @@ describe('view-syncer/client-handler', () => {
 
     const received: Downstream[][] = [[], [], []];
     // Subscriptions that dump unconsumed pokes to `received`
-    const subscriptions = received.map(
-      bucket =>
-        new Subscription<Downstream>({
-          cleanup: msgs => bucket.push(...msgs),
-        }),
+    const subscriptions = received.map(bucket =>
+      Subscription.create<Downstream>({
+        cleanup: msgs => bucket.push(...msgs),
+      }),
     );
 
     const lc = createSilentLogContext();
@@ -319,7 +318,7 @@ describe('view-syncer/client-handler', () => {
       },
     ] satisfies Patch[]) {
       let terminated = false;
-      const downstream = new Subscription<Downstream>({
+      const downstream = Subscription.create<Downstream>({
         cleanup: () => {
           terminated = true;
         },

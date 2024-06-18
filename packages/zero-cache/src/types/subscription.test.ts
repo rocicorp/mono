@@ -7,7 +7,7 @@ describe('types/subscription', () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<number>({
+    const subscription = Subscription.create<number>({
       cleanup,
       consumed: m => consumed.add(m),
     });
@@ -39,7 +39,7 @@ describe('types/subscription', () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<number>({
+    const subscription = Subscription.create<number>({
       cleanup,
       consumed: m => consumed.add(m),
     });
@@ -78,7 +78,7 @@ describe('types/subscription', () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<number>({
+    const subscription = Subscription.create<number>({
       cleanup,
       consumed: m => consumed.add(m),
     });
@@ -109,7 +109,7 @@ describe('types/subscription', () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<number>({
+    const subscription = Subscription.create<number>({
       cleanup,
       consumed: m => consumed.add(m),
     });
@@ -147,7 +147,7 @@ describe('types/subscription', () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<number>({
+    const subscription = Subscription.create<number>({
       cleanup,
       consumed: m => consumed.add(m),
     });
@@ -184,7 +184,7 @@ describe('types/subscription', () => {
     const consumed = new Set<string>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<string>({
+    const subscription = Subscription.create<string>({
       cleanup,
       consumed: m => consumed.add(m),
       coalesce: (curr, prev) => `${prev},${curr}`,
@@ -219,7 +219,7 @@ describe('types/subscription', () => {
     const consumed = new Set<string>();
     const cleanup = vi.fn();
 
-    const subscription = new Subscription<string>({
+    const subscription = Subscription.create<string>({
       cleanup,
       consumed: m => consumed.add(m),
       coalesce: (curr, prev) => `${prev},${curr}`,
@@ -248,5 +248,89 @@ describe('types/subscription', () => {
     expect(consumed).toEqual(new Set(received));
     expect(cleanup).toBeCalledTimes(1);
     expect(cleanup.mock.calls[0][0]).toEqual([]);
+  });
+
+  test('publish different type', async () => {
+    type Internal = {foo: number; bar: string};
+    type External = {foo: number};
+
+    const consumed = new Set<number>();
+    const cleanup = vi.fn();
+
+    const subscription = new Subscription<External, Internal>(
+      {
+        cleanup,
+        consumed: m => consumed.add(m.foo),
+      },
+      m => ({foo: m.foo}),
+    );
+    for (let i = 0; i < 5; i++) {
+      subscription.push({foo: i, bar: 'internal'});
+    }
+
+    const received: External[] = [];
+
+    let j = 0;
+    for await (const m of subscription) {
+      expect(consumed.has(m.foo)).toBe(false);
+      for (let i = 0; i < m.foo; i++) {
+        expect(consumed.has(i)).toBe(true);
+      }
+      received.push(m);
+      if (j++ === 2) {
+        subscription.cancel();
+      }
+    }
+
+    expect(received).toEqual([{foo: 0}, {foo: 1}, {foo: 2}]);
+    expect(consumed).toEqual(new Set([0, 1, 2]));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual([
+      {foo: 3, bar: 'internal'},
+      {foo: 4, bar: 'internal'},
+    ]);
+  });
+
+  test('publish: pushed while iterating', async () => {
+    type Internal = {foo: number; bar: string};
+    type External = {foo: number};
+
+    const consumed = new Set<number>();
+    const cleanup = vi.fn();
+
+    const subscription = new Subscription<External, Internal>(
+      {
+        cleanup,
+        consumed: m => consumed.add(m.foo),
+      },
+      m => ({foo: m.foo}),
+    );
+
+    // Start the iteration first.
+    const received: External[] = [];
+    const iteration = (async () => {
+      let j = 0;
+      for await (const m of subscription) {
+        expect(consumed.has(m.foo)).toBe(false);
+        for (let i = 0; i < m.foo; i++) {
+          expect(consumed.has(i)).toBe(true);
+        }
+        received.push(m);
+        if (j++ === 2) {
+          subscription.cancel();
+        }
+      }
+    })();
+
+    // Now push messages into the subscription.
+    for (let i = 0; i < 5; i++) {
+      await sleep(2);
+      subscription.push({foo: i, bar: 'internal'});
+    }
+    await iteration;
+
+    expect(received).toEqual([{foo: 0}, {foo: 1}, {foo: 2}]);
+    expect(consumed).toEqual(new Set([0, 1, 2]));
+    expect(cleanup).toBeCalledTimes(1);
   });
 });

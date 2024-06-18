@@ -837,7 +837,7 @@ describe('view-syncer/service', () => {
         this.subscription === undefined,
         'Only one subscription expected (at a time) in this test',
       );
-      this.subscription = new Subscription<QueryInvalidationUpdate>({
+      this.subscription = Subscription.create<QueryInvalidationUpdate>({
         consumed: () => this.consumed.enqueue(true),
         cleanup: () => (this.subscription = undefined),
       });
