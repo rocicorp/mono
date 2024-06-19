@@ -1,5 +1,6 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
+import {DurableStorage} from '../../storage/durable-storage.js';
 import {
   expectStorage,
   initStorage,
@@ -13,8 +14,8 @@ import {
   CVRQueryDrivenUpdater,
   CVRSnapshot,
   CVRUpdater,
-  loadCVR,
 } from './cvr.js';
+import {DurableObjectCVRStore} from './durable-object-cvr-store.js';
 import type {
   CVRVersion,
   ClientPatch,
@@ -27,7 +28,6 @@ import type {
   RowPatch,
   RowRecord,
 } from './schema/types.js';
-import {DurableStorage} from '../../storage/durable-storage.js';
 
 describe('view-syncer/cvr', () => {
   const lc = createSilentLogContext();
@@ -35,7 +35,8 @@ describe('view-syncer/cvr', () => {
   test('load first time cvr', async () => {
     await runWithDurableObjectStorage(async doStorage => {
       const storage = new DurableStorage(doStorage);
-      const cvr = await loadCVR(lc, storage, 'abc123');
+      const doStore = new DurableObjectCVRStore(lc, storage, 'abc123');
+      const cvr = await doStore.load();
       expect(cvr).toEqual({
         id: 'abc123',
         version: {stateVersion: '00'},
@@ -43,8 +44,7 @@ describe('view-syncer/cvr', () => {
         clients: {},
         queries: {},
       } satisfies CVRSnapshot);
-
-      const flushed = await new CVRUpdater(storage, cvr).flush(
+      const flushed = await new CVRUpdater(doStore, cvr).flush(
         lc,
         new Date(Date.UTC(2024, 3, 20)),
       );
@@ -55,7 +55,8 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, storage, 'abc123');
+      const doStore2 = new DurableObjectCVRStore(lc, storage, 'abc123');
+      const reloaded = await doStore2.load();
       expect(reloaded).toEqual(flushed);
 
       await expectStorage(doStorage, {
@@ -91,7 +92,12 @@ describe('view-syncer/cvr', () => {
         } satisfies QueryRecord,
       });
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const cvr = await cvrStore.load();
       expect(cvr).toEqual({
         id: 'abc123',
         version: {stateVersion: '1a9', minorVersion: 2},
@@ -143,8 +149,13 @@ describe('view-syncer/cvr', () => {
         ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       });
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRUpdater(new DurableStorage(storage), cvr);
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const cvr = await cvrStore.load();
+      const updater = new CVRUpdater(cvrStore, cvr);
 
       const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
 
@@ -176,7 +187,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
@@ -234,11 +250,14 @@ describe('view-syncer/cvr', () => {
         ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
       });
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRConfigDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr);
 
       // This removes and adds desired queries to the existing fooClient.
       updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']);
@@ -369,7 +388,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
@@ -469,11 +493,13 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRConfigDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr);
 
       // Same desired query set. Nothing should change except last active time.
       expect(
@@ -491,7 +517,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {
@@ -622,12 +653,13 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRQueryDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
-        '1aa',
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa');
 
       updater.trackQueries(
         lc,
@@ -641,7 +673,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -669,7 +701,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -683,7 +715,7 @@ describe('view-syncer/cvr', () => {
               },
             ],
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+              ROW_ID2,
               {
                 record: {
                   id: ROW_ID2,
@@ -694,7 +726,7 @@ describe('view-syncer/cvr', () => {
               },
             ],
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
+              ROW_ID3,
               {
                 record: {
                   id: ROW_ID3,
@@ -740,7 +772,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -821,7 +853,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       const {
@@ -971,12 +1008,13 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRQueryDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
-        '1ba',
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
       updater.trackQueries(
         lc,
@@ -989,7 +1027,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -1018,7 +1056,7 @@ describe('view-syncer/cvr', () => {
           new Map([
             [
               // Now referencing ROW_ID2 instead of ROW_ID3
-              `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+              ROW_ID2,
               {
                 record: {
                   id: ROW_ID2,
@@ -1090,7 +1128,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       const {
@@ -1251,12 +1294,13 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRQueryDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
-        '1ba',
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
       updater.trackQueries(
         lc,
@@ -1272,7 +1316,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -1300,7 +1344,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -1328,7 +1372,7 @@ describe('view-syncer/cvr', () => {
         new Map([
           [
             // Now referencing ROW_ID2 instead of ROW_ID3
-            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+            ROW_ID2,
             {
               record: {
                 id: ROW_ID2,
@@ -1346,7 +1390,7 @@ describe('view-syncer/cvr', () => {
         lc,
         new Map([
           [
-            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+            ROW_ID2,
             {
               record: {
                 id: ROW_ID2,
@@ -1421,7 +1465,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       const {
@@ -1580,12 +1629,13 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRQueryDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
-        '1ba',
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
       updater.trackQueries(lc, [], ['oneHash'], {stateVersion: '189'});
 
@@ -1635,7 +1685,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       const {
@@ -1788,12 +1843,13 @@ describe('view-syncer/cvr', () => {
     await runWithDurableObjectStorage(async storage => {
       await initStorage(storage, initialState);
 
-      const cvr = await loadCVR(lc, new DurableStorage(storage), 'abc123');
-      const updater = new CVRQueryDrivenUpdater(
+      const cvrStore = new DurableObjectCVRStore(
+        lc,
         new DurableStorage(storage),
-        cvr,
-        '1ba',
+        'abc123',
       );
+      const cvr = await cvrStore.load();
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
       updater.trackQueries(
         lc,
@@ -1809,7 +1865,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -1837,7 +1893,7 @@ describe('view-syncer/cvr', () => {
           lc,
           new Map([
             [
-              `/vs/cvr/abc123/d/r/${ROW_HASH1}`,
+              ROW_ID1,
               {
                 record: {
                   id: ROW_ID1,
@@ -1864,7 +1920,7 @@ describe('view-syncer/cvr', () => {
         lc,
         new Map([
           [
-            `/vs/cvr/abc123/d/r/${ROW_HASH3}`,
+            ROW_ID3,
             {
               record: {
                 id: ROW_ID3,
@@ -1882,7 +1938,7 @@ describe('view-syncer/cvr', () => {
         lc,
         new Map([
           [
-            `/vs/cvr/abc123/d/r/${ROW_HASH2}`,
+            ROW_ID2,
             {
               record: {
                 id: ROW_ID2,
@@ -1951,7 +2007,12 @@ describe('view-syncer/cvr', () => {
       } satisfies CVRSnapshot);
 
       // Verify round tripping.
-      const reloaded = await loadCVR(lc, new DurableStorage(storage), 'abc123');
+      const doCVRStore2 = new DurableObjectCVRStore(
+        lc,
+        new DurableStorage(storage),
+        'abc123',
+      );
+      const reloaded = await doCVRStore2.load();
       expect(reloaded).toEqual(updated);
 
       await expectStorage(storage, {

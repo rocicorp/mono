@@ -22,9 +22,9 @@ import {ClientHandler} from './client-handler.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
-  loadCVR,
   type CVRSnapshot,
 } from './cvr.js';
+import {DurableObjectCVRStore} from './durable-object-cvr-store.js';
 import {QueryHandler, TransformedQuery} from './queries.js';
 import {SCHEMA_MIGRATIONS} from './schema/migrations.js';
 import {schemaRoot} from './schema/paths.js';
@@ -102,7 +102,14 @@ export class ViewSyncerService implements ViewSyncer, Service {
           SCHEMA_MIGRATIONS,
         );
 
-        this.#cvr = await loadCVR(this.#lc, this.#storage, this.id);
+        const doStore = new DurableObjectCVRStore(
+          this.#lc,
+          this.#storage,
+          this.id,
+        );
+        this.#cvr = await doStore.load();
+
+        // this.#cvr = await loadCVR(this.#lc, this.#storage, this.id);
       });
 
       this.#lc.info?.('started view-syncer');
@@ -263,7 +270,12 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     // Apply patches requested in the initConnectionMessage.
     const {clientID} = client;
-    const updater = new CVRConfigDrivenUpdater(this.#storage, this.#cvr);
+    const doStore = new DurableObjectCVRStore(
+      this.#lc,
+      this.#storage,
+      this.#cvr.id,
+    );
+    const updater = new CVRConfigDrivenUpdater(doStore, this.#cvr);
     const added: {id: string; ast: AST}[] = [];
     for (const patch of desiredQueriesPatch) {
       switch (patch.op) {
@@ -375,7 +387,8 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     lc.info?.(`Executing ${queriesToExecute.length} queries`);
 
-    const updater = new CVRQueryDrivenUpdater(this.#storage, cvr, version);
+    const doStore = new DurableObjectCVRStore(this.#lc, this.#storage, cvr.id);
+    const updater = new CVRQueryDrivenUpdater(doStore, cvr, version);
     // Track which queries are being executed and removed.
     const cvrVersion = updater.trackQueries(
       lc,
@@ -397,11 +410,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     const cursorPageSize = 1000; // TODO: something less arbitrary.
     const queriesDone = queriesToExecute.map(q => {
       const {queryIDs, columnAliases} = q;
-      const resultParser = queryHandler.resultParser(
-        cvr.id,
-        queryIDs,
-        columnAliases,
-      );
+      const resultParser = queryHandler.resultParser(queryIDs, columnAliases);
 
       return reader.processReadTask(async tx => {
         const {query, values} = q.transformedAST.query();
