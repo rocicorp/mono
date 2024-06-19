@@ -71,7 +71,7 @@ export class WriteCache implements Storage {
   }
 
   async getEntries<T extends JSONValue>(
-    keys: string[],
+    keys: Iterable<string>,
     schema: valita.Type<T>,
   ): Promise<Map<string, T>> {
     const result = new Map<string, T>();
