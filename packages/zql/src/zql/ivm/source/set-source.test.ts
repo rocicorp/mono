@@ -776,7 +776,37 @@ describe('merge requests', () => {
       },
     },
     {
-      name: 'disjoint operators',
+      name: 'disjoint columns',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'baz'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'widen >,=',
       reqA: {
         id: 1,
         type: 'pull',
@@ -802,7 +832,505 @@ describe('merge requests', () => {
       expected: {
         id: 1,
         type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>=',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,= 2',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 0,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>=',
+            value: 0,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,= 3',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 4,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,>',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 0,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 0,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,> 2',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,> 3',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 2,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,=',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>=',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen >,<',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 2,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
         hoistedConditions: [],
+      },
+    },
+    {
+      name: 'widen =,>',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 0,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 0,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen =,<',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 2,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 2,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen <,>',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '>',
+            value: 0,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [],
+      },
+    },
+    {
+      name: 'widen <,=',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 0,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen <,= 2',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '=',
+            value: 2,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<=',
+            value: 2,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen <,<',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 0,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'widen <,<=',
+      reqA: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<',
+            value: 1,
+          },
+        ],
+      },
+      reqB: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<=',
+            value: 2,
+          },
+        ],
+      },
+      expected: {
+        id: 1,
+        type: 'pull',
+        hoistedConditions: [
+          {
+            selector: ['foo', 'bar'],
+            op: '<=',
+            value: 2,
+          },
+        ],
       },
     },
     {
@@ -817,8 +1345,8 @@ describe('merge requests', () => {
             value: 1,
           },
           {
-            selector: ['foo', 'bar'],
-            op: '=',
+            selector: ['foo', 'baz'],
+            op: '>',
             value: 2,
           },
         ],
@@ -828,14 +1356,14 @@ describe('merge requests', () => {
         type: 'pull',
         hoistedConditions: [
           {
-            selector: ['foo', 'bar'],
-            op: '=',
-            value: 1,
+            selector: ['foo', 'baz'],
+            op: '>',
+            value: 3,
           },
           {
             selector: ['foo', 'bar'],
             op: '=',
-            value: 3,
+            value: 1,
           },
         ],
       },
@@ -848,7 +1376,43 @@ describe('merge requests', () => {
             op: '=',
             value: 1,
           },
+          {
+            op: '>',
+            selector: ['foo', 'baz'],
+            value: 2,
+          },
         ],
+      },
+    },
+    {
+      name: 'previous issue page - zeppliear',
+      reqA: {
+        id: 5,
+        type: 'pull',
+        hoistedConditions: [
+          {selector: ['issue', 'modified'], op: '>', value: 5004533700000},
+          {selector: ['issue', 'status'], op: 'IN', value: [1, 2, 3, 4, 5]},
+        ],
+      },
+      reqB: {
+        id: 5,
+        type: 'pull',
+        hoistedConditions: [
+          {selector: ['issue', 'id'], op: '>=', value: 'ysHxepAl0J_dup6'},
+          {selector: ['issue', 'modified'], op: '=', value: 5004533700000},
+          {selector: ['issue', 'status'], op: 'IN', value: [1, 2, 3, 4, 5]},
+        ],
+      },
+      expected: {
+        hoistedConditions: [
+          {
+            op: '>=',
+            selector: ['issue', 'modified'],
+            value: 5004533700000,
+          },
+        ],
+        id: 5,
+        type: 'pull',
       },
     },
   ] as const)('$name', ({reqA, reqB, expected}) => {
