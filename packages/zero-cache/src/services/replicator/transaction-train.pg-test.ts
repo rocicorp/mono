@@ -9,6 +9,8 @@ import {CREATE_INVALIDATION_TABLES} from './schema/invalidation.js';
 import {CREATE_REPLICATION_TABLES} from './schema/replication.js';
 import {TransactionFn, TransactionTrainService} from './transaction-train.js';
 
+const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
+
 describe('replicator/transaction-train', () => {
   let db: PostgresDB;
   let lc: LogContext;
@@ -37,17 +39,26 @@ describe('replicator/transaction-train', () => {
   const returnVersionsFn: TransactionFn<{
     stateVersion: LexiVersion;
     invalidationRegistryVersion: LexiVersion | null;
-  }> = (_writer, _readers, stateVersion, invalidationRegistryVersion) =>
+    snapshotID: string;
+  }> = (
+    _writer,
+    _readers,
+    stateVersion,
+    invalidationRegistryVersion,
+    snapshotID,
+  ) =>
     Promise.resolve({
       stateVersion,
       invalidationRegistryVersion,
+      snapshotID,
     });
 
   test('initial (null) versions', async () => {
     const versions = await train.runNext(returnVersionsFn);
-    expect(versions).toEqual({
+    expect(versions).toMatchObject({
       stateVersion: '00',
       invalidationRegistryVersion: null,
+      snapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
     });
   });
 
@@ -68,9 +79,10 @@ describe('replicator/transaction-train', () => {
     });
 
     const versions = await train.runNext(returnVersionsFn);
-    expect(versions).toEqual({
+    expect(versions).toMatchObject({
       stateVersion: '03',
       invalidationRegistryVersion: '02',
+      snapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
     });
 
     await expectTables(db, {
@@ -95,6 +107,7 @@ describe('replicator/transaction-train', () => {
         readers,
         stateVersion,
         invalidationFiltersRegistryVersion,
+        snapshotID,
       ) => {
         const {promise: externalTxStarted, resolve: signalExternalTxWaiting} =
           resolver();
@@ -133,18 +146,21 @@ describe('replicator/transaction-train', () => {
           readers,
           stateVersion,
           invalidationFiltersRegistryVersion,
+          snapshotID,
         );
       },
     );
-    expect(versions1).toEqual({
+    expect(versions1).toMatchObject({
       stateVersion: '00',
       invalidationRegistryVersion: null,
+      snapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
     });
 
     const versions2 = await train.runNext(returnVersionsFn);
-    expect(versions2).toEqual({
+    expect(versions2).toMatchObject({
       stateVersion: '05',
       invalidationRegistryVersion: '03',
+      snapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
     });
   });
 });

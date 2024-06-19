@@ -627,17 +627,16 @@ describe('db/transaction-pool', () => {
     const {exportSnapshot, cleanupExport, setSnapshot} =
       synchronizedSnapshots();
     const leader = new TransactionPool(
-      lc,
+      lc.withContext('pool', 'leader'),
       Mode.SERIALIZABLE,
       exportSnapshot,
       cleanupExport,
-    );
-    const followers = new TransactionPool(
-      lc,
-      Mode.READONLY,
-      setSnapshot,
-      undefined,
       3,
+    );
+    const follower = new TransactionPool(
+      lc.withContext('pool', 'follower'),
+      Mode.SERIALIZABLE,
+      setSnapshot,
     );
 
     // Start off with some existing values in the db.
@@ -647,20 +646,18 @@ describe('db/transaction-pool', () => {
     INSERT INTO foo (id) VALUES (3);
     `.simple();
 
-    // Run the leader pool.
+    // Run both pools.
     const leaderDone = leader.run(db);
+    const followerDone = follower.run(db);
 
-    // Process some writes on leader.
-    leader.process(blockingTask(`INSERT INTO foo (id) VALUES (4);`));
-    leader.process(blockingTask(`INSERT INTO foo (id) VALUES (5);`));
-    leader.process(blockingTask(`INSERT INTO foo (id) VALUES (6);`));
+    // Process some writes on follower.
+    follower.process(blockingTask(`INSERT INTO foo (id) VALUES (4);`));
+    follower.process(blockingTask(`INSERT INTO foo (id) VALUES (5);`));
+    follower.process(blockingTask(`INSERT INTO foo (id) VALUES (6);`));
 
     // Verify that at least one task is processed, which guarantees that
     // the snapshot was exported.
     await processing.dequeue();
-
-    // Run the follower pool. This should get set to the initial snapshot.
-    const followerDone = followers.run(db);
 
     // Do some writes outside of the transaction.
     await db`
@@ -669,11 +666,11 @@ describe('db/transaction-pool', () => {
     INSERT INTO foo (id) VALUES (9);
     `.simple();
 
-    // Verify that the followers only see the initial snapshot.
+    // Verify that the leader only sees the initial snapshot.
     const reads: Promise<number[]>[] = [];
     for (let i = 0; i < 3; i++) {
       reads.push(
-        followers.processReadTask(async tx =>
+        leader.processReadTask(async tx =>
           (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat(),
         ),
       );
@@ -684,7 +681,7 @@ describe('db/transaction-pool', () => {
       expect(result).toEqual([1, 2, 3]);
     }
 
-    followers.setDone();
+    follower.setDone();
     leader.setDone();
 
     await Promise.all([leaderDone, followerDone]);

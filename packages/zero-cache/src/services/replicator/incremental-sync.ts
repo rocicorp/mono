@@ -333,7 +333,13 @@ export class MessageProcessor {
   ): void {
     const start = Date.now();
     void this.#txTrain.runNext(
-      async (writer, readers, prevVersion, invalidationRegistryVersion) => {
+      async (
+        writer,
+        readers,
+        prevVersion,
+        invalidationRegistryVersion,
+        prevSnapshotID,
+      ) => {
         const inLock = Date.now();
         const txProcessor = new TransactionProcessor(
           commitLsn,
@@ -347,12 +353,6 @@ export class MessageProcessor {
             txProcessor.fail(new PrecedingTransactionError(this.#failure));
             return;
           }
-          // Export the snapshot ID from the readers pool as that it will be kept
-          // alive until VersionChange subscribers have consumed it. The writer pool,
-          // on the contrary, must be closed immediately to commit the db changes.
-          const snapshotExport = readers.processReadTask(tx =>
-            tx`SELECT pg_export_snapshot() AS "prevSnapshotID";`.simple(),
-          );
 
           loop: for await (const msg of messages.asAsyncIterable()) {
             switch (msg.tag) {
@@ -398,8 +398,6 @@ export class MessageProcessor {
                 );
             }
           }
-          const {prevSnapshotID} = (await snapshotExport)[0];
-          lc.debug?.(`Exporting READ ONLY snapshot ID ${prevSnapshotID}`);
 
           const versionChange: InternalVersionChange = {
             ...(await txProcessor.getFinalVersionChange()),

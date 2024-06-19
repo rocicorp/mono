@@ -548,19 +548,18 @@ describe('replicator/invalidation', () => {
 
         const {exportSnapshot, cleanupExport, setSnapshot} =
           synchronizedSnapshots();
-        const writer = new TransactionPool(
-          lc.withContext('pool', 'writer'),
+        const readers = new TransactionPool(
+          lc.withContext('pool', 'readers'),
           Mode.SERIALIZABLE,
           exportSnapshot,
           cleanupExport,
-        );
-        const readers = new TransactionPool(
-          lc.withContext('pool', 'readers'),
-          Mode.READONLY,
-          setSnapshot,
-          undefined,
           1, // start with 1 worker
           2, // but allow growing the pool to 2 workers
+        );
+        const writer = new TransactionPool(
+          lc.withContext('pool', 'writer'),
+          Mode.SERIALIZABLE,
+          setSnapshot,
         );
         void writer.run(db);
         void readers.run(db);
