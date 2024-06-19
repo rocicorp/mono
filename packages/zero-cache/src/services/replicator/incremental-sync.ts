@@ -106,12 +106,11 @@ export class IncrementalSyncer {
           }
           void service.acknowledge(lsn);
         },
-        (v: InternalVersionChange) => {
+        (v: InternalVersionChange) =>
           this.#eventEmitter.listeners('version').forEach(listener => {
             v.readers.ref();
             listener(v);
-          });
-        },
+          }),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
