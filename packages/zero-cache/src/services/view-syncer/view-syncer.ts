@@ -108,8 +108,6 @@ export class ViewSyncerService implements ViewSyncer, Service {
           this.id,
         );
         this.#cvr = await doStore.load();
-
-        // this.#cvr = await loadCVR(this.#lc, this.#storage, this.id);
       });
 
       this.#lc.info?.('started view-syncer');

@@ -1,9 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
+import {sleep} from 'shared/src/sleep.js';
 import {versionToLexi} from 'zero-cache/src/types/lexi-version.js';
 import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
-import {DelOp, PutOp, WriteCache} from '../../storage/write-cache.js';
+import {WriteCache} from '../../storage/write-cache.js';
 import type {CVRStore} from './cvr-store.js';
 import type {CVR} from './cvr.js';
 import {CVRPaths, lastActiveIndex} from './schema/paths.js';
@@ -23,7 +24,6 @@ import {
   type ClientRecord,
   type QueryRecord,
 } from './schema/types.js';
-import {sleep} from 'shared/src/sleep.js';
 
 export class DurableObjectCVRStore implements CVRStore {
   readonly #lc: LogContext;
@@ -86,12 +86,16 @@ export class DurableObjectCVRStore implements CVRStore {
     this.#writes.cancelPending(this.#paths.row(id));
   }
 
-  getPendingRowRecord(id: RowID): PutOp | DelOp | undefined {
-    return this.#writes.getPending(this.#paths.row(id));
+  getPendingRowRecord(id: RowID): RowRecord | undefined {
+    const op = this.#writes.getPending(this.#paths.row(id));
+    if (op?.op !== 'put') {
+      return undefined;
+    }
+    return op.value as RowRecord;
   }
 
-  isPatchRecordPendingDelete(
-    patchRecord: MetadataPatch,
+  isQueryPatchPendingDelete(
+    patchRecord: {id: string},
     version: CVRVersion,
   ): boolean {
     const path = this.#paths.queryPatch(version, patchRecord);
@@ -114,7 +118,7 @@ export class DurableObjectCVRStore implements CVRStore {
       keys.push(path);
     }
 
-    const entryMap = await this.#writes.getEntries(keys, rowRecordSchema);
+    const entryMap = await this.#storage.getEntries(keys, rowRecordSchema);
     const rv = new CustomKeyMap<RowID, RowRecord>(rowIDHash);
     for (const [path, record] of entryMap) {
       rv.set(pathsMapping.get(path)!, record);
@@ -122,21 +126,34 @@ export class DurableObjectCVRStore implements CVRStore {
     return rv;
   }
 
-  putRowRecord(rowRecord: RowRecord): void {
-    void this.#writes.put(this.#paths.row(rowRecord.id), rowRecord);
-  }
+  putRowRecord(
+    row: RowRecord,
+    oldRowPatchVersionToDelete: CVRVersion | undefined,
+  ): void {
+    const {id, rowVersion, patchVersion, queriedColumns} = row;
+    const isDel = queriedColumns === null;
+    void this.#writes.put(this.#paths.row(row.id), row);
 
-  delRowPatch(rowPatch: {patchVersion: CVRVersion; id: RowID}): void {
-    void this.#writes.del(
-      this.#paths.rowPatch(rowPatch.patchVersion, rowPatch.id),
-    );
-  }
+    if (oldRowPatchVersionToDelete !== undefined) {
+      void this.#writes.del(
+        this.#paths.rowPatch(oldRowPatchVersionToDelete, id),
+      );
+    }
 
-  putRowPatch(patchVersion: CVRVersion, rowPatch: RowPatch): void {
-    void this.#writes.put(
-      this.#paths.rowPatch(patchVersion, rowPatch.id),
-      rowPatch,
-    );
+    const rowPatch: RowPatch = isDel
+      ? {
+          type: 'row',
+          op: 'del',
+          id,
+        }
+      : {
+          type: 'row',
+          op: 'put',
+          id,
+          rowVersion,
+          columns: Object.keys(queriedColumns),
+        };
+    void this.#writes.put(this.#paths.rowPatch(patchVersion, id), rowPatch);
   }
 
   putLastActive(lastActive: {epochMillis: number}): void {
@@ -155,10 +172,6 @@ export class DurableObjectCVRStore implements CVRStore {
 
   numPendingWrites(): number {
     return this.#writes.pendingSize();
-  }
-
-  delQueryPatch(patchVersion: CVRVersion, query: {id: string}): void {
-    void this.#writes.del(this.#paths.queryPatch(patchVersion, query));
   }
 
   delQuery(query: {id: string}): void {
@@ -236,8 +249,8 @@ export class DurableObjectCVRStore implements CVRStore {
 
   delDesiredQueryPatch(
     oldPutVersion: CVRVersion,
-    query: QueryRecord,
-    client: ClientRecord,
+    query: {id: string},
+    client: {id: string},
   ): void {
     void this.#writes.del(
       this.#paths.desiredQueryPatch(oldPutVersion, query, client),
@@ -246,13 +259,13 @@ export class DurableObjectCVRStore implements CVRStore {
 
   putDesiredQueryPatch(
     newVersion: CVRVersion,
-    query: QueryRecord,
-    client: ClientRecord,
-    queryPath: QueryPatch,
+    query: {id: string},
+    client: {id: string},
+    queryPatch: QueryPatch,
   ): void {
     void this.#writes.put(
       this.#paths.desiredQueryPatch(newVersion, query, client),
-      queryPath,
+      queryPatch,
     );
   }
 
@@ -270,11 +283,17 @@ export class DurableObjectCVRStore implements CVRStore {
   }
 
   putQueryPatch(
-    transformationVersion: CVRVersion,
+    version: CVRVersion,
     queryPatch: QueryPatch,
+    oldQueryPatchVersion: CVRVersion | undefined,
   ): void {
+    if (oldQueryPatchVersion !== undefined) {
+      void this.#writes.del(
+        this.#paths.queryPatch(oldQueryPatchVersion, queryPatch),
+      );
+    }
     void this.#writes.put(
-      this.#paths.queryPatch(transformationVersion, queryPatch),
+      this.#paths.queryPatch(version, queryPatch),
       queryPatch,
     );
   }

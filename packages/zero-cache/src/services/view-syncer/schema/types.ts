@@ -187,6 +187,12 @@ export const queryRecordSchema = v.union(
 
 export type QueryRecord = v.Infer<typeof queryRecordSchema>;
 
+export function isInternalQueryRecord(
+  q: QueryRecord,
+): q is InternalQueryRecord {
+  return q.internal === true;
+}
+
 export const rowIDSchema = v.object({
   schema: v.string(),
   table: v.string(),
@@ -227,11 +233,15 @@ export const putRowPatchSchema = patchSchema.extend({
   columns: v.array(v.string()),
 });
 
+export type PutRowPatch = v.Infer<typeof putRowPatchSchema>;
+
 export const delRowPatchSchema = patchSchema.extend({
   type: v.literal('row'),
   op: v.literal('del'),
   id: rowIDSchema,
 });
+
+export type DelRowPatch = v.Infer<typeof delRowPatchSchema>;
 
 export const rowPatchSchema = v.union(putRowPatchSchema, delRowPatchSchema);
 

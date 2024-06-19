@@ -1,4 +1,3 @@
-import type {DelOp, PutOp} from '../../storage/write-cache.js';
 import type {CVR} from './cvr.js';
 import type {
   CVRVersion,
@@ -16,8 +15,8 @@ export interface CVRStore {
   load(): Promise<CVR>;
   cancelPendingRowPatch(patchVersion: CVRVersion, id: RowID): void;
   cancelPendingRowRecord(id: RowID): void;
-  getPendingRowRecord(id: RowID): PutOp | DelOp | undefined;
-  isPatchRecordPendingDelete(
+  getPendingRowRecord(id: RowID): RowRecord | undefined;
+  isQueryPatchPendingDelete(
     patchRecord: MetadataPatch,
     version: CVRVersion,
   ): boolean;
@@ -25,17 +24,19 @@ export interface CVRStore {
   getMultipleRowEntries(
     rowIDs: Iterable<RowID>,
   ): Promise<Map<RowID, RowRecord>>;
-  putRowRecord(updated: RowRecord): void;
-  delRowPatch(rowPatch: {patchVersion: CVRVersion; id: RowID}): void;
-  putRowPatch(patchVersion: CVRVersion, rowPatch: RowPatch): void;
+  // delRowPatch(patchVersion: CVRVersion, rowID: RowID): void;
+  putRowRecord(
+    row: RowRecord,
+    oldRowPatchVersionToDelete: CVRVersion | undefined,
+  ): void;
   putLastActive(lastActive: {epochMillis: number}): void;
   putLastActiveIndex(cvrID: string, newMillis: number): void;
   delLastActiveIndex(cvrID: string, oldMillis: number): void;
   numPendingWrites(): number;
-  delQueryPatch(patchVersion: CVRVersion, queryPatchID: {id: string}): void;
   putQueryPatch(
-    transformationVersion: CVRVersion,
+    version: CVRVersion,
     queryPatch: QueryPatch,
+    oldQueryPatchVersion: CVRVersion | undefined,
   ): void;
   putQuery(query: QueryRecord): void;
   delQuery(query: {id: string}): void;

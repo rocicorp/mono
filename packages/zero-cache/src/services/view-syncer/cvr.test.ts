@@ -1050,6 +1050,12 @@ describe('view-syncer/cvr', () => {
           },
         },
       ] satisfies PatchToVersion[]);
+
+      expect(updater.updatedVersion()).toEqual({
+        stateVersion: '1ba',
+        minorVersion: 1,
+      });
+
       expect(
         await updater.received(
           lc,

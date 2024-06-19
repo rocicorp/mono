@@ -147,14 +147,14 @@ export class CVRPaths {
     return `${this.metadataPatchVersionPrefix(v)}c/${client.id}`;
   }
 
-  queryPatch(v: CVRVersion, query: QueryRecord | {id: string}): string {
+  queryPatch(v: CVRVersion, query: {id: string}): string {
     return `${this.metadataPatchVersionPrefix(v)}q/${query.id}`;
   }
 
   desiredQueryPatch(
     v: CVRVersion,
-    query: QueryRecord | {id: string},
-    client: ClientRecord | {id: string},
+    query: {id: string},
+    client: {id: string},
   ): string {
     return `${this.metadataPatchVersionPrefix(v)}q/${query.id}/c/${client.id}`;
   }
