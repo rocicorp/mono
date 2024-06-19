@@ -1,4 +1,5 @@
 import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
+import {compareEntityFields} from '../compare.js';
 
 export type Request = PullMsg;
 
@@ -89,13 +90,6 @@ export function createPullMessage(order: Ordering | undefined): Request {
   };
 }
 
-export function forkPullMessage(original: Request): Request {
-  return {
-    ...original,
-    id: nextMessageID(),
-  };
-}
-
 export function createPullResponseMessage(
   pullMsg: PullMsg,
   sourceName: string,
@@ -110,7 +104,7 @@ export function createPullResponseMessage(
   };
 }
 
-export function intersectConditions(
+export function mergeConditionLists(
   a: readonly HoistedCondition[],
   b: readonly HoistedCondition[],
 ) {
@@ -118,28 +112,210 @@ export function intersectConditions(
     return a;
   }
 
-  const valueMap = new Map<string, unknown[]>();
-  const makeKey = (cond: HoistedCondition) =>
-    cond.op + '-' + cond.selector.join(',');
+  const aConditionsBySelector = groupConditionsBySelector(a);
+  const bConditionsBySelector = groupConditionsBySelector(b);
+  const ret: HoistedCondition[] = [];
 
-  for (const cond of a) {
-    const key = makeKey(cond);
-    const existing = valueMap.get(key);
+  for (const [selector, aConditions] of aConditionsBySelector) {
+    const bConditions = bConditionsBySelector.get(selector);
+    if (bConditions) {
+      for (const aCondition of aConditions) {
+        const merged = mergeConditions(aCondition, bConditions);
+        if (merged) {
+          ret.push(merged);
+        }
+      }
+    }
+    // no corresponding b condition? throw it out.
+  }
+
+  return ret;
+}
+
+function groupConditionsBySelector(
+  conditions: readonly HoistedCondition[],
+): Map<string, HoistedCondition[]> {
+  const ret = new Map<string, HoistedCondition[]>();
+
+  for (const condition of conditions) {
+    const key = condition.selector.join(',');
+    const existing = ret.get(key);
     if (existing) {
-      existing.push(cond.value);
+      existing.push(condition);
     } else {
-      valueMap.set(key, [cond.value]);
+      ret.set(key, [condition]);
     }
   }
 
-  const intersection: HoistedCondition[] = [];
-  for (const cond of b) {
-    const key = makeKey(cond);
-    const existing = valueMap.get(key);
-    if (existing && existing.find(v => v === cond.value) !== undefined) {
-      intersection.push(cond);
+  return ret;
+}
+
+export function mergeConditions(
+  left: HoistedCondition,
+  right: HoistedCondition[],
+): HoistedCondition | undefined {
+  if (right.length === 0) {
+    return undefined;
+  }
+  if (right.length === 1) {
+    if (left === right[0]) {
+      return left;
+    }
+    if (left.op === right[0].op && left.value === right[0].value) {
+      return left;
     }
   }
 
-  return intersection;
+  const ret = {
+    ...left,
+  };
+
+  for (const cond of right) {
+    switch (ret.op) {
+      case '<': {
+        switch (cond.op) {
+          case '<':
+            ret.value = max(ret.value, cond.value);
+            break;
+          case '<=':
+            if (compareEntityFields(ret.value, cond.value) <= 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) <= 0) {
+              ret.value = cond.value;
+              ret.op = '<=';
+            }
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      }
+      case '<=': {
+        switch (cond.op) {
+          case '<':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '<=':
+            ret.value = max(ret.value, cond.value);
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) <= 0) {
+              ret.value = cond.value;
+            }
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      }
+      case '=':
+        switch (cond.op) {
+          case '<':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            } else {
+              ret.op = '<=';
+            }
+            break;
+          case '<=':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            } else {
+              ret.op = '<=';
+            }
+            break;
+          case '>':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.op = '>=';
+            } else {
+              ret.op = '>';
+              ret.value = cond.value;
+            }
+            break;
+          case '>=':
+            if (compareEntityFields(ret.value, cond.value) < 0) {
+              ret.op = '>=';
+            } else {
+              ret.op = '>=';
+              ret.value = cond.value;
+            }
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      case '>':
+        switch (cond.op) {
+          case '>':
+            ret.value = min(ret.value, cond.value);
+            break;
+          case '>=':
+            if (compareEntityFields(ret.value, cond.value) >= 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) >= 0) {
+              ret.value = cond.value;
+              ret.op = '>=';
+            }
+            break;
+          default:
+            return undefined;
+        }
+        break;
+      case '>=':
+        switch (cond.op) {
+          case '>':
+            if (compareEntityFields(ret.value, cond.value) > 0) {
+              ret.value = cond.value;
+              ret.op = cond.op;
+            }
+            break;
+          case '>=':
+            ret.value = min(ret.value, cond.value);
+            break;
+          case '=':
+            if (compareEntityFields(ret.value, cond.value) > 0) {
+              ret.value = cond.value;
+              ret.op = '>=';
+            }
+            break;
+        }
+        break;
+      default:
+        // TODO: like expansion, in expansion, set operation expansion
+        // TODO: > x & < y -> between x and y if y > x
+        // TODO: many equality -> IN
+        return undefined;
+    }
+  }
+
+  return ret;
+}
+
+function min(l: unknown, r: unknown) {
+  const comp = compareEntityFields(l, r);
+  if (comp <= 0) {
+    return l;
+  }
+  return r;
+}
+
+function max(l: unknown, r: unknown) {
+  const comp = compareEntityFields(l, r);
+  if (comp < 0) {
+    return r;
+  }
+  return l;
 }

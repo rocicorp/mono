@@ -37,6 +37,10 @@ registerPostgresTypeParsers();
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
 
+type InternalVersionChange = VersionChange & {
+  readers: TransactionPool;
+};
+
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
  * handling application lifecycle events (start, stop) and retrying the
@@ -102,7 +106,11 @@ export class IncrementalSyncer {
           }
           void service.acknowledge(lsn);
         },
-        (v: VersionChange) => this.#eventEmitter.emit('version', v),
+        (v: InternalVersionChange) =>
+          this.#eventEmitter.listeners('version').forEach(listener => {
+            v.readers.ref();
+            listener(v);
+          }),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
@@ -140,26 +148,41 @@ export class IncrementalSyncer {
   }
 
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
-    const subscribe = (v: VersionChange) => subscription.push(v);
-    const subscription: Subscription<VersionChange> =
-      Subscription.create<VersionChange>({
-        coalesce: (curr, prev) => ({
-          newVersion: curr.newVersion,
-          prevVersion: prev.prevVersion,
-          invalidations:
-            !prev.invalidations || !curr.invalidations
-              ? undefined
-              : {
-                  ...prev.invalidations,
-                  ...curr.invalidations,
-                },
-          changes:
-            !prev.changes || !curr.changes
-              ? undefined
-              : [...prev.changes, ...curr.changes],
-        }),
-        cleanup: () => this.#eventEmitter.off('version', subscribe),
-      });
+    const subscribe = (v: InternalVersionChange) => subscription.push(v);
+    const subscription: Subscription<VersionChange, InternalVersionChange> =
+      new Subscription<VersionChange, InternalVersionChange>(
+        {
+          consumed: prev => prev.readers.unref(),
+          coalesce: (curr, prev) => {
+            curr.readers.unref();
+            return {
+              newVersion: curr.newVersion,
+              prevVersion: prev.prevVersion,
+              prevSnapshotID: prev.prevSnapshotID,
+              readers: prev.readers,
+              invalidations:
+                !prev.invalidations || !curr.invalidations
+                  ? undefined
+                  : {
+                      ...prev.invalidations,
+                      ...curr.invalidations,
+                    },
+              changes:
+                !prev.changes || !curr.changes
+                  ? undefined
+                  : [...prev.changes, ...curr.changes],
+            };
+          },
+          cleanup: unconsumed => {
+            this.#eventEmitter.off('version', subscribe);
+            unconsumed.forEach(m => m.readers.unref());
+          },
+        },
+        ivc => {
+          const {readers: _excluded, ...vc} = ivc;
+          return vc;
+        },
+      );
 
     this.#eventEmitter.on('version', subscribe);
     return Promise.resolve(subscription);
@@ -278,7 +301,7 @@ export class MessageProcessor {
   readonly #txTrain: TransactionTrain;
   readonly #invalidationFilters: InvalidationFilters;
   readonly #acknowledge: (lsn: string) => unknown;
-  readonly #emitVersion: (v: VersionChange) => void;
+  readonly #emitVersion: (v: InternalVersionChange) => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
   #currentTx: Queue<Pgoutput.Message> | null = null;
@@ -291,7 +314,7 @@ export class MessageProcessor {
     txTrain: TransactionTrain,
     invalidationFilters: InvalidationFilters,
     acknowledge: (lsn: string) => unknown,
-    emitVersion: (v: VersionChange) => void,
+    emitVersion: (v: InternalVersionChange) => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#replicated = replicated;
@@ -309,10 +332,15 @@ export class MessageProcessor {
   ): void {
     const start = Date.now();
     void this.#txTrain.runNext(
-      async (writer, readers, preStateVersion, invalidationRegistryVersion) => {
+      async (
+        writer,
+        readers,
+        prevVersion,
+        invalidationRegistryVersion,
+        prevSnapshotID,
+      ) => {
         const inLock = Date.now();
         const txProcessor = new TransactionProcessor(
-          lc,
           commitLsn,
           writer,
           readers,
@@ -370,8 +398,12 @@ export class MessageProcessor {
             }
           }
 
-          const versionChange =
-            await txProcessor.getFinalVersionChange(preStateVersion);
+          const versionChange: InternalVersionChange = {
+            ...(await txProcessor.getFinalVersionChange()),
+            prevVersion,
+            prevSnapshotID,
+            readers,
+          };
           this.#acknowledge(commitLsn);
           this.#emitVersion(versionChange);
           lc.debug?.(
@@ -495,7 +527,6 @@ export class MessageProcessor {
  * on the {@link postgres.TransactionSql} on the replica.
  */
 class TransactionProcessor {
-  readonly #lc: LogContext;
   readonly #version: LexiVersion;
   readonly #invalidation: InvalidationProcessor;
   readonly #writer: TransactionPool;
@@ -503,46 +534,25 @@ class TransactionProcessor {
   readonly #tableTrackers = new Map<string, TableTracker>();
 
   constructor(
-    lc: LogContext,
     lsn: string,
     writer: TransactionPool,
     readers: TransactionPool,
     filters: InvalidationFilters,
   ) {
     this.#version = toLexiVersion(lsn);
-    this.#lc = lc.withContext('tx', this.#version);
     this.#invalidation = new InvalidationProcessor(filters);
     this.#writer = writer;
     this.#readers = readers;
   }
 
-  async getFinalVersionChange(
-    prevVersion: LexiVersion,
-  ): Promise<VersionChange> {
-    const [writes, reads] = await Promise.allSettled([
-      this.#writer.done(),
-      this.#readers.done(),
-    ]);
-    if (reads.status === 'rejected') {
-      // An error from the readers pool is logged but otherwise dropped, because meaningful
-      // errors from the readers pool must necessarily be propagated to the writer pool.
-      //
-      // In particular, an error from the reader pool may arise because of a transaction
-      // error from the writer pool (i.e. UNIQUE violation constraint from a transaction
-      // replay preventing a snapshot capture from happening). In such a case, it is
-      // imperative that the writer pool error is surfaced directly, rather than masking it
-      // with an auxiliary error from the reader pool
-      this.#lc.info?.(`Error from reader pool`, reads.reason);
-    }
-    if (writes.status === 'rejected') {
-      throw writes.reason;
-    }
-
+  async getFinalVersionChange(): Promise<
+    Omit<VersionChange, 'prevVersion' | 'prevSnapshotID'>
+  > {
+    await this.#writer.done();
     const invalidations = this.#invalidation.getInvalidations();
 
     return {
       newVersion: this.#version,
-      prevVersion,
       invalidations: Object.fromEntries(
         [...invalidations.keys()].map(hash => [hash, this.#version]),
       ),
@@ -703,7 +713,6 @@ class TransactionProcessor {
       this.#version,
       this.#tableTrackers.values(),
     );
-    this.#readers.setDone();
     this.#writer.setDone();
   }
 

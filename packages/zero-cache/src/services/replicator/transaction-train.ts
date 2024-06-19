@@ -15,6 +15,7 @@ export type TransactionFn<T> = (
   readers: TransactionPool,
   preStateVersion: LexiVersion,
   invalidationRegistryVersion: LexiVersion | null,
+  preStateSnapshotID: string,
 ) => Promise<T> | T;
 
 export interface TransactionTrain {
@@ -85,8 +86,13 @@ export class TransactionTrainService implements TransactionTrain {
 
   runNext<T>(fn: TransactionFn<T>): Promise<T> {
     return this.#lock.withLock(async () => {
-      const {writer, readers, stateVersion, invalidationRegistryVersion} =
-        await this.#txPools.dequeue();
+      const {
+        writer,
+        readers,
+        stateVersion,
+        invalidationRegistryVersion,
+        preStateSnapshotID,
+      } = await this.#txPools.dequeue();
 
       this.#clearIdleTimeout();
 
@@ -96,14 +102,15 @@ export class TransactionTrainService implements TransactionTrain {
           readers,
           stateVersion,
           invalidationRegistryVersion,
+          preStateSnapshotID,
         );
       } finally {
         if (writer.isRunning()) {
           writer.setDone();
-          await writer.done(); // Required for correctness.
+          await writer.done(); // Required for correctness (row lock must be released).
         }
         if (readers.isRunning()) {
-          readers.setDone();
+          readers.unref(); // Allow the readers to be shared with ref counting.
         }
       }
     });
@@ -125,23 +132,22 @@ export class TransactionTrainService implements TransactionTrain {
   }
 
   #createSnapshotSynchronizedPools() {
-    const {exportSnapshot, cleanupExport, setSnapshot} =
+    const {exportSnapshot, cleanupExport, setSnapshot, snapshotID} =
       synchronizedSnapshots();
-    const writer = new TransactionPool(
-      this.#lc.withContext('pool', 'writer'),
-      Mode.SERIALIZABLE,
-      exportSnapshot,
-      cleanupExport,
-    );
     const readers = new TransactionPool(
       this.#lc.withContext('pool', 'readers'),
-      Mode.READONLY,
-      setSnapshot,
-      undefined,
+      Mode.SERIALIZABLE, // exportSnapshot will set READ ONLY after exporting.
+      exportSnapshot,
+      cleanupExport,
       2,
       4, // TODO: Parameterize the max workers for the readers pool.
     );
-    return {writer, readers};
+    const writer = new TransactionPool(
+      this.#lc.withContext('pool', 'writer'),
+      Mode.SERIALIZABLE,
+      setSnapshot,
+    );
+    return {writer, readers, snapshotID};
   }
 
   async run(): Promise<void> {
@@ -151,7 +157,8 @@ export class TransactionTrainService implements TransactionTrain {
     while (!this.#isStopped) {
       const start = Date.now();
 
-      const {writer, readers} = this.#createSnapshotSynchronizedPools();
+      const {writer, readers, snapshotID} =
+        this.#createSnapshotSynchronizedPools();
       const writerDone = writer.run(this.#replica);
       const readersDone = readers.run(this.#replica);
       let txPools: TxPools | undefined;
@@ -174,7 +181,13 @@ export class TransactionTrainService implements TransactionTrain {
           } ms)`,
         );
 
-        txPools = {writer, readers, stateVersion, invalidationRegistryVersion};
+        txPools = {
+          writer,
+          readers,
+          stateVersion,
+          invalidationRegistryVersion,
+          preStateSnapshotID: await snapshotID,
+        };
 
         this.#setIdleTimeout();
         void this.#txPools.enqueue(txPools);
@@ -219,6 +232,7 @@ type TxPools = {
   readers: TransactionPool;
   stateVersion: LexiVersion;
   invalidationRegistryVersion: LexiVersion | null;
+  preStateSnapshotID: string;
 };
 
 // Close and refresh idle transactions after 5 minutes

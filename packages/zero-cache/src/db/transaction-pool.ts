@@ -389,24 +389,30 @@ export class TransactionPool {
 
 type SynchronizeSnapshotTasks = {
   /**
-   * The `init` Task for the TransactionPool from which the snapshot
-   * originates.
+   * The `init` Task for the TransactionPool from which the snapshot originates.
+   * The pool must have Mode.SERIALIZABLE, and will be set to READ ONLY by the
+   * `exportSnapshot` init task. If the TransactionPool has multiple workers, the
+   * first worker will export a snapshot that the others set.
    */
   exportSnapshot: Task;
 
   /**
    * The `cleanup` Task for the TransactionPool from which the snapshot
-   * originates.
+   * originates. This Task will wait for the follower pool to `setSnapshot`
+   * to ensure that the snapshot is successfully shared before the originating
+   * transaction is closed.
    */
   cleanupExport: Task;
 
   /**
    * The `init` Task for the TransactionPool in which workers will
-   * consequently see the same snapshot as that of the first pool.
-   * In addition to setting the snapshot, the transaction mode will be
-   * set to `ISOLATION LEVEL REPEATABLE READ` and `READ ONLY`.
+   * consequently see the same snapshot as that of the first pool. The pool
+   * must have Mode.SERIALIZABLE, and will have the ability to perform writes.
    */
   setSnapshot: Task;
+
+  /** The ID of the shared snapshot. */
+  snapshotID: Promise<string>;
 };
 
 /**
@@ -427,17 +433,28 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
     reject: failCapture,
   } = resolver<unknown>();
 
+  // Set by the first worker to run its initTask, who becomes responsible for
+  // exporting the snapshot. TODO: Plumb the workerNum and use that instead.
+  let firstWorkerRun = false;
+
   // Note: Neither init task should `await`, as processing in each pool can proceed
   //       as soon as the statements have been sent to the db. However, the `cleanupExport`
   //       task must `await` the result of `setSnapshot` to ensure that exporting transaction
   //       does not close before the snapshot has been captured.
   return {
     exportSnapshot: tx => {
-      const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
-      // Intercept the promise to propagate the information to `setSnapshot`.
-      stmt.then(result => exportSnapshot(result[0].snapshot), failExport);
-      // Also return the stmt so that it gets awaited (and errors handled).
-      return [stmt];
+      if (!firstWorkerRun) {
+        firstWorkerRun = true;
+        const stmt =
+          tx`SELECT pg_export_snapshot() AS snapshot; SET TRANSACTION READ ONLY;`.simple();
+        // Intercept the promise to propagate the information to `snapshotExported`.
+        stmt.then(result => exportSnapshot(result[0].snapshot), failExport);
+        return [stmt]; // Also return the stmt so that it gets awaited (and errors handled).
+      }
+      return snapshotExported.then(snapshotID => [
+        tx.unsafe(`SET TRANSACTION SNAPSHOT '${snapshotID}'`),
+        tx`SET TRANSACTION READ ONLY`.simple(),
+      ]);
     },
 
     setSnapshot: tx =>
@@ -452,18 +469,20 @@ export function synchronizedSnapshots(): SynchronizeSnapshotTasks {
       await snapshotCaptured;
       return [];
     },
+
+    snapshotID: snapshotExported,
   };
 }
 
 /**
  * Returns `init` and `cleanup` {@link Task}s for a TransactionPool that ensure its workers
- * share a single `READ ONLY` view of the database. This is used for View Notifier and
- * View Syncer logic that allows multiple entities to perform parallel reads on the same
- * snapshot of the database.
+ * share a single view of the database. This is used for View Notifier and View Syncer logic
+ * that allows multiple entities to perform parallel reads on the same snapshot of the database.
  */
-export function sharedReadOnlySnapshot(): {
+export function sharedSnapshot(): {
   init: Task;
   cleanup: Task;
+  snapshotID: Promise<string>;
 } {
   const {
     promise: snapshotExported,
@@ -502,6 +521,28 @@ export function sharedReadOnlySnapshot(): {
       firstWorkerDone = true;
       return [];
     },
+
+    snapshotID: snapshotExported,
+  };
+}
+
+/**
+ * @returns An `init` Task for importing a snapshot from another transaction.
+ */
+export function importSnapshot(snapshotID: string): {
+  init: Task;
+  imported: Promise<void>;
+} {
+  const {promise: imported, resolve, reject} = resolver<void>();
+
+  return {
+    init: tx => {
+      const stmt = tx.unsafe(`SET TRANSACTION SNAPSHOT '${snapshotID}'`);
+      stmt.then(() => resolve(), reject);
+      return [stmt];
+    },
+
+    imported,
   };
 }
 

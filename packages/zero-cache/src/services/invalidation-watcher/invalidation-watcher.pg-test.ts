@@ -125,6 +125,7 @@ describe('invalidation-watcher', () => {
           {
             newVersion: '101',
             prevVersion: '0a',
+            prevSnapshotID: 'TODO',
             invalidations: {['beefcafe']: '101', ['87654321']: '101'},
             changes: [
               {
@@ -187,7 +188,7 @@ describe('invalidation-watcher', () => {
         INSERT INTO _zero."InvalidationIndex" (hash, "stateVersion")
           VALUES ('\\x87654321', '101'); 
           `,
-          {newVersion: '101', prevVersion: '0a'},
+          {newVersion: '101', prevVersion: '0a', prevSnapshotID: 'TODO'},
         ],
       ],
       expectedIncrementalUpdates: [
@@ -238,6 +239,7 @@ describe('invalidation-watcher', () => {
           {
             newVersion: '0a',
             prevVersion: '01',
+            prevSnapshotID: 'TODO',
             invalidations: {['01234567']: '0a', ['0abc1230']: '0a'},
             changes: [
               {
@@ -286,6 +288,7 @@ describe('invalidation-watcher', () => {
           {
             newVersion: '01',
             prevVersion: '00',
+            prevSnapshotID: 'TODO',
             changes: [
               {
                 schema: 'public',
@@ -308,6 +311,7 @@ describe('invalidation-watcher', () => {
           {
             newVersion: '0a',
             prevVersion: '01',
+            prevSnapshotID: 'TODO',
             changes: [
               {
                 schema: 'public',
@@ -330,6 +334,7 @@ describe('invalidation-watcher', () => {
           {
             newVersion: '101',
             prevVersion: '0a',
+            prevSnapshotID: 'TODO',
             changes: [
               {
                 schema: 'public',
@@ -415,7 +420,7 @@ describe('invalidation-watcher', () => {
         INSERT INTO _zero."InvalidationIndex" (hash, "stateVersion")
           VALUES ('\\x87654321', '101'); 
           `,
-          {newVersion: '101', prevVersion: '0a'},
+          {newVersion: '101', prevVersion: '0a', prevSnapshotID: 'TODO'},
         ],
       ],
       incrementalWatchRequest: {
