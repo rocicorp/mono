@@ -63,6 +63,6 @@ export interface CVRStore {
   catchupConfigPatches(
     startingVersion: CVRVersion,
   ): Promise<[MetadataPatch, CVRVersion][]>;
-  allRowRecords(): AsyncIterable<Map<string, RowRecord>>;
+  allRowRecords(): AsyncIterable<RowRecord>;
   flush(): Promise<void>;
 }
