@@ -6,6 +6,7 @@ import {sleep} from 'shared/src/sleep.js';
 import {
   Mode,
   TransactionPool,
+  importSnapshot,
   sharedSnapshot,
 } from '../../db/transaction-pool.js';
 import {stringify} from '../../types/bigint-json.js';
@@ -53,21 +54,33 @@ export type QueryInvalidationUpdate = {
   invalidatedQueries: Set<string>;
 
   /**
-   * A `READ ONLY` TransactionPool snapshotted at the `newVersion` for re-executing
+   * A `READ ONLY` TransactionPool snapshotted at the new `version` for re-executing
    * invalidated queries.
    */
   reader: TransactionPool;
+
+  /**
+   * A `READ ONLY` TransactionPool snapshotted at the `fromVersion` used for computing
+   * IVM updates. This is available for updates triggered from the Replicator's
+   * `VersionChange` message.
+   *
+   * In exceptional circumstances the snapshot may not be imported successfully
+   * (e.g. if the Replicator process holding the exporting transaction was shut down).
+   * In such cases, the `prevReader` will be undefined and the sync logic would need
+   * to fall back to rerunning invalidated queries.
+   */
+  prevReader?: TransactionPool | undefined;
 
   /**
    * An ordered list RowChanges comprising the difference between the `fromVersion`
    * and `newVersion`. Redundant changes may or may not be removed (e.g. an insert
    * followed by a delete of the same row). Combined with the fact that row changes
    * are not associated specific version, it is important that the client process the
-   * changes either in their entirety or not at all, as a partial scan is not necessarily
-   * be consistent with any snapshot of the database.
+   * changes either in their entirety or not at all, as a partial scan will not
+   * necessarily be consistent with any snapshot of the database.
    *
-   * Currently, changes are only included when received from the Replicator's `VersionChange`
-   * message for the exact version range.
+   * Currently, changes are only included when received from the Replicator's
+   * `VersionChange` message for the exact version range.
    */
   changes: readonly RowChange[] | undefined;
 
@@ -296,8 +309,10 @@ export class InvalidationWatcherService
             prev = tmp;
           }
           // The Subscription will not call `consumed()` on coalesced `prev` messages.
-          // cleanup must be done explicitly when coalescing.
+          // cleanup must be done explicitly when coalescing. Unref the intermediate
+          // readers that are coalesced away.
           prev.reader.unref();
+          curr.prevReader?.unref();
 
           return {
             version: max(prev.version, curr.version),
@@ -319,11 +334,15 @@ export class InvalidationWatcherService
           };
         },
 
-        consumed: prev => prev.reader.unref(),
+        consumed: prev => {
+          prev.reader.unref();
+          prev.prevReader?.unref();
+        },
 
         cleanup: unconsumed => {
           for (const update of unconsumed) {
             update.reader.unref();
+            update.prevReader?.unref();
           }
           this.#hashSubscriptions.remove(subscription, request);
           if (this.#hashSubscriptions.empty()) {
@@ -423,6 +442,7 @@ export class InvalidationWatcherService
       lc,
       versionChange.prevVersion,
       versionChange.newVersion,
+      versionChange.prevSnapshotID,
       versionChange.invalidations,
       versionChange.changes,
     );
@@ -432,15 +452,57 @@ export class InvalidationWatcherService
 
     if (numUpdates === 0) {
       lc.debug?.(`no views to update from ${hashes.size} hashes`);
-      update.reader.setDone();
-      return update.reader.done();
-    }
-    lc.info?.(`${numUpdates} view updates for ${hashes.size} hashes`);
+    } else {
+      lc.info?.(`${numUpdates} view updates for ${hashes.size} hashes`);
 
-    update.reader.ref(numUpdates);
-    for (const [subscription, queryIDs] of updates) {
-      subscription.push({...update, invalidatedQueries: queryIDs});
+      update.reader.ref(numUpdates);
+      update.prevReader?.ref(numUpdates);
+      for (const [subscription, queryIDs] of updates) {
+        subscription.push({...update, invalidatedQueries: queryIDs});
+      }
     }
+    // Release the `prevReader` reference from #getOrCreatePrevReader().
+    // Leave the `reader` alone at it is referenced as the #latestReader.
+    update.prevReader?.unref();
+  }
+
+  async #getOrCreatePrevReader(
+    lc: LogContext,
+    prevVersion: LexiVersion,
+    prevSnapshotID: string,
+  ): Promise<TransactionPool | undefined> {
+    if (this.#latestReader && this.#latestReader.version === prevVersion) {
+      lc.debug?.(
+        `Reusing cached reader @${this.#latestReader.version} as prevReader`,
+      );
+      const {reader} = this.#latestReader;
+      // The #latestReader reference is considered one ref. Increment the ref count when
+      // reusing it as the prevReader since this means that the #latestReader will be
+      // replaced (and unref-ed in the process).
+      reader.ref();
+      return reader;
+    }
+    const {init, imported} = importSnapshot(prevSnapshotID);
+    const prevReader = new TransactionPool(
+      this.#lc,
+      Mode.READONLY,
+      init,
+      undefined,
+      1,
+      4,
+    ); // TODO: Choose maxWorkers more intelligently / dynamically.
+    prevReader.run(this.#replica).catch(e => lc.error?.(e));
+    try {
+      await imported;
+    } catch (e) {
+      lc.error?.('Failed to create prevReader', e);
+      return undefined;
+    }
+
+    lc.debug?.(
+      `Created prevReader @${prevVersion} from snapshot ${prevSnapshotID}`,
+    );
+    return prevReader;
   }
 
   /**
@@ -457,7 +519,14 @@ export class InvalidationWatcherService
       return this.#latestReader;
     }
     const {init, cleanup} = sharedSnapshot();
-    const reader = new TransactionPool(lc, Mode.READONLY, init, cleanup, 1, 4); // TODO: Choose maxWorkers more intelligently / dynamically.
+    const reader = new TransactionPool(
+      this.#lc,
+      Mode.READONLY,
+      init,
+      cleanup,
+      1,
+      4,
+    ); // TODO: Choose maxWorkers more intelligently / dynamically.
     reader.run(this.#replica).catch(e => lc.error?.(e));
 
     const snapshotQuery = await reader.processReadTask(queryStateVersion);
@@ -509,6 +578,8 @@ export class InvalidationWatcherService
    *                   version at which they were computed (e.g. from a {@link VersionChange} update).
    *                   If the TransactionPool snapshot is at this exact version, the `invalidation`
    *                   can be used directly instead of querying them from the invalidation index.
+   * @param prevSnapshotID The snapshot ID associated with the `fromVersion`, when creating an update
+   *                   from a {@link VersionChange} update.
    * @param invalidations Existing invalidation hashes to use if the version of the resulting
    *                    snapshot is equal to `minVersion`.
    * @param changes Existing RowChanges to use if the version of the resulting snapshot is
@@ -518,17 +589,25 @@ export class InvalidationWatcherService
     lc: LogContext,
     fromVersion: LexiVersion | undefined,
     minVersion: LexiVersion,
+    prevSnapshotID?: string,
     invalidations?: Record<string, string>,
     changes?: readonly RowChange[],
   ): Promise<{
     update: Omit<QueryInvalidationUpdate, 'invalidatedQueries'>;
     hashes: Set<string>;
   }> {
+    // Note: #getOrCreatePrevReader() first so that it can reuse the cached
+    // #latestReader before it is replaced / unref-ed by #getOrCreateReader().
+    const prevReader =
+      fromVersion && prevSnapshotID
+        ? await this.#getOrCreatePrevReader(lc, fromVersion, prevSnapshotID)
+        : undefined;
     const {reader, version} = await this.#getOrCreateReader(lc, minVersion);
     const update = {
       version,
       fromVersion: fromVersion ?? null,
       reader,
+      prevReader,
       changes,
     };
 
