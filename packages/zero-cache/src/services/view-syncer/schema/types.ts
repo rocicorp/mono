@@ -1,8 +1,7 @@
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
-import {versionToLexi} from '../../../types/lexi-version.js';
-import {versionFromString, versionString} from './paths.js';
+import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
 
 export const cvrVersionSchema = v.object({
   /**
@@ -259,3 +258,33 @@ export type ClientPatch = v.Infer<typeof clientPatchSchema>;
 export const metadataPatchSchema = v.union(clientPatchSchema, queryPatchSchema);
 
 export type MetadataPatch = v.Infer<typeof metadataPatchSchema>;
+
+export function versionString(v: CVRVersion) {
+  // The separator (e.g. ":") needs to be lexicographically greater than the
+  // storage key path separator (e.g. "/") so that "01/row-hash" is less than "01:01/row-hash".
+  // In particular, the traditional separator for major.minor versions (".") does not
+  // satisfy this quality.
+  return v.minorVersion
+    ? `${v.stateVersion}:${versionToLexi(v.minorVersion)}`
+    : v.stateVersion;
+}
+
+export function versionFromString(str: string): CVRVersion {
+  const parts = str.split(':');
+  const stateVersion = parts[0];
+  switch (parts.length) {
+    case 1: {
+      versionFromLexi(stateVersion); // Purely for validation.
+      return {stateVersion};
+    }
+    case 2: {
+      const minorVersion = versionFromLexi(parts[1]);
+      if (minorVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error(`minorVersion ${parts[1]} exceeds max safe integer`);
+      }
+      return {stateVersion, minorVersion: Number(minorVersion)};
+    }
+    default:
+      throw new TypeError(`Invalid version string ${str}`);
+  }
+}
