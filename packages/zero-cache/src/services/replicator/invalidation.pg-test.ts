@@ -589,13 +589,13 @@ describe('replicator/invalidation', () => {
           barTable,
         ]);
 
-        // Let the readers finish first so that it can capture the exported
-        // snapshot. If the writer is otherwise set done too early, the reader
+        // Let the writer finish first so that it can capture the exported
+        // snapshot. If the readers are otherwise set done too early, the writer
         // will not be able to set its snapshot and Postgres will throw.
-        readers.setDone();
-        await readers.done();
         writer.setDone();
         await writer.done();
+        readers.setDone();
+        await readers.done();
 
         const index =
           await db`SELECT hash, "stateVersion" FROM _zero."InvalidationIndex"`;
