@@ -20,9 +20,7 @@ export async function* scan<T extends JSONValue>(
     schema,
     defaultSafeBatchSize,
   )) {
-    for (const entry of batch) {
-      yield entry;
-    }
+    yield* batch;
   }
 }
 

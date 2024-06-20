@@ -378,18 +378,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const allRowRecords = this._cvrStore.allRowRecords();
 
     let total = 0;
-    for await (const existingRows of allRowRecords) {
-      total += existingRows.size;
-      for (const existing of existingRows.values()) {
-        if (existing.queriedColumns === null) {
-          continue; // Tombstone
-        }
-        for (const queries of Object.values(existing.queriedColumns)) {
-          if (queries.some(id => this.#removedOrExecutedQueryIDs.has(id))) {
-            const hash = rowIDHash(existing.id);
-            results.set(hash, existing);
-            break;
-          }
+    for await (const existing of allRowRecords) {
+      total++;
+      if (existing.queriedColumns === null) {
+        continue; // Tombstone
+      }
+      for (const queries of Object.values(existing.queriedColumns)) {
+        if (queries.some(id => this.#removedOrExecutedQueryIDs.has(id))) {
+          const hash = rowIDHash(existing.id);
+          results.set(hash, existing);
+          break;
         }
       }
     }

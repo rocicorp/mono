@@ -209,12 +209,14 @@ export class DurableObjectCVRStore implements CVRStore {
     ]);
   }
 
-  allRowRecords(): AsyncIterable<Map<string, RowRecord>> {
-    return this.#storage.batchScan(
+  async *allRowRecords(): AsyncIterable<RowRecord> {
+    for await (const entry of this.#storage.batchScan(
       {prefix: this.#paths.rowPrefix()},
       rowRecordSchema,
       2000,
-    );
+    )) {
+      yield* entry.values();
+    }
   }
 
   putVersion(version: CVRVersion): void {
