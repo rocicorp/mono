@@ -2,11 +2,13 @@ import type postgres from 'postgres';
 import {stringify, type JSONValue} from './bigint-json.js';
 import {h64} from './xxhash.js';
 
-export type ColumnType = {typeOid: number};
-export type RowKeyType = Record<string, ColumnType>;
-export type RowKey = Record<string, postgres.SerializableParameter<JSONValue>>;
+export type ColumnType = {readonly typeOid: number};
+export type RowKeyType = Readonly<Record<string, ColumnType>>;
+export type RowKey = Readonly<
+  Record<string, postgres.SerializableParameter<JSONValue>>
+>;
 
-export type RowID = {schema: string; table: string; rowKey: RowKey};
+export type RowID = Readonly<{schema: string; table: string; rowKey: RowKey}>;
 
 // Aliased for documentation purposes when dealing with full rows vs row keys.
 // The actual structure of the objects is the same.
@@ -27,6 +29,8 @@ function tuples(key: RowKey) {
     .flat();
 }
 
+const rowIDHashes = new WeakMap<RowID, string>();
+
 /**
  * A RowIDHash is a 128-bit column-order-agnostic hash of the schema, table name, and
  * column name / value tuples of a row key. It serves as a compact identifier for
@@ -40,6 +44,11 @@ function tuples(key: RowKey) {
  * The hash is encoded in `base36`, with the maximum 128-bit value being 25 characters long.
  */
 export function rowIDHash(id: RowID): string {
+  let hash = rowIDHashes.get(id);
+  if (hash) {
+    return hash;
+  }
+
   const str = stringify([id.schema, id.table, ...tuples(id.rowKey)]);
 
   // xxhash only computes 64-bit values. Run it on the forward and reverse string
@@ -47,7 +56,9 @@ export function rowIDHash(id: RowID): string {
   const forward = h64(str);
   const backward = h64(reverse(str));
   const full = (forward << 64n) + backward;
-  return full.toString(36);
+  hash = full.toString(36);
+  rowIDHashes.set(id, hash);
+  return hash;
 }
 
 function reverse(str: string): string {
