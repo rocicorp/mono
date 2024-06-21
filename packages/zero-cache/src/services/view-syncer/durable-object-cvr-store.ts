@@ -23,6 +23,7 @@ import {
   type ClientRecord,
   type QueryRecord,
 } from './schema/types.js';
+import {sleep} from 'shared/src/sleep.js';
 
 export class DurableObjectCVRStore implements CVRStore {
   readonly #lc: LogContext;
@@ -210,12 +211,22 @@ export class DurableObjectCVRStore implements CVRStore {
   }
 
   async *allRowRecords(): AsyncIterable<RowRecord> {
-    for await (const entry of this.#storage.batchScan(
+    // We use list instead of batch scan here
+    // since we are currently using an in memory
+    // FakeDurableObjectStore which does a linear
+    // scan for each batch of batch scan.
+    const records = this.#storage.list(
       {prefix: this.#paths.rowPrefix()},
       rowRecordSchema,
-      2000,
-    )) {
-      yield* entry.values();
+    );
+    let count = 0;
+    for await (const value of (await records).values()) {
+      // Every 2000 entries insert a macrotask to
+      // prevent starvation of the event queue.
+      if (count++ % 2000 === 0) {
+        await sleep(1);
+      }
+      yield value;
     }
   }
 
