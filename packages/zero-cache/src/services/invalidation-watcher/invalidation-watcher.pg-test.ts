@@ -1,3 +1,5 @@
+import {stringify} from 'json-custom-numbers';
+import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
@@ -586,7 +588,11 @@ describe('invalidation-watcher', () => {
           let i = 0;
           for await (const update of incrementalSub) {
             // Check the snapshot Transaction pools.
-            if (update.prevReader) {
+            if (i > 0) {
+              assert(
+                update.prevReader,
+                `Missing prevReader in non-initial update ${stringify(update)}`,
+              );
               expect(
                 (await update.prevReader.processReadTask(queryStateVersion))[0]
                   .max ?? '00',
