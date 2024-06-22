@@ -1,6 +1,5 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {EventEmitter} from 'eventemitter3';
 import {
   LogicalReplicationService,
   Pgoutput,
@@ -21,9 +20,9 @@ import type {LexiVersion} from '../../types/lexi-version.js';
 import {PostgresDB, registerPostgresTypeParsers} from '../../types/pg.js';
 import type {RowKey, RowKeyType, RowValue} from '../../types/row-key.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
-import {Subscription} from '../../types/subscription.js';
 import {replicationSlot} from './initial-sync.js';
 import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
+import {InternalVersionChange, Notifier} from './notifier.js';
 import type {RowChange, VersionChange} from './replicator.js';
 import {ZERO_VERSION_COLUMN_NAME, queryLastLSN} from './schema/replication.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
@@ -37,10 +36,6 @@ registerPostgresTypeParsers();
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
 
-type InternalVersionChange = VersionChange & {
-  readers: TransactionPool;
-};
-
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
  * handling application lifecycle events (start, stop) and retrying the
@@ -51,7 +46,7 @@ export class IncrementalSyncer {
   readonly #upstreamUri: string;
   readonly #replicaID: string;
   readonly #replica: PostgresDB;
-  readonly #eventEmitter: EventEmitter = new EventEmitter();
+  readonly #notifier: Notifier;
 
   // The train ensures that transactions are processed serially, even
   // across re-connects to the upstream db and multiple (temporarily)
@@ -74,6 +69,7 @@ export class IncrementalSyncer {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replica = replica;
+    this.#notifier = new Notifier();
     this.#txTrain = txTrain;
     this.#invalidationFilters = invalidationFilters;
   }
@@ -106,11 +102,7 @@ export class IncrementalSyncer {
           }
           void service.acknowledge(lsn);
         },
-        (v: InternalVersionChange) =>
-          this.#eventEmitter.listeners('version').forEach(listener => {
-            v.readers.ref();
-            listener(v);
-          }),
+        (v: InternalVersionChange) => this.#notifier.notifySubscribers(v),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
@@ -148,44 +140,7 @@ export class IncrementalSyncer {
   }
 
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
-    const subscribe = (v: InternalVersionChange) => subscription.push(v);
-    const subscription: Subscription<VersionChange, InternalVersionChange> =
-      new Subscription<VersionChange, InternalVersionChange>(
-        {
-          consumed: prev => prev.readers.unref(),
-          coalesce: (curr, prev) => {
-            curr.readers.unref();
-            return {
-              newVersion: curr.newVersion,
-              prevVersion: prev.prevVersion,
-              prevSnapshotID: prev.prevSnapshotID,
-              readers: prev.readers,
-              invalidations:
-                !prev.invalidations || !curr.invalidations
-                  ? undefined
-                  : {
-                      ...prev.invalidations,
-                      ...curr.invalidations,
-                    },
-              changes:
-                !prev.changes || !curr.changes
-                  ? undefined
-                  : [...prev.changes, ...curr.changes],
-            };
-          },
-          cleanup: unconsumed => {
-            this.#eventEmitter.off('version', subscribe);
-            unconsumed.forEach(m => m.readers.unref());
-          },
-        },
-        ivc => {
-          const {readers: _excluded, ...vc} = ivc;
-          return vc;
-        },
-      );
-
-    this.#eventEmitter.on('version', subscribe);
-    return Promise.resolve(subscription);
+    return this.#notifier.addSubscription();
   }
 
   async stop(lc: LogContext, err?: unknown) {
