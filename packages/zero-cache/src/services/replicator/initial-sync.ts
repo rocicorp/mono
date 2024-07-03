@@ -39,10 +39,10 @@ export async function startPostgresReplication(
   replicaID: string,
   tx: postgres.TransactionSql,
   upstream: postgres.Sql,
-  upstreamUri: string,
+  upstreamURI: string,
   subName = 'zero_sync',
 ) {
-  lc.info?.(`Starting initial data synchronization from ${upstreamUri}`);
+  lc.info?.(`Starting initial data synchronization from ${upstreamURI}`);
   const slotName = replicationSlot(replicaID);
   const published = await setupUpstream(lc, upstream, slotName);
 
@@ -127,7 +127,7 @@ export async function startPostgresReplication(
     ...publicationStmts,
     `
     CREATE SUBSCRIPTION ${id(subName)}
-      CONNECTION '${upstreamUri}'
+      CONNECTION '${upstreamURI}'
       PUBLICATION ${idList(publications)}
       WITH (slot_name='${slotName}', create_slot=false);`,
   ];
@@ -135,7 +135,7 @@ export async function startPostgresReplication(
   // Execute all statements in a single batch.
   await tx.unsafe(stmts.join('\n'));
 
-  lc.info?.(`Started initial data synchronization from ${upstreamUri}`);
+  lc.info?.(`Started initial data synchronization from ${upstreamURI}`);
 }
 
 type SubscribedTable = {
@@ -160,13 +160,11 @@ const MAX_POLLING_INTERVAL = 60000;
  */
 export async function waitForInitialDataSynchronization(
   lc: LogContext,
-  _replicaID: string,
   sql: postgres.Sql,
-  _upstream: postgres.Sql,
-  upstreamUri: string,
+  upstreamURI: string,
   subName = 'zero_sync',
 ) {
-  lc.info?.(`Awaiting initial data synchronization from ${upstreamUri}`);
+  lc.info?.(`Awaiting initial data synchronization from ${upstreamURI}`);
   for (
     let interval = 100; // Exponential backoff, up to 30 seconds between polls.
     ;
@@ -221,9 +219,7 @@ export async function waitForInitialDataSynchronization(
  */
 export async function handoffPostgresReplication(
   lc: LogContext,
-  _replicaID: string,
   tx: postgres.TransactionSql,
-  _upstream: postgres.Sql,
   upstreamUri: string,
   subName = 'zero_sync',
 ) {

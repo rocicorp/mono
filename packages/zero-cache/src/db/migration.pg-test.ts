@@ -204,8 +204,6 @@ describe('schema/migration', () => {
           schemaName,
           'foo-bar-replica-id',
           db,
-          null as unknown as postgres.Sql, // Not used in the test.
-          'postgres://upstream',
           c.migrations,
         );
       } catch (e) {

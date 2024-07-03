@@ -30,13 +30,7 @@ describe('replicator/message-processor', () => {
     );
     `;
     await replica.begin(tx =>
-      setupReplicationTables(
-        lc,
-        'unused_id',
-        tx,
-        null as unknown as PostgresDB, // unused
-        'postgres:///unused_upstream',
-      ),
+      setupReplicationTables(lc, tx, 'postgres:///unused_upstream'),
     );
     train = new TransactionTrainService(lc, replica);
     void train.run();

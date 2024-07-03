@@ -12,16 +12,12 @@ type PreMigrationFn = (
   log: LogContext,
   replicaID: string,
   replica: postgres.Sql,
-  upstream: postgres.Sql,
-  upstreamUri: string,
 ) => Promise<void>;
 
 type MigrationFn = (
   log: LogContext,
   replicaID: string,
   tx: postgres.TransactionSql,
-  upstream: postgres.Sql,
-  upstreamURI: string,
 ) => Promise<void>;
 
 /**
@@ -49,8 +45,6 @@ export async function runSyncSchemaMigrations(
   schemaName: string,
   replicaID: string,
   replica: postgres.Sql,
-  upstream: postgres.Sql,
-  upstreamUri: string,
   versionMigrationMap: VersionMigrationMap,
 ): Promise<void> {
   log = log.withContext(
@@ -94,7 +88,7 @@ export async function runSyncSchemaMigrations(
 
           // Run the optional PreMigration step before starting the transaction.
           if ('pre' in migration) {
-            await migration.pre(log, replicaID, replica, upstream, upstreamUri);
+            await migration.pre(log, replicaID, replica);
           }
 
           meta = await replica.begin(async tx => {
@@ -106,8 +100,6 @@ export async function runSyncSchemaMigrations(
                 schemaName,
                 replicaID,
                 tx,
-                upstream,
-                upstreamUri,
                 meta,
                 dest,
                 migration,
@@ -204,14 +196,12 @@ async function migrateSyncSchemaVersion(
   schemaName: string,
   replicaID: string,
   tx: postgres.TransactionSql,
-  upstream: postgres.Sql,
-  upstreamUri: string,
   meta: SyncSchemaVersions,
   destinationVersion: number,
   migration: Migration,
 ): Promise<SyncSchemaVersions> {
   if ('run' in migration) {
-    await migration.run(log, replicaID, tx, upstream, upstreamUri);
+    await migration.run(log, replicaID, tx);
   } else {
     meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
   }
