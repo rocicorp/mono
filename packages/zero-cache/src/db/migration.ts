@@ -21,7 +21,7 @@ type MigrationFn = (
   replicaID: string,
   tx: postgres.TransactionSql,
   upstream: postgres.Sql,
-  upstreamUri: string,
+  upstreamURI: string,
 ) => Promise<void>;
 
 /**
@@ -40,11 +40,13 @@ export type VersionMigrationMap = {
 };
 
 /**
- * Ensures that the sync schema is compatible with the current code,
- * updating and migrating the schema if necessary.
+ * Ensures that the schema is compatible with the current code, updating and
+ * migrating the schema if necessary.
  */
 export async function runSyncSchemaMigrations(
   log: LogContext,
+  debugName: string,
+  schemaName: string,
   replicaID: string,
   replica: postgres.Sql,
   upstream: postgres.Sql,
@@ -64,14 +66,14 @@ export async function runSyncSchemaMigrations(
     const codeSchemaVersion =
       versionMigrations[versionMigrations.length - 1][0];
     log.info?.(
-      `Checking schema for compatibility with replicator at schema v${codeSchemaVersion}`,
+      `Checking schema for compatibility with ${debugName} at schema v${codeSchemaVersion}`,
     );
 
     let meta = await replica.begin(async tx => {
-      const meta = await getSyncSchemaVersions(tx);
+      const meta = await getSyncSchemaVersions(tx, schemaName);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
         throw new Error(
-          `Cannot run replicator at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
+          `Cannot run ${debugName} at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
         );
       }
 
@@ -79,7 +81,7 @@ export async function runSyncSchemaMigrations(
         log.info?.(
           `Schema is at v${meta.version}. Resetting to v${codeSchemaVersion}`,
         );
-        return setSyncSchemaVersion(tx, meta, codeSchemaVersion);
+        return setSyncSchemaVersion(tx, schemaName, meta, codeSchemaVersion);
       }
       return meta;
     });
@@ -97,10 +99,11 @@ export async function runSyncSchemaMigrations(
 
           meta = await replica.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
-            let meta = await getSyncSchemaVersions(tx);
+            let meta = await getSyncSchemaVersions(tx, schemaName);
             if (meta.version < dest) {
               meta = await migrateSyncSchemaVersion(
                 log,
+                schemaName,
                 replicaID,
                 tx,
                 upstream,
@@ -118,7 +121,7 @@ export async function runSyncSchemaMigrations(
     }
 
     assert(meta.version === codeSchemaVersion);
-    log.info?.(`Running replicator at schema v${codeSchemaVersion}`);
+    log.info?.(`Running ${debugName} at schema v${codeSchemaVersion}`);
   } catch (e) {
     log.error?.('Error in ensureSyncSchemaMigrated', e);
     throw e;
@@ -150,11 +153,12 @@ export type SyncSchemaVersions = v.Infer<typeof syncSchemaVersions>;
 // Exposed for tests
 export async function getSyncSchemaVersions(
   sql: postgres.Sql,
+  schemaName: string,
 ): Promise<SyncSchemaVersions> {
   // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
   const results = await sql`
-    CREATE SCHEMA IF NOT EXISTS _zero;
-    CREATE TABLE IF NOT EXISTS _zero."SchemaVersions" (
+    CREATE SCHEMA IF NOT EXISTS ${sql(schemaName)};
+    CREATE TABLE IF NOT EXISTS ${sql(schemaName)}."SchemaVersions" (
       version int NOT NULL,
       "maxVersion" int NOT NULL,
       "minSafeRollbackVersion" int NOT NULL,
@@ -163,7 +167,9 @@ export async function getSyncSchemaVersions(
       CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
       CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
     );
-    SELECT version, "maxVersion", "minSafeRollbackVersion" FROM _zero."SchemaVersions";
+    SELECT version, "maxVersion", "minSafeRollbackVersion" FROM ${sql(
+      schemaName,
+    )}."SchemaVersions";
   `.simple();
   const rows = results[1];
   if (rows.length === 0) {
@@ -174,6 +180,7 @@ export async function getSyncSchemaVersions(
 
 async function setSyncSchemaVersion(
   sql: postgres.Sql,
+  schemaName: string,
   prev: SyncSchemaVersions,
   newVersion: number,
 ): Promise<SyncSchemaVersions> {
@@ -185,15 +192,16 @@ async function setSyncSchemaVersion(
   };
 
   if (prev.version === 0) {
-    await sql`INSERT INTO _zero."SchemaVersions" ${sql(meta)}`;
+    await sql`INSERT INTO ${sql(schemaName)}."SchemaVersions" ${sql(meta)}`;
   } else {
-    await sql`UPDATE _zero."SchemaVersions" set ${sql(meta)}`;
+    await sql`UPDATE ${sql(schemaName)}."SchemaVersions" set ${sql(meta)}`;
   }
   return meta;
 }
 
 async function migrateSyncSchemaVersion(
   log: LogContext,
+  schemaName: string,
   replicaID: string,
   tx: postgres.TransactionSql,
   upstream: postgres.Sql,
@@ -207,7 +215,7 @@ async function migrateSyncSchemaVersion(
   } else {
     meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
   }
-  return setSyncSchemaVersion(tx, meta, destinationVersion);
+  return setSyncSchemaVersion(tx, schemaName, meta, destinationVersion);
 }
 
 /**

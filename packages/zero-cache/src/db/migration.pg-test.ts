@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from '../../../test/db.js';
+import {testDBs} from '../test/db.js';
 import {
   SyncSchemaVersions,
   VersionMigrationMap,
@@ -11,6 +11,9 @@ import {
 } from './migration.js';
 
 describe('schema/migration', () => {
+  const schemaName = '_zero';
+  const debugName = 'debug-name';
+
   type Case = {
     name: string;
     preSchema?: SyncSchemaVersions;
@@ -23,7 +26,7 @@ describe('schema/migration', () => {
   const logMigrationHistory =
     (name: string) =>
     async (_log: LogContext, _id: string, sql: postgres.Sql) => {
-      const meta = await getSyncSchemaVersions(sql);
+      const meta = await getSyncSchemaVersions(sql, schemaName);
       await sql`INSERT INTO "MigrationHistory" ${sql({
         event: `${name}-at(${meta.version})`,
       })}`;
@@ -122,8 +125,7 @@ describe('schema/migration', () => {
         maxVersion: 10,
         minSafeRollbackVersion: 8,
       },
-      expectedErr:
-        'Error: Cannot run replicator at schema v7 because rollback limit is v8',
+      expectedErr: `Error: Cannot run ${debugName} at schema v7 because rollback limit is v8`,
     },
     {
       name: 'bump rollback limit',
@@ -188,14 +190,18 @@ describe('schema/migration', () => {
   for (const c of cases) {
     test(c.name, async () => {
       if (c.preSchema) {
-        await getSyncSchemaVersions(db); // Ensures that the table is created.
-        await db`INSERT INTO _zero."SchemaVersions" ${db(c.preSchema)}`;
+        await getSyncSchemaVersions(db, schemaName); // Ensures that the table is created.
+        await db`INSERT INTO ${db(schemaName)}."SchemaVersions" ${db(
+          c.preSchema,
+        )}`;
       }
 
       let err: string | undefined;
       try {
         await runSyncSchemaMigrations(
           createSilentLogContext(),
+          debugName,
+          schemaName,
           'foo-bar-replica-id',
           db,
           null as unknown as postgres.Sql, // Not used in the test.
@@ -210,7 +216,7 @@ describe('schema/migration', () => {
       }
       expect(err).toBe(c.expectedErr);
 
-      expect(await getSyncSchemaVersions(db)).toEqual(c.postSchema);
+      expect(await getSyncSchemaVersions(db, schemaName)).toEqual(c.postSchema);
       expect(await db`SELECT * FROM "MigrationHistory"`).toEqual(
         c.expectedMigrationHistory ?? [],
       );

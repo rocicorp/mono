@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {
+  runSyncSchemaMigrations,
+  type VersionMigrationMap,
+} from '../../../db/migration.js';
+import {
   handoffPostgresReplication,
   startPostgresReplication,
   waitForInitialDataSynchronization,
 } from '../initial-sync.js';
-import {
-  runSyncSchemaMigrations,
-  type VersionMigrationMap,
-} from './migration.js';
 import {setupReplicationTables} from './replication.js';
 
 const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
@@ -23,6 +23,8 @@ const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
 
 export async function initSyncSchema(
   log: LogContext,
+  debugName: string,
+  schemaName: string,
   replicaID: string,
   replica: postgres.Sql,
   upstream: postgres.Sql,
@@ -30,6 +32,8 @@ export async function initSyncSchema(
 ): Promise<void> {
   await runSyncSchemaMigrations(
     log,
+    debugName,
+    schemaName,
     replicaID,
     replica,
     upstream,
