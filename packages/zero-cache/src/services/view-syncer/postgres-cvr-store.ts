@@ -173,17 +173,15 @@ export class PostgresCVRStore implements CVRStore {
 
     for (const row of desiresRow) {
       const client = cvr.clients[row.clientID];
-      if (!client) {
-        throw new Error('Client not found');
-      }
+      assert(client, 'Client not found');
+
       if (!row.deleted) {
         client.desiredQueryIDs.push(row.queryHash);
       }
 
       const query = cvr.queries[row.queryHash];
-      if (!query) {
-        throw new Error('Query not found: ' + row.queryHash);
-      }
+      assert(query, 'Query not found: ' + row.queryHash);
+
       if (!isInternalQueryRecord(query) && !row.deleted) {
         query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
