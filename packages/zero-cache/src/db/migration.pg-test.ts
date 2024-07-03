@@ -4,10 +4,10 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../test/db.js';
 import {
-  SyncSchemaVersions,
+  SchemaVersions,
   VersionMigrationMap,
-  getSyncSchemaVersions,
-  runSyncSchemaMigrations,
+  getSchemaVersions,
+  runSchemaMigrations,
 } from './migration.js';
 
 describe('schema/migration', () => {
@@ -16,16 +16,16 @@ describe('schema/migration', () => {
 
   type Case = {
     name: string;
-    preSchema?: SyncSchemaVersions;
+    preSchema?: SchemaVersions;
     migrations: VersionMigrationMap;
-    postSchema: SyncSchemaVersions;
+    postSchema: SchemaVersions;
     expectedErr?: string;
     expectedMigrationHistory?: {event: string}[];
   };
 
   const logMigrationHistory =
     (name: string) => async (_log: LogContext, sql: postgres.Sql) => {
-      const meta = await getSyncSchemaVersions(sql, schemaName);
+      const meta = await getSchemaVersions(sql, schemaName);
       await sql`INSERT INTO "MigrationHistory" ${sql({
         event: `${name}-at(${meta.version})`,
       })}`;
@@ -189,7 +189,7 @@ describe('schema/migration', () => {
   for (const c of cases) {
     test(c.name, async () => {
       if (c.preSchema) {
-        await getSyncSchemaVersions(db, schemaName); // Ensures that the table is created.
+        await getSchemaVersions(db, schemaName); // Ensures that the table is created.
         await db`INSERT INTO ${db(schemaName)}."SchemaVersions" ${db(
           c.preSchema,
         )}`;
@@ -197,7 +197,7 @@ describe('schema/migration', () => {
 
       let err: string | undefined;
       try {
-        await runSyncSchemaMigrations(
+        await runSchemaMigrations(
           createSilentLogContext(),
           debugName,
           schemaName,
@@ -212,7 +212,7 @@ describe('schema/migration', () => {
       }
       expect(err).toBe(c.expectedErr);
 
-      expect(await getSyncSchemaVersions(db, schemaName)).toEqual(c.postSchema);
+      expect(await getSchemaVersions(db, schemaName)).toEqual(c.postSchema);
       expect(await db`SELECT * FROM "MigrationHistory"`).toEqual(
         c.expectedMigrationHistory ?? [],
       );

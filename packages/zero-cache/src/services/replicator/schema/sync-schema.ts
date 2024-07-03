@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {
-  runSyncSchemaMigrations,
+  runSchemaMigrations,
   type VersionMigrationMap,
 } from '../../../db/migration.js';
 import {
@@ -35,7 +35,7 @@ export async function initSyncSchema(
     },
   };
 
-  await runSyncSchemaMigrations(
+  await runSchemaMigrations(
     log,
     debugName,
     schemaName,
