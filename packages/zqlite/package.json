@@ -1,0 +1,36 @@
+{
+  "name": "@rocicorp/zqlite",
+  "version": "0.0.0",
+  "description": "SQLite source provider for ZQL (for use on the server)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "bench": "vitest bench",
+    "test-types": "vitest run --typecheck.only --no-browser.enabled",
+    "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/logger": "^5.2.2",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "fast-check": "^3.18.0",
+    "nanoid": "^4.0.2",
+    "playwright": "^1.43.1",
+    "shared": "0.0.0",
+    "typescript": "^5.4.2"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "zql": "0.0.0",
+    "better-sqlite3": "^11.0.0"
+  }
+}
