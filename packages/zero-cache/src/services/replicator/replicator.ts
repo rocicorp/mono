@@ -212,6 +212,8 @@ export class ReplicatorService implements Replicator, Service {
   async run() {
     await initSyncSchema(
       this.#lc,
+      'replicator',
+      '_zero',
       this.id,
       this.#syncReplica,
       this.#upstream,

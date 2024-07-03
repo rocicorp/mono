@@ -1,39 +1,45 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {
+  runSchemaMigrations,
+  type VersionMigrationMap,
+} from '../../../db/migration.js';
+import {
   handoffPostgresReplication,
   startPostgresReplication,
   waitForInitialDataSynchronization,
 } from '../initial-sync.js';
-import {
-  runSyncSchemaMigrations,
-  type VersionMigrationMap,
-} from './migration.js';
 import {setupReplicationTables} from './replication.js';
-
-const SCHEMA_VERSION_MIGRATION_MAP: VersionMigrationMap = {
-  1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
-  2: {run: startPostgresReplication},
-  3: {
-    pre: waitForInitialDataSynchronization,
-    run: handoffPostgresReplication,
-  },
-  4: {run: setupReplicationTables},
-};
 
 export async function initSyncSchema(
   log: LogContext,
+  debugName: string,
+  schemaName: string,
   replicaID: string,
-  replica: postgres.Sql,
+  db: postgres.Sql,
   upstream: postgres.Sql,
-  upstreamUri: string,
+  upstreamURI: string,
 ): Promise<void> {
-  await runSyncSchemaMigrations(
+  const schemaVersionMigrationMap: VersionMigrationMap = {
+    1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
+    2: {
+      run: (log, tx) =>
+        startPostgresReplication(log, replicaID, tx, upstream, upstreamURI),
+    },
+    3: {
+      pre: (log, db) => waitForInitialDataSynchronization(log, db, upstreamURI),
+      run: (log, tx) => handoffPostgresReplication(log, tx, upstreamURI),
+    },
+    4: {
+      run: (log, tx) => setupReplicationTables(log, tx, upstreamURI),
+    },
+  };
+
+  await runSchemaMigrations(
     log,
-    replicaID,
-    replica,
-    upstream,
-    upstreamUri,
-    SCHEMA_VERSION_MIGRATION_MAP,
+    debugName,
+    schemaName,
+    db,
+    schemaVersionMigrationMap,
   );
 }
