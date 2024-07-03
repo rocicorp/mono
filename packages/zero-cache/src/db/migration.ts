@@ -8,15 +8,10 @@ import * as v from 'shared/src/valita.js';
  * A PreMigrationFn executes logic outside of a database transaction, and is
  * suitable for potentially long running polling operations.
  */
-type PreMigrationFn = (
-  log: LogContext,
-  replicaID: string,
-  replica: postgres.Sql,
-) => Promise<void>;
+type PreMigrationFn = (log: LogContext, db: postgres.Sql) => Promise<void>;
 
 type MigrationFn = (
   log: LogContext,
-  replicaID: string,
   tx: postgres.TransactionSql,
 ) => Promise<void>;
 
@@ -43,8 +38,7 @@ export async function runSyncSchemaMigrations(
   log: LogContext,
   debugName: string,
   schemaName: string,
-  replicaID: string,
-  replica: postgres.Sql,
+  db: postgres.Sql,
   versionMigrationMap: VersionMigrationMap,
 ): Promise<void> {
   log = log.withContext(
@@ -63,7 +57,7 @@ export async function runSyncSchemaMigrations(
       `Checking schema for compatibility with ${debugName} at schema v${codeSchemaVersion}`,
     );
 
-    let meta = await replica.begin(async tx => {
+    let meta = await db.begin(async tx => {
       const meta = await getSyncSchemaVersions(tx, schemaName);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
         throw new Error(
@@ -88,17 +82,16 @@ export async function runSyncSchemaMigrations(
 
           // Run the optional PreMigration step before starting the transaction.
           if ('pre' in migration) {
-            await migration.pre(log, replicaID, replica);
+            await migration.pre(log, db);
           }
 
-          meta = await replica.begin(async tx => {
+          meta = await db.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
             let meta = await getSyncSchemaVersions(tx, schemaName);
             if (meta.version < dest) {
               meta = await migrateSyncSchemaVersion(
                 log,
                 schemaName,
-                replicaID,
                 tx,
                 meta,
                 dest,
@@ -194,14 +187,13 @@ async function setSyncSchemaVersion(
 async function migrateSyncSchemaVersion(
   log: LogContext,
   schemaName: string,
-  replicaID: string,
   tx: postgres.TransactionSql,
   meta: SyncSchemaVersions,
   destinationVersion: number,
   migration: Migration,
 ): Promise<SyncSchemaVersions> {
   if ('run' in migration) {
-    await migration.run(log, replicaID, tx);
+    await migration.run(log, tx);
   } else {
     meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
   }

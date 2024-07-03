@@ -24,8 +24,7 @@ describe('schema/migration', () => {
   };
 
   const logMigrationHistory =
-    (name: string) =>
-    async (_log: LogContext, _id: string, sql: postgres.Sql) => {
+    (name: string) => async (_log: LogContext, sql: postgres.Sql) => {
       const meta = await getSyncSchemaVersions(sql, schemaName);
       await sql`INSERT INTO "MigrationHistory" ${sql({
         event: `${name}-at(${meta.version})`,
@@ -202,7 +201,6 @@ describe('schema/migration', () => {
           createSilentLogContext(),
           debugName,
           schemaName,
-          'foo-bar-replica-id',
           db,
           c.migrations,
         );

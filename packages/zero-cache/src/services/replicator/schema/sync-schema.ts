@@ -16,25 +16,22 @@ export async function initSyncSchema(
   debugName: string,
   schemaName: string,
   replicaID: string,
-  replica: postgres.Sql,
+  db: postgres.Sql,
   upstream: postgres.Sql,
   upstreamURI: string,
 ): Promise<void> {
   const schemaVersionMigrationMap: VersionMigrationMap = {
     1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
     2: {
-      run: (log, replicaID, tx) =>
+      run: (log, tx) =>
         startPostgresReplication(log, replicaID, tx, upstream, upstreamURI),
     },
     3: {
-      pre: (log, _replicaID, db) =>
-        waitForInitialDataSynchronization(log, db, upstreamURI),
-      run: (log, _replicaID, tx) =>
-        handoffPostgresReplication(log, tx, upstreamURI),
+      pre: (log, db) => waitForInitialDataSynchronization(log, db, upstreamURI),
+      run: (log, tx) => handoffPostgresReplication(log, tx, upstreamURI),
     },
     4: {
-      run: (log, _replicaID, tx) =>
-        setupReplicationTables(log, tx, upstreamURI),
+      run: (log, tx) => setupReplicationTables(log, tx, upstreamURI),
     },
   };
 
@@ -42,10 +39,7 @@ export async function initSyncSchema(
     log,
     debugName,
     schemaName,
-    replicaID,
-    replica,
-    // upstream,
-    // upstreamUri,
+    db,
     schemaVersionMigrationMap,
   );
 }
