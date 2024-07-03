@@ -1960,13 +1960,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
 
       await setupUpstream(lc, upstream, replicationSlot(REPLICA_ID));
       await replica.begin(tx =>
-        setupReplicationTables(
-          lc,
-          REPLICA_ID,
-          tx,
-          upstream,
-          getConnectionURI(upstream),
-        ),
+        setupReplicationTables(lc, tx, getConnectionURI(upstream)),
       );
 
       expect(await queryLastLSN(replica)).toBeNull();

@@ -120,6 +120,8 @@ describe('replicator/sync-schema', () => {
 
         await initSyncSchema(
           createSilentLogContext(),
+          'test',
+          '_zero',
           REPLICA_ID,
           replica,
           upstream,
