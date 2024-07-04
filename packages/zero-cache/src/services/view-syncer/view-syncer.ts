@@ -9,8 +9,6 @@ import type {
   InitConnectionMessage,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {DurableStorage} from '../../storage/durable-storage.js';
-import {initStorageSchema} from '../../storage/schema.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
@@ -24,10 +22,9 @@ import {
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
 } from './cvr.js';
-import {DurableObjectCVRStore} from './durable-object-cvr-store.js';
+import {PostgresCVRStore} from './postgres-cvr-store.js';
 import {QueryHandler, TransformedQuery} from './queries.js';
-import {SCHEMA_MIGRATIONS} from './schema/migrations.js';
-import {schemaRoot} from './schema/paths.js';
+import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {cmpVersions} from './schema/types.js';
 
 export type SyncContext = {
@@ -51,9 +48,8 @@ export interface ViewSyncer {
 export class ViewSyncerService implements ViewSyncer, Service {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #storage: DurableStorage;
   readonly #registry: InvalidationWatcherRegistry;
-  readonly #queryChecker: PostgresDB;
+  readonly #db: PostgresDB;
 
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
@@ -74,17 +70,15 @@ export class ViewSyncerService implements ViewSyncer, Service {
   constructor(
     lc: LogContext,
     clientGroupID: string,
-    storage: DurableStorage,
     registry: InvalidationWatcherRegistry,
-    queryChecker: PostgresDB,
+    db: PostgresDB,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
-    this.#storage = storage;
     this.#registry = registry;
-    this.#queryChecker = queryChecker;
+    this.#db = db;
   }
 
   async run(): Promise<void> {
@@ -92,22 +86,12 @@ export class ViewSyncerService implements ViewSyncer, Service {
     this.#started = true;
 
     this.#lc.info?.('starting view-syncer');
+
     try {
       await this.#lock.withLock(async () => {
-        await initStorageSchema(
-          this.#lc,
-          'view-syncer',
-          this.#storage,
-          schemaRoot,
-          SCHEMA_MIGRATIONS,
-        );
-
-        const doStore = new DurableObjectCVRStore(
-          this.#lc,
-          this.#storage,
-          this.id,
-        );
-        this.#cvr = await doStore.load();
+        await initViewSyncerSchema(this.#lc, 'view-syncer', 'cvr', this.#db);
+        const cvrStore = new PostgresCVRStore(this.#lc, this.#db, this.id);
+        this.#cvr = await cvrStore.load();
       });
 
       this.#lc.info?.('started view-syncer');
@@ -264,16 +248,13 @@ export class ViewSyncerService implements ViewSyncer, Service {
     {desiredQueriesPatch}: ChangeDesiredQueriesBody,
   ) {
     assert(this.#started);
-    assert(this.#cvr);
+    assert(this.#cvr, 'CVR must be loaded before patching queries');
 
     // Apply patches requested in the initConnectionMessage.
     const {clientID} = client;
-    const doStore = new DurableObjectCVRStore(
-      this.#lc,
-      this.#storage,
-      this.#cvr.id,
-    );
-    const updater = new CVRConfigDrivenUpdater(doStore, this.#cvr);
+    const cvrStore = new PostgresCVRStore(this.#lc, this.#db, this.#cvr.id);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, this.#cvr);
+
     const added: {id: string; ast: AST}[] = [];
     for (const patch of desiredQueriesPatch) {
       switch (patch.op) {
@@ -385,8 +366,8 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     lc.info?.(`Executing ${queriesToExecute.length} queries`);
 
-    const doStore = new DurableObjectCVRStore(this.#lc, this.#storage, cvr.id);
-    const updater = new CVRQueryDrivenUpdater(doStore, cvr, version);
+    const cvrStore = new PostgresCVRStore(this.#lc, this.#db, cvr.id);
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, version);
     // Track which queries are being executed and removed.
     const cvrVersion = updater.trackQueries(
       lc,
@@ -506,7 +487,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
           const start = Date.now();
           this.#lc.debug?.(`checking query [${id}]`, parameterized.query);
 
-          const checked = this.#queryChecker
+          const checked = this.#db
             .unsafe(parameterized.query, parameterized.values)
             .describe();
 

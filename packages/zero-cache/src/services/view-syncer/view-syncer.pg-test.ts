@@ -5,9 +5,7 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Downstream, PokePartBody} from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import {Mode, TransactionPool} from '../../db/transaction-pool.js';
-import {DurableStorage} from '../../storage/durable-storage.js';
-import {testDBs} from '../../test/db.js';
-import {FakeDurableObjectStorage} from '../../test/fake-do.js';
+import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -19,7 +17,8 @@ import type {
 import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
 import {getPublicationInfo} from '../replicator/tables/published.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
-import {DurableObjectCVRStore} from './durable-object-cvr-store.js';
+import {PostgresCVRStore} from './postgres-cvr-store.js';
+import {setupCVRTables} from './schema/cvr.js';
 import {ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
@@ -60,7 +59,7 @@ describe('view-syncer/service', () => {
   let db: PostgresDB;
   const lc = createSilentLogContext();
 
-  let storage: FakeDurableObjectStorage;
+  // let storage: FakeDurableObjectStorage;
   let watcher: MockInvalidationWatcher;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
@@ -110,16 +109,11 @@ describe('view-syncer/service', () => {
 
     CREATE PUBLICATION zero_all FOR ALL TABLES;
     `.simple();
+    await setupCVRTables(lc, db);
 
-    storage = new FakeDurableObjectStorage();
+    // storage = new FakeDurableObjectStorage();
     watcher = new MockInvalidationWatcher();
-    vs = new ViewSyncerService(
-      lc,
-      serviceID,
-      new DurableStorage(storage),
-      watcher,
-      db,
-    );
+    vs = new ViewSyncerService(lc, serviceID, watcher, db);
     viewSyncerDone = vs.run();
     downstream = new Queue();
     const stream = await vs.initConnection(SYNC_CONTEXT, [
@@ -181,20 +175,21 @@ describe('view-syncer/service', () => {
   };
 
   test('initializes schema', async () => {
-    expect(await storage.get('/vs/storage_schema_meta')).toEqual({
-      // Update versions as necessary
-      version: 1,
-      maxVersion: 1,
-      minSafeRollbackVersion: 1,
+    await expectTables(db, {
+      'cvr.SchemaVersions': [
+        {
+          // Update versions as necessary
+          version: 1,
+          maxVersion: 1,
+          minSafeRollbackVersion: 1,
+          lock: 'v', // Internal column, always 'v'
+        },
+      ],
     });
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    const cvrStore = new DurableObjectCVRStore(
-      lc,
-      new DurableStorage(storage),
-      serviceID,
-    );
+    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -284,11 +279,7 @@ describe('view-syncer/service', () => {
     ]);
     expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
 
-    const cvrStore = new DurableObjectCVRStore(
-      lc,
-      new DurableStorage(storage),
-      serviceID,
-    );
+    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -317,9 +308,10 @@ describe('view-syncer/service', () => {
       version: {stateVersion: '1xz'},
     });
 
-    const rowRecords = await storage.list({
-      prefix: `/vs/cvr/${serviceID}/d/`,
-    });
+    const rowRecords = new Map();
+    // await storage.list({
+    //   prefix: `/vs/cvr/${serviceID}/d/`,
+    // });
     expect(new Set(rowRecords.values())).toEqual(
       new Set([
         {
@@ -380,9 +372,10 @@ describe('view-syncer/service', () => {
       ]),
     );
 
-    const rowPatches = await storage.list({
-      prefix: `/vs/cvr/${serviceID}/p/d/`,
-    });
+    const rowPatches = new Map();
+    // await storage.list({
+    //   prefix: `/vs/cvr/${serviceID}/p/d/`,
+    // });
     expect(rowPatches).toEqual(
       new Map([
         [
@@ -521,11 +514,7 @@ describe('view-syncer/service', () => {
     ]);
     expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
 
-    const cvrStore = new DurableObjectCVRStore(
-      lc,
-      new DurableStorage(storage),
-      serviceID,
-    );
+    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -577,11 +566,7 @@ describe('view-syncer/service', () => {
     expect(err).not.toBeUndefined();
 
     // Bad client / query should not have been added to the CVR.
-    const cvrStore = new DurableObjectCVRStore(
-      lc,
-      new DurableStorage(storage),
-      serviceID,
-    );
+    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(Object.keys(cvr.clients)).not.toContain('boo');
     expect(Object.keys(cvr.queries)).not.toContain('bad-query');
@@ -616,11 +601,7 @@ describe('view-syncer/service', () => {
     expect(err).not.toBeUndefined();
 
     // Bad query should not have been added to the CVR.
-    const cvrStore = new DurableObjectCVRStore(
-      lc,
-      new DurableStorage(storage),
-      serviceID,
-    );
+    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -671,11 +652,7 @@ describe('view-syncer/service', () => {
     // Everything else should succeed, however, because CVRs are agnostic to row
     // contents, and the data in the DB is technically "valid" (and available when
     // the protocol supports it).
-    const cvrStore = new DurableObjectCVRStore(
-      lc,
-      new DurableStorage(storage),
-      serviceID,
-    );
+    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -704,129 +681,86 @@ describe('view-syncer/service', () => {
       version: {stateVersion: '1xz'},
     });
 
-    const rowRecords = await storage.list({
-      prefix: `/vs/cvr/${serviceID}/d/`,
-    });
-    expect(new Set(rowRecords.values())).toEqual(
-      new Set([
+    await expectTables(db, {
+      'cvr.rows': [
         {
-          id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1a0',
-        },
-        {
-          id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1ab',
-        },
-        {
-          id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1ca',
-        },
-        {
-          id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1cd',
-        },
-        {
-          id: {
-            rowKey: {clientGroupID: '9876', clientID: 'foo'},
-            schema: 'zero',
-            table: 'clients',
-          },
-          patchVersion: {stateVersion: '1xz'},
+          clientGroupID: '9876',
+          patchVersion: '1xz',
           queriedColumns: {
             clientGroupID: ['lmids'],
             clientID: ['lmids'],
             lastMutationID: ['lmids'],
           },
+          rowKey: {
+            clientGroupID: '9876',
+            clientID: 'foo',
+          },
           rowVersion: '0a',
+          schema: 'zero',
+          table: 'clients',
         },
-      ]),
-    );
-
-    const rowPatches = await storage.list({
-      prefix: `/vs/cvr/${serviceID}/p/d/`,
+        {
+          clientGroupID: '9876',
+          patchVersion: '1xz',
+          queriedColumns: {
+            big: ['query-hash1'],
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+          },
+          rowKey: {
+            id: '1',
+          },
+          rowVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: '9876',
+          patchVersion: '1xz',
+          queriedColumns: {
+            big: ['query-hash1'],
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+          },
+          rowKey: {
+            id: '2',
+          },
+          rowVersion: '1ab',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: '9876',
+          patchVersion: '1xz',
+          queriedColumns: {
+            big: ['query-hash1'],
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+          },
+          rowKey: {
+            id: '3',
+          },
+          rowVersion: '1ca',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: '9876',
+          patchVersion: '1xz',
+          queriedColumns: {
+            big: ['query-hash1'],
+            id: ['query-hash1'],
+            title: ['query-hash1'],
+          },
+          rowKey: {
+            id: '4',
+          },
+          rowVersion: '1cd',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
     });
-    expect(rowPatches).toEqual(
-      new Map([
-        [
-          '/vs/cvr/9876/p/d/1xz/r/7flkrz0yskhi5ko0l0lqjccoe',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1cd',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/2z8i982skum71jkx73g5y2gao',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1ab',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/1ngjqp2ckvs2ur64mjoacg55',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1a0',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/e3jqcp8k60hejdhju08414x2z',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1ca',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/7fxlm9v6qwokjvqa9d20cc09v',
-          {
-            columns: ['clientGroupID', 'clientID', 'lastMutationID'],
-            id: {
-              schema: 'zero',
-              table: 'clients',
-              rowKey: {clientGroupID: '9876', clientID: 'foo'},
-            },
-            op: 'put',
-            rowVersion: '0a',
-            type: 'row',
-          },
-        ],
-      ]),
-    );
   });
 
   test('disconnects on unexpected query result error', async () => {

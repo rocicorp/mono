@@ -29,7 +29,10 @@ export interface CVRStore {
     row: RowRecord,
     oldRowPatchVersionToDelete: CVRVersion | undefined,
   ): void;
-  putLastActive(lastActive: {epochMillis: number}): void;
+  putInstance(
+    version: {minorVersion?: number | undefined; stateVersion: string},
+    lastActive: {epochMillis: number},
+  ): void;
   putLastActiveIndex(cvrID: string, newMillis: number): void;
   delLastActiveIndex(cvrID: string, oldMillis: number): void;
   numPendingWrites(): number;
@@ -57,7 +60,6 @@ export interface CVRStore {
     query: QueryRecord,
     client: ClientRecord,
   ): void;
-  putVersion(version: CVRVersion): void;
   catchupRowPatches(
     startingVersion: CVRVersion,
   ): Promise<[RowPatch, CVRVersion][]>;

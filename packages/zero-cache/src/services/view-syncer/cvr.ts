@@ -86,7 +86,8 @@ export class CVRUpdater {
   protected _setVersion(version: CVRVersion) {
     assert(cmpVersions(this._cvr.version, version) < 0);
     this._cvr.version = version;
-    this._cvrStore.putVersion(this._cvr.version);
+    // this._cvrStore.putVersion(this._cvr.version, this._cvr.lastActive);
+    this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
     return version;
   }
 
@@ -120,7 +121,7 @@ export class CVRUpdater {
     }
 
     this._cvr.lastActive = {epochMillis: newMillis};
-    this._cvrStore.putLastActive(this._cvr.lastActive);
+    this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
   }
 
   // Exposed for testing.

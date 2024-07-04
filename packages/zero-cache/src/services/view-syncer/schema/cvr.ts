@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type postgres from 'postgres';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
 import type {JSONValue} from '../../../types/bigint-json.js';
 import {
   RowID,
@@ -193,10 +193,7 @@ const CREATE_CVR_TABLES =
   CREATE_CVR_DESIRES_TABLE +
   CREATE_CVR_ROWS_TABLE;
 
-export async function setupCVRTables(
-  lc: LogContext,
-  tx: postgres.TransactionSql,
-) {
+export async function setupCVRTables(lc: LogContext, db: PostgresDB) {
   lc.info?.(`Setting up CVR tables`);
-  await tx.unsafe(CREATE_CVR_TABLES);
+  await db.unsafe(CREATE_CVR_TABLES);
 }

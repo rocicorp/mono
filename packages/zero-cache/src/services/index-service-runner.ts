@@ -1,8 +1,8 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
+import {DurableStorage} from '../storage/durable-storage.js';
 import {createLogSink, getLogLevel} from './logging.js';
 import {ServiceRunnerDO} from './runner-do.js';
 import type {ServiceRunnerEnv} from './service-runner.js';
-import {DurableStorage} from '../storage/durable-storage.js';
 
 type GetNormalizedOptions<Env extends ServiceRunnerEnv> = (
   env: Env,

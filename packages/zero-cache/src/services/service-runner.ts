@@ -2,6 +2,8 @@ import type {LogContext, LogLevel} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
+import WebSocket from 'ws';
+import type {DurableStorage} from '../storage/durable-storage.js';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
@@ -28,8 +30,6 @@ import {
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
 import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
-import type {DurableStorage} from '../storage/durable-storage.js';
-import WebSocket from 'ws';
 export interface ServiceRunnerEnv {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   UPSTREAM_URI: string;
@@ -56,21 +56,19 @@ export class ServiceRunner
   readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
     new Map();
 
-  readonly #storage: DurableStorage;
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
-  readonly #replica: PostgresDB;
+  readonly #db: PostgresDB;
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
   constructor(
     lc: LogContext,
-    storage: DurableStorage,
+    _storage: DurableStorage,
     env: ServiceRunnerEnv,
     runReplicator: boolean,
   ) {
     this.#lc = lc;
-    this.#storage = storage;
     this.#env = env;
     // Connections are capped to stay within the DO limit of 6 TCP connections.
     // Note that the Replicator uses one extra connection for replication.
@@ -81,7 +79,7 @@ export class ServiceRunner
       ...postgresTypeConfig(),
       max: 1,
     });
-    this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
+    this.#db = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
       max: 4,
     });
@@ -94,7 +92,7 @@ export class ServiceRunner
       this.#getService(
         INVALIDATION_WATCHER_ID,
         this.#invalidationWatchers,
-        id => new InvalidationWatcherService(id, this.#lc, this, this.#replica),
+        id => new InvalidationWatcherService(id, this.#lc, this, this.#db),
         'InvalidationWatcherService',
       ),
     );
@@ -112,7 +110,7 @@ export class ServiceRunner
             id,
             this.#env.UPSTREAM_URI,
             this.#upstream,
-            this.#replica,
+            this.#db,
           ),
         'ReplicatorService',
       );
@@ -131,8 +129,7 @@ export class ServiceRunner
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
-      id =>
-        new ViewSyncerService(this.#lc, id, this.#storage, this, this.#replica),
+      id => new ViewSyncerService(this.#lc, id, this, this.#db),
       'ViewSyncer',
     );
   }
@@ -143,9 +140,7 @@ export class ServiceRunner
       // Warm up 1 upstream connection for mutagen, and 4 replica connections for view syncing.
       // Note: These can be much larger when not limited to 6 TCP connections per DO.
       this.#upstream`SELECT 1`.simple().execute(),
-      ...Array.from({length: 4}, () =>
-        this.#replica`SELECT 1`.simple().execute(),
-      ),
+      ...Array.from({length: 4}, () => this.#db`SELECT 1`.simple().execute()),
     ])
       .then(
         () =>
@@ -188,10 +183,10 @@ export class ServiceRunner
 
   async status(): Promise<JSONObject> {
     // One ping to warm up the connections
-    await Promise.all([this.#replica`SELECT 1`, this.#upstream`SELECT 1`]);
+    await Promise.all([this.#db`SELECT 1`, this.#upstream`SELECT 1`]);
 
     const start = Date.now();
-    const replicaPingMs = this.#replica`SELECT 1`
+    const replicaPingMs = this.#db`SELECT 1`
       .simple()
       .then(() => Date.now() - start);
     const upstreamPingMs = this.#upstream`SELECT 1`

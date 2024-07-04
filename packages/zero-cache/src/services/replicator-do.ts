@@ -1,15 +1,15 @@
-import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
 import websocket, {WebSocket} from '@fastify/websocket';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
+import type {DurableStorage} from '../storage/durable-storage.js';
 import {streamOut} from '../types/streams.js';
 import {
   REGISTER_FILTERS_PATTERN,
   REPLICATOR_STATUS_PATTERN,
   VERSION_CHANGES_PATTERN,
 } from './paths.js';
-import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-import type {DurableStorage} from '../storage/durable-storage.js';
 import type {RegisterInvalidationFiltersRequest} from './replicator/replicator.js';
+import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
 export class ReplicatorDO {
   readonly #lc: LogContext;

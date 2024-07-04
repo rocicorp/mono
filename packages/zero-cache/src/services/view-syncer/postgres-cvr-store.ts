@@ -81,10 +81,14 @@ function asQuery(row: QueryRow): QueryRecord {
   return queryRecord;
 }
 
+let instanceCounter = 0;
+
 export class PostgresCVRStore implements CVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
   readonly #db: PostgresDB;
+
+  instanceCounter = instanceCounter++;
 
   readonly #writes: Set<(tx: PostgresTransaction) => Promise<unknown>> =
     new Set();
@@ -96,6 +100,9 @@ export class PostgresCVRStore implements CVRStore {
     RowID,
     [RowRecord, (tx: PostgresTransaction) => Promise<unknown>]
   >(rowIDHash);
+
+  #lastActive = -1;
+  #version: CVRVersion | undefined = undefined;
 
   constructor(lc: LogContext, db: PostgresDB, cvrID: string) {
     this.#lc = lc;
@@ -154,7 +161,15 @@ export class PostgresCVRStore implements CVRStore {
         lastActive: new Date(0),
         deleted: false,
       };
-      this.#writes.add(tx => tx`INSERT INTO cvr.instances ${tx(change)}`);
+      console.log(
+        'Schedule load, INSERT INTO cvr.instances',
+        {size: this.#writes.size, instanceCounter: this.instanceCounter},
+        change,
+      );
+      this.#writes.add(tx => {
+        console.log('load, INSERT INTO cvr.instances', change);
+        return tx`INSERT INTO cvr.instances ${tx(change)}`;
+      });
     }
 
     for (const value of clientsRows) {
@@ -282,14 +297,18 @@ export class PostgresCVRStore implements CVRStore {
     this.#pendingRowRecordPuts.set(row.id, [row, w]);
   }
 
-  putLastActive(lastActive: {epochMillis: number}): void {
-    const d = new Date(lastActive.epochMillis);
-    this.#writes.add(
-      tx =>
-        tx`UPDATE cvr.instances SET ${tx({
-          lastActive: d,
-        })} WHERE "clientGroupID" = ${this.#id}`,
-    );
+  putInstance(version: CVRVersion, lastActive: {epochMillis: number}): void {
+    const change: InstancesRow = {
+      clientGroupID: this.#id,
+      version: versionString(version),
+      lastActive: new Date(lastActive.epochMillis),
+      deleted: false,
+    };
+    this.#writes.add(async tx => {
+      await tx`INSERT INTO cvr.instances ${tx(
+        change,
+      )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
+    });
   }
 
   putLastActiveIndex(_cvrID: string, _newMillis: number): void {
@@ -348,7 +367,9 @@ export class PostgresCVRStore implements CVRStore {
           clientAST: query.ast,
           patchVersion: null,
           transformationHash: query.transformationHash ?? null,
-          transformationVersion: null,
+          transformationVersion: maybeVersionString(
+            query.transformationVersion,
+          ),
           internal: true,
           deleted: false, // put vs del "got" query
         }
@@ -382,12 +403,12 @@ export class PostgresCVRStore implements CVRStore {
       patchVersion: versionString(client.patchVersion),
       deleted: false,
     };
-    this.#writes.add(
-      tx => tx`
-      INSERT INTO cvr.clients ${tx(change)}
+    this.#writes.add(tx => {
+      console.log('putClient, INSERT INTO cvr.clients', change);
+      return tx`INSERT INTO cvr.clients ${tx(change)}
       ON CONFLICT ("clientGroupID", "clientID")
-      DO UPDATE SET ${tx(change)}`,
-    );
+      DO UPDATE SET ${tx({patchVersion: change.patchVersion})}`;
+    });
   }
 
   putClientPatch(
@@ -401,12 +422,13 @@ export class PostgresCVRStore implements CVRStore {
       patchVersion: versionString(newVersion),
       deleted: clientPatch.op === 'del',
     };
-    this.#writes.add(
-      tx => tx`
-      INSERT INTO cvr.clients ${tx(change)}
+    // TODO(arv): We do not need both putClient and putClientPatch.
+    this.#writes.add(tx => {
+      console.log('putClientPatch, INSERT INTO cvr.clients', change);
+      return tx`INSERT INTO cvr.clients ${tx(change)}
       ON CONFLICT ("clientGroupID", "clientID")
-      DO UPDATE SET ${tx(change)}`,
-    );
+      DO UPDATE SET ${tx(change)}`;
+    });
   }
 
   putDesiredQueryPatch(
@@ -439,18 +461,6 @@ export class PostgresCVRStore implements CVRStore {
         } AND "clientID" = ${client.id} AND "queryHash" = ${
           query.id
         } AND "patchVersion" = ${versionString(oldPutVersion)}`,
-    );
-  }
-
-  putVersion(version: CVRVersion): void {
-    const change: Pick<InstancesRow, 'version'> = {
-      version: versionString(version),
-    };
-    this.#writes.add(
-      tx =>
-        tx`UPDATE cvr.instances SET ${tx(change)} WHERE "clientGroupID" = ${
-          this.#id
-        }`,
     );
   }
 
@@ -528,8 +538,29 @@ export class PostgresCVRStore implements CVRStore {
   }
 
   async flush(): Promise<void> {
-    await this.#db.begin(tx => Array.from(this.#writes, write => write(tx)));
+    console.log('flush', this.#writes.size, this.instanceCounter);
 
+    await this.#db.begin(async tx => {
+      // Ensure we update instances first since we depend on it existing in the other tables.
+      // if (this.#lastActive !== -1) {
+      //   assert(this.#version);
+      //   const change: InstancesRow = {
+      //     clientGroupID: this.#id,
+      //     version: versionString(this.#version),
+      //     lastActive: new Date(this.#lastActive),
+      //     deleted: false,
+      //   };
+      //   await tx`INSERT INTO cvr.instances ${tx(
+      //     change,
+      //   )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
+      // }
+
+      for (const write of this.#writes) {
+        await write(tx);
+      }
+    });
+
+    this.#writes.clear();
     this.#pendingRowPatchDeletes.clear();
     this.#pendingQueryPatchDeletes.clear();
   }

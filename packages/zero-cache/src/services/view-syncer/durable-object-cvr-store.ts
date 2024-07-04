@@ -156,8 +156,13 @@ export class DurableObjectCVRStore implements CVRStore {
     void this.#writes.put(this.#paths.rowPatch(patchVersion, id), rowPatch);
   }
 
-  putLastActive(lastActive: {epochMillis: number}): void {
+  #putLastActive(lastActive: {epochMillis: number}): void {
     void this.#writes.put(this.#paths.lastActive(), lastActive);
+  }
+
+  putInstance(version: CVRVersion, lastActive: {epochMillis: number}): void {
+    this.putVersion(version);
+    this.#putLastActive(lastActive);
   }
 
   putLastActiveIndex(cvrID: string, newMillis: number): void {

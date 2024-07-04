@@ -1,10 +1,10 @@
-import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
-import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {handleConnection, Connection} from './connection.js';
-import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
 import websocket, {WebSocket} from '@fastify/websocket';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
 import type {DurableStorage} from '../storage/durable-storage.js';
+import {Connection, handleConnection} from './connection.js';
+import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
+import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
 export class ServiceRunnerDO {
   readonly #lc: LogContext;
