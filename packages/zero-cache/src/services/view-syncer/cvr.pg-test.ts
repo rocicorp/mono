@@ -787,7 +787,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
       ],
       queries: [
@@ -795,11 +795,11 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           queryHash: 'oneHash',
           clientAST: {table: 'issues'},
-          transformationHash: null, // TODO
+          transformationHash: null,
           transformationVersion: null,
           patchVersion: null,
           internal: null,
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
@@ -828,7 +828,7 @@ describe('view-syncer/cvr', () => {
           clientID: 'fooClient',
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
       ],
       rows: [
@@ -1092,7 +1092,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
+          deleted: null,
           patchVersion: '1a9:01',
         },
       ],
@@ -1138,7 +1138,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
+          deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
         },
@@ -1215,7 +1215,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
       ],
       queries: [
@@ -1227,7 +1227,7 @@ describe('view-syncer/cvr', () => {
           transformationVersion: '1aa',
           patchVersion: '1aa:01',
           internal: null,
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1256,7 +1256,7 @@ describe('view-syncer/cvr', () => {
           clientID: 'fooClient',
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
       ],
       rows: [
@@ -1307,81 +1307,6 @@ describe('view-syncer/cvr', () => {
         },
       ],
     };
-    // const doInitialState = {
-    //   [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
-    //     id: ROW_ID1,
-    //     patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    //     queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
-    //     rowVersion: '03',
-    //   } satisfies RowRecord,
-    //   [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-    //     patchVersion: {stateVersion: '1a0'},
-    //     id: ROW_ID2,
-    //     rowVersion: '03',
-    //     queriedColumns: {id: ['twoHash']},
-    //   } satisfies RowRecord,
-    //   [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
-    //     id: ROW_ID3,
-    //     patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    //     queriedColumns: {id: ['oneHash']},
-    //     rowVersion: '09',
-    //   } satisfies RowRecord,
-    //   [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-    //     patchVersion: {stateVersion: '189'},
-    //     id: IN_OLD_PATCH_ROW_ID,
-    //     rowVersion: '03',
-    //     queriedColumns: null,
-    //   } satisfies RowRecord,
-    //   [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
-    //     patchVersion: {stateVersion: '1ba'},
-    //     id: DELETED_ROW_ID,
-    //     rowVersion: '03',
-    //     queriedColumns: null,
-    //   } satisfies RowRecord,
-    //   [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
-    //     type: 'query',
-    //     op: 'del', // Already in CVRs from "189"
-    //     id: 'already-deleted',
-    //   } satisfies QueryPatch,
-    //   [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
-    //     type: 'query',
-    //     op: 'del',
-    //     id: 'catchup-delete',
-    //   } satisfies QueryPatch,
-    //   [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-    //     type: 'row',
-    //     op: 'del', // Already in CVRs from "189"
-    //     id: IN_OLD_PATCH_ROW_ID,
-    //   } satisfies RowPatch,
-    //   [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
-    //     type: 'row',
-    //     op: 'del', // Needs to be picked up by catchup.
-    //     id: DELETED_ROW_ID,
-    //   } satisfies RowPatch,
-    //   [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
-    //     type: 'row',
-    //     op: 'put',
-    //     id: ROW_ID1,
-    //     rowVersion: '03',
-    //     columns: ['id', 'name'],
-    //   } satisfies RowPatch,
-    //   [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
-    //     type: 'row',
-    //     op: 'put',
-    //     id: ROW_ID2,
-    //     rowVersion: '03',
-    //     columns: ['id'],
-    //   } satisfies RowPatch,
-    //   [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
-    //     type: 'row',
-    //     op: 'put',
-    //     id: ROW_ID3,
-    //     rowVersion: '09',
-    //     columns: ['id'],
-    //   } satisfies RowPatch,
-    //   ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
-    // };
-
     await setInitialState(db, initialState);
 
     const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
@@ -1559,7 +1484,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
+          deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
         },
@@ -1633,7 +1558,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
       ],
       queries: [
@@ -1641,21 +1566,21 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           queryHash: 'oneHash',
           clientAST: {table: 'issues'},
-          transformationHash: 'oneServerHash',
+          transformationHash: 'serverOneHash',
           transformationVersion: '1aa',
           patchVersion: '1aa:01',
           internal: null,
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
           queryHash: 'twoHash',
           clientAST: {table: 'issues'},
-          transformationHash: 'twoServerHash',
+          transformationHash: 'serverTwoHash',
           transformationVersion: '1aa',
           patchVersion: '1aa:01',
           internal: null,
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1684,14 +1609,14 @@ describe('view-syncer/cvr', () => {
           clientID: 'fooClient',
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
           queryHash: 'twoHash',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
         },
       ],
       rows: [
@@ -1752,8 +1677,8 @@ describe('view-syncer/cvr', () => {
     updater.trackQueries(
       lc,
       [
-        {id: 'oneHash', transformationHash: 'updatedOneServerHash'},
-        {id: 'twoHash', transformationHash: 'updatedTwoServerHash'},
+        {id: 'oneHash', transformationHash: 'updatedServerOneHash'},
+        {id: 'twoHash', transformationHash: 'updatedServerTwoHash'},
       ],
       [],
       {stateVersion: '189'},
@@ -1891,7 +1816,7 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
-          transformationHash: 'updatedOneServerHash',
+          transformationHash: 'updatedServerOneHash',
           transformationVersion: newVersion,
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
         },
@@ -1899,7 +1824,7 @@ describe('view-syncer/cvr', () => {
           id: 'twoHash',
           ast: {table: 'issues'},
           desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
-          transformationHash: 'updatedTwoServerHash',
+          transformationHash: 'updatedServerTwoHash',
           transformationVersion: newVersion,
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
         },
@@ -1955,7 +1880,7 @@ describe('view-syncer/cvr', () => {
           internal: null,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
-          transformationHash: 'updatedOneServerHash',
+          transformationHash: 'updatedServerOneHash',
           transformationVersion: '1ba:01',
         },
         {
@@ -1967,7 +1892,7 @@ describe('view-syncer/cvr', () => {
           internal: null,
           patchVersion: '1aa:01',
           queryHash: 'twoHash',
-          transformationHash: 'updatedTwoServerHash',
+          transformationHash: 'updatedServerTwoHash',
           transformationVersion: '1ba:01',
         },
       ],
@@ -1975,14 +1900,14 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
+          deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
+          deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'twoHash',
         },
@@ -2058,7 +1983,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           queryHash: 'oneHash',
           clientAST: {table: 'issues'},
-          transformationHash: 'oneServerHash',
+          transformationHash: 'serverOneHash',
           transformationVersion: '1aa',
           patchVersion: '1aa:01',
           internal: null,
@@ -2136,96 +2061,6 @@ describe('view-syncer/cvr', () => {
     };
 
     await setInitialState(db, initialState);
-
-    // const doinitialState = {
-    // ['/vs/cvr/abc123/m/q/oneHash']: {
-    //   id: 'oneHash',
-    //   ast: {table: 'issues'},
-    //   desiredBy: {},
-    //   transformationHash: 'oneServerHash',
-    //   transformationVersion: {stateVersion: '1aa'},
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    // } satisfies QueryRecord,
-    // ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
-    // ['/vs/cvr/abc123/p/m/1aa:01/q/oneHash']: {
-    //   type: 'query',
-    //   op: 'put',
-    //   id: 'oneHash',
-    // } satisfies QueryPatch,
-    // [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-    //   patchVersion: {stateVersion: '189'},
-    //   id: IN_OLD_PATCH_ROW_ID,
-    //   rowVersion: '03',
-    //   queriedColumns: null,
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
-    //   patchVersion: {stateVersion: '19z'},
-    //   id: DELETED_ROW_ID,
-    //   rowVersion: '03',
-    //   queriedColumns: null,
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
-    //   id: ROW_ID1,
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    //   queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
-    //   rowVersion: '03',
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-    //   patchVersion: {stateVersion: '1ba'},
-    //   id: ROW_ID2,
-    //   rowVersion: '03',
-    //   queriedColumns: {id: ['twoHash']},
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
-    //   id: ROW_ID3,
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    //   queriedColumns: {id: ['oneHash']},
-    //   rowVersion: '09',
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
-    //   type: 'query',
-    //   op: 'del', // Already in CVRs from "189"
-    //   id: 'already-deleted',
-    // } satisfies QueryPatch,
-    // [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
-    //   type: 'query',
-    //   op: 'del',
-    //   id: 'catchup-delete',
-    // // } satisfies QueryPatch,
-    // [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-    //   type: 'row',
-    //   op: 'del', // Already in CVRs from "189"
-    //   id: IN_OLD_PATCH_ROW_ID,
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/19z/r/${DELETED_ROW_HASH}`]: {
-    //   type: 'row',
-    //   op: 'del', // Needs to be picked up by catchup.
-    //   id: DELETED_ROW_ID,
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
-    //   type: 'row',
-    //   op: 'put',
-    //   id: ROW_ID1,
-    //   rowVersion: '03',
-    //   columns: ['id', 'name'],
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1ba/r/${ROW_HASH2}`]: {
-    //   type: 'row',
-    //   op: 'put',
-    //   id: ROW_ID2,
-    //   rowVersion: '03',
-    //   columns: ['id'],
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
-    //   type: 'row',
-    //   op: 'put',
-    //   id: ROW_ID3,
-    //   rowVersion: '09',
-    //   columns: ['id'],
-    // } satisfies RowPatch,
-    // };
-
-    // await initStorage(storage, initialState);
 
     const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
@@ -2324,7 +2159,7 @@ describe('view-syncer/cvr', () => {
           internal: null,
           patchVersion: '1ba:01',
           queryHash: 'oneHash',
-          transformationHash: 'oneServerHash',
+          transformationHash: 'serverOneHash',
           transformationVersion: '1aa',
         },
       ],
@@ -2406,21 +2241,21 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           queryHash: 'oneHash',
           clientAST: {table: 'issues'},
-          transformationHash: 'oneServerHash',
+          transformationHash: 'serverOneHash',
           transformationVersion: '1aa',
           patchVersion: '1aa:01',
           internal: null,
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
           queryHash: 'twoHash',
           clientAST: {table: 'issues'},
-          transformationHash: 'twoServerHash',
+          transformationHash: 'serverTwoHash',
           transformationVersion: '1aa',
           patchVersion: '1aa:01',
           internal: null,
-          deleted: false,
+          deleted: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2449,7 +2284,14 @@ describe('view-syncer/cvr', () => {
           clientID: 'fooClient',
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
-          deleted: false,
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'twoHash',
+          patchVersion: '1a9:01',
+          deleted: null,
         },
       ],
       rows: [
@@ -2503,102 +2345,6 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    // const doIinitialState = {
-    // ['/vs/cvr/abc123/m/version']: {
-    //   stateVersion: '1ba',
-    // } satisfies CVRVersion,
-    // ['/vs/cvr/abc123/m/lastActive']: {
-    //   epochMillis: Date.UTC(2024, 3, 23),
-    // } satisfies LastActive,
-    // ['/vs/cvr/abc123/m/q/oneHash']: {
-    //   id: 'oneHash',
-    //   ast: {table: 'issues'},
-    //   desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
-    //   transformationHash: 'oneServerHash',
-    //   transformationVersion: {stateVersion: '1aa'},
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    // } satisfies QueryRecord,
-    // ['/vs/cvr/abc123/m/q/twoHash']: {
-    //   id: 'twoHash',
-    //   ast: {table: 'issues'},
-    //   transformationHash: 'twoServerHash',
-    //   transformationVersion: {stateVersion: '1aa'},
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    // } satisfies QueryRecord,
-    // [`/vs/cvr/abc123/p/m/189/q/already-deleted`]: {
-    //   type: 'query',
-    //   op: 'del', // Already in CVRs from "189"
-    //   id: 'already-deleted',
-    // } satisfies QueryPatch,
-    // [`/vs/cvr/abc123/p/m/19z/q/catchup-delete`]: {
-    //   type: 'query',
-    //   op: 'del',
-    //   id: 'catchup-delete',
-    // } satisfies QueryPatch,
-    // [`/vs/cvr/abc123/d/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-    //   patchVersion: {stateVersion: '189'},
-    //   id: IN_OLD_PATCH_ROW_ID,
-    //   rowVersion: '03',
-    //   queriedColumns: null,
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${DELETED_ROW_HASH}`]: {
-    //   patchVersion: {stateVersion: '1ba'},
-    //   id: DELETED_ROW_ID,
-    //   rowVersion: '03',
-    //   queriedColumns: null,
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${ROW_HASH1}`]: {
-    //   id: ROW_ID1,
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    //   queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
-    //   rowVersion: '03',
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${ROW_HASH2}`]: {
-    //   patchVersion: {stateVersion: '1a0'},
-    //   id: ROW_ID2,
-    //   rowVersion: '03',
-    //   queriedColumns: {id: ['twoHash']},
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/d/r/${ROW_HASH3}`]: {
-    //   id: ROW_ID3,
-    //   patchVersion: {stateVersion: '1aa', minorVersion: 1},
-    //   queriedColumns: {id: ['oneHash']},
-    //   rowVersion: '09',
-    // } satisfies RowRecord,
-    // [`/vs/cvr/abc123/p/d/189/r/${IN_OLD_PATCH_ROW_HASH}`]: {
-    //   type: 'row',
-    //   op: 'del', // Already in CVRs from "189"
-    //   id: IN_OLD_PATCH_ROW_ID,
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1ba/r/${DELETED_ROW_HASH}`]: {
-    //   type: 'row',
-    //   op: 'del', // Needs to be picked up by catchup.
-    //   id: DELETED_ROW_ID,
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH1}`]: {
-    //   type: 'row',
-    //   op: 'put',
-    //   id: ROW_ID1,
-    //   rowVersion: '03',
-    //   columns: ['id', 'name'],
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1a0/r/${ROW_HASH2}`]: {
-    //   type: 'row',
-    //   op: 'put',
-    //   id: ROW_ID2,
-    //   rowVersion: '03',
-    //   columns: ['id'],
-    // } satisfies RowPatch,
-    // [`/vs/cvr/abc123/p/d/1aa:01/r/${ROW_HASH3}`]: {
-    //   type: 'row',
-    //   op: 'put',
-    //   id: ROW_ID3,
-    //   rowVersion: '09',
-    //   columns: ['id'],
-    // } satisfies RowPatch,
-    // ['/vs/lastActive/2024-04-23/abc123']: {id: 'abc123'} satisfies CvrID,
-    // };
-
     const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     expect(cvr).toMatchInlineSnapshot(`
@@ -2607,6 +2353,7 @@ describe('view-syncer/cvr', () => {
           "fooClient": {
             "desiredQueryIDs": [
               "oneHash",
+              "twoHash",
             ],
             "id": "fooClient",
             "patchVersion": {
@@ -2635,7 +2382,7 @@ describe('view-syncer/cvr', () => {
               "minorVersion": 1,
               "stateVersion": "1aa",
             },
-            "transformationHash": "oneServerHash",
+            "transformationHash": "serverOneHash",
             "transformationVersion": {
               "stateVersion": "1aa",
             },
@@ -2644,13 +2391,18 @@ describe('view-syncer/cvr', () => {
             "ast": {
               "table": "issues",
             },
-            "desiredBy": {},
+            "desiredBy": {
+              "fooClient": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+            },
             "id": "twoHash",
             "patchVersion": {
               "minorVersion": 1,
               "stateVersion": "1aa",
             },
-            "transformationHash": "twoServerHash",
+            "transformationHash": "serverTwoHash",
             "transformationVersion": {
               "stateVersion": "1aa",
             },
@@ -2666,8 +2418,8 @@ describe('view-syncer/cvr', () => {
     updater.trackQueries(
       lc,
       [
-        {id: 'oneHash', transformationHash: 'oneServerHash'},
-        {id: 'twoHash', transformationHash: 'twoServerHash'},
+        {id: 'oneHash', transformationHash: 'serverOneHash'},
+        {id: 'twoHash', transformationHash: 'serverTwoHash'},
       ],
       [],
       {stateVersion: '189'},

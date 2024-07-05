@@ -92,9 +92,7 @@ export class PostgresCVRStore implements CVRStore {
 
   readonly #writes: Set<(tx: PostgresTransaction) => Promise<unknown>> =
     new Set();
-  readonly #pendingQueryPatchDeletes: Map<CVRVersion, Set<string>> =
-    new CustomKeyMap(versionString);
-  readonly #pendingQueryPatchDeletes2 = new CustomKeySet<
+  readonly #pendingQueryPatchDeletes = new CustomKeySet<
     [{id: string}, CVRVersion]
   >(([patchRecord, version]) => patchRecord.id + '-' + versionString(version));
   readonly #pendingRowRecordPuts = new CustomKeyMap<
@@ -135,7 +133,7 @@ export class PostgresCVRStore implements CVRStore {
 
         const queryRows = await tx<
           QueryRow[]
-        >`SELECT * FROM cvr.queries WHERE "clientGroupID" = ${id} AND NOT (deleted = true)`;
+        >`SELECT * FROM cvr.queries WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`;
 
         const desiresRows = await tx<
           DesiresRow[]
@@ -248,9 +246,7 @@ export class PostgresCVRStore implements CVRStore {
     patchRecord: {id: string},
     version: CVRVersion,
   ): boolean {
-    return this.#pendingQueryPatchDeletes2.has([patchRecord, version]);
-    const set = this.#pendingQueryPatchDeletes.get(version);
-    return set !== undefined && set.has(patchRecord.id);
+    return this.#pendingQueryPatchDeletes.has([patchRecord, version]);
   }
 
   isRowPatchPendingDelete(rowPatch: RowPatch, version: CVRVersion): boolean {
@@ -339,10 +335,10 @@ export class PostgresCVRStore implements CVRStore {
     queryPatch: QueryPatch,
     oldQueryPatchVersionToDelete: CVRVersion | undefined,
   ): void {
-    this.#pendingQueryPatchDeletes2.delete([queryPatch, version]);
+    this.#pendingQueryPatchDeletes.delete([queryPatch, version]);
 
     if (oldQueryPatchVersionToDelete) {
-      this.#pendingQueryPatchDeletes2.add([
+      this.#pendingQueryPatchDeletes.add([
         queryPatch,
         oldQueryPatchVersionToDelete,
       ]);
@@ -511,19 +507,21 @@ export class PostgresCVRStore implements CVRStore {
       DesiresRow[]
     >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${
       this.#id
-    } AND "patchVersion" >= ${version}`;
+    } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
     // const allClients = await sql<ClientsRow[]>`SELECT * FROM cvr.clients`;
     const clientRows = await sql<
       ClientsRow[]
     >`SELECT * FROM cvr.clients WHERE "clientGroupID" = ${
       this.#id
-    } AND "patchVersion" >= ${version}`;
+    } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
     console.log(version, {allQueries, allDesires});
 
     const queryRows = await sql<
       Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
     >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
-      WHERE "clientGroupID" = ${this.#id} AND "patchVersion" >= ${version}`;
+      WHERE "clientGroupID" = ${
+        this.#id
+      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
     // AND cvr.queries."transformationVersion" IS NULL`;
     const rv: [MetadataPatch, CVRVersion][] = [];
     for (const row of queryRows) {
@@ -572,20 +570,6 @@ export class PostgresCVRStore implements CVRStore {
     console.log('flush', this.#writes.size, this.instanceCounter);
 
     await this.#db.begin(async tx => {
-      // Ensure we update instances first since we depend on it existing in the other tables.
-      // if (this.#lastActive !== -1) {
-      //   assert(this.#version);
-      //   const change: InstancesRow = {
-      //     clientGroupID: this.#id,
-      //     version: versionString(this.#version),
-      //     lastActive: new Date(this.#lastActive),
-      //     deleted: false,
-      //   };
-      //   await tx`INSERT INTO cvr.instances ${tx(
-      //     change,
-      //   )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
-      // }
-
       for (const write of this.#writes) {
         await write(tx);
       }

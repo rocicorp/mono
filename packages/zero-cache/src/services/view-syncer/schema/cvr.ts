@@ -32,7 +32,7 @@ export type ClientsRow = {
   clientGroupID: string;
   clientID: string;
   patchVersion: string;
-  deleted: boolean;
+  deleted: boolean | null;
 };
 
 const CREATE_CVR_CLIENTS_TABLE = `
@@ -40,7 +40,7 @@ CREATE TABLE cvr.clients (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
   "patchVersion"       TEXT NOT NULL,  -- Version at which added or deleted
-  deleted              BOOL NOT NULL,  -- put vs del client patch
+  deleted              BOOL,           -- put vs del client patch
 
   PRIMARY KEY ("clientGroupID", "clientID"),
 
@@ -91,7 +91,7 @@ export type DesiresRow = {
   clientID: string;
   queryHash: string;
   patchVersion: string;
-  deleted: boolean;
+  deleted: boolean | null;
 };
 
 const CREATE_CVR_DESIRES_TABLE = `
@@ -100,7 +100,7 @@ CREATE TABLE cvr.desires (
   "clientID"           TEXT,
   "queryHash"          TEXT,
   "patchVersion"       TEXT NOT NULL,
-  "deleted"            BOOL NOT NULL,  -- put vs del "desired" query
+  "deleted"            BOOL,  -- put vs del "desired" query
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 
