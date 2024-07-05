@@ -1,7 +1,6 @@
 import websocket, {WebSocket} from '@fastify/websocket';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
-import type {DurableStorage} from '../storage/durable-storage.js';
 import {Connection, handleConnection} from './connection.js';
 import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
@@ -12,17 +11,12 @@ export class ServiceRunnerDO {
   readonly #clientConnections = new Map<string, Connection>();
   #fastify: FastifyInstance;
 
-  constructor(
-    logSink: LogSink,
-    logLevel: LogLevel,
-    state: DurableStorage,
-    env: ServiceRunnerEnv,
-  ) {
+  constructor(logSink: LogSink, logLevel: LogLevel, env: ServiceRunnerEnv) {
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ServiceRunnerDO',
     );
-    this.#serviceRunner = new ServiceRunner(lc, state, env, false);
+    this.#serviceRunner = new ServiceRunner(lc, env, false);
     this.#lc = lc;
     this.#fastify = Fastify();
   }

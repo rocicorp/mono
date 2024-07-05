@@ -3,7 +3,6 @@ import postgres from 'postgres';
 import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import WebSocket from 'ws';
-import type {DurableStorage} from '../storage/durable-storage.js';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
@@ -62,12 +61,7 @@ export class ServiceRunner
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
-  constructor(
-    lc: LogContext,
-    _storage: DurableStorage,
-    env: ServiceRunnerEnv,
-    runReplicator: boolean,
-  ) {
+  constructor(lc: LogContext, env: ServiceRunnerEnv, runReplicator: boolean) {
     this.#lc = lc;
     this.#env = env;
     // Connections are capped to stay within the DO limit of 6 TCP connections.

@@ -111,6 +111,7 @@ CREATE TABLE cvr.desires (
   CONSTRAINT fk_desires_query
     FOREIGN KEY("clientGroupID", "queryHash")
     REFERENCES cvr.queries("clientGroupID", "queryHash")
+    ON DELETE CASCADE
 );
 
 -- For catchup patches.

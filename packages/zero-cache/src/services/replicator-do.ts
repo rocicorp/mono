@@ -1,7 +1,6 @@
 import websocket, {WebSocket} from '@fastify/websocket';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
-import type {DurableStorage} from '../storage/durable-storage.js';
 import {streamOut} from '../types/streams.js';
 import {
   REGISTER_FILTERS_PATTERN,
@@ -16,18 +15,13 @@ export class ReplicatorDO {
   readonly #serviceRunner: ServiceRunner;
   #fastify: FastifyInstance;
 
-  constructor(
-    logSink: LogSink,
-    logLevel: LogLevel,
-    storage: DurableStorage,
-    env: ServiceRunnerEnv,
-  ) {
+  constructor(logSink: LogSink, logLevel: LogLevel, env: ServiceRunnerEnv) {
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ReplicatorDO',
     );
     this.#lc = lc;
-    this.#serviceRunner = new ServiceRunner(lc, storage, env, true);
+    this.#serviceRunner = new ServiceRunner(lc, env, true);
     this.#fastify = Fastify();
   }
 

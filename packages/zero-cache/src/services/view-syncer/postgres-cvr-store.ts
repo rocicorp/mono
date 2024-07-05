@@ -160,15 +160,7 @@ export class PostgresCVRStore implements CVRStore {
         lastActive: new Date(0),
         deleted: false,
       };
-      console.log(
-        'Schedule load, INSERT INTO cvr.instances',
-        {size: this.#writes.size, instanceCounter: this.instanceCounter},
-        change,
-      );
-      this.#writes.add(tx => {
-        console.log('load, INSERT INTO cvr.instances', change);
-        return tx`INSERT INTO cvr.instances ${tx(change)}`;
-      });
+      this.#writes.add(tx => tx`INSERT INTO cvr.instances ${tx(change)}`);
     }
 
     for (const value of clientsRows) {
@@ -389,7 +381,13 @@ export class PostgresCVRStore implements CVRStore {
     );
   }
 
-  delQuery(_query: {id: string}): void {
+  delQuery(query: {id: string}): void {
+    this.#writes.add(
+      tx =>
+        tx`DELETE FROM cvr.queries WHERE "clientGroupID" = ${
+          this.#id
+        } AND "queryHash" = ${query.id}`,
+    );
     // No op here. queries and query patches are not two distinct entities in the Postgres schema.
   }
 
@@ -400,12 +398,11 @@ export class PostgresCVRStore implements CVRStore {
       patchVersion: versionString(client.patchVersion),
       deleted: false,
     };
-    this.#writes.add(tx => {
-      console.log('putClient, INSERT INTO cvr.clients', change);
-      return tx`INSERT INTO cvr.clients ${tx(change)}
+    this.#writes.add(
+      tx => tx`INSERT INTO cvr.clients ${tx(change)}
       ON CONFLICT ("clientGroupID", "clientID")
-      DO UPDATE SET ${tx({patchVersion: change.patchVersion})}`;
-    });
+      DO UPDATE SET ${tx({patchVersion: change.patchVersion})}`,
+    );
   }
 
   putClientPatch(
@@ -420,12 +417,11 @@ export class PostgresCVRStore implements CVRStore {
       deleted: clientPatch.op === 'del',
     };
     // TODO(arv): We do not need both putClient and putClientPatch.
-    this.#writes.add(tx => {
-      console.log('putClientPatch, INSERT INTO cvr.clients', change);
-      return tx`INSERT INTO cvr.clients ${tx(change)}
+    this.#writes.add(
+      tx => tx`INSERT INTO cvr.clients ${tx(change)}
       ON CONFLICT ("clientGroupID", "clientID")
-      DO UPDATE SET ${tx(change)}`;
-    });
+      DO UPDATE SET ${tx(change)}`,
+    );
   }
 
   putDesiredQueryPatch(
@@ -502,27 +498,23 @@ export class PostgresCVRStore implements CVRStore {
     const sql = this.#db;
     const version = versionString(startingVersion);
 
-    const allQueries = await sql<QueryRow[]>`SELECT * FROM cvr.queries`;
     const allDesires = await sql<
       DesiresRow[]
     >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${
       this.#id
     } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
-    // const allClients = await sql<ClientsRow[]>`SELECT * FROM cvr.clients`;
     const clientRows = await sql<
       ClientsRow[]
     >`SELECT * FROM cvr.clients WHERE "clientGroupID" = ${
       this.#id
     } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
-    console.log(version, {allQueries, allDesires});
-
     const queryRows = await sql<
       Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
     >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
       WHERE "clientGroupID" = ${
         this.#id
       } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
-    // AND cvr.queries."transformationVersion" IS NULL`;
+
     const rv: [MetadataPatch, CVRVersion][] = [];
     for (const row of queryRows) {
       const queryPatch: QueryPatch = {
@@ -567,8 +559,6 @@ export class PostgresCVRStore implements CVRStore {
   }
 
   async flush(): Promise<void> {
-    console.log('flush', this.#writes.size, this.instanceCounter);
-
     await this.#db.begin(async tx => {
       for (const write of this.#writes) {
         await write(tx);

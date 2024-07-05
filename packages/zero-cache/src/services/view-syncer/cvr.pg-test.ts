@@ -2150,18 +2150,6 @@ describe('view-syncer/cvr', () => {
           transformationHash: null,
           transformationVersion: null,
         },
-        {
-          clientAST: {
-            table: 'issues',
-          },
-          clientGroupID: 'abc123',
-          deleted: true,
-          internal: null,
-          patchVersion: '1ba:01',
-          queryHash: 'oneHash',
-          transformationHash: 'serverOneHash',
-          transformationVersion: '1aa',
-        },
       ],
       desires: [],
       rows: [

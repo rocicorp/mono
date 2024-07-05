@@ -59,7 +59,6 @@ describe('view-syncer/service', () => {
   let db: PostgresDB;
   const lc = createSilentLogContext();
 
-  // let storage: FakeDurableObjectStorage;
   let watcher: MockInvalidationWatcher;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
@@ -111,7 +110,6 @@ describe('view-syncer/service', () => {
     `.simple();
     await setupCVRTables(lc, db);
 
-    // storage = new FakeDurableObjectStorage();
     watcher = new MockInvalidationWatcher();
     vs = new ViewSyncerService(lc, serviceID, watcher, db);
     viewSyncerDone = vs.run();
@@ -124,7 +122,9 @@ describe('view-syncer/service', () => {
         ],
       },
     ]);
-    void pipeToQueue(stream, downstream);
+    void pipeToQueue(stream, downstream).catch(e => {
+      console.error('pipeToQueue error:', e);
+    });
   });
 
   async function pipeToQueue(
