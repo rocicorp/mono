@@ -61,6 +61,9 @@ describe('view-syncer/cvr', () => {
 
       await expectStorage(doStorage, {
         ['/vs/cvr/abc123/m/lastActive']: flushed.lastActive,
+        ['/vs/cvr/abc123/m/version']: {
+          stateVersion: '00',
+        },
         ['/vs/lastActive/2024-04-20/abc123']: {id: 'abc123'} satisfies CvrID,
       });
     });
@@ -573,6 +576,11 @@ describe('view-syncer/cvr', () => {
       ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
+      ['/vs/cvr/abc123/m/c/fooClient']: {
+        id: 'fooClient',
+        desiredQueryIDs: ['oneHash'],
+        patchVersion: {stateVersion: '1a9', minorVersion: 1},
+      } satisfies ClientRecord,
       ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
@@ -659,6 +667,7 @@ describe('view-syncer/cvr', () => {
         'abc123',
       );
       const cvr = await cvrStore.load();
+
       const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa');
 
       updater.trackQueries(
@@ -829,7 +838,7 @@ describe('view-syncer/cvr', () => {
         },
       ]);
 
-      expect(updater.numPendingWrites()).toBe(11);
+      expect(updater.numPendingWrites()).toBe(12);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
@@ -923,6 +932,11 @@ describe('view-syncer/cvr', () => {
       ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
+      ['/vs/cvr/abc123/m/c/fooClient']: {
+        id: 'fooClient',
+        desiredQueryIDs: ['oneHash'],
+        patchVersion: {stateVersion: '1a9', minorVersion: 1},
+      } satisfies ClientRecord,
       ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
@@ -1110,7 +1124,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
-      expect(updater.numPendingWrites()).toBe(11);
+      expect(updater.numPendingWrites()).toBe(12);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
@@ -1207,6 +1221,11 @@ describe('view-syncer/cvr', () => {
       ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
+      ['/vs/cvr/abc123/m/c/fooClient']: {
+        id: 'fooClient',
+        desiredQueryIDs: ['oneHash', 'twoHash'],
+        patchVersion: {stateVersion: '1a9', minorVersion: 1},
+      } satisfies ClientRecord,
       ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},
@@ -1439,7 +1458,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
-      expect(updater.numPendingWrites()).toBe(12);
+      expect(updater.numPendingWrites()).toBe(13);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
@@ -1676,7 +1695,7 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]);
 
-      expect(updater.numPendingWrites()).toBe(10);
+      expect(updater.numPendingWrites()).toBe(11);
 
       // Same last active day (no index change), but different hour.
       const updated = await updater.flush(
@@ -1756,6 +1775,11 @@ describe('view-syncer/cvr', () => {
       ['/vs/cvr/abc123/m/lastActive']: {
         epochMillis: Date.UTC(2024, 3, 23),
       } satisfies LastActive,
+      ['/vs/cvr/abc123/m/c/fooClient']: {
+        id: 'fooClient',
+        desiredQueryIDs: ['oneHash', 'twoHash'],
+        patchVersion: {stateVersion: '1a9', minorVersion: 1},
+      } satisfies ClientRecord,
       ['/vs/cvr/abc123/m/q/oneHash']: {
         id: 'oneHash',
         ast: {table: 'issues'},

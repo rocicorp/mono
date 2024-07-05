@@ -308,132 +308,84 @@ describe('view-syncer/service', () => {
       version: {stateVersion: '1xz'},
     });
 
-    const rowRecords = new Map();
-    // await storage.list({
-    //   prefix: `/vs/cvr/${serviceID}/d/`,
-    // });
-    expect(new Set(rowRecords.values())).toEqual(
-      new Set([
-        {
-          id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1a0',
+    expect(await db`SELECT * FROM cvr.rows`).toEqual([
+      {
+        clientGroupID: '9876',
+        patchVersion: '1xz',
+        queriedColumns: {
+          clientGroupID: ['lmids'],
+          clientID: ['lmids'],
+          lastMutationID: ['lmids'],
         },
-        {
-          id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1ab',
+        rowKey: {
+          clientGroupID: '9876',
+          clientID: 'foo',
         },
-        {
-          id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1ca',
+        rowVersion: '0a',
+        schema: 'zero',
+        table: 'clients',
+      },
+      {
+        clientGroupID: '9876',
+        patchVersion: '1xz',
+        queriedColumns: {
+          big: ['query-hash1'],
+          id: ['query-hash1'],
+          title: ['query-hash1'],
         },
-        {
-          id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            id: ['query-hash1'],
-            title: ['query-hash1'],
-            big: ['query-hash1'],
-          },
-          rowVersion: '1cd',
+        rowKey: {
+          id: '1',
         },
-        {
-          id: {
-            rowKey: {clientGroupID: '9876', clientID: 'foo'},
-            schema: 'zero',
-            table: 'clients',
-          },
-          patchVersion: {stateVersion: '1xz'},
-          queriedColumns: {
-            clientGroupID: ['lmids'],
-            clientID: ['lmids'],
-            lastMutationID: ['lmids'],
-          },
-
-          rowVersion: '0a',
+        rowVersion: '1a0',
+        schema: 'public',
+        table: 'issues',
+      },
+      {
+        clientGroupID: '9876',
+        patchVersion: '1xz',
+        queriedColumns: {
+          big: ['query-hash1'],
+          id: ['query-hash1'],
+          title: ['query-hash1'],
         },
-      ]),
-    );
-
-    const rowPatches = new Map();
-    // await storage.list({
-    //   prefix: `/vs/cvr/${serviceID}/p/d/`,
-    // });
-    expect(rowPatches).toEqual(
-      new Map([
-        [
-          '/vs/cvr/9876/p/d/1xz/r/7flkrz0yskhi5ko0l0lqjccoe',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '4'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1cd',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/2z8i982skum71jkx73g5y2gao',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '2'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1ab',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/1ngjqp2ckvs2ur64mjoacg55',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '1'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1a0',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/e3jqcp8k60hejdhju08414x2z',
-          {
-            columns: ['big', 'id', 'title'],
-            id: {rowKey: {id: '3'}, schema: 'public', table: 'issues'},
-            op: 'put',
-            rowVersion: '1ca',
-            type: 'row',
-          },
-        ],
-        [
-          '/vs/cvr/9876/p/d/1xz/r/7fxlm9v6qwokjvqa9d20cc09v',
-          {
-            columns: ['clientGroupID', 'clientID', 'lastMutationID'],
-            id: {
-              schema: 'zero',
-              table: 'clients',
-              rowKey: {clientGroupID: '9876', clientID: 'foo'},
-            },
-            op: 'put',
-            rowVersion: '0a',
-            type: 'row',
-          },
-        ],
-      ]),
-    );
+        rowKey: {
+          id: '2',
+        },
+        rowVersion: '1ab',
+        schema: 'public',
+        table: 'issues',
+      },
+      {
+        clientGroupID: '9876',
+        patchVersion: '1xz',
+        queriedColumns: {
+          big: ['query-hash1'],
+          id: ['query-hash1'],
+          title: ['query-hash1'],
+        },
+        rowKey: {
+          id: '3',
+        },
+        rowVersion: '1ca',
+        schema: 'public',
+        table: 'issues',
+      },
+      {
+        clientGroupID: '9876',
+        patchVersion: '1xz',
+        queriedColumns: {
+          big: ['query-hash1'],
+          id: ['query-hash1'],
+          title: ['query-hash1'],
+        },
+        rowKey: {
+          id: '4',
+        },
+        rowVersion: '1cd',
+        schema: 'public',
+        table: 'issues',
+      },
+    ]);
   });
 
   test('responds to changeQueriesPatch', async () => {
@@ -482,8 +434,8 @@ describe('view-syncer/service', () => {
         lastMutationIDChanges: {foo: 42},
         desiredQueriesPatches: {
           foo: [
-            {hash: 'query-hash1', op: 'del'},
             {ast: USERS_NAME_QUERY, hash: 'query-hash2', op: 'put'},
+            {hash: 'query-hash1', op: 'del'},
           ],
         },
         entitiesPatch: [

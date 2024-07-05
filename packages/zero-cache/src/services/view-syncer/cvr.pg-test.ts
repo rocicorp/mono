@@ -2601,6 +2601,66 @@ describe('view-syncer/cvr', () => {
 
     const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
+    expect(cvr).toMatchInlineSnapshot(`
+      {
+        "clients": {
+          "fooClient": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "fooClient",
+            "patchVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1a9",
+            },
+          },
+        },
+        "id": "abc123",
+        "lastActive": {
+          "epochMillis": 1713830400000,
+        },
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "desiredBy": {
+              "fooClient": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+            },
+            "id": "oneHash",
+            "patchVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+            "transformationHash": "oneServerHash",
+            "transformationVersion": {
+              "stateVersion": "1aa",
+            },
+          },
+          "twoHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "desiredBy": {},
+            "id": "twoHash",
+            "patchVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+            "transformationHash": "twoServerHash",
+            "transformationVersion": {
+              "stateVersion": "1aa",
+            },
+          },
+        },
+        "version": {
+          "stateVersion": "1ba",
+        },
+      }
+    `);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
     updater.trackQueries(
@@ -2741,14 +2801,60 @@ describe('view-syncer/cvr', () => {
       ] satisfies PatchToVersion[]),
     );
     expect(await updater.generateConfigPatches(lc)).toEqual([
+      // {
+      //   patch: {
+      //     ast: {
+      //       table: 'issues',
+      //     },
+      //     id: 'oneHash',
+      //     op: 'put',
+      //     type: 'query',
+      //   },
+      //   toVersion: {
+      //     minorVersion: 1,
+      //     stateVersion: '1aa',
+      //   },
+      // },
+      // {
+      //   patch: {
+      //     ast: {
+      //       table: 'issues',
+      //     },
+      //     id: 'twoHash',
+      //     op: 'put',
+      //     type: 'query',
+      //   },
+      //   toVersion: {
+      //     minorVersion: 1,
+      //     stateVersion: '1aa',
+      //   },
+      // },
       {
         patch: {type: 'query', op: 'del', id: 'catchup-delete'},
         toVersion: {stateVersion: '19z'},
       },
+      {
+        patch: {type: 'client', op: 'put', id: 'fooClient'},
+        toVersion: {stateVersion: '1a9', minorVersion: 1},
+      },
+      // {
+      //   patch: {
+      //     ast: {
+      //       table: 'issues',
+      //     },
+      //     clientID: 'fooClient',
+      //     id: 'oneHash',
+      //     op: 'put',
+      //     type: 'query',
+      //   },
+      //   toVersion: {
+      //     minorVersion: 1,
+      //     stateVersion: '1a9',
+      //   },
+      // },
     ] satisfies PatchToVersion[]);
 
     // No writes!
-    // TODO(arv): This should be 0 even for postgres (I think)
     expect(updater.numPendingWrites()).toBe(0);
 
     // Only the last active time should change.
