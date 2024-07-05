@@ -43,6 +43,7 @@ After you have visted the local website and the sync / replica tables have popul
 ```
 docker-compose down
 docker volume rm -f docker_pgdata_sync
+docker volume rm -f docker_pgdata_cvr
 docker volume rm -f docker_pgdata_upstream
 ```
 

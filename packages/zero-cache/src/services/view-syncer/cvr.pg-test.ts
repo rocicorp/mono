@@ -74,9 +74,7 @@ describe('view-syncer/cvr', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('cvr_test_db');
-    await db.begin(async tx => {
-      await setupCVRTables(lc, tx);
-    });
+    await db.begin(tx => setupCVRTables(lc, tx));
   });
 
   afterEach(async () => {

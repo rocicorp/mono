@@ -47,8 +47,30 @@ services:
     volumes:
       - pgdata_sync:/var/lib/postgresql/data
       - ./init_sync:/docker-entrypoint-initdb.d
+
+  postgres_cvr:
+    <<: *postgres-common
+    ports:
+      - 6434:5432
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: password
+    command: |
+      postgres 
+      -c wal_level=logical
+      -c max_wal_senders=10 
+      -c max_replication_slots=5 
+      -c hot_standby=on 
+      -c hot_standby_feedback=on
+    volumes:
+      - pgdata_cvr:/var/lib/postgresql/data
+      - ./init_cvr:/docker-entrypoint-initdb.d
+
 volumes:
   pgdata_sync:
+    driver: local
+  pgdata_cvr:
     driver: local
   pgdata_upstream:
     driver: local

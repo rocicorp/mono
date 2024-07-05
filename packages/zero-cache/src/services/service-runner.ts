@@ -30,18 +30,13 @@ import {
 import type {Service} from './service.js';
 import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
 export interface ServiceRunnerEnv {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  UPSTREAM_URI: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  SYNC_REPLICA_URI: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  LOG_LEVEL: LogLevel;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DATADOG_LOGS_API_KEY?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DATADOG_SERVICE_LABEL?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  REPLICATOR_HOST?: string;
+  ['UPSTREAM_URI']: string;
+  ['SYNC_REPLICA_URI']: string;
+  ['SYNC_CVR_URI']: string;
+  ['LOG_LEVEL']: LogLevel;
+  ['DATADOG_LOGS_API_KEY']?: string;
+  ['DATADOG_SERVICE_LABEL']?: string;
+  ['REPLICATOR_HOST']?: string;
 }
 
 const REPLICATOR_ID = 'r1';
@@ -57,7 +52,8 @@ export class ServiceRunner
 
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
-  readonly #db: PostgresDB;
+  readonly #replicaDB: PostgresDB;
+  readonly #cvrDB: PostgresDB;
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
@@ -73,7 +69,11 @@ export class ServiceRunner
       ...postgresTypeConfig(),
       max: 1,
     });
-    this.#db = postgres(this.#env.SYNC_REPLICA_URI, {
+    this.#replicaDB = postgres(this.#env.SYNC_REPLICA_URI, {
+      ...postgresTypeConfig(),
+      max: 4,
+    });
+    this.#cvrDB = postgres(this.#env.SYNC_CVR_URI, {
       ...postgresTypeConfig(),
       max: 4,
     });
@@ -86,7 +86,8 @@ export class ServiceRunner
       this.#getService(
         INVALIDATION_WATCHER_ID,
         this.#invalidationWatchers,
-        id => new InvalidationWatcherService(id, this.#lc, this, this.#db),
+        id =>
+          new InvalidationWatcherService(id, this.#lc, this, this.#replicaDB),
         'InvalidationWatcherService',
       ),
     );
@@ -104,7 +105,7 @@ export class ServiceRunner
             id,
             this.#env.UPSTREAM_URI,
             this.#upstream,
-            this.#db,
+            this.#replicaDB,
           ),
         'ReplicatorService',
       );
@@ -123,7 +124,7 @@ export class ServiceRunner
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
-      id => new ViewSyncerService(this.#lc, id, this, this.#db),
+      id => new ViewSyncerService(this.#lc, id, this, this.#cvrDB),
       'ViewSyncer',
     );
   }
@@ -131,10 +132,15 @@ export class ServiceRunner
   #warmUpConnections() {
     const start = Date.now();
     void Promise.all([
-      // Warm up 1 upstream connection for mutagen, and 4 replica connections for view syncing.
+      // Warm up 1 upstream connection for mutagen,
+      // 3 replica connections for view syncing.
+      // 1 cvr connection for view syncing.
       // Note: These can be much larger when not limited to 6 TCP connections per DO.
       this.#upstream`SELECT 1`.simple().execute(),
-      ...Array.from({length: 4}, () => this.#db`SELECT 1`.simple().execute()),
+      ...Array.from({length: 3}, () =>
+        this.#replicaDB`SELECT 1`.simple().execute(),
+      ),
+      this.#cvrDB`SELECT 1`.simple().execute(),
     ])
       .then(
         () =>
@@ -177,10 +183,13 @@ export class ServiceRunner
 
   async status(): Promise<JSONObject> {
     // One ping to warm up the connections
-    await Promise.all([this.#db`SELECT 1`, this.#upstream`SELECT 1`]);
+    await Promise.all([this.#replicaDB`SELECT 1`, this.#upstream`SELECT 1`]);
 
     const start = Date.now();
-    const replicaPingMs = this.#db`SELECT 1`
+    const replicaPingMs = this.#replicaDB`SELECT 1`
+      .simple()
+      .then(() => Date.now() - start);
+    const cvrPingMs = this.#cvrDB`SELECT 1`
       .simple()
       .then(() => Date.now() - start);
     const upstreamPingMs = this.#upstream`SELECT 1`
@@ -189,6 +198,7 @@ export class ServiceRunner
     return {
       status: 'OK',
       replicaPingMs: await replicaPingMs,
+      cvrPingMs: await cvrPingMs,
       upstreamPingMs: await upstreamPingMs,
     };
   }
