@@ -15,10 +15,10 @@ import type {Entry} from 'zql/src/zql/ivm/multiset.js';
 import type {Source, SourceInternal} from 'zql/src/zql/ivm/source/source.js';
 import type {PipelineEntity, Version} from 'zql/src/zql/ivm/types.js';
 import {genMap, genCached} from 'zql/src/zql/util/iterables.js';
-import type {Statement} from 'better-sqlite3';
-import type {DB} from './internal/db.js';
+import type {Database, Statement} from 'better-sqlite3';
 import type {HoistedCondition} from 'zql/src/zql/ivm/graph/message.js';
 import type {SourceHashIndex} from '../../zql/src/zql/ivm/source/source-hash-index.js';
+import {StatementCache} from './internal/statement-cache.js';
 
 const resolved = Promise.resolve();
 
@@ -29,13 +29,17 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
   readonly #internal: SourceInternal;
   readonly #name: string;
   readonly #materialite: MaterialiteForSourceInternal;
-  readonly #db: DB;
+  readonly #db: Database;
+  // The query udse to get history varies with what downstream operators
+  // request. We keep a cache to avoid preparing each unique request more than
+  // once.
+  readonly #historyStatements: StatementCache;
   readonly #cols: string[];
   #id = id++;
   #pending: Entry<T>[] = [];
 
   constructor(
-    db: DB,
+    db: Database,
     materialite: MaterialiteForSourceInternal,
     name: string,
     columns: string[],
@@ -51,6 +55,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
       destroy: () => {},
     });
     this.#db = db;
+    this.#historyStatements = new StatementCache(db);
 
     this.#internal = {
       onCommitEnqueue: (_v: Version) => {
@@ -79,8 +84,8 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
     const deleteSQL = `DELETE FROM "${name}" WHERE id = ?`;
 
     const insertOrDeleteTx = this.#db.transaction(this.#insertOrDelete);
-    const insertStmt = this.#db.getStmt(insertSQL);
-    const deleteStmt = this.#db.getStmt(deleteSQL);
+    const insertStmt = this.#db.prepare(insertSQL);
+    const deleteStmt = this.#db.prepare(deleteSQL);
 
     this.#cols = sortedCols;
   }
@@ -148,7 +153,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
           : -1,
       );
     const sql = conditionsAndSortToSQL(this.#name, sortedConditions, sort);
-    const stmt = this.#db.getStmt(sql);
+    const stmt = this.#historyStatements.get(sql);
 
     try {
       this.#stream.newDifference(
@@ -166,7 +171,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
         createPullResponseMessage(msg, this.#name, sort),
       );
     } finally {
-      this.#db.returnStmt(sql);
+      this.#historyStatements.return(sql);
     }
   }
 
