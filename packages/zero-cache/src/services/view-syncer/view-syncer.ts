@@ -25,7 +25,7 @@ import {
 import {PostgresCVRStore} from './postgres-cvr-store.js';
 import {QueryHandler, TransformedQuery} from './queries.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
-import {cmpVersions} from './schema/types.js';
+import {cmpVersions, versionString} from './schema/types.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -298,7 +298,9 @@ export class ViewSyncerService implements ViewSyncer, Service {
       .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b));
 
     this.#lc.info?.(
-      `subscribing to invalidations ${minVersion ? 'since ' + minVersion : ''}`,
+      `subscribing to invalidations ${
+        minVersion ? 'since ' + versionString(minVersion) : ''
+      }`,
     );
 
     const watcher = await this.#registry.getInvalidationWatcher();

@@ -439,7 +439,11 @@ export class PostgresCVRStore implements CVRStore {
       patchVersion: versionString(newVersion),
       deleted: queryPatch.op === 'del',
     };
-    this.#writes.add(tx => tx`INSERT INTO cvr.desires ${tx(change)}`);
+    this.#writes.add(
+      tx => tx`INSERT INTO cvr.desires ${tx(change)}
+        ON CONFLICT ("clientGroupID", "clientID", "queryHash")
+        DO UPDATE SET ${tx(change)}`,
+    );
   }
 
   delDesiredQueryPatch(

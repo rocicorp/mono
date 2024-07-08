@@ -52,8 +52,7 @@ export class ServiceRunner
 
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
-  readonly #replicaDB: PostgresDB;
-  readonly #cvrDB: PostgresDB;
+  readonly #db: PostgresDB;
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
@@ -69,11 +68,7 @@ export class ServiceRunner
       ...postgresTypeConfig(),
       max: 1,
     });
-    this.#replicaDB = postgres(this.#env.SYNC_REPLICA_URI, {
-      ...postgresTypeConfig(),
-      max: 4,
-    });
-    this.#cvrDB = postgres(this.#env.SYNC_CVR_URI, {
+    this.#db = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
       max: 4,
     });
@@ -86,8 +81,7 @@ export class ServiceRunner
       this.#getService(
         INVALIDATION_WATCHER_ID,
         this.#invalidationWatchers,
-        id =>
-          new InvalidationWatcherService(id, this.#lc, this, this.#replicaDB),
+        id => new InvalidationWatcherService(id, this.#lc, this, this.#db),
         'InvalidationWatcherService',
       ),
     );
@@ -105,7 +99,7 @@ export class ServiceRunner
             id,
             this.#env.UPSTREAM_URI,
             this.#upstream,
-            this.#replicaDB,
+            this.#db,
           ),
         'ReplicatorService',
       );
@@ -124,7 +118,7 @@ export class ServiceRunner
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
-      id => new ViewSyncerService(this.#lc, id, this, this.#cvrDB),
+      id => new ViewSyncerService(this.#lc, id, this, this.#db),
       'ViewSyncer',
     );
   }
@@ -137,10 +131,7 @@ export class ServiceRunner
       // 1 cvr connection for view syncing.
       // Note: These can be much larger when not limited to 6 TCP connections per DO.
       this.#upstream`SELECT 1`.simple().execute(),
-      ...Array.from({length: 3}, () =>
-        this.#replicaDB`SELECT 1`.simple().execute(),
-      ),
-      this.#cvrDB`SELECT 1`.simple().execute(),
+      ...Array.from({length: 4}, () => this.#db`SELECT 1`.simple().execute()),
     ])
       .then(
         () =>
@@ -183,13 +174,10 @@ export class ServiceRunner
 
   async status(): Promise<JSONObject> {
     // One ping to warm up the connections
-    await Promise.all([this.#replicaDB`SELECT 1`, this.#upstream`SELECT 1`]);
+    await Promise.all([this.#db`SELECT 1`, this.#upstream`SELECT 1`]);
 
     const start = Date.now();
-    const replicaPingMs = this.#replicaDB`SELECT 1`
-      .simple()
-      .then(() => Date.now() - start);
-    const cvrPingMs = this.#cvrDB`SELECT 1`
+    const replicaPingMs = this.#db`SELECT 1`
       .simple()
       .then(() => Date.now() - start);
     const upstreamPingMs = this.#upstream`SELECT 1`
@@ -198,7 +186,6 @@ export class ServiceRunner
     return {
       status: 'OK',
       replicaPingMs: await replicaPingMs,
-      cvrPingMs: await cvrPingMs,
       upstreamPingMs: await upstreamPingMs,
     };
   }
