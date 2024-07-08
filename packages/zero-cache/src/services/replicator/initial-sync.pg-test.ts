@@ -267,9 +267,7 @@ describe('replicator/initial-sync', () => {
 
       await waitForInitialDataSynchronization(
         lc,
-        REPLICA_ID,
         replica,
-        upstream,
         getConnectionURI(upstream),
         SUB,
       );
@@ -277,14 +275,7 @@ describe('replicator/initial-sync', () => {
       await expectTables(replica, c.replicated);
 
       await replica.begin(tx =>
-        handoffPostgresReplication(
-          lc,
-          REPLICA_ID,
-          tx,
-          upstream,
-          getConnectionURI(upstream),
-          SUB,
-        ),
+        handoffPostgresReplication(lc, tx, getConnectionURI(upstream), SUB),
       );
 
       // Subscriptions should have been dropped.
