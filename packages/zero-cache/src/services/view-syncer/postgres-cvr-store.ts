@@ -9,7 +9,6 @@ import {versionToLexi} from 'zero-cache/src/types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from 'zero-cache/src/types/pg.js';
 import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import {astSchema} from 'zero-protocol';
-import type {CVRStore} from './cvr-store.js';
 import type {CVR} from './cvr.js';
 import {
   RowsRow,
@@ -83,7 +82,7 @@ function asQuery(row: QueryRow): QueryRecord {
 
 let instanceCounter = 0;
 
-export class PostgresCVRStore implements CVRStore {
+export class PostgresCVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
   readonly #db: PostgresDB;

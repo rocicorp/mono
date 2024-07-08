@@ -8,7 +8,7 @@ import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
-import type {CVRStore} from './cvr-store.js';
+import type {PostgresCVRStore} from './postgres-cvr-store.js';
 import type {ParsedRow} from './queries.js';
 import {
   ClientQueryRecord,
@@ -71,13 +71,13 @@ export class CVRUpdater {
   protected readonly _orig: CVRSnapshot;
   protected readonly _cvr: CVR;
 
-  protected readonly _cvrStore: CVRStore;
+  protected readonly _cvrStore: PostgresCVRStore;
 
   /**
    * @param cvrStore The CVRStore to use for storage
    * @param cvr The current CVR
    */
-  constructor(cvrStore: CVRStore, cvr: CVRSnapshot) {
+  constructor(cvrStore: PostgresCVRStore, cvr: CVRSnapshot) {
     this._cvrStore = cvrStore;
     this._orig = cvr;
     this._cvr = structuredClone(cvr) as CVR; // mutable deep copy
@@ -317,7 +317,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
    */
-  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, stateVersion: LexiVersion) {
+  constructor(
+    cvrStore: PostgresCVRStore,
+    cvr: CVRSnapshot,
+    stateVersion: LexiVersion,
+  ) {
     super(cvrStore, cvr);
 
     assert(stateVersion >= cvr.version.stateVersion);
