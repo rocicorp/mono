@@ -96,20 +96,6 @@ class ZeroSource {
     }
     for (const diff of changes) {
       if (diff.op === 'del' || diff.op === 'change') {
-        // TODO(arv): This doesn't work as expected. We sometimes evict values
-        // from LazyStore so the value is not going to be the same. If we
-        // really need to do it this way the only way to do this would be to
-        // use the JSON string as a key. But since the storage is KV store we
-        // can do better. The #canonicalSource should not be a "Set" but a
-        // "Map". <-- If we make it a `Map` then we cannot efficiently implement range queries.
-        // We need to be able to perform an in-order iteration over the source for range queries.
-        // Range queries are implemented by creating a source in the desired order.
-        // If joins are involved and the result of the join needs to be ordered,
-        // it is done so by iterating over the source that determines the result order
-        // as the outer loop of the join. If two sources determine order then the leftmost one
-        // in the order-by is the outer loop.
-        // const old = this.#canonicalSource.get(diff.oldValue as Entity);
-        // assert(old, 'oldValue not found in canonical source');
         this.#canonicalSource.delete(diff.oldValue as Entity);
       }
       if (diff.op === 'add' || diff.op === 'change') {
