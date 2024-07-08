@@ -100,7 +100,7 @@ async function copySchemaToSQLite(
 }
 
 async function copyDataToSQLite(
-  sql: postgres.Sql<Record<string, unknown>>,
+  sql: postgres.TransactionSql<Record<string, unknown>>,
   sqliteDb: Database.Database,
 ) {
   const tables = await getPostgresTables(sql);
@@ -149,18 +149,16 @@ async function copyDataToSQLite(
   }
 }
 
-if (argv.length !== 4) {
-  // TODO (mlaw):
-  // Add an option to also create the replication slot and
-  // output the WAL LSN to use for replication.
+if (argv.length !== 5) {
   console.error(
-    'Usage: ts-node script.ts <postgres_connection_string> <sqlite_db_path>',
+    'Usage: ts-node script.ts <postgres_connection_string> <sqlite_db_path> <replication_slot_name>',
   );
   process.exit(1);
 }
 
 const postgresConnString = argv[2];
 const sqliteDbPath = argv[3];
+const replicationSlot = argv[4];
 
 const sql = postgres(postgresConnString);
 const sqliteDb = new Database(sqliteDbPath);
@@ -172,7 +170,15 @@ sqliteDb.pragma('synchronous = OFF');
 await copySchemaToSQLite(sql, sqliteDb);
 console.log('Schema copied');
 
-await copyDataToSQLite(sql, sqliteDb);
+await sql.begin('ISOLATION LEVEL REPEATABLE READ', async sql => {
+  await copyDataToSQLite(sql, sqliteDb);
+  await sql`SELECT pg_create_logical_replication_slot(${replicationSlot}, 'pgoutput') as slot`;
+  console.log('Replication slot created');
+  const rows = await sql`SELECT restart_lsn, confirmed_flush_lsn
+    FROM pg_replication_slots
+    WHERE slot_name = ${replicationSlot}`;
+  console.log('LSNs:', rows[0]);
+});
 
 await sql.end();
 
