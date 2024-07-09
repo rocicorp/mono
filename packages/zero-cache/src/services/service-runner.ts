@@ -43,6 +43,8 @@ export interface ServiceRunnerEnv {
   DATADOG_SERVICE_LABEL?: string;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   REPLICATOR_HOST?: string;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  EMBEDDED_REPLICATOR?: boolean;
 }
 
 const REPLICATOR_ID = 'r1';

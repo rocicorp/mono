@@ -11,6 +11,7 @@ export class ServiceRunnerDO {
   readonly #serviceRunner: ServiceRunner;
   readonly #clientConnections = new Map<string, Connection>();
   #fastify: FastifyInstance;
+  readonly #env: ServiceRunnerEnv;
 
   constructor(
     logSink: LogSink,
@@ -18,11 +19,17 @@ export class ServiceRunnerDO {
     state: DurableStorage,
     env: ServiceRunnerEnv,
   ) {
+    this.#env = env;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
       'ServiceRunnerDO',
     );
-    this.#serviceRunner = new ServiceRunner(lc, state, env, false);
+    this.#serviceRunner = new ServiceRunner(
+      lc,
+      state,
+      env,
+      env.EMBEDDED_REPLICATOR ?? false,
+    );
     this.#lc = lc;
     this.#fastify = Fastify();
   }
@@ -57,6 +64,9 @@ export class ServiceRunnerDO {
   };
 
   async start() {
+    if (this.#env.EMBEDDED_REPLICATOR) {
+      await this.#serviceRunner.getReplicator();
+    }
     await this.#fastify.register(websocket);
     this.#fastify.get(CONNECT_URL_PATTERN, {websocket: true}, this.#connect);
     this.#fastify.get(STATUS_URL_PATTERN, this.#status);
