@@ -10,7 +10,7 @@ test('add', () => {
 
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 
-  const source = context.getSource('foo', undefined);
+  const source = context.getSource('foo');
   source.add({id: 1, name: 'one'});
   source.add({id: 2, name: 'two'});
   source.add({id: 3, name: 'three'});
@@ -30,7 +30,7 @@ test('delete', () => {
 
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 
-  const source = context.getSource('foo', undefined);
+  const source = context.getSource('foo');
   source.add({id: 1, name: 'one'});
   source.add({id: 2, name: 'two'});
   source.add({id: 3, name: 'three'});
@@ -51,7 +51,7 @@ describe('message upstream', () => {
   const context = createContext(m, db);
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 
-  const source = context.getSource('foo', undefined);
+  const source = context.getSource('foo');
   source.add({id: 1, name: 'one'});
   source.add({id: 2, name: 'two'});
   source.add({id: 3, name: 'three'});
