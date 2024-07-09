@@ -4,9 +4,9 @@ import type {Database} from 'better-sqlite3';
 import {TableSource} from './table-source.js';
 import type {PipelineEntity} from 'zql/src/zql/ivm/types.js';
 import type {Source} from 'zql/src/zql/ivm/source/source.js';
-import type {Ordering} from 'zql/src/zql/ast/ast.js';
 
 const emptyFunction = () => {};
+
 export function createContext(materialite: Materialite, db: Database): Context {
   const sources = new Map<string, Source<PipelineEntity>>();
   const sql = `SELECT name FROM pragma_table_info(?)`;
@@ -14,10 +14,7 @@ export function createContext(materialite: Materialite, db: Database): Context {
 
   return {
     materialite,
-    getSource: <T extends PipelineEntity>(
-      name: string,
-      _ordering: Ordering | undefined,
-    ): Source<T> => {
+    getSource: <T extends PipelineEntity>(name: string): Source<T> => {
       let existing = sources.get(name);
       if (existing) {
         return existing as Source<T>;

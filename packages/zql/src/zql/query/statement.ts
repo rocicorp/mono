@@ -4,7 +4,7 @@ import {
   buildPipeline,
   pullUsedSources,
 } from '../ast-to-ivm/pipeline-builder.js';
-import type {AST, Ordering} from '../ast/ast.js';
+import type {AST} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
 import {makeComparator} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -143,7 +143,7 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   const usedSources = pullUsedSources(ast, new Set<string>());
   const promises: PromiseLike<void>[] = [];
   for (const source of usedSources) {
-    const theSource = context.getSource(source, undefined);
+    const theSource = context.getSource(source);
     if (theSource.isSeeded()) {
       continue;
     }
@@ -161,8 +161,7 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
   await Promise.all(promises);
 
   const pipeline = buildPipeline(
-    (sourceName: string, order: Ordering | undefined) =>
-      context.getSource(sourceName, order),
+    (sourceName: string) => context.getSource(sourceName),
     ast,
   );
   const view = new TreeView<Return extends [] ? Return[number] : never>(
