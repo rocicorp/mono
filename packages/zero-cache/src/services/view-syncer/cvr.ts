@@ -55,7 +55,6 @@ function assertNotInternal(
     // This should never happen for behaving clients, as query ids should be hashes.
     throw new Error(`Query ID ${query.id} is reserved for internal use`);
   }
-  query satisfies ClientQueryRecord;
 }
 
 /**
@@ -86,7 +85,6 @@ export class CVRUpdater {
   protected _setVersion(version: CVRVersion) {
     assert(cmpVersions(this._cvr.version, version) < 0);
     this._cvr.version = version;
-    // this._cvrStore.putVersion(this._cvr.version, this._cvr.lastActive);
     this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
     return version;
   }
@@ -104,22 +102,7 @@ export class CVRUpdater {
   }
 
   #setLastActive(now = new Date()) {
-    const oldMillis = this._cvr.lastActive.epochMillis;
     const newMillis = now.getTime();
-
-    // TODO(arv): For DO we should deal with the index inside CVRStore... but DO
-    // is going away so this code can be removed.
-    const ONE_DAY = 24 * 60 * 60 * 1000;
-    function isSameDay(d1: number, d2: number) {
-      return Math.floor(d1 / ONE_DAY) === Math.floor(d2 / ONE_DAY);
-    }
-
-    // The global index has per-day granularity. Only update if the day changes.
-    if (!isSameDay(newMillis, oldMillis)) {
-      this._cvrStore.delLastActiveIndex(this._cvr.id, oldMillis);
-      this._cvrStore.putLastActiveIndex(this._cvr.id, newMillis);
-    }
-
     this._cvr.lastActive = {epochMillis: newMillis};
     this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
   }
@@ -157,12 +140,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client = {id, patchVersion: newVersion, desiredQueryIDs: []};
     this._cvr.clients[id] = client;
 
-    this._cvrStore.putClient(client);
-    this._cvrStore.putClientPatch(newVersion, client, {
-      type: 'client',
-      op: 'put',
-      id,
-    });
+    this._cvrStore.insertClient(client);
 
     const lmidsQuery: InternalQueryRecord = {
       id: CLIENT_LMID_QUERY_ID,
@@ -224,7 +202,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     }
     const newVersion = this._ensureNewVersion();
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
-    this._cvrStore.putClient(client);
 
     const added: {id: string; ast: AST}[] = [];
     for (const id of needed) {
@@ -237,12 +214,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       added.push({id, ast});
 
       this._cvrStore.putQuery(query);
-      this._cvrStore.putDesiredQueryPatch(newVersion, query, client, {
-        type: 'query',
-        op: 'put',
-        id,
-        clientID,
-      });
+      this._cvrStore.insertDesiredQueryPatch(newVersion, query, client, false);
     }
     return added;
   }
@@ -257,7 +229,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     }
     const newVersion = this._ensureNewVersion();
     client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
-    this._cvrStore.putClient(client);
+    this._cvrStore.updateClientPatchVersion(client.id, client.patchVersion);
 
     for (const id of remove) {
       const query = this._cvr.queries[id];
@@ -272,12 +244,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvrStore.delDesiredQueryPatch(oldPutVersion, query, client);
 
       this._cvrStore.putQuery(query);
-      this._cvrStore.putDesiredQueryPatch(newVersion, query, client, {
-        type: 'query',
-        op: 'del',
-        id,
-        clientID,
-      });
+      this._cvrStore.insertDesiredQueryPatch(newVersion, query, client, true);
     }
   }
 
@@ -422,17 +389,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         // client query: desired -> gotten
         query.patchVersion = transformationVersion;
         const queryPatch: QueryPatch = {type: 'query', op: 'put', id: query.id};
-        this._cvrStore.putQueryPatch(
-          transformationVersion,
-          queryPatch,
-          undefined,
-        );
         this.#newConfigPatches.push(queryPatch);
       }
 
       query.transformationHash = transformationHash;
       query.transformationVersion = transformationVersion;
-      this._cvrStore.putQuery(query);
+      this._cvrStore.updateQuery(query);
     }
   }
 
@@ -455,10 +417,14 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     delete this._cvr.queries[queryID];
 
     const newVersion = this._ensureNewVersion();
-    this._cvrStore.delQuery({id: queryID});
+    this._cvrStore.delQuery(queryID);
     const oldQueryPatchVersion = query.patchVersion;
     const queryPatch: QueryPatch = {type: 'query', op: 'del', id: queryID};
-    this._cvrStore.putQueryPatch(newVersion, queryPatch, oldQueryPatchVersion);
+    this._cvrStore.markQueryAsDeleted(
+      newVersion,
+      queryPatch,
+      oldQueryPatchVersion,
+    );
     this.#newConfigPatches.push(queryPatch);
   }
 

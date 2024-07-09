@@ -307,21 +307,11 @@ export class CVRStore {
     });
   }
 
-  putLastActiveIndex(_cvrID: string, _newMillis: number): void {
-    // TODO(arv): Not used AFAICT.
-    // But even if we wanted this in Postgres we use an index on the cvr.instances tables instead.
-  }
-
-  delLastActiveIndex(_cvrID: string, _oldMillis: number): void {
-    // TODO(arv): Not used AFAICT.
-    // But even if we wanted this in Postgres we use an index on the cvr.instances tables instead.
-  }
-
   numPendingWrites(): number {
     return this.#writes.size;
   }
 
-  putQueryPatch(
+  markQueryAsDeleted(
     version: CVRVersion,
     queryPatch: QueryPatch,
     oldQueryPatchVersionToDelete: CVRVersion | undefined,
@@ -338,10 +328,27 @@ export class CVRStore {
     this.#writes.add(
       tx => tx`UPDATE cvr.queries SET ${tx({
         patchVersion: versionString(version),
-        deleted: queryPatch.op === 'del',
+        deleted: true,
       })}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
     );
+  }
+
+  insertNonInternalQuery(query: ClientQueryRecord): void {
+    const maybeVersionString = (v: CVRVersion | undefined) =>
+      v ? versionString(v) : null;
+
+    const change: QueriesRow = {
+      clientGroupID: this.#id,
+      queryHash: query.id,
+      clientAST: query.ast,
+      patchVersion: maybeVersionString(query.patchVersion),
+      transformationHash: query.transformationHash ?? null,
+      transformationVersion: maybeVersionString(query.transformationVersion),
+      internal: null,
+      deleted: false, // put vs del "got" query
+    };
+    this.#writes.add(tx => tx`INSERT   INTO cvr.queries ${tx(change)}`);
   }
 
   putQuery(query: QueryRecord): void {
@@ -380,69 +387,72 @@ export class CVRStore {
     );
   }
 
-  delQuery(query: {id: string}): void {
+  updateQuery(query: QueryRecord) {
+    const maybeVersionString = (v: CVRVersion | undefined) =>
+      v ? versionString(v) : null;
+
+    const change: Pick<
+      QueriesRow,
+      | 'patchVersion'
+      | 'transformationHash'
+      | 'transformationVersion'
+      | 'deleted'
+    > = {
+      patchVersion: query.internal
+        ? null
+        : maybeVersionString(query.patchVersion),
+      transformationHash: query.transformationHash ?? null,
+      transformationVersion: maybeVersionString(query.transformationVersion),
+      deleted: false,
+    };
+    this.#writes.add(
+      tx => tx`UPDATE cvr.queries SET ${tx(change)}
+      WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${query.id}`,
+    );
+  }
+
+  delQuery(queryHash: string): void {
     this.#writes.add(
       tx =>
         tx`DELETE FROM cvr.queries WHERE "clientGroupID" = ${
           this.#id
-        } AND "queryHash" = ${query.id}`,
+        } AND "queryHash" = ${queryHash}`,
     );
-    // No op here. queries and query patches are not two distinct entities in the Postgres schema.
   }
 
-  putClient(client: ClientRecord): void {
+  updateClientPatchVersion(clientID: string, patchVersion: CVRVersion): void {
+    this.#writes.add(
+      tx => tx`UPDATE cvr.clients
+      SET "patchVersion" = ${versionString(patchVersion)}
+      WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
+    );
+  }
+
+  insertClient(client: ClientRecord): void {
     const change: ClientsRow = {
       clientGroupID: this.#id,
       clientID: client.id,
       patchVersion: versionString(client.patchVersion),
+      // TODO(arv): deleted is never set to true
       deleted: false,
     };
-    this.#writes.add(
-      tx => tx`INSERT INTO cvr.clients ${tx(change)}
-      ON CONFLICT ("clientGroupID", "clientID")
-      DO UPDATE SET ${tx({patchVersion: change.patchVersion})}`,
-    );
+    this.#writes.add(tx => tx`INSERT INTO cvr.clients ${tx(change)}`);
   }
 
-  putClientPatch(
-    newVersion: CVRVersion,
-    client: ClientRecord,
-    clientPatch: ClientPatch,
-  ): void {
-    const change: ClientsRow = {
-      clientGroupID: this.#id,
-      clientID: client.id,
-      patchVersion: versionString(newVersion),
-      deleted: clientPatch.op === 'del',
-    };
-    // TODO(arv): We do not need both putClient and putClientPatch.
-    this.#writes.add(
-      tx => tx`INSERT INTO cvr.clients ${tx(change)}
-      ON CONFLICT ("clientGroupID", "clientID")
-      DO UPDATE SET ${tx(change)}`,
-    );
-  }
-
-  putDesiredQueryPatch(
+  insertDesiredQueryPatch(
     newVersion: CVRVersion,
     query: {id: string},
     client: {id: string},
-    queryPatch: QueryPatch,
+    deleted: boolean,
   ): void {
-    assert(queryPatch.clientID === client.id);
-    assert(query.id === queryPatch.id);
     const change: DesiresRow = {
       clientGroupID: this.#id,
       clientID: client.id,
       queryHash: query.id,
       patchVersion: versionString(newVersion),
-      deleted: queryPatch.op === 'del',
+      deleted,
     };
-    this.#writes.add(
-      tx => tx`INSERT INTO cvr.desires ${tx(change)}
-        ON CONFLICT ("clientGroupID", "clientID", "queryHash")
-        DO UPDATE SET ${tx(change)}`,
-    );
+    this.#writes.add(tx => tx`INSERT INTO cvr.desires ${tx(change)}`);
   }
 
   delDesiredQueryPatch(
