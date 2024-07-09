@@ -82,7 +82,7 @@ function asQuery(row: QueryRow): QueryRecord {
 
 let instanceCounter = 0;
 
-export class PostgresCVRStore {
+export class CVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
   readonly #db: PostgresDB;

@@ -17,7 +17,7 @@ import type {
 import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
 import {getPublicationInfo} from '../replicator/tables/published.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
-import {PostgresCVRStore} from './postgres-cvr-store.js';
+import {CVRStore} from './cvr-store.js';
 import {ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
@@ -187,7 +187,7 @@ describe('view-syncer/service', () => {
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -277,7 +277,7 @@ describe('view-syncer/service', () => {
     ]);
     expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
 
-    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -464,7 +464,7 @@ describe('view-syncer/service', () => {
     ]);
     expect(await downstream.dequeue()).toEqual(['pokeEnd', {pokeID: '1xz'}]);
 
-    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -516,7 +516,7 @@ describe('view-syncer/service', () => {
     expect(err).not.toBeUndefined();
 
     // Bad client / query should not have been added to the CVR.
-    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(Object.keys(cvr.clients)).not.toContain('boo');
     expect(Object.keys(cvr.queries)).not.toContain('bad-query');
@@ -551,7 +551,7 @@ describe('view-syncer/service', () => {
     expect(err).not.toBeUndefined();
 
     // Bad query should not have been added to the CVR.
-    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -602,7 +602,7 @@ describe('view-syncer/service', () => {
     // Everything else should succeed, however, because CVRs are agnostic to row
     // contents, and the data in the DB is technically "valid" (and available when
     // the protocol supports it).
-    const cvrStore = new PostgresCVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, db, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {

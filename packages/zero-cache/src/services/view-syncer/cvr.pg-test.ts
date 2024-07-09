@@ -2,7 +2,7 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {PostgresCVRStore} from './postgres-cvr-store.js';
+import {CVRStore} from './cvr-store.js';
 
 import {expect} from 'vitest';
 import {and, cond, or} from 'zero-cache/src/zql/query-test-util.js';
@@ -82,7 +82,7 @@ describe('view-syncer/cvr', () => {
   });
 
   test('load first time cvr', async () => {
-    const pgStore = new PostgresCVRStore(lc, db, 'abc123');
+    const pgStore = new CVRStore(lc, db, 'abc123');
 
     const cvr = await pgStore.load();
     expect(cvr).toEqual({
@@ -103,7 +103,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const pgStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const pgStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await pgStore2.load();
     expect(reloaded).toEqual(flushed);
 
@@ -165,7 +165,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
 
     const cvr = await cvrStore.load();
     expect(cvr).toEqual({
@@ -236,7 +236,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     const updater = new CVRUpdater(cvrStore, cvr);
 
@@ -270,7 +270,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const cvrStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await cvrStore2.load();
     expect(reloaded).toEqual(updated);
 
@@ -335,7 +335,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     expect(cvr).toEqual({
       id: 'abc123',
@@ -666,7 +666,7 @@ describe('view-syncer/cvr', () => {
     });
 
     // Verify round tripping.
-    const cvrStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await cvrStore2.load();
     expect(reloaded).toEqual(updated);
   });
@@ -714,7 +714,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr);
 
@@ -731,7 +731,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await doCVRStore2.load();
     expect(reloaded).toEqual(updated);
 
@@ -880,7 +880,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa');
 
@@ -1073,7 +1073,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const cvrStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await cvrStore2.load();
     expect(reloaded).toEqual(updated);
 
@@ -1307,7 +1307,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
@@ -1426,7 +1426,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await doCVRStore2.load();
     expect(reloaded).toEqual(updated);
 
@@ -1668,7 +1668,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
@@ -1830,7 +1830,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await doCVRStore2.load();
     expect(reloaded).toEqual(updated);
 
@@ -2060,7 +2060,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
@@ -2109,7 +2109,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await doCVRStore2.load();
     expect(reloaded).toEqual(updated);
 
@@ -2331,7 +2331,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new PostgresCVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
     expect(cvr).toMatchInlineSnapshot(`
       {
@@ -2603,7 +2603,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new PostgresCVRStore(lc, db, 'abc123');
+    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await doCVRStore2.load();
     expect(reloaded).toEqual(updated);
 

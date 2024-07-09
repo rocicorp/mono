@@ -17,12 +17,12 @@ import type {QueryInvalidationUpdate} from '../invalidation-watcher/invalidation
 import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
 import type {Service} from '../service.js';
 import {ClientHandler} from './client-handler.js';
+import {CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
 } from './cvr.js';
-import {PostgresCVRStore} from './postgres-cvr-store.js';
 import {QueryHandler, TransformedQuery} from './queries.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {cmpVersions, versionString} from './schema/types.js';
@@ -90,7 +90,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
     try {
       await this.#lock.withLock(async () => {
         await initViewSyncerSchema(this.#lc, 'view-syncer', 'cvr', this.#db);
-        const cvrStore = new PostgresCVRStore(this.#lc, this.#db, this.id);
+        const cvrStore = new CVRStore(this.#lc, this.#db, this.id);
         this.#cvr = await cvrStore.load();
       });
 
@@ -252,7 +252,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     // Apply patches requested in the initConnectionMessage.
     const {clientID} = client;
-    const cvrStore = new PostgresCVRStore(this.#lc, this.#db, this.#cvr.id);
+    const cvrStore = new CVRStore(this.#lc, this.#db, this.#cvr.id);
     const updater = new CVRConfigDrivenUpdater(cvrStore, this.#cvr);
 
     const added: {id: string; ast: AST}[] = [];
@@ -368,7 +368,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
 
     lc.info?.(`Executing ${queriesToExecute.length} queries`);
 
-    const cvrStore = new PostgresCVRStore(this.#lc, this.#db, cvr.id);
+    const cvrStore = new CVRStore(this.#lc, this.#db, cvr.id);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, version);
     // Track which queries are being executed and removed.
     const cvrVersion = updater.trackQueries(
