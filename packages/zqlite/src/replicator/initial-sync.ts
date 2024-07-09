@@ -1,6 +1,13 @@
+/**
+ * Copies data out from a Postgres database into a SQLite database.
+ * Destroys and recreates the replication slot so it matches the SQLite DB state
+ * and can be used for incremental replication.
+ */
+
 import postgres from 'postgres';
 import Database from 'better-sqlite3';
-import {argv} from 'process';
+import {PUBLICATION_NAME, SLOT_NAME} from '../consts.js';
+import type {LogContext} from '@rocicorp/logger';
 
 const BATCH_SIZE = 100_000;
 
@@ -100,13 +107,14 @@ async function copySchemaToSQLite(
 }
 
 async function copyDataToSQLite(
+  lc: LogContext,
   sql: postgres.TransactionSql<Record<string, unknown>>,
   sqliteDb: Database.Database,
 ) {
   const tables = await getPostgresTables(sql);
 
   for (const table of tables) {
-    console.log('COPYING: ', table);
+    lc.info?.('COPYING: ', table);
     const columnNames = await sql`
             SELECT column_name, data_type 
             FROM information_schema.columns 
@@ -149,45 +157,58 @@ async function copyDataToSQLite(
   }
 }
 
-if (argv.length !== 5) {
-  console.error(
-    'Usage: ts-node script.ts <postgres_connection_string> <sqlite_db_path> <replication_slot_name>',
-  );
-  process.exit(1);
-}
+export async function copy(
+  lc: LogContext,
+  postgresConnectionString: string,
+  sqliteDbPath: string,
+) {
+  const sql = postgres(postgresConnectionString);
+  const sqliteDb = new Database(sqliteDbPath);
+  sqliteDb.pragma('foreign_keys = OFF');
+  sqliteDb.pragma('journal_mode = WAL');
+  // For initial import we'll wait for the disk flush on close.
+  sqliteDb.pragma('synchronous = OFF');
 
-const postgresConnString = argv[2];
-const sqliteDbPath = argv[3];
-const replicationSlot = argv[4];
+  await copySchemaToSQLite(sql, sqliteDb);
+  lc.info?.('Schema copied');
 
-const sql = postgres(postgresConnString);
-const sqliteDb = new Database(sqliteDbPath);
-sqliteDb.pragma('foreign_keys = OFF');
-sqliteDb.pragma('journal_mode = WAL');
-// For initial import we'll wait for the disk flush on close.
-sqliteDb.pragma('synchronous = OFF');
+  await sql.begin('ISOLATION LEVEL REPEATABLE READ', async sql => {
+    await copyDataToSQLite(lc, sql, sqliteDb);
 
-await copySchemaToSQLite(sql, sqliteDb);
-console.log('Schema copied');
+    const slotExists =
+      await sql`SELECT 1 FROM pg_replication_slots WHERE slot_name = ${SLOT_NAME};`;
+    if (slotExists.length > 0) {
+      lc.info?.('Replication slot already exists. Dropping it');
+      await sql`SELECT pg_drop_replication_slot(${SLOT_NAME})`;
+    }
+    await sql`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput') as slot`;
+    lc.info?.('Replication slot created');
 
-await sql.begin('ISOLATION LEVEL REPEATABLE READ', async sql => {
-  await copyDataToSQLite(sql, sqliteDb);
-  await sql`SELECT pg_create_logical_replication_slot(${replicationSlot}, 'pgoutput') as slot`;
-  console.log('Replication slot created');
-  const rows = await sql`SELECT restart_lsn, confirmed_flush_lsn
+    const rows = await sql`SELECT restart_lsn, confirmed_flush_lsn
     FROM pg_replication_slots
-    WHERE slot_name = ${replicationSlot}`;
-  console.log('LSNs:', rows[0]);
-});
+    WHERE slot_name = ${SLOT_NAME}`;
 
-await sql.end();
+    const pubExists =
+      await sql`SELECT 1 FROM pg_publication WHERE pubname = ${PUBLICATION_NAME}`;
+    if (pubExists.length > 0) {
+      lc.info?.('Publication already exists');
+    } else {
+      await sql`CREATE PUBLICATION ${sql(
+        PUBLICATION_NAME,
+      )} FOR TABLES IN SCHEMA public`;
+      lc.info?.('Publication created');
+    }
 
-console.log(
-  'Data migration completed successfully. VACUUMING and ANALYZING DB',
-);
-sqliteDb.pragma('synchronous = NORMAL');
-sqliteDb.exec('VACUUM');
-console.log('VACUUM completed');
-sqliteDb.exec('ANALYZE main');
-console.log('ANALYZE completed');
-sqliteDb.close();
+    lc.info?.('LSNs:', rows[0]);
+  });
+
+  await sql.end();
+
+  lc.info?.('Copy completed successfully. VACUUMING and ANALYZING DB');
+  sqliteDb.pragma('synchronous = NORMAL');
+  sqliteDb.exec('VACUUM');
+  lc.info?.('VACUUM completed');
+  sqliteDb.exec('ANALYZE main');
+  lc.info?.('ANALYZE completed');
+  sqliteDb.close();
+}

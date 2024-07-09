@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "node --require 'dotenv/config' --loader ts-node/esm ./src/bin/start.ts",
     "format": "prettier --write 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-types": "tsc --noEmit",
@@ -31,7 +32,9 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
+    "@rocicorp/logger": "^5.2.2",
     "zql": "0.0.0",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.0.0",
+    "pg-logical-replication": "^2.0.5"
   }
 }
