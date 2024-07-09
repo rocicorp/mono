@@ -22,20 +22,24 @@ import {StatementCache} from './internal/statement-cache.js';
 
 const resolved = Promise.resolve();
 
-// Write in a TX on `commitEnqueued` event.
+// ID is only used for debugging.
 let id = 0;
+
 export class TableSource<T extends PipelineEntity> implements Source<T> {
   readonly #stream: DifferenceStream<T>;
   readonly #internal: SourceInternal;
   readonly #name: string;
   readonly #materialite: MaterialiteForSourceInternal;
   readonly #db: Database;
-  // The query udse to get history varies with what downstream operators
+  // The query used to get history varies with what downstream operators
   // request. We keep a cache to avoid preparing each unique request more than
   // once.
   readonly #historyStatements: StatementCache;
   readonly #cols: string[];
+
+  // Field for debugging.
   #id = id++;
+  // Pending changes to be committed in the current transaction.
   #pending: Entry<T>[] = [];
 
   constructor(
