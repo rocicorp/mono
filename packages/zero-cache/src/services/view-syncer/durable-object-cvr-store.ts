@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
-import {versionToLexi} from 'zero-cache/src/types/lexi-version.js';
+import {versionToLexi} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import type {DurableStorage} from '../../storage/durable-storage.js';
 import {DelOp, PutOp, WriteCache} from '../../storage/write-cache.js';

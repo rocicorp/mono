@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {versionToLexi, type LexiVersion} from '../../../types/lexi-version.js';
+import {versionToLexi, type LexiVersion} from './lexi-version.js';
 
 /**
  * Parsing and conversion utilities for the pg_lsn Type, which represents

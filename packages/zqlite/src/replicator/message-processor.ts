@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type Database from 'better-sqlite3';
 import type {Pgoutput} from 'pg-logical-replication';
-import {LexiVersion, toLexiVersion} from '../duped/lsn.js';
+import {toLexiVersion} from 'zqlite-zero-cache-shared/src/lsn.js';
+import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import {DB, queries} from '../internal/db.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../consts.js';
 import {assert} from '../../../shared/src/asserts.js';

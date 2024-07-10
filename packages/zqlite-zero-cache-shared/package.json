@@ -1,0 +1,26 @@
+{
+  "name": "zqlite-zero-cache-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write *",
+    "check-format": "prettier --check *",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "shared": "0.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "vite-tsconfig-paths": "^4.3.2",
+    "vitest": "^1.6.0"
+  },
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
