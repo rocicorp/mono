@@ -10,7 +10,11 @@ import {
   sharedSnapshot,
 } from '../../db/transaction-pool.js';
 import {stringify} from '../../types/bigint-json.js';
-import {max, min, type LexiVersion} from '../../types/lexi-version.js';
+import {
+  max,
+  min,
+  type LexiVersion,
+} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
