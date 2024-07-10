@@ -41,6 +41,7 @@ export interface ServiceRunnerEnv {
   ['DATADOG_LOGS_API_KEY']?: string;
   ['DATADOG_SERVICE_LABEL']?: string;
   ['REPLICATOR_HOST']?: string;
+  ['EMBEDDED_REPLICATOR']?: boolean;
 }
 
 const REPLICATOR_ID = 'r1';
