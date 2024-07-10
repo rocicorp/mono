@@ -7,6 +7,8 @@ import fs from 'fs';
 import type {LogContext} from '@rocicorp/logger';
 import {PUBLICATION_NAME, SLOT_NAME} from '../consts.js';
 import {copy} from './initial-sync.js';
+import {MessageProcessor} from './message-processor.js';
+import {DB, queries} from '../internal/db.js';
 
 /**
  * The replicator attaches to the Postgres replication slot and listens for changes.
@@ -34,7 +36,10 @@ export class Replicator {
       await copy(lc, this.#pgConnectionString, this.#sqliteDbPath);
     }
 
-    const lastLsn = '0/00000000'; // TODO: Get the last LSN from the SQLite DB
+    const db = new DB(this.#sqliteDbPath);
+    const lastLsn =
+      db.prepare(queries.getCommittedLsn).pluck().get() ?? '0/00000000';
+    lc.debug?.('Last LSN:', lastLsn);
 
     const replicationService = (this.#replicationService =
       new LogicalReplicationService(
@@ -42,12 +47,12 @@ export class Replicator {
         {acknowledge: {auto: false, timeoutSeconds: 0}},
       ));
 
+    const messageProcessor = new MessageProcessor(this.#sqliteDbPath);
     this.#replicationService.on(
       'data',
       (lsn: string, message: Pgoutput.Message) => {
-        // TODO: Apply the changes to the SQLite DB
-        // TODO: Push the changes down the IVM pipelines
         lc.debug?.('DATA:', lsn, message);
+        messageProcessor.processMessage(lc, lsn, message);
       },
     );
     this.#replicationService.on(
