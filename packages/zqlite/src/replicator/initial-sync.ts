@@ -6,8 +6,13 @@
 
 import postgres from 'postgres';
 import Database from 'better-sqlite3';
-import {PUBLICATION_NAME, SLOT_NAME} from '../consts.js';
+import {
+  PUBLICATION_NAME,
+  SLOT_NAME,
+  ZERO_VERSION_COLUMN_NAME,
+} from '../consts.js';
 import type {LogContext} from '@rocicorp/logger';
+import {DB, queries} from '../internal/db.js';
 
 const BATCH_SIZE = 100_000;
 
@@ -94,7 +99,7 @@ async function copySchemaToSQLite(
     createTableQuery += columns
       .map(col => `${col.column_name} ${mapDataType(col.data_type)}`)
       .join(', ');
-    createTableQuery += ", _0_version TEXT DEFAULT '00'";
+    createTableQuery += `, ${ZERO_VERSION_COLUMN_NAME} TEXT DEFAULT '00'`;
     if (primaryKeys.length > 0) {
       createTableQuery += `, PRIMARY KEY (${primaryKeys
         .map(pk => `"${pk}"`)
@@ -172,6 +177,7 @@ export async function copy(
   await copySchemaToSQLite(sql, sqliteDb);
   lc.info?.('Schema copied');
 
+  let confirmedLsn = '0/00000000';
   await sql.begin('ISOLATION LEVEL REPEATABLE READ', async sql => {
     await copyDataToSQLite(lc, sql, sqliteDb);
 
@@ -200,6 +206,7 @@ export async function copy(
     }
 
     lc.info?.('LSNs:', rows[0]);
+    confirmedLsn = rows[0].confirmed_flush_lsn;
   });
 
   await sql.end();
@@ -210,5 +217,9 @@ export async function copy(
   lc.info?.('VACUUM completed');
   sqliteDb.exec('ANALYZE main');
   lc.info?.('ANALYZE completed');
+
+  DB.ensureSchema(sqliteDb);
+  sqliteDb.prepare(queries.setCommittedLsn).run(confirmedLsn);
+
   sqliteDb.close();
 }
