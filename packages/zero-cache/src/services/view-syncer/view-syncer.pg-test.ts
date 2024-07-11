@@ -1,6 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
+import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Downstream, PokePartBody} from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
@@ -713,8 +714,7 @@ describe('view-syncer/service', () => {
     });
   });
 
-  test.skip('disconnects on unexpected query result error', async () => {
-    // TODO(arv): This has an unhandled promise rejection.
+  test('disconnects on unexpected query result error', async () => {
     // This will result in failing the query parsing.
     await db`UPDATE issues SET _0_version = '' WHERE id = '4';`;
 
@@ -725,6 +725,12 @@ describe('view-syncer/service', () => {
       invalidatedQueries: new Set(),
       changes: undefined,
     });
+
+    // TODO(arv): Without a sleep there is sometimes (flaky) unhandled promise
+    // rejection from postgres:
+    //
+    //   Error: write CONNECTION_ENDED
+    await sleep(50);
 
     let err;
     try {
