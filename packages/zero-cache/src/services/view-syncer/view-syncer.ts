@@ -27,6 +27,9 @@ import {QueryHandler, TransformedQuery} from './queries.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {cmpVersions, versionString} from './schema/types.js';
 
+// TODO(arv): Use TransactionTrain?
+export const MAX_WORKERS = 4;
+
 export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;

@@ -85,10 +85,9 @@ export class TransactionPool {
     init?: Task,
     cleanup?: Task,
     initialWorkers = 1,
-    maxWorkers?: number,
+    maxWorkers = initialWorkers,
     timeoutTasks = TIMEOUT_TASKS, // Overridden for tests.
   ) {
-    maxWorkers ??= initialWorkers;
     assert(initialWorkers > 0);
     assert(maxWorkers >= initialWorkers);
 

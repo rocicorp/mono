@@ -176,6 +176,9 @@ export interface InvalidationWatcher {
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
 
+const READER_INITIAL_WORKERS = 1;
+export const READER_MAX_WORKERS = 4;
+
 export class InvalidationWatcherService
   implements InvalidationWatcher, Service
 {
@@ -488,8 +491,8 @@ export class InvalidationWatcherService
       Mode.READONLY,
       init,
       undefined,
-      1,
-      4,
+      READER_INITIAL_WORKERS,
+      READER_MAX_WORKERS,
     ); // TODO: Choose maxWorkers more intelligently / dynamically.
     prevReader.run(this.#replica).catch(e => lc.error?.(e));
     try {
@@ -524,8 +527,8 @@ export class InvalidationWatcherService
       Mode.READONLY,
       init,
       cleanup,
-      1,
-      4,
+      READER_INITIAL_WORKERS,
+      READER_MAX_WORKERS,
     ); // TODO: Choose maxWorkers more intelligently / dynamically.
     reader.run(this.#replica).catch(e => lc.error?.(e));
 

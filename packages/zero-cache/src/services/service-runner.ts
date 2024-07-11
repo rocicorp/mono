@@ -7,6 +7,7 @@ import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
 import {
+  READER_MAX_WORKERS as INVALIDATION_WATCHER_READER_MAX_WORKERS,
   InvalidationWatcher,
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
@@ -28,7 +29,11 @@ import {
   versionChangeSchema,
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
-import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
+import {
+  MAX_WORKERS as VIEW_SYNCER_MAX_WORKERS,
+  ViewSyncer,
+  ViewSyncerService,
+} from './view-syncer/view-syncer.js';
 export interface ServiceRunnerEnv {
   ['UPSTREAM_URI']: string;
   ['SYNC_REPLICA_URI']: string;
@@ -52,7 +57,7 @@ export class ServiceRunner
 
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
-  readonly #db: PostgresDB;
+  readonly #replica: PostgresDB;
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
@@ -68,9 +73,9 @@ export class ServiceRunner
       ...postgresTypeConfig(),
       max: 1,
     });
-    this.#db = postgres(this.#env.SYNC_REPLICA_URI, {
+    this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
-      max: 4,
+      max: INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
     });
     this.#runReplicator = runReplicator;
     this.#warmUpConnections();
@@ -81,7 +86,7 @@ export class ServiceRunner
       this.#getService(
         INVALIDATION_WATCHER_ID,
         this.#invalidationWatchers,
-        id => new InvalidationWatcherService(id, this.#lc, this, this.#db),
+        id => new InvalidationWatcherService(id, this.#lc, this, this.#replica),
         'InvalidationWatcherService',
       ),
     );
@@ -99,7 +104,7 @@ export class ServiceRunner
             id,
             this.#env.UPSTREAM_URI,
             this.#upstream,
-            this.#db,
+            this.#replica,
           ),
         'ReplicatorService',
       );
@@ -118,7 +123,7 @@ export class ServiceRunner
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
-      id => new ViewSyncerService(this.#lc, id, this, this.#db),
+      id => new ViewSyncerService(this.#lc, id, this, this.#replica),
       'ViewSyncer',
     );
   }
@@ -131,7 +136,13 @@ export class ServiceRunner
       // 1 cvr connection for view syncing.
       // Note: These can be much larger when not limited to 6 TCP connections per DO.
       this.#upstream`SELECT 1`.simple().execute(),
-      ...Array.from({length: 4}, () => this.#db`SELECT 1`.simple().execute()),
+      ...Array.from(
+        {
+          length:
+            INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
+        },
+        () => this.#replica`SELECT 1`.simple().execute(),
+      ),
     ])
       .then(
         () =>
@@ -174,10 +185,10 @@ export class ServiceRunner
 
   async status(): Promise<JSONObject> {
     // One ping to warm up the connections
-    await Promise.all([this.#db`SELECT 1`, this.#upstream`SELECT 1`]);
+    await Promise.all([this.#replica`SELECT 1`, this.#upstream`SELECT 1`]);
 
     const start = Date.now();
-    const replicaPingMs = this.#db`SELECT 1`
+    const replicaPingMs = this.#replica`SELECT 1`
       .simple()
       .then(() => Date.now() - start);
     const upstreamPingMs = this.#upstream`SELECT 1`
