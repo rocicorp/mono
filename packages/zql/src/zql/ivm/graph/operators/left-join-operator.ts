@@ -45,10 +45,19 @@ export class LeftJoinOperator<
         readonly index: DifferenceIndex<StringOrNumber, BValue>;
         readonly bKeysForCompactions: Set<StringOrNumber>;
       };
+
+  // Tracks the cumulative multiplicity of each row in A that we have seen.
+  // Example with issues and comments: the issue will be side A and the child
+  // comments will be side B. As issue rows flow through join we accumulate
+  // their multiplicity here, keyed by A's PK.
+  //
+  // The reason to do this is so that we know when to retract a join result
+  // where A had no child B rows. See comment in #joinOneInner.
   readonly #aMatches: Map<
     StringOrNumber,
     [JoinResult<AValue, BValue, ATable, BAlias>, number]
   > = new Map();
+
   readonly #getAPrimaryKey;
   readonly #getBPrimaryKey;
   readonly #getAJoinKey;
@@ -85,6 +94,9 @@ export class LeftJoinOperator<
       );
 
     this.#getAJoinKey = (value: AValue) =>
+      // TODO(aa): bad cast, this can be undefined
+      // Actually maybe it could be any value? does something earlier in
+      // pipeline enforce that it's a string or number?
       getValueFromEntity(value, joinArgs.aJoinColumn) as StringOrNumber;
     this.#getBJoinKey = (value: BValue) =>
       getValueFromEntity(value, joinArgs.bJoinColumn) as StringOrNumber;
@@ -195,7 +207,6 @@ export class LeftJoinOperator<
 
     const bEntries =
       aKey !== undefined ? this.#indexB.index.get(aKey) : undefined;
-    // `undefined` cannot join with anything
     if (bEntries === undefined || bEntries.length === 0) {
       const joinEntry = [
         combineRows(
@@ -230,6 +241,11 @@ export class LeftJoinOperator<
 
       const existing = this.#aMatches.get(aPrimaryKey);
       if (existing) {
+        // TODO(aa): This is a bug. We need to update the reference to the row
+        // here, like:
+        // existing[0] = joinEntry[0];
+        // because otherwise when we retract/reassert later, we will send the
+        // wrong version of the row.
         existing[1] += joinEntry[1];
       } else {
         this.#aMatches.set(aPrimaryKey, [joinEntry[0], joinEntry[1]]);
@@ -249,6 +265,9 @@ export class LeftJoinOperator<
       return [];
     }
 
+    // There can be multiple entries for the same key just because of
+    // remove/add in the same transaction. But also theoretically, there could
+    // be multiple adds for the same key in the same transaction.
     const aEntries = this.#indexA.get(bKey);
     if (aEntries === undefined) {
       return [];
@@ -269,20 +288,38 @@ export class LeftJoinOperator<
       ] as const;
       ret.push(joinEntry);
 
+      // TODO(aa): This branch isn't necessary now, it's always correct to use
+      // a.id. This was thinking ahead to compound keys.
+      // See: https://rocicorp.slack.com/archives/C013XFG80JC/p1720724435728549
       const aPrimaryKey = isJoinResult(aRow)
         ? aRow.id
         : this.#getAPrimaryKey(aRow as AValue);
 
+      // This is tricky -- can we do it differently?
+      //
+      // The problem is that if we get a left row, and there are no right rows,
+      // then we will emit a join result with a left side and null for right
+      // side. If a right side then comes in, we need to know to retract the
+      // left side. The reason this doesn't work as it does in inner join is
+      // that inner join doesn't have this problem because it doesn't emit the
+      // left side if there's no right side. So if a new right side comes in,
+      // it's an edit and we get the right side retraction which naturally
+      // leads to the join retraction. Here in left join that doesn't happen
+      // and we need to synthesize the join retraction somehow.
+      //
+      // TODO(aa): also explore first-class subqueries as a solution.
       const existing = this.#aMatches.get(aPrimaryKey);
       if (joinEntry[1] > 0 && existing && existing[1] === 0) {
-        // row `a` now has matches. Remove the un-match.
+        // Row `a` now has matches. Send the retraction for the join entry with
+        // left side but no right side.
         ret.push([existing[0], -1]);
       } else if (
         joinEntry[1] < 0 &&
         existing &&
         existing[1] + joinEntry[1] === 0
       ) {
-        // We went back to row `a` being an unmatch. Send the un-match
+        // We went back to row `a` being an unmatch. Send the assertion for the
+        // join entry with left.
         ret.push([existing[0], 1]);
       }
 

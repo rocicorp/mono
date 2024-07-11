@@ -103,6 +103,11 @@ export function concatIds(idA: string | number, idB: string | number) {
   return ret;
 }
 
+// TODO(aa): In the case where `innerValue` is undefined, the id component for
+// that value is not included in the generated id. This can create collisions
+// when there are multiple levels of joins going on. We should just emit an
+// empty id in that case, e.g., `foo_` when the right side of the join is
+// undefined.
 export function combineRows<
   AValue,
   BValue,
