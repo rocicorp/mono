@@ -511,22 +511,20 @@ export class CVRStore {
     const sql = this.#db;
     const version = versionString(startingVersion);
 
-    const allDesires = await sql<
-      DesiresRow[]
-    >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${
-      this.#id
-    } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
-    const clientRows = await sql<
-      ClientsRow[]
-    >`SELECT * FROM cvr.clients WHERE "clientGroupID" = ${
-      this.#id
-    } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
-    const queryRows = await sql<
-      Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
-    >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
+    const [allDesires, clientRows, queryRows] = await Promise.all([
+      sql<DesiresRow[]>`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${
+        this.#id
+      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`,
+      sql<ClientsRow[]>`SELECT * FROM cvr.clients WHERE "clientGroupID" = ${
+        this.#id
+      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`,
+      sql<
+        Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
+      >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
       WHERE "clientGroupID" = ${
         this.#id
-      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`;
+      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`,
+    ]);
 
     const rv: [MetadataPatch, CVRVersion][] = [];
     for (const row of queryRows) {
@@ -561,13 +559,14 @@ export class CVRStore {
   }
 
   async *allRowRecords(): AsyncIterable<RowRecord> {
-    const sql = this.#db;
-    const rows = await sql<
+    for await (const rows of this.#db<
       RowsRow[]
-    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${this.#id}`;
-
-    for (const row of rows) {
-      yield rowsRowToRowRecord(row);
+    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${this.#id}`
+      // TODO(arv): Arbitrary page size
+      .cursor(1000)) {
+      for (const row of rows) {
+        yield rowsRowToRowRecord(row);
+      }
     }
   }
 
