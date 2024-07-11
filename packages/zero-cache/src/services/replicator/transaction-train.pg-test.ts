@@ -3,7 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../../test/db.js';
-import type {LexiVersion} from '../../types/lexi-version.js';
+import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {CREATE_INVALIDATION_TABLES} from './schema/invalidation.js';
 import {CREATE_REPLICATION_TABLES} from './schema/replication.js';

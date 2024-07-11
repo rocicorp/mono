@@ -1,7 +1,10 @@
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
-import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
+import {
+  versionFromLexi,
+  versionToLexi,
+} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 
 export const cvrVersionSchema = v.object({
   /**

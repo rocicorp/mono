@@ -1,8 +1,5 @@
 import {expect, test} from 'vitest';
-import {
-  versionFromLexi,
-  type LexiVersion,
-} from '../../../types/lexi-version.js';
+import {versionFromLexi, type LexiVersion} from './lexi-version.js';
 import {toLexiVersion, type LSN} from './lsn.js';
 
 test('lsn to LexiVersion', () => {

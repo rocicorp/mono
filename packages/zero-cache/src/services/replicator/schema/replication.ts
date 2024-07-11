@@ -7,7 +7,7 @@
 
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import type {LexiVersion} from '../../../types/lexi-version.js';
+import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import {getPublicationInfo} from '../tables/published.js';
 import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
 

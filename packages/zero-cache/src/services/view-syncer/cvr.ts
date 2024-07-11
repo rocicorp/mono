@@ -6,7 +6,7 @@ import {ReadonlyJSONValue, deepEqual} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
 import {rowIDHash} from 'zero-cache/src/types/row-key.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {LexiVersion} from '../../types/lexi-version.js';
+import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVRStore} from './cvr-store.js';
 import type {ParsedRow} from './queries.js';

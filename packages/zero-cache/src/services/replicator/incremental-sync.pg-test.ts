@@ -20,7 +20,10 @@ import {
   normalizeFilterSpec,
   type InvalidationFilterSpec,
 } from '../../types/invalidation.js';
-import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
+import {
+  versionFromLexi,
+  type LexiVersion,
+} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
@@ -30,7 +33,7 @@ import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
 import type {TableSpec} from './tables/specs.js';
 import {TransactionTrainService} from './transaction-train.js';
-import {toLexiVersion} from './types/lsn.js';
+import {toLexiVersion} from 'zqlite-zero-cache-shared/src/lsn.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
