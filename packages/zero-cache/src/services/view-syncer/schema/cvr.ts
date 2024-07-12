@@ -14,19 +14,15 @@ export type InstancesRow = {
   clientGroupID: string;
   version: string;
   lastActive: Date;
-  deleted: boolean;
 };
 
 const CREATE_CVR_INSTANCES_TABLE = `
 CREATE TABLE cvr.instances (
   "clientGroupID" TEXT PRIMARY KEY,
   version         TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
-  "lastActive"    TIMESTAMPTZ NOT NULL, -- For garbage collection
-  deleted         BOOL NOT NULL         -- Garbage collected
+  "lastActive"    TIMESTAMPTZ NOT NULL -- For garbage collection
 );
 `;
-// TODO(arv): The DO version has an index on lastActive but AFAICT it
-// is not used.
 
 export type ClientsRow = {
   clientGroupID: string;

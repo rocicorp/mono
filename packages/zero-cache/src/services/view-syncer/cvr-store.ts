@@ -28,7 +28,6 @@ import {
   MetadataPatch,
   PutRowPatch,
   QueryPatch,
-  isInternalQueryRecord,
   versionFromString,
   versionString,
   type CVRVersion,
@@ -54,41 +53,30 @@ type QueryRow = {
 
 function asQuery(row: QueryRow): QueryRecord {
   const ast = astSchema.parse(row.clientAST);
-  const queryRecord: QueryRecord = row.internal
+  const maybeVersion = (s: string | null) =>
+    s === null ? undefined : versionFromString(s);
+  return row.internal
     ? ({
         id: row.queryHash,
         ast,
         transformationHash: row.transformationHash ?? undefined,
-        transformationVersion: row.transformationVersion
-          ? versionFromString(row.transformationVersion)
-          : undefined,
+        transformationVersion: maybeVersion(row.transformationVersion),
         internal: true,
       } satisfies InternalQueryRecord)
     : ({
         id: row.queryHash,
         ast,
-        patchVersion: row.patchVersion
-          ? versionFromString(row.patchVersion)
-          : undefined,
+        patchVersion: maybeVersion(row.patchVersion),
         desiredBy: {},
         transformationHash: row.transformationHash ?? undefined,
-        transformationVersion: row.transformationVersion
-          ? versionFromString(row.transformationVersion)
-          : undefined,
+        transformationVersion: maybeVersion(row.transformationVersion),
       } satisfies ClientQueryRecord);
-
-  return queryRecord;
 }
-
-let instanceCounter = 0;
 
 export class CVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
   readonly #db: PostgresDB;
-
-  instanceCounter = instanceCounter++;
-
   readonly #writes: Set<(tx: PostgresTransaction) => Promise<unknown>> =
     new Set();
   readonly #pendingQueryVersionDeletes = new CustomKeySet<
@@ -124,7 +112,7 @@ export class CVRStore {
       await this.#db.begin(tx => [
         tx<
           Pick<InstancesRow, 'version' | 'lastActive'>[]
-        >`SELECT version, "lastActive" FROM cvr.instances WHERE "clientGroupID" = ${id} AND NOT deleted`,
+        >`SELECT version, "lastActive" FROM cvr.instances WHERE "clientGroupID" = ${id}`,
         tx<
           Pick<ClientsRow, 'clientID' | 'patchVersion'>[]
         >`SELECT "clientID", "patchVersion" FROM cvr.clients WHERE "clientGroupID" = ${id}`,
@@ -147,7 +135,6 @@ export class CVRStore {
         clientGroupID: id,
         version: versionString(cvr.version),
         lastActive: new Date(0),
-        deleted: false,
       };
       this.#writes.add(tx => tx`INSERT INTO cvr.instances ${tx(change)}`);
     }
@@ -172,7 +159,7 @@ export class CVRStore {
       client.desiredQueryIDs.push(row.queryHash);
 
       const query = cvr.queries[row.queryHash];
-      if (query && !isInternalQueryRecord(query)) {
+      if (query && !query.internal) {
         query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
     }
@@ -263,7 +250,6 @@ export class CVRStore {
       clientGroupID: this.#id,
       version: versionString(version),
       lastActive: new Date(lastActive.epochMillis),
-      deleted: false,
     };
     this.#writes.add(async tx => {
       await tx`INSERT INTO cvr.instances ${tx(
@@ -387,7 +373,7 @@ export class CVRStore {
     this.#writes.add(tx => tx`INSERT INTO cvr.clients ${tx(change)}`);
   }
 
-  insertDesiredQueryPatch(
+  insertDesiredQuery(
     newVersion: CVRVersion,
     query: {id: string},
     client: {id: string},
@@ -403,7 +389,7 @@ export class CVRStore {
     this.#writes.add(tx => tx`INSERT INTO cvr.desires ${tx(change)}`);
   }
 
-  delDesiredQueryPatch(
+  delDesiredQuery(
     oldPutVersion: CVRVersion,
     query: {id: string},
     client: {id: string},

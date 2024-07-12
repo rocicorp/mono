@@ -121,9 +121,7 @@ describe('view-syncer/service', () => {
         ],
       },
     ]);
-    void pipeToQueue(stream, downstream).catch(e => {
-      console.error('pipeToQueue error:', e);
-    });
+    void pipeToQueue(stream, downstream);
   });
 
   async function pipeToQueue(

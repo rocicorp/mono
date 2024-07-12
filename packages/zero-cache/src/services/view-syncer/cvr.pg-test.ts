@@ -113,7 +113,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '00',
           lastActive: new Date(Date.UTC(2024, 3, 20)),
-          deleted: false,
         },
       ],
       clients: [],
@@ -129,7 +128,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1a9:02',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -200,7 +198,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1a9:02',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -286,7 +283,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -473,7 +469,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          deleted: false,
           lastActive: new Date('2024-04-24T00:00:00.000Z'),
           version: '1aa:01',
         },
@@ -678,7 +673,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -777,7 +771,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -1081,7 +1074,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          deleted: false,
           lastActive: new Date('2024-04-23T01:00:00Z'),
           version: '1aa:01',
         },
@@ -1205,7 +1197,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -1434,7 +1425,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          deleted: false,
           lastActive: new Date('2024-04-23T01:00:00Z'),
           version: '1ba:01',
         },
@@ -1548,7 +1538,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [
@@ -1838,7 +1827,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          deleted: false,
           lastActive: new Date('2024-04-23T01:00:00Z'),
           version: '1ba:01',
         },
@@ -1972,7 +1960,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [],
@@ -2117,7 +2104,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          deleted: false,
           lastActive: new Date('2024-04-23T01:00:00Z'),
           version: '1ba:01',
         },
@@ -2211,7 +2197,6 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           lastActive: new Date(Date.UTC(2024, 3, 23)),
-          deleted: false,
         },
       ],
       clients: [

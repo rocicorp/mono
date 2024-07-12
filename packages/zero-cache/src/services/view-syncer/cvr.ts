@@ -214,7 +214,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       added.push({id, ast});
 
       this._cvrStore.putQuery(query);
-      this._cvrStore.insertDesiredQueryPatch(newVersion, query, client, false);
+      this._cvrStore.insertDesiredQuery(newVersion, query, client, false);
     }
     return added;
   }
@@ -241,10 +241,10 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       // Delete the old put-desired-patch
       const oldPutVersion = query.desiredBy[clientID];
       delete query.desiredBy[clientID];
-      this._cvrStore.delDesiredQueryPatch(oldPutVersion, query, client);
+      this._cvrStore.delDesiredQuery(oldPutVersion, query, client);
 
       this._cvrStore.putQuery(query);
-      this._cvrStore.insertDesiredQueryPatch(newVersion, query, client, true);
+      this._cvrStore.insertDesiredQuery(newVersion, query, client, true);
     }
   }
 

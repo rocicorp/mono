@@ -187,12 +187,6 @@ export const queryRecordSchema = v.union(
 
 export type QueryRecord = v.Infer<typeof queryRecordSchema>;
 
-export function isInternalQueryRecord(
-  q: QueryRecord,
-): q is InternalQueryRecord {
-  return q.internal === true;
-}
-
 export const rowIDSchema = v.object({
   schema: v.string(),
   table: v.string(),

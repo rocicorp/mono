@@ -37,7 +37,6 @@ import {
 export interface ServiceRunnerEnv {
   ['UPSTREAM_URI']: string;
   ['SYNC_REPLICA_URI']: string;
-  ['SYNC_CVR_URI']: string;
   ['LOG_LEVEL']: LogLevel;
   ['DATADOG_LOGS_API_KEY']?: string;
   ['DATADOG_SERVICE_LABEL']?: string;
@@ -132,9 +131,10 @@ export class ServiceRunner
     const start = Date.now();
     void Promise.all([
       // Warm up 1 upstream connection for mutagen,
-      // 3 replica connections for view syncing.
-      // 1 cvr connection for view syncing.
+      // INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS
+      //   replica connections for view syncing.
       // Note: These can be much larger when not limited to 6 TCP connections per DO.
+      // TODO(arv): Figure out new limits now that we are not using Durable Objects.
       this.#upstream`SELECT 1`.simple().execute(),
       ...Array.from(
         {
