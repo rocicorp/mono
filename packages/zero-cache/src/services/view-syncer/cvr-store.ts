@@ -91,14 +91,14 @@ export class CVRStore {
 
   readonly #writes: Set<(tx: PostgresTransaction) => Promise<unknown>> =
     new Set();
-  readonly #pendingQueryPatchDeletes = new CustomKeySet<
+  readonly #pendingQueryVersionDeletes = new CustomKeySet<
     [{id: string}, CVRVersion]
   >(([patchRecord, version]) => patchRecord.id + '-' + versionString(version));
   readonly #pendingRowRecordPuts = new CustomKeyMap<
     RowID,
     [RowRecord, (tx: PostgresTransaction) => Promise<unknown>]
   >(rowIDHash);
-  readonly #pendingRowPatchDeletes = new CustomKeySet<[RowID, CVRVersion]>(
+  readonly #pendingRowVersionDeletes = new CustomKeySet<[RowID, CVRVersion]>(
     ([id, version]) => rowIDHash(id) + '-' + versionString(version),
   );
 
@@ -120,31 +120,21 @@ export class CVRStore {
       queries: {},
     };
 
-    const [versionAndLastActive, clientsRows, queryRows, desiresRow] =
-      await this.#db.begin(async tx => {
-        const versionAndLastActive = await tx<
+    const [versionAndLastActive, clientsRows, queryRows, desiresRows] =
+      await this.#db.begin(tx => [
+        tx<
           Pick<InstancesRow, 'version' | 'lastActive'>[]
-        >`SELECT version, "lastActive" FROM cvr.instances WHERE "clientGroupID" = ${id} AND NOT deleted`;
-
-        const clientRows = await tx<
-          Pick<ClientsRow, 'clientID' | 'patchVersion' | 'deleted'>[]
-        >`SELECT "clientID", "patchVersion", deleted FROM cvr.clients WHERE "clientGroupID" = ${id}`;
-
-        const queryRows = await tx<
+        >`SELECT version, "lastActive" FROM cvr.instances WHERE "clientGroupID" = ${id} AND NOT deleted`,
+        tx<
+          Pick<ClientsRow, 'clientID' | 'patchVersion'>[]
+        >`SELECT "clientID", "patchVersion" FROM cvr.clients WHERE "clientGroupID" = ${id}`,
+        tx<
           QueryRow[]
-        >`SELECT * FROM cvr.queries WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`;
-
-        const desiresRows = await tx<
+        >`SELECT * FROM cvr.queries WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+        tx<
           DesiresRow[]
-        >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${id}`;
-
-        return [
-          versionAndLastActive,
-          clientRows,
-          queryRows,
-          desiresRows,
-        ] as const;
-      });
+        >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+      ]);
 
     if (versionAndLastActive.length !== 0) {
       assert(versionAndLastActive.length === 1);
@@ -162,10 +152,10 @@ export class CVRStore {
       this.#writes.add(tx => tx`INSERT INTO cvr.instances ${tx(change)}`);
     }
 
-    for (const value of clientsRows) {
-      const version = versionFromString(value.patchVersion);
-      cvr.clients[value.clientID] = {
-        id: value.clientID,
+    for (const row of clientsRows) {
+      const version = versionFromString(row.patchVersion);
+      cvr.clients[row.clientID] = {
+        id: row.clientID,
         patchVersion: version,
         desiredQueryIDs: [],
       };
@@ -176,33 +166,14 @@ export class CVRStore {
       cvr.queries[row.queryHash] = query;
     }
 
-    for (const row of desiresRow) {
-      // if (row.deleted) {
-      //   continue;
-      // }
-
+    for (const row of desiresRows) {
       const client = cvr.clients[row.clientID];
       assert(client, 'Client not found');
-
-      // TODO
-      if (!row.deleted) {
-        client.desiredQueryIDs.push(row.queryHash);
-      }
+      client.desiredQueryIDs.push(row.queryHash);
 
       const query = cvr.queries[row.queryHash];
-      if (query) {
-        // assert(
-        //   query,
-        //   'Query not found: ' +
-        //     row.queryHash +
-        //     '(row.deleted: ' +
-        //     row.deleted +
-        //     ')',
-        // );
-
-        if (!isInternalQueryRecord(query) && !row.deleted) {
-          query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
-        }
+      if (query && !isInternalQueryRecord(query)) {
+        query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
     }
 
@@ -211,11 +182,7 @@ export class CVRStore {
     return cvr;
   }
 
-  cancelPendingRowPatch(_version: CVRVersion, _id: RowID): void {
-    // No op. cancelPendingRowRecord takes care of this
-  }
-
-  cancelPendingRowRecord(id: RowID): void {
+  cancelPendingRowRecordWrite(id: RowID): void {
     const pair = this.#pendingRowRecordPuts.get(id);
     if (!pair) {
       return;
@@ -233,17 +200,15 @@ export class CVRStore {
     return pair[0];
   }
 
-  isQueryPatchPendingDelete(
+  isQueryVersionPendingDelete(
     patchRecord: {id: string},
     version: CVRVersion,
   ): boolean {
-    return this.#pendingQueryPatchDeletes.has([patchRecord, version]);
+    return this.#pendingQueryVersionDeletes.has([patchRecord, version]);
   }
 
-  isRowPatchPendingDelete(rowPatch: RowPatch, version: CVRVersion): boolean {
-    return this.#pendingRowPatchDeletes.has([rowPatch.id, version]);
-    // const rowIDSet = this.#pendingRowPatchDeletes.get(version);
-    // return rowIDSet !== undefined && rowIDSet.has(rowPatch.id);
+  isRowVersionPendingDelete(rowID: RowID, version: CVRVersion): boolean {
+    return this.#pendingRowVersionDeletes.has([rowID, version]);
   }
 
   async getMultipleRowEntries(
@@ -273,16 +238,16 @@ export class CVRStore {
   ): void {
     if (oldRowPatchVersionToDelete) {
       // add pending delete for the old patch version.
-      this.#pendingRowPatchDeletes.add([row.id, oldRowPatchVersionToDelete]);
+      this.#pendingRowVersionDeletes.add([row.id, oldRowPatchVersionToDelete]);
 
       // No need to delete the old row because it will be replaced by the new one.
     }
 
     // Clear any pending deletes for this row and patchVersion.
-    this.#pendingRowPatchDeletes.delete([row.id, row.patchVersion]);
+    this.#pendingRowVersionDeletes.delete([row.id, row.patchVersion]);
 
     // If we are writing the same again then delete the old write.
-    this.cancelPendingRowRecord(row.id);
+    this.cancelPendingRowRecordWrite(row.id);
 
     const change = rowRecordToRowsRow(this.#id, row);
     const w = (tx: PostgresTransaction) => tx`INSERT INTO cvr.rows ${tx(change)}
@@ -316,10 +281,10 @@ export class CVRStore {
     queryPatch: QueryPatch,
     oldQueryPatchVersionToDelete: CVRVersion | undefined,
   ): void {
-    this.#pendingQueryPatchDeletes.delete([queryPatch, version]);
+    this.#pendingQueryVersionDeletes.delete([queryPatch, version]);
 
     if (oldQueryPatchVersionToDelete) {
-      this.#pendingQueryPatchDeletes.add([
+      this.#pendingQueryVersionDeletes.add([
         queryPatch,
         oldQueryPatchVersionToDelete,
       ]);
@@ -332,23 +297,6 @@ export class CVRStore {
       })}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
     );
-  }
-
-  insertNonInternalQuery(query: ClientQueryRecord): void {
-    const maybeVersionString = (v: CVRVersion | undefined) =>
-      v ? versionString(v) : null;
-
-    const change: QueriesRow = {
-      clientGroupID: this.#id,
-      queryHash: query.id,
-      clientAST: query.ast,
-      patchVersion: maybeVersionString(query.patchVersion),
-      transformationHash: query.transformationHash ?? null,
-      transformationVersion: maybeVersionString(query.transformationVersion),
-      internal: null,
-      deleted: false, // put vs del "got" query
-    };
-    this.#writes.add(tx => tx`INSERT   INTO cvr.queries ${tx(change)}`);
   }
 
   putQuery(query: QueryRecord): void {
@@ -578,7 +526,8 @@ export class CVRStore {
     });
 
     this.#writes.clear();
-    this.#pendingRowPatchDeletes.clear();
-    this.#pendingQueryPatchDeletes.clear();
+    this.#pendingRowVersionDeletes.clear();
+    this.#pendingQueryVersionDeletes.clear();
+    this.#pendingRowRecordPuts.clear();
   }
 }

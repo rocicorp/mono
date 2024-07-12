@@ -562,7 +562,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const catchupRowPatches = await this.#catchupRowPatches;
     lc.debug?.(`processing ${catchupRowPatches.length} row patches`);
     for (const [rowPatch, toVersion] of catchupRowPatches) {
-      if (this._cvrStore.isRowPatchPendingDelete(rowPatch, toVersion)) {
+      if (this._cvrStore.isRowVersionPendingDelete(rowPatch.id, toVersion)) {
         continue;
       }
 
@@ -605,7 +605,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     };
 
     for (const [patchRecord, toVersion] of catchupConfigPatches) {
-      if (this._cvrStore.isQueryPatchPendingDelete(patchRecord, toVersion)) {
+      if (this._cvrStore.isQueryVersionPendingDelete(patchRecord, toVersion)) {
         continue; // config patch has been replaced.
       }
 
@@ -640,11 +640,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           deepEqual(pending as ReadonlyJSONValue, existing as ReadonlyJSONValue)
         ) {
           // Remove no-op writes from the WriteCache.
-          this._cvrStore.cancelPendingRowRecord(existing.id);
-          this._cvrStore.cancelPendingRowPatch(
-            existing.patchVersion,
-            existing.id,
-          );
+          this._cvrStore.cancelPendingRowRecordWrite(existing.id);
         }
       }
 
