@@ -40,20 +40,15 @@ export type Listener<T> = {
   commit: (version: Version) => void;
 };
 
-let id = 0;
-
 /**
- * DifferenceStream connects Sources, Operators, and Views together to form
- * pipelines.
+ * Holds a reference to a `DifferenceStreamWriter` and allows users
+ * to add operators onto it.
  *
- * A DifferenceStream has zero or one "upstream" Operators, and zero or more
- * "downstream" Listeners. The listeners are typically Operators or Views. The
- * upstream is typically either a Source or Operator (although there's no
- * separate type for a Source currently -- it implements Operator).
+ * E.g.,
+ * s = new DifferenceStream();
  *
- * Usage:
- *
- * s = new DifferenceStream(); mapped = s.map(); filtered = s.filter();
+ * mapped = s.map();
+ * filtered = s.filter();
  *
  *       s
  *    /     \
@@ -66,43 +61,22 @@ let id = 0;
  *    mapped
  *     |
  *   filtered
- *
- * Changes flow through downstream via the `newDifference` method. Because the
- * argument to newDifference() is a multiset, and operations on multisets are
- * commutative, there's no particular semantics to an individual call to
- * newDifference(). For example, this:
- *
- * newDifference([[{x: 1}, 1]]); newDifference([[{x: 1}, 1]]);
- *
- * means the same thing as:
- *
- * newDifference([[{x: 1}, 1], [{x: 1}, 1]]);
- *
- * and even:
- *
- * newDifference([[{x: 1}, 2]]);
- *
- * The difference between the calls is just a memory/speed tradeoff. Calling
- * newDifference() more frequently is slower, but calling less frequently means
- * buffering more at the source (as well as higher latency).
- *
- * Either way, changes from newDifference() are accumulated in downstream views
- * and notified to application code via the `commit` method.
- *
- * The `messageUpstream` method is used to send messages up the DAG. See
- * message.ts for more information.
  */
+// T extends object: I believe in the context of ZQL we only deal with object.
+let id = 0;
 export class DifferenceStream<T extends PipelineEntity> {
-  /** Unique identifier for this stream (used for debugging). */
-  readonly #id = id++;
-
-  /** Operators that are listening to this stream. */
+  /**
+   * Operators that are listening to this stream.
+   */
   readonly #downstreams: Set<Listener<T>> = new Set();
-
-  /** The operator that is sending data to this stream. */
+  readonly #id = id++;
+  /**
+   * The operator that is sending data to this stream.
+   */
   #upstream: Operator | undefined;
-
-  /** Downstreams that requested historical data. */
+  /**
+   * Downstreams that requested historical data.
+   */
   readonly #requestors = new Map<number, Set<Listener<T>>>();
 
   addDownstream(listener: Listener<T>) {
@@ -255,6 +229,11 @@ export class DifferenceStream<T extends PipelineEntity> {
     );
   }
 
+  /**
+   * This differs from count in that `size` just counts the entire
+   * stream whereas `count` counts the number of times each key appears.
+   * @returns returns the size of the stream
+   */
   count<Alias extends string>(alias: Alias) {
     const stream = new DifferenceStream<AggregateOut<T, [[Alias, number]]>>();
     return stream.setUpstream(new FullCountOperator(this, stream, alias));
