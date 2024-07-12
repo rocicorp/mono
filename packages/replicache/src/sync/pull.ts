@@ -336,8 +336,8 @@ export function handlePullResponseV0(
       throw new Error(
         badOrderMessage(
           `lastMutationID`,
-          response.lastMutationID,
-          baseLastMutationID,
+          String(response.lastMutationID),
+          String(baseLastMutationID),
         ),
       );
     }
@@ -350,12 +350,16 @@ export function handlePullResponseV0(
     if (deepEqual(frozenCookie, baseCookie)) {
       if (response.patch.length > 0) {
         lc.error?.(
-          `handlePullResponse: cookie ${baseCookie} did not change, but patch is not empty`,
+          `handlePullResponse: cookie ${JSON.stringify(
+            baseCookie,
+          )} did not change, but patch is not empty`,
         );
       }
       if (response.lastMutationID !== baseLastMutationID) {
         lc.error?.(
-          `handlePullResponse: cookie ${baseCookie} did not change, but lastMutationID did change`,
+          `handlePullResponse: cookie ${JSON.stringify(
+            baseCookie,
+          )} did not change, but lastMutationID did change`,
         );
       }
       return {
@@ -451,8 +455,8 @@ type HandlePullResponseResult =
 
 function badOrderMessage(
   name: string,
-  receivedValue: unknown,
-  lastSnapshotValue: unknown,
+  receivedValue: string,
+  lastSnapshotValue: string,
 ) {
   return `Received ${name} ${receivedValue} is < than last snapshot ${name} ${lastSnapshotValue}; ignoring client view`;
 }
@@ -485,7 +489,7 @@ export function handlePullResponseV1(
     // In DD31 this is expected to happen if a refresh occurs during a pull.
     if (!deepEqual(expectedBaseCookie, baseCookie)) {
       lc.debug?.(
-        'handlePullResponse: cookie mismatch, pull response is not applicable',
+        'handlePullResponse: cookie mismatch, response is not applicable',
       );
       return {
         type: HandlePullResponseResultType.CookieMismatch,
@@ -501,8 +505,8 @@ export function handlePullResponseV1(
         throw new Error(
           badOrderMessage(
             `${clientID} lastMutationID`,
-            lmidChange,
-            lastMutationID,
+            String(lmidChange),
+            String(lastMutationID),
           ),
         );
       }
@@ -511,20 +515,28 @@ export function handlePullResponseV1(
     const frozenResponseCookie = deepFreeze(response.cookie);
     if (compareCookies(frozenResponseCookie, baseCookie) < 0) {
       throw new Error(
-        badOrderMessage('cookie', frozenResponseCookie, baseCookie),
+        badOrderMessage(
+          'cookie',
+          JSON.stringify(frozenResponseCookie),
+          JSON.stringify(baseCookie),
+        ),
       );
     }
 
     if (deepEqual(frozenResponseCookie, baseCookie)) {
       if (response.patch.length > 0) {
         lc.error?.(
-          `handlePullResponse: cookie ${baseCookie} did not change, but patch is not empty`,
+          `handlePullResponse: cookie ${JSON.stringify(
+            baseCookie,
+          )} did not change, but patch is not empty`,
         );
       }
       if (Object.keys(response.lastMutationIDChanges).length > 0) {
         console.log(response.lastMutationIDChanges);
         lc.error?.(
-          `handlePullResponse: cookie ${baseCookie} did not change, but lastMutationIDChanges is not empty`,
+          `handlePullResponse: cookie ${JSON.stringify(
+            baseCookie,
+          )} did not change, but lastMutationIDChanges is not empty`,
         );
       }
       // If the cookie doesn't change, it's a nop.
