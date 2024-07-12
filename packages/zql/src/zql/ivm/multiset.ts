@@ -11,15 +11,30 @@ import type {StringOrNumber} from './types.js';
  * You can think of a Multiset in the IVM code roughly as a patch: each “entry”
  * represents a row getting added or removed. If the entry has a "multiplicity"
  * of positive 1, it means the row was added. A multiplicity of negative 1 means
- * the row was removed. A multiplicity of 0 conceptually means no change to the
- * row ( e.g., a no-op). This is rarely used but can sometimes happen in
- * internals. Edits are represented by a remove of the old row (-1) followed by
- * an add of the new row (+1).
+ * the row was removed. A multiplicity of 0 means no change to the row (i.e., a
+ * no-op -- This is rarely used but can sometimes happen in internals). Edits
+ * are represented by a remove of the old row (-1) followed by an add of the new
+ * row (+1).
  *
- * This representation is convenient because it means that operators don’t have
- * to implement add, remove, and edit operations separately. They can define a
- * single "transform" of an input row that handles all three of these cases
- * generically.
+ * Other multiplicities are allowed and just mean more or fewer adds or
+ * additions of the same row. It's also fine to have multiple entries for the
+ * same row. These three multisets all mean the same thing:
+ *
+ *  - [[r1, 1], [r1, 1]]
+ *  - [[r1, 2]]
+ *  - [[r1, 3], [r1, -1]]
+ *
+ * Note that when we say "row" here, we're talking about a *version* of a row
+ * (aka a "tuple"). Not a row as identified by an ID. It's commonly the case for
+ * two different versions of a row to be in a multiset at once: for example the
+ * old row and the new row during an edit. These would both have the same ID,
+ * but different fields contents.
+ *
+ * This representation of change is convenient for a few reasons:
+ *
+ * First, it means that operators don’t have to implement add, remove, and edit
+ * operations separately. They can define a single "transform" of an input row
+ * that handles all three of these cases generically.
  *
  * For example, consider the simplest operator: `filter`. If instead of
  * multiset, we used a traditional patch datastructure with add/edit/remove
@@ -40,17 +55,15 @@ import type {StringOrNumber} from './types.js';
  * the same filter. Edits are represented by remove/add pairs and all cases are
  * naturally handled.
  *
- * Currently, our Multiset never uses multiplicities other than 1, 0, -1. This
- * is because we are modeling atomic changes to rows which have a unique ID. It
- * doesn’t make sense to remove or add the same row more than once - it can only
- * appear in the output once. Similarly, the same ID should only show up in a
- * Multiset at most twice: once with -1, and once with +1. However IVM is mostly
- * ignorant to this and handles all entries in a Multiset the same way.
+ * The other advantage of the Multiset representation is that makes processing
+ * incremental changes purely functional. The remove and add entries for a row
+ * don't have to appear in the set in sequence. Thus we can process the entries
+ * in any order or even in parallel.
  *
- * Finally, we represent our Multiset as an `Iterator` so that it can be lazily
- * computed with JavaScript’s yield. This enables the pipeline to exit early, as
- * in the case of `limit`. It also prevents copying the multiset over and over
- * as it flows through the pipeline.
+ * Finally, we represent our Multiset as a JavaScript `Iterator` so that it can
+ * be lazily computed with yield. This enables the pipeline to exit early, as in
+ * the case of `limit`. It also prevents copying the multiset over and over as
+ * it flows through the pipeline.
  */
 export type Multiset<T> = Iterable<Entry<T>>;
 export type Entry<T> = readonly [T, Multiplicity];
