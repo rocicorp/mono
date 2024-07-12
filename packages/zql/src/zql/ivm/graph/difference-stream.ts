@@ -40,15 +40,20 @@ export type Listener<T> = {
   commit: (version: Version) => void;
 };
 
+let id = 0;
+
 /**
- * Holds a reference to a `DifferenceStreamWriter` and allows users
- * to add operators onto it.
+ * DifferenceStream connects Sources, Operators, and Views together to form
+ * pipelines.
  *
- * E.g.,
- * s = new DifferenceStream();
+ * A DifferenceStream has zero or one "upstream" Operators, and zero or more
+ * "downstream" Listeners. The listeners are typically Operators or Views. The
+ * upstream is typically either a Source or Operator (although there's no
+ * separate type for a Source currently -- it implements Operator).
  *
- * mapped = s.map();
- * filtered = s.filter();
+ * Usage:
+ *
+ * s = new DifferenceStream(); mapped = s.map(); filtered = s.filter();
  *
  *       s
  *    /     \
@@ -61,22 +66,23 @@ export type Listener<T> = {
  *    mapped
  *     |
  *   filtered
+ *
+ * Changes flow through downstream via the `newDifference` method.
+ *
+ * The `messageUpstream` method is used to send messages up the DAG. See
+ * message.ts for more information.
  */
-// T extends object: I believe in the context of ZQL we only deal with object.
-let id = 0;
 export class DifferenceStream<T extends PipelineEntity> {
-  /**
-   * Operators that are listening to this stream.
-   */
-  readonly #downstreams: Set<Listener<T>> = new Set();
+  /** Unique identifier for this stream (used for debugging). */
   readonly #id = id++;
-  /**
-   * The operator that is sending data to this stream.
-   */
+
+  /** Operators that are listening to this stream. */
+  readonly #downstreams: Set<Listener<T>> = new Set();
+
+  /** The operator that is sending data to this stream. */
   #upstream: Operator | undefined;
-  /**
-   * Downstreams that requested historical data.
-   */
+
+  /** Downstreams that requested historical data. */
   readonly #requestors = new Map<number, Set<Listener<T>>>();
 
   addDownstream(listener: Listener<T>) {
@@ -229,11 +235,6 @@ export class DifferenceStream<T extends PipelineEntity> {
     );
   }
 
-  /**
-   * This differs from count in that `size` just counts the entire
-   * stream whereas `count` counts the number of times each key appears.
-   * @returns returns the size of the stream
-   */
   count<Alias extends string>(alias: Alias) {
     const stream = new DifferenceStream<AggregateOut<T, [[Alias, number]]>>();
     return stream.setUpstream(new FullCountOperator(this, stream, alias));
