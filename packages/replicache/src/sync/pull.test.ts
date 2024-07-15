@@ -873,7 +873,21 @@ test('begin try pull DD31', async () => {
       },
       expNewSyncHead: undefined,
       expBeginPullResult:
-        'Received cookie cookie_0 is < than last snapshot cookie cookie_1; ignoring client view',
+        'Received cookie "cookie_0" is < than last snapshot cookie "cookie_1"; ignoring client view',
+    },
+    {
+      name: 'pulls new state w/lesser cookie using _order -> beginPull errors',
+      numPendingMutations: 0,
+      pullResult: {
+        ...goodPullResp,
+        cookie: {
+          foo: 'bar',
+          order: 'cookie_0',
+        },
+      },
+      expNewSyncHead: undefined,
+      expBeginPullResult:
+        'Received cookie {"foo":"bar","order":"cookie_0"} is < than last snapshot cookie "cookie_1"; ignoring client view',
     },
     {
       name: 'pulls new state with identical client-lmid-changes in response (identical cookie and no patch)',
