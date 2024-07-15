@@ -492,10 +492,14 @@ export class CVRStore {
     return rv;
   }
 
-  async *allRowRecords(): AsyncIterable<RowRecord> {
+  async *allRowRecords(): AsyncIterable<
+    RowRecord & {queriedColumns: JSONValue}
+  > {
     for await (const rows of this.#db<
       RowsRow[]
-    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${this.#id}`
+    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
+      this.#id
+    } AND "queriedColumns" IS NOT NULL`
       // TODO(arv): Arbitrary page size
       .cursor(1000)) {
       for (const row of rows) {

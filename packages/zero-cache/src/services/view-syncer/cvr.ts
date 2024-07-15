@@ -342,21 +342,17 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     }
 
     // Currently this performs a full scan of the CVR row records. In the future this
-    // can be optimized by tracking an index from query to row, either manually or
-    // when DO storage is backed by SQLite.
+    // can be optimized by tracking an index from query to row.
     //
-    // Note that it is important here to use _directStorage rather than _writes because
-    // (1) We are interested in the existing storage state, and not pending mutations
-    // (2) WriteCache.batchScan() (i.e. list()) will perform computationally expensive
-    //     (and unnecessary) sorting over the entry Map to adhere to the DO contract.
+    // We can use something like:
+    //   SELECT * FROM cvr.rows WHERE "queriedColumns" ?| array[...queryHashes...];
+
     const allRowRecords = this._cvrStore.allRowRecords();
 
     let total = 0;
     for await (const existing of allRowRecords) {
       total++;
-      if (existing.queriedColumns === null) {
-        continue; // Tombstone
-      }
+      assert(existing.queriedColumns !== null); // allRowRecords does not include null.
       for (const id of Object.keys(existing.queriedColumns)) {
         if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
