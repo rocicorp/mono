@@ -10,7 +10,7 @@ import {
 import type {RegisterInvalidationFiltersRequest} from './replicator/replicator.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
-export class ReplicatorDO {
+export class Replicator {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
   #fastify: FastifyInstance;
@@ -18,7 +18,7 @@ export class ReplicatorDO {
   constructor(logSink: LogSink, logLevel: LogLevel, env: ServiceRunnerEnv) {
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
-      'ReplicatorDO',
+      'Replicator',
     );
     this.#lc = lc;
     this.#serviceRunner = new ServiceRunner(lc, env, true);
