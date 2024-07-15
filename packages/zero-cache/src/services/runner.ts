@@ -5,7 +5,7 @@ import {Connection, handleConnection} from './connection.js';
 import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
-export class ServiceRunnerDO {
+export class Runner {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
   readonly #clientConnections = new Map<string, Connection>();
@@ -16,7 +16,7 @@ export class ServiceRunnerDO {
     this.#embeddedReplicator = env.EMBEDDED_REPLICATOR ?? false;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
-      'ServiceRunnerDO',
+      'ServiceRunner',
     );
     this.#serviceRunner = new ServiceRunner(lc, env, this.#embeddedReplicator);
     this.#lc = lc;
