@@ -46,7 +46,7 @@ test('direct foreign key join: join a track to an album', async () => {
 
   expect(rows).toEqual([
     {
-      id: '1_1',
+      id: '1:1',
       track,
       album,
       [joinSymbol]: true,
@@ -62,17 +62,17 @@ test('direct foreign key join: join a track to an album', async () => {
   // re-add a track for that album
   await z.mutate.track.create({
     id: '2',
-    title: 'Track 1',
+    title: 'Track 2',
     length: 100,
     albumId: '1',
   });
 
   rows = await stmt.exec();
   const track2Album1 = {
-    id: '1_2',
+    id: '2:1',
     track: {
       id: '2',
-      title: 'Track 1',
+      title: 'Track 2',
       length: 100,
       albumId: '1',
     },
@@ -115,7 +115,7 @@ test('direct foreign key join: join a track to an album', async () => {
 
   rows = await stmt.exec();
   const track3Album3 = {
-    id: '3_3',
+    id: '3:3',
     track: {
       id: '3',
       title: 'Track 3',
@@ -141,7 +141,7 @@ test('direct foreign key join: join a track to an album', async () => {
 
   rows = await stmt.exec();
   const track4Album2 = {
-    id: '2_4',
+    id: '4:2',
     track: {
       id: '4',
       title: 'Track 4',
@@ -167,7 +167,7 @@ test('direct foreign key join: join a track to an album', async () => {
 
   rows = await stmt.exec();
   const track5Album1 = {
-    id: '1_5',
+    id: '5:1',
     track: {
       id: '5',
       title: 'Track 5',
@@ -363,7 +363,7 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
 
   expect(rows).toEqual([
     {
-      id: '1_1-1_1_1_1-1',
+      id: '1-1:1:1:1-1:1',
       playlistTrack: {id: '1-1', playlistId: '1', trackId: '1', position: 1},
       track: {id: '1', title: 'Track 1', length: 100, albumId: '1'},
       album: {id: '1', title: 'Album 1', artistId: '1'},
@@ -372,7 +372,8 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
       [joinSymbol]: true,
     },
     {
-      id: '1_1_1-2_2_2-1',
+      // TODO(aa): Where is the `1` id at the end coming from?
+      id: '1-2:2:1:2-1:1',
       playlistTrack: {id: '1-2', playlistId: '1', trackId: '2', position: 2},
       track: {id: '2', title: 'Track 2', length: 100, albumId: '1'},
       album: {id: '1', title: 'Album 1', artistId: '1'},
@@ -385,7 +386,7 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
       [joinSymbol]: true,
     },
     {
-      id: '1_1-3_3_2_3-1',
+      id: '1-3:3:2:3-1:1',
       playlistTrack: {id: '1-3', playlistId: '1', trackId: '3', position: 3},
       track: {id: '3', title: 'Track 3', length: 100, albumId: '2'},
       album: {id: '2', title: 'Album 2', artistId: '1'},
@@ -394,7 +395,7 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
       [joinSymbol]: true,
     },
     {
-      id: '1_1-4_4_2_4-1',
+      id: '1-4:4:2:4-1:1',
       playlistTrack: {id: '1-4', playlistId: '1', trackId: '4', position: 4},
       track: {id: '4', title: 'Track 4', length: 100, albumId: '2'},
       album: {id: '2', title: 'Album 2', artistId: '1'},

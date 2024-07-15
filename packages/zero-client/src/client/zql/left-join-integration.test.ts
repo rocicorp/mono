@@ -48,9 +48,9 @@ test('left-join and aggregation to gather artists for a track', async () => {
   const rows = await stmt.exec();
   expect(rows).toEqual([
     {
-      id: '1_1_1_1-1',
-      trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
+      id: '1:1-1:1:1',
       track: {id: '1', title: 'Track 1', length: 1000, albumId: '1'},
+      trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
       artists: [
         {id: '1', name: 'Artist 1'},
         {id: '2', name: 'Artist 2'},
@@ -62,9 +62,9 @@ test('left-join and aggregation to gather artists for a track', async () => {
       [joinSymbol]: true,
     },
     {
-      id: '1_1_2_2-1',
-      trackArtist: {id: '2-1', trackId: '2', artistId: '1'},
+      id: '2:2-1:1:1',
       track: {id: '2', title: 'Track 2', length: 2000, albumId: '1'},
+      trackArtist: {id: '2-1', trackId: '2', artistId: '1'},
       artists: [
         {id: '1', name: 'Artist 1'},
         {id: '2', name: 'Artist 2'},
@@ -76,24 +76,24 @@ test('left-join and aggregation to gather artists for a track', async () => {
       [joinSymbol]: true,
     },
     {
-      id: '1_3',
+      id: '3:::1',
       track: {id: '3', title: 'Track 3', length: 3000, albumId: '1'},
-      album: {id: '1', title: 'Album 1', artistId: '1'},
       artists: [],
+      album: {id: '1', title: 'Album 1', artistId: '1'},
       [joinSymbol]: true,
     },
     {
-      id: '1_4',
+      id: '4:::1',
       track: {id: '4', title: 'Track 4', length: 4000, albumId: '1'},
-      album: {id: '1', title: 'Album 1', artistId: '1'},
       artists: [],
+      album: {id: '1', title: 'Album 1', artistId: '1'},
       [joinSymbol]: true,
     },
     {
-      id: '1_5',
+      id: '5:::1',
       track: {id: '5', title: 'Track 5', length: 5000, albumId: '1'},
-      album: {id: '1', title: 'Album 1', artistId: '1'},
       artists: [],
+      album: {id: '1', title: 'Album 1', artistId: '1'},
       [joinSymbol]: true,
     },
   ]);
@@ -127,7 +127,7 @@ test('left-join through single table', async () => {
 
   expect(rows).toEqual([
     {
-      id: '1_1',
+      id: '1:1',
       track: {id: '1', albumId: '1', title: 'track 1', length: 1},
       album: {id: '1', artistId: '', title: 'album 1'},
       [joinSymbol]: true,
@@ -145,13 +145,13 @@ test('left-join through single table', async () => {
 
   expect(rows).toEqual([
     {
-      id: '1_1',
+      id: '1:1',
       track: {id: '1', albumId: '1', title: 'track 1', length: 1},
       album: {id: '1', artistId: '', title: 'album 1'},
       [joinSymbol]: true,
     },
     {
-      id: '2',
+      id: '2:',
       track: {id: '2', albumId: '2', title: 'track 2', length: 2},
       [joinSymbol]: true,
     },
@@ -167,13 +167,13 @@ test('left-join through single table', async () => {
 
   expect(rows).toEqual([
     {
-      id: '1_1',
+      id: '1:1',
       track: {id: '1', albumId: '1', title: 'track 1', length: 1},
       album: {id: '1', artistId: '', title: 'album 1'},
       [joinSymbol]: true,
     },
     {
-      id: '2_2',
+      id: '2:2',
       album: {id: '2', artistId: '', title: 'album 2'},
       track: {id: '2', albumId: '2', title: 'track 2', length: 2},
       [joinSymbol]: true,
@@ -186,7 +186,7 @@ test('left-join through single table', async () => {
 
   expect(rows).toEqual([
     {
-      id: '2_2',
+      id: '2:2',
       album: {id: '2', artistId: '', title: 'album 2'},
       track: {id: '2', albumId: '2', title: 'track 2', length: 2},
       [joinSymbol]: true,
@@ -199,7 +199,7 @@ test('left-join through single table', async () => {
 
   expect(rows).toEqual([
     {
-      id: '2',
+      id: '2:',
       track: {id: '2', albumId: '2', title: 'track 2', length: 2},
       [joinSymbol]: true,
     },
@@ -277,21 +277,21 @@ test('left-join through junction edge', async () => {
 
   expect(rows).toEqual([
     {
-      id: '1_1_1-1',
-      trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
+      id: '1:1-1:1',
       track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
       artists: {id: '1', name: 'artist 1'},
       [joinSymbol]: true,
     },
     {
-      id: '1_1-2_2',
-      trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
+      id: '1:1-2:2',
       track: {id: '1', albumId: '1', title: 'track 1', length: 1},
+      trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
       artists: {id: '2', name: 'artist 2'},
       [joinSymbol]: true,
     },
     {
-      id: '2',
+      id: '2::',
       track: {id: '2', albumId: '1', title: 'track 2', length: 1},
       [joinSymbol]: true,
     },

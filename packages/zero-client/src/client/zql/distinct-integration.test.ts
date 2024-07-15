@@ -105,19 +105,19 @@ describe('distinct', async () => {
         .distinct('track.id'),
       expected: [
         {
-          id: '1_1-1',
+          id: '1:1-1',
           track: {id: '1', length: 100, title: 'a', albumId: '1'},
           trackArtist: {id: '1-1', artistId: '1', trackId: '1'},
           [joinSymbol]: true,
         },
         {
-          id: '1-2_2',
+          id: '2:1-2',
           track: {id: '2', length: 200, title: 'b', albumId: '1'},
           trackArtist: {id: '1-2', artistId: '1', trackId: '2'},
           [joinSymbol]: true,
         },
         {
-          id: '1-3_3',
+          id: '3:1-3',
           track: {id: '3', length: 300, title: 'c', albumId: '1'},
           trackArtist: {id: '1-3', artistId: '1', trackId: '3'},
           [joinSymbol]: true,
@@ -137,21 +137,21 @@ describe('distinct', async () => {
         .distinct('track.id'),
       expected: [
         {
-          id: '1_1_1-1',
+          id: '1:1-1:1',
           track: {id: '1', length: 100, title: 'a', albumId: '1'},
           trackArtist: {id: '1-1', artistId: '1', trackId: '1'},
           artist: {id: '1', name: 'a'},
           [joinSymbol]: true,
         },
         {
-          id: '1_1-2_2',
+          id: '2:1-2:1',
           track: {id: '2', length: 200, title: 'b', albumId: '1'},
           trackArtist: {id: '1-2', artistId: '1', trackId: '2'},
           artist: {id: '1', name: 'a'},
           [joinSymbol]: true,
         },
         {
-          id: '1_1-3_3',
+          id: '3:1-3:1',
           track: {id: '3', length: 300, title: 'c', albumId: '1'},
           trackArtist: {id: '1-3', artistId: '1', trackId: '3'},
           artist: {id: '1', name: 'a'},
