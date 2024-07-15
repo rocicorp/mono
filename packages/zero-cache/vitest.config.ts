@@ -23,7 +23,6 @@ function inlineWASM(): PluginOption {
 
 export default defineConfig({
   test: {
-    name: 'pg',
     include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     retry: 3,
     globalSetup: ['./test/pg-container-setup.ts'],
