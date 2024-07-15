@@ -4,17 +4,17 @@ import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 import {sleep} from 'shared/src/sleep.js';
 import {
+  max,
+  min,
+  type LexiVersion,
+} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import {
   Mode,
   TransactionPool,
   importSnapshot,
   sharedSnapshot,
 } from '../../db/transaction-pool.js';
 import {stringify} from '../../types/bigint-json.js';
-import {
-  max,
-  min,
-  type LexiVersion,
-} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -93,8 +93,8 @@ export type QueryInvalidationUpdate = {
 };
 
 /**
- * An Invalidation Watcher is a per-Service Runner (i.e. Durable Object) service that
- * serves as the liaison between the View Syncers in the Service Runner and the global
+ * An Invalidation Watcher is a per-Service Runner  service that serves as the
+ * liaison between the View Syncers in the Service Runner and the global
  * Replicator.
  *
  * ```
@@ -113,30 +113,33 @@ export type QueryInvalidationUpdate = {
  *
  * The Invalidation Watcher serves two architectural purposes:
  *
- * * **Reduces notification fan-out from the Replicator**: Replicators only need to manage
- *   `O(num-service-runners)` notification streams, which is orders of magnitudes less than
- *   `O(num-view-syncers)`.
+ * * **Reduces notification fan-out from the Replicator**: Replicators only need
+ *   to manage `O(num-service-runners)` notification streams, which is orders of
+ *   magnitudes less than `O(num-view-syncers)`.
  *
- * * **Reduces query fan-in when computing view invalidation**: View Syncers register their
- *   invalidation hashes with the Invalidation Watcher. On each replication change, the
- *   Invalidation Watcher makes a single, composite query on the Invalidation Index, as
- *   opposed to all View Syncers querying individually. This is a critical scalability
- *   component; the connection, cpu, and I/O usage incurred by having all View Syncers
- *   query the index for every transaction would be otherwise untenable.
+ * * **Reduces query fan-in when computing view invalidation**: View Syncers
+ *   register their invalidation hashes with the Invalidation Watcher. On each
+ *   replication change, the Invalidation Watcher makes a single, composite
+ *   query on the Invalidation Index, as opposed to all View Syncers querying
+ *   individually. This is a critical scalability component; the connection,
+ *   cpu, and I/O usage incurred by having all View Syncers query the index for
+ *   every transaction would be otherwise untenable.
  *
- * As a logistical corollary to the latter, the Invalidation Watcher also plays a role in
- * connection / transaction management. On each replication change, the Invalidation Watcher
- * creates a read-only TransactionPool, initially sized for a single connection, to query
- * the Invalidation Index. If queries have been invalidated, it passes the TransactionPool
- * to the corresponding View Syncers to execute their queries at the same snapshot of the
- * database, growing the pool to a configurable maximum number of connections to increase
- * concurrency and reduce latency. When the View Syncers finish, the `Subscription` cleanup
- * logic facilitates reference counting to close TransactionPools when they are no longer
- * needed.
+ * As a logistical corollary to the latter, the Invalidation Watcher also plays
+ * a role in connection / transaction management. On each replication change,
+ * the Invalidation Watcher creates a read-only TransactionPool, initially sized
+ * for a single connection, to query the Invalidation Index. If queries have
+ * been invalidated, it passes the TransactionPool to the corresponding View
+ * Syncers to execute their queries at the same snapshot of the database,
+ * growing the pool to a configurable maximum number of connections to increase
+ * concurrency and reduce latency. When the View Syncers finish, the
+ * `Subscription` cleanup logic facilitates reference counting to close
+ * TransactionPools when they are no longer needed.
  *
- * In other words, the InvalidationWatcher is where all TransactionPools for view
- * queries originate. All View Syncers access the database via TransactionPools
- * (and corresponding invalidation info) managed by the InvalidationWatcher.
+ * In other words, the InvalidationWatcher is where all TransactionPools for
+ * view queries originate. All View Syncers access the database via
+ * TransactionPools (and corresponding invalidation info) managed by the
+ * InvalidationWatcher.
  */
 export interface InvalidationWatcher {
   /**

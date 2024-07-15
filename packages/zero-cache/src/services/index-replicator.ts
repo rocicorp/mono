@@ -1,6 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import {createLogSink, getLogLevel} from './logging.js';
-import {ReplicatorDO as ReplicatorDOClass} from './replicator-do.js';
+import {Replicator} from './replicator.js';
 import type {ServiceRunnerEnv} from './service-runner.js';
 
 type GetNormalizedOptions<Env extends ServiceRunnerEnv> = (
@@ -15,13 +15,10 @@ export type NormalizedOptions = {
 function createReplicator<Env extends ServiceRunnerEnv>(
   getOptions: GetNormalizedOptions<Env>,
 ) {
-  return class extends ReplicatorDOClass {
+  return class extends Replicator {
     constructor(env: Env) {
       const {logSink, logLevel} = getOptions(env);
       super(logSink, logLevel, env);
-    }
-    async start() {
-      await super.start();
     }
   };
 }
