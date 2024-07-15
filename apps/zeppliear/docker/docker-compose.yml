@@ -47,6 +47,7 @@ services:
     volumes:
       - pgdata_sync:/var/lib/postgresql/data
       - ./init_sync:/docker-entrypoint-initdb.d
+
 volumes:
   pgdata_sync:
     driver: local

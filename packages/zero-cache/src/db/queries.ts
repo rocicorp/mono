@@ -24,7 +24,7 @@ export function lookupRowsWithKeys(
   schema: string,
   table: string,
   rowKeyType: RowKeyType,
-  rowKeys: RowKey[],
+  rowKeys: Iterable<RowKey>,
 ): postgres.PendingQuery<postgres.Row[]> {
   const colNames = Object.keys(rowKeyType).sort(compareUTF8);
   const cols = colNames
@@ -34,13 +34,11 @@ export function lookupRowsWithKeys(
   // See https://github.com/porsager/postgres/issues/842
   const colType = (col: string) =>
     db.unsafe(typeNameByOID[rowKeyType[col].typeOid]);
-  const values = rowKeys
-    .map(row =>
-      colNames
-        .map(col => db`${row[col]}::${colType(col)}`)
-        .flatMap((v, i) => (i ? [db`,`, v] : v)),
-    )
-    .flatMap((tuple, i) => (i ? [db`),(`, ...tuple.flat()] : tuple));
+  const values = Array.from(rowKeys, row =>
+    colNames
+      .map(col => db`${row[col]}::${colType(col)}`)
+      .flatMap((v, i) => (i ? [db`,`, v] : v)),
+  ).flatMap((tuple, i) => (i ? [db`),(`, ...tuple.flat()] : tuple));
 
   return db`
     WITH keys (${cols}) AS (VALUES (${values}))

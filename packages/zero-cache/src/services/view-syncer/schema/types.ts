@@ -1,10 +1,11 @@
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
-import {jsonValueSchema} from '../../../types/bigint-json.js';
 import {
   versionFromLexi,
   versionToLexi,
 } from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import {jsonValueSchema} from '../../../types/bigint-json.js';
+import type {Column, QueriedColumns} from '../cvr.js';
 
 export const cvrVersionSchema = v.object({
   /**
@@ -211,7 +212,7 @@ export type RowID = v.Infer<typeof rowIDSchema>;
 export const rowRecordSchema = cvrRecordSchema.extend({
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
-  // column => query IDs, or `null` for a row that was removed from the view (i.e. tombstone).
+  // query IDS => column, or `null` for a row that was removed from the view (i.e. tombstone).
   queriedColumns: v.record(v.array(v.string())).nullable(),
 });
 
@@ -230,11 +231,15 @@ export const putRowPatchSchema = patchSchema.extend({
   columns: v.array(v.string()),
 });
 
+export type PutRowPatch = v.Infer<typeof putRowPatchSchema>;
+
 export const delRowPatchSchema = patchSchema.extend({
   type: v.literal('row'),
   op: v.literal('del'),
   id: rowIDSchema,
 });
+
+export type DelRowPatch = v.Infer<typeof delRowPatchSchema>;
 
 export const rowPatchSchema = v.union(putRowPatchSchema, delRowPatchSchema);
 
@@ -290,4 +295,26 @@ export function versionFromString(str: string): CVRVersion {
     default:
       throw new TypeError(`Invalid version string ${str}`);
   }
+}
+
+/**
+ * Returns the union of all columns in the queriedColumns object. The order is
+ * not yet sorted.
+ */
+export function getAllColumns(queriedColumns: QueriedColumns): Set<Column> {
+  const columns = new Set<Column>();
+  for (const cols of Object.values(queriedColumns)) {
+    cols.forEach(c => columns.add(c));
+  }
+  return columns;
+}
+
+/**
+ * Returns the union of all columns in the queriedColumns object as a sorted
+ * array.
+ */
+export function getAllColumnsSorted(queriedColumns: QueriedColumns): Column[] {
+  // This can be done more efficiently since QueriedColumns should already be sorted
+  // so we can do binary search insertions.
+  return [...getAllColumns(queriedColumns)].sort();
 }
