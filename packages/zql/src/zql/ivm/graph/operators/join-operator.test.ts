@@ -1,10 +1,11 @@
 import {expect, test} from 'vitest';
-import {JoinResult, joinSymbol} from '../../types.js';
+import {JoinResult, StringOrNumber, joinSymbol} from '../../types.js';
 import {DifferenceStream} from '../difference-stream.js';
 import {
   orderIsRemovedFromReply,
   orderIsRemovedFromRequest,
 } from './join-operator-test-util.js';
+import {makeJoinResult} from './join-operator.js';
 
 type Track = {
   id: number;
@@ -88,7 +89,7 @@ test('unbalanced input', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
+        id: '1:1',
         [joinSymbol]: true,
         track: {
           id: 1,
@@ -126,7 +127,7 @@ test('unbalanced input', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
+        id: '1:1',
         [joinSymbol]: true,
         track: {
           id: 1,
@@ -163,7 +164,7 @@ test('unbalanced input', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
+        id: '1:1',
         [joinSymbol]: true,
         track: {
           id: 1,
@@ -236,7 +237,7 @@ test('basic join', () => {
   check([
     [
       {
-        id: '1_1',
+        id: '1:1',
         [joinSymbol]: true,
         track: {
           id: 1,
@@ -262,11 +263,13 @@ test('basic join', () => {
 
 test('join through a junction table', () => {
   // track -> track_artist -> artist
+
   let version = 0;
   const trackInput = new DifferenceStream<Track>();
   const trackArtistInput = new DifferenceStream<TrackArtist>();
   const artistInput = new DifferenceStream<Artist>();
 
+  // track x trackartist
   const trackAndTrackArtistOutput = trackInput.join({
     aTable: 'track',
     aPrimaryKeyColumns: ['id'],
@@ -279,6 +282,7 @@ test('join through a junction table', () => {
     bJoinColumn: ['trackArtist', 'trackId'],
   });
 
+  // (track x trackartist) x artist
   const output = trackAndTrackArtistOutput.join({
     aTable: undefined,
     aPrimaryKeyColumns: ['id'],
@@ -363,7 +367,7 @@ test('join through a junction table', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: 1, title: 'Track One', length: 1, albumId: 1},
         trackArtist: {trackId: 1, artistId: 1},
         artist: {id: 1, name: 'Artist One'},
@@ -373,7 +377,7 @@ test('join through a junction table', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: 1, title: 'Track One', length: 1, albumId: 1},
         trackArtist: {trackId: 1, artistId: 2},
         artist: {id: 2, name: 'Artist Two'},
@@ -405,7 +409,7 @@ test('join through a junction table', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: 1, title: 'Track One', length: 1, albumId: 1},
         trackArtist: {trackId: 1, artistId: 2},
         artist: {id: 2, name: 'Artist Two'},
@@ -460,7 +464,7 @@ test('join through a junction table', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: 1, title: 'Track One', length: 1, albumId: 1},
         trackArtist: {trackId: 1, artistId: 1},
         artist: {id: 1, name: 'Artist One'},
@@ -597,7 +601,7 @@ test('join through a junction table', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: 1, title: 'Track A', length: 1, albumId: 1},
         trackArtist: {trackId: 1, artistId: 1},
         artist: {id: 1, name: 'Artist A'},
@@ -607,7 +611,7 @@ test('join through a junction table', () => {
     ],
     [
       {
-        id: '2_2_2-2',
+        id: '2:2-2:2',
         track: {id: 2, title: 'Track B', length: 1, albumId: 1},
         trackArtist: {trackId: 2, artistId: 2},
         artist: {id: 2, name: 'Artist B'},
@@ -747,7 +751,7 @@ test('add many items to the same source as separate calls in the same tick', () 
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: 1, title: 'Track A', length: 1, albumId: 1},
         trackArtist: {trackId: 1, artistId: 1},
         artist: {id: 1, name: 'Artist A'},
@@ -757,7 +761,7 @@ test('add many items to the same source as separate calls in the same tick', () 
     ],
     [
       {
-        id: '2_2_2-2',
+        id: '2:2-2:2',
         track: {id: 2, title: 'Track B', length: 1, albumId: 1},
         trackArtist: {trackId: 2, artistId: 2},
         artist: {id: 2, name: 'Artist B'},
@@ -774,4 +778,293 @@ test('order is removed from request', () => {
 
 test('order is removed from reply', () => {
   orderIsRemovedFromReply('join');
+});
+
+test('makeJoinResult', () => {
+  const cases: {
+    description: string;
+    aVal: Record<string, unknown>;
+    bVal: Record<string, unknown> | undefined;
+    aAlias: string;
+    bAlias: string | undefined;
+    getAID: (value: Record<string, unknown>) => StringOrNumber;
+    getBID: (value: Record<string, unknown>) => StringOrNumber;
+    expected: unknown;
+  }[] = [
+    {
+      description: 'row x undefined',
+      aVal: {id1: 1, val1: 'a'},
+      bVal: undefined,
+      aAlias: 't1',
+      bAlias: undefined,
+      getAID: v => v.id1 as number,
+      getBID: v => v.id2 as number,
+      expected: {
+        id: '1:',
+        t1: {id1: 1, val1: 'a'},
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'row x row',
+      aVal: {id1: 1, val1: 1},
+      bVal: {id2: 2, val2: 2},
+      aAlias: 't1',
+      bAlias: 't2',
+      getAID: v => v.id1 as number,
+      getBID: v => v.id2 as number,
+      expected: {
+        id: '1:2',
+        t1: {id1: 1, val1: 1},
+        t2: {id2: 2, val2: 2},
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'row x row - reversed id order',
+      aVal: {id1: 4, val1: 1},
+      bVal: {id2: 3, val2: 2},
+      aAlias: 't1',
+      bAlias: 't2',
+      getAID: v => v.id1 as string,
+      getBID: v => v.id2 as string,
+      expected: {
+        id: '4:3',
+        t1: {id1: 4, val1: 1},
+        t2: {id2: 3, val2: 2},
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'row x row - string ids',
+      aVal: {id1: '1', val1: 1},
+      bVal: {id2: '2', val2: 2},
+      aAlias: 't1',
+      bAlias: 't2',
+      getAID: v => v.id1 as string,
+      getBID: v => v.id2 as string,
+      expected: {
+        id: '1:2',
+        t1: {id1: '1', val1: 1},
+        t2: {id2: '2', val2: 2},
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'row x row - badchars',
+      aVal: {id1: '1:1%?', val1: 1},
+      bVal: {id2: '2:2%?', val2: 2},
+      aAlias: 't1',
+      bAlias: 't2',
+      getAID: v => v.id1 as string,
+      getBID: v => v.id2 as string,
+      expected: {
+        id: '1%3A1%25%3F:2%3A2%25%3F',
+        t1: {id1: '1:1%?', val1: 1},
+        t2: {id2: '2:2%?', val2: 2},
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'joinresult x undefined',
+      aVal: makeJoinResult(
+        {id1: 1, val1: 1},
+        {id2: 2, val2: 2},
+        't1',
+        't2',
+        v => v.id1,
+        v => v.id2,
+      ),
+      bVal: undefined,
+      aAlias: '',
+      bAlias: undefined,
+      getAID: v => v.id as string,
+      getBID: () => '',
+      expected: {
+        id: '1:2:',
+        t1: {
+          id1: 1,
+          val1: 1,
+        },
+        t2: {
+          id2: 2,
+          val2: 2,
+        },
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'joinresult x undefined (badchars)',
+      aVal: makeJoinResult(
+        {id1: '1:1%?', val1: 1},
+        {id2: '2:2%?', val2: 2},
+        't1',
+        't2',
+        v => v.id1,
+        v => v.id2,
+      ),
+      bVal: undefined,
+      aAlias: '',
+      bAlias: undefined,
+      getAID: v => v.id as string,
+      getBID: () => '',
+      expected: {
+        id: '1%3A1%25%3F:2%3A2%25%3F:',
+        t1: {
+          id1: '1:1%?',
+          val1: 1,
+        },
+        t2: {
+          id2: '2:2%?',
+          val2: 2,
+        },
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'join result x row',
+      aVal: makeJoinResult(
+        {id1: 1, val1: 1},
+        {id2: 2, val2: 2},
+        't1',
+        't2',
+        v => v.id1,
+        v => v.id2,
+      ),
+      bVal: {
+        id3: 3,
+        val3: 3,
+      },
+      aAlias: 't1',
+      bAlias: 't3',
+      getAID: v => v.id as string,
+      getBID: v => v.id3 as number,
+      expected: {
+        id: '1:2:3',
+        t1: {
+          id1: 1,
+          val1: 1,
+        },
+        t2: {
+          id2: 2,
+          val2: 2,
+        },
+        t3: {
+          id3: 3,
+          val3: 3,
+        },
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'join result (with undefined) x row',
+      aVal: makeJoinResult(
+        {id1: 1, val1: 1},
+        undefined,
+        't1',
+        undefined,
+        v => v.id1,
+        () => '',
+      ),
+      bVal: {
+        id3: 3,
+        val3: 3,
+      },
+      aAlias: 't1',
+      bAlias: 't3',
+      getAID: v => v.id as string,
+      getBID: v => v.id3 as number,
+      expected: {
+        id: '1::3',
+        t1: {
+          id1: 1,
+          val1: 1,
+        },
+        t3: {
+          id3: 3,
+          val3: 3,
+        },
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'join result (with undefined) x undefined',
+      aVal: makeJoinResult(
+        {id1: 1, val1: 1},
+        undefined,
+        't1',
+        undefined,
+        v => v.id1,
+        () => '',
+      ),
+      bVal: undefined,
+      aAlias: 't1',
+      bAlias: undefined,
+      getAID: v => v.id as string,
+      getBID: () => '',
+      expected: {
+        id: '1::',
+        t1: {
+          id1: 1,
+          val1: 1,
+        },
+        [joinSymbol]: true,
+      },
+    },
+    {
+      description: 'join result x join result',
+      aVal: makeJoinResult(
+        {id1: 1, val1: 1},
+        {id2: 2, val2: 2},
+        't1',
+        't2',
+        v => v.id1,
+        v => v.id2,
+      ),
+      bVal: makeJoinResult(
+        {id3: 3, val3: 3},
+        {id4: 4, val4: 4},
+        't3',
+        't4',
+        v => v.id3,
+        v => v.id4,
+      ),
+      aAlias: '',
+      bAlias: '',
+      getAID: v => v.id as string,
+      getBID: v => v.id as string,
+      expected: {
+        id: '1:2:3:4',
+        t1: {
+          id1: 1,
+          val1: 1,
+        },
+        t2: {
+          id2: 2,
+          val2: 2,
+        },
+        t3: {
+          id3: 3,
+          val3: 3,
+        },
+        t4: {
+          id4: 4,
+          val4: 4,
+        },
+        [joinSymbol]: true,
+      },
+    },
+  ];
+
+  for (const c of cases) {
+    const result = makeJoinResult(
+      c.aVal,
+      c.bVal,
+      c.aAlias,
+      c.bAlias,
+      c.getAID,
+      c.getBID,
+    );
+    expect(result, c.description).toEqual(c.expected);
+  }
 });

@@ -13,9 +13,9 @@ import {
   StringOrNumber,
   Version,
 } from '../../types.js';
-import {combineRows, DifferenceIndex} from './difference-index.js';
+import {DifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
-import type {JoinArgs} from './join-operator.js';
+import {makeJoinResult, JoinArgs} from './join-operator.js';
 import {SourceHashIndexBackedDifferenceIndex} from './source-backed-difference-index.js';
 
 export class LeftJoinOperator<
@@ -209,7 +209,7 @@ export class LeftJoinOperator<
       aKey !== undefined ? this.#indexB.index.get(aKey) : undefined;
     if (bEntries === undefined || bEntries.length === 0) {
       const joinEntry = [
-        combineRows(
+        makeJoinResult(
           aValue,
           undefined,
           this.#joinArgs.aTable,
@@ -226,7 +226,7 @@ export class LeftJoinOperator<
 
     for (const [bValue, bMult] of bEntries) {
       const joinEntry = [
-        combineRows(
+        makeJoinResult(
           aValue,
           bValue,
           this.#joinArgs.aTable,
@@ -276,7 +276,7 @@ export class LeftJoinOperator<
     const ret: Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] = [];
     for (const [aRow, aMult] of aEntries) {
       const joinEntry = [
-        combineRows(
+        makeJoinResult(
           aRow,
           bValue,
           this.#joinArgs.aTable,

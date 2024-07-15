@@ -59,7 +59,7 @@ test('left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1',
+        id: '1:',
         [joinSymbol]: true,
         track: {
           id: '1',
@@ -96,7 +96,7 @@ test('left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
+        id: '1:1',
         [joinSymbol]: true,
         track: {
           id: '1',
@@ -114,7 +114,7 @@ test('left join', () => {
     ],
     [
       {
-        id: '1',
+        id: '1:',
         [joinSymbol]: true,
         track: {
           id: '1',
@@ -152,7 +152,7 @@ test('left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
+        id: '1:1',
         [joinSymbol]: true,
         track: {
           id: '1',
@@ -221,8 +221,8 @@ test('left join', () => {
     [
       [
         {
-          id: '1',
-          title: 'Track One',
+          id: '2',
+          title: 'Track Two',
           length: 1,
           albumId: '1',
         },
@@ -238,11 +238,11 @@ test('left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
+        id: '2:1',
         [joinSymbol]: true,
         track: {
-          id: '1',
-          title: 'Track One',
+          id: '2',
+          title: 'Track Two',
           length: 1,
           albumId: '1',
         },
@@ -250,6 +250,42 @@ test('left join', () => {
           id: '1',
           title: 'Album One',
           artistId: '1',
+        },
+      },
+      1,
+    ],
+  ]);
+
+  // special chars
+  items.length = 0;
+  trackInput.newDifference(
+    version,
+    [
+      [
+        {
+          id: ':%?',
+          title: 'Track :%?',
+          length: 1,
+          albumId: '2',
+        },
+        1,
+      ],
+    ],
+    undefined,
+  );
+  trackInput.commit(version);
+  ++version;
+
+  expect(items).toEqual([
+    [
+      {
+        id: '%3A%25%3F:',
+        [joinSymbol]: true,
+        track: {
+          id: ':%?',
+          title: 'Track :%?',
+          length: 1,
+          albumId: '2',
         },
       },
       1,
@@ -370,7 +406,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1',
+        id: '1::',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -378,7 +414,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-1',
+        id: '1:1-1:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         [joinSymbol]: true,
@@ -387,7 +423,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1',
+        id: '1::',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -395,7 +431,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2',
+        id: '1:1-2:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         [joinSymbol]: true,
@@ -404,7 +440,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -414,7 +450,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-1',
+        id: '1:1-1:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         [joinSymbol]: true,
@@ -423,7 +459,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -433,7 +469,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2',
+        id: '1:1-2:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         [joinSymbol]: true,
@@ -446,7 +482,7 @@ test('junction table left join', () => {
   expect([...normalize(items, x => x.id)]).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -456,7 +492,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -491,7 +527,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -501,7 +537,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -534,7 +570,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -544,7 +580,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -583,7 +619,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -593,7 +629,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -603,7 +639,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1',
+        id: '1::',
         track: {
           id: '1',
           title: 'Track One',
@@ -646,7 +682,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -656,7 +692,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1',
+        id: '1::',
         track: {
           id: '1',
           title: 'Track One',
@@ -669,7 +705,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -706,7 +742,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -716,7 +752,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-1',
+        id: '1:1-1:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         [joinSymbol]: true,
@@ -725,7 +761,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -735,7 +771,7 @@ test('junction table left join', () => {
     ],
     [
       {
-        id: '1_1-2',
+        id: '1:1-2:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         [joinSymbol]: true,
@@ -767,7 +803,7 @@ test('junction table left join', () => {
   expect(items).toEqual([
     [
       {
-        id: '2',
+        id: '2::',
         track: {id: '2', title: 'Track Two', length: 1, albumId: '2'},
         [joinSymbol]: true,
       },
@@ -889,7 +925,7 @@ test('repro 1', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -899,7 +935,7 @@ test('repro 1', () => {
     ],
     [
       {
-        id: '1',
+        id: '1::',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -907,7 +943,7 @@ test('repro 1', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -945,7 +981,7 @@ test('repro 1', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -955,7 +991,7 @@ test('repro 1', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         artist: {id: '2', name: 'Artist Two'},
@@ -965,7 +1001,7 @@ test('repro 1', () => {
     ],
     [
       {
-        id: '1',
+        id: '1::',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -1004,8 +1040,8 @@ test('add track & album, then remove album', () => {
     [
       [
         {
-          id: '1',
-          title: 'Track One',
+          id: '2',
+          title: 'Track Two',
           length: 1,
           albumId: '1',
         },
@@ -1035,16 +1071,16 @@ test('add track & album, then remove album', () => {
   expect(items).toEqual([
     [
       {
-        id: '1',
-        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        id: '2:',
+        track: {id: '2', title: 'Track Two', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
       1,
     ],
     [
       {
-        id: '1_1',
-        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        id: '2:1',
+        track: {id: '2', title: 'Track Two', length: 1, albumId: '1'},
         album: {id: '1', title: 'Album One', artistId: '1'},
         [joinSymbol]: true,
       },
@@ -1052,8 +1088,8 @@ test('add track & album, then remove album', () => {
     ],
     [
       {
-        id: '1',
-        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        id: '2:',
+        track: {id: '2', title: 'Track Two', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
       -1,
@@ -1082,8 +1118,8 @@ test('add track & album, then remove album', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1',
-        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        id: '2:1',
+        track: {id: '2', title: 'Track Two', length: 1, albumId: '1'},
         album: {id: '1', title: 'Album One', artistId: '1'},
         [joinSymbol]: true,
       },
@@ -1091,8 +1127,8 @@ test('add track & album, then remove album', () => {
     ],
     [
       {
-        id: '1',
-        track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
+        id: '2:',
+        track: {id: '2', title: 'Track Two', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
       1,
@@ -1172,7 +1208,7 @@ test('one to many, remove the one, add the one', () => {
   expect(items).toEqual([
     [
       {
-        id: '1',
+        id: '1:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -1180,7 +1216,7 @@ test('one to many, remove the one, add the one', () => {
     ],
     [
       {
-        id: '1_1-1',
+        id: '1:1-1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         [joinSymbol]: true,
@@ -1189,7 +1225,7 @@ test('one to many, remove the one, add the one', () => {
     ],
     [
       {
-        id: '1',
+        id: '1:',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -1197,7 +1233,7 @@ test('one to many, remove the one, add the one', () => {
     ],
     [
       {
-        id: '1_1-2',
+        id: '1:1-2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         [joinSymbol]: true,
@@ -1228,7 +1264,7 @@ test('one to many, remove the one, add the one', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1-1',
+        id: '1:1-1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         [joinSymbol]: true,
@@ -1237,7 +1273,7 @@ test('one to many, remove the one, add the one', () => {
     ],
     [
       {
-        id: '1_1-2',
+        id: '1:1-2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         [joinSymbol]: true,
@@ -1268,7 +1304,7 @@ test('one to many, remove the one, add the one', () => {
   expect(items).toEqual([
     [
       {
-        id: '1_1-1',
+        id: '1:1-1',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         [joinSymbol]: true,
@@ -1277,7 +1313,7 @@ test('one to many, remove the one, add the one', () => {
     ],
     [
       {
-        id: '1_1-2',
+        id: '1:1-2',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         [joinSymbol]: true,
@@ -1406,7 +1442,7 @@ test('two tracks, only 1 is linked to artists', () => {
   expect(items).toEqual([
     [
       {
-        id: '1',
+        id: '1::',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -1414,7 +1450,7 @@ test('two tracks, only 1 is linked to artists', () => {
     ],
     [
       {
-        id: '2',
+        id: '2::',
         track: {id: '2', albumId: '1', title: 'track 2', length: 1},
         [joinSymbol]: true,
       },
@@ -1422,7 +1458,7 @@ test('two tracks, only 1 is linked to artists', () => {
     ],
     [
       {
-        id: '1_1_1-1',
+        id: '1:1-1:1',
         trackArtist: {id: '1-1', trackId: '1', artistId: '1'},
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         artist: {id: '1', name: 'Artist One'},
@@ -1432,7 +1468,7 @@ test('two tracks, only 1 is linked to artists', () => {
     ],
     [
       {
-        id: '1',
+        id: '1::',
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         [joinSymbol]: true,
       },
@@ -1440,7 +1476,7 @@ test('two tracks, only 1 is linked to artists', () => {
     ],
     [
       {
-        id: '1_1-2_2',
+        id: '1:1-2:2',
         trackArtist: {id: '1-2', trackId: '1', artistId: '2'},
         track: {id: '1', title: 'Track One', length: 1, albumId: '1'},
         artist: {id: '2', name: 'Artist Two'},
