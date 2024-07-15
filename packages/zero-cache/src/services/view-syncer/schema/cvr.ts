@@ -164,7 +164,6 @@ CREATE TABLE cvr.rows (
   "rowKey"           JSONB,
   "rowVersion"       TEXT NOT NULL,
   "patchVersion"     TEXT NOT NULL,
-  -- TODO(arv): Make the change in the queriedColumns
   "queriedColumns"   JSONB,  -- {[queryHash: string]: string[]}, NULL for tombstone
 
   PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey"),

@@ -310,9 +310,7 @@ describe('view-syncer/service', () => {
         clientGroupID: '9876',
         patchVersion: '1xz',
         queriedColumns: {
-          clientGroupID: ['lmids'],
-          clientID: ['lmids'],
-          lastMutationID: ['lmids'],
+          lmids: ['clientGroupID', 'clientID', 'lastMutationID'],
         },
         rowKey: {
           clientGroupID: '9876',
@@ -326,9 +324,7 @@ describe('view-syncer/service', () => {
         clientGroupID: '9876',
         patchVersion: '1xz',
         queriedColumns: {
-          big: ['query-hash1'],
-          id: ['query-hash1'],
-          title: ['query-hash1'],
+          'query-hash1': ['big', 'id', 'title'],
         },
         rowKey: {
           id: '1',
@@ -341,9 +337,7 @@ describe('view-syncer/service', () => {
         clientGroupID: '9876',
         patchVersion: '1xz',
         queriedColumns: {
-          big: ['query-hash1'],
-          id: ['query-hash1'],
-          title: ['query-hash1'],
+          'query-hash1': ['big', 'id', 'title'],
         },
         rowKey: {
           id: '2',
@@ -356,9 +350,7 @@ describe('view-syncer/service', () => {
         clientGroupID: '9876',
         patchVersion: '1xz',
         queriedColumns: {
-          big: ['query-hash1'],
-          id: ['query-hash1'],
-          title: ['query-hash1'],
+          'query-hash1': ['big', 'id', 'title'],
         },
         rowKey: {
           id: '3',
@@ -371,9 +363,7 @@ describe('view-syncer/service', () => {
         clientGroupID: '9876',
         patchVersion: '1xz',
         queriedColumns: {
-          big: ['query-hash1'],
-          id: ['query-hash1'],
-          title: ['query-hash1'],
+          'query-hash1': ['big', 'id', 'title'],
         },
         rowKey: {
           id: '4',
@@ -636,9 +626,7 @@ describe('view-syncer/service', () => {
           clientGroupID: '9876',
           patchVersion: '1xz',
           queriedColumns: {
-            clientGroupID: ['lmids'],
-            clientID: ['lmids'],
-            lastMutationID: ['lmids'],
+            lmids: ['clientGroupID', 'clientID', 'lastMutationID'],
           },
           rowKey: {
             clientGroupID: '9876',
@@ -652,9 +640,7 @@ describe('view-syncer/service', () => {
           clientGroupID: '9876',
           patchVersion: '1xz',
           queriedColumns: {
-            big: ['query-hash1'],
-            id: ['query-hash1'],
-            title: ['query-hash1'],
+            'query-hash1': ['big', 'id', 'title'],
           },
           rowKey: {
             id: '1',
@@ -667,9 +653,7 @@ describe('view-syncer/service', () => {
           clientGroupID: '9876',
           patchVersion: '1xz',
           queriedColumns: {
-            big: ['query-hash1'],
-            id: ['query-hash1'],
-            title: ['query-hash1'],
+            'query-hash1': ['big', 'id', 'title'],
           },
           rowKey: {
             id: '2',
@@ -682,9 +666,7 @@ describe('view-syncer/service', () => {
           clientGroupID: '9876',
           patchVersion: '1xz',
           queriedColumns: {
-            big: ['query-hash1'],
-            id: ['query-hash1'],
-            title: ['query-hash1'],
+            'query-hash1': ['big', 'id', 'title'],
           },
           rowKey: {
             id: '3',
@@ -697,9 +679,7 @@ describe('view-syncer/service', () => {
           clientGroupID: '9876',
           patchVersion: '1xz',
           queriedColumns: {
-            big: ['query-hash1'],
-            id: ['query-hash1'],
-            title: ['query-hash1'],
+            'query-hash1': ['big', 'id', 'title'],
           },
           rowKey: {
             id: '4',

@@ -164,7 +164,7 @@ class ResultParser {
    * Multiple views of rows from different queries are merged, with the query to column
    * mapping tracked in the `record` field of the returned {@link ParsedRow}.
    *
-   * Returns a mapping from the CVR row record path to {@link ParsedRow}.
+   * Returns a mapping from the CVR row ID to {@link ParsedRow}.
    *
    */
   parseResults(results: readonly JSONObject[]): Map<RowID, ParsedRow> {
@@ -222,12 +222,12 @@ class ResultParser {
           };
           parsed.set(id, rowResult);
         }
-        for (const col of Object.keys(row)) {
+        for (const id of this.#queryIDs) {
           rowResult.record.queriedColumns ??= {}; // Appease the compiler
-          rowResult.record.queriedColumns[col] = union(
-            rowResult.record.queriedColumns[col],
-            this.#queryIDs,
-          );
+          rowResult.record.queriedColumns[id] = union(
+            rowResult.record.queriedColumns[id],
+            Object.keys(row),
+          ).sort();
         }
         rowResult.contents = {...rowResult.contents, ...row};
       }

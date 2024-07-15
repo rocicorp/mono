@@ -186,10 +186,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'issues', rowKey: {id: '3'}},
               rowVersion: '1ca',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                parent_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'parent_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'parent_id', 'title'],
               },
             },
           },
@@ -202,8 +200,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'users', rowKey: {id: '102'}},
               rowVersion: '0c',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                name: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'name'],
+                queryHash2: ['id', 'name'],
               },
             },
           },
@@ -216,9 +214,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'issues', rowKey: {id: '1'}},
               rowVersion: '1a0',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'title'],
               },
             },
           },
@@ -231,8 +228,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'users', rowKey: {id: '100'}},
               rowVersion: '0a',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                name: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'name'],
+                queryHash2: ['id', 'name'],
               },
             },
           },
@@ -245,10 +242,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'issues', rowKey: {id: '4'}},
               rowVersion: '1cd',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                parent_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'parent_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'parent_id', 'title'],
               },
             },
           },
@@ -261,8 +256,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'users', rowKey: {id: '101'}},
               rowVersion: '0b',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                name: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'name'],
+                queryHash2: ['id', 'name'],
               },
             },
           },
@@ -275,9 +270,8 @@ describe('view-syncer/queries', () => {
               id: {schema: 'public', table: 'issues', rowKey: {id: '2'}},
               rowVersion: '1ab',
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'title'],
               },
             },
           },
@@ -353,8 +347,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1ab',
               queriedColumns: {
-                id: ['queryHash'],
-                title: ['queryHash'],
+                queryHash: ['id', 'title'],
               },
             },
             contents: {
@@ -382,8 +375,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1cd',
               queriedColumns: {
-                id: ['queryHash'],
-                title: ['queryHash'],
+                queryHash: ['id', 'title'],
               },
             },
             contents: {
@@ -411,9 +403,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1c',
               queriedColumns: {
-                id: ['queryHash'],
-                issueId: ['queryHash'],
-                labelId: ['queryHash'],
+                queryHash: ['id', 'issueId', 'labelId'],
               },
             },
             contents: {
@@ -442,8 +432,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1b',
               queriedColumns: {
-                id: ['queryHash'],
-                name: ['queryHash'],
+                queryHash: ['id', 'name'],
               },
             },
             contents: {
@@ -471,8 +460,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1ca',
               queriedColumns: {
-                id: ['queryHash'],
-                title: ['queryHash'],
+                queryHash: ['id', 'title'],
               },
             },
             contents: {
@@ -500,9 +488,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1a',
               queriedColumns: {
-                id: ['queryHash'],
-                issueId: ['queryHash'],
-                labelId: ['queryHash'],
+                queryHash: ['id', 'issueId', 'labelId'],
               },
             },
             contents: {
@@ -531,9 +517,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1b',
               queriedColumns: {
-                id: ['queryHash'],
-                issueId: ['queryHash'],
-                labelId: ['queryHash'],
+                queryHash: ['id', 'issueId', 'labelId'],
               },
             },
             contents: {
@@ -562,8 +546,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1a',
               queriedColumns: {
-                id: ['queryHash'],
-                name: ['queryHash'],
+                queryHash: ['id', 'name'],
               },
             },
             contents: {
@@ -591,8 +574,7 @@ describe('view-syncer/queries', () => {
               },
               rowVersion: '1a0',
               queriedColumns: {
-                id: ['queryHash'],
-                title: ['queryHash'],
+                queryHash: ['id', 'title'],
               },
             },
             contents: {
@@ -747,8 +729,8 @@ describe('view-syncer/queries', () => {
                 table: 'users',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                name: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'name'],
+                queryHash2: ['id', 'name'],
               },
               rowVersion: '0b',
             },
@@ -778,10 +760,8 @@ describe('view-syncer/queries', () => {
                 table: 'issues',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                parent_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'parent_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'parent_id', 'title'],
               },
               rowVersion: '1ab',
             },
@@ -811,10 +791,8 @@ describe('view-syncer/queries', () => {
                 table: 'issues',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                parent_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'parent_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'parent_id', 'title'],
               },
               rowVersion: '1cd',
             },
@@ -842,8 +820,8 @@ describe('view-syncer/queries', () => {
                 table: 'users',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                name: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'name'],
+                queryHash2: ['id', 'name'],
               },
               rowVersion: '0c',
             },
@@ -871,8 +849,8 @@ describe('view-syncer/queries', () => {
                 table: 'users',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                name: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'name'],
+                queryHash2: ['id', 'name'],
               },
               rowVersion: '0a',
             },
@@ -902,10 +880,8 @@ describe('view-syncer/queries', () => {
                 table: 'issues',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                parent_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'parent_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'parent_id', 'title'],
               },
               rowVersion: '1a0',
             },
@@ -935,10 +911,8 @@ describe('view-syncer/queries', () => {
                 table: 'issues',
               },
               queriedColumns: {
-                id: ['queryHash', 'queryHash2'],
-                owner_id: ['queryHash', 'queryHash2'],
-                parent_id: ['queryHash', 'queryHash2'],
-                title: ['queryHash', 'queryHash2'],
+                queryHash: ['id', 'owner_id', 'parent_id', 'title'],
+                queryHash2: ['id', 'owner_id', 'parent_id', 'title'],
               },
               rowVersion: '1ca',
             },

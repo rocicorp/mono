@@ -20,6 +20,8 @@ import {
   RowPatch,
   RowRecord,
   cmpVersions,
+  getAllColumns,
+  getAllColumnsSorted,
   oneAfter,
   type CVRVersion,
   type ClientRecord,
@@ -259,7 +261,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 }
 
-type QueriedColumns = Record<string, string[]>;
+type Hash = string;
+export type Column = string;
+export type QueriedColumns = Record<Hash, Column[]>;
 
 /**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
@@ -353,8 +357,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       if (existing.queriedColumns === null) {
         continue; // Tombstone
       }
-      for (const queries of Object.values(existing.queriedColumns)) {
-        if (queries.some(id => this.#removedOrExecutedQueryIDs.has(id))) {
+      for (const id of Object.keys(existing.queriedColumns)) {
+        if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
           break;
         }
@@ -487,7 +491,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       const patchVersion =
         // not the same
         existing?.rowVersion === rowVersion &&
-        Object.keys(merged).every(col => existing.queriedColumns?.[col])
+        columnsAreASubset(merged, existing?.queriedColumns)
           ? existing.patchVersion
           : this.#assertNewVersion();
 
@@ -631,7 +635,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       );
     if (
       existing.queriedColumns &&
-      Object.keys(existing.queriedColumns).every(col => newQueriedColumns[col])
+      sameColumns(existing.queriedColumns, newQueriedColumns)
     ) {
       if (received) {
         const pending = this._cvrStore.getPendingRowRecord(existing.id);
@@ -649,7 +653,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     }
     const newPatchVersion = this.#assertNewVersion();
     const {id} = existing;
-    const columns = Object.keys(newQueriedColumns);
+    const columns = getAllColumnsSorted(newQueriedColumns);
     const isPut = columns.length > 0;
 
     const rowRecord: RowRecord = {
@@ -661,7 +665,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
 
     return isPut
-      ? {id, columns} // UpdateOp
+      ? // TODO(arv): Should this be updated?
+        {id, columns} // UpdateOp
       : {id}; // DeleteOp
   }
 }
@@ -680,20 +685,64 @@ function mergeQueriedColumns(
     if (!row) {
       return;
     }
-    for (const [col, queries] of Object.entries(row)) {
-      for (const id of queries) {
-        if (i === 0 /* existing */ && removeIDs?.has(id)) {
-          continue; // removeIDs from existing row.
-        }
-        if (!merged[col]?.includes(id)) {
-          const len = (merged[col] ??= []).push(id);
-          if (len > 1) {
-            merged[col].sort(); // Determinism is needed for diffing.
-          }
-        }
+    for (const [id, columns] of Object.entries(row)) {
+      if (i === 0 /* existing */ && removeIDs?.has(id)) {
+        continue; // removeIDs from existing row.
+      }
+      let col = merged[id];
+      if (!col) {
+        col = merged[id] = [];
+      }
+      const set = new Set([...col, ...columns]);
+      merged[id] = [...set];
+      if (set.size > 1) {
+        merged[id].sort(); // Determinism is needed for diffing.
       }
     }
+
+    return merged;
   });
 
   return merged;
+}
+
+function sameColumns(a: QueriedColumns, b: QueriedColumns | null): boolean {
+  const aColumns = getAllColumns(a);
+  if (b === null) {
+    return aColumns.size === 0;
+  }
+  const bColumns = getAllColumns(b);
+  if (aColumns.size !== bColumns.size) {
+    return false;
+  }
+  for (const col of aColumns) {
+    if (!bColumns.has(col)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Determines if b has all the columns a has. b can have more columns than a.
+ */
+function columnsAreASubset(
+  a: QueriedColumns,
+  b: QueriedColumns | null,
+): boolean {
+  const aColumns = getAllColumns(a);
+  if (b === null) {
+    return aColumns.size === 0;
+  }
+  const bColumns = new Set(getAllColumns(b));
+  if (aColumns.size > bColumns.size) {
+    return false;
+  }
+  for (const col of aColumns) {
+    if (!bColumns.has(col)) {
+      return false;
+    }
+  }
+  return true;
 }

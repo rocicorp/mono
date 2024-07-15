@@ -11,8 +11,8 @@ import {astSchema} from 'zero-protocol';
 import {versionToLexi} from 'zqlite-zero-cache-shared/src/lexi-version.js';
 import type {CVR} from './cvr.js';
 import {
-  RowsRow,
   rowRecordToRowsRow,
+  RowsRow,
   rowsRowToRowRecord,
   type ClientsRow,
   type DesiresRow,
@@ -24,6 +24,7 @@ import {
   ClientQueryRecord,
   ClientRecord,
   DelRowPatch,
+  getAllColumnsSorted,
   InternalQueryRecord,
   MetadataPatch,
   PutRowPatch,
@@ -426,8 +427,7 @@ export class CVRStore {
             op: 'put',
             id,
             rowVersion: row.rowVersion,
-            // TODO(arv): Update schema to match design doc
-            columns: Object.keys(row.queriedColumns),
+            columns: getAllColumnsSorted(row.queriedColumns),
           } satisfies PutRowPatch)
         : ({
             type: 'row',

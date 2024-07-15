@@ -827,7 +827,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          queriedColumns: {id: ['twoHash']},
+          queriedColumns: {twoHash: ['id']},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -836,7 +836,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          queriedColumns: {id: ['twoHash']},
+          queriedColumns: {twoHash: ['id']},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -894,7 +894,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash']},
+                queriedColumns: {oneHash: ['id']},
               },
               contents: {id: 'should-show-up-in-patch'},
             },
@@ -922,7 +922,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash'], name: ['oneHash']},
+                queriedColumns: {oneHash: ['id', 'name']},
               },
               contents: {
                 id: 'new version patch',
@@ -936,7 +936,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID2,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash']},
+                queriedColumns: {oneHash: ['id']},
               },
               contents: {id: 'same column selection as twoHash'},
             },
@@ -947,7 +947,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID3,
                 rowVersion: '09',
-                queriedColumns: {id: ['oneHash']},
+                queriedColumns: {oneHash: ['id']},
               },
               contents: {id: 'new version patch'},
             },
@@ -993,7 +993,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash']},
+                queriedColumns: {oneHash: ['id']},
               },
               contents: {id: 'patch stays at new version'},
             },
@@ -1156,7 +1156,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1a0',
           queriedColumns: {
-            id: ['oneHash', 'twoHash'],
+            oneHash: ['id'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY2,
           rowVersion: '03',
@@ -1167,7 +1168,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
           queriedColumns: {
-            id: ['oneHash'],
+            oneHash: ['id'],
           },
           rowKey: ROW_KEY3,
           rowVersion: '09',
@@ -1178,8 +1179,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
           queriedColumns: {
-            id: ['oneHash', 'twoHash'],
-            name: ['oneHash'],
+            oneHash: ['id', 'name'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY1,
           rowVersion: '03',
@@ -1253,7 +1254,10 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
+          queriedColumns: {
+            oneHash: ['id', 'name'],
+            twoHash: ['id'],
+          },
           patchVersion: '1aa:01',
           schema: 'public',
           table: 'issues',
@@ -1262,7 +1266,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          queriedColumns: {id: ['twoHash']},
+          queriedColumns: {twoHash: ['id']},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -1271,7 +1275,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY3,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash']},
+          queriedColumns: {oneHash: ['id']},
           patchVersion: '1aa:01',
           schema: 'public',
           table: 'issues',
@@ -1318,7 +1322,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+                queriedColumns: {oneHash: ['id']}, // No longer referencing "name"
               },
               contents: {id: 'existing patch'},
             },
@@ -1353,7 +1357,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID2,
                 rowVersion: '09',
-                queriedColumns: {id: ['oneHash']},
+                queriedColumns: {oneHash: ['id']},
               },
               contents: {id: 'new-row-version-should-bump-cvr-version'},
             },
@@ -1500,7 +1504,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
           queriedColumns: {
-            id: ['oneHash', 'twoHash'],
+            oneHash: ['id'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY2,
           rowVersion: '09',
@@ -1511,7 +1516,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
           queriedColumns: {
-            id: ['oneHash', 'twoHash'],
+            oneHash: ['id'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY1,
           rowVersion: '03',
@@ -1629,7 +1635,10 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
+          queriedColumns: {
+            oneHash: ['id', 'name'],
+            twoHash: ['id'],
+          },
           patchVersion: '1aa:01',
           schema: 'public',
           table: 'issues',
@@ -1638,7 +1647,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          queriedColumns: {id: ['twoHash']},
+          queriedColumns: {twoHash: ['id']},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -1647,7 +1656,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY3,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash']},
+          queriedColumns: {oneHash: ['id']},
           patchVersion: '1aa:01',
           schema: 'public',
           table: 'issues',
@@ -1680,7 +1689,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash']}, // No longer referencing "name"
+                queriedColumns: {oneHash: ['id']}, // No longer referencing "name"
               },
               contents: {id: 'existing-patch'},
             },
@@ -1708,7 +1717,9 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['twoHash'], desc: ['twoHash']}, // Now referencing "desc"
+                queriedColumns: {
+                  twoHash: ['desc', 'id'], // Now referencing "desc"
+                },
               },
               contents: {id: 'new-column-bumps-cvr-version'},
             },
@@ -1736,7 +1747,7 @@ describe('view-syncer/cvr', () => {
             record: {
               id: ROW_ID2,
               rowVersion: '09',
-              queriedColumns: {id: ['oneHash']},
+              queriedColumns: {oneHash: ['id']},
             },
             contents: {
               /* ignored */
@@ -1754,7 +1765,7 @@ describe('view-syncer/cvr', () => {
             record: {
               id: ROW_ID2,
               rowVersion: '09',
-              queriedColumns: {id: ['twoHash']},
+              queriedColumns: {twoHash: ['id']},
             },
             contents: {
               /* ignored */
@@ -1772,7 +1783,7 @@ describe('view-syncer/cvr', () => {
           type: 'row',
           op: 'constrain',
           id: ROW_ID1,
-          columns: ['id', 'desc'],
+          columns: ['desc', 'id'],
         },
         toVersion: newVersion,
       },
@@ -1921,7 +1932,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
           queriedColumns: {
-            id: ['oneHash', 'twoHash'],
+            oneHash: ['id'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY2,
           rowVersion: '09',
@@ -1932,8 +1944,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
           queriedColumns: {
-            desc: ['twoHash'],
-            id: ['oneHash', 'twoHash'],
+            oneHash: ['id'],
+            twoHash: ['desc', 'id'],
           },
           rowKey: ROW_KEY1,
           rowVersion: '03',
@@ -2019,7 +2031,10 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
           rowKey: ROW_KEY1,
-          queriedColumns: {id: ['twoHash', 'oneHash'], name: ['oneHash']},
+          queriedColumns: {
+            oneHash: ['id', 'name'],
+            twoHash: ['id'],
+          },
           rowVersion: '03',
           schema: 'public',
           table: 'issues',
@@ -2028,7 +2043,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba',
           rowKey: ROW_KEY2,
-          queriedColumns: {id: ['twoHash']},
+          queriedColumns: {twoHash: ['id']},
           rowVersion: '03',
           schema: 'public',
           table: 'issues',
@@ -2037,7 +2052,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
           rowKey: ROW_KEY3,
-          queriedColumns: {id: ['oneHash']},
+          queriedColumns: {oneHash: ['id']},
           rowVersion: '09',
           schema: 'public',
           table: 'issues',
@@ -2159,7 +2174,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba',
           queriedColumns: {
-            id: ['twoHash'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY2,
           rowVersion: '03',
@@ -2170,7 +2185,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
           queriedColumns: {
-            id: ['twoHash'],
+            twoHash: ['id'],
           },
           rowKey: ROW_KEY1,
           rowVersion: '03',
@@ -2289,7 +2304,10 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          queriedColumns: {id: ['oneHash', 'twoHash'], name: ['oneHash']},
+          queriedColumns: {
+            oneHash: ['id', 'name'],
+            twoHash: ['id'],
+          },
           schema: 'public',
           table: 'issues',
         },
@@ -2298,7 +2316,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a0',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          queriedColumns: {id: ['twoHash']},
+          queriedColumns: {twoHash: ['id']},
           schema: 'public',
           table: 'issues',
         },
@@ -2307,7 +2325,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           rowKey: ROW_KEY3,
           rowVersion: '09',
-          queriedColumns: {id: ['oneHash']},
+          queriedColumns: {oneHash: ['id']},
           schema: 'public',
           table: 'issues',
         },
@@ -2405,7 +2423,9 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['oneHash'], name: ['oneHash']},
+                queriedColumns: {
+                  oneHash: ['id', 'name'],
+                },
               },
               contents: {id: 'existing-patch'},
             },
@@ -2433,7 +2453,7 @@ describe('view-syncer/cvr', () => {
               record: {
                 id: ROW_ID1,
                 rowVersion: '03',
-                queriedColumns: {id: ['twoHash']},
+                queriedColumns: {twoHash: ['id']},
               },
               contents: {id: 'existing-patch'},
             },
@@ -2460,7 +2480,7 @@ describe('view-syncer/cvr', () => {
             record: {
               id: ROW_ID3,
               rowVersion: '09',
-              queriedColumns: {id: ['oneHash']},
+              queriedColumns: {oneHash: ['id']},
             },
             contents: {
               /* ignored */
@@ -2478,7 +2498,7 @@ describe('view-syncer/cvr', () => {
             record: {
               id: ROW_ID2,
               rowVersion: '03',
-              queriedColumns: {id: ['twoHash']},
+              queriedColumns: {twoHash: ['id']},
             },
             contents: {
               /* ignored */
