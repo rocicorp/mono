@@ -56,6 +56,7 @@ vim packages/replicache/package.json
 npm install
 npx syncpack fix-mismatches
 npm install
+npm run build
 git commit -a -m 'chore(replicache): Bump version to v$NEW_VERSION'
 ```
 
@@ -81,7 +82,7 @@ git push origin --tags
 ## Merge the Release
 
 ```bash
-# From your main checkout (not temp dir)
+# !!! IMPORTANT !!! From your main checkout (NOT temp dir - /tmp/release)
 git fetch -t
 git merge replicache/v$NEW_VERSION
 git push origin main
