@@ -16,7 +16,7 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "shared": "0.0.0",
     "type-fest": "^4.3.1",
-    "typescript": "^5.4.2"
+    "typescript": "^5.5.3"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

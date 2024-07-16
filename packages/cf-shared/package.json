@@ -19,7 +19,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@vitest/browser": "^2.0.3",
-    "typescript": "^5.4.2",
+    "typescript": "^5.5.3",
     "vite-tsconfig-paths": "^4.3.2",
     "vitest": "^2.0.3"
   },

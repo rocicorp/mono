@@ -51,7 +51,7 @@
     "concurrently": "^8.2.1",
     "rollup-plugin-dts": "^5.3.0",
     "shared": "0.0.0",
-    "typescript": "^5.4.2",
+    "typescript": "^5.5.3",
     "vitest": "^2.0.3",
     "ts-node": "^10.9.1"
   },

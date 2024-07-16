@@ -17,7 +17,7 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "zql": "0.0.0",
     "shared": "0.0.0",
-    "typescript": "^5.4.2"
+    "typescript": "^5.5.3"
   },
   "exports": {
     ".": "./src/mod.ts",
