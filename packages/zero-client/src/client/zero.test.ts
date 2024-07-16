@@ -918,7 +918,7 @@ test('smokeTest', async () => {
     spy.mockReset();
     await r.mutate.issues.delete({id: 'b'});
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.lastCall[0]).toEqual([{id: 'a', value: 11}]);
+    expect(spy.mock.lastCall?.[0]).toEqual([{id: 'a', value: 11}]);
 
     unsubscribe();
 

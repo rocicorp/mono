@@ -17,15 +17,12 @@ import {toGotQueriesKey} from './keys.js';
 import {QueryManager} from './query-manager.js';
 
 function createExperimentalWatchMock() {
-  return vi.fn<
-    Parameters<InstanceType<typeof ReplicacheImpl>['experimentalWatch']>,
-    ReturnType<InstanceType<typeof ReplicacheImpl>['experimentalWatch']>
-  >();
+  return vi.fn<typeof ReplicacheImpl.prototype.experimentalWatch>();
 }
 
 test('add', () => {
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   const ast: AST = {
     table: 'issues',
@@ -70,7 +67,7 @@ test('add', () => {
 
 test('remove', () => {
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   const ast: AST = {
     table: 'issues',
@@ -185,7 +182,7 @@ class TestTransaction implements ReadTransaction {
 
 test('getQueriesPatch', async () => {
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   // hash: 3m39m3xhe8uxg
   const ast1: AST = {
@@ -246,7 +243,7 @@ test('getQueriesPatch', async () => {
 test('gotCallback, query already got', async () => {
   const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -267,7 +264,7 @@ test('gotCallback, query already got', async () => {
     orderBy: [[['issues', 'id'], 'asc']],
   };
 
-  const gotCalback1 = vi.fn<[boolean], void>();
+  const gotCalback1 = vi.fn<(arg: boolean) => void>();
   queryManager.add(ast, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
@@ -303,7 +300,7 @@ test('gotCallback, query already got', async () => {
 
   expect(gotCalback1).nthCalledWith(1, true);
 
-  const gotCalback2 = vi.fn<[boolean], void>();
+  const gotCalback2 = vi.fn<(arg: boolean) => void>();
   queryManager.add(ast, gotCalback2);
   expect(send).toBeCalledTimes(1);
 
@@ -317,7 +314,7 @@ test('gotCallback, query already got', async () => {
 test('gotCallback, query got after add', async () => {
   const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -331,7 +328,7 @@ test('gotCallback, query got after add', async () => {
     orderBy: [[['issues', 'id'], 'asc']],
   };
 
-  const gotCalback1 = vi.fn<[boolean], void>();
+  const gotCalback1 = vi.fn<(arg: boolean) => void>();
   queryManager.add(ast, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
@@ -381,7 +378,7 @@ test('gotCallback, query got after add', async () => {
 test('gotCallback, query got after add then removed', async () => {
   const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -395,7 +392,7 @@ test('gotCallback, query got after add then removed', async () => {
     orderBy: [[['issues', 'id'], 'asc']],
   };
 
-  const gotCalback1 = vi.fn<[boolean], void>();
+  const gotCalback1 = vi.fn<(arg: boolean) => void>();
   queryManager.add(ast, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
@@ -455,7 +452,7 @@ test('gotCallback, query got after add then removed', async () => {
 test('gotCallback, query got after subscription removed', async () => {
   const queryHash = 'vgoxbdhr8m7c';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<[ChangeDesiredQueriesMessage], void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -469,7 +466,7 @@ test('gotCallback, query got after subscription removed', async () => {
     orderBy: [[['issues', 'id'], 'asc']],
   };
 
-  const gotCalback1 = vi.fn<[boolean], void>();
+  const gotCalback1 = vi.fn<(arg: boolean) => void>();
   const remove = queryManager.add(ast, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([

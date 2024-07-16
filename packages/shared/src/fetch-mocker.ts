@@ -34,8 +34,9 @@ export interface SpyOn {
 
 type FetchSpy =
   | vitest.MockInstance<
-      [input: string | Request | URL, init?: RequestInit | undefined],
-      Promise<Response>
+      (
+        ...args: [input: string | Request | URL, init?: RequestInit | undefined]
+      ) => Promise<Response>
     >
   | jest.SpiedFunction<{
       (

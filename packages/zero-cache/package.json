@@ -52,7 +52,7 @@
     "rollup-plugin-dts": "^5.3.0",
     "shared": "0.0.0",
     "typescript": "^5.4.2",
-    "vitest": "^1.6.0",
+    "vitest": "^2.0.3",
     "ts-node": "^10.9.1"
   },
   "eslintConfig": {

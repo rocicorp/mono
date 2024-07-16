@@ -12,7 +12,7 @@ import {
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 
-let rafStub: MockInstance<[FrameRequestCallback], number>;
+let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use
 // its time argument, so use an arbitrary constant for it in tests.
 const UNUSED_RAF_ARG = 10;
