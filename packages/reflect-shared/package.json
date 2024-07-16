@@ -17,7 +17,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "esbuild": "^0.20.2",
-    "replicache": "15.0.0",
+    "replicache": "15.0.1",
     "rollup": "^3.24.0",
     "shared": "0.0.0",
     "typescript": "^5.4.2"
