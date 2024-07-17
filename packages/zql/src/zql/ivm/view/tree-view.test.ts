@@ -3,6 +3,7 @@ import {expect, test} from 'vitest';
 import {makeTestContext} from '../../context/test-context.js';
 import type {Entity} from '../../schema/entity-schema.js';
 import {makeComparator} from '../compare.js';
+import {DifferenceStream} from '../graph/difference-stream.js';
 import type {Comparator} from '../types.js';
 import {TreeView} from './tree-view.js';
 
@@ -175,4 +176,57 @@ test('replace outside viewport', () => {
     {id: 3, s: '3'},
     {id: 4, s: '4'},
   ]);
+});
+
+test('iterator passed to the view is correctly returned', () => {
+  const context = makeTestContext();
+  const orderBy = [[['test', 'x'], 'asc']] as const;
+  const comparator: Comparator<{x: number}> = (l, r) => l.x - r.x;
+
+  const stream = new DifferenceStream<{x: number}>();
+
+  const view = new TreeView(context, stream, comparator, orderBy, 2);
+
+  const items = [1, 2, 3, 4, 5].map(x => ({x}));
+
+  let returned = false;
+
+  class Iterator {
+    #i = 0;
+
+    next() {
+      if (this.#i === items.length) {
+        return {done: true, value: undefined} as const;
+      }
+      return {done: false, value: [items[this.#i++], 1] as const} as const;
+    }
+
+    return() {
+      returned = true;
+      return {done: true, value: undefined} as const;
+    }
+
+    throw() {
+      return {done: true, value: undefined} as const;
+    }
+  }
+
+  view.pullHistoricalData();
+
+  stream.newDifference(
+    1,
+    {
+      [Symbol.iterator]: () => new Iterator(),
+    },
+    {
+      replyingTo: 0,
+      type: 'pullResponse',
+      sourceName: 'test',
+      contiguousGroup: [],
+      order: orderBy,
+    },
+  );
+
+  expect(view.value).toEqual([{x: 1}, {x: 2}]);
+  expect(returned).toBe(true);
 });
