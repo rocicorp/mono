@@ -1,7 +1,18 @@
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {makeErrorResponse} from 'cf-shared/src/errors.js';
+import {
+  BaseContext,
+  Handler,
+  Router,
+  WithLogContext,
+  bodyAndArbitraryQueryParams,
+  checkAuthAPIKey,
+  get,
+  post,
+} from 'cf-shared/src/router.js';
 import {version} from 'reflect-shared/src/version.js';
-import type {MaybePromise} from 'shared/src/types.js';
 import {timed} from 'shared/src/timed.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import {Series, reportMetricsSchema} from '../types/report-metrics.js';
 import {isTrueEnvValue} from '../util/env.js';
 import {populateLogContextFromRequest} from '../util/log-context-common.js';
@@ -16,7 +27,6 @@ import {
   AUTH_WEBSOCKET_ROUTES_AUTHED_BY_API_KEY,
 } from './auth-do.js';
 import {createDatadogMetricsSink} from './datadog-metrics-sink.js';
-import {makeErrorResponse} from 'cf-shared/src/errors.js';
 import {
   CANARY_GET,
   HELLO,
@@ -24,16 +34,6 @@ import {
   REPORT_METRICS_PATH,
 } from './paths.js';
 import type {DatadogMetricsOptions} from './reflect.js';
-import {
-  BaseContext,
-  Handler,
-  Router,
-  WithLogContext,
-  bodyAndArbitraryQueryParams,
-  checkAuthAPIKey,
-  get,
-  post,
-} from 'cf-shared/src/router.js';
 import {withUnhandledRejectionHandler} from './unhandled-rejection-handler.js';
 
 export type MetricsSink = (
@@ -193,7 +193,7 @@ const logLogs = post<WorkerContext>().handle(
         'Failed to send client logs to DataDog, error response',
         ddResponse.status,
         ddResponse.statusText,
-        await ddResponse.text,
+        await ddResponse.text(),
       );
       return new Response('Error response.', {status: ddResponse.status});
     } catch (e) {
