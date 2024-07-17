@@ -1,12 +1,21 @@
 import type {Primitive} from '../../../ast/ast.js';
 import type {Entry} from '../../multiset.js';
 
+export interface DifferenceIndex<Key extends Primitive | undefined, V> {
+  add(key: Key, value: Entry<V>): void;
+  get(key: Key): Entry<V>[] | undefined;
+  compact(): void;
+}
+
 /**
  * Indexes difference events by a key.
  */
-export class DifferenceIndex<Key extends Primitive | undefined, V> {
+export class MemoryBackedDifferenceIndex<Key extends Primitive | undefined, V>
+  implements DifferenceIndex<Key, V>
+{
   readonly #index = new Map<Key, Entry<V>[]>();
   readonly #getValueIdentity;
+  readonly #keysForCompaction = new Set<Key>();
 
   constructor(getValueIdentity: (value: V) => string | number) {
     this.#getValueIdentity = getValueIdentity;
@@ -19,6 +28,7 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
       this.#index.set(key, existing);
     }
     existing.push(value);
+    this.#keysForCompaction.add(key);
   }
 
   get(key: Key): Entry<V>[] | undefined {
@@ -39,9 +49,9 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
    *
    * `JOIN` will compact its index at the end of each run.
    */
-  compact(keys: Set<Key>) {
+  compact() {
     // Go through all the keys that were requested to be compacted.
-    for (const key of keys) {
+    for (const key of this.#keysForCompaction) {
       const values = this.#index.get(key);
       if (values === undefined) {
         continue;
@@ -53,6 +63,7 @@ export class DifferenceIndex<Key extends Primitive | undefined, V> {
         this.#index.set(key, consolidated);
       }
     }
+    this.#keysForCompaction.clear();
   }
 
   #consolidateValues(values: Entry<V>[]) {

@@ -14,7 +14,7 @@ import {
   getValueFromEntity,
 } from '../../source/util.js';
 import type {DifferenceStream} from '../difference-stream.js';
-import {DifferenceIndex} from './difference-index.js';
+import {MemoryBackedDifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
 
 export type JoinArgs<
@@ -77,8 +77,8 @@ export class InnerJoinOperator<
   // since they're already aliased
   JoinResult<AValue, BValue, ATable, BAlias>
 > {
-  readonly #indexA: DifferenceIndex<StringOrNumber, AValue>;
-  readonly #indexB: DifferenceIndex<StringOrNumber, BValue>;
+  readonly #indexA: MemoryBackedDifferenceIndex<StringOrNumber, AValue>;
+  readonly #indexB: MemoryBackedDifferenceIndex<StringOrNumber, BValue>;
   readonly #getAPrimaryKey;
   readonly #getBPrimaryKey;
   readonly #getAJoinKey;
@@ -110,18 +110,16 @@ export class InnerJoinOperator<
     this.#getBJoinKey = (value: BValue) =>
       getValueFromEntity(value, joinArgs.bJoinColumn) as StringOrNumber;
 
-    this.#indexA = new DifferenceIndex<StringOrNumber, AValue>(
+    this.#indexA = new MemoryBackedDifferenceIndex<StringOrNumber, AValue>(
       this.#getAPrimaryKey,
     );
-    this.#indexB = new DifferenceIndex<StringOrNumber, BValue>(
+    this.#indexB = new MemoryBackedDifferenceIndex<StringOrNumber, BValue>(
       this.#getBPrimaryKey,
     );
 
     this.#joinArgs = joinArgs;
   }
 
-  #aKeysForCompaction = new Set<StringOrNumber>();
-  #bKeysForCompaction = new Set<StringOrNumber>();
   #lastVersion = -1;
   #join(
     version: Version,
@@ -132,10 +130,8 @@ export class InnerJoinOperator<
       // TODO: all outstanding iterables _must_ be made invalid before processing a new version.
       // We should add some invariant in `joinOne` that checks if the version is still valid
       // and throws if not.
-      this.#indexA.compact(this.#aKeysForCompaction);
-      this.#indexB.compact(this.#bKeysForCompaction);
-      this.#aKeysForCompaction.clear();
-      this.#bKeysForCompaction.clear();
+      this.#indexA.compact();
+      this.#indexB.compact();
       this.#lastVersion = version;
     }
 
@@ -169,7 +165,6 @@ export class InnerJoinOperator<
           );
           if (key !== undefined) {
             this.#indexB.add(key, entry);
-            this.#bKeysForCompaction.add(key);
           }
           return ret;
         }),
@@ -193,7 +188,6 @@ export class InnerJoinOperator<
           );
           if (key !== undefined) {
             this.#indexA.add(key, entry);
-            this.#aKeysForCompaction.add(key);
           }
           return ret;
         }),
@@ -206,7 +200,7 @@ export class InnerJoinOperator<
   #joinOne<OuterValue, InnerValue, JoinResultValue>(
     outerEntry: Entry<OuterValue>,
     outerKey: StringOrNumber,
-    innerIndex: DifferenceIndex<StringOrNumber, InnerValue>,
+    innerIndex: MemoryBackedDifferenceIndex<StringOrNumber, InnerValue>,
     makeJoinResult: (a: OuterValue, b: InnerValue) => JoinResultValue,
   ): Entry<JoinResultValue>[] {
     const outerValue = outerEntry[0];
