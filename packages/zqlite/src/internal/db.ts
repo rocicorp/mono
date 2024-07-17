@@ -43,7 +43,5 @@ export class DB {
 
 export const queries = {
   setCommittedLsn: /*sql*/ `INSERT OR REPLACE INTO _zero_metadata (key, value) VALUES ('committed-lsn', ?);`,
-  setIvmLsn: /*sql*/ `INSERT OR REPLACE INTO _zero_metadata (key, value) VALUES ('ivm-lsn', ?);`,
   getCommittedLsn: /*sql*/ `SELECT value FROM _zero_metadata WHERE key = 'committed-lsn';`,
-  getIvmLsn: /*sql*/ `SELECT value FROM _zero_metadata WHERE key = 'ivm-lsn';`,
 };

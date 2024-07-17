@@ -7,6 +7,12 @@ import {DB, queries} from '../internal/db.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../consts.js';
 import {assert} from '../../../shared/src/asserts.js';
 
+const relationRenames: Record<string, Record<string, string>> = {
+  zero: {
+    clients: '_zero_clients',
+  },
+};
+
 /**
  * Handles incoming messages from the replicator.
  * Applies them to SQLite.
@@ -19,21 +25,22 @@ import {assert} from '../../../shared/src/asserts.js';
 export class MessageProcessor {
   readonly #db: DB;
   readonly #setCommittedLsnStmt: Database.Statement;
-  readonly #setIvmLsnStmt: Database.Statement;
   #rowVersion: LexiVersion | undefined;
+  #inTransaction = false;
 
   constructor(sqliteDbPath: string) {
     this.#db = new DB(sqliteDbPath);
 
     this.#setCommittedLsnStmt = this.#db.prepare(queries.setCommittedLsn);
-    this.#setIvmLsnStmt = this.#db.prepare(queries.setIvmLsn);
   }
 
   processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
     try {
       this.processMessageImpl(lc, lsn, message);
     } catch (e) {
-      this.#db.rollbackImperativeTransaction();
+      if (this.#inTransaction) {
+        this.#db.rollbackImperativeTransaction();
+      }
       throw e;
     }
   }
@@ -80,10 +87,15 @@ export class MessageProcessor {
 
   #begin(lsn: string) {
     this.#rowVersion = toLexiVersion(lsn);
+    this.#inTransaction = true;
     this.#db.beginImperativeTransaction();
   }
 
   #insert(insert: Pgoutput.MessageInsert) {
+    const relationName =
+      relationRenames[insert.relation.schema]?.[insert.relation.name] ??
+      insert.relation.name;
+
     const row = {
       ...insert.new,
       [ZERO_VERSION_COLUMN_NAME]: this.#rowVersion,
@@ -98,12 +110,16 @@ export class MessageProcessor {
       .join(', ');
     this.#db
       .prepare(
-        `INSERT INTO "${insert.relation.name}" (${columns}) VALUES (${valuePlaceholders})`,
+        `INSERT INTO "${relationName}" (${columns}) VALUES (${valuePlaceholders})`,
       )
       .run(row);
   }
 
   #update(update: Pgoutput.MessageUpdate) {
+    const relationName =
+      relationRenames[update.relation.schema]?.[update.relation.name] ??
+      update.relation.name;
+
     const row = {
       ...update.new,
       [ZERO_VERSION_COLUMN_NAME]: this.#rowVersion,
@@ -120,7 +136,7 @@ export class MessageProcessor {
     // Do _not_ use their SQLite bindings, however. Just the builder.
     this.#db
       .prepare(
-        `UPDATE "${update.relation.name}" SET ${Object.keys(row)
+        `UPDATE "${relationName}" SET ${Object.keys(row)
           .map(c => `"${c}" = @${c}`)
           .join(', ')} WHERE ${keyConditions.join(' AND ')}`,
       )
@@ -131,6 +147,10 @@ export class MessageProcessor {
   }
 
   #delete(del: Pgoutput.MessageDelete) {
+    const relationName =
+      relationRenames[del.relation.schema]?.[del.relation.name] ??
+      del.relation.name;
+
     assert(del.relation.replicaIdentity === 'default');
     assert(del.key);
     const keyConditions = getKeyConditions(del.key);
@@ -138,9 +158,7 @@ export class MessageProcessor {
 
     this.#db
       .prepare(
-        `DELETE FROM "${del.relation.name}" WHERE ${keyConditions.join(
-          ' AND ',
-        )}`,
+        `DELETE FROM "${relationName}" WHERE ${keyConditions.join(' AND ')}`,
       )
       .run(rowKey);
   }
@@ -155,16 +173,18 @@ export class MessageProcessor {
 
   #commit(lsn: string) {
     this.#setCommittedLsnStmt.run(lsn);
-    this.#db.commitImperativeTransaction();
-
     this.#runIvmAndBlock();
-    this.#setIvmLsnStmt.run(lsn);
+    this.#db.commitImperativeTransaction();
+    this.#inTransaction = false;
   }
 
   #runIvmAndBlock() {
     // The future implementation will not block. As in,
     // ViewSyncers are in separate processes and we can continue taking writes while
     // they're running.
+    // ---
+    // #runIvmAndBlock needs its own connection so it runs with the old version of the DB
+    // rather than in the current transaction.
   }
 }
 
