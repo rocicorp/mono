@@ -209,7 +209,7 @@ export async function copy(
     } else {
       await sql`CREATE PUBLICATION ${sql(
         PUBLICATION_NAME,
-      )} FOR TABLES IN SCHEMA public`;
+      )} FOR TABLES IN SCHEMA public, zero`;
       lc.info?.('Publication created');
     }
 
