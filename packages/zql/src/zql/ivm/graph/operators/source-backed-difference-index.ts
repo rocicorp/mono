@@ -2,11 +2,13 @@ import type {Primitive} from '../../../ast/ast.js';
 import type {Entry} from '../../multiset.js';
 import type {SourceHashIndex} from '../../source/source-hash-index.js';
 import type {PipelineEntity} from '../../types.js';
+import type {DifferenceIndex} from './difference-index.js';
 
-export class SourceHashIndexBackedDifferenceIndex<
+export class SourceBackedDifferenceIndex<
   Key extends Primitive,
   V extends PipelineEntity,
-> {
+> implements DifferenceIndex<Key, V>
+{
   readonly #overlayIndex: Map<Key, Entry<V>[]>;
   readonly #sourceIndex: SourceHashIndex<Key, V>;
 
@@ -46,4 +48,6 @@ export class SourceHashIndexBackedDifferenceIndex<
   compact() {
     this.#overlayIndex.clear();
   }
+
+  trackKeyForCompaction(_key: Key) {}
 }

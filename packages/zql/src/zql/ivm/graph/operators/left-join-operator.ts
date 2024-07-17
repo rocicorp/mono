@@ -13,10 +13,13 @@ import {
   StringOrNumber,
   Version,
 } from '../../types.js';
-import {DifferenceIndex} from './difference-index.js';
+import {
+  DifferenceIndex,
+  MemoryBackedDifferenceIndex,
+} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
 import {makeJoinResult, JoinArgs} from './join-operator.js';
-import {SourceHashIndexBackedDifferenceIndex} from './source-backed-difference-index.js';
+import {SourceBackedDifferenceIndex} from './source-backed-difference-index.js';
 
 export class LeftJoinOperator<
   AValue extends PipelineEntity,
@@ -31,20 +34,11 @@ export class LeftJoinOperator<
   // since they're already aliased
   JoinResult<AValue, BValue, ATable, BAlias>
 > {
-  readonly #indexA: DifferenceIndex<StringOrNumber | undefined, AValue>;
-  readonly #indexB:
-    | {
-        readonly type: 'source-hash-backed';
-        readonly index: SourceHashIndexBackedDifferenceIndex<
-          StringOrNumber,
-          BValue
-        >;
-      }
-    | {
-        readonly type: 'difference-index';
-        readonly index: DifferenceIndex<StringOrNumber, BValue>;
-        readonly bKeysForCompactions: Set<StringOrNumber>;
-      };
+  readonly #indexA: MemoryBackedDifferenceIndex<
+    StringOrNumber | undefined,
+    AValue
+  >;
+  readonly #indexB: DifferenceIndex<StringOrNumber, BValue>;
 
   // Tracks the cumulative multiplicity of each row in A that we have seen.
   // Example with issues and comments: the issue will be side A and the child
@@ -101,33 +95,24 @@ export class LeftJoinOperator<
     this.#getBJoinKey = (value: BValue) =>
       getValueFromEntity(value, joinArgs.bJoinColumn) as StringOrNumber;
 
-    this.#indexA = new DifferenceIndex<StringOrNumber, AValue>(
+    this.#indexA = new MemoryBackedDifferenceIndex<StringOrNumber, AValue>(
       this.#getAPrimaryKey,
     );
 
     // load indexB from the source...
     if (sourceProvider === undefined) {
-      this.#indexB = {
-        type: 'difference-index',
-        index: new DifferenceIndex<StringOrNumber, BValue>(
-          this.#getBPrimaryKey,
-        ),
-        bKeysForCompactions: new Set(),
-      };
+      this.#indexB = new MemoryBackedDifferenceIndex<StringOrNumber, BValue>(
+        this.#getBPrimaryKey,
+      );
     } else {
       const sourceB = sourceProvider(joinArgs.bTable, undefined);
-      this.#indexB = {
-        type: 'source-hash-backed',
-        index: new SourceHashIndexBackedDifferenceIndex(
-          sourceB.getOrCreateAndMaintainNewHashIndex(joinArgs.bJoinColumn),
-        ) as SourceHashIndexBackedDifferenceIndex<StringOrNumber, BValue>,
-      };
+      this.#indexB = new SourceBackedDifferenceIndex(
+        sourceB.getOrCreateAndMaintainNewHashIndex(joinArgs.bJoinColumn),
+      ) as SourceBackedDifferenceIndex<StringOrNumber, BValue>;
     }
 
     this.#joinArgs = joinArgs;
   }
-
-  readonly #aKeysForCompaction = new Set<StringOrNumber>();
 
   #lastVersion = -1;
   #join(
@@ -140,13 +125,8 @@ export class LeftJoinOperator<
       // TODO: all outstanding iterables _must_ be made invalid before processing a new version.
       // We should add some invariant in `joinOne` that checks if the version is still valid
       // and throws if not.
-      this.#indexA.compact(this.#aKeysForCompaction);
-      if (this.#indexB.type === 'difference-index') {
-        this.#indexB.index.compact(this.#indexB.bKeysForCompactions);
-      } else {
-        this.#indexB.index.compact();
-      }
-      this.#aKeysForCompaction.clear();
+      this.#indexA.compact();
+      this.#indexB.compact();
       this.#lastVersion = version;
     }
 
@@ -166,10 +146,7 @@ export class LeftJoinOperator<
           const key = this.#getBJoinKey(entry[0]);
           const ret = this.#joinOneInner(entry, key);
           if (key !== undefined) {
-            this.#indexB.index.add(key, entry);
-            if (this.#indexB.type === 'difference-index') {
-              this.#indexB.bKeysForCompactions.add(key);
-            }
+            this.#indexB.add(key, entry);
           }
           return ret;
         }),
@@ -183,7 +160,6 @@ export class LeftJoinOperator<
           const ret = this.#joinOneLeft(entry, key);
           if (key !== undefined) {
             this.#indexA.add(key, entry);
-            this.#aKeysForCompaction.add(key);
           }
           return ret;
         }),
@@ -205,8 +181,7 @@ export class LeftJoinOperator<
       ? aValue.id
       : this.#getAPrimaryKey(aValue as AValue);
 
-    const bEntries =
-      aKey !== undefined ? this.#indexB.index.get(aKey) : undefined;
+    const bEntries = aKey !== undefined ? this.#indexB.get(aKey) : undefined;
     if (bEntries === undefined || bEntries.length === 0) {
       const joinEntry = [
         makeJoinResult(
