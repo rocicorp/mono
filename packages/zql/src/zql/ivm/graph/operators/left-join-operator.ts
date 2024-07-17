@@ -309,4 +309,8 @@ export class LeftJoinOperator<
   toString() {
     return `indexa: ${this.#indexA.toString()}\n\n\nindexb: ${this.#indexB.toString()}`;
   }
+
+  inputBIsSourceBacked(): boolean {
+    return this.#indexB instanceof SourceBackedDifferenceIndex;
+  }
 }

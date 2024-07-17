@@ -70,13 +70,17 @@ export class JoinOperatorBase<
     this.#inputB = inputB;
   }
 
+  inputBIsSourceBacked(): boolean {
+    return false;
+  }
+
   #onInputADifference = (
     version: Version,
     data: Multiset<AValue>,
     reply: Reply | undefined,
   ) => {
     if (reply !== undefined) {
-      if (this.#buffer.inputB !== undefined) {
+      if (this.#buffer.inputB !== undefined || this.inputBIsSourceBacked()) {
         this.#output.newDifference(
           version,
           this.#fn(version, data, this.#buffer.inputB, true),
@@ -169,7 +173,9 @@ export class JoinOperatorBase<
       order: undefined,
     };
     this.#inputA.messageUpstream(message, this.#listenerA);
-    this.#inputB.messageUpstream(bMessage, this.#listenerB);
+    if (!this.inputBIsSourceBacked()) {
+      this.#inputB.messageUpstream(bMessage, this.#listenerB);
+    }
   }
 
   destroy() {
