@@ -68,7 +68,7 @@
     "reflect-server": "0.0.0",
     "reflect-shared": "0.0.0",
     "reflect-react": "0.0.0",
-    "replicache": "15.0.0"
+    "replicache": "15.0.1"
   },
   "engines": {
     "node": ">=18"
