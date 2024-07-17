@@ -12,9 +12,11 @@ import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/get-document.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
+import {assertCookie, type Cookie} from './cookies.js';
 import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
@@ -115,7 +117,6 @@ import type {
   RequestOptions,
   UpdateNeededReason,
 } from './types.js';
-import type {MaybePromise} from 'shared/src/types.js';
 import {uuid as makeUuid} from './uuid.js';
 import {version} from './version.js';
 import {
@@ -123,7 +124,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.js';
-import {assertCookie, type Cookie} from './cookies.js';
 
 declare const TESTING: boolean;
 
@@ -376,8 +376,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *   has different mutators, indexes, schema version and/or format version
    *   from this Replicache client. This is likely due to the new client having
    *   newer code. A code update is needed to be able to locally sync with this
-   *   new Replicache client (i.e. to sync while offline, the clients can can
-   *   still sync with each other via the server).
+   *   new Replicache client (i.e. to sync while offline, the clients can still
+   *   sync with each other via the server).
    *
    * The default behavior is to reload the page (using `location.reload()`). Set
    * this to `null` or provide your own function to prevent the page from
