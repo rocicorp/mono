@@ -54,7 +54,7 @@
     "mersenne-twister": "^1.1.0",
     "testpack-cli": "^1.1.4",
     "ts-node": "^10.9.1",
-    "typescript": "^5.4.2"
+    "typescript": "^5.5.3"
   },
   "jest": {
     "transform": {

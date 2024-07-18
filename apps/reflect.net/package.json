@@ -80,7 +80,7 @@
     "styled-components": "^5.3.6",
     "ts-loader": "^9.4.4",
     "ts-node": "^10.9.1",
-    "typescript": "^5.4.2",
+    "typescript": "^5.5.3",
     "vercel": "^28.12.7",
     "zod": "^3.21.4"
   },
