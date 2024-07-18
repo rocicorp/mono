@@ -558,9 +558,8 @@ test('isEqual', () => {
     s3,
   ];
 
-  type ElementType<T> = T extends Array<infer ElementType>
-    ? ElementType
-    : never;
+  type ElementType<T> =
+    T extends Array<infer ElementType> ? ElementType : never;
 
   const sub = new SubscriptionImplForTesting(
     (): Promise<ElementType<typeof queryResults>> =>

@@ -55,7 +55,7 @@ function bumpCanaryVersion(version, hash) {
 
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reflect-build-'));
-  execute(`git clone --depth 1 git@github.com:rocicorp/mono.git ${tempDir}`);
+  execute(`git clone --depth 1 git@github.com:workcanvas/reflect.git ${tempDir}`);
   process.chdir(tempDir);
   //installs turbo and other build dependencies
   execute('npm install');
@@ -80,8 +80,7 @@ try {
   writePackageData(REFLECT_PACKAGE_JSON_PATH, currentPackageData);
 
   const dependencyPaths = [
-    basePath('apps', 'reflect.net', 'package.json'),
-    basePath('mirror', 'mirror-cli', 'package.json'),
+    basePath('package.json'),
   ];
 
   dependencyPaths.forEach(p => {
@@ -110,23 +109,12 @@ try {
   execute(`git merge ${branchName}`);
   execute(`git push origin main`);
 
-  process.chdir('mirror/mirror-cli');
-  execute(
-    `npm run mirror uploadServer -- --version=${nextCanaryVersion} --channels=canary`,
-  );
-  execute(
-    `npm run mirror uploadServer -- --version=${nextCanaryVersion} --channels=canary --stack=sandbox`,
-  );
-
   console.log(``);
   console.log(``);
   console.log(`🎉 Success!`);
   console.log(``);
   console.log(
     `* Published @rocicorp/reflect@${nextCanaryVersion} to npm with tag '@canary'.`,
-  );
-  console.log(
-    `* Published @rocicorp/reflect@${nextCanaryVersion} to Mirror with tag '@canary'.`,
   );
   console.log(`* Pushed Git tag ${tagName} to origin and merged with main.`);
   console.log(``);

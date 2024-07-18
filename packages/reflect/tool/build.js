@@ -68,23 +68,6 @@ function doCopy(dst, src, name) {
   fs.copyFileSync(src, dst);
 }
 
-function copyReflectCLI() {
-  const binDir = basePath('bin');
-  fs.rmSync(binDir, {recursive: true, force: true});
-  const src = basePath('..', '..', 'mirror', 'reflect-cli', 'out', 'index.mjs');
-  const dst = basePath('bin', 'cli.js');
-  doCopy(dst, src, 'mirror/reflect-cli');
-  const templateSrc = basePath(
-    '..',
-    '..',
-    'mirror',
-    'reflect-cli',
-    'templates',
-  );
-  const templateDst = basePath('bin', 'templates');
-  fs.cpSync(templateSrc, templateDst, {recursive: true});
-}
-
 /**
  * @param {any[]} names
  * @returns {Promise<string[]>}
@@ -138,7 +121,5 @@ async function buildPackages() {
 await buildPackages();
 
 copyPackages();
-
-copyReflectCLI();
 
 copyScriptTemplates();

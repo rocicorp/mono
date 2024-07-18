@@ -1,4 +1,3 @@
-export {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 export {consoleLogSink} from '@rocicorp/logger';
 export type {LogLevel, LogSink} from '@rocicorp/logger';
 export type {MaybePromise} from 'shared/src/types.js';

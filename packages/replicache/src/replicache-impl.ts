@@ -1,10 +1,4 @@
-import {
-  getLicenseStatus,
-  licenseActive,
-  LicenseStatus,
-  PROD_LICENSE_SERVER_URL,
-  TEST_LICENSE_KEY,
-} from '@rocicorp/licensing/src/client';
+/* eslint-disable no-constant-condition */
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
@@ -80,7 +74,7 @@ import {
   ReportError,
 } from './replicache.js';
 import {setIntervalWithSignal} from './set-interval-with-signal.js';
-import {mustSimpleFetch} from './simple-fetch.js';
+
 import {
   SubscribeOptions,
   SubscriptionImpl,
@@ -143,7 +137,6 @@ const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
 const RECOVER_MUTATIONS_INTERVAL_MS = 5 * 60 * 1000; // 5 mins
 const LICENSE_ACTIVE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const TEST_LICENSE_KEY_TTL_MS = 5 * 60 * 1000;
 
 const noop = () => {
   // noop
@@ -655,89 +648,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   async #licenseCheck(
     resolveLicenseCheck: (valid: boolean) => void,
   ): Promise<void> {
-    if (!this.#enableLicensing) {
+    if(true) {
       resolveLicenseCheck(true);
-      return;
+    } else {
+      await new Promise(resolve => resolve(true));
     }
-    if (!this.#licenseKey) {
-      await this.#licenseInvalid(
-        this.#lc,
-        `license key ReplicacheOptions.licenseKey is not set`,
-        true /* disable replicache */,
-        resolveLicenseCheck,
-      );
-      return;
-    }
-    this.#lc.debug?.(`Replicache license key: ${this.#licenseKey}`);
-    if (this.#licenseKey === TEST_LICENSE_KEY) {
-      this.#lc.info?.(
-        `Skipping license check for TEST_LICENSE_KEY. ` +
-          `You may ONLY use this key for automated (e.g., unit/CI) testing. ` +
-          // TODO(phritz) maybe use a more specific URL
-          `See https://replicache.dev for more information.`,
-      );
-      resolveLicenseCheck(true);
-
-      this.#testLicenseKeyTimeout = setTimeout(async () => {
-        await this.#licenseInvalid(
-          this.#lc,
-          'Test key expired',
-          true,
-          resolveLicenseCheck,
-        );
-      }, TEST_LICENSE_KEY_TTL_MS);
-
-      return;
-    }
-    try {
-      const resp = await getLicenseStatus(
-        mustSimpleFetch,
-        PROD_LICENSE_SERVER_URL,
-        this.#licenseKey,
-        this.#lc,
-      );
-      if (resp.pleaseUpdate) {
-        this.#lc.error?.(
-          `You are using an old version of Replicache that uses deprecated licensing features. ` +
-            `Please update Replicache else it may stop working.`,
-        );
-      }
-      if (resp.status === LicenseStatus.Valid) {
-        this.#lc.debug?.(`License is valid.`);
-      } else {
-        await this.#licenseInvalid(
-          this.#lc,
-          `status: ${resp.status}`,
-          resp.disable,
-          resolveLicenseCheck,
-        );
-        return;
-      }
-    } catch (err) {
-      this.#lc.error?.(`Error checking license: ${err}`);
-      // Note: on error we fall through to assuming the license is valid.
-    }
-    resolveLicenseCheck(true);
-  }
-
-  async #licenseInvalid(
-    lc: LogContext,
-    reason: string,
-    disable: boolean,
-    resolveLicenseCheck: (valid: boolean) => void,
-  ): Promise<void> {
-    lc.error?.(
-      `** REPLICACHE LICENSE NOT VALID ** Replicache license key '${
-        this.#licenseKey
-      }' is not valid (${reason}). ` +
-        `Please run 'npx replicache get-license' to get a license key or contact hello@replicache.dev for help.`,
-    );
-    if (disable) {
-      await this.close();
-      lc.error?.(`** REPLICACHE DISABLED **`);
-    }
-    resolveLicenseCheck(false);
-    return;
   }
 
   async #startLicenseActive(
@@ -745,24 +660,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     lc: LogContext,
     signal: AbortSignal,
   ): Promise<void> {
-    if (
-      !this.#enableLicensing ||
-      !this.#licenseKey ||
-      this.#licenseKey === TEST_LICENSE_KEY
-    ) {
+    if (!this.#enableLicensing || !this.#licenseKey) {
       resolveLicenseActive(false);
       return;
     }
 
     const markActive = async () => {
       try {
-        await licenseActive(
-          mustSimpleFetch,
-          PROD_LICENSE_SERVER_URL,
-          this.#licenseKey as string,
-          await this.profileID,
-          lc,
-        );
+        await new Promise(resolve => resolve(true));
       } catch (err) {
         this.#lc.info?.(`Error sending license active ping: ${err}`);
       }

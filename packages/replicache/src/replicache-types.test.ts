@@ -1,6 +1,4 @@
 /* eslint-disable require-await */
-
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {IndexKey} from './db/index.js';
@@ -14,7 +12,7 @@ function use(..._args: unknown[]) {
 function expectType<T>(_: T) {
   // do nothing
 }
-
+const TEST_LICENSE_KEY = '123';
 // Only used for type checking
 test.skip('mutator optional args [type checking only]', async () => {
   const rep = new Replicache({
