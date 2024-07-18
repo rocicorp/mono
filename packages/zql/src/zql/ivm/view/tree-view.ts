@@ -151,7 +151,9 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
         },
         next() {
           if (i >= limit) {
-            iterator.return?.();
+            if (iterator.return) {
+              return iterator.return();
+            }
             return {done: true, value: undefined} as const;
           }
           const next = iterator.next();
@@ -163,11 +165,15 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
           return next;
         },
         return() {
-          iterator.return?.();
+          if (iterator.return) {
+            return iterator.return();
+          }
           return {done: true, value: undefined} as const;
         },
         throw() {
-          iterator.throw?.();
+          if (iterator.throw) {
+            return iterator.throw();
+          }
           return {done: true, value: undefined} as const;
         },
       };
@@ -205,7 +211,9 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
 
           const entry = next.value;
           if (last === undefined) {
-            iterator.return?.();
+            if (iterator.return) {
+              return iterator.return();
+            }
             return {
               done: true,
               value: undefined,
@@ -213,7 +221,9 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
           }
 
           if (responseComparator(entry[0], last) > 0) {
-            iterator.return?.();
+            if (iterator.return) {
+              return iterator.return();
+            }
             return {
               done: true,
               value: undefined,
@@ -234,13 +244,13 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
       },
       return() {
         if (iterator.return) {
-          iterator.return();
+          return iterator.return();
         }
         return {done: true, value: undefined} as const;
       },
       throw() {
         if (iterator.throw) {
-          iterator.throw();
+          return iterator.throw();
         }
         return {done: true, value: undefined} as const;
       },
