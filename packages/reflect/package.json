@@ -63,7 +63,6 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/node": "^18.16.0",
-    "reflect-cli": "0.0.0",
     "reflect-client": "0.0.0",
     "reflect-server": "0.0.0",
     "reflect-shared": "0.0.0",

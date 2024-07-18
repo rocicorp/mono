@@ -26,7 +26,7 @@ export function defaultConsoleLogSink<
   MD extends MutatorDefs,
 >(): OptionsAdder<Env, MD> {
   return (options: ReflectServerOptions<MD>) =>
-    options.logSinks?.length ?? 0 > 0
+    (options.logSinks?.length ?? 0 > 0)
       ? options
       : {
           ...options,

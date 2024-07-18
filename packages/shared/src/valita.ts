@@ -109,8 +109,8 @@ function getMessage(err: v.Err, v: unknown): string {
       const message = !error
         ? 'unknown'
         : typeof error === 'string'
-        ? error
-        : error.message ?? 'unknown';
+          ? error
+          : (error.message ?? 'unknown');
       return `${message}${atPath}. Got ${toDisplayAtPath(v, path)}`;
     }
   }

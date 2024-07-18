@@ -1,11 +1,12 @@
 // This test file is loaded by worker.test.ts
 
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {ReplicacheTest, closeAllReps, reps} from './test-util.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
+
+const TEST_LICENSE_KEY = '123';
 
 onmessage = async (e: MessageEvent) => {
   const {name} = e.data;

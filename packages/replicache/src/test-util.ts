@@ -1,4 +1,3 @@
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
@@ -35,6 +34,7 @@ import fetchMock from 'fetch-mock/esm/client';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {ReplicacheImpl, ReplicacheImplOptions} from './replicache-impl.js';
 
+const TEST_LICENSE_KEY = '123';
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
