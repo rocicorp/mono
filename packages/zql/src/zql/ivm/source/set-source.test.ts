@@ -17,7 +17,7 @@ test('add', () => {
   fc.assert(
     fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
-      const source = m.newSetSource(comparator, ordering, 'test');
+      const source = m.newSetSource(ordering, 'test');
 
       arr.forEach(x => source.add({id: x}));
       expect([...source.value.keys()]).toEqual(
@@ -31,7 +31,7 @@ test('delete', () => {
   fc.assert(
     fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
-      const source = m.newSetSource(comparator, ordering, 'test');
+      const source = m.newSetSource(ordering, 'test');
 
       arr.forEach(x => source.add({id: x}));
       arr.forEach(x => source.delete({id: x}));
@@ -42,7 +42,7 @@ test('delete', () => {
 
 test('on', () => {
   const m = new Materialite();
-  const source = m.newSetSource(comparator, ordering, 'test');
+  const source = m.newSetSource(ordering, 'test');
 
   let callCount = 0;
   const dispose = source.on(value => {
@@ -77,7 +77,7 @@ test('replace', () => {
   fc.assert(
     fc.property(fc.uniqueArray(fc.integer()), arr => {
       const m = new Materialite();
-      const source = m.newSetSource(comparator, ordering, 'test');
+      const source = m.newSetSource(ordering, 'test');
 
       m.tx(() => {
         arr.forEach(id => source.add({id}));
@@ -104,7 +104,7 @@ test('replace', () => {
 // it has diverged from Replicache and we're in a bad state.
 test('rollback', async () => {
   const m = new Materialite();
-  const source = m.newSetSource(comparator, ordering, 'test');
+  const source = m.newSetSource(ordering, 'test');
 
   try {
     m.tx(() => {
@@ -125,8 +125,8 @@ test('rollback', async () => {
 
 test('withNewOrdering - we do not update the derived thing / withNewOrdering is not tied to the original. User must do that.', async () => {
   const m = new Materialite();
-  const source = m.newSetSource(comparator, ordering, 'test');
-  const derived = source.withNewOrdering((l, r) => r.id - l.id, descOrdering);
+  const source = m.newSetSource(ordering, 'test');
+  const derived = source.withNewOrdering(descOrdering);
 
   m.tx(() => {
     source.add({id: 1});
@@ -143,11 +143,8 @@ test('withNewOrdering - is correctly ordered', async () => {
 
   await fc.assert(
     fc.asyncProperty(fc.uniqueArray(fc.integer()), async arr => {
-      const source = m.newSetSource(comparator, ordering, 'test');
-      const derived = source.withNewOrdering(
-        (l, r) => r.id - l.id,
-        descOrdering,
-      );
+      const source = m.newSetSource(ordering, 'test');
+      const derived = source.withNewOrdering(descOrdering);
       m.tx(() => {
         arr.forEach(id => {
           source.add({id});
@@ -171,11 +168,10 @@ test('history requests with an alternate ordering are fulfilled by that ordering
     id: number;
     x: string;
   };
-  const comparator = (l: E2, r: E2) => l.id - r.id;
 
   const ordering: Ordering = [[['e2', 'id'], 'asc']];
   const m = new Materialite();
-  const source = m.newSetSource(comparator, ordering, 'e2');
+  const source = m.newSetSource<E2>(ordering, 'e2');
 
   const baseItems = [
     {id: 1, x: 'c'},
@@ -669,8 +665,7 @@ describe('history requests with hoisted filters', () => {
     }) => {
       const ordering: Ordering = [[['e', 'id'], 'asc']];
       const m = new Materialite();
-      const comparator = (l: E, r: E) => l.id - r.id;
-      const source = m.newSetSource(comparator, ordering, 'e');
+      const source = m.newSetSource<E>(ordering, 'e');
       m.tx(() => {
         source.seed(seedItems);
       });

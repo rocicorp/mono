@@ -1,4 +1,3 @@
-import {compareUTF8} from 'compare-utf8';
 import {describe, expect, test} from 'vitest';
 import {z} from 'zod';
 import type {AST, Condition, SimpleCondition} from '../ast/ast.js';
@@ -24,12 +23,11 @@ type E1 = z.infer<typeof e1>;
 
 const context = makeTestContext();
 
-const comparator = (l: E1, r: E1) => compareUTF8(l.id, r.id);
 const ordering = [[['e1', 'id'], 'asc']] as const;
 test('A simple select', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
-  let s = m.newSetSource<E1>(comparator, ordering, 'e1');
+  let s = m.newSetSource<E1>(ordering, 'e1');
   let pipeline = buildPipeline(
     () => s as unknown as Source<PipelineEntity>,
     ast(q.select('id', 'a', 'b', 'c', 'd')),
@@ -49,7 +47,7 @@ test('A simple select', () => {
   s.add(expected[1]);
   expect(effectRunCount).toBe(2);
 
-  s = m.newSetSource(comparator, ordering, 'e1');
+  s = m.newSetSource(ordering, 'e1');
   pipeline = buildPipeline(
     () => s as unknown as Source<PipelineEntity>,
     ast(q.select('a', 'd')),
@@ -68,7 +66,7 @@ test('A simple select', () => {
 test('Count', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
-  const s = m.newSetSource<E1>(comparator, ordering, 'e1');
+  const s = m.newSetSource<E1>(ordering, 'e1');
   const pipeline = buildPipeline(
     () => s as unknown as Source<PipelineEntity>,
     ast(q.select(agg.count())),
@@ -98,7 +96,7 @@ test('Count', () => {
 test('Where', () => {
   const q = new EntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
-  const s = m.newSetSource<E1>(comparator, ordering, 'e1');
+  const s = m.newSetSource<E1>(ordering, 'e1');
   const pipeline = buildPipeline(
     () => s as unknown as Source<PipelineEntity>,
     ast(q.select('id').where('a', '>', 1).where('b', '<', 2)),
@@ -540,17 +538,11 @@ describe('OR', () => {
     },
   ];
 
-  const comparator = (l: E, r: E) => compareUTF8(l.id, r.id);
-
   for (const c of cases) {
     test((c.name ? c.name + ': ' : '') + conditionToString(c.where), () => {
       const {values = defaultValues} = c;
       const m = new Materialite();
-      const s = m.newSetSource<E>(
-        comparator,
-        [[['items', 'id'], 'asc']],
-        'items',
-      );
+      const s = m.newSetSource<E>([[['items', 'id'], 'asc']], 'items');
 
       const ast: AST = {
         table: 'items',

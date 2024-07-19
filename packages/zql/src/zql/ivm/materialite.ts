@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore next.js is having issues finding the .d.ts
-import type {Comparator, PipelineEntity} from './types.js';
+import type {PipelineEntity} from './types.js';
 import {must} from 'shared/src/must.js';
 import {SetSource} from './source/set-source.js';
 import type {Ordering} from '../ast/ast.js';
@@ -41,12 +41,8 @@ export class Materialite {
     };
   }
 
-  newSetSource<T extends PipelineEntity>(
-    comparator: Comparator<T>,
-    order: Ordering,
-    name: string,
-  ) {
-    return new SetSource<T>(this.#internal, comparator, order, name);
+  newSetSource<T extends PipelineEntity>(order: Ordering, name: string) {
+    return new SetSource<T>(this.#internal, order, name);
   }
 
   constructSource<T extends PipelineEntity>(

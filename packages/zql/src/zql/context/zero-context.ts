@@ -1,4 +1,3 @@
-import {compareUTF8} from 'compare-utf8';
 import type {ExperimentalNoIndexDiff} from 'replicache';
 import {assert} from 'shared/src//asserts.js';
 import type {AST} from '../ast/ast.js';
@@ -70,7 +69,6 @@ class ZeroSource {
 
   constructor(materialite: Materialite, name: string, addWatch: AddWatch) {
     this.#canonicalSource = materialite.newSetSource<Entity>(
-      canonicalComparator,
       [[[name, 'id'], 'asc']],
       name,
     );
@@ -108,6 +106,3 @@ class ZeroSource {
     return this.#canonicalSource;
   }
 }
-
-export const canonicalComparator = (l: Entity, r: Entity) =>
-  compareUTF8(l.id, r.id);
