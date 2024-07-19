@@ -100,9 +100,26 @@ npx replicache@canary get-license
 
 Go through the flow and ensure you get a license.
 
+## Update the peer libraries for compat with the new Replicache
+
+If the major version changed, then update the following packages that have peerDependencies on Replicache:
+
+### Note: you will have to create canary / latest of these libraries.
+
+- update their package.json to point to the new Replicache version
+
+```
+git tag v$NEW_VERSION
+git push origin --tags
+npm publish --tag=canary
+```
+
+- `rails`
+- `replicache-transaction`
+
 ### Todo Samples
 
-Check out each of the [todo samples](https://trunk.doc.replicache.dev/examples/todo). Install the canary version:
+Check out each of the [todo samples](https://trunk.doc.replicache.dev/examples/todo). Install the canary version (you may need to upgrade rails and replicache-transaction dependencies also):
 
 ```bash
 npm add replicache@canary
@@ -125,14 +142,6 @@ Go through https://doc.replicache.dev/tutorial and test still works / make any u
 ### BYOB Guide
 
 Walk through [the integration guide](https://trunk.doc.replicache.dev/byob/intro) and make sure things still work.
-
-## Update the peer libraries for compat with the new Replicache
-
-If the major version changed, then update the following packages that have peerDependencies on Replicache:
-
-- `replicache-nextjs`
-- `rails`
-- `replicache-transaction`
 
 ## Finish Release Notes
 
@@ -160,6 +169,8 @@ want `@latest` to point at the same release. To do this, we use `npm dist-tag`:
 # use the `beta` tag but also make sure the semver has beta in it.
 npm dist-tag add replicache@$NEW_VERSION latest
 ```
+
+### note: you may need to add latest tags to rails and replicache-transaction as well
 
 ## Publish the Private Release
 
