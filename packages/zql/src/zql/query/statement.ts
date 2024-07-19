@@ -6,7 +6,6 @@ import {
 } from '../ast-to-ivm/pipeline-builder.js';
 import type {AST} from '../ast/ast.js';
 import type {Context} from '../context/context.js';
-import {makeComparator} from '../ivm/compare.js';
 import type {DifferenceStream} from '../ivm/graph/difference-stream.js';
 import {TreeView} from '../ivm/view/tree-view.js';
 import type {View} from '../ivm/view/view.js';
@@ -169,7 +168,6 @@ async function createMaterialization<Return>(ast: AST, context: Context) {
     pipeline as unknown as DifferenceStream<
       Return extends [] ? Return[number] : never
     >,
-    makeComparator<Record<string, unknown>>(orderBy),
     orderBy,
     limit,
   ) as unknown as View<Return extends [] ? Return[number] : Return>;

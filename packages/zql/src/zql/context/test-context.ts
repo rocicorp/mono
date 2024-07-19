@@ -1,4 +1,3 @@
-import {compareUTF8} from 'compare-utf8';
 import {must} from 'shared/src/must.js';
 import type {AST} from '../ast/ast.js';
 import {DifferenceStream} from '../ivm/graph/difference-stream.js';
@@ -28,7 +27,6 @@ export class TestContext implements Context {
   getSource<T extends PipelineEntity>(name: string): Source<T> {
     if (!this.#sources.has(name)) {
       const source = this.materialite.newSetSource(
-        (l: T, r: T) => compareUTF8(l.id as string, r.id as string),
         [[[name, 'id'], 'asc']],
         name,
       ) as unknown as Source<PipelineEntity>;
@@ -69,7 +67,6 @@ export class InfiniteSourceContext implements Context {
       );
     } else {
       source = this.materialite.newSetSource<X>(
-        (l: X, r: X) => compareUTF8(l.id as string, r.id as string),
         [[[name, 'id'], 'asc']],
         name,
       ) as unknown as Source<PipelineEntity>;

@@ -36,17 +36,16 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
   constructor(
     context: Context,
     stream: DifferenceStream<T>,
-    comparator: Comparator<T>,
-    order: Ordering | undefined,
+    order: Ordering,
     limit?: number | undefined,
     name: string = '',
   ) {
     super(context, stream, name);
     this.#limit = limit;
+    this.#comparator = makeComparator(order);
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    this.#data = new BTree(undefined, comparator);
-    this.#comparator = comparator;
+    this.#data = new BTree(undefined, this.#comparator);
     this.#order = order;
     if (limit !== undefined) {
       this.#add = this.#limitedAdd;
