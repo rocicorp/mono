@@ -144,7 +144,7 @@ leaving the pipeline initialized and ready for the first update.
 
 # Update
 
-One a pipeline is hydrated, it can then be used to process incremental
+Once a pipeline is hydrated, it can then be used to process incremental
 _updates_.
 
 To do so, a source calls `newDifference()` on its downstream(s)
