@@ -220,7 +220,7 @@ cases like `sum()` re-hydrating will actually create the wrong answer.
 # Transactions
 
 `newDifference()` naturally represents changes from a single upstream
-transaction. For example, we map changes from revery Replicache transaction into
+transaction. For example, we map changes from every Replicache transaction into
 a single call to `newDifference()`.
 
 But `ivm` also supports its own separate lightweight notion of _transactions_.
