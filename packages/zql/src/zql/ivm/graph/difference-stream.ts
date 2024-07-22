@@ -1,6 +1,9 @@
 import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import type {Ordering, Selector, SimpleOperator} from '../../ast/ast.js';
+import type {Entity} from '../../schema/entity-schema.js';
 import type {Multiset} from '../multiset.js';
+import type {Source} from '../source/source.js';
 import type {
   JoinResult,
   PipelineEntity,
@@ -22,14 +25,11 @@ import {
   FullCountOperator,
   FullSumOperator,
 } from './operators/full-agg-operators.js';
-import {LeftJoinOperator} from './operators/left-join-operator.js';
 import {InnerJoinOperator, JoinArgs} from './operators/join-operator.js';
+import {LeftJoinOperator} from './operators/left-join-operator.js';
 import {MapOperator} from './operators/map-operator.js';
 import type {Operator} from './operators/operator.js';
 import {ReduceOperator} from './operators/reduce-operator.js';
-import {must} from 'shared/src/must.js';
-import type {Entity} from '../../schema/entity-schema.js';
-import type {Source} from '../source/source.js';
 
 export type Listener<T> = {
   newDifference: (
@@ -184,8 +184,8 @@ export class DifferenceStream<T extends PipelineEntity> {
 
   leftJoin<
     BValue extends PipelineEntity,
-    AAlias extends string | undefined,
-    BAlias extends string | undefined,
+    AAlias extends string,
+    BAlias extends string,
   >(
     args: Omit<JoinArgs<T, BValue, AAlias, BAlias>, 'a' | 'output'>,
     sourceProvider:
@@ -212,8 +212,8 @@ export class DifferenceStream<T extends PipelineEntity> {
 
   join<
     BValue extends PipelineEntity,
-    AAlias extends string | undefined,
-    BAlias extends string | undefined,
+    AAlias extends string,
+    BAlias extends string,
   >(
     args: Omit<JoinArgs<T, BValue, AAlias, BAlias>, 'a' | 'output'>,
   ): DifferenceStream<JoinResult<T, BValue, AAlias, BAlias>> {
