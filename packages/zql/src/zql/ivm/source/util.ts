@@ -1,5 +1,11 @@
+import {assert} from 'shared/src/asserts.js';
 import type {Ordering, OrderPart, Selector} from '../../ast/ast.js';
-import {isJoinResult} from '../types.js';
+import {
+  assertStringOrNumber,
+  isJoinResult,
+  PipelineEntity,
+  StringOrNumber,
+} from '../types.js';
 
 export function sourcesAreIdentical(
   sourceAName: string,
@@ -103,6 +109,20 @@ export function getValueFromEntity(
   return getOrLiftValue(entity, qualifiedColumn[1]);
 }
 
+export function getValueFromEntityAsStringOrNumberOrUndefined(
+  entity: Record<string, unknown>,
+  qualifiedColumn: readonly [table: string | null, column: string],
+): StringOrNumber | undefined {
+  const value = getValueFromEntity(entity, qualifiedColumn);
+  assert(
+    typeof value === 'string' ||
+      typeof value === 'number' ||
+      value === undefined,
+  );
+
+  return value;
+}
+
 export function getOrLiftValue(
   containerOrValue:
     | Record<string, unknown>
@@ -131,4 +151,12 @@ export function getPrimaryKeyValuesAsStringUnqualified(
     ret += entity[col];
   }
   return ret;
+}
+
+export function getPrimaryKey(value: PipelineEntity): StringOrNumber {
+  // For now only `id` is used for the primary key. We plan to support composite
+  // keys in the future.
+  const {id} = value;
+  assertStringOrNumber(id);
+  return id;
 }
