@@ -2,6 +2,10 @@ import type {Selector} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import {
+  getPrimaryKeyValuesAsStringUnqualified,
+  getValueFromEntity,
+} from '../../source/util.js';
+import {
   isJoinResult,
   joinSymbol,
   type JoinResult,
@@ -9,10 +13,6 @@ import {
   type StringOrNumber,
   type Version,
 } from '../../types.js';
-import {
-  getPrimaryKeyValuesAsStringUnqualified,
-  getValueFromEntity,
-} from '../../source/util.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {MemoryBackedDifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
@@ -20,8 +20,8 @@ import {JoinOperatorBase} from './join-operator-base.js';
 export type JoinArgs<
   AValue extends PipelineEntity,
   BValue extends PipelineEntity,
-  ATable extends string | undefined,
-  BAlias extends string | undefined,
+  ATable extends string,
+  BAlias extends string,
 > = {
   a: DifferenceStream<AValue>;
   // a is currently un-aliasable in ZQL. Hence `aTable` not `aAlias`.
@@ -37,7 +37,7 @@ export type JoinArgs<
   // bTable is always defined at the moment.
   // Seems like this will not be true if the B input is ever a query rather than a table.
   bTable: string;
-  bAs: BAlias;
+  bAs: BAlias | undefined;
   bPrimaryKeyColumns: readonly (keyof BValue & string)[];
   bJoinColumn: Selector;
   output: DifferenceStream<JoinResult<AValue, BValue, ATable, BAlias>>;
@@ -67,8 +67,8 @@ export type JoinArgs<
 export class InnerJoinOperator<
   AValue extends PipelineEntity,
   BValue extends PipelineEntity,
-  ATable extends string | undefined,
-  BAlias extends string | undefined,
+  ATable extends string,
+  BAlias extends string,
 > extends JoinOperatorBase<
   AValue,
   BValue,
@@ -156,9 +156,8 @@ export class InnerJoinOperator<
               makeJoinResult(
                 aVal,
                 bVal,
-                // TODO(aa): Verify cast safety
-                this.#joinArgs.aTable!,
-                this.#joinArgs.bAs!,
+                this.#joinArgs.aTable,
+                this.#joinArgs.bAs,
                 this.#getAPrimaryKey,
                 this.#getBPrimaryKey,
               ),
@@ -179,9 +178,8 @@ export class InnerJoinOperator<
             makeJoinResult(
               aVal,
               bVal,
-              // TODO(aa): Verify cast safety
-              this.#joinArgs.aTable!,
-              this.#joinArgs.bAs!,
+              this.#joinArgs.aTable,
+              this.#joinArgs.bAs,
               this.#getAPrimaryKey,
               this.#getBPrimaryKey,
             ),
@@ -210,13 +208,13 @@ export class InnerJoinOperator<
       return [];
     }
 
-    const innerEtnries = innerIndex.get(outerKey);
-    if (innerEtnries === undefined) {
+    const innerEntries = innerIndex.get(outerKey);
+    if (innerEntries === undefined) {
       return [];
     }
 
     const ret: Entry<JoinResultValue>[] = [];
-    for (const [innerValue, innerMult] of innerEtnries) {
+    for (const [innerValue, innerMult] of innerEntries) {
       const value = makeJoinResult(outerValue, innerValue);
 
       ret.push([value, outerMult * innerMult] as const);

@@ -25,8 +25,8 @@ import {SourceBackedDifferenceIndex} from './source-backed-difference-index.js';
 export class LeftJoinOperator<
   AValue extends PipelineEntity,
   BValue extends PipelineEntity,
-  ATable extends string | undefined,
-  BAlias extends string | undefined,
+  ATable extends string,
+  BAlias extends string,
 > extends JoinOperatorBase<
   AValue,
   BValue,
@@ -194,7 +194,7 @@ export class LeftJoinOperator<
           this.#joinArgs.bAs,
           this.#getAPrimaryKey,
           this.#getBPrimaryKey,
-        ) as JoinResult<AValue, BValue, ATable, BAlias>,
+        ),
         aMult,
       ] as const;
       ret.push(joinEntry);
