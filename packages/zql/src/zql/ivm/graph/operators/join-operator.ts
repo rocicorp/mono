@@ -1,3 +1,4 @@
+import {must} from 'shared/src/must.js';
 import type {Selector} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
@@ -139,6 +140,9 @@ export class InnerJoinOperator<
       JoinResult<AValue, BValue, ATable, BAlias>
     >[] = [];
 
+    const {aTable} = this.#joinArgs;
+    const bAs = must(this.#joinArgs.bAs);
+
     if (inputB !== undefined) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
@@ -156,8 +160,8 @@ export class InnerJoinOperator<
               makeJoinResult(
                 aVal,
                 bVal,
-                this.#joinArgs.aTable,
-                this.#joinArgs.bAs,
+                aTable,
+                bAs,
                 this.#getAPrimaryKey,
                 this.#getBPrimaryKey,
               ),
@@ -178,8 +182,8 @@ export class InnerJoinOperator<
             makeJoinResult(
               aVal,
               bVal,
-              this.#joinArgs.aTable,
-              this.#joinArgs.bAs,
+              aTable,
+              bAs,
               this.#getAPrimaryKey,
               this.#getBPrimaryKey,
             ),
@@ -276,7 +280,7 @@ export function makeJoinResult<
   getBID: (value: BValue) => StringOrNumber,
 ): JoinResult<AValue, BValue, AAlias, BAlias> {
   const asJoinPart = (
-    alias: string,
+    alias: string | undefined,
     id: StringOrNumber,
     val: AValue | BValue,
   ) => {
@@ -288,13 +292,12 @@ export function makeJoinResult<
       // over the lifetime of a pipeline. So a number changing to string can't
       // cause a collision.
       id: encodeRowIDForJoin(id.toString()),
-      [alias]: val,
+      [must(alias)]: val,
     } as const;
   };
 
-  // TODO(aa): Both aliases were cast in the old code. Verify safety.
-  const aPart = asJoinPart(aAlias!, getAID(aVal), aVal);
-  const bPart = bVal ? asJoinPart(bAlias!, getBID(bVal), bVal) : undefined;
+  const aPart = asJoinPart(aAlias, getAID(aVal), aVal);
+  const bPart = bVal ? asJoinPart(bAlias, getBID(bVal), bVal) : undefined;
 
   return {
     [joinSymbol]: true,

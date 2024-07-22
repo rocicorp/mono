@@ -1,3 +1,4 @@
+import {must} from 'shared/src/must.js';
 import type {Ordering} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
@@ -184,14 +185,17 @@ export class LeftJoinOperator<
       ? aValue.id
       : this.#getAPrimaryKey(aValue);
 
+    const {aTable} = this.#joinArgs;
+    const bAs = must(this.#joinArgs.bAs);
+
     const bEntries = aKey !== undefined ? this.#indexB.get(aKey) : undefined;
     if (bEntries === undefined || bEntries.length === 0) {
       const joinEntry = [
         makeJoinResult(
           aValue,
           undefined,
-          this.#joinArgs.aTable,
-          this.#joinArgs.bAs,
+          aTable,
+          bAs,
           this.#getAPrimaryKey,
           this.#getBPrimaryKey,
         ),
@@ -207,8 +211,8 @@ export class LeftJoinOperator<
         makeJoinResult(
           aValue,
           bValue,
-          this.#joinArgs.aTable,
-          this.#joinArgs.bAs,
+          aTable,
+          bAs,
           this.#getAPrimaryKey,
           this.#getBPrimaryKey,
         ) as JoinResult<AValue, BValue, ATable, BAlias>,
@@ -252,13 +256,15 @@ export class LeftJoinOperator<
     }
 
     const ret: Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] = [];
+    const {aTable} = this.#joinArgs;
+    const bAs = must(this.#joinArgs.bAs);
     for (const [aRow, aMult] of aEntries) {
       const joinEntry = [
         makeJoinResult(
           aRow,
           bValue,
-          this.#joinArgs.aTable,
-          this.#joinArgs.bAs,
+          aTable,
+          bAs,
           this.#getAPrimaryKey,
           this.#getBPrimaryKey,
         ) as JoinResult<AValue, BValue, ATable, BAlias>,
