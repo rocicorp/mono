@@ -3,7 +3,6 @@ import {genCached, genFilter, genMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {PipelineEntity, StringOrNumber, Version} from '../../types.js';
 import type {DifferenceStream} from '../difference-stream.js';
-import type {Request} from '../message.js';
 import {UnaryOperator} from './unary-operator.js';
 
 /**
@@ -16,7 +15,7 @@ import {UnaryOperator} from './unary-operator.js';
 export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
   // The entries for this version. The string is the ID of the entity.
   readonly #entriesCache = new Map<string, Entry<T>>();
-  readonly #seenUpstreamMessages = new Set<number>();
+  // readonly #seenUpstreamMessages = new Set<number>();
   #lastSeenVersion: Version = -1;
 
   constructor(input: DifferenceStream<T>, output: DifferenceStream<T>) {
@@ -94,14 +93,6 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
     );
 
     return ret;
-  }
-
-  messageUpstream(message: Request): void {
-    // TODO(arv): Test this and validate that it is correct.
-    if (!this.#seenUpstreamMessages.has(message.id)) {
-      this.#seenUpstreamMessages.add(message.id);
-      super.messageUpstream(message);
-    }
   }
 }
 
