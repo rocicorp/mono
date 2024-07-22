@@ -3,8 +3,9 @@ import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
 import type {Source} from '../../source/source.js';
 import {
+  getPrimaryKey,
   getPrimaryKeyValuesAsStringUnqualified,
-  getValueFromEntity,
+  getValueFromEntityAsStringOrNumberOrUndefined,
 } from '../../source/util.js';
 import {
   isJoinResult,
@@ -18,7 +19,7 @@ import {
   MemoryBackedDifferenceIndex,
 } from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
-import {makeJoinResult, JoinArgs} from './join-operator.js';
+import {JoinArgs, makeJoinResult} from './join-operator.js';
 import {SourceBackedDifferenceIndex} from './source-backed-difference-index.js';
 
 export class LeftJoinOperator<
@@ -52,10 +53,10 @@ export class LeftJoinOperator<
     [JoinResult<AValue, BValue, ATable, BAlias>, number]
   > = new Map();
 
-  readonly #getAPrimaryKey;
-  readonly #getBPrimaryKey;
-  readonly #getAJoinKey;
-  readonly #getBJoinKey;
+  readonly #getAPrimaryKey: (value: AValue) => string;
+  readonly #getBPrimaryKey: (value: BValue) => string;
+  readonly #getAJoinKey: (value: AValue) => string | number | undefined;
+  readonly #getBJoinKey: (value: BValue) => string | number | undefined;
   readonly #joinArgs: JoinArgs<AValue, BValue, ATable, BAlias>;
 
   constructor(
@@ -76,25 +77,27 @@ export class LeftJoinOperator<
       joinArgs.aJoinColumn,
     );
 
-    this.#getAPrimaryKey = (value: AValue) =>
+    this.#getAPrimaryKey = value =>
       getPrimaryKeyValuesAsStringUnqualified(
         value,
         joinArgs.aPrimaryKeyColumns,
       );
-    this.#getBPrimaryKey = (value: BValue) =>
+    this.#getBPrimaryKey = value =>
       getPrimaryKeyValuesAsStringUnqualified(
         value,
         joinArgs.bPrimaryKeyColumns,
       );
 
-    this.#getAJoinKey = (value: AValue) =>
-      // TODO(aa): bad cast, this can be undefined
-      // Actually maybe it could be any value? does something earlier in
-      // pipeline enforce that it's a string or number?
-      getValueFromEntity(value, joinArgs.aJoinColumn) as StringOrNumber;
-    this.#getBJoinKey = (value: BValue) =>
-      getValueFromEntity(value, joinArgs.bJoinColumn) as StringOrNumber;
-
+    this.#getAJoinKey = value =>
+      getValueFromEntityAsStringOrNumberOrUndefined(
+        value,
+        joinArgs.aJoinColumn,
+      );
+    this.#getBJoinKey = value =>
+      getValueFromEntityAsStringOrNumberOrUndefined(
+        value,
+        joinArgs.bJoinColumn,
+      );
     this.#indexA = new MemoryBackedDifferenceIndex<StringOrNumber, AValue>(
       this.#getAPrimaryKey,
     );
@@ -179,7 +182,7 @@ export class LeftJoinOperator<
     const ret: Entry<JoinResult<AValue, BValue, ATable, BAlias>>[] = [];
     const aPrimaryKey = isJoinResult(aValue)
       ? aValue.id
-      : this.#getAPrimaryKey(aValue as AValue);
+      : this.#getAPrimaryKey(aValue);
 
     const bEntries = aKey !== undefined ? this.#indexB.get(aKey) : undefined;
     if (bEntries === undefined || bEntries.length === 0) {
@@ -263,12 +266,7 @@ export class LeftJoinOperator<
       ] as const;
       ret.push(joinEntry);
 
-      // TODO(aa): This branch isn't necessary now, it's always correct to use
-      // a.id. This was thinking ahead to compound keys.
-      // See: https://rocicorp.slack.com/archives/C013XFG80JC/p1720724435728549
-      const aPrimaryKey = isJoinResult(aRow)
-        ? aRow.id
-        : this.#getAPrimaryKey(aRow as AValue);
+      const aPrimaryKey = getPrimaryKey(aRow);
 
       // This is tricky -- can we do it differently?
       //
