@@ -15,7 +15,6 @@ import {UnaryOperator} from './unary-operator.js';
 export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
   // The entries for this version. The string is the ID of the entity.
   readonly #entriesCache = new Map<string, Entry<T>>();
-  // readonly #seenUpstreamMessages = new Set<number>();
   #lastSeenVersion: Version = -1;
 
   constructor(input: DifferenceStream<T>, output: DifferenceStream<T>) {
@@ -30,14 +29,12 @@ export class DistinctOperator<T extends Entity> extends UnaryOperator<T, T> {
       this.#lastSeenVersion = version;
     }
 
-    /*
-    That distinct is stateful is a problem for laziness.
-    Future invocation of the lazy iterable returns different data than the first.
-    We need to cache what we've returned and return the same to future callers.
+    // That distinct is stateful is a problem for laziness.
+    // Future invocation of the lazy iterable returns different data than the first.
+    // We need to cache what we've returned and return the same to future callers.
 
-    Lazy reduce should also be a problem for us...
-    Probably can see it with `or` and `and` operators on `having` against a reduction.
-    */
+    // Lazy reduce should also be a problem for us...
+    // Probably can see it with `or` and `and` operators on `having` against a reduction.
 
     const entriesCache = this.#entriesCache;
     const ret = genFilter(

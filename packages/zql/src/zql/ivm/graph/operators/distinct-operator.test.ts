@@ -203,7 +203,11 @@ test('re-pulling the same iterable more than once yields the same data', () => {
 test('messageUpstream', () => {
   // Given the following graph:
   //
-  //    A | Distinct | B
+  //    A
+  //    |
+  // Distinct
+  //    |
+  //    B
   //
   // test that multiple upstream messages with the same id will only call
   // newDifference once.
