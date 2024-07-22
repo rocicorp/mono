@@ -40,6 +40,7 @@ export const config = {
       provider: 'playwright',
       headless: true,
       name: 'chromium',
+      screenshotFailures: false,
     },
     typecheck: {
       enabled: false,
