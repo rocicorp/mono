@@ -59,13 +59,23 @@
     "node": ">=14.8.0"
   },
   "exports": {
-    "module": "./out/replicache.js",
-    "default": "./out/replicache.js"
+    ".": {
+      "module": "./out/replicache.js",
+      "default": "./out/replicache.js"
+    },
+    "./impl": {
+      "import": "./out/impl.js",
+      "require": "./out/impl.js"
+    }
   },
   "files": [
     "out/cli.cjs",
     "out/replicache.d.ts",
-    "out/replicache.js"
+    "out/replicache.js",
+    "out/impl.d.ts",
+    "out/impl.js",
+    "out/chunk-*.js",
+    "out/chunk-*.d.ts"
   ],
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
