@@ -13,8 +13,6 @@
     "preview": "vite preview",
     "publish-worker-prod": "npm run wrangler-prod -- publish",
     "publish-worker-sandbox": "npm run wrangler-sandbox -- publish",
-    "wrangler-prod": "npx wrangler --config wrangler.toml",
-    "wrangler-sandbox": "npx wrangler --config wrangler.toml --env=sandbox",
     "worker-logs-sandbox": "npm run wrangler-sandbox -- tail",
     "worker-logs-prod": "npm run wrangler-prod -- tail",
     "start-workers": "concurrently --kill-others 'npm run start-replicator' 'npm run start-service-runner'",

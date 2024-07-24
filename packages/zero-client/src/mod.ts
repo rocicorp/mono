@@ -7,7 +7,6 @@ export {
   makeIDBName,
 } from 'replicache';
 export type {
-  // based on reflect-shared/src/mod.ts, but slimmed
   AsyncIterableIteratorToArray,
   ClientGroupID,
   ClientID,
