@@ -8,17 +8,17 @@ import tsConfigPaths from 'rollup-plugin-tsconfig-paths';
 // We use esbuild for building the actual code.
 
 /**
- * @param {string} input
- * @param {string} outputFile
- * @returns {import('rollup').InputOptions}
+ * @param {import('rollup').InputOption} input
+ * @param {import('rollup').OutputOptions | string} output
+ * @returns {import('rollup').RollupOptions}
  */
-export function makeInputOptions(input, outputFile) {
-  /** @type {import('rollup').InputOptions} */
-  const config = {
+export function makeRollupOptions(input, output) {
+  if (typeof output === 'string') {
+    output = {file: output};
+  }
+  return {
     input,
-    output: {
-      file: outputFile,
-    },
+    output,
     external: ['@rocicorp/lock', '@rocicorp/logger', '@rocicorp/resolver'],
     plugins: [
       tsConfigPaths(),
@@ -28,5 +28,4 @@ export function makeInputOptions(input, outputFile) {
       }),
     ],
   };
-  return config;
 }

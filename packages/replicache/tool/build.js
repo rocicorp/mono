@@ -29,22 +29,39 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
  */
 
 /**
+ * @param {string[]} parts
+ * @returns {string}
+ */
+function basePath(...parts) {
+  return path.join(dirname, '..', ...parts);
+}
+
+/**
  * @param {BuildOptions} options
  */
 async function buildReplicache(options) {
-  const define = await makeDefine(options.mode);
+  const define = makeDefine(options.mode);
   const {ext, mode, external, ...restOfOptions} = options;
-  const outfile = path.join(dirname, '..', 'out', 'replicache.' + ext);
+  const outfile = basePath('out', 'replicache.' + ext);
+  const entryPoints = {
+    replicache: basePath('src', 'mod.ts'),
+    ...(forBundleSizeDashboard
+      ? {}
+      : {impl: basePath('src', 'replicache-impl.ts')}),
+  };
   const result = await esbuild.build({
     ...sharedOptions(options.minify, metafile),
     ...(external ? {external} : {}),
     ...restOfOptions,
+    bundle: true,
+    splitting: !forBundleSizeDashboard,
     format: 'esm',
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
     define,
-    outfile,
-    entryPoints: [path.join(dirname, '..', 'src', 'mod.ts')],
+    outdir: basePath('out'),
+    entryPoints,
+    outExtension: {'.js': `.${ext}`},
   });
   if (metafile) {
     await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));
@@ -67,8 +84,8 @@ async function buildCLI() {
   await esbuild.build({
     ...sharedOptions(true),
     platform: 'node',
-    outfile: path.join(dirname, '..', 'out', 'cli.cjs'),
-    entryPoints: [path.join(dirname, 'cli.ts')],
+    outfile: basePath('out', 'cli.cjs'),
+    entryPoints: [basePath('tool', 'cli.ts')],
     format: 'cjs',
   });
 }
