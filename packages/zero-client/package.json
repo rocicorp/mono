@@ -25,7 +25,6 @@
     "@rocicorp/logger": "^5.2.2",
     "@rocicorp/resolver": "^1.0.2"
   },
-  "//1": "Note: reflect-client is included in devDependencies to avoid this packages and reflect-clients test running concurrently which causes flakiness.",
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
