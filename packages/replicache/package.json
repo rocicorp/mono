@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
-    "@rocicorp/licensing": "^7.0.1",
+    "@rocicorp/licensing": "^7.1.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/chai": "^4.3.5",
     "@types/command-line-usage": "^5.0.2",

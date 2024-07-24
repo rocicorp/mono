@@ -26,10 +26,6 @@ jobs:
         with:
           node-version: 18.x
           cache: 'npm'
-      - name: configure npm auth token
-        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
-        env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
       - if: github.event_name == 'pull_request'
         run: npm run check-format -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
@@ -50,10 +46,6 @@ jobs:
         with:
           node-version: 18.x
           cache: 'npm'
-      - name: configure npm auth token
-        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
-        env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
       - if: github.event_name == 'pull_request'
         run: npm run lint -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
@@ -74,10 +66,6 @@ jobs:
         with:
           node-version: 18.x
           cache: 'npm'
-      - name: configure npm auth token
-        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
-        env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: npm ci
       - if: github.event_name == 'pull_request'
         run: npm run check-types -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
@@ -98,11 +86,6 @@ jobs:
         with:
           node-version: 18.x
           cache: 'npm'
-
-      - name: configure npm auth token
-        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
-        env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
 
       - run: npm ci
 
