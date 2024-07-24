@@ -1,7 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "types": ["node"]
-  },
-  "include": ["src", "tool/fix-jest-mock.js", "tool/build.js"]
-}

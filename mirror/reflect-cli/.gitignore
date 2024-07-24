@@ -1,7 +1,0 @@
-node_modules
-.DS_Store
-out
-*.log
-
-
-!templates/**/reflect.config.json

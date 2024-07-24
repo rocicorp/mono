@@ -1,8 +1,0 @@
-{
-  "projects": {
-    "sandbox": "reflect-mirror-sandbox",
-    "test": "unknown-project",
-    "prod": "reflect-mirror-prod",
-    "default": "reflect-mirror-sandbox"
-  }
-}
