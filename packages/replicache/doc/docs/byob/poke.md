@@ -56,7 +56,7 @@ async function sendPoke() {
 Then on the client, in `client/src/index.tsx`, replace the implementation of `listen()` to tell Replicache to `pull()` whenever a poke is received:
 
 ```ts
-function listen(rep: Replicache<M>) {
+function listen(rep: Replicache) {
   console.log('listening');
   // Listen for pokes, and pull whenever we get one.
   Pusher.logToConsole = true;
@@ -75,6 +75,16 @@ function listen(rep: Replicache<M>) {
     await rep.pull();
   });
 }
+```
+
+Finally, ensure Pusher and Replicache disconnect at the same time
+in `client/src/index.tsx`, replace Replicache useEffect return with
+
+```ts
+return () => {
+  Pusher.instances.forEach(i => i.disconnect());
+  void r.close();
+};
 ```
 
 Restart the app, and make a change, and you should see it propagate live between browsers:
