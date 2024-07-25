@@ -18,7 +18,7 @@
     "esbuild": "^0.20.2",
     "mirror-schema": "0.0.0",
     "ts-jest": "^29.1.0",
-    "typescript": "^5.4.2"
+    "typescript": "^5.5.3"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

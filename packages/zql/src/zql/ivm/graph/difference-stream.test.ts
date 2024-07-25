@@ -128,11 +128,7 @@ test('map, filter, linearCount', () => {
 
 test('cleaning up the only user of a stream cleans up the entire pipeline', () => {
   const materialite = new Materialite();
-  const set = materialite.newSetSource<Elem>(
-    (l, r) => l.x - r.x,
-    [[['elem', 'x'], 'asc']],
-    'elem',
-  );
+  const set = materialite.newSetSource<Elem>([[['elem', 'x'], 'asc']], 'elem');
 
   let notifyCount = 0;
   const final = set.stream
@@ -151,11 +147,7 @@ test('cleaning up the only user of a stream cleans up the entire pipeline', () =
 
 test('cleaning up the only user of a stream cleans up the entire pipeline but stops at a used fork', () => {
   const materialite = new Materialite();
-  const set = materialite.newSetSource<Elem>(
-    (l, r) => l.x - r.x,
-    [[['elem', 'x'], 'asc']],
-    'elem',
-  );
+  const set = materialite.newSetSource<Elem>([[['elem', 'x'], 'asc']], 'elem');
 
   let notifyCount = 0;
   const stream1 = set.stream.effect(_ => notifyCount++);

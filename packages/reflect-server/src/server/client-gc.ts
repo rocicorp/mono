@@ -200,7 +200,7 @@ export async function collectClientIfDeleted(
   nextVersion: number,
 ): Promise<void> {
   const clientRecord = must(
-    await getClientRecord(clientID, IncludeDeleted.Exclude, storage),
+    await getClientRecord(clientID, IncludeDeleted.Include, storage),
   );
   const {lastMutationID, lastMutationIDAtClose} = clientRecord;
   if (lastMutationIDAtClose === undefined) {
@@ -247,14 +247,20 @@ export async function collectClientIfDeleted(
     lc.debug?.(`Client and server are fully synced. Collecting.`);
   }
 
-  await callClientDeleteHandler(
-    lc,
-    clientID,
-    env,
-    clientDeleteHandler,
-    nextVersion,
-    storage,
-  );
+  if (clientRecord.deleted) {
+    lc.debug?.(
+      `Client ${clientID} is already deleted. Not calling delete handler again.`,
+    );
+  } else {
+    await callClientDeleteHandler(
+      lc,
+      clientID,
+      env,
+      clientDeleteHandler,
+      nextVersion,
+      storage,
+    );
+  }
 
   const cache = new EntryCache(storage);
   await collectOldUserSpaceClientKeys(lc, cache, [clientID], nextVersion);

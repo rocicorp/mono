@@ -49,7 +49,6 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
 
   constructor(
     materialite: MaterialiteForSourceInternal,
-    comparator: Comparator<T>,
     order: Ordering,
     name: string,
   ) {
@@ -64,10 +63,10 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       },
       destroy: () => {},
     });
+    this.comparator = makeComparator(order);
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    this.#tree = new BTree(undefined, comparator);
-    this.comparator = comparator;
+    this.#tree = new BTree(undefined, this.comparator);
 
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
@@ -95,7 +94,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
             if (
               Math.abs(mult) === 1 &&
               mult === -nextMult &&
-              comparator(val, nextVal) === 0
+              this.comparator(val, nextVal) === 0
             ) {
               // The tree doesn't allow dupes -- so this is a replace.
               this.#tree = this.#tree.with(
@@ -142,13 +141,8 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
     };
   }
 
-  withNewOrdering(comp: Comparator<T>, ordering: Ordering): this {
-    const ret = new SetSource(
-      this._materialite,
-      comp,
-      ordering,
-      this.#name,
-    ) as this;
+  withNewOrdering(ordering: Ordering): this {
+    const ret = new SetSource(this._materialite, ordering, this.#name) as this;
     if (this.#seeded) {
       ret.seed(this.#tree.keys(), true);
     }
@@ -355,8 +349,7 @@ export class SetSource<T extends PipelineEntity> implements Source<T> {
       [firstSelector, 'asc'],
       [[this.#name, 'id'], 'asc'],
     ];
-    const newComparator = makeComparator(orderBy);
-    const source = this.withNewOrdering(newComparator, orderBy);
+    const source = this.withNewOrdering(orderBy);
 
     this.#sorts.set(key, source);
     // We omit the `id` part when responding to the view so the view can correctly

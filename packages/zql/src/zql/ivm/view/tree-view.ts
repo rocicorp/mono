@@ -36,17 +36,16 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
   constructor(
     context: Context,
     stream: DifferenceStream<T>,
-    comparator: Comparator<T>,
-    order: Ordering | undefined,
+    order: Ordering,
     limit?: number | undefined,
     name: string = '',
   ) {
     super(context, stream, name);
     this.#limit = limit;
+    this.#comparator = makeComparator(order);
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    this.#data = new BTree(undefined, comparator);
-    this.#comparator = comparator;
+    this.#data = new BTree(undefined, this.#comparator);
     this.#order = order;
     if (limit !== undefined) {
       this.#add = this.#limitedAdd;
@@ -109,19 +108,19 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
       }
     };
 
-    let iterator: Iterable<Entry<T>>;
+    let iterable: Iterable<Entry<T>>;
     if (
       reply === undefined ||
       this.#limit === undefined ||
       !orderingsAreCompatible(reply.order, this.#order)
     ) {
-      iterator = c;
+      iterable = c;
     } else {
       // We only get the limited iterator if we're receiving historical data.
-      iterator = this.#getLimitedIterator(c, reply, this.#limit);
+      iterable = this.#getLimitedIterable(c, reply, this.#limit);
     }
 
-    for (const entry of iterator) {
+    for (const entry of iterable) {
       const [value, mult] = entry;
       process(value, mult);
     }
@@ -134,7 +133,7 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
    * This is only used in cases where we're processing initial data
    * for initial query run. Initial data will never contain removes, only adds.
    */
-  #getLimitedIterator(
+  #getLimitedIterable(
     data: Multiset<T>,
     reply: Reply,
     limit: number,
@@ -151,6 +150,9 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
         },
         next() {
           if (i >= limit) {
+            if (iterator.return) {
+              return iterator.return();
+            }
             return {done: true, value: undefined} as const;
           }
           const next = iterator.next();
@@ -160,6 +162,18 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
           const entry = next.value;
           i += entry[1];
           return next;
+        },
+        return() {
+          if (iterator.return) {
+            return iterator.return();
+          }
+          return {done: true, value: undefined} as const;
+        },
+        throw() {
+          if (iterator.throw) {
+            return iterator.throw();
+          }
+          return {done: true, value: undefined} as const;
         },
       };
     }
@@ -196,6 +210,9 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
 
           const entry = next.value;
           if (last === undefined) {
+            if (iterator.return) {
+              return iterator.return();
+            }
             return {
               done: true,
               value: undefined,
@@ -203,6 +220,9 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
           }
 
           if (responseComparator(entry[0], last) > 0) {
+            if (iterator.return) {
+              return iterator.return();
+            }
             return {
               done: true,
               value: undefined,
@@ -220,6 +240,18 @@ export class TreeView<T extends PipelineEntity> extends AbstractView<T, T[]> {
         i += Math.abs(entry[1]);
         last = entry[0];
         return next;
+      },
+      return() {
+        if (iterator.return) {
+          return iterator.return();
+        }
+        return {done: true, value: undefined} as const;
+      },
+      throw() {
+        if (iterator.throw) {
+          return iterator.throw();
+        }
+        return {done: true, value: undefined} as const;
       },
     };
   }
