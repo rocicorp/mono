@@ -1,6 +1,11 @@
+import {must} from 'shared/src/must.js';
 import type {Selector} from '../../../ast/ast.js';
 import {genCached, genConcat, genFlatMap} from '../../../util/iterables.js';
 import type {Entry, Multiset} from '../../multiset.js';
+import {
+  getPrimaryKeyValuesAsStringUnqualified,
+  getValueFromEntity,
+} from '../../source/util.js';
 import {
   isJoinResult,
   joinSymbol,
@@ -9,10 +14,6 @@ import {
   type StringOrNumber,
   type Version,
 } from '../../types.js';
-import {
-  getPrimaryKeyValuesAsStringUnqualified,
-  getValueFromEntity,
-} from '../../source/util.js';
 import type {DifferenceStream} from '../difference-stream.js';
 import {MemoryBackedDifferenceIndex} from './difference-index.js';
 import {JoinOperatorBase} from './join-operator-base.js';
@@ -20,8 +21,8 @@ import {JoinOperatorBase} from './join-operator-base.js';
 export type JoinArgs<
   AValue extends PipelineEntity,
   BValue extends PipelineEntity,
-  ATable extends string | undefined,
-  BAlias extends string | undefined,
+  ATable extends string,
+  BAlias extends string,
 > = {
   a: DifferenceStream<AValue>;
   // a is currently un-aliasable in ZQL. Hence `aTable` not `aAlias`.
@@ -37,7 +38,7 @@ export type JoinArgs<
   // bTable is always defined at the moment.
   // Seems like this will not be true if the B input is ever a query rather than a table.
   bTable: string;
-  bAs: BAlias;
+  bAs: BAlias | undefined;
   bPrimaryKeyColumns: readonly (keyof BValue & string)[];
   bJoinColumn: Selector;
   output: DifferenceStream<JoinResult<AValue, BValue, ATable, BAlias>>;
@@ -67,8 +68,8 @@ export type JoinArgs<
 export class InnerJoinOperator<
   AValue extends PipelineEntity,
   BValue extends PipelineEntity,
-  ATable extends string | undefined,
-  BAlias extends string | undefined,
+  ATable extends string,
+  BAlias extends string,
 > extends JoinOperatorBase<
   AValue,
   BValue,
@@ -139,6 +140,9 @@ export class InnerJoinOperator<
       JoinResult<AValue, BValue, ATable, BAlias>
     >[] = [];
 
+    const {aTable} = this.#joinArgs;
+    const bAs = must(this.#joinArgs.bAs);
+
     if (inputB !== undefined) {
       iterablesToReturn.push(
         genFlatMap(inputB, entry => {
@@ -156,9 +160,8 @@ export class InnerJoinOperator<
               makeJoinResult(
                 aVal,
                 bVal,
-                // TODO(aa): Verify cast safety
-                this.#joinArgs.aTable!,
-                this.#joinArgs.bAs!,
+                aTable,
+                bAs,
                 this.#getAPrimaryKey,
                 this.#getBPrimaryKey,
               ),
@@ -179,9 +182,8 @@ export class InnerJoinOperator<
             makeJoinResult(
               aVal,
               bVal,
-              // TODO(aa): Verify cast safety
-              this.#joinArgs.aTable!,
-              this.#joinArgs.bAs!,
+              aTable,
+              bAs,
               this.#getAPrimaryKey,
               this.#getBPrimaryKey,
             ),
@@ -210,13 +212,13 @@ export class InnerJoinOperator<
       return [];
     }
 
-    const innerEtnries = innerIndex.get(outerKey);
-    if (innerEtnries === undefined) {
+    const innerEntries = innerIndex.get(outerKey);
+    if (innerEntries === undefined) {
       return [];
     }
 
     const ret: Entry<JoinResultValue>[] = [];
-    for (const [innerValue, innerMult] of innerEtnries) {
+    for (const [innerValue, innerMult] of innerEntries) {
       const value = makeJoinResult(outerValue, innerValue);
 
       ret.push([value, outerMult * innerMult] as const);
@@ -278,7 +280,7 @@ export function makeJoinResult<
   getBID: (value: BValue) => StringOrNumber,
 ): JoinResult<AValue, BValue, AAlias, BAlias> {
   const asJoinPart = (
-    alias: string,
+    alias: string | undefined,
     id: StringOrNumber,
     val: AValue | BValue,
   ) => {
@@ -290,13 +292,12 @@ export function makeJoinResult<
       // over the lifetime of a pipeline. So a number changing to string can't
       // cause a collision.
       id: encodeRowIDForJoin(id.toString()),
-      [alias]: val,
+      [must(alias)]: val,
     } as const;
   };
 
-  // TODO(aa): Both aliases were cast in the old code. Verify safety.
-  const aPart = asJoinPart(aAlias!, getAID(aVal), aVal);
-  const bPart = bVal ? asJoinPart(bAlias!, getBID(bVal), bVal) : undefined;
+  const aPart = asJoinPart(aAlias, getAID(aVal), aVal);
+  const bPart = bVal ? asJoinPart(bAlias, getBID(bVal), bVal) : undefined;
 
   return {
     [joinSymbol]: true,

@@ -1,6 +1,6 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import type {Entry, Multiset} from '../../multiset.js';
-import {DifferenceStream} from '../difference-stream.js';
+import {DifferenceStream, Listener} from '../difference-stream.js';
 
 test('distinct', () => {
   type T = {
@@ -198,4 +198,60 @@ test('re-pulling the same iterable more than once yields the same data', () => {
   const first = [...generator];
   const second = [...generator];
   expect(first).toEqual(second);
+});
+
+test('messageUpstream', () => {
+  // Given the following graph:
+  //
+  //    A
+  //    |
+  // Distinct
+  //    |
+  //    B
+  //
+  // test that multiple upstream messages with the same id will only call
+  // newDifference once.
+
+  type T = {id: string; value: number};
+  const a = new DifferenceStream<T>();
+  const newDifferenceSpy = vi.fn<Listener<T>['newDifference']>();
+  const b = a.distinct();
+  const listener: Listener<T> = {
+    commit() {},
+    newDifference: newDifferenceSpy,
+  };
+  const requestedID = 123;
+  b.messageUpstream(
+    {id: requestedID, type: 'pull', hoistedConditions: []},
+    listener,
+  );
+  b.messageUpstream(
+    {id: requestedID, type: 'pull', hoistedConditions: []},
+    listener,
+  );
+
+  expect(newDifferenceSpy).toHaveBeenCalledTimes(0);
+
+  const version = 1;
+  a.newDifference(version, [[{id: 'a', value: 1}, 1]], {
+    replyingTo: requestedID,
+    sourceName: 'A',
+    order: undefined,
+    type: 'pullResponse',
+    contiguousGroup: [],
+  });
+  a.commit(version);
+
+  expect(newDifferenceSpy).toHaveBeenCalledTimes(1);
+  expect(newDifferenceSpy).toHaveBeenCalledWith(
+    version,
+    expect.objectContaining({[Symbol.iterator]: expect.any(Function)}),
+    {
+      replyingTo: requestedID,
+      sourceName: 'A',
+      order: undefined,
+      type: 'pullResponse',
+      contiguousGroup: [],
+    },
+  );
 });
