@@ -2,10 +2,12 @@ import type {LogContext, LogLevel} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
+import WebSocket from 'ws';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
 import {
+  READER_MAX_WORKERS as INVALIDATION_WATCHER_READER_MAX_WORKERS,
   InvalidationWatcher,
   InvalidationWatcherService,
 } from './invalidation-watcher/invalidation-watcher.js';
@@ -27,24 +29,19 @@ import {
   versionChangeSchema,
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
-import {ViewSyncer, ViewSyncerService} from './view-syncer/view-syncer.js';
-import type {DurableStorage} from '../storage/durable-storage.js';
-import WebSocket from 'ws';
+import {
+  MAX_WORKERS as VIEW_SYNCER_MAX_WORKERS,
+  ViewSyncer,
+  ViewSyncerService,
+} from './view-syncer/view-syncer.js';
 export interface ServiceRunnerEnv {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  UPSTREAM_URI: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  SYNC_REPLICA_URI: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  LOG_LEVEL: LogLevel;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DATADOG_LOGS_API_KEY?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  DATADOG_SERVICE_LABEL?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  REPLICATOR_HOST?: string;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  EMBEDDED_REPLICATOR?: boolean;
+  ['UPSTREAM_URI']: string;
+  ['SYNC_REPLICA_URI']: string;
+  ['LOG_LEVEL']: LogLevel;
+  ['DATADOG_LOGS_API_KEY']?: string;
+  ['DATADOG_SERVICE_LABEL']?: string;
+  ['REPLICATOR_HOST']?: string;
+  ['EMBEDDED_REPLICATOR']?: boolean;
 }
 
 const REPLICATOR_ID = 'r1';
@@ -58,21 +55,14 @@ export class ServiceRunner
   readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
     new Map();
 
-  readonly #storage: DurableStorage;
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
   readonly #replica: PostgresDB;
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
-  constructor(
-    lc: LogContext,
-    storage: DurableStorage,
-    env: ServiceRunnerEnv,
-    runReplicator: boolean,
-  ) {
+  constructor(lc: LogContext, env: ServiceRunnerEnv, runReplicator: boolean) {
     this.#lc = lc;
-    this.#storage = storage;
     this.#env = env;
     // Connections are capped to stay within the DO limit of 6 TCP connections.
     // Note that the Replicator uses one extra connection for replication.
@@ -85,7 +75,7 @@ export class ServiceRunner
     });
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
-      max: 4,
+      max: INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
     });
     this.#runReplicator = runReplicator;
     this.#warmUpConnections();
@@ -133,8 +123,7 @@ export class ServiceRunner
     return this.#getService(
       clientGroupID,
       this.#viewSyncers,
-      id =>
-        new ViewSyncerService(this.#lc, id, this.#storage, this, this.#replica),
+      id => new ViewSyncerService(this.#lc, id, this, this.#replica),
       'ViewSyncer',
     );
   }
@@ -142,11 +131,18 @@ export class ServiceRunner
   #warmUpConnections() {
     const start = Date.now();
     void Promise.all([
-      // Warm up 1 upstream connection for mutagen, and 4 replica connections for view syncing.
+      // Warm up 1 upstream connection for mutagen,
+      // INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS
+      //   replica connections for view syncing.
       // Note: These can be much larger when not limited to 6 TCP connections per DO.
+      // TODO(arv): Figure out new limits now that we are not using Durable Objects.
       this.#upstream`SELECT 1`.simple().execute(),
-      ...Array.from({length: 4}, () =>
-        this.#replica`SELECT 1`.simple().execute(),
+      ...Array.from(
+        {
+          length:
+            INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
+        },
+        () => this.#replica`SELECT 1`.simple().execute(),
       ),
     ])
       .then(

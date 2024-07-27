@@ -30,7 +30,7 @@ npm install
 VITE_PUBLIC_SERVER="http://127.0.0.1:3000" npm run dev
 ```
 
-After you have visted the local website and the sync / replica tables have populated.
+After you have visited the local website and the sync / replica tables have populated.
 
 ## Create the indexes on the Replica
 

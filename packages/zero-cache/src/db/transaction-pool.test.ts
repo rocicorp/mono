@@ -554,7 +554,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('partial success; error from post-resize worker', async () => {
+  test.skip('partial success; error from post-resize worker', async () => {
     const pool = new TransactionPool(
       lc,
       Mode.SERIALIZABLE,

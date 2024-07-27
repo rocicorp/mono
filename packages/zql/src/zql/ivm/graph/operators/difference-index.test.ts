@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
-import {DifferenceIndex} from './difference-index.js';
+import {MemoryBackedDifferenceIndex} from './difference-index.js';
 
 test('get', () => {
-  const index = new DifferenceIndex<string, number>(x => x);
+  const index = new MemoryBackedDifferenceIndex<string, number>(x => x);
   index.add('a', [1, 1]);
   index.add('a', [1, 1]);
   index.add('a', [2, 1]);
@@ -17,12 +17,12 @@ test('get', () => {
 });
 
 test('compact', () => {
-  const index = new DifferenceIndex<string, number>(x => x);
+  const index = new MemoryBackedDifferenceIndex<string, number>(x => x);
   index.add('a', [1, 1]);
   index.add('a', [1, 1]);
   index.add('a', [2, 1]);
   index.add('b', [3, 2]);
-  index.compact(new Set(['a', 'b']));
+  index.compact();
 
   expect(index.get('a')).toEqual([
     [1, 2],
@@ -37,14 +37,13 @@ test('compact', () => {
     [1, -1],
   ]);
 
-  index.compact(new Set(['b']));
+  index.compact();
   expect(index.get('a')).toEqual([
-    [1, 2],
+    [1, 1],
     [2, 1],
-    [1, -1],
   ]);
 
-  index.compact(new Set(['a']));
+  index.compact();
   expect(index.get('a')).toEqual([
     [1, 1],
     [2, 1],
@@ -53,11 +52,11 @@ test('compact', () => {
   index.add('a', [1, -1]);
   index.add('a', [2, -1]);
   index.add('a', [1, -1]);
-  index.compact(new Set(['a']));
+  index.compact();
 
   expect(index.get('a')).toEqual([[1, -1]]);
 
   index.add('a', [1, 1]);
-  index.compact(new Set(['a']));
+  index.compact();
   expect(index.get('a')).toEqual(undefined);
 });

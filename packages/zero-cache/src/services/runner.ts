@@ -1,35 +1,24 @@
-import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
-import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {handleConnection, Connection} from './connection.js';
-import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
-import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
 import websocket, {WebSocket} from '@fastify/websocket';
-import type {DurableStorage} from '../storage/durable-storage.js';
+import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
+import {Connection, handleConnection} from './connection.js';
+import {CONNECT_URL_PATTERN, STATUS_URL_PATTERN} from './paths.js';
+import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
-export class ServiceRunnerDO {
+export class Runner {
   readonly #lc: LogContext;
   readonly #serviceRunner: ServiceRunner;
   readonly #clientConnections = new Map<string, Connection>();
   #fastify: FastifyInstance;
   #embeddedReplicator: boolean;
 
-  constructor(
-    logSink: LogSink,
-    logLevel: LogLevel,
-    state: DurableStorage,
-    env: ServiceRunnerEnv,
-  ) {
+  constructor(logSink: LogSink, logLevel: LogLevel, env: ServiceRunnerEnv) {
     this.#embeddedReplicator = env.EMBEDDED_REPLICATOR ?? false;
     const lc = new LogContext(logLevel, undefined, logSink).withContext(
       'component',
-      'ServiceRunnerDO',
+      'ServiceRunner',
     );
-    this.#serviceRunner = new ServiceRunner(
-      lc,
-      state,
-      env,
-      this.#embeddedReplicator,
-    );
+    this.#serviceRunner = new ServiceRunner(lc, env, this.#embeddedReplicator);
     this.#lc = lc;
     this.#fastify = Fastify();
   }

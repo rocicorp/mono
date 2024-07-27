@@ -70,3 +70,5 @@ next-env.d.ts
 reflect.config.json
 .reflect/
 bundle-sizes.json
+packages/zero-cache/coverage
+__screenshots__/

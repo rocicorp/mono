@@ -1,5 +1,4 @@
 import {describe, expect, test} from 'vitest';
-import {canonicalComparator} from 'zql/src/zql/context/zero-context.js';
 import {makeComparator} from 'zql/src/zql/ivm/compare.js';
 import {Comparator, joinSymbol} from 'zql/src/zql/ivm/types.js';
 import {must} from '../../../../shared/src/must.js';
@@ -45,10 +44,7 @@ describe('sorting and limiting with different query operations', async () => {
   const joinAlbumToArtist = (album: Album) => {
     const artist = must(indexedArtists[album.artistId]);
     return {
-      id:
-        album.id < artist.id
-          ? album.id + '_' + artist.id
-          : artist.id + '_' + album.id,
+      id: `${album.id}:${artist.id}`,
       album,
       artist,
       [joinSymbol]: true,
@@ -59,13 +55,8 @@ describe('sorting and limiting with different query operations', async () => {
     const tas = indexedTrackArtists[t.id];
     return tas.map(ta => {
       const a = indexedArtists[ta.artistId];
-      const firstJoinId =
-        t.id < ta.id ? t.id + '_' + ta.id : ta.id + '_' + t.id;
       return {
-        id:
-          firstJoinId < a.id
-            ? firstJoinId + '_' + a.id
-            : a.id + '_' + firstJoinId,
+        id: `${t.id}:${ta.id}:${a.id}`,
         [joinSymbol]: true,
         track: t,
         trackArtist: ta,
@@ -89,6 +80,8 @@ describe('sorting and limiting with different query operations', async () => {
     }
     return ret.sort(comp);
   };
+
+  const canonicalComparator = makeComparator([[['unused', 'id'], 'asc']]);
 
   test.each([
     {
@@ -135,7 +128,7 @@ describe('sorting and limiting with different query operations', async () => {
           .sort(
             makeComparator([
               [['track', 'title'], 'asc'],
-              [['tracl', 'id'], 'asc'],
+              [['track', 'id'], 'asc'],
             ]),
           )
           .slice(0, 3),

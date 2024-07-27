@@ -1,6 +1,7 @@
 import {describe, expect, jest, test} from '@jest/globals';
 import type {Env} from 'reflect-shared/src/types.js';
 import {jsonSchema} from 'shared/src/json-schema.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {DurableStorage} from '../storage/durable-storage.js';
 import {EntryCache} from '../storage/entry-cache.js';
 import type {Storage} from '../storage/storage.js';
@@ -15,7 +16,6 @@ import {putConnectedClients} from '../types/connected-clients.js';
 import {getUserValue, putUserValue} from '../types/user-value.js';
 import {putVersion} from '../types/version.js';
 import {setUserEntries} from '../util/test-utils.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import type {ClientDeleteHandler} from './client-delete-handler.js';
 import {
   collectClientIfDeleted,
@@ -698,7 +698,15 @@ Map {
 describe('collectClientIfDeleted', () => {
   const lc = createSilentLogContext();
 
-  const cases = [
+  type Case = {
+    name: string;
+    lastMutationID: number;
+    lastMutationIDAtClose: number;
+    expectDeleted: boolean;
+    deleted?: boolean | undefined;
+  };
+
+  const cases: Case[] = [
     {
       name: 'client not deleted because it has pending mutations',
       lastMutationID: 1,
@@ -717,11 +725,23 @@ describe('collectClientIfDeleted', () => {
       lastMutationIDAtClose: 2,
       expectDeleted: true,
     },
+    {
+      name: 'client record already deleted',
+      lastMutationID: 3,
+      lastMutationIDAtClose: 2,
+      expectDeleted: true,
+      deleted: true,
+    },
   ];
 
   for (const c of cases) {
     test(c.name, async () => {
-      const {expectDeleted, lastMutationID, lastMutationIDAtClose} = c;
+      const {
+        expectDeleted,
+        lastMutationID,
+        lastMutationIDAtClose,
+        deleted = false,
+      } = c;
 
       const durable = await getMiniflareDurableObjectStorage(id);
       await durable.deleteAll();
@@ -731,7 +751,9 @@ describe('collectClientIfDeleted', () => {
       const clientID = 'client-a';
       const clientGroupID = 'client-group-id';
       const env: Env = {a: 'b'};
-      const clientDeleteHandler = async () => {};
+      const clientDeleteHandler: ClientDeleteHandler = jest
+        .fn<ClientDeleteHandler>()
+        .mockReturnValue(Promise.resolve());
       const userID = 'user-id-xyz';
 
       // Set a presence state key value
@@ -748,6 +770,7 @@ describe('collectClientIfDeleted', () => {
         lastSeen: 4,
         lastMutationIDAtClose,
         userID,
+        deleted,
       };
 
       await putClientRecord(clientID, clientRecord, cache);
@@ -763,6 +786,10 @@ describe('collectClientIfDeleted', () => {
 
       const testEntry = await getUserValue(keyToTest, cache);
       expect(testEntry?.deleted).toBe(expectDeleted);
+
+      expect(clientDeleteHandler).toHaveBeenCalledTimes(
+        expectDeleted && !deleted ? 1 : 0,
+      );
     });
   }
 });
