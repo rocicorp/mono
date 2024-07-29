@@ -7,14 +7,14 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 /**
- * Map from name to packages/name or mirror/name
+ * Map from name to packages/name
  * @type {Map<string, string>}
  */
 export const internalPackagesMap = new Map();
 
 const monoRootPath = fileURLToPath(new URL('../../../../', import.meta.url));
 
-for (const p of ['packages', 'mirror']) {
+for (const p of ['packages']) {
   for (const f of fs.readdirSync(path.join(monoRootPath, p))) {
     const stat = fs.statSync(path.join(monoRootPath, p, f));
     if (stat.isDirectory()) {

@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {resetAllConfig} from 'reflect-shared/src/config.js';
 import type {PullRequestV1, PushRequestV1} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
 import {TestLogSink} from 'shared/src/logging-test-utils.js';
@@ -64,7 +63,6 @@ beforeEach(() => {
 
 afterEach(() => {
   sinon.restore();
-  resetAllConfig();
 });
 
 test('onOnlineChange callback', async () => {

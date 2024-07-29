@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ErrorKind as ServerErrorKind} from 'zero-protocol';
 import type {MaybePromise} from 'shared/src/types.js';
+import type {ErrorKind as ServerErrorKind} from 'zero-protocol';
 
 export enum MetricName {
   TimeToConnectMs = 'time_to_connect_ms',
@@ -158,7 +158,7 @@ export class MetricManager {
   // connection.  Cleared when the client is not connected.
   // TODO: Not actually currently cleared on disconnect until there is a
   // connect error, or client reports disconnected and waiting for visible.
-  // See Reflect.#totalToConnectStart for details of how this total is computed.
+  // See Zero.#totalToConnectStart for details of how this total is computed.
   // Should have a value iff _notConnected has no value.
   readonly #totalTimeToConnectMs = this.#register(
     new Gauge(MetricName.TotalTimeToConnectMs),

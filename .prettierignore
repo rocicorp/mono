@@ -3,8 +3,6 @@ dist
 lib
 *.log
 
-packages/reflect-server/out
-packages/reflect/out
 packages/replicache/out
 packages/replicache/doc/build/
 packages/replicache/doc/docs/api
