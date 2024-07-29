@@ -43,7 +43,7 @@
     "esbuild": "^0.20.2",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.43.1",
-    "rollup": "^4.19.0",
+    "rollup": "^4.19.1",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "typescript": "^5.5.3"
