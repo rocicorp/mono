@@ -19,7 +19,12 @@ export function makeRollupOptions(input, output) {
   return {
     input,
     output,
-    external: ['@rocicorp/lock', '@rocicorp/logger', '@rocicorp/resolver'],
+    external: [
+      '@badrap/valita',
+      '@rocicorp/lock',
+      '@rocicorp/logger',
+      '@rocicorp/resolver',
+    ],
     plugins: [
       tsConfigPaths(),
       nodeResolve(),
