@@ -1,6 +1,6 @@
 import type {Primitive} from '../../../ast/ast.js';
 import type {Entry} from '../../multiset.js';
-import type {SourceHashIndex} from '../../source/source-hash-index.js';
+import type {HashIndex} from '../../source/source-hash-index.js';
 import type {PipelineEntity} from '../../types.js';
 import type {DifferenceIndex} from './difference-index.js';
 
@@ -10,9 +10,9 @@ export class SourceBackedDifferenceIndex<
 > implements DifferenceIndex<Key, V>
 {
   readonly #overlayIndex: Map<Key, Entry<V>[]>;
-  readonly #sourceIndex: SourceHashIndex<Key, V>;
+  readonly #sourceIndex: HashIndex<Key, V>;
 
-  constructor(sourceIndex: SourceHashIndex<Key, V>) {
+  constructor(sourceIndex: HashIndex<Key, V>) {
     this.#overlayIndex = new Map();
     this.#sourceIndex = sourceIndex;
   }

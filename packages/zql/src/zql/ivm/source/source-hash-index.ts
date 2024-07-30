@@ -2,7 +2,13 @@ import type {Primitive, Selector} from '../../ast/ast.js';
 import type {PipelineEntity} from '../types.js';
 import {getValueFromEntity} from './util.js';
 
-export class SourceHashIndex<K extends Primitive, T extends PipelineEntity> {
+export interface HashIndex<K extends Primitive, T extends PipelineEntity> {
+  get(key: K): Iterable<T> | undefined;
+}
+
+export class SourceHashIndex<K extends Primitive, T extends PipelineEntity>
+  implements HashIndex<K, T>
+{
   readonly #column;
   readonly #index = new Map<K, Set<T>>();
 
