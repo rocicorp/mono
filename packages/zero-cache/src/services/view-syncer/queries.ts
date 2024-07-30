@@ -1,7 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {CustomKeySet} from 'shared/src/custom-key-set.js';
-import {rowIDHash} from 'zero-cache/src/types/row-key.js';
+import {rowIDHash} from '../../types/row-key.js';
 import type {AST, Selector} from 'zql/src/zql/ast/ast.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
 import {deaggregateArrays} from '../../zql/deaggregation.js';

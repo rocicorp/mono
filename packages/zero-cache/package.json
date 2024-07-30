@@ -35,8 +35,7 @@
     "postgres-array": "^3.0.2",
     "zero-protocol": "0.0.0",
     "zql": "0.0.0",
-    "xxhash-wasm": "^1.0.2",
-    "zqlite-zero-cache-shared": "0.0.0"
+    "xxhash-wasm": "^1.0.2"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",

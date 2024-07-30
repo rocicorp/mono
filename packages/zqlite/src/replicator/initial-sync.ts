@@ -12,7 +12,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../consts.js';
 import type {LogContext} from '@rocicorp/logger';
-import {DB, queries} from '../internal/db.js';
+import {ensureSchema, queries} from '../internal/db.js';
 
 const BATCH_SIZE = 100_000;
 
@@ -226,7 +226,7 @@ export async function copy(
   sqliteDb.exec('ANALYZE main');
   lc.info?.('ANALYZE completed');
 
-  DB.ensureSchema(sqliteDb);
+  ensureSchema(sqliteDb);
   sqliteDb.prepare(queries.setCommittedLsn).run(confirmedLsn);
 
   sqliteDb.close();
