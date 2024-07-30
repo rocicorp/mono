@@ -8,15 +8,13 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.2.2",
     "@rocicorp/prettier-config": "^0.2.0",
-    "@types/node-fetch": "^2.6.2",
-    "cross-fetch": "^3.1.5",
     "replicache": "15.0.1",
-    "ts-jest": "^29.1.0",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.3"
   },
   "scripts": {
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
     "check-format": "prettier --check *",
