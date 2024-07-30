@@ -67,8 +67,7 @@ next-env.d.ts
 .wrangler/
 .mf
 
-reflect.config.json
-.reflect/
+
 bundle-sizes.json
 packages/zero-cache/coverage
 __screenshots__/

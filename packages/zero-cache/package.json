@@ -47,7 +47,6 @@
     "@types/pg-format": "^1.0.5",
     "@types/ws": "^8.5.10",
     "@types/node": "^18.16.0",
-    "cf-shared": "0.0.0",
     "concurrently": "^8.2.1",
     "rollup-plugin-dts": "^6.1.1",
     "shared": "0.0.0",

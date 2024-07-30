@@ -4,7 +4,7 @@ import {parseBigInt} from 'shared/src/parse-big-int.js';
 /**
  * A LexiVersion is a lexicographically sortable representation of
  * numbers from 0 to Number.MAX_SAFE_INTEGER (which is the safe range of
- * Version values used in Reflect).
+ * Version values used in Zero).
  *
  * The Version is first encoded in base36, and then prepended by a single
  * base36 character representing the length (of the base36 version) minus 1.
