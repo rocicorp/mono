@@ -1,8 +1,8 @@
+import type {MaybePromise} from 'shared/src/types.js';
 import type {Hash} from './hash.js';
 import type {ReadonlyJSONValue, WriteTransaction} from './mod.js';
 import type {PullResponseV1, PullResponseV1Internal} from './puller.js';
 import type {ReadTransactionImpl} from './transactions.js';
-import type {MaybePromise} from 'shared/src/types.js';
 
 export type BeginPullResult = {
   requestID: string;
@@ -36,6 +36,7 @@ export type MutatorDefs = {
     args?: any,
   ) => MutatorReturn;
 };
+
 export type MakeMutator<
   F extends (
     tx: WriteTransaction,
