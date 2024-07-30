@@ -1,7 +1,7 @@
 import type {DifferenceStream} from '../graph/difference-stream.js';
 import type {PipelineEntity, Version} from '../types.js';
 import type {Request} from '../graph/message.js';
-import type {SourceHashIndex} from './source-hash-index.js';
+import type {HashIndex} from './source-hash-index.js';
 import type {Primitive, Selector} from '../../ast/ast.js';
 
 export interface Source<T extends PipelineEntity> {
@@ -12,7 +12,7 @@ export interface Source<T extends PipelineEntity> {
   processMessage(message: Request): void;
   getOrCreateAndMaintainNewHashIndex<K extends Primitive>(
     column: Selector,
-  ): SourceHashIndex<K, T>;
+  ): HashIndex<K, T>;
 
   // We could remove `seed` and implicitly deduce it from the `add` method
   seed(values: Iterable<T>, derived: boolean): this;

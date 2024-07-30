@@ -9,8 +9,6 @@ const emptyFunction = () => {};
 
 export function createContext(materialite: Materialite, db: Database): Context {
   const sources = new Map<string, Source<PipelineEntity>>();
-  const sql = `SELECT name FROM pragma_table_info(?)`;
-  const columnsStatement = db.prepare(sql).pluck();
 
   return {
     materialite,
@@ -19,9 +17,8 @@ export function createContext(materialite: Materialite, db: Database): Context {
       if (existing) {
         return existing as Source<T>;
       }
-      const columns = columnsStatement.all(name);
       existing = materialite.constructSource(
-        internal => new TableSource(db, internal, name, columns),
+        internal => new TableSource(db, internal, name),
       );
       sources.set(name, existing);
       return existing as Source<T>;

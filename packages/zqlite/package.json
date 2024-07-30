@@ -11,8 +11,6 @@
     "check-types": "tsc --noEmit",
     "build:bin": "tsc -p tsconfig.bin.json",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
     "bench": "vitest bench",
     "test-types": "vitest run --typecheck.only --no-browser.enabled",
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
