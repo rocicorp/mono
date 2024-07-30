@@ -1,13 +1,13 @@
 export {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 export {consoleLogSink} from '@rocicorp/logger';
 export type {LogLevel, LogSink} from '@rocicorp/logger';
-export type {MaybePromise} from 'shared/src/types.js';
 export type {
   JSONObject,
   JSONValue,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
 } from 'shared/src/json.js';
+export type {MaybePromise} from 'shared/src/types.js';
 export type {
   Diff as ExperimentalDiff,
   DiffOperation as ExperimentalDiffOperation,
@@ -106,6 +106,8 @@ export type {
   WriteTransaction,
 } from './transactions.js';
 export type {
+  MakeMutator,
+  MakeMutators,
   MutatorDefs,
   MutatorReturn,
   Poke,
