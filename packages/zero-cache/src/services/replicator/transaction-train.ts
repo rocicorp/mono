@@ -7,7 +7,7 @@ import {
   TransactionPool,
   synchronizedSnapshots,
 } from '../../db/transaction-pool.js';
-import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import type {LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 
 export type TransactionFn<T> = (

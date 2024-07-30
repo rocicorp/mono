@@ -3,12 +3,12 @@ import pg from 'pg';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {CustomKeySet} from 'shared/src/custom-key-set.js';
-import {lookupRowsWithKeys} from 'zero-cache/src/db/queries.js';
-import type {JSONValue} from 'zero-cache/src/types/bigint-json.js';
-import type {PostgresDB, PostgresTransaction} from 'zero-cache/src/types/pg.js';
-import {rowIDHash} from 'zero-cache/src/types/row-key.js';
+import {lookupRowsWithKeys} from '../../db/queries.js';
+import type {JSONValue} from '../../types/bigint-json.js';
+import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
+import {rowIDHash} from '../../types/row-key.js';
 import {astSchema} from 'zero-protocol';
-import {versionToLexi} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import {versionToLexi} from '../../types/lexi-version.js';
 import type {CVR} from './cvr.js';
 import {
   rowRecordToRowsRow,

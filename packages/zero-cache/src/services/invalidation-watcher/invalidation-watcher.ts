@@ -3,11 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 import {sleep} from 'shared/src/sleep.js';
-import {
-  max,
-  min,
-  type LexiVersion,
-} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import {max, min, type LexiVersion} from '../../types/lexi-version.js';
 import {
   Mode,
   TransactionPool,

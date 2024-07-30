@@ -1,9 +1,6 @@
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
-import {
-  versionFromLexi,
-  versionToLexi,
-} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
 import type {Column, QueriedColumns} from '../cvr.js';
 

@@ -11,7 +11,7 @@ import {
   type InvalidationFilterSpec,
   type NormalizedInvalidationFilterSpec,
 } from '../../types/invalidation.js';
-import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import type {LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {RowKeyType, RowValue} from '../../types/row-key.js';
 import {rowKeyString} from '../../types/row-key.js';
