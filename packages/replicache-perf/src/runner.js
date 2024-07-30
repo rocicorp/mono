@@ -149,7 +149,7 @@ async function main() {
     options.groups = ['replicache'];
   }
 
-  const port = await getPort();
+  const port = await getPort({port: 8080});
 
   const server = await startDevServer({
     config: {
@@ -201,7 +201,16 @@ async function main() {
       process.exit(1);
     });
 
-    await page.goto(`http://127.0.0.1:${port}/index.html`);
+    const url = new URL(`http://127.0.0.1:${port}/index.html`);
+    if (options.devtools) {
+      for (const group of options.groups ?? ['replicache']) {
+        url.searchParams.append('group', group);
+      }
+      if (options.run) {
+        url.searchParams.append('run', options.run.source);
+      }
+    }
+    await page.goto(url.toString());
 
     await runInBrowser(browser, page, options);
 
