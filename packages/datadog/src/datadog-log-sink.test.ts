@@ -1,5 +1,4 @@
 import {resolver} from '@rocicorp/resolver';
-import realFetch from 'cross-fetch';
 import type {ReadonlyJSONObject} from 'replicache';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {
@@ -9,7 +8,8 @@ import {
   MAX_LOG_ENTRIES_PER_FLUSH,
 } from './datadog-log-sink.js';
 
-const fetch = vi.fn(realFetch);
+const originalFetch = globalThis.fetch;
+const fetch = vi.fn<typeof originalFetch>();
 globalThis.fetch = fetch;
 
 beforeEach(() => {
