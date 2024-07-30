@@ -15,13 +15,14 @@ import type {Entry} from 'zql/src/zql/ivm/multiset.js';
 import type {Source, SourceInternal} from 'zql/src/zql/ivm/source/source.js';
 import type {PipelineEntity, Version} from 'zql/src/zql/ivm/types.js';
 import {genMap, genCached} from 'zql/src/zql/util/iterables.js';
-import type {Database} from 'better-sqlite3';
+import type {Database, Statement} from 'better-sqlite3';
 import type {HoistedCondition} from 'zql/src/zql/ivm/graph/message.js';
 import type {HashIndex} from 'zql/src/zql/ivm/source/source-hash-index.js';
 import {StatementCache} from './internal/statement-cache.js';
 import {TableSourceHashIndex} from './table-source-hash-index.js';
 import {mergeRequests} from 'zql/src/zql/ivm/source/set-source.js';
 import {assert} from 'shared/src/asserts.js';
+import {compile, sql} from './internal/sql.js';
 
 const resolved = Promise.resolve();
 
@@ -50,6 +51,8 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
   // once.
   readonly #historyStatements: StatementCache;
   readonly #historyRequests: Map<number, PullMsg> = new Map();
+  readonly #insertStmt: Statement;
+  readonly #deleteStmt: Statement;
 
   // Field for debugging.
   #id = id++;
@@ -60,6 +63,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
     db: Database,
     materialite: MaterialiteForSourceInternal,
     name: string,
+    columns: string[],
   ) {
     this.#materialite = materialite;
     this.#name = name;
@@ -73,6 +77,19 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
     });
     this.#db = db;
     this.#historyStatements = new StatementCache(db);
+    let str = compile(
+      sql`INSERT INTO ${sql.ident(name)} (${sql.join(
+        columns.map(c => sql.ident(c)),
+        sql`, `,
+      )}) VALUES (${sql.__dangerous__rawValue(
+        new Array(columns.length).fill('?').join(', '),
+      )})`,
+    );
+    this.#insertStmt = db.prepare(str);
+    str = compile(
+      sql`DELETE FROM ${sql.ident(name)} WHERE ${sql.ident('id')} = ?`,
+    );
+    this.#deleteStmt = db.prepare(str);
 
     this.#internal = {
       onCommitEnqueue: (version: Version) => {
@@ -90,7 +107,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
         }
 
         if (this.#pending.length !== 0) {
-          this.#stream.newDifference(version, this.#pending, undefined);
+          this.#writeAndSendPending(version);
         }
 
         this.#pending = [];
@@ -160,6 +177,7 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
           : -1,
       );
     const sql = conditionsAndSortToSQL(this.#name, sortedConditions, sort);
+
     const stmt = this.#historyStatements.get(sql);
 
     try {
@@ -179,6 +197,28 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
       );
     } finally {
       this.#historyStatements.return(sql);
+    }
+  }
+
+  // TODO(mlaw): we'll need to optimize this.
+  // We're essentially changing the `one at a time` case from this:
+  // https://jsbm.dev/QeaEw5incvxQy
+  // instead of doing `single Iterator`.
+  #writeAndSendPending(version: Version): void {
+    // do the SQLite writes for each item in pending.
+    for (const entry of this.#pending) {
+      if (entry[1] > 0) {
+        // apply the insert
+        this.#insertStmt.run(...Object.values(entry[0]));
+      }
+
+      // run through the pipeline
+      this.#stream.newDifference(version, [entry], undefined);
+
+      if (entry[1] < 0) {
+        // apply the delete
+        this.#deleteStmt.run(entry[0].id);
+      }
     }
   }
 
@@ -233,28 +273,36 @@ export function conditionsAndSortToSQL(
   conditions: HoistedCondition[],
   sort: Ordering | undefined,
 ) {
-  let sql = `SELECT * FROM ${table}`;
+  let query = sql`SELECT * FROM ${sql.ident(table)}`;
   if (conditions.length > 0) {
-    sql += ' WHERE ';
-    sql += conditions
-      .map(c => {
+    query = sql`${query} WHERE ${sql.join(
+      conditions.map(c => {
         if (c.op === 'IN') {
           // we use `json_each` so we do not create a different number of bind params each time we see an `IN`
-          return `${c.selector[1]} ${c.op} (SELECT value FROM json_each(?))`;
+          return sql`${sql.ident(c.selector[1])} ${sql.__dangerous__rawValue(
+            c.op,
+          )} (SELECT value FROM json_each(?))`;
         } else if (c.op === 'ILIKE') {
           // The default configuration of SQLite only supports case-insensitive comparisons of ASCII characters
-          return `${c.selector[1]} LIKE ?`;
+          return sql`${sql.ident(c.selector[1])} LIKE ?`;
         }
-        return `${c.selector[1]} ${c.op} ?`;
-      })
-      .join(' AND ');
+        return sql`${sql.ident(c.selector[1])} ${sql.__dangerous__rawValue(
+          c.op,
+        )} ?`;
+      }),
+      sql` AND `,
+    )}`;
   }
   if (sort) {
-    sql += ' ORDER BY ';
-    sql += sort.map(s => `"${s[0][1]}" ${s[1]}`).join(', ');
+    query = sql`${query} ORDER BY ${sql.join(
+      sort.map(
+        s => sql`${sql.ident(s[0][1])} ${sql.__dangerous__rawValue(s[1])}`,
+      ),
+      sql`, `,
+    )}`;
   }
 
-  return sql;
+  return compile(query);
 }
 
 export function getConditionBindParams(conditions: HoistedCondition[]) {

@@ -34,8 +34,7 @@ export class Materialite {
         this.#dirtySources.add(source);
         // auto-commit if not in a transaction
         if (this.#currentTx === null) {
-          this.#currentTx = this.#version + 1;
-          this.#commit();
+          this.#commit(true);
         }
       },
     };
@@ -80,29 +79,51 @@ export class Materialite {
       return;
     }
     try {
-      fn();
+      try {
+        this._txBegin();
+        fn();
+      } catch (e) {
+        this.#rollback();
+        throw e;
+      }
       this.#commit();
-    } catch (e) {
-      this.#rollback();
-      throw e;
     } finally {
       this.#dirtySources.clear();
     }
   }
 
+  protected _txBegin(): void {}
+
+  protected _txCommit(): void {}
+
+  protected _txRollback(): void {}
+
   #rollback() {
     this.#currentTx = null;
+    this._txRollback();
     for (const source of this.#dirtySources) {
       source.onRollback();
     }
   }
 
-  #commit() {
-    this.#version = must(this.#currentTx);
-    this.#currentTx = null;
-    for (const source of this.#dirtySources) {
-      source.onCommitEnqueue(this.#version);
+  #commit(autoTx = false) {
+    try {
+      if (autoTx) {
+        this.#currentTx = this.#version + 1;
+        this._txBegin();
+      }
+      this.#version = must(this.#currentTx);
+      this.#currentTx = null;
+      for (const source of this.#dirtySources) {
+        source.onCommitEnqueue(this.#version);
+      }
+
+      this._txCommit();
+    } catch (e) {
+      this.#rollback();
+      throw e;
     }
+
     for (const source of this.#dirtySources) {
       source.onCommitted(this.#version);
     }
