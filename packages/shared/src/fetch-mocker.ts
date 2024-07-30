@@ -1,4 +1,3 @@
-import type {jest} from '@jest/globals';
 import type * as vitest from 'vitest';
 
 type Method = 'GET' | 'PUT' | 'PATCH' | 'POST' | 'DELETE';
@@ -32,22 +31,11 @@ export interface SpyOn {
   spyOn(obj: object, methodName: string): any;
 }
 
-type FetchSpy =
-  | vitest.MockInstance<
-      (
-        ...args: [input: string | Request | URL, init?: RequestInit | undefined]
-      ) => Promise<Response>
-    >
-  | jest.SpiedFunction<{
-      (
-        input: URL | RequestInfo,
-        init?: RequestInit | undefined,
-      ): Promise<Response>;
-      (
-        input: string | Request | URL,
-        init?: RequestInit | undefined,
-      ): Promise<Response>;
-    }>;
+type FetchSpy = vitest.MockInstance<
+  (
+    ...args: [input: string | Request | URL, init?: RequestInit | undefined]
+  ) => Promise<Response>
+>;
 
 export class FetchMocker {
   #success: (result: unknown) => Response;
