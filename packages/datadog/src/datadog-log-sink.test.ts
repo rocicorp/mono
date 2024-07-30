@@ -1,25 +1,25 @@
-import {jest, afterEach, beforeEach, test, expect} from '@jest/globals';
+import {resolver} from '@rocicorp/resolver';
 import type {ReadonlyJSONObject} from 'replicache';
+import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {
   DatadogLogSink,
   FORCE_FLUSH_THRESHOLD,
   MAX_ENTRY_CHARS,
   MAX_LOG_ENTRIES_PER_FLUSH,
 } from './datadog-log-sink.js';
-import {resolver} from '@rocicorp/resolver';
-import realFetch from 'cross-fetch';
 
-const fetch = jest.fn(realFetch);
+const originalFetch = globalThis.fetch;
+const fetch = vi.fn<typeof originalFetch>();
 globalThis.fetch = fetch;
 
 beforeEach(() => {
-  jest.useFakeTimers();
-  jest.setSystemTime(0);
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
   fetch.mockReturnValue(Promise.resolve(new Response('{}')));
 });
 
 afterEach(() => {
-  jest.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 function stringifyMany(...messages: ReadonlyJSONObject[]): string {
@@ -30,7 +30,7 @@ test('calling error also calls flush', () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
-  const flushSpy = jest
+  const flushSpy = vi
     .spyOn(l, 'flush')
     .mockImplementation(() => Promise.resolve(undefined));
   l.log('error', {usr: {name: 'bob'}}, 'aaa');
@@ -41,7 +41,7 @@ test('reaching flush threshold also calls flush', () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
-  const flushSpy = jest
+  const flushSpy = vi
     .spyOn(l, 'flush')
     .mockImplementation(() => Promise.resolve(undefined));
   for (let i = 0; i < FORCE_FLUSH_THRESHOLD - 1; i++) {
@@ -101,7 +101,7 @@ test('does not flush more than max entries', async () => {
 
   // Check the third fetch (not flushed till after flush interval
   // since message count is below FORCE_FLUSH_THRESHOLD).
-  jest.advanceTimersByTime(10);
+  vi.advanceTimersByTime(10);
   await fetchLatches[2].promise;
   expect(numLogEntriesInRequest(2)).toBe(123);
 });
@@ -181,7 +181,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
 
   // Check the final fetch (not flushed till after flush interval
   // since message count is below FORCE_FLUSH_THRESHOLD).
-  jest.advanceTimersByTime(10);
+  vi.advanceTimersByTime(10);
   await fetchLatches[4].promise;
   fetchResponseResolvers[4].resolve({ok: true} as unknown as Response);
   expect(numLogEntriesInRequest(4)).toBe(123);
@@ -191,12 +191,12 @@ test('flush calls fetch', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
-  jest.setSystemTime(1);
+  vi.setSystemTime(1);
   l.log('debug', {usr: {name: 'bob'}}, 'debug message');
-  jest.setSystemTime(2);
+  vi.setSystemTime(2);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
 
-  jest.setSystemTime(10);
+  vi.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -230,12 +230,12 @@ test('flush calls fetch with specified baseURL', async () => {
     apiKey: 'apiKey',
     baseURL: new URL('http://custom.base.com/api/path/log'),
   });
-  jest.setSystemTime(1);
+  vi.setSystemTime(1);
   l.log('debug', {usr: {name: 'bob'}}, 'debug message');
-  jest.setSystemTime(2);
+  vi.setSystemTime(2);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
 
-  jest.setSystemTime(10);
+  vi.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -268,7 +268,7 @@ test('flush truncates large messages and batches', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
-  jest.setSystemTime(1);
+  vi.setSystemTime(1);
   l.log('debug', {usr: {name: 'bob'}}, 'a'.repeat(MAX_ENTRY_CHARS * 2));
   l.log('debug', {usr: {name: 'bob'}}, 'b'.repeat(MAX_ENTRY_CHARS / 2));
   l.log('debug', {usr: {name: 'bob'}}, 'small message');
@@ -360,7 +360,7 @@ test('reserved keys are prefixed', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
-  jest.setSystemTime(1);
+  vi.setSystemTime(1);
   l.log(
     'debug',
     {
@@ -380,7 +380,7 @@ test('reserved keys are prefixed', async () => {
     'debug message',
   );
 
-  jest.setSystemTime(10);
+  vi.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -416,7 +416,7 @@ test('Errors in multi arg messages are converted to JSON', async () => {
     apiKey: 'apiKey',
   });
 
-  jest.setSystemTime(1);
+  vi.setSystemTime(1);
   l.log(
     'info',
     {usr: {name: 'bob'}},
@@ -458,7 +458,7 @@ test('Errors in single arg messages are converted to JSON', async () => {
     apiKey: 'apiKey',
   });
 
-  jest.setSystemTime(1);
+  vi.setSystemTime(1);
   l.log('info', {usr: {name: 'bob'}}, new Error('Test error msg'));
 
   await l.flush();
@@ -490,13 +490,13 @@ test('flush calls fetch but includes logs after the error', async () => {
   const l = new DatadogLogSink({
     apiKey: 'apiKey',
   });
-  jest.useFakeTimers();
-  jest.setSystemTime(3);
+  vi.useFakeTimers();
+  vi.setSystemTime(3);
   l.log('error', {usr: {name: 'bob'}}, 'error message');
-  jest.setSystemTime(4);
+  vi.setSystemTime(4);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
 
-  jest.setSystemTime(10);
+  vi.setSystemTime(10);
   await l.flush();
 
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -532,9 +532,9 @@ test('flush is called 1s after a log', async () => {
     interval: 1000,
   });
 
-  jest.setSystemTime(3);
+  vi.setSystemTime(3);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 1);
 
@@ -562,9 +562,9 @@ test('flush is called again in case of failure', async () => {
   });
 
   fetch.mockReturnValue(Promise.reject(new Error('error')));
-  jest.setSystemTime(3);
+  vi.setSystemTime(3);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 1);
 
@@ -586,7 +586,7 @@ test('flush is called again in case of failure', async () => {
 
   fetch.mockReturnValue(Promise.resolve(new Response()));
   l.log('info', {usr: {name: 'bob'}}, 'info message 2');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 2);
 
@@ -624,10 +624,10 @@ test('messages that fail to send 3 times are dropped', async () => {
   });
 
   fetch.mockReturnValue(Promise.reject(new Error('error')));
-  jest.setSystemTime(3);
+  vi.setSystemTime(3);
   l.log('info', {usr: {name: 'bob'}}, 'info message');
   l.log('info', {usr: {name: 'bob'}}, 'info message 2');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 1);
 
@@ -657,7 +657,7 @@ test('messages that fail to send 3 times are dropped', async () => {
   );
 
   l.log('info', {usr: {name: 'bob'}}, 'info message 3');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 2);
 
@@ -696,7 +696,7 @@ test('messages that fail to send 3 times are dropped', async () => {
   );
 
   l.log('info', {usr: {name: 'bob'}}, 'info message 4');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 3);
 
@@ -744,7 +744,7 @@ test('messages that fail to send 3 times are dropped', async () => {
 
   fetch.mockReturnValue(Promise.resolve(new Response()));
   l.log('info', {usr: {name: 'bob'}}, 'info message 5');
-  jest.advanceTimersByTime(1000);
+  vi.advanceTimersByTime(1000);
 
   await microtasksUntil(() => fetch.mock.calls.length >= 4);
 
