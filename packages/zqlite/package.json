@@ -31,9 +31,11 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
+    "@databases/escape-identifier": "^1.0.3",
+    "@databases/sql": "^3.3.0",
     "@rocicorp/logger": "^5.2.2",
-    "zql": "0.0.0",
     "better-sqlite3": "^11.0.0",
-    "pg-logical-replication": "^2.0.5"
+    "pg-logical-replication": "^2.0.5",
+    "zql": "0.0.0"
   }
 }
