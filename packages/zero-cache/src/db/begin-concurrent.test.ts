@@ -105,4 +105,39 @@ describe('db/begin-concurrent', () => {
     conn1.close();
     conn2.close();
   });
+
+  test('begin concurrent with savepoints', () => {
+    const conn1 = new Database(dbFile);
+    conn1.pragma('journal_mode = WAL');
+    conn1.pragma('synchronous = NORMAL');
+    conn1.prepare('BEGIN CONCURRENT').run();
+    // Force the transaction to start immediately by accessing the database.
+    expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([]);
+
+    const conn2 = new Database(dbFile);
+    conn2.pragma('journal_mode = WAL');
+    conn2.pragma('synchronous = NORMAL');
+    conn2.prepare('BEGIN CONCURRENT').run();
+    // Force the transaction to start immediately by accessing the database.
+    expect(conn2.prepare('SELECT * FROM foo').all()).toEqual([]);
+
+    conn1.prepare('INSERT INTO foo(id) VALUES(1)').run();
+    conn1.prepare('COMMIT').run();
+
+    expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([{id: 1}]);
+
+    // Should not see commit from conn1.
+    conn2.prepare('SAVEPOINT foobar').run();
+    conn2.prepare('INSERT INTO foo(id) VALUES(2)').run();
+    expect(conn2.prepare('SELECT * FROM foo').all()).toEqual([{id: 2}]);
+
+    // Should rollback to the savepoint, which should still exclude conn1's commit.
+    conn2.prepare('ROLLBACK TO foobar').run();
+    expect(conn2.prepare('SELECT * FROM foo').all()).toEqual([]);
+
+    conn2.prepare('ROLLBACK').run();
+
+    conn1.close();
+    conn2.close();
+  });
 });
