@@ -10,7 +10,7 @@ import {
   setClients,
 } from './clients.js';
 
-const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+export const HEARTBEAT_INTERVAL = 60 * 1000;
 
 export let latestHeartbeatUpdate: Promise<ClientMap> | undefined;
 
@@ -18,6 +18,7 @@ export function startHeartbeats(
   clientID: ClientID,
   dagStore: Store,
   onClientStateNotFound: () => void,
+  heartbeatIntervalMs: number,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
@@ -35,7 +36,7 @@ export function startHeartbeats(
         throw e;
       }
     },
-    () => HEARTBEAT_INTERVAL_MS,
+    () => heartbeatIntervalMs,
     lc,
     signal,
   );

@@ -6,7 +6,12 @@ import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {newUUIDHash} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
-import {getLatestGCUpdate, initClientGC} from './client-gc.js';
+import {
+  CLIENT_MAX_INACTIVE_TIME,
+  GC_INTERVAL,
+  getLatestGCUpdate,
+  initClientGC,
+} from './client-gc.js';
 import {makeClientV4, setClientsForTesting} from './clients-test-helpers.js';
 import {ClientMap, getClients, setClient} from './clients.js';
 
@@ -60,7 +65,14 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   await setClientsForTesting(clientMap, dagStore);
 
   const controller = new AbortController();
-  initClientGC('client1', dagStore, new LogContext(), controller.signal);
+  initClientGC(
+    'client1',
+    dagStore,
+    CLIENT_MAX_INACTIVE_TIME,
+    GC_INTERVAL,
+    new LogContext(),
+    controller.signal,
+  );
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);

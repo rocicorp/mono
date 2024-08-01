@@ -52,7 +52,11 @@ import {
   PersistInfo,
 } from './on-persist-channel.js';
 import {PendingMutation, pendingMutationsForAPI} from './pending-mutations.js';
-import {initClientGC} from './persist/client-gc.js';
+import {
+  CLIENT_MAX_INACTIVE_TIME,
+  GC_INTERVAL,
+  initClientGC,
+} from './persist/client-gc.js';
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
 import {
@@ -61,8 +65,14 @@ import {
   initClientV6,
   hasClientState as persistHasClientState,
 } from './persist/clients.js';
-import {initCollectIDBDatabases} from './persist/collect-idb-databases.js';
-import {startHeartbeats} from './persist/heartbeat.js';
+import {
+  COLLECT_IDB_INTERVAL,
+  DD31_IDB_MAX_AGE,
+  initCollectIDBDatabases,
+  INITIAL_COLLECT_IDB_DELAY,
+  SDD_IDB_MAX_AGE,
+} from './persist/collect-idb-databases.js';
+import {HEARTBEAT_INTERVAL, startHeartbeats} from './persist/heartbeat.js';
 import {
   IDBDatabasesStore,
   IndexedDBDatabase,
@@ -404,6 +414,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     options: ReplicacheOptions<MD>,
     implOptions: ReplicacheImplOptions = {},
   ) {
+    validateOptions(options);
     const {
       name,
       logLevel = 'info',
@@ -420,6 +431,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       pusher,
       licenseKey,
       indexes = {},
+      clientMaxAgeMs = CLIENT_MAX_INACTIVE_TIME,
     } = options;
     const {
       enableMutationRecovery = true,
@@ -433,9 +445,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
-    if (typeof name !== 'string' || !name) {
-      throw new TypeError('name is required and must be non-empty');
-    }
     this.name = name;
     this.schemaVersion = schemaVersion;
     this.pullInterval = pullInterval;
@@ -534,6 +543,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     void this.#open(
       indexes,
       enableClientGroupForking,
+      clientMaxAgeMs,
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
@@ -545,6 +555,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   async #open(
     indexes: IndexDefinitions,
     enableClientGroupForking: boolean,
+    clientMaxAgeMs: number,
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
     resolveReady: () => void,
@@ -578,8 +589,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     await this.#licenseCheck(resolveLicenseCheck);
 
     if (this.#enablePullAndPushInOpen) {
-      void this.pull().catch(noop);
-      void this.push().catch(noop);
+      this.pull().catch(noop);
+      this.push().catch(noop);
     }
 
     const {signal} = this.#closeAbortController;
@@ -590,15 +601,28 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       () => {
         this.#clientStateNotFoundOnClient(clientID);
       },
+      HEARTBEAT_INTERVAL,
       this.#lc,
       signal,
     );
-    initClientGC(clientID, this.perdag, this.#lc, signal);
-    initCollectIDBDatabases(
-      this.#idbDatabases,
+    initClientGC(
+      clientID,
+      this.perdag,
+      clientMaxAgeMs,
+      GC_INTERVAL,
       this.#lc,
       signal,
+    );
+    initCollectIDBDatabases(
+      this.#idbDatabases,
       this.#kvStoreProvider.drop,
+      COLLECT_IDB_INTERVAL,
+      INITIAL_COLLECT_IDB_DELAY,
+      SDD_IDB_MAX_AGE,
+      // TODO(arv): I think this should be 2 * clientMaxAgeMs
+      DD31_IDB_MAX_AGE,
+      this.#lc,
+      signal,
     );
     initClientGroupGC(this.perdag, this.#lc, signal);
     initNewClientChannel(
@@ -1703,5 +1727,23 @@ async function throwIfError(p: Promise<undefined | {error: unknown}>) {
 function reload(): void {
   if (typeof location !== 'undefined') {
     location.reload();
+  }
+}
+
+function validateOptions<MD extends MutatorDefs>(
+  options: ReplicacheOptions<MD>,
+): void {
+  const {name, clientMaxAgeMs} = options;
+  if (typeof name !== 'string' || !name) {
+    throw new TypeError('name is required and must be non-empty');
+  }
+
+  if (clientMaxAgeMs !== undefined) {
+    const min = Math.max(GC_INTERVAL, HEARTBEAT_INTERVAL);
+    if (typeof clientMaxAgeMs !== 'number' || clientMaxAgeMs <= min) {
+      throw new TypeError(
+        `clientAgeMaxMs must be a number larger than ${min}ms`,
+      );
+    }
   }
 }

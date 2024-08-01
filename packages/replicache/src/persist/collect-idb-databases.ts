@@ -7,7 +7,9 @@ import type {Store} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import {assertHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
-import type {StoreProvider, DropStore} from '../kv/store.js';
+import type {DropStore, StoreProvider} from '../kv/store.js';
+import {createLogContext} from '../log-options.js';
+import {getKVStoreProvider} from '../replicache.js';
 import {withRead} from '../with-transactions.js';
 import {
   clientGroupHasPendingMutations,
@@ -16,27 +18,37 @@ import {
 import {ClientMap, getClients} from './clients.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
-import {getKVStoreProvider} from '../replicache.js';
-import {createLogContext} from '../log-options.js';
 
-// How frequently to try to collect
-const COLLECT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+/**
+ * How frequently to try to collect
+ */
+export const COLLECT_IDB_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours
 
-// If an IDB database is older than MAX_AGE, then it can be collected.
-const MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 1 month
+/**
+ * If an IDB database is older than MAX_AGE, then it can be collected.
+ */
+export const SDD_IDB_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 1 month
 
-// If an IDB database is older than DD31_MAX_AGE **and** has no pending
-// mutations, then it can be collected.
-const DD31_MAX_AGE = 14 * 24 * 60 * 60 * 1000; // 2 weeks
+/**
+ * If an IDB database is older than DD31_MAX_AGE **and** has no pending
+ * mutations, then it can be collected.
+ */
+export const DD31_IDB_MAX_AGE = 14 * 24 * 60 * 60 * 1000; // 2 weeks
 
-// We delay the initial collection to prevent doing it at startup.
-const COLLECT_DELAY = 5 * 60 * 1000; // 5 minutes
+/**
+ * We delay the initial collection to prevent doing it at startup.
+ */
+export const INITIAL_COLLECT_IDB_DELAY = 5 * 60 * 1000; // 5 minutes
 
 export function initCollectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
+  kvDropStore: DropStore,
+  collectInterval: number,
+  initialCollectDelay: number,
+  sddMaxAge: number,
+  dd31MaxAge: number,
   lc: LogContext,
   signal: AbortSignal,
-  kvDropStore: DropStore,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -45,27 +57,30 @@ export function initCollectIDBDatabases(
       await collectIDBDatabases(
         idbDatabasesStore,
         Date.now(),
-        MAX_AGE,
-        DD31_MAX_AGE,
+        sddMaxAge,
+        dd31MaxAge,
         kvDropStore,
       );
     },
     () => {
       if (initial) {
         initial = false;
-        return COLLECT_DELAY;
+        return initialCollectDelay;
       }
-      return COLLECT_INTERVAL_MS;
+      return collectInterval;
     },
     lc,
     signal,
   );
 }
 
+/**
+ * Collects IDB databases that are no longer needed.
+ */
 export async function collectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   now: number,
-  maxAge: number,
+  sddMaxAge: number,
   dd31MaxAge: number,
   kvDropStore: DropStore,
   newDagStore = defaultNewDagStore,
@@ -78,7 +93,7 @@ export async function collectIDBDatabases(
       async db =>
         [
           db.name,
-          await canCollectDatabase(db, now, maxAge, dd31MaxAge, newDagStore),
+          await canCollectDatabase(db, now, sddMaxAge, dd31MaxAge, newDagStore),
         ] as const,
     ),
   );
@@ -141,7 +156,7 @@ function defaultNewDagStore(name: string): Store {
 async function canCollectDatabase(
   db: IndexedDBDatabase,
   now: number,
-  maxAge: number,
+  sddMaxAge: number,
   dd31MaxAge: number,
   newDagStore: typeof defaultNewDagStore,
 ): Promise<boolean> {
@@ -156,7 +171,7 @@ async function canCollectDatabase(
     // - For SDD we can delete the database if it is older than maxAge.
     // - For DD31 we can delete the database if it is older than dd31MaxAge and
     //   there are no pending mutations.
-    if (now - db.lastOpenedTimestampMS < (isDD31 ? dd31MaxAge : maxAge)) {
+    if (now - db.lastOpenedTimestampMS < (isDD31 ? dd31MaxAge : sddMaxAge)) {
       return false;
     }
 
@@ -180,7 +195,7 @@ async function canCollectDatabase(
   const clientMap = await withRead(perdag, getClients);
   await perdag.close();
 
-  return allClientsOlderThan(clientMap, now, maxAge);
+  return allClientsOlderThan(clientMap, now, sddMaxAge);
 }
 
 function allClientsOlderThan(
