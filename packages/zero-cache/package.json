@@ -42,7 +42,7 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@testcontainers/postgresql": "^10.9.0",
-    "@types/better-sqlite3": "^7.6.11",
+    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^18.16.0",
     "@types/pg": "^8.11.2",
     "@types/pg-format": "^1.0.5",
