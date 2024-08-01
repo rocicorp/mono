@@ -24,12 +24,12 @@ describe('db/begin-concurrent', () => {
     const conn1 = new Database(dbFile);
     conn1.pragma('journal_mode = WAL');
     conn1.pragma('synchronous = NORMAL');
-    conn1.prepare('BEGIN CONCURRENT').run(); // SqliteError: near "CONCURRENT": syntax error
+    conn1.prepare('BEGIN CONCURRENT').run();
 
     const conn2 = new Database(dbFile);
     conn2.pragma('journal_mode = WAL');
     conn2.pragma('synchronous = NORMAL');
-    conn2.prepare('BEGIN CONCURRENT').run(); // SqliteError: near "CONCURRENT": syntax error
+    conn2.prepare('BEGIN CONCURRENT').run();
 
     conn1.prepare('INSERT INTO foo(id) VALUES(1)').run();
     expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([{id: 1}]);
@@ -48,13 +48,13 @@ describe('db/begin-concurrent', () => {
     const conn1 = new Database(dbFile);
     conn1.pragma('journal_mode = WAL');
     conn1.pragma('synchronous = NORMAL');
-    conn1.prepare('BEGIN CONCURRENT').run(); // SqliteError: near "CONCURRENT": syntax error
+    conn1.prepare('BEGIN CONCURRENT').run();
 
     const conn2 = new Database(dbFile);
     conn2.pragma('journal_mode = WAL');
     conn2.pragma('synchronous = NORMAL');
 
-    // Note: Like BEGIN DEFERRED, for BEGIN CONCURRENT, the transaction does not actually start until
+    // Note: Like BEGIN DEFERRED, the BEGIN CONCURRENT transaction does not actually start until
     // the database is first accessed
     conn2.prepare('BEGIN CONCURRENT').run();
 
