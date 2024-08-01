@@ -6,7 +6,7 @@
   "scripts": {
     "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-replicator.ts",
     "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-service-runner.ts",
-    "test": "vitest run -t begin-concurrent",
+    "test": "vitest run",
     "test:watch": "vitest ",
     "check-types": "tsc --noEmit",
     "format": "prettier --write *",
