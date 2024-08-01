@@ -1,10 +1,10 @@
 import {RWLock} from '@rocicorp/lock';
 import {joinIterables} from 'shared/src/iterables.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
+import type {MaybePromise} from 'shared/src/types.js';
 import type {Hash} from '../hash.js';
 import {getSizeOfValue} from '../size-of-value.js';
-import type {MaybePromise} from 'shared/src/types.js';
-import {Chunk, ChunkHasher, createChunk} from './chunk.js';
+import {Chunk, ChunkHasher, Refs, createChunk} from './chunk.js';
 import {
   HeadChange,
   RefCountUpdatesDelegate,
@@ -327,7 +327,7 @@ export class LazyWrite
     this.#chunkHasher = chunkHasher;
   }
 
-  createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> => {
+  createChunk = <V>(data: V, refs: Refs): Chunk<V> => {
     const chunk = createChunk(data, refs, this.#chunkHasher);
     this.#createdChunks.add(chunk.hash);
     return chunk;

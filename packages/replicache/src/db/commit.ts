@@ -10,7 +10,7 @@ import {
 import {assertJSONValue} from 'shared/src/json.js';
 import {skipCommitDataAsserts} from '../config.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
-import type {Chunk, CreateChunk} from '../dag/chunk.js';
+import {toRefs, type Chunk, type CreateChunk, type Refs} from '../dag/chunk.js';
 import {MustGetChunk, Read, mustGetHeadHash} from '../dag/store.js';
 import {
   FrozenTag,
@@ -711,16 +711,17 @@ function commitFromCommitData<M extends Meta>(
   return new Commit(createChunk(data, getRefs(data)));
 }
 
-export function getRefs(data: CommitData<Meta>): Hash[] {
-  const refs: Hash[] = [data.valueHash];
+export function getRefs(data: CommitData<Meta>): Refs {
+  const refs: Set<Hash> = new Set();
+  refs.add(data.valueHash);
   const {meta} = data;
   switch (meta.type) {
     case MetaType.IndexChangeSDD:
-      meta.basisHash && refs.push(meta.basisHash);
+      meta.basisHash && refs.add(meta.basisHash);
       break;
     case MetaType.LocalSDD:
     case MetaType.LocalDD31:
-      meta.basisHash && refs.push(meta.basisHash);
+      meta.basisHash && refs.add(meta.basisHash);
       // Local has weak originalHash
       break;
     case MetaType.SnapshotSDD:
@@ -732,10 +733,10 @@ export function getRefs(data: CommitData<Meta>): Hash[] {
   }
 
   for (const index of data.indexes) {
-    refs.push(index.valueHash);
+    refs.add(index.valueHash);
   }
 
-  return refs;
+  return toRefs(refs);
 }
 
 export type CommitData<M extends Meta> = FrozenTag<{

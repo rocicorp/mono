@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {Chunk} from '../dag/chunk.js';
+import {Chunk, Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
@@ -325,7 +325,7 @@ test('load roundtrip', () => {
         timestamp,
       },
       fakeHash('face4'),
-      [fakeHash('000'), fakeHash('000')],
+      [fakeHash('001'), fakeHash('002')],
     ),
     new Error('Missing mutator name'),
   );
@@ -344,7 +344,7 @@ test('load roundtrip', () => {
         clientID,
       },
       fakeHash('face4'),
-      [fakeHash('000'), fakeHash('000')],
+      [fakeHash('001'), fakeHash('002')],
     ),
     new Error('Missing mutator name'),
   );
@@ -361,7 +361,7 @@ test('load roundtrip', () => {
         originalHash: emptyStringHash,
       },
       fakeHash('face4'),
-      ['', ''],
+      ['a', 'b'],
     ),
     new Error('Invalid type: null, expected string'),
   );
@@ -379,7 +379,7 @@ test('load roundtrip', () => {
         clientID,
       },
       fakeHash('face4'),
-      ['', ''],
+      ['a', 'b'],
     ),
     new Error('Invalid type: null, expected string'),
   );
@@ -461,7 +461,7 @@ test('load roundtrip', () => {
       },
       //@ts-expect-error we are testing invalid types
       null,
-      ['', ''],
+      ['a', 'b'],
     ),
     new Error('Invalid type: null, expected string'),
   );
@@ -481,7 +481,7 @@ test('load roundtrip', () => {
       },
       //@ts-expect-error we are testing invalid types
       null,
-      ['', ''],
+      ['a', 'b'],
     ),
     new Error('Invalid type: null, expected string'),
   );
@@ -753,7 +753,7 @@ const chunkHasher = makeNewFakeHashFunction('face55');
 
 const hashMapper: Map<string, Hash> = new Map();
 
-function createChunk<V>(data: V, refs: readonly Hash[]): Chunk<V> {
+function createChunk<V>(data: V, refs: Refs): Chunk<V> {
   const s = JSON.stringify(data);
   let hash = hashMapper.get(s);
   if (!hash) {
@@ -770,7 +770,7 @@ function makeCommit<M extends Meta>(
   refs: Hash[],
 ): Chunk<CommitData<M>> {
   const data: CommitData<M> = makeCommitData(meta, valueHash, []);
-  return createChunk(data, refs);
+  return createChunk(data, toRefs(refs));
 }
 
 function makeIndexChangeMeta(
