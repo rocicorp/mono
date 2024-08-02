@@ -1,3 +1,4 @@
+import {notImplemented} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {
   AST,
@@ -218,6 +219,58 @@ type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
         >;
       };
 
+type ExtractSubQueryPiece<
+  From extends FromSet,
+  SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
+> = {
+  [p in SubQueryName<From, SQ>]: SQ['body'] extends EntityQuery<From, infer R>
+    ? R
+    : never;
+};
+
+type SubQueryName<
+  From extends FromSet,
+  SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
+> = SQ['name'];
+
+// export type TEMP = SubQueryName<{
+//   name: 'foo';
+//   body: () => EntityQuery<{issue: {id: string; title: string}}, any>;
+// }>;
+
+type F = {issue: {id: string; title: string}};
+type Q = EntityQuery<F, 42[]>;
+type SQ = SubQuery<'foo', F, Q>;
+export type TEMP = SubQueryName<F, SQ>;
+
+type ExtractSubQueryEntityQueryReturn<
+  From extends FromSet,
+  SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
+> = SQ extends SubQuery<string, From, infer R> ? R : never;
+
+export type TEMP3 = ExtractSubQueryEntityQueryReturn<
+  F,
+  SubQuery<'foo', F, EntityQuery<F, {a: string; b: number}>>
+>;
+
+type ExtractEntityQueryReturn<
+  From extends FromSet,
+  EQ extends EntityQuery<From, unknown>,
+> = EQ extends EntityQuery<From, infer R> ? R : never;
+
+export type TEMP4 = ExtractEntityQueryReturn<
+  F,
+  ExtractSubQueryEntityQueryReturn<
+    F,
+    SubQuery<'foo', F, EntityQuery<F, {a: string; b: number}>>
+  >
+>;
+
+export type TEMP5 = ExtractSubQueryPiece<
+  F,
+  SubQuery<'foo', F, EntityQuery<F, bigint>>
+>;
+
 /**
  * ExtractNestedTypeByName returns the type of property `S` one level down in an object structure
  *
@@ -296,13 +349,23 @@ type CombineFromSets<A, B> = MergeRecords<A & B>;
  */
 type CombineSelections<
   From extends FromSet,
-  Selections extends (Selector<From> | Aggregator<From>)[],
+  Selections extends (
+    | Selector<From>
+    | Aggregator<From>
+    | SubQuery<string, From, EntityQuery<From, unknown>>
+  )[],
 > = Selections extends [infer First, ...infer Rest]
   ? First extends Selector<From>
     ? CombineFromSets<
         CombineSelections<
           From,
-          Rest extends (Selector<From> | Aggregator<From>)[] ? Rest : []
+          Rest extends (
+            | Selector<From>
+            | Aggregator<From>
+            | SubQuery<string, From, EntityQuery<From, unknown>>
+          )[]
+            ? Rest
+            : []
         >,
         ExtractFieldPiece<From, First>
       >
@@ -310,9 +373,29 @@ type CombineSelections<
     ? CombineFromSets<
         CombineSelections<
           From,
-          Rest extends (Selector<From> | Aggregator<From>)[] ? Rest : []
+          Rest extends (
+            | Selector<From>
+            | Aggregator<From>
+            | SubQuery<string, From, EntityQuery<From, unknown>>
+          )[]
+            ? Rest
+            : []
         >,
         ExtractAggregatePiece<From, First>
+      >
+    : First extends SubQuery<string, From, EntityQuery<From, unknown>>
+    ? CombineFromSets<
+        CombineSelections<
+          From,
+          Rest extends (
+            | Selector<From>
+            | Aggregator<From>
+            | SubQuery<string, From, EntityQuery<From, unknown>>
+          )[]
+            ? Rest
+            : []
+        >,
+        ExtractSubQueryPiece<From, First>
       >
     : never
   : unknown;
@@ -320,6 +403,16 @@ type CombineSelections<
 type Aggregator<From extends FromSet> =
   | Aggregate<SimpleSelector<From>, string>
   | AggArray<Selector<From>, string>;
+
+type SubQuery<
+  Name extends string,
+  From extends FromSet,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  SubQueryReturnType extends EntityQuery<From, any>,
+> = {
+  name: Name;
+  body: SubQueryReturnType;
+};
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows
@@ -371,32 +464,37 @@ export class EntityQuery<From extends FromSet, Return = []> {
     astWeakMap.set(this, this.#ast);
   }
 
-  select<Fields extends (Selector<From> | Aggregator<From>)[]>(
-    ...x: Fields
-  ): EntityQuery<From, CombineSelections<From, Fields>[]> {
+  select<
+    Fields extends (
+      | Selector<From>
+      | Aggregator<From>
+      | SubQuery<string, From, EntityQuery<From, unknown>>
+    )[],
+  >(...x: Fields): EntityQuery<From, CombineSelections<From, Fields>[]> {
     const seen = new Set(this.#ast.select?.map(s => s[1]));
     const aggregate: Aggregation[] = [];
     const ast = this.#ast;
     const select = ast.select ? [...ast.select] : [];
 
     for (const more of x) {
-      if (!isAggregate(more)) {
+      if (isAggregate(more)) {
+        aggregate.push({
+          field:
+            more.field !== undefined
+              ? qualifySelector(ast, more.field)
+              : undefined,
+          alias: more.alias,
+          aggregate: more.aggregate,
+        });
+      } else if (isSubQuery(more)) {
+        notImplemented();
+      } else {
         if (seen.has(more)) {
           continue;
         }
         seen.add(more);
         select.push([qualifySelector(ast, more), more]);
-
-        continue;
       }
-      aggregate.push({
-        field:
-          more.field !== undefined
-            ? qualifySelector(ast, more.field)
-            : undefined,
-        alias: more.alias,
-        aggregate: more.aggregate,
-      });
     }
 
     return new EntityQuery<From, CombineSelections<From, Fields>[]>(
@@ -880,4 +978,13 @@ function getRequiredOrderFieldsForDeterministicOrdering(
   }
 
   return ret;
+}
+
+function isSubQuery<From extends FromSet>(
+  field:
+    | Selector<From>
+    | Aggregator<From>
+    | SubQuery<string, From, EntityQuery<From, unknown>>,
+): field is SubQuery<string, From, EntityQuery<From, unknown>> {
+  return typeof field === 'object' && 'name' in field && 'body' in field;
 }
