@@ -1,7 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
-import type {Chunk, CreateChunk} from '../dag/chunk.js';
+import {toRefs, type Chunk, type CreateChunk} from '../dag/chunk.js';
 import type {Write} from '../dag/store.js';
 import type {FormatVersion} from '../format-version.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
@@ -206,6 +206,8 @@ function gatherNewChunks(
     return chunk.hash;
   }
 
+  // The BTree cannot have duplicate keys so the child entry hashes are unique.
+  // No need fot a set to dedupe here.
   const refs: Hash[] = [];
   const {entries} = node;
   for (let i = 0; i < entries.length; i++) {
@@ -225,7 +227,7 @@ function gatherNewChunks(
     }
     refs.push(newChildHash);
   }
-  const chunk = createChunk(toChunkData(node, formatVersion), refs);
+  const chunk = createChunk(toChunkData(node, formatVersion), toRefs(refs));
   newChunks.push(chunk);
   return chunk.hash;
 }

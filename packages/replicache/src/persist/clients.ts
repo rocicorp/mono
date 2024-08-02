@@ -5,6 +5,7 @@ import * as valita from 'shared/src/valita.js';
 import {emptyDataNode} from '../btree/node.js';
 import {BTreeRead} from '../btree/read.js';
 import {FrozenCookie, compareCookies} from '../cookies.js';
+import {toRefs, type Refs} from '../dag/chunk.js';
 import type {Read, Store, Write} from '../dag/store.js';
 import {
   ChunkIndexDefinition,
@@ -530,22 +531,24 @@ export async function findMatchingClient(
   return {type: FIND_MATCHING_CLIENT_TYPE_NEW};
 }
 
-function getRefsForClients(clients: ClientMap): Hash[] {
-  const refs: Hash[] = [];
+function getRefsForClients(clients: ClientMap): Refs {
+  const refs: Set<Hash> = new Set();
   for (const client of clients.values()) {
     if (isClientV6(client)) {
-      refs.push(...client.refreshHashes);
+      for (const hash of client.refreshHashes) {
+        refs.add(hash);
+      }
       if (client.persistHash) {
-        refs.push(client.persistHash);
+        refs.add(client.persistHash);
       }
     } else {
-      refs.push(client.headHash);
+      refs.add(client.headHash);
       if (isClientV5(client) && client.tempRefreshHash) {
-        refs.push(client.tempRefreshHash);
+        refs.add(client.tempRefreshHash);
       }
     }
   }
-  return refs;
+  return toRefs(refs);
 }
 
 export async function getClientGroupForClient(

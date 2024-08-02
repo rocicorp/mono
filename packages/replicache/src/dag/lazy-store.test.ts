@@ -1,12 +1,12 @@
 import {expect} from 'chai';
 import {deepFreeze} from '../frozen-json.js';
-import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
 } from '../with-transactions.js';
-import type {Chunk} from './chunk.js';
+import {asRefs, toRefs, type Chunk} from './chunk.js';
 import {TestLazyStore} from './test-lazy-store.js';
 import {TestStore} from './test-store.js';
 
@@ -127,7 +127,7 @@ test('chunksPersisted', async () => {
     testValue3MemOnlyChunk,
   ] = await withWrite(lazyStore, async write => {
     const chunks = [];
-    let refs: Hash[] = [];
+    let refs = asRefs([]);
     for (let i = 1; i <= 3; i++) {
       const chunk = write.createChunk(`testValue${i}`, refs);
       await write.putChunk(chunk);
@@ -877,10 +877,10 @@ test('cache eviction does not change ref counts or remove refs', async () => {
       await write.putChunk(testValue2Chunk);
       const testValue3Chunk = write.createChunk(testValue3, []);
       await write.putChunk(testValue3Chunk);
-      const testValue4Chunk = write.createChunk(testValue4, [
-        testValue2Chunk.hash,
-        testValue3Chunk.hash,
-      ]);
+      const testValue4Chunk = write.createChunk(
+        testValue4,
+        toRefs([testValue2Chunk.hash, testValue3Chunk.hash]),
+      );
       await write.putChunk(testValue4Chunk);
       await write.setHead('testHeadSource', testValue4Chunk.hash);
       return {
@@ -1061,7 +1061,7 @@ test(
       const c = write.createChunk('c', [d.hash]);
       const b = write.createChunk('b', [c.hash]);
       const a = write.createChunk('a', [c.hash]);
-      const r = write.createChunk('r', [a.hash, b.hash]);
+      const r = write.createChunk('r', toRefs([b.hash, a.hash]));
       await write.putChunk(r);
       await write.putChunk(a);
       await write.putChunk(b);
@@ -1072,7 +1072,7 @@ test(
     });
 
     expect(lazyStore.getRefsSnapshot()).to.deep.equal({
-      [r.hash]: [a.hash, b.hash],
+      [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
@@ -1139,7 +1139,7 @@ test(
       const c = write.createChunk('c', [d.hash]);
       const b = write.createChunk('b', [c.hash]);
       const a = write.createChunk('a', [c.hash]);
-      const r = write.createChunk('r', [a.hash, b.hash]);
+      const r = write.createChunk('r', toRefs([b.hash, a.hash]));
       await write.putChunk(r);
       await write.putChunk(a);
       await write.putChunk(b);
@@ -1159,7 +1159,7 @@ test(
     });
 
     expect(lazyStore.getRefsSnapshot()).to.deep.equal({
-      [r.hash]: [a.hash, b.hash],
+      [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
@@ -1233,7 +1233,7 @@ test(
       const c = write.createChunk('c', [d.hash]);
       const b = write.createChunk('b', [c.hash]);
       const a = write.createChunk('a', [c.hash]);
-      const r = write.createChunk('r', [a.hash, b.hash]);
+      const r = write.createChunk('r', toRefs([b.hash, a.hash]));
       await write.putChunk(r);
       await write.putChunk(a);
       await write.putChunk(b);
@@ -1253,7 +1253,7 @@ test(
     });
 
     expect(lazyStore.getRefsSnapshot()).to.deep.equal({
-      [r.hash]: [a.hash, b.hash],
+      [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
@@ -1349,7 +1349,7 @@ test(
       const c = write.createChunk('c', [d.hash]);
       const b = write.createChunk('b', [c.hash]);
       const a = write.createChunk('a', [c.hash]);
-      const r = write.createChunk('r', [a.hash, b.hash]);
+      const r = write.createChunk('r', toRefs([b.hash, a.hash]));
       await write.putChunk(r);
       await write.putChunk(a);
       await write.putChunk(b);
@@ -1373,7 +1373,7 @@ test(
 
     expect(lazyStore.getRefsSnapshot()).to.deep.equal({
       [tempR1.hash]: [r.hash],
-      [r.hash]: [a.hash, b.hash],
+      [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
@@ -1412,7 +1412,7 @@ test(
 
         expect(lazyStore.getRefsSnapshot()).to.deep.equal({
           [tempR2.hash]: [d.hash],
-          [r.hash]: [a.hash, b.hash],
+          [r.hash]: [b.hash, a.hash],
           [a.hash]: [c.hash],
           [b.hash]: [c.hash],
           [c.hash]: [d.hash],
@@ -1444,7 +1444,7 @@ test(
         });
 
         expect(lazyStore.getRefsSnapshot()).to.deep.equal({
-          [r.hash]: [a.hash, b.hash],
+          [r.hash]: [b.hash, a.hash],
           [a.hash]: [c.hash],
           [b.hash]: [c.hash],
           [c.hash]: [d.hash],
@@ -1562,7 +1562,7 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
         await write.putChunk(b);
         break;
     }
-    const c = write.createChunk('c', [a.hash, b.hash]);
+    const c = write.createChunk('c', toRefs([b.hash, a.hash]));
     await write.putChunk(c);
     await write.setHead('headLazy', c.hash);
     return c;

@@ -1,12 +1,12 @@
 import {expect} from 'chai';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
-import {Hash, fakeHash, makeNewFakeHashFunction, parse} from '../hash.js';
-import {Chunk, createChunk} from './chunk.js';
+import {fakeHash, Hash, makeNewFakeHashFunction, parse} from '../hash.js';
+import {Chunk, createChunk, Refs, toRefs} from './chunk.js';
 
 test('round trip', () => {
   const chunkHasher = makeNewFakeHashFunction();
-  const t = (hash: Hash, data: ReadonlyJSONValue, refs: Hash[]) => {
+  const t = (hash: Hash, data: ReadonlyJSONValue, refs: Refs) => {
     const c = createChunk(deepFreeze(data), refs, chunkHasher);
     expect(c.hash).to.equal(hash);
     expect(c.data).to.deep.equal(data);
@@ -17,16 +17,16 @@ test('round trip', () => {
     expect(c).to.deep.equal(c2);
   };
 
-  t(parse('face0000000040008000000000000000' + '000000000000'), [], []);
+  t(parse('face0000000040008000000000000000000000000000'), [], []);
   t(
-    parse('face0000000040008000000000000000' + '000000000001'),
+    parse('face0000000040008000000000000000000000000001'),
     [0],
     [fakeHash('a1')],
   );
   t(
-    parse('face0000000040008000000000000000' + '000000000002'),
+    parse('face0000000040008000000000000000000000000002'),
     [0, 1],
-    [fakeHash('a1'), fakeHash('a2')],
+    toRefs([fakeHash('a1'), fakeHash('a2')]),
   );
 });
 
@@ -43,7 +43,7 @@ test('equals', () => {
 
   const hashMapper: Map<string, Hash> = new Map();
 
-  const newChunk = (data: ReadonlyJSONValue, refs: Hash[]) => {
+  const newChunk = (data: ReadonlyJSONValue, refs: Refs) => {
     // Cache chunks based on the data.
     // TODO(arv): This is not very useful any more... Remove?
     deepFreeze(data);
@@ -67,6 +67,6 @@ test('equals', () => {
   neq(newChunk([], [fakeHash('a')]), newChunk([], [fakeHash('b')]));
   neq(
     newChunk([], [fakeHash('a')]),
-    newChunk([], [fakeHash('a'), fakeHash('b')]),
+    newChunk([], toRefs([fakeHash('a'), fakeHash('b')])),
   );
 });

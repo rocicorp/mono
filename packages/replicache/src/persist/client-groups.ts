@@ -1,5 +1,6 @@
 import {assert, assertObject} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
+import {toRefs} from '../dag/chunk.js';
 import type {Read, Write} from '../dag/store.js';
 import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
 import {Hash, hashSchema} from '../hash.js';
@@ -177,11 +178,11 @@ async function setValidatedClientGroups(
   dagWrite: Write,
 ): Promise<ClientGroupMap> {
   const chunkData = clientGroupMapToChunkData(clientGroups, dagWrite);
-  const refs = Array.from(
-    clientGroups.values(),
-    clientGroup => clientGroup.headHash,
-  );
-  const chunk = dagWrite.createChunk(chunkData, refs);
+  const refs: Set<Hash> = new Set();
+  for (const clientGroup of clientGroups.values()) {
+    refs.add(clientGroup.headHash);
+  }
+  const chunk = dagWrite.createChunk(chunkData, toRefs(refs));
   await dagWrite.putChunk(chunk);
   await dagWrite.setHead(CLIENT_GROUPS_HEAD_NAME, chunk.hash);
   return clientGroups;
