@@ -14,9 +14,8 @@ test('collect IDB databases', async () => {
     return;
   }
 
-  const ONE_MINUTE = 1000 * 60 * 1;
-  const FIVE_MINUTES = ONE_MINUTE * 5;
-  const ONE_WEEK = ONE_MINUTE * 60 * 24 * 7;
+  const MINUTES = 1000 * 60 * 1;
+  const HOURS = 1000 * 60 * 60;
   const ONE_MONTH = 1000 * 60 * 60 * 24 * 30;
 
   const rep = await replicacheForTesting('collect-idb-databases-1');
@@ -34,7 +33,7 @@ test('collect IDB databases', async () => {
     'collect-idb-databases-2',
   ]);
 
-  await clock.tickAsync(ONE_WEEK);
+  await clock.tickAsync(12 * HOURS);
 
   // Open one more database and keep it open long enough to trigger the collection.
   const rep3 = await replicacheForTesting(
@@ -44,7 +43,7 @@ test('collect IDB databases', async () => {
       enableLicensing: false,
     },
   );
-  await clock.tickAsync(FIVE_MINUTES);
+  await clock.tickAsync(5 * MINUTES);
   await rep3.close();
 
   // Restore real timers and wait a few ms to let the idb state "flush"

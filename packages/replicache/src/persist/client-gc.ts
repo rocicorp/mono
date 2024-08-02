@@ -10,7 +10,7 @@ import {ClientMap, getClients, setClients} from './clients.js';
  * This means that this is the maximum time a tab can be in the background
  * (frozen) and still be able to sync when it comes back to the foreground.
  */
-export const CLIENT_MAX_INACTIVE_TIME = 7 * 24 * 60 * 60 * 1000; // 7 days
+export const CLIENT_MAX_INACTIVE_TIME = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * How frequently to try to garbage collect clients.
