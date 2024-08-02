@@ -223,7 +223,10 @@ type ExtractSubQueryPiece<
   From extends FromSet,
   SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
 > = {
-  [p in SubQueryName<From, SQ>]: SQ['body'] extends EntityQuery<From, infer R>
+  [p in SubQueryName<From, SQ>]: ReturnType<SQ> extends EntityQuery<
+    From,
+    infer R
+  >
     ? R
     : never;
 };
@@ -231,12 +234,7 @@ type ExtractSubQueryPiece<
 type SubQueryName<
   From extends FromSet,
   SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
-> = SQ['name'];
-
-// export type TEMP = SubQueryName<{
-//   name: 'foo';
-//   body: () => EntityQuery<{issue: {id: string; title: string}}, any>;
-// }>;
+> = Parameters<Parameters<SQ>[0]['related']>[0];
 
 type F = {issue: {id: string; title: string}};
 type Q = EntityQuery<F, 42[]>;
@@ -269,6 +267,15 @@ export type TEMP4 = ExtractEntityQueryReturn<
 export type TEMP5 = ExtractSubQueryPiece<
   F,
   SubQuery<'foo', F, EntityQuery<F, bigint>>
+>;
+
+export type TEMP6 = CombineSelections<
+  F,
+  [
+    'issue.title',
+    SubQuery<'xyz', F, EntityQuery<F, {y: bigint}>>,
+    (pq: SubQueryBuilder<F, 'abc'>) => EntityQuery<F, {z: RegExp}[]>,
+  ]
 >;
 
 /**
@@ -404,14 +411,23 @@ type Aggregator<From extends FromSet> =
   | Aggregate<SimpleSelector<From>, string>
   | AggArray<Selector<From>, string>;
 
-type SubQuery<
+// TODO(arv): Remove export
+export type SubQuery<
   Name extends string,
   From extends FromSet,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   SubQueryReturnType extends EntityQuery<From, any>,
-> = {
-  name: Name;
-  body: SubQueryReturnType;
+> = ParentQueryFunction<From, Name, SubQueryReturnType>;
+
+type ParentQueryFunction<
+  From extends FromSet,
+  Name extends string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  SubQueryReturnType extends EntityQuery<From, any>,
+> = (pq: SubQueryBuilder<From, Name>) => SubQueryReturnType;
+
+type SubQueryBuilder<From extends FromSet, Name extends string> = {
+  related(name: Name): EntityQuery<From, unknown>;
 };
 
 /**

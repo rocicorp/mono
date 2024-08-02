@@ -1493,4 +1493,26 @@ suite('Return type for EntityQuery', () => {
       })[]
     >();
   });
+
+  test('select sub query type', () => {
+    // const s = issueQuery.select('issue.id', (pq =>
+    //   pq.related('abc').select('creatorId')) as SubQuery<
+    //   'abc',
+    //   {issue: Issue},
+    //   EntityQuery<{issue: Issue}, {creatorId: string}[]>
+    // >);
+    const s = issueQuery.select('issue.id', pq =>
+      pq.related('abc').select('creatorId'),
+    );
+
+    expectTypeOf<EntityQueryReturn<typeof s>>().toEqualTypeOf<
+      {
+        abc: {creatorId: string}[];
+        id: string;
+      }[]
+    >();
+    expectTypeOf<EntityQueryReturn<typeof s>>().not.toEqualTypeOf<
+      ({title: string} & {id: string})[]
+    >();
+  });
 });
