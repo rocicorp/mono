@@ -1,8 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
-import {uuid} from './uuid.js';
 
-export const STRING_LENGTH = 44;
+export const STRING_LENGTH = 22;
 
 // We use an opaque type so that we can make sure that a hash is always a hash.
 // TypeScript does not have direct support but we can use a trick described
@@ -33,67 +32,75 @@ export function parse(s: string): Hash {
   return s;
 }
 
-const emptyUUID = '00000000-0000-4000-8000-000000000000';
+const emptyUUID = '0'.repeat(STRING_LENGTH);
 export const emptyHash = emptyUUID as unknown as Hash;
 
 /**
- * Creates a new "Hash" that is a UUID.
+ * Creates a function that generates random hashes.
  */
-export const newUUIDHash = makeNewUUIDHashFunctionInternal('', uuid);
+export const newRandomHash = makeNewRandomHashFunctionInternal();
 
 /**
  * Creates a function that generates UUID hashes for tests.
  */
-export function makeNewFakeHashFunction(hashPrefix = 'face'): () => Hash {
+export function makeNewFakeHashFunction(hashPrefix = 'fake'): () => Hash {
   assert(
-    /^[0-9a-f]{0,8}$/.test(hashPrefix),
+    /^[0-9a-v]{0,8}$/.test(hashPrefix),
     `Invalid hash prefix: ${hashPrefix}`,
   );
-  return makeNewUUIDHashFunctionInternal(hashPrefix, () => emptyUUID);
-}
-
-/**
- * Creates a new fake hash function.
- * @param hashPrefix The prefix of the hash. If the prefix starts with 't/' it
- * is considered a temp hash.
- */
-function makeNewUUIDHashFunctionInternal(
-  hashPrefix: string,
-  makeUUID: () => string,
-): () => Hash {
-  let base: string | undefined;
-  let tempHashCounter = 0;
+  let i = 0;
   return () => {
-    if (!base) {
-      // This needs to be lazy because the cloudflare worker environment will
-      // throw an error if crypto.randomUUID is used statically.  Specifically:
-      // Error: Some functionality, such as asynchronous I/O, timeouts, and
-      // generating random values, can only be performed while handling a
-      // request.
-      base = makeBase(hashPrefix, makeUUID());
-    }
-    const tail = String(tempHashCounter++);
-    return makeHash(base, tail);
+    const count = String(i++);
+    return (hashPrefix +
+      '0'.repeat(STRING_LENGTH - hashPrefix.length - count.length) +
+      count) as Hash;
   };
 }
 
-function makeBase(hashPrefix: string, uuid: string): string {
-  return hashPrefix + uuid.replaceAll('-', '').slice(hashPrefix.length);
+function toStringAndSlice(n: number | bigint, len: number): string {
+  return n.toString(32).slice(-len).padStart(len, '0');
 }
 
-function makeHash(base: string, tail: string): Hash {
-  assert(tail.length <= 12);
-  return (base + tail.padStart(12, '0')) as unknown as Hash;
+const uint64Array = new BigUint64Array(1);
+
+function randomUint64(): bigint {
+  crypto.getRandomValues(uint64Array);
+  return uint64Array[0];
+}
+
+/**
+ * This creates an ID that looks like `<RANDOM><COUNTER>`. The random part is
+ * a random number encoded with base 32 and the length is 12 characters. The
+ * is 10 characters long and encoded as base 32. The total length is 22 characters.
+ *
+ * Do the math: https://devina.io/collision-calculator
+ */
+function makeNewRandomHashFunctionInternal(): () => Hash {
+  let base = '';
+  let i = 0;
+
+  return () => {
+    if (!base) {
+      // This needs to be lazy because the cloudflare worker environment will
+      // throw an error if crypto.getRandomValues is used statically.  Specifically:
+      // Error: Some functionality, such as asynchronous I/O, timeouts, and
+      // generating random values, can only be performed while handling a
+      // request.
+      base = toStringAndSlice(randomUint64(), 12);
+    }
+    const tail = toStringAndSlice(i++, 10);
+    return (base + tail) as Hash;
+  };
 }
 
 /**
  * Generates a fake hash useful for testing.
  */
-export function fakeHash(word: string): Hash {
-  assert(/^[0-9a-f]{0,12}$/.test(word), `Invalid word for fakeHash: ${word}`);
-  const fake = 'face';
-  const base = makeBase(fake, emptyUUID);
-  return makeHash(base, word);
+export function fakeHash(word: string | number): Hash {
+  if (typeof word === 'number') {
+    word = String(word);
+  }
+  return ('fake' + '0'.repeat(STRING_LENGTH - 4 - word.length) + word) as Hash;
 }
 
 export function isHash(value: unknown): value is Hash {

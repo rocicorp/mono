@@ -1,11 +1,10 @@
 import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
-import {uuidChunkHasher} from '../dag/chunk.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Store} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
-import {assertHash} from '../hash.js';
+import {assertHash, newRandomHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import type {DropStore, StoreProvider} from '../kv/store.js';
 import {createLogContext} from '../log-options.js';
@@ -150,7 +149,7 @@ async function dropDatabases(
 
 function defaultNewDagStore(name: string): Store {
   const perKvStore = new IDBStore(name);
-  return new StoreImpl(perKvStore, uuidChunkHasher, assertHash);
+  return new StoreImpl(perKvStore, newRandomHash, assertHash);
 }
 
 async function canCollectDatabase(

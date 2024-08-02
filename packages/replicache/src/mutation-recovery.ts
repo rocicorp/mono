@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import type {MaybePromise} from 'shared/src/types.js';
-import {throwChunkHasher, uuidChunkHasher} from './dag/chunk.js';
+import {throwChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
@@ -16,7 +16,7 @@ import {
   FormatVersion,
   parseReplicacheFormatVersion as parseFormatVersion,
 } from './format-version.js';
-import {assertHash} from './hash.js';
+import {assertHash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
 import {
@@ -395,7 +395,7 @@ async function recoverMutationsWithNewPerdag(
   createStore: CreateStore,
 ) {
   const perKvStore = createStore(database.name);
-  const perdag = new StoreImpl(perKvStore, uuidChunkHasher, assertHash);
+  const perdag = new StoreImpl(perKvStore, newRandomHash, assertHash);
   try {
     await recoverMutationsFromPerdag(
       database,

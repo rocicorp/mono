@@ -1,14 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
 import {LocalMetaDD31, LocalMetaSDD, assertLocalMetaDD31} from './db/commit.js';
 import {ChainBuilder} from './db/test-helpers.js';
 import {FormatVersion} from './format-version.js';
-import {assertHash} from './hash.js';
+import {assertHash, newRandomHash} from './hash.js';
 import {IDBStore} from './kv/idb-store.js';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {IDBDatabasesStore} from './persist/idb-databases-store.js';
@@ -48,7 +47,7 @@ export async function createPerdag(args: {
   } finally {
     await idbDatabases.close();
   }
-  const perdag = new StoreImpl(idb, uuidChunkHasher, assertHash);
+  const perdag = new StoreImpl(idb, newRandomHash, assertHash);
   return perdag;
 }
 
@@ -61,7 +60,7 @@ export async function createAndPersistClientWithPendingLocalSDD(
   const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20,
-    uuidChunkHasher,
+    newRandomHash,
     assertHash,
   );
   const b = new ChainBuilder(testMemdag, undefined, formatVersion);
@@ -101,7 +100,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
   const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
-    uuidChunkHasher,
+    newRandomHash,
     assertHash,
   );
 
@@ -159,7 +158,7 @@ export async function persistSnapshotDD31(
   const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,
-    uuidChunkHasher,
+    newRandomHash,
     assertHash,
   );
 

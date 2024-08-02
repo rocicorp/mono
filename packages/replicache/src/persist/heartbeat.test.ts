@@ -4,11 +4,10 @@ import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import {uuidChunkHasher} from '../dag/chunk.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {assertHash, fakeHash} from '../hash.js';
+import {assertHash, fakeHash, newRandomHash} from '../hash.js';
 import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
 import {withRead} from '../with-transactions.js';
@@ -256,7 +255,7 @@ test('heartbeat with dropped idb throws', async () => {
   const {resolve, promise} = resolver();
   const name = `heartbeat-test-dropped-idb-${Math.random()}`;
   const ibdStore = new IDBStore(name);
-  const dagStore = new StoreImpl(ibdStore, uuidChunkHasher, assertHash);
+  const dagStore = new StoreImpl(ibdStore, newRandomHash, assertHash);
   const onClientStateNotFound = sinon.fake();
   const controller = new AbortController();
 

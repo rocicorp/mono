@@ -7,7 +7,7 @@ import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import {Hash, emptyHash, makeNewFakeHashFunction} from '../hash.js';
+import {Hash, emptyHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
@@ -328,7 +328,7 @@ suite('btree node', () => {
         expect(await asyncIterToArray(w.scan(''))).to.deep.equal([]);
 
         const h = await w.flush();
-        expect(h).to.equal('face0000000040008000000000000000' + '000000000001');
+        expect(h).to.equal(fakeHash('1'));
       });
       let rootHash = await withWrite(dagStore, async dagWrite => {
         const w = new BTreeWrite(
@@ -354,9 +354,7 @@ suite('btree node', () => {
 
       // We do not restore back to empty hash when empty.
       expect(rootHash).to.not.equal(emptyHash);
-      expect(rootHash).to.equal(
-        'face0000000040008000000000000000' + '000000000003',
-      );
+      expect(rootHash).to.equal(fakeHash(3));
     });
 
     test(`get > v${formatVersion}`, async () => {

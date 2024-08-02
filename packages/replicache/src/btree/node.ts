@@ -21,7 +21,7 @@ import {
   type FrozenJSONValue,
   type FrozenTag,
 } from '../frozen-json.js';
-import {Hash, emptyHash, newUUIDHash} from '../hash.js';
+import {Hash, emptyHash, newRandomHash} from '../hash.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
 
@@ -588,7 +588,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     const {level} = this;
 
     if (length === 0) {
-      return new InternalNodeImpl([], newUUIDHash(), level - 1, true);
+      return new InternalNodeImpl([], newRandomHash(), level - 1, true);
     }
 
     const output = await this.getChildren(start, start + length, tree);
@@ -598,7 +598,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       for (const child of output as InternalNodeImpl[]) {
         entries.push(...child.entries);
       }
-      return new InternalNodeImpl(entries, newUUIDHash(), level - 1, true);
+      return new InternalNodeImpl(entries, newRandomHash(), level - 1, true);
     }
 
     assert(level === 1);
@@ -606,7 +606,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     for (const child of output as DataNodeImpl[]) {
       entries.push(...child.entries);
     }
-    return new DataNodeImpl(entries, newUUIDHash(), true);
+    return new DataNodeImpl(entries, newRandomHash(), true);
   }
 }
 
