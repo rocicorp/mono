@@ -1,12 +1,12 @@
-import {Materialite} from 'zql/src/zql/ivm/materialite.js';
 import type {PipelineEntity} from 'zql/src/zql/ivm/types.js';
 import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {createContext} from './context.js';
+import {ZQLite} from './ZQLite.js';
 
 test('add', () => {
   const db = new Database(':memory:');
-  const context = createContext(new Materialite(), db);
+  const context = createContext(new ZQLite(db), db);
 
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 
@@ -26,7 +26,7 @@ test('add', () => {
 
 test('delete', () => {
   const db = new Database(':memory:');
-  const context = createContext(new Materialite(), db);
+  const context = createContext(new ZQLite(db), db);
 
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 
@@ -47,7 +47,7 @@ test('delete', () => {
 
 describe('message upstream', () => {
   const db = new Database(':memory:');
-  const m = new Materialite();
+  const m = new ZQLite(db);
   const context = createContext(m, db);
   db.prepare('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)').run();
 

@@ -6,7 +6,7 @@ import type {
   Store as KVStore,
   Write as KVWrite,
 } from '../kv/store.js';
-import {Chunk, ChunkHasher, assertMeta, createChunk} from './chunk.js';
+import {Chunk, ChunkHasher, Refs, assertRefs, createChunk} from './chunk.js';
 import {RefCountUpdatesDelegate, computeRefCountUpdates} from './gc.js';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
 import {Read, Store, Write, mustGetChunk} from './store.js';
@@ -63,9 +63,9 @@ export class ReadImpl implements Read {
     }
 
     const refsVal = await this._tx.get(chunkMetaKey(hash));
-    let refs: readonly Hash[];
+    let refs: Refs;
     if (refsVal !== undefined) {
-      assertMeta(refsVal);
+      assertRefs(refsVal);
       refs = refsVal;
     } else {
       refs = [];
@@ -119,7 +119,7 @@ export class WriteImpl
     this.#chunkHasher = chunkHasher;
   }
 
-  createChunk = <V>(data: V, refs: readonly Hash[]): Chunk<V> =>
+  createChunk = <V>(data: V, refs: Refs): Chunk<V> =>
     createChunk(data, refs, this.#chunkHasher);
 
   get kvWrite(): KVWrite {
@@ -204,7 +204,7 @@ export class WriteImpl
     if (meta === undefined) {
       return [];
     }
-    assertMeta(meta);
+    assertRefs(meta);
     return meta;
   }
 

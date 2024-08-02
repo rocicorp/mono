@@ -1,7 +1,7 @@
 import {EventEmitter} from 'eventemitter3';
-import type {TransactionPool} from 'zero-cache/src/db/transaction-pool.js';
-import type {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
-import {Subscription} from 'zero-cache/src/types/subscription.js';
+import type {TransactionPool} from '../../db/transaction-pool.js';
+import type {CancelableAsyncIterable} from '../../types/streams.js';
+import {Subscription} from '../../types/subscription.js';
 import type {VersionChange} from './replicator.js';
 
 export type InternalVersionChange = VersionChange & {

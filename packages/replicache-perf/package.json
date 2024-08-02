@@ -23,7 +23,7 @@
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
     "playwright": "^1.43.1",
-    "replicache": "15.0.1",
+    "replicache": "15.1.0",
     "shared": "0.0.0",
     "typescript": "^5.5.3",
     "xbytes": "^1.7.0"

@@ -1,6 +1,14 @@
 import {benchmarks as compareBenchmarks} from './benchmarks/compare-utf8.js';
 import {benchmarks as hashBenchmarks} from './benchmarks/hash.js';
-import {benchmarkIDBRead, benchmarkIDBWrite} from './benchmarks/idb.js';
+import {
+  benchmarkIDBReadGet,
+  benchmarkIDBReadGetAll,
+  benchmarkIDBReadGetAllGetAllKeys,
+  benchmarkIDBReadGetAllWithInlineKey,
+  benchmarkIDBReadGetWithInlineKeys,
+  benchmarkIDBWrite,
+  benchmarkIDBWriteWithInlineKey,
+} from './benchmarks/idb.js';
 import {benchmarks as replicacheBenchmarks} from './benchmarks/replicache.js';
 import {benchmarks as storageBenchmarks} from './benchmarks/storage.js';
 import {benchmarks as uuidBenchmarks} from './benchmarks/uuid.js';
@@ -147,7 +155,15 @@ export const benchmarks = [
   ...mapLoopBenchmarks(),
 ];
 
-for (const b of [benchmarkIDBRead, benchmarkIDBWrite]) {
+for (const b of [
+  benchmarkIDBReadGet,
+  benchmarkIDBReadGetWithInlineKeys,
+  benchmarkIDBReadGetAll,
+  benchmarkIDBReadGetAllGetAllKeys,
+  benchmarkIDBReadGetAllWithInlineKey,
+  benchmarkIDBWrite,
+  benchmarkIDBWriteWithInlineKey,
+]) {
   for (const numKeys of [1, 10, 100, 1000]) {
     const dataTypes: RandomDataType[] = ['string', 'object', 'arraybuffer'];
     for (const dataType of dataTypes) {
@@ -211,16 +227,21 @@ export async function runBenchmarkByNameAndGroup(
   }
 }
 
-export function findBenchmarks(groups: string[]): Benchmark[] {
+export function findBenchmarks(groups: string[], runs: string[]): Benchmark[] {
+  const bs = benchmarks.filter(b => groups.includes(b.group));
+  if (runs.length > 0) {
+    const runRegExps = runs.map(r => new RegExp(r));
+    return bs.filter(b => runRegExps.every(re => re.test(b.name)));
+  }
   return benchmarks.filter(b => groups.includes(b.group));
 }
 
-export async function runAll(groups: string[]): Promise<void> {
+export async function runAll(groups: string[], runs: string[]): Promise<void> {
   const out: HTMLElement | null = document.getElementById('out');
   if (!out) {
     return;
   }
-  const benchmarks = findBenchmarks(groups);
+  const benchmarks = findBenchmarks(groups, runs);
   for (const b of benchmarks) {
     try {
       const result = await runBenchmark(b);

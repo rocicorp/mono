@@ -1,6 +1,7 @@
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {toRefs} from '../dag/chunk.js';
 import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
@@ -81,7 +82,7 @@ suite('btree node', () => {
         formatVersion,
       );
       const refs = entries2.map(pair => pair[1]);
-      const chunk = dagWrite.createChunk(internalNode, refs);
+      const chunk = dagWrite.createChunk(internalNode, toRefs(refs));
       await dagWrite.putChunk(chunk);
       return [chunk.hash, level + 1];
     }
@@ -251,7 +252,7 @@ suite('btree node', () => {
           formatVersion,
         );
 
-        const rootChunk = dagWrite.createChunk(root, [h0, h1, h2]);
+        const rootChunk = dagWrite.createChunk(root, toRefs([h0, h1, h2]));
         rootHash = rootChunk.hash;
 
         await dagWrite.putChunk(c0);

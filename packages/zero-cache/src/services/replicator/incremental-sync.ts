@@ -16,7 +16,7 @@ import {
 } from '../../db/transaction-pool.js';
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {JSONValue, stringify} from '../../types/bigint-json.js';
-import type {LexiVersion} from 'zqlite-zero-cache-shared/src/lexi-version.js';
+import type {LexiVersion} from '../../types/lexi-version.js';
 import {PostgresDB, registerPostgresTypeParsers} from '../../types/pg.js';
 import type {RowKey, RowKeyType, RowValue} from '../../types/row-key.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
@@ -27,7 +27,7 @@ import type {RowChange, VersionChange} from './replicator.js';
 import {ZERO_VERSION_COLUMN_NAME, queryLastLSN} from './schema/replication.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import type {TransactionTrain} from './transaction-train.js';
-import {toLexiVersion} from 'zqlite-zero-cache-shared/src/lsn.js';
+import {toLexiVersion} from '../../types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
 
 // BigInt support from LogicalReplicationService.

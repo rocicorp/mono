@@ -43,6 +43,18 @@ export type ValueAsOperatorInput<
   ? NotUndefined<V>[]
   : never;
 
+/**
+ * FieldAsOperatorInput takes a `FromSet`, a `SimpleSelector`, and a `SimpleOperator`
+ * and returns the type of the value that can be used with the operator.
+ *
+ * ```ts
+ * type T = FieldAsOperatorInput<{issue: {id: string; title: string}}, 'issue.title', '='>;
+ * // type T = string
+ *
+ * type T2 = FieldAsOperatorInput<{issue: {id: string; title: string}}, 'issue.title', 'IN'>;
+ * // type T2 = string[]
+ * ```
+ */
 export type FieldAsOperatorInput<
   F extends FromSet,
   S extends SimpleSelector<F>,
@@ -59,10 +71,27 @@ type NestedKeys<T> = {
   [K in keyof T]: string & keyof T[K];
 }[keyof T];
 
+/**
+ * This type returns `never` if the object has exactly one property.
+ *
+ * ```ts
+ * type T1 = ObjectHasSingleProperty<{a: string}>; // never
+ * type T2 = ObjectHasSingleProperty<{a: string, b: number}>; // 'a' | 'b'
+ * ```
+ */
 type ObjectHasSingleProperty<T> = {
   [K in keyof T]: Exclude<keyof Omit<T, K>, K>;
 }[keyof T];
 
+/**
+ * QualifiedSelector takes a `FromSet` and returns a union of all the qualified
+ * string that represents the columns in the `FromSet`.
+ *
+ * ```ts
+ * type T = QualifiedSelector<{issue: {id: string; title: string}}>;
+ * // type T = 'issue.id' | 'issue.title'
+ * ```
+ */
 type QualifiedSelector<F extends FromSet> = {
   [K in keyof F]: `${string & K}.${string & keyof NotUndefined<F[K]>}`;
 }[keyof F];
@@ -71,6 +100,14 @@ type SimpleSelector<F extends FromSet> =
   | QualifiedSelector<F>
   | (ObjectHasSingleProperty<F> extends never ? NestedKeys<F> : never);
 
+/**
+ * Selector is a string that represents all the possible columns (simple and
+ * qualified) of a `FromSet`.
+ *
+ * ```ts
+ * type T = Selector<{issue: {id: string; title: string}}>;
+ * // type T = '*' | 'id' | 'title' | 'issue.id' | 'issue.title' | 'issue.*'
+ */
 type Selector<F extends FromSet> =
   | {
       [K in keyof F]:
@@ -126,6 +163,23 @@ type ExtractAggregatePiece<From extends FromSet, K extends Aggregator<From>> =
     ? AggregateResult<Selection, From, Alias, number>
     : never;
 
+/**
+ * ExtractFieldPiece extract the relevant part(s) from the fieldset.
+ *
+ * ```ts
+ * type T = ExtractFieldPiece<{
+ *   issue: {id: string; title: string};
+ *   comment: {id: string; body: string; issueID: string};
+ * }, 'issue.title'>;
+ * // type T = {issue: {title: string}}
+ *
+ * type T2 = ExtractFieldPiece<{
+ *   issue: {id: string; title: string};
+ *   comment: {id: string; body: string; issueID: string};
+ * }, 'comment.*'>;
+ * // type T2 = {comment: {id: string; body: string; issueID: string}}
+ * ```
+ */
 type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
   // 'table.*'
   Selection extends `${infer Table}.*`
@@ -164,10 +218,30 @@ type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
         >;
       };
 
+/**
+ * ExtractNestedTypeByName returns the type of property `S` one level down in an object structure
+ *
+ * ```ts
+ * * type T = ExtractNestedTypeByName<{x: {y: boolean}}, 'y'>;
+ * // type T = boolean
+ *
+ * type T = ExtractNestedTypeByName<{x: {y: boolean}; z: {y: string}}, 'y'>;
+ * // type T = boolean | string
+ * ```
+ */
 type ExtractNestedTypeByName<T, S extends string> = {
   [K in keyof T]: S extends keyof T[K] ? T[K][S] : never;
 }[keyof T];
 
+/**
+ * ExtractFieldValue takes a `FromSet` and a `SimpleSelector` and returns the
+ * type of the field.
+ *
+ * ```ts
+ * type T = ExtractFieldValue<{issue: {id: string; complete: boolean}}, 'issue.complete'>;
+ * // type T = boolean
+ * ```
+ */
 type ExtractFieldValue<
   F extends FromSet,
   S extends SimpleSelector<F>,
@@ -175,14 +249,51 @@ type ExtractFieldValue<
   ? NotUndefined<F[T]>[K]
   : ExtractNestedTypeByName<F, S>;
 
+/**
+ * MergeRecords takes one or more records that have been intersected and makes
+ * it into a simpler type:
+ *
+ * For example:
+ *
+ * ```ts
+ * type A = {a: string} & {b: number};
+ * type Test = MergeRecords<A>;
+ *
+ * // Test is:
+ *
+ * type Test = {a: string; b: number};
+ * ```
+ */
 type MergeRecords<T> = T extends Record<string, unknown>
   ? {
       [K in keyof T]: MergeRecords<T[K]>;
     }
   : T;
 
+/**
+ * CombineFromSets merges Record types into a single record type.
+ */
 type CombineFromSets<A, B> = MergeRecords<A & B>;
 
+/**
+ * CombineSelections takes a `From` type and a list of `Selections` and returns
+ * a new type that represents the result of selecting those fields.
+ *
+ * For example:
+ *
+ * ```ts
+ * type Test = CombineSelections<{
+ *   issue: {id: string; title: string};
+ *   comment: {id: string; body: string, issueID: string};
+ * }, ['issue.id', 'comment.body', 'comment.issueID']>;
+ *
+ * // Test is:
+ *
+ * type Test = {
+ *   comment: {issueID: string; body: string};
+ *   issue: {id: string};
+ * }
+ */
 type CombineSelections<
   From extends FromSet,
   Selections extends (Selector<From> | Aggregator<From>)[],

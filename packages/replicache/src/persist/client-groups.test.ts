@@ -760,13 +760,13 @@ test("setClientGroup properly manages refs to client group heads when a client g
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
-  await expectRefs([clientGroup1V1HeadHash, clientGroup2HeadHash], dagStore);
+  await expectRefs([clientGroup2HeadHash, clientGroup1V1HeadHash], dagStore);
 
   await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroups(clientGroupMap2, write);
     await write.commit();
   });
-  await expectRefs([clientGroup1V2HeadHash, clientGroup2HeadHash], dagStore);
+  await expectRefs([clientGroup2HeadHash, clientGroup1V2HeadHash], dagStore);
 });
 
 test('setClientGroup properly manages refs to client group heads when a client group is added', async () => {
@@ -826,7 +826,7 @@ test("setClientGroup properly manages refs to client group heads when a client g
     await setClientGroups(clientGroupMap1, write);
     await write.commit();
   });
-  await expectRefs([clientGroup1V1HeadHash, clientGroup2HeadHash], dagStore);
+  await expectRefs([clientGroup2HeadHash, clientGroup1V1HeadHash], dagStore);
 
   await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     await setClientGroup(
@@ -839,7 +839,7 @@ test("setClientGroup properly manages refs to client group heads when a client g
     await write.commit();
   });
 
-  await expectRefs([clientGroup1V2HeadHash, clientGroup2HeadHash], dagStore);
+  await expectRefs([clientGroup2HeadHash, clientGroup1V2HeadHash], dagStore);
 });
 
 test('deleteClientGroup properly manages refs to client group heads', async () => {
