@@ -1,7 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import type {Hash} from '../hash.js';
 import type {Release} from '../with-transactions.js';
-import type {Chunk} from './chunk.js';
+import type {Chunk, Refs} from './chunk.js';
 
 export interface Store {
   read(): Promise<Read>;
@@ -24,7 +24,7 @@ export interface Read extends GetChunk, MustGetChunk, Release {
 }
 
 export interface Write extends Read {
-  createChunk<V>(data: V, refs: readonly Hash[]): Chunk<V>;
+  createChunk<V>(data: V, refs: Refs): Chunk<V>;
   putChunk<V>(c: Chunk<V>): Promise<void>;
   setHead(name: string, hash: Hash): Promise<void>;
   removeHead(name: string): Promise<void>;

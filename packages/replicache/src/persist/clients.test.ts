@@ -115,8 +115,8 @@ test('updateClients and getClients for DD31', async () => {
     const chunk = await read.getChunk(h);
     assert(chunk);
     expect(chunk.meta).to.deep.equal([
-      headClient1Hash,
       refresh1Hash,
+      headClient1Hash,
       headClient2Hash,
     ]);
   });
@@ -241,8 +241,8 @@ test("updateClients properly manages refs to client heads when a client's head c
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
     expect(clientsChunk?.meta).to.deep.equal([
-      client1V1HeadHash,
       client2HeadHash,
+      client1V1HeadHash,
     ]);
   });
 
@@ -261,8 +261,8 @@ test("updateClients properly manages refs to client heads when a client's head c
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
     expect(clientsChunk?.meta).to.deep.equal([
-      client1V2HeadHash,
       client2HeadHash,
+      client1V2HeadHash,
     ]);
   });
 });

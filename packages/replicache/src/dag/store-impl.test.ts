@@ -2,7 +2,7 @@ import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
-import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
+import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
 import type {Read, Store} from '../kv/store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {
@@ -11,7 +11,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from '../with-transactions.js';
-import {Chunk, createChunk} from './chunk.js';
+import {Chunk, createChunk, Refs, toRefs} from './chunk.js';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
 import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.js';
 import {ChunkNotFoundError} from './store.js';
@@ -40,7 +40,7 @@ suite('read', () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (
       data: ReadonlyJSONValue,
-      refs: Hash[],
+      refs: Refs,
       getSameChunk: boolean,
     ) => {
       const kv = new TestMemStore();
@@ -71,9 +71,9 @@ suite('read', () => {
       });
     };
 
-    await t('Hello', [fakeHash('a001'), fakeHash('a002')], true);
+    await t('Hello', toRefs([fakeHash('a001'), fakeHash('a002')]), true);
     await t(42, [], true);
-    await t(null, [fakeHash('a001'), fakeHash('a002')], false);
+    await t(null, toRefs([fakeHash('a001'), fakeHash('a002')]), false);
   });
 
   test('must get chunk missing chunks', async () => {
@@ -84,7 +84,7 @@ suite('read', () => {
 suite('write', () => {
   test('put chunk', async () => {
     const chunkHasher = makeNewFakeHashFunction();
-    const t = async (data: ReadonlyJSONValue, refs: Hash[]) => {
+    const t = async (data: ReadonlyJSONValue, refs: Refs) => {
       const kv = new TestMemStore();
       await withWrite(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
@@ -278,7 +278,7 @@ suite('write', () => {
 
   test('roundtrip', async () => {
     const chunkHasher = makeNewFakeHashFunction();
-    const t = async (name: string, data: ReadonlyJSONValue, refs: Hash[]) => {
+    const t = async (name: string, data: ReadonlyJSONValue, refs: Refs) => {
       const kv = new TestMemStore();
       const hash = chunkHasher();
       const c = new Chunk(hash, deepFreeze(data), refs);
@@ -306,7 +306,7 @@ suite('write', () => {
 
     await t('', 0, []);
     await t('n1', 1, [fakeHash('a001')]);
-    await t('n2', 42, [fakeHash('a001'), fakeHash('a002')]);
+    await t('n2', 42, toRefs([fakeHash('a001'), fakeHash('a002')]));
 
     await t('', true, []);
     await t('', false, []);
@@ -383,7 +383,7 @@ suite('write', () => {
     const c = new Chunk(fakeHash('c'), 'c', [d.hash]);
     const a = new Chunk(fakeHash('a'), 'a', [c.hash]);
     const b = new Chunk(fakeHash('b'), 'b', [c.hash]);
-    const r = new Chunk(fakeHash('000'), 'r', [a.hash, b.hash]);
+    const r = new Chunk(fakeHash('000'), 'r', toRefs([a.hash, b.hash]));
     await withWrite(dagStore, async dagWrite => {
       await Promise.all([
         dagWrite.setHead('test', r.hash),

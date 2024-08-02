@@ -1,14 +1,14 @@
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import {Hash, fakeHash} from '../hash.js';
-import {Chunk} from './chunk.js';
+import {Chunk, toRefs} from './chunk.js';
 import type {MustGetChunk} from './store.js';
 import {Visitor} from './visitor.js';
 
 test('Ensure only visited once', async () => {
   const c1 = new Chunk(fakeHash('1'), 'data1', []);
   const c2 = new Chunk(fakeHash('2'), 'data2', [c1.hash]);
-  const c3 = new Chunk(fakeHash('3'), 'data3', [c1.hash, c2.hash]);
+  const c3 = new Chunk(fakeHash('3'), 'data3', toRefs([c1.hash, c2.hash]));
 
   const log: Chunk[] = [];
   class TestVisitor extends Visitor {

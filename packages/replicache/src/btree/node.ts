@@ -55,10 +55,6 @@ export function makeNodeChunkData<V>(
 
 export type Node = DataNode | InternalNode;
 
-export function getRefs(node: Node): ReadonlyArray<Hash> {
-  return isInternalNode(node) ? node[NODE_ENTRIES].map(e => e[1]) : [];
-}
-
 /**
  * Describes the changes that happened to Replicache after a
  * {@link WriteTransaction} was committed.

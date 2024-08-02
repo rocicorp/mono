@@ -33,25 +33,26 @@
     "pg-logical-replication": "^2.0.5",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
+    "xxhash-wasm": "^1.0.2",
     "zero-protocol": "0.0.0",
-    "zql": "0.0.0",
-    "xxhash-wasm": "^1.0.2"
+    "zql": "0.0.0"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@testcontainers/postgresql": "^10.9.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^18.16.0",
     "@types/pg": "^8.11.2",
     "@types/pg-format": "^1.0.5",
     "@types/ws": "^8.5.10",
-    "@types/node": "^18.16.0",
     "concurrently": "^8.2.1",
     "rollup-plugin-dts": "^6.1.1",
     "shared": "0.0.0",
+    "ts-node": "^10.9.1",
     "typescript": "^5.5.3",
-    "vitest": "^2.0.3",
-    "ts-node": "^10.9.1"
+    "vitest": "^2.0.3"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"

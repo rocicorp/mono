@@ -7,7 +7,7 @@ import {
 } from '../hash.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {stringCompare} from '../string-compare.js';
-import {Chunk, ChunkHasher} from './chunk.js';
+import {Chunk, ChunkHasher, Refs, toRefs as chunkToRefs} from './chunk.js';
 import {KeyType, chunkMetaKey, parse as parseKey} from './key.js';
 import {StoreImpl} from './store-impl.js';
 
@@ -55,13 +55,15 @@ function sortByHash(arr: Iterable<Chunk>): Chunk[] {
   return [...arr].sort((a, b) => stringCompare(String(a.hash), String(b.hash)));
 }
 
-function toRefs(refs: unknown): Hash[] {
+function toRefs(refs: unknown): Refs {
   if (refs === undefined) {
     return [];
   }
   assertArray(refs);
-  return refs.map(h => {
+  const rv = new Set<Hash>();
+  for (const h of refs) {
     assertString(h);
-    return parseHash(h);
-  });
+    rv.add(parseHash(h));
+  }
+  return chunkToRefs(rv);
 }
