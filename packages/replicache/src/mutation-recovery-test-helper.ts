@@ -9,6 +9,7 @@ import {ChainBuilder} from './db/test-helpers.js';
 import {FormatVersion} from './format-version.js';
 import {assertHash, newRandomHash} from './hash.js';
 import {IDBStore} from './kv/idb-store.js';
+import {makeRandomID} from './make-random-id.js';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {IDBDatabasesStore} from './persist/idb-databases-store.js';
 import {persistSDD} from './persist/persist-test-helpers.js';
@@ -18,7 +19,6 @@ import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD} from './sync/push.js';
 import {closeablesToClose, dbsToDrop} from './test-util.js';
 import type {MutatorDefs} from './types.js';
-import {uuid} from './uuid.js';
 
 export async function createPerdag(args: {
   replicacheName: string;
@@ -65,7 +65,7 @@ export async function createAndPersistClientWithPendingLocalSDD(
   );
   const b = new ChainBuilder(testMemdag, undefined, formatVersion);
   await b.addGenesis(clientID);
-  await b.addSnapshot([['unique', uuid()]], clientID);
+  await b.addSnapshot([['unique', makeRandomID()]], clientID);
 
   await initClientWithClientID(clientID, perdag, [], {}, formatVersion);
 
@@ -108,7 +108,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
-    [['unique', uuid()]],
+    [['unique', makeRandomID()]],
     clientID,
     cookie,
     snapshotLastMutationIDs,
@@ -166,7 +166,7 @@ export async function persistSnapshotDD31(
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
-    [['unique', uuid()]],
+    [['unique', makeRandomID()]],
     clientID,
     cookie,
     snapshotLastMutationIDs,

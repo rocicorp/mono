@@ -43,6 +43,7 @@ import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {StoreProvider} from './kv/store.js';
 import {createLogContext} from './log-options.js';
+import {makeRandomID} from './make-random-id.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -125,7 +126,6 @@ import type {
   RequestOptions,
   UpdateNeededReason,
 } from './types.js';
-import {uuid as makeUuid} from './uuid.js';
 import {version} from './version.js';
 import {
   withRead,
@@ -258,7 +258,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
   #closed = false;
   #online = true;
-  readonly #clientID = makeUuid();
+  readonly #clientID = makeRandomID();
   readonly #ready: Promise<void>;
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;

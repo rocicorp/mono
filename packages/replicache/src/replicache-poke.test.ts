@@ -79,7 +79,7 @@ test('poke', async () => {
     error = String(e);
   }
   expect(error).matches(
-    /Received ([0-9a-f-]* )?lastMutationID 0 is < than last snapshot ([0-9a-f-]* )?lastMutationID 1; ignoring client view/,
+    /Received ([0-9a-v]* )?lastMutationID 0 is < than last snapshot ([0-9a-v]* )?lastMutationID 1; ignoring client view/,
   );
 });
 

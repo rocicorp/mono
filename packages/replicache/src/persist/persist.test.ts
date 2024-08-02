@@ -23,10 +23,10 @@ import {
 } from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
+import {makeRandomID} from '../make-random-id.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
 import type {MutatorDefs} from '../types.js';
-import {uuid} from '../uuid.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   CLIENT_GROUPS_HEAD_NAME,
@@ -892,7 +892,7 @@ async function setupPersistTest() {
 
   let clientGroupID: undefined | ClientGroupID;
   const createClient = async () => {
-    const cID = uuid();
+    const cID = makeRandomID();
     const [c] = await initClientV6(
       cID,
       new LogContext(),

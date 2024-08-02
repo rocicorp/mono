@@ -2,19 +2,23 @@ import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
+import {must} from 'shared/src/must.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
+import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {MemStore} from './kv/mem-store.js';
 import type {Store as KVStore} from './kv/store.js';
+import {makeRandomID} from './make-random-id.js';
 import type {PatchOperation} from './patch-operation.js';
 import {
   setupForTest as setupIDBDatabasesStoreForTest,
   teardownForTest as teardownIDBDatabasesStoreForTest,
 } from './persist/idb-databases-store-db-name.js';
 import type {PullResponseV1} from './puller.js';
+import {ReplicacheImpl, ReplicacheImplOptions} from './replicache-impl.js';
 import type {ReplicacheOptions} from './replicache-options.js';
 import {
   Replicache,
@@ -25,15 +29,11 @@ import type {DiffComputationConfig} from './sync/diff.js';
 import type {ClientID} from './sync/ids.js';
 import type {WriteTransaction} from './transactions.js';
 import type {BeginPullResult, MutatorDefs} from './types.js';
-import {uuid} from './uuid.js';
-import {must} from 'shared/src/must.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
-import {ReplicacheImpl, ReplicacheImplOptions} from './replicache-impl.js';
 
 export class ReplicacheTest<
   // eslint-disable-next-line @typescript-eslint/ban-types
@@ -207,7 +207,7 @@ export async function replicacheForTesting<
       pullURL,
       pushDelay,
       pushURL,
-      name: useUniqueName ? `${uuid()}:${name}` : name,
+      name: useUniqueName ? `${makeRandomID()}:${name}` : name,
       licenseKey: licenseKey ?? TEST_LICENSE_KEY,
       ...rest,
     },

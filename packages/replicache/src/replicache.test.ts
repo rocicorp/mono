@@ -19,6 +19,7 @@ import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {Write} from './db/write.js';
 import {TestMemStore} from './kv/test-mem-store.js';
 import type {PatchOperation} from './patch-operation.js';
+import {getClientGroup} from './persist/client-groups.js';
 import {deleteClientForTesting} from './persist/clients-test-helpers.js';
 import type {ReplicacheOptions} from './replicache-options.js';
 import {Replicache, httpStatusUnauthorized} from './replicache.js';
@@ -43,13 +44,12 @@ import {
 import {TransactionClosedError} from './transaction-closed-error.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 import type {MutatorDefs, Poke} from './types.js';
+import {withRead} from './with-transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {withRead} from './with-transactions.js';
-import {getClientGroup} from './persist/client-groups.js';
 
 const {fail} = chaiAssert;
 
@@ -1571,8 +1571,7 @@ test('schemaVersion push', async () => {
 });
 
 test('clientID', async () => {
-  const re =
-    /^[0-9:A-z]{8}-[0-9:A-z]{4}-4[0-9:A-z]{3}-[0-9:A-z]{4}-[0-9:A-z]{12}$/;
+  const re = /^[0-9a-v]{13}$/;
 
   let rep = await replicacheForTesting('clientID');
   const {clientID} = rep;

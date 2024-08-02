@@ -6,7 +6,7 @@ import {
 } from 'shared/src/asserts.js';
 import {deepFreeze} from '../frozen-json.js';
 import type {CreateStore, Read, Store} from '../kv/store.js';
-import {uuid} from '../uuid.js';
+import {makeRandomID} from '../make-random-id.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {getIDBDatabasesDBName} from './idb-databases-store-db-name.js';
 
@@ -111,7 +111,7 @@ export class IDBDatabasesStore {
       let profileId = await write.get(PROFILE_ID_KEY);
       if (profileId === undefined) {
         // Profile id is 'p' followed by the guid with no dashes.
-        profileId = `p${uuid().replace(/-/g, '')}`;
+        profileId = `p${makeRandomID().replace(/-/g, '')}`;
         await write.put(PROFILE_ID_KEY, profileId);
       }
       assertString(profileId);

@@ -13,8 +13,8 @@ import {
 import {FormatVersion} from '../format-version.js';
 import {newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
+import {makeRandomID} from '../make-random-id.js';
 import type {ClientID} from '../sync/ids.js';
-import {uuid as makeUuid} from '../uuid.js';
 import {withWrite} from '../with-transactions.js';
 import {
   Client,
@@ -133,7 +133,7 @@ function initClientV4(
   ]
 > {
   return withWrite(perdag, async dagWrite => {
-    const newClientID = makeUuid();
+    const newClientID = makeRandomID();
     const clients = await getClients(dagWrite);
 
     let bootstrapClient: Client | undefined;
