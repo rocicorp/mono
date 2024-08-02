@@ -1,6 +1,6 @@
 import {assert, assertString} from 'shared/src/asserts.js';
 import {assertDeepFrozen} from '../frozen-json.js';
-import {Hash} from '../hash.js';
+import type {Hash} from '../hash.js';
 
 // By using declare we tell the type system that there is a unique symbol.
 // However, there is no such symbol but the type system does not care.
