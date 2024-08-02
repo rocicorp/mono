@@ -18,8 +18,8 @@ import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
 import {assertHash, fakeHash, newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
+import {makeRandomID} from '../make-random-id.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
-import {uuid} from '../uuid.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
@@ -340,7 +340,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
   const formatVersion = FormatVersion.Latest;
   const dagStore = new TestStore();
   clock.tick(4000);
-  const clientID = uuid();
+  const clientID = makeRandomID();
   const [client, headHash, clients] = await initClientV6(
     clientID,
     new LogContext(),
@@ -679,7 +679,7 @@ suite('initClientV6', () => {
         const mutatorNames: string[] = [];
         const indexes: IndexDefinitions = {};
 
-        const clientID = uuid();
+        const clientID = makeRandomID();
         const [client, , clientMap, newClientGroup] = await initClientV6(
           clientID,
           lc,
@@ -739,7 +739,7 @@ suite('initClientV6', () => {
           await write.commit();
         });
 
-        const clientID2 = uuid();
+        const clientID2 = makeRandomID();
         const [client2, client2HeadHash, clientMap, newClientGroup] =
           await initClientV6(
             clientID2,
@@ -823,7 +823,7 @@ suite('initClientV6', () => {
           await write.commit();
         });
 
-        const clientID2 = uuid();
+        const clientID2 = makeRandomID();
         const [client2, client2HeadHash, clientMap] = await initClientV6(
           clientID2,
           lc,
@@ -941,7 +941,7 @@ suite('initClientV6', () => {
           await write.commit();
         });
 
-        const clientID2 = uuid();
+        const clientID2 = makeRandomID();
         const [client2, client2HeadHash, clientMap] = await initClientV6(
           clientID2,
           lc,

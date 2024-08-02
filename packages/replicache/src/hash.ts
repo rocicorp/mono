@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import {randomUint64} from 'shared/src/random-uint64.js';
 import * as valita from 'shared/src/valita.js';
 
 export const STRING_LENGTH = 22;
@@ -59,13 +60,6 @@ export function makeNewFakeHashFunction(hashPrefix = 'fake'): () => Hash {
 
 function toStringAndSlice(n: number | bigint, len: number): string {
   return n.toString(32).slice(-len).padStart(len, '0');
-}
-
-const uint64Array = new BigUint64Array(1);
-
-function randomUint64(): bigint {
-  crypto.getRandomValues(uint64Array);
-  return uint64Array[0];
 }
 
 /**

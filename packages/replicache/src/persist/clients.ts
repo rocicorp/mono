@@ -24,12 +24,12 @@ import type {FormatVersion} from '../format-version.js';
 import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {Hash, hashSchema} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
+import {makeRandomID} from '../make-random-id.js';
 import {
   clientGroupIDSchema,
   type ClientGroupID,
   type ClientID,
 } from '../sync/ids.js';
-import {uuid as makeUuid} from '../uuid.js';
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   ClientGroup,
@@ -318,7 +318,7 @@ export function initClientV6(
         getRefs(newSnapshotData),
       );
 
-      const newClientGroupID = makeUuid();
+      const newClientGroupID = makeRandomID();
 
       const newClient: ClientV6 = {
         heartbeatTimestampMs: Date.now(),
