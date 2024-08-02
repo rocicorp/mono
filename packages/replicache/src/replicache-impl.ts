@@ -67,7 +67,6 @@ import {
 } from './persist/clients.js';
 import {
   COLLECT_IDB_INTERVAL,
-  DD31_IDB_MAX_AGE,
   initCollectIDBDatabases,
   INITIAL_COLLECT_IDB_DELAY,
   SDD_IDB_MAX_AGE,
@@ -619,8 +618,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       COLLECT_IDB_INTERVAL,
       INITIAL_COLLECT_IDB_DELAY,
       SDD_IDB_MAX_AGE,
-      // TODO(arv): I think this should be 2 * clientMaxAgeMs
-      DD31_IDB_MAX_AGE,
+      2 * clientMaxAgeMs,
       this.#lc,
       signal,
     );
