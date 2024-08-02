@@ -323,7 +323,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
   }
 
   /**
-   * Push pushes pending changes to the {@link pushURLXXX}.
+   * Push pushes pending changes to the {@link pushURL}.
    *
    * You do not usually need to manually call push. If {@link pushDelay} is
    * non-zero (which it is by default) pushes happen automatically shortly after

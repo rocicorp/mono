@@ -216,4 +216,17 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    * Defines the indexes, if any, to use on the data.
    */
   readonly indexes?: IndexDefinitions | undefined;
+
+  /**
+   * The maximum age of a client in milliseconds. If a client hasn't been seen
+   * and has no pending mutations for this long, it will be removed from the
+   * cache. Default is 7 days.
+   *
+   * This means that this is the maximum time a tab can be in the background
+   * (frozen or in fbcache) and still be able to sync when it comes back to the
+   * foreground. If tab comes back after this time the
+   * {@linkcode onClientStateNotFound} callback is called on the Replicache
+   * instance.
+   */
+  clientMaxAgeMs?: number | undefined;
 }

@@ -34,6 +34,9 @@ export function initClientGroupGC(
   );
 }
 
+/**
+ * This removes client groups that have no clients and no pending mutations.
+ */
 export function gcClientGroups(dagStore: Store): Promise<ClientGroupMap> {
   return withWrite(dagStore, async tx => {
     const clients = await getClients(tx);

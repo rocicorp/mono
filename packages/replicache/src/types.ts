@@ -61,10 +61,13 @@ export interface RequestOptions {
    */
   maxDelayMs?: number;
 }
+
 export type MakeMutators<T extends MutatorDefs> = {
   readonly [P in keyof T]: MakeMutator<T[P]>;
 };
+
 export type ToPromise<P> = P extends Promise<unknown> ? P : Promise<P>;
+
 export type QueryInternal = <R>(
   body: (tx: ReadTransactionImpl) => MaybePromise<R>,
 ) => Promise<R>; /**
