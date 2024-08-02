@@ -1,7 +1,7 @@
 import {expect} from 'chai';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
-import {fakeHash, Hash, makeNewFakeHashFunction, parse} from '../hash.js';
+import {fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
 import {Chunk, createChunk, Refs, toRefs} from './chunk.js';
 
 test('round trip', () => {
@@ -17,17 +17,9 @@ test('round trip', () => {
     expect(c).to.deep.equal(c2);
   };
 
-  t(parse('face0000000040008000000000000000000000000000'), [], []);
-  t(
-    parse('face0000000040008000000000000000000000000001'),
-    [0],
-    [fakeHash('a1')],
-  );
-  t(
-    parse('face0000000040008000000000000000000000000002'),
-    [0, 1],
-    toRefs([fakeHash('a1'), fakeHash('a2')]),
-  );
+  t(fakeHash(0), [], []);
+  t(fakeHash(1), [0], [fakeHash('a1')]);
+  t(fakeHash(2), [0, 1], toRefs([fakeHash('a1'), fakeHash('a2')]));
 });
 
 test('equals', () => {

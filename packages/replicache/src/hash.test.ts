@@ -8,7 +8,7 @@ import {
   hashSchema,
   isHash,
   makeNewFakeHashFunction,
-  newUUIDHash,
+  newRandomHash,
   parse,
 } from './hash.js';
 
@@ -16,7 +16,7 @@ const emptyUUID = '00000000-0000-4000-8000-000000000000';
 
 function hashes() {
   return [
-    newUUIDHash(),
+    newRandomHash(),
     fakeHash(''),
     fakeHash('a'),
     // old native hashes
@@ -46,9 +46,15 @@ test('parse', () => {
   }
 });
 
+test('newRandomHash', () => {
+  const h = newRandomHash();
+  expect(h.length).to.equal(22);
+  expect(h).to.match(/^[0-9a-v-]+$/);
+});
+
 test.skip('type checking only', () => {
   {
-    const h = newUUIDHash();
+    const h = newRandomHash();
     // Should not be an error
     const s: string = h;
     console.log(s);
@@ -62,27 +68,27 @@ test.skip('type checking only', () => {
 test('makeNewFakeHashFunction', () => {
   {
     const f = makeNewFakeHashFunction('a');
-    expect(f()).to.equal('a0000000000040008000000000000000' + '000000000000');
-    expect(f()).to.equal('a0000000000040008000000000000000' + '000000000001');
-    expect(f()).to.equal('a0000000000040008000000000000000' + '000000000002');
+    expect(f()).to.equal('a000000000000000000000');
+    expect(f()).to.equal('a000000000000000000001');
+    expect(f()).to.equal('a000000000000000000002');
   }
   {
     const f = makeNewFakeHashFunction('b');
-    expect(f()).to.equal('b0000000000040008000000000000000' + '000000000000');
-    expect(f()).to.equal('b0000000000040008000000000000000' + '000000000001');
-    expect(f()).to.equal('b0000000000040008000000000000000' + '000000000002');
+    expect(f()).to.equal('b000000000000000000000');
+    expect(f()).to.equal('b000000000000000000001');
+    expect(f()).to.equal('b000000000000000000002');
   }
   {
     const f = makeNewFakeHashFunction();
-    expect(f()).to.equal('face0000000040008000000000000000' + '000000000000');
-    expect(f()).to.equal('face0000000040008000000000000000' + '000000000001');
-    expect(f()).to.equal('face0000000040008000000000000000' + '000000000002');
+    expect(f()).to.equal('fake000000000000000000');
+    expect(f()).to.equal('fake000000000000000001');
+    expect(f()).to.equal('fake000000000000000002');
   }
   {
     const f = makeNewFakeHashFunction('');
-    expect(f()).to.equal('00000000000040008000000000000000' + '000000000000');
-    expect(f()).to.equal('00000000000040008000000000000000' + '000000000001');
-    expect(f()).to.equal('00000000000040008000000000000000' + '000000000002');
+    expect(f()).to.equal('0000000000000000000000');
+    expect(f()).to.equal('0000000000000000000001');
+    expect(f()).to.equal('0000000000000000000002');
   }
   expect(() => makeNewFakeHashFunction('x')).to.throw();
   expect(() => makeNewFakeHashFunction('000000000')).to.throw();
@@ -91,9 +97,7 @@ test('makeNewFakeHashFunction', () => {
 test('fakeHash', () => {
   expect(String(fakeHash('aa')).length).to.equal(STRING_LENGTH);
   expect(fakeHash('aa')).to.equal(fakeHash('aa'));
-  expect(fakeHash('aa')).to.equal(
-    'face0000000040008000000000000000' + '0000000000aa',
-  );
+  expect(fakeHash('aa')).to.equal('fake0000000000000000aa');
 });
 
 test('valita schema', () => {

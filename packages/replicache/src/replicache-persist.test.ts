@@ -18,10 +18,9 @@ import {
 import fetchMock from 'fetch-mock/esm/client';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
-import {uuidChunkHasher} from './dag/chunk.js';
 import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
-import {assertHash} from './hash.js';
+import {assertHash, newRandomHash} from './hash.js';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
 import {
@@ -64,11 +63,7 @@ test('basic persist & load', async () => {
     pullURL,
   });
   const {clientID} = rep;
-  perdag = new StoreImpl(
-    new IDBStore(rep.idbName),
-    uuidChunkHasher,
-    assertHash,
-  );
+  perdag = new StoreImpl(new IDBStore(rep.idbName), newRandomHash, assertHash);
 
   const clientBeforePull = await withRead(perdag, read =>
     getClient(clientID, read),

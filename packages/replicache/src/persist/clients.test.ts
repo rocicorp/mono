@@ -16,7 +16,7 @@ import {
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
-import {assertHash, fakeHash, newUUIDHash} from '../hash.js';
+import {assertHash, fakeHash, newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import {uuid} from '../uuid.js';
@@ -404,24 +404,24 @@ test('setClient', async () => {
   const clientID = 'client-id';
   await t(clientID, {
     clientGroupID: 'client-group-id-1',
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
     heartbeatTimestampMs: 1,
     tempRefreshHash: null,
   });
 
   await t(clientID, {
     clientGroupID: 'client-group-id-1',
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
     heartbeatTimestampMs: 2,
-    tempRefreshHash: newUUIDHash(),
+    tempRefreshHash: newRandomHash(),
   });
 
   const clientID2 = 'client-id-2';
   await t(clientID2, {
     clientGroupID: 'client-group-id-1',
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
     heartbeatTimestampMs: 3,
-    tempRefreshHash: newUUIDHash(),
+    tempRefreshHash: newRandomHash(),
   });
 });
 
@@ -457,7 +457,7 @@ test('getClientGroupID', async () => {
   const clientGroupID = 'client-group-id-1';
 
   const clientGroup = {
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
     lastServerAckdMutationIDs: {[clientID]: 0},
     mutationIDs: {[clientID]: 0},
     indexes: {},
@@ -467,7 +467,7 @@ test('getClientGroupID', async () => {
   {
     const client = {
       clientGroupID,
-      headHash: newUUIDHash(),
+      headHash: newRandomHash(),
       heartbeatTimestampMs: 1,
       tempRefreshHash: null,
     };
@@ -484,7 +484,7 @@ test('getClientGroupID', async () => {
   {
     const client = {
       clientGroupID: 'client-group-id-wrong',
-      headHash: newUUIDHash(),
+      headHash: newRandomHash(),
       heartbeatTimestampMs: 1,
       tempRefreshHash: null,
     };

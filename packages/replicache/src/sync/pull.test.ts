@@ -34,7 +34,7 @@ import {
   assertPullResponseV0,
   assertPullResponseV1,
 } from '../get-default-puller.js';
-import {assertHash, emptyHash} from '../hash.js';
+import {assertHash, emptyHash, fakeHash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {PatchOperation} from '../patch-operation.js';
@@ -1751,7 +1751,7 @@ test('pull for client group with multiple client local changes', async () => {
       httpStatusCode: 200,
     },
     pullResponse,
-    syncHead: 'face0000000040008000000000000000000000000007',
+    syncHead: fakeHash(7),
   });
 });
 
@@ -1801,7 +1801,7 @@ suite('beginPull DD31', () => {
         errorMessage: '',
         httpStatusCode: 200,
       },
-      syncHead: '00000000-0000-4000-8000-000000000000',
+      syncHead: '0000000000000000000000',
     });
   });
 });

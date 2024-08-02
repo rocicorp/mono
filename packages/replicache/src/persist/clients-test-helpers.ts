@@ -11,7 +11,7 @@ import {
   newSnapshotCommitDataSDD,
 } from '../db/commit.js';
 import {FormatVersion} from '../format-version.js';
-import {newUUIDHash} from '../hash.js';
+import {newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 import {uuid as makeUuid} from '../uuid.js';
@@ -168,7 +168,7 @@ function initClientV4(
       );
     } else {
       // No existing snapshot to bootstrap from. Create empty snapshot.
-      const emptyBTreeChunk = new Chunk(newUUIDHash(), emptyDataNode, []);
+      const emptyBTreeChunk = new Chunk(newRandomHash(), emptyDataNode, []);
       chunksToPut.push(emptyBTreeChunk);
       newClientCommitData = newSnapshotCommitDataSDD(
         null /* basisHash */,
@@ -180,7 +180,7 @@ function initClientV4(
     }
 
     const newClientCommitChunk = new Chunk(
-      newUUIDHash(),
+      newRandomHash(),
       newClientCommitData,
       getRefs(newClientCommitData),
     );

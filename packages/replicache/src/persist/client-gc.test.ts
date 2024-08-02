@@ -4,7 +4,7 @@ import {assertNotUndefined} from 'shared/src/asserts.js';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {newUUIDHash} from '../hash.js';
+import {newRandomHash} from '../hash.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
   CLIENT_MAX_INACTIVE_TIME,
@@ -38,21 +38,21 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   const dagStore = new TestStore();
   const client1 = makeClientV4({
     heartbeatTimestampMs: START_TIME,
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
     mutationID: 100,
     lastServerAckdMutationID: 90,
   });
   const client2 = makeClientV4({
     heartbeatTimestampMs: START_TIME,
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
   });
   const client3 = makeClientV4({
     heartbeatTimestampMs: START_TIME + 6 * 60 * 1000,
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
   });
   const client4 = makeClientV4({
     heartbeatTimestampMs: START_TIME + 6 * 60 * 1000,
-    headHash: newUUIDHash(),
+    headHash: newRandomHash(),
   });
   const clientMap = new Map(
     Object.entries({

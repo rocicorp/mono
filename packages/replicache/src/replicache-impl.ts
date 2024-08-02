@@ -17,7 +17,6 @@ import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
 import {assertCookie, type Cookie} from './cookies.js';
-import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
@@ -39,7 +38,7 @@ import {FormatVersion} from './format-version.js';
 import {deepFreeze} from './frozen-json.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
-import {assertHash, emptyHash, Hash} from './hash.js';
+import {assertHash, emptyHash, Hash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {StoreProvider} from './kv/store.js';
@@ -473,11 +472,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const perKVStore = kvStoreProvider.create(this.idbName);
 
     this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-    this.perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
+    this.perdag = new StoreImpl(perKVStore, newRandomHash, assertHash);
     this.memdag = new LazyStore(
       this.perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-      uuidChunkHasher,
+      newRandomHash,
       assertHash,
     );
 

@@ -3,7 +3,7 @@ import {LazyStore} from '../dag/lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
 import {MetaType} from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {assertHash, makeNewFakeHashFunction} from '../hash.js';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
 
@@ -109,15 +109,14 @@ suite('GatherNotCachedVisitor', () => {
       expect(
         Object.fromEntries(visitor.gatheredChunks.entries()),
       ).to.deep.equal({
-        face0000000040008000000000000000000000000014: {
+        [fakeHash(14)]: {
           chunk: {
-            hash: 'face0000000040008000000000000000000000000014',
+            hash: fakeHash(14),
             data: {
               meta: {
                 type: MetaType.LocalDD31,
-                basisHash: 'face0000000040008000000000000000000000000011',
-                baseSnapshotHash:
-                  'face0000000040008000000000000000000000000005',
+                basisHash: fakeHash(11),
+                baseSnapshotHash: fakeHash(5),
                 clientID: 'client-id',
                 mutationID: 4,
                 mutatorName: 'mutator_name_4',
@@ -125,7 +124,7 @@ suite('GatherNotCachedVisitor', () => {
                 originalHash: null,
                 timestamp: 42,
               },
-              valueHash: 'face0000000040008000000000000000000000000012',
+              valueHash: fakeHash(12),
               indexes: [
                 {
                   definition: {
@@ -134,21 +133,17 @@ suite('GatherNotCachedVisitor', () => {
                     jsonPointer: '/id',
                     allowEmpty: true,
                   },
-                  valueHash: 'face0000000040008000000000000000000000000013',
+                  valueHash: fakeHash(13),
                 },
               ],
             },
-            meta: [
-              'face0000000040008000000000000000000000000011',
-              'face0000000040008000000000000000000000000012',
-              'face0000000040008000000000000000000000000013',
-            ],
+            meta: [fakeHash(11), fakeHash(12), fakeHash(13)],
           },
           size: 10,
         },
-        face0000000040008000000000000000000000000012: {
+        [fakeHash(12)]: {
           chunk: {
-            hash: 'face0000000040008000000000000000000000000012',
+            hash: fakeHash(12),
             data: [
               0,
               [
@@ -163,9 +158,9 @@ suite('GatherNotCachedVisitor', () => {
           },
           size: 10,
         },
-        face0000000040008000000000000000000000000013: {
+        [fakeHash(13)]: {
           chunk: {
-            hash: 'face0000000040008000000000000000000000000013',
+            hash: fakeHash(13),
             data: [
               0,
               [
@@ -219,14 +214,14 @@ async function setup() {
 }
 
 const allChunksInVisitOrder = {
-  face0000000040008000000000000000000000000011: {
+  [fakeHash(11)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000011',
+      hash: fakeHash(11),
       data: {
         meta: {
           type: MetaType.LocalDD31,
-          basisHash: 'face0000000040008000000000000000000000000008',
-          baseSnapshotHash: 'face0000000040008000000000000000000000000005',
+          basisHash: fakeHash(8),
+          baseSnapshotHash: fakeHash(5),
           clientID: 'client-id',
           mutationID: 3,
           mutatorName: 'mutator_name_3',
@@ -234,7 +229,7 @@ const allChunksInVisitOrder = {
           originalHash: null,
           timestamp: 42,
         },
-        valueHash: 'face0000000040008000000000000000000000000009',
+        valueHash: fakeHash(9),
         indexes: [
           {
             definition: {
@@ -243,21 +238,17 @@ const allChunksInVisitOrder = {
               jsonPointer: '/id',
               allowEmpty: true,
             },
-            valueHash: 'face0000000040008000000000000000000000000010',
+            valueHash: fakeHash(10),
           },
         ],
       },
-      meta: [
-        'face0000000040008000000000000000000000000008',
-        'face0000000040008000000000000000000000000009',
-        'face0000000040008000000000000000000000000010',
-      ],
+      meta: [fakeHash(8), fakeHash(9), fakeHash(10)],
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000009: {
+  [fakeHash(9)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000009',
+      hash: fakeHash(9),
       data: [
         0,
         [
@@ -271,14 +262,14 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000008: {
+  [fakeHash(8)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000008',
+      hash: fakeHash(8),
       data: {
         meta: {
           type: MetaType.LocalDD31,
-          basisHash: 'face0000000040008000000000000000000000000005',
-          baseSnapshotHash: 'face0000000040008000000000000000000000000005',
+          basisHash: fakeHash(5),
+          baseSnapshotHash: fakeHash(5),
           clientID: 'client-id',
           mutationID: 2,
           mutatorName: 'mutator_name_2',
@@ -286,7 +277,7 @@ const allChunksInVisitOrder = {
           originalHash: null,
           timestamp: 42,
         },
-        valueHash: 'face0000000040008000000000000000000000000006',
+        valueHash: fakeHash(6),
         indexes: [
           {
             definition: {
@@ -295,21 +286,17 @@ const allChunksInVisitOrder = {
               jsonPointer: '/id',
               allowEmpty: true,
             },
-            valueHash: 'face0000000040008000000000000000000000000007',
+            valueHash: fakeHash(7),
           },
         ],
       },
-      meta: [
-        'face0000000040008000000000000000000000000005',
-        'face0000000040008000000000000000000000000006',
-        'face0000000040008000000000000000000000000007',
-      ],
+      meta: [fakeHash(5), fakeHash(6), fakeHash(7)],
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000010: {
+  [fakeHash(10)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000010',
+      hash: fakeHash(10),
       data: [
         0,
         [
@@ -323,19 +310,19 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000005: {
+  [fakeHash(5)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000005',
+      hash: fakeHash(5),
       data: {
         meta: {
           type: MetaType.SnapshotDD31,
-          basisHash: 'face0000000040008000000000000000000000000002',
+          basisHash: fakeHash(2),
           lastMutationIDs: {
             'client-id': 1,
           },
           cookieJSON: 'cookie_1',
         },
-        valueHash: 'face0000000040008000000000000000000000000003',
+        valueHash: fakeHash(3),
         indexes: [
           {
             definition: {
@@ -344,20 +331,17 @@ const allChunksInVisitOrder = {
               jsonPointer: '/id',
               allowEmpty: true,
             },
-            valueHash: 'face0000000040008000000000000000000000000004',
+            valueHash: fakeHash(4),
           },
         ],
       },
-      meta: [
-        'face0000000040008000000000000000000000000003',
-        'face0000000040008000000000000000000000000004',
-      ],
+      meta: [fakeHash(3), fakeHash(4)],
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000006: {
+  [fakeHash(6)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000006',
+      hash: fakeHash(6),
       data: [
         0,
         [
@@ -370,9 +354,9 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000007: {
+  [fakeHash(7)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000007',
+      hash: fakeHash(7),
       data: [
         0,
         [
@@ -385,9 +369,9 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000003: {
+  [fakeHash(3)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000003',
+      hash: fakeHash(3),
       data: [
         0,
         [
@@ -399,9 +383,9 @@ const allChunksInVisitOrder = {
     },
     size: 10,
   },
-  face0000000040008000000000000000000000000004: {
+  [fakeHash(4)]: {
     chunk: {
-      hash: 'face0000000040008000000000000000000000000004',
+      hash: fakeHash(4),
       data: [
         0,
         [

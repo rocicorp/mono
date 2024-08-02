@@ -5,7 +5,7 @@ import {TestStore} from '../dag/test-store.js';
 import {DEFAULT_HEAD_NAME, MetaType} from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
-import {assertHash, makeNewFakeHashFunction} from '../hash.js';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
@@ -123,7 +123,7 @@ suite(
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
         await visitor.visit(mb.headHash);
         const metaBase = {
-          basisHash: 'face0000000040008000000000000000000000000003',
+          basisHash: fakeHash(3),
           mutationID: 2,
           mutatorArgsJSON: [2],
           mutatorName: 'mutator_name_2',
@@ -135,13 +135,12 @@ suite(
             ? {
                 type: MetaType.LocalDD31,
                 ...metaBase,
-                baseSnapshotHash:
-                  'face0000000040008000000000000000000000000001',
+                baseSnapshotHash: fakeHash(1),
                 clientID,
               }
             : {type: MetaType.LocalSDD, ...metaBase};
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal({
-          ['face0000000040008000000000000000000000000004']: {
+          [fakeHash(4)]: {
             data: [
               0,
               [
@@ -150,20 +149,17 @@ suite(
                   : ['local', '2'],
               ],
             ],
-            hash: 'face0000000040008000000000000000000000000004',
+            hash: fakeHash(4),
             meta: [],
           },
-          ['face0000000040008000000000000000000000000005']: {
+          [fakeHash(5)]: {
             data: {
               indexes: [],
               meta,
-              valueHash: 'face0000000040008000000000000000000000000004',
+              valueHash: fakeHash(4),
             },
-            hash: 'face0000000040008000000000000000000000000005',
-            meta: [
-              'face0000000040008000000000000000000000000003',
-              'face0000000040008000000000000000000000000004',
-            ],
+            hash: fakeHash(5),
+            meta: [fakeHash(3), fakeHash(4)],
           },
         });
       });
@@ -224,14 +220,13 @@ suite(
         expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal(
           formatVersion >= FormatVersion.DD31
             ? {
-                ['face0000000040008000000000000000000000000008']: {
-                  hash: 'face0000000040008000000000000000000000000008',
+                [fakeHash(8)]: {
+                  hash: fakeHash(8),
                   data: {
                     meta: {
                       type: MetaType.LocalDD31,
-                      basisHash: 'face0000000040008000000000000000000000000005',
-                      baseSnapshotHash:
-                        'face0000000040008000000000000000000000000005',
+                      basisHash: fakeHash(5),
+                      baseSnapshotHash: fakeHash(5),
                       mutationID: 2,
                       mutatorName: 'mutator_name_2',
                       mutatorArgsJSON: [2],
@@ -239,7 +234,7 @@ suite(
                       timestamp: 42,
                       clientID: 'client-id',
                     },
-                    valueHash: 'face0000000040008000000000000000000000000006',
+                    valueHash: fakeHash(6),
                     indexes: [
                       {
                         definition: {
@@ -248,21 +243,14 @@ suite(
                           jsonPointer: '/name',
                           allowEmpty: true,
                         },
-                        valueHash:
-                          'face0000000040008000000000000000' +
-                          '' +
-                          '000000000007',
+                        valueHash: fakeHash(7),
                       },
                     ],
                   },
-                  meta: [
-                    'face0000000040008000000000000000000000000005',
-                    'face0000000040008000000000000000000000000006',
-                    'face0000000040008000000000000000000000000007',
-                  ],
+                  meta: [fakeHash(5), fakeHash(6), fakeHash(7)],
                 },
-                ['face0000000040008000000000000000000000000006']: {
-                  hash: 'face0000000040008000000000000000000000000006',
+                [fakeHash(6)]: {
+                  hash: fakeHash(6),
                   data: [
                     0,
                     [
@@ -285,8 +273,8 @@ suite(
                   ],
                   meta: [],
                 },
-                ['face0000000040008000000000000000000000000007']: {
-                  hash: 'face0000000040008000000000000000000000000007',
+                [fakeHash(7)]: {
+                  hash: fakeHash(7),
                   data: [
                     0,
                     [
@@ -310,7 +298,7 @@ suite(
                 },
               }
             : {
-                ['face0000000040008000000000000000000000000006']: {
+                [fakeHash(6)]: {
                   data: [
                     0,
                     [
@@ -322,10 +310,10 @@ suite(
                       ],
                     ],
                   ],
-                  hash: 'face0000000040008000000000000000000000000006',
+                  hash: fakeHash(6),
                   meta: [],
                 },
-                ['face0000000040008000000000000000000000000007']: {
+                [fakeHash(7)]: {
                   data: {
                     indexes: [
                       {
@@ -335,25 +323,20 @@ suite(
                           keyPrefix: '',
                           name: 'testIndex',
                         },
-                        valueHash:
-                          'face0000000040008000000000000000000000000006',
+                        valueHash: fakeHash(6),
                       },
                     ],
                     meta: {
-                      basisHash: 'face0000000040008000000000000000000000000005',
+                      basisHash: fakeHash(5),
                       lastMutationID: 1,
                       type: 1,
                     },
-                    valueHash: 'face0000000040008000000000000000000000000003',
+                    valueHash: fakeHash(3),
                   },
-                  hash: 'face0000000040008000000000000000000000000007',
-                  meta: [
-                    'face0000000040008000000000000000000000000003',
-                    'face0000000040008000000000000000000000000005',
-                    'face0000000040008000000000000000000000000006',
-                  ],
+                  hash: fakeHash(7),
+                  meta: [fakeHash(3), fakeHash(5), fakeHash(6)],
                 },
-                ['face0000000040008000000000000000000000000008']: {
+                [fakeHash(8)]: {
                   data: [
                     0,
                     [
@@ -372,10 +355,10 @@ suite(
                       ],
                     ],
                   ],
-                  hash: 'face0000000040008000000000000000000000000008',
+                  hash: fakeHash(8),
                   meta: [],
                 },
-                ['face0000000040008000000000000000000000000009']: {
+                [fakeHash(9)]: {
                   data: [
                     0,
                     [
@@ -393,10 +376,10 @@ suite(
                       ],
                     ],
                   ],
-                  hash: 'face0000000040008000000000000000000000000009',
+                  hash: fakeHash(9),
                   meta: [],
                 },
-                ['face0000000040008000000000000000000000000010']: {
+                [fakeHash(10)]: {
                   data: {
                     indexes: [
                       {
@@ -406,12 +389,11 @@ suite(
                           keyPrefix: '',
                           name: 'testIndex',
                         },
-                        valueHash:
-                          'face0000000040008000000000000000000000000009',
+                        valueHash: fakeHash(9),
                       },
                     ],
                     meta: {
-                      basisHash: 'face0000000040008000000000000000000000000007',
+                      basisHash: fakeHash(7),
                       mutationID: 2,
                       mutatorArgsJSON: [3],
                       mutatorName: 'mutator_name_3',
@@ -419,14 +401,10 @@ suite(
                       timestamp: 42,
                       type: 2,
                     },
-                    valueHash: 'face0000000040008000000000000000000000000008',
+                    valueHash: fakeHash(8),
                   },
-                  hash: 'face0000000040008000000000000000000000000010',
-                  meta: [
-                    'face0000000040008000000000000000000000000007',
-                    'face0000000040008000000000000000000000000008',
-                    'face0000000040008000000000000000000000000009',
-                  ],
+                  hash: fakeHash(10),
+                  meta: [fakeHash(7), fakeHash(8), fakeHash(9)],
                 },
               },
         );
