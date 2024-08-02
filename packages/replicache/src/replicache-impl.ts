@@ -43,7 +43,6 @@ import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {StoreProvider} from './kv/store.js';
 import {createLogContext} from './log-options.js';
-import {makeRandomID} from './make-random-id.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -76,6 +75,7 @@ import {
   IDBDatabasesStore,
   IndexedDBDatabase,
 } from './persist/idb-databases-store.js';
+import {makeClientID} from './persist/make-client-id.js';
 import {persistDD31} from './persist/persist.js';
 import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
@@ -258,7 +258,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
   #closed = false;
   #online = true;
-  readonly #clientID = makeRandomID();
+  readonly #clientID = makeClientID();
   readonly #ready: Promise<void>;
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;

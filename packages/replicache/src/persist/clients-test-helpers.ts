@@ -13,7 +13,6 @@ import {
 import {FormatVersion} from '../format-version.js';
 import {newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
-import {makeRandomID} from '../make-random-id.js';
 import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
 import {
@@ -28,6 +27,7 @@ import {
   isClientV4,
   setClients,
 } from './clients.js';
+import {makeClientID} from './make-client-id.js';
 
 export function setClientsForTesting(
   clients: ClientMap,
@@ -133,7 +133,7 @@ function initClientV4(
   ]
 > {
   return withWrite(perdag, async dagWrite => {
-    const newClientID = makeRandomID();
+    const newClientID = makeClientID();
     const clients = await getClients(dagWrite);
 
     let bootstrapClient: Client | undefined;

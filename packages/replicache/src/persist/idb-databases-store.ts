@@ -6,9 +6,9 @@ import {
 } from 'shared/src/asserts.js';
 import {deepFreeze} from '../frozen-json.js';
 import type {CreateStore, Read, Store} from '../kv/store.js';
-import {makeRandomID} from '../make-random-id.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {getIDBDatabasesDBName} from './idb-databases-store-db-name.js';
+import {makeClientID} from './make-client-id.js';
 
 const DBS_KEY = 'dbs';
 const PROFILE_ID_KEY = 'profileId';
@@ -110,8 +110,8 @@ export class IDBDatabasesStore {
     return withWrite(this.#kvStore, async write => {
       let profileId = await write.get(PROFILE_ID_KEY);
       if (profileId === undefined) {
-        // Profile id is 'p' followed by the guid with no dashes.
-        profileId = `p${makeRandomID().replace(/-/g, '')}`;
+        // Profile id is 'p' followed by a random number.
+        profileId = `p${makeClientID()}`;
         await write.put(PROFILE_ID_KEY, profileId);
       }
       assertString(profileId);

@@ -1571,7 +1571,7 @@ test('schemaVersion push', async () => {
 });
 
 test('clientID', async () => {
-  const re = /^[0-9a-v]{13}$/;
+  const re = /^[0-9a-v]{18}$/;
 
   let rep = await replicacheForTesting('clientID');
   const {clientID} = rep;
