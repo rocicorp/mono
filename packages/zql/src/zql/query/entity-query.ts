@@ -862,7 +862,7 @@ export interface EntityQuery<
   toString(): string;
 }
 
-type RelationSet = {
+export type RelationSet = {
   [name: string]: unknown;
 };
 

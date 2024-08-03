@@ -89,8 +89,10 @@ export type QueryDefs = {
   readonly [name: string]: Entity;
 };
 
+type NoRelations = Record<string, never>;
+
 type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
-  readonly [K in keyof QD]: EntityQuery<{[P in K]: QD[K]}, []>;
+  readonly [K in keyof QD]: EntityQuery<{[P in K]: QD[K]}, NoRelations, []>;
 };
 
 declare const TESTING: boolean;
@@ -1469,7 +1471,7 @@ export class Zero<QD extends QueryDefs> {
   #registerQueries(
     queryDefs: QueryParseDefs<QD>,
   ): MakeEntityQueriesFromQueryDefs<QD> {
-    const rv = {} as Record<string, EntityQuery<FromSet, []>>;
+    const rv = {} as Record<string, EntityQuery<FromSet, NoRelations, []>>;
     const context = this.#zqlContext;
     // Not using parse yet
     for (const name of Object.keys(queryDefs)) {
