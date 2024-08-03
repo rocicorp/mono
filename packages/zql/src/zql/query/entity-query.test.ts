@@ -18,6 +18,7 @@ import {
 } from './entity-query.js';
 
 type WeakKey = object;
+
 function ast(q: WeakKey): AST {
   const {alias: _, ...rest} = astForTesting(q);
   return rest;
@@ -1389,7 +1390,7 @@ describe('all references to columns are always qualified', () => {
       },
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ] satisfies {test: string; q: EntityQuery<any, any>; expected: AST}[])(
+  ] satisfies {test: string; q: EntityQuery<any, any, any>; expected: AST}[])(
     '$test',
     ({q, expected}) => {
       expect(ast(q)).toEqual(expected);
@@ -1398,8 +1399,8 @@ describe('all references to columns are always qualified', () => {
 });
 
 suite('Return type for EntityQuery', () => {
-  type EntityQueryReturn<Q extends EntityQuery<never, unknown>> =
-    Q extends EntityQuery<never, infer R> ? R : never;
+  type EntityQueryReturn<Q extends EntityQuery<never, never, unknown>> =
+    Q extends EntityQuery<never, never, infer R> ? R : never;
 
   type Issue = {
     id: string;
@@ -1413,7 +1414,10 @@ suite('Return type for EntityQuery', () => {
     name: string;
   };
 
-  const issueQuery = newEntityQuery<{issue: Issue}>(context, 'issue');
+  const issueQuery = newEntityQuery<{issue: Issue}, {abc: null}>(
+    context,
+    'issue',
+  );
   const userQuery = newEntityQuery<{user: User}>(context, 'user');
 
   test('select', () => {
