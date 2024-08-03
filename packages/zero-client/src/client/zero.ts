@@ -51,7 +51,7 @@ import type {Context as ZQLContext} from 'zql/src/zql/context/context.js';
 import {ZeroContext} from 'zql/src/zql/context/zero-context.js';
 import {Materialite} from 'zql/src/zql/ivm/materialite.js';
 import type {FromSet} from 'zql/src/zql/query/entity-query.js';
-import {EntityQuery} from 'zql/src/zql/query/entity-query.js';
+import {EntityQuery, newEntityQuery} from 'zql/src/zql/query/entity-query.js';
 import type {Entity} from 'zql/src/zql/schema/entity-schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
@@ -1473,7 +1473,7 @@ export class Zero<QD extends QueryDefs> {
     const context = this.#zqlContext;
     // Not using parse yet
     for (const name of Object.keys(queryDefs)) {
-      rv[name] = new EntityQuery(context, name);
+      rv[name] = newEntityQuery(context, name);
     }
 
     return rv as MakeEntityQueriesFromQueryDefs<QD>;

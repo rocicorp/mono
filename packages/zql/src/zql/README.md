@@ -24,7 +24,7 @@ type Issue = z.infer<typeof issueSchema>;
 Then you can create a well-typed query builder
 
 ```ts
-const query = new EntityQuery<Issue>(context, 'issue');
+const query = newEntityQuery<Issue>(context, 'issue');
 ```
 
 - The first param to `EntityQuery` is the integration point between the query builder and Replicache. It provides the query builder with a way to gain access to the current Replicache instance and collections. See [`makeTestContext`](./context/context.ts) for an example.
