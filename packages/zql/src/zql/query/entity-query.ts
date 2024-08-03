@@ -1,4 +1,3 @@
-import {notImplemented} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import type {
   AST,
@@ -465,7 +464,25 @@ class EntityQueryImpl<From extends FromSet, Return = []>
           aggregate: more.aggregate,
         });
       } else if (isSubQuery(more)) {
-        notImplemented();
+        let n = '';
+        const pg = {
+          related: (
+            name: string,
+          ): RelatedEntityQuery<From, string, unknown> => {
+            // TODO(arv): Throw if duplicate
+            n = name;
+            // TODO(arv): The tableName here might need some more thinking about.
+            return newEntityQuery(this.#context, n);
+          },
+        };
+        const subAst = (more(pg) as EntityQueryImpl<From, unknown>).#ast;
+        seen.add(n);
+        const subQueryAst = {
+          type: 'subQuery',
+          ast: subAst,
+          name: n,
+        } as const;
+        select.push([subQueryAst, n]);
       } else {
         if (seen.has(more)) {
           continue;
@@ -1153,5 +1170,5 @@ function isSubQuery<From extends FromSet>(
     | Aggregator<From>
     | SubQuery<From, RelatedEntityQuery<From, string, unknown>>,
 ): field is SubQuery<From, RelatedEntityQuery<From, string, unknown>> {
-  return typeof field === 'object' && 'name' in field && 'body' in field;
+  return typeof field === 'function';
 }

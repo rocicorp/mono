@@ -1508,8 +1508,25 @@ suite('Return type for EntityQuery', () => {
         id: string;
       }[]
     >();
-    expectTypeOf<EntityQueryReturn<typeof s>>().not.toEqualTypeOf<
-      ({title: string} & {id: string})[]
-    >();
+
+    expect(ast(s)).toEqual({
+      table: 'issue',
+      select: [
+        [['issue', 'id'], 'issue.id'],
+        [
+          {
+            type: 'subQuery',
+            name: 'abc',
+            ast: {
+              table: 'abc',
+              select: [[['abc', 'creatorId'], 'creatorId']],
+              aggregate: [],
+            },
+          },
+          'abc',
+        ],
+      ],
+      aggregate: [],
+    });
   });
 });
