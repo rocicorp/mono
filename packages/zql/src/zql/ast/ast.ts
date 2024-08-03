@@ -3,6 +3,7 @@
 
 import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
+import {assert} from 'shared/src/asserts.js';
 
 export type Selector = readonly [table: string, column: string];
 
@@ -60,11 +61,17 @@ export type AST = {
   // readonly after?: Primitive;
 };
 
-type SubQueryAST = {
+export type SubQueryAST = {
   type: 'subQuery';
   name: string;
   ast: AST;
 };
+
+export function assertSelector(
+  selector: Selector | SubQueryAST,
+): asserts selector is Selector {
+  assert(Array.isArray(selector));
+}
 
 export type Condition = SimpleCondition | Conjunction;
 export type HavingCondition = SimpleHavingCondition | HavingConjunction;

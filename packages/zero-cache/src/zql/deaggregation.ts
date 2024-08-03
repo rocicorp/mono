@@ -1,5 +1,11 @@
 import {assert} from 'shared/src/asserts.js';
-import type {AST, Condition, Ordering, Selector} from 'zql/src/zql/ast/ast.js';
+import {
+  assertSelector,
+  type AST,
+  type Condition,
+  type Ordering,
+  type Selector,
+} from 'zql/src/zql/ast/ast.js';
 import type {ServerAST} from './server-ast.js';
 
 export type PrimaryKeyLookup = (
@@ -68,11 +74,21 @@ export function deaggregateArrays(
     ),
   );
 
-  const subQuerySelect = select.filter(s => s[0][0] === groupByTable);
+  const subQuerySelect = select.filter(s => {
+    // TODO(arv): Deal with sub queries. Especially nested...
+    assertSelector(s[0]);
+    return s[0][0] === groupByTable;
+  });
 
   // Map direct column references to their aliases, which is how these values
   // must be referenced when the query is pushed down into the subQuery.
-  const aliasMap = new Map((subQuerySelect ?? []).map(s => [s[0][1], s[1]]));
+  const aliasMap = new Map(
+    (subQuerySelect ?? []).map(s => {
+      // TODO(arv): Deal with sub queries. Especially nested...
+      assertSelector(s[0]);
+      return [s[0][1], s[1]];
+    }),
+  );
   const renameSelector = (parts: Selector): Selector => {
     const [from, col] = parts;
     return from !== groupByTable ? parts : [from, aliasMap.get(col) ?? col];
@@ -93,7 +109,11 @@ export function deaggregateArrays(
     ...ast,
     subQuery,
     select: [
-      ...select.map(s => [renameSelector(s[0]), s[1]] as const),
+      ...select.map(s => {
+        // TODO(arv): Deal with sub queries. Especially nested...
+        assertSelector(s[0]);
+        return [renameSelector(s[0]), s[1]] as const;
+      }),
       ...deaggregatedColumns,
     ],
     aggregate: undefined,
