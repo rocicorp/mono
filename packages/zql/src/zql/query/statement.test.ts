@@ -3,7 +3,7 @@ import {expect, test} from 'vitest';
 import {z} from 'zod';
 import {makeTestContext} from '../context/test-context.js';
 import {makeComparator} from '../ivm/compare.js';
-import {EntityQuery, astForTesting as ast} from './entity-query.js';
+import {astForTesting as ast, newEntityQuery} from './entity-query.js';
 
 const e1 = z.object({
   id: z.string(),
@@ -15,7 +15,7 @@ type E1 = z.infer<typeof e1>;
 
 test('basic materialization', async () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
   const stmt = q.select('id', 'n').where('n', '>', 100).prepare();
 
@@ -47,7 +47,7 @@ test('basic materialization', async () => {
 test('sorted materialization', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
   const ascStatement = q.select('id').orderBy('n', 'asc').prepare();
   const descStatement = q.select('id').orderBy('n', 'desc').prepare();
 
@@ -79,7 +79,7 @@ test('sorted materialization', async () => {
 test('sorting is stable via suffixing the primary key to the order', async () => {
   const context = makeTestContext();
   type E1 = z.infer<typeof e1>;
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
   const ascStatement = q.select('id').orderBy('n', 'asc').prepare();
   const descStatement = q.select('id').orderBy('n', 'desc').prepare();
@@ -147,7 +147,7 @@ test('makeComparator', () => {
 
 test('destroying the statement stops updating the view', async () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
   const stmt = q.select('id', 'n').prepare();
 
@@ -175,7 +175,7 @@ test('destroying the statement stops updating the view', async () => {
 
 test('ensure we get callbacks when subscribing and unsubscribing', async () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
 
   const statement = q.prepare();
   const unsubscribe = statement.subscribe(_ => {
@@ -208,7 +208,7 @@ test('ensure we get callbacks when subscribing and unsubscribing', async () => {
 
 test('preloaded resolves to true when subscription is got', async () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
 
   const statement = q.prepare();
   const {cleanup, preloaded} = statement.preload();
@@ -259,7 +259,7 @@ test('preloaded resolves to true when subscription is got', async () => {
 
 test('preloaded resolves to false if preload is cleanedup before query is ever got', async () => {
   const context = makeTestContext();
-  const q = new EntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1').select('id', 'n');
 
   const statement = q.prepare();
   const {cleanup, preloaded} = statement.preload();

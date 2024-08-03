@@ -6,10 +6,10 @@
  * 2. Crafting the fastest possible way to run that query by hand. E.g., direct array lookup.
  */
 
+import {compareUTF8} from 'compare-utf8';
 import {bench, describe, expect} from 'vitest';
 import {TestContext} from '../context/test-context.js';
-import {EntityQuery} from '../query/entity-query.js';
-import {compareUTF8} from 'compare-utf8';
+import {newEntityQuery} from '../query/entity-query.js';
 
 type Issue = {
   id: string;
@@ -36,12 +36,12 @@ type TheoryInput = {
 };
 
 const makeQueries = (context: TestContext) => ({
-  issueQuery: new EntityQuery<{issue: Issue}>(context, 'issue'),
-  issueLabelQuery: new EntityQuery<{issueLabel: IssueLabel}>(
+  issueQuery: newEntityQuery<{issue: Issue}>(context, 'issue'),
+  issueLabelQuery: newEntityQuery<{issueLabel: IssueLabel}>(
     context,
     'issueLabel',
   ),
-  labelQuery: new EntityQuery<{label: Label}>(context, 'label'),
+  labelQuery: newEntityQuery<{label: Label}>(context, 'label'),
 });
 
 const tableScanWithCompareTheory = ({issueMap}: TheoryInput) => {
@@ -68,7 +68,7 @@ describe.each([
   {
     name: 'table.* WHERE id = x | primary key index on id',
     getZql: (context: TestContext) =>
-      new EntityQuery<{issue: Issue}>(context, 'issue')
+      newEntityQuery<{issue: Issue}>(context, 'issue')
         .select('id')
         .where('id', '=', '005000'),
     zqlExpected: (_: Issue[]) => {},
@@ -96,7 +96,7 @@ describe.each([
   {
     name: 'table.* LIMIT 1',
     getZql: (context: TestContext) =>
-      new EntityQuery<{issue: Issue}>(context, 'issue').select('*').limit(1),
+      newEntityQuery<{issue: Issue}>(context, 'issue').select('*').limit(1),
     zqlExpected: (_: Issue[]) => {},
     theoryQuery: ({issueMap}: TheoryInput) => {
       const ret: Issue[] = [];
@@ -127,7 +127,7 @@ describe.each([
   {
     name: 'table.* ORDER BY id DESC LIMIT 1',
     getZql: (context: TestContext) =>
-      new EntityQuery<{issue: Issue}>(context, 'issue')
+      newEntityQuery<{issue: Issue}>(context, 'issue')
         .select('*')
         .orderBy('id', 'desc')
         .limit(1),
@@ -156,7 +156,7 @@ describe.each([
   {
     name: 'table.* WHERE title = x | no index on title',
     getZql: (context: TestContext) =>
-      new EntityQuery<{issue: Issue}>(context, 'issue')
+      newEntityQuery<{issue: Issue}>(context, 'issue')
         .select('*')
         .where('title', '=', 'Issue 500'),
     zqlExpected: (_: Issue[]) => {},
@@ -179,7 +179,7 @@ describe.each([
   {
     name: 'table.*',
     getZql: (context: TestContext) =>
-      new EntityQuery<{issue: Issue}>(context, 'issue').select('*'),
+      newEntityQuery<{issue: Issue}>(context, 'issue').select('*'),
     zqlExpected: (_: Issue[]) => {},
     theoryQuery: ({issueArray}: TheoryInput) => issueArray,
     theoryUnplanned: ({issueMap}: TheoryInput) => {
@@ -203,7 +203,7 @@ describe.each([
   {
     name: 'table.* ORDER BY id DESC',
     getZql: (context: TestContext) =>
-      new EntityQuery<{issue: Issue}>(context, 'issue')
+      newEntityQuery<{issue: Issue}>(context, 'issue')
         .select('*')
         .orderBy('id', 'desc'),
     zqlExpected: (_: Issue[]) => {},

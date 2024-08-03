@@ -6,7 +6,7 @@ import {
 } from '../context/test-context.js';
 import type {Source} from '../ivm/source/source.js';
 import * as agg from './agg.js';
-import {EntityQuery, exp, or} from './entity-query.js';
+import {type EntityQuery, exp, newEntityQuery, or} from './entity-query.js';
 
 describe('a limited window is correctly maintained over differences', () => {
   type E = {
@@ -20,7 +20,7 @@ describe('a limited window is correctly maintained over differences', () => {
   beforeEach(() => {
     context = makeTestContext();
     source = context.getSource<E>('e');
-    q = new EntityQuery<{e: E}>(context, 'e');
+    q = newEntityQuery<{e: E}>(context, 'e');
     Array.from({length: 10}, (_, i) => source.add({id: letters[i * 2 + 3]}));
   });
 
@@ -226,7 +226,7 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
   });
 
   test('bare select', async () => {
-    const q = new EntityQuery<{e: E}>(context, 'e');
+    const q = newEntityQuery<{e: E}>(context, 'e');
     const stmt = q.select('id').limit(2).prepare();
     const data = await stmt.exec();
 
@@ -239,7 +239,7 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
   });
 
   test('select and where', async () => {
-    const q = new EntityQuery<{e: E}>(context, 'e');
+    const q = newEntityQuery<{e: E}>(context, 'e');
     const stmt = q
       .select('id')
       .where('e.id', '>', numToPaddedString(9))
@@ -256,7 +256,7 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
   });
 
   test('select and where with or', async () => {
-    const q = new EntityQuery<{e: E}>(context, 'e');
+    const q = newEntityQuery<{e: E}>(context, 'e');
     const stmt = q
       .select('id')
       .where(
@@ -276,13 +276,13 @@ describe('pulling from an infinite source is possible if we set a limit', () => 
     stmt.destroy();
   });
 
-  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
-  const userQuery = new EntityQuery<{user: User}>(context, 'user');
-  const issueLabelQuery = new EntityQuery<{issueLabel: IssueLabel}>(
+  const issueQuery = newEntityQuery<{issue: Issue}>(context, 'issue');
+  const userQuery = newEntityQuery<{user: User}>(context, 'user');
+  const issueLabelQuery = newEntityQuery<{issueLabel: IssueLabel}>(
     context,
     'issueLabel',
   );
-  const labelQuery = new EntityQuery<{label: Label}>(context, 'label');
+  const labelQuery = newEntityQuery<{label: Label}>(context, 'label');
   test('bare select with a join', async () => {
     const limit = 50;
     const stmt = issueQuery

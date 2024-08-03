@@ -218,65 +218,18 @@ type ExtractFieldPiece<From extends FromSet, Selection extends Selector<From>> =
           string & Selection
         >;
       };
-
+/**
+ * For sub queries the name is part of the return type. We use this name to
+ * construct the final object.
+ */
 type ExtractSubQueryPiece<
   From extends FromSet,
-  SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
-> = {
-  [p in SubQueryName<From, SQ>]: ReturnType<SQ> extends EntityQuery<
-    From,
-    infer R
-  >
-    ? R
-    : never;
-};
-
-type SubQueryName<
-  From extends FromSet,
-  SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
-> = Parameters<Parameters<SQ>[0]['related']>[0];
-
-type F = {issue: {id: string; title: string}};
-type Q = EntityQuery<F, 42[]>;
-type SQ = SubQuery<'foo', F, Q>;
-export type TEMP = SubQueryName<F, SQ>;
-
-type ExtractSubQueryEntityQueryReturn<
-  From extends FromSet,
-  SQ extends SubQuery<string, From, EntityQuery<From, unknown>>,
-> = SQ extends SubQuery<string, From, infer R> ? R : never;
-
-export type TEMP3 = ExtractSubQueryEntityQueryReturn<
-  F,
-  SubQuery<'foo', F, EntityQuery<F, {a: string; b: number}>>
->;
-
-type ExtractEntityQueryReturn<
-  From extends FromSet,
-  EQ extends EntityQuery<From, unknown>,
-> = EQ extends EntityQuery<From, infer R> ? R : never;
-
-export type TEMP4 = ExtractEntityQueryReturn<
-  F,
-  ExtractSubQueryEntityQueryReturn<
-    F,
-    SubQuery<'foo', F, EntityQuery<F, {a: string; b: number}>>
-  >
->;
-
-export type TEMP5 = ExtractSubQueryPiece<
-  F,
-  SubQuery<'foo', F, EntityQuery<F, bigint>>
->;
-
-export type TEMP6 = CombineSelections<
-  F,
-  [
-    'issue.title',
-    SubQuery<'xyz', F, EntityQuery<F, {y: bigint}>>,
-    (pq: SubQueryBuilder<F, 'abc'>) => EntityQuery<F, {z: RegExp}[]>,
-  ]
->;
+  SQ extends SubQuery<From, RelatedEntityQuery<From, string, unknown>>,
+> = ReturnType<SQ> extends RelatedEntityQuery<From, infer N, infer R>
+  ? {
+      [p in N]: R;
+    }
+  : never;
 
 /**
  * ExtractNestedTypeByName returns the type of property `S` one level down in an object structure
@@ -359,7 +312,7 @@ type CombineSelections<
   Selections extends (
     | Selector<From>
     | Aggregator<From>
-    | SubQuery<string, From, EntityQuery<From, unknown>>
+    | SubQuery<From, EntityQuery<From, unknown>>
   )[],
 > = Selections extends [infer First, ...infer Rest]
   ? First extends Selector<From>
@@ -369,7 +322,7 @@ type CombineSelections<
           Rest extends (
             | Selector<From>
             | Aggregator<From>
-            | SubQuery<string, From, EntityQuery<From, unknown>>
+            | SubQuery<From, EntityQuery<From, unknown>>
           )[]
             ? Rest
             : []
@@ -383,21 +336,21 @@ type CombineSelections<
           Rest extends (
             | Selector<From>
             | Aggregator<From>
-            | SubQuery<string, From, EntityQuery<From, unknown>>
+            | SubQuery<From, EntityQuery<From, unknown>>
           )[]
             ? Rest
             : []
         >,
         ExtractAggregatePiece<From, First>
       >
-    : First extends SubQuery<string, From, EntityQuery<From, unknown>>
+    : First extends SubQuery<From, EntityQuery<From, unknown>>
     ? CombineFromSets<
         CombineSelections<
           From,
           Rest extends (
             | Selector<From>
             | Aggregator<From>
-            | SubQuery<string, From, EntityQuery<From, unknown>>
+            | SubQuery<From, EntityQuery<From, unknown>>
           )[]
             ? Rest
             : []
@@ -413,21 +366,21 @@ type Aggregator<From extends FromSet> =
 
 // TODO(arv): Remove export
 export type SubQuery<
-  Name extends string,
   From extends FromSet,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  SubQueryReturnType extends EntityQuery<From, any>,
-> = ParentQueryFunction<From, Name, SubQueryReturnType>;
+  SubQueryReturnType extends RelatedEntityQuery<From, string, any>,
+> = ParentQueryFunction<From, SubQueryReturnType>;
 
 type ParentQueryFunction<
   From extends FromSet,
-  Name extends string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   SubQueryReturnType extends EntityQuery<From, any>,
-> = (pq: SubQueryBuilder<From, Name>) => SubQueryReturnType;
+> = (pq: SubQueryBuilder<From>) => SubQueryReturnType;
 
-type SubQueryBuilder<From extends FromSet, Name extends string> = {
-  related(name: Name): EntityQuery<From, unknown>;
+type SubQueryBuilder<From extends FromSet> = {
+  related<Name extends string>(
+    name: Name,
+  ): RelatedEntityQuery<From, Name, unknown>;
 };
 
 /**
@@ -464,7 +417,16 @@ type SimpleCondition<
   };
 };
 
-export class EntityQuery<From extends FromSet, Return = []> {
+export function newEntityQuery<From extends FromSet, Return = []>(
+  context: Context,
+  tableName: string,
+): EntityQuery<From, Return> {
+  return new EntityQueryImpl(context, tableName);
+}
+
+class EntityQueryImpl<From extends FromSet, Return = []>
+  implements EntityQuery<From, Return>
+{
   readonly #ast: AST;
   readonly #name: string;
   readonly #context: Context;
@@ -484,7 +446,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     Fields extends (
       | Selector<From>
       | Aggregator<From>
-      | SubQuery<string, From, EntityQuery<From, unknown>>
+      | SubQuery<From, RelatedEntityQuery<From, string, unknown>>
     )[],
   >(...x: Fields): EntityQuery<From, CombineSelections<From, Fields>[]> {
     const seen = new Set(this.#ast.select?.map(s => s[1]));
@@ -513,7 +475,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       }
     }
 
-    return new EntityQuery<From, CombineSelections<From, Fields>[]>(
+    return new EntityQueryImpl<From, CombineSelections<From, Fields>[]>(
       this.#context,
       this.#name,
       {
@@ -527,7 +489,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
   // AFAICT `EntityQuery` would need to carry its table name in a third generic parameter
   // in order for us to be able make `Alias` optional. Seems doable.
   join<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
-    other: EntityQuery<OtherFromSet, OtherReturn>,
+    other: EntityQueryImpl<OtherFromSet, OtherReturn>,
     alias: Alias,
     thisField: SimpleSelector<From>,
     otherField: SimpleSelector<OtherFromSet>,
@@ -540,7 +502,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     >,
     Return
   > {
-    return new EntityQuery(this.#context, this.#name, {
+    return new EntityQueryImpl(this.#context, this.#name, {
       ...this.#ast,
       joins: [
         ...(this.#ast.joins ?? []),
@@ -558,7 +520,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
   }
 
   leftJoin<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
-    other: EntityQuery<OtherFromSet, OtherReturn>,
+    other: EntityQueryImpl<OtherFromSet, OtherReturn>,
     alias: Alias,
     thisField: SimpleSelector<From>,
     otherField: SimpleSelector<OtherFromSet>,
@@ -571,7 +533,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
     >,
     Return
   > {
-    return new EntityQuery(this.#context, this.#name, {
+    return new EntityQueryImpl(this.#context, this.#name, {
       ...this.#ast,
       joins: [
         ...(this.#ast.joins ?? []),
@@ -588,15 +550,19 @@ export class EntityQuery<From extends FromSet, Return = []> {
     });
   }
 
-  groupBy<Fields extends SimpleSelector<From>[]>(...x: Fields) {
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
+  groupBy<Fields extends SimpleSelector<From>[]>(
+    ...x: Fields
+  ): EntityQuery<From, Return> {
+    return new EntityQueryImpl<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       groupBy: x.map(x => qualifySelector(this.#ast, x)),
     });
   }
 
-  distinct<Field extends SimpleSelector<From>>(field: Field) {
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
+  distinct<Field extends SimpleSelector<From>>(
+    field: Field,
+  ): EntityQuery<From, Return> {
+    return new EntityQueryImpl<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       distinct: qualifySelector(this.#ast, field),
     });
@@ -688,7 +654,7 @@ export class EntityQuery<From extends FromSet, Return = []> {
       }
     }
 
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
+    return new EntityQueryImpl<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       // Can't use satisfies here because WhereCondition is recursive.
       // Tests ensure that the expected AST output satisfies the Condition
@@ -697,22 +663,25 @@ export class EntityQuery<From extends FromSet, Return = []> {
     });
   }
 
-  limit(n: number) {
+  limit(n: number): EntityQuery<From, Return> {
     if (this.#ast.limit !== undefined) {
       throw new Misuse('Limit already set');
     }
 
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
+    return new EntityQueryImpl<From, Return>(this.#context, this.#name, {
       ...this.#ast,
       limit: n,
     });
   }
 
-  orderBy(selector: SimpleSelector<From>, dir: 'asc' | 'desc' = 'asc') {
+  orderBy(
+    selector: SimpleSelector<From>,
+    dir: 'asc' | 'desc' = 'asc',
+  ): EntityQuery<From, Return> {
     const ast = this.#ast;
     const entry = [qualifySelector(ast, selector), dir] as const;
     const orderBy = ast.orderBy ? [...ast.orderBy, entry] : [entry];
-    return new EntityQuery<From, Return>(this.#context, this.#name, {
+    return new EntityQueryImpl<From, Return>(this.#context, this.#name, {
       ...ast,
       orderBy,
     });
@@ -728,6 +697,188 @@ export class EntityQuery<From extends FromSet, Return = []> {
   toString() {
     return JSON.stringify(this.#ast, null, 2);
   }
+}
+
+export interface EntityQuery<From extends FromSet, Return = []> {
+  select<
+    Fields extends (
+      | Selector<From>
+      | Aggregator<From>
+      | SubQuery<From, EntityQuery<From, unknown>>
+    )[],
+  >(
+    ...x: Fields
+  ): EntityQuery<From, CombineSelections<From, Fields>[]>;
+  join<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): EntityQuery<
+    CombineFromSets<
+      From,
+      {
+        [K in Alias]: OtherFromSet[keyof OtherFromSet];
+      }
+    >,
+    Return
+  >;
+  leftJoin<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): EntityQuery<
+    CombineFromSets<
+      From,
+      {
+        [K in Alias]?: OtherFromSet[keyof OtherFromSet] | undefined;
+      }
+    >,
+    Return
+  >;
+  groupBy<Fields extends SimpleSelector<From>[]>(
+    ...x: Fields
+  ): EntityQuery<From, Return>;
+  distinct<Field extends SimpleSelector<From>>(
+    field: Field,
+  ): EntityQuery<From, Return>;
+  where(expr: WhereCondition<From>): EntityQuery<From, Return>;
+  where<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    field: K,
+    op: Op,
+    value: FieldAsOperatorInput<From, K, Op>,
+  ): EntityQuery<From, Return>;
+  where<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ): EntityQuery<From, Return>;
+
+  having(expr: WhereCondition<From>): EntityQuery<From, Return>;
+  having<
+    K extends
+      | SimpleSelector<From>
+      | keyof (Return extends Array<unknown> ? Return[number] : never),
+    Op extends SimpleOperator,
+  >(
+    field: K,
+    op: Op,
+    value: K extends SimpleSelector<From>
+      ? FieldAsOperatorInput<From, K, Op>
+      : Return extends Array<unknown>
+      ? K extends keyof Return[number]
+        ? Return[number][K]
+        : never
+      : never,
+  ): EntityQuery<From, Return>;
+  having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ): EntityQuery<From, Return>;
+
+  limit(n: number): EntityQuery<From, Return>;
+  orderBy(
+    selector: SimpleSelector<From>,
+    dir?: 'asc' | 'desc',
+  ): EntityQuery<From, Return>;
+  prepare(): Statement<Return>;
+  toString(): string;
+}
+
+interface RelatedEntityQuery<
+  From extends FromSet,
+  Name extends string,
+  Return = [],
+> {
+  select<
+    Fields extends (
+      | Selector<From>
+      | Aggregator<From>
+      | SubQuery<From, RelatedEntityQuery<From, string, unknown>>
+    )[],
+  >(
+    ...x: Fields
+  ): RelatedEntityQuery<From, Name, CombineSelections<From, Fields>[]>;
+  join<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): RelatedEntityQuery<
+    CombineFromSets<
+      From,
+      {
+        [K in Alias]: OtherFromSet[keyof OtherFromSet];
+      }
+    >,
+    Name,
+    Return
+  >;
+  leftJoin<OtherFromSet extends FromSet, OtherReturn, Alias extends string>(
+    other: EntityQuery<OtherFromSet, OtherReturn>,
+    alias: Alias,
+    thisField: SimpleSelector<From>,
+    otherField: SimpleSelector<OtherFromSet>,
+  ): RelatedEntityQuery<
+    CombineFromSets<
+      From,
+      {
+        [K in Alias]?: OtherFromSet[keyof OtherFromSet] | undefined;
+      }
+    >,
+    Name,
+    Return
+  >;
+  groupBy<Fields extends SimpleSelector<From>[]>(
+    ...x: Fields
+  ): RelatedEntityQuery<From, Name, Return>;
+  distinct<Field extends SimpleSelector<From>>(
+    field: Field,
+  ): RelatedEntityQuery<From, Name, Return>;
+  where(expr: WhereCondition<From>): EntityQuery<From, Return>;
+  where<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    field: K,
+    op: Op,
+    value: FieldAsOperatorInput<From, K, Op>,
+  ): RelatedEntityQuery<From, Name, Return>;
+  where<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ): RelatedEntityQuery<From, Name, Return>;
+
+  having(expr: WhereCondition<From>): RelatedEntityQuery<From, Name, Return>;
+  having<
+    K extends
+      | SimpleSelector<From>
+      | keyof (Return extends Array<unknown> ? Return[number] : never),
+    Op extends SimpleOperator,
+  >(
+    field: K,
+    op: Op,
+    value: K extends SimpleSelector<From>
+      ? FieldAsOperatorInput<From, K, Op>
+      : Return extends Array<unknown>
+      ? K extends keyof Return[number]
+        ? Return[number][K]
+        : never
+      : never,
+  ): RelatedEntityQuery<From, Name, Return>;
+  having<K extends SimpleSelector<From>, Op extends SimpleOperator>(
+    exprOrField: K | WhereCondition<From>,
+    op?: Op,
+    value?: FieldAsOperatorInput<From, K, Op>,
+  ): RelatedEntityQuery<From, Name, Return>;
+
+  limit(n: number): RelatedEntityQuery<From, Name, Return>;
+  orderBy(
+    selector: SimpleSelector<From>,
+    dir?: 'asc' | 'desc',
+  ): RelatedEntityQuery<From, Name, Return>;
+  prepare(): Statement<Return>;
+  toString(): string;
 }
 
 const astWeakMap = new WeakMap<WeakKey, AST>();
@@ -1000,7 +1151,7 @@ function isSubQuery<From extends FromSet>(
   field:
     | Selector<From>
     | Aggregator<From>
-    | SubQuery<string, From, EntityQuery<From, unknown>>,
-): field is SubQuery<string, From, EntityQuery<From, unknown>> {
+    | SubQuery<From, RelatedEntityQuery<From, string, unknown>>,
+): field is SubQuery<From, RelatedEntityQuery<From, string, unknown>> {
   return typeof field === 'object' && 'name' in field && 'body' in field;
 }

@@ -1,8 +1,8 @@
-import {expect, test} from 'vitest';
 import fc from 'fast-check';
+import {expect, test} from 'vitest';
 import {TestContext} from '../context/test-context.js';
 import {makeComparator} from '../ivm/compare.js';
-import {EntityQuery} from './entity-query.js';
+import {newEntityQuery} from './entity-query.js';
 
 type Track = {
   id: string;
@@ -49,7 +49,7 @@ test('select query with order by', async () => {
           order.map(field => [field, direction]),
           direction,
         );
-        let query = new EntityQuery<{track: Track}>(context, 'track').select(
+        let query = newEntityQuery<{track: Track}>(context, 'track').select(
           '*',
         );
         for (const field of order) {

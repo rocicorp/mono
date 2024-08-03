@@ -5,15 +5,16 @@ import {makeTestContext} from '../context/test-context.js';
 import * as agg from './agg.js';
 import {conditionToString} from './condition-to-string.js';
 import {
-  EntityQuery,
   FieldAsOperatorInput,
   ValueAsOperatorInput,
   WhereCondition,
   and,
   astForTesting,
   exp,
+  newEntityQuery,
   not,
   or,
+  type EntityQuery,
 } from './entity-query.js';
 
 type WeakKey = object;
@@ -34,7 +35,7 @@ test('query types', () => {
     [sym]: boolean;
   };
 
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
   // @ts-expect-error - selecting fields that do not exist in the schema is a type error
   q.select('does-not-exist');
@@ -155,8 +156,8 @@ test('join types', () => {
     name: string;
   };
 
-  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
-  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+  const issueQuery = newEntityQuery<{issue: Issue}>(context, 'issue');
+  const userQuery = newEntityQuery<{user: User}>(context, 'user');
 
   expectTypeOf(
     issueQuery
@@ -239,8 +240,8 @@ test('left join types', () => {
     name: string;
   };
 
-  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
-  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+  const issueQuery = newEntityQuery<{issue: Issue}>(context, 'issue');
+  const userQuery = newEntityQuery<{user: User}>(context, 'user');
 
   const r1 = issueQuery
     .leftJoin(userQuery, 'owner', 'ownerId', 'id')
@@ -450,7 +451,7 @@ test('FieldValue type', () => {
     FieldAsOperatorInput<E, 'optB', 'NOT LIKE'>
   >().toEqualTypeOf<never>();
 
-  const q = new EntityQuery<E>(context, 'e');
+  const q = newEntityQuery<E>(context, 'e');
   q.where('n', '<', 1);
   q.where('s', '>', 'a');
   q.where('b', '=', true);
@@ -505,7 +506,7 @@ const dummyObject: E1 = {
 };
 describe('ast', () => {
   test('select', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
     // each individual field is selectable on its own
     Object.keys(dummyObject).forEach(k => {
@@ -542,7 +543,7 @@ describe('ast', () => {
   });
 
   test('where', () => {
-    let q = new EntityQuery<{e1: E1}>(context, 'e1');
+    let q: EntityQuery<{e1: E1}> = newEntityQuery(context, 'e1');
 
     // where is applied
     q = q.where('id', '=', 'a');
@@ -632,7 +633,7 @@ describe('ast', () => {
   });
 
   test('limit', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = newEntityQuery<{e1: E1}>(context, 'e1');
     expect(ast(q.limit(10))).toEqual({
       table: 'e1',
       limit: 10,
@@ -640,7 +641,7 @@ describe('ast', () => {
   });
 
   test('asc/desc', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
     // order methods update the ast
     expect(ast(q.orderBy('id', 'asc'))).toEqual({
@@ -666,7 +667,7 @@ describe('ast', () => {
   });
 
   test('independent of method call order', () => {
-    const base = new EntityQuery<{e1: E1}>(context, 'e1');
+    const base = newEntityQuery<{e1: E1}>(context, 'e1');
 
     const calls = {
       select(q: typeof base) {
@@ -705,7 +706,7 @@ describe('ast', () => {
   });
 
   test('or', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
     expect(ast(q.where(or(exp('a', '=', 123), exp('c', '=', 'abc'))))).toEqual({
       table: 'e1',
@@ -856,7 +857,7 @@ describe('ast', () => {
   });
 
   test('consecutive wheres/ands should be merged', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
     expect(
       ast(
@@ -1006,7 +1007,7 @@ describe('ast', () => {
   });
 
   test('consecutive ors', () => {
-    const q = new EntityQuery<{e1: E1}>(context, 'e1');
+    const q = newEntityQuery<{e1: E1}>(context, 'e1');
 
     expect(
       ast(q.where(or(exp('a', '=', 123), exp('a', '=', 456)))).where,
@@ -1120,7 +1121,7 @@ describe('NOT', () => {
 
     for (const c of cases) {
       test(`${c.in} -> ${c.out}`, () => {
-        const q = new EntityQuery<{e1: E1}>(context, 'e1');
+        const q = newEntityQuery<{e1: E1}>(context, 'e1');
         expect(ast(q.where(not(exp('a', c.in, 1)))).where).toEqual({
           type: 'simple',
           op: c.out,
@@ -1207,7 +1208,7 @@ describe("De Morgan's Law", () => {
 });
 
 test('where is always qualified', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
   expect(ast(q.where(exp('a', '=', 1))).where).toEqual({
     type: 'simple',
     field: ['e1', 'a'],
@@ -1255,7 +1256,7 @@ test('where is always qualified', () => {
 });
 
 describe('all references to columns are always qualified', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
   test.each([
     {
       test: 'unqualified where',
@@ -1397,7 +1398,8 @@ describe('all references to columns are always qualified', () => {
 });
 
 suite('Return type for EntityQuery', () => {
-  type EntityQueryReturn<Q> = Q extends EntityQuery<never, infer R> ? R : never;
+  type EntityQueryReturn<Q extends EntityQuery<never, unknown>> =
+    Q extends EntityQuery<never, infer R> ? R : never;
 
   type Issue = {
     id: string;
@@ -1411,8 +1413,8 @@ suite('Return type for EntityQuery', () => {
     name: string;
   };
 
-  const issueQuery = new EntityQuery<{issue: Issue}>(context, 'issue');
-  const userQuery = new EntityQuery<{user: User}>(context, 'user');
+  const issueQuery = newEntityQuery<{issue: Issue}>(context, 'issue');
+  const userQuery = newEntityQuery<{user: User}>(context, 'user');
 
   test('select', () => {
     const s = issueQuery.select('issue.id', 'issue.title');
@@ -1495,17 +1497,12 @@ suite('Return type for EntityQuery', () => {
   });
 
   test('select sub query type', () => {
-    // const s = issueQuery.select('issue.id', (pq =>
-    //   pq.related('abc').select('creatorId')) as SubQuery<
-    //   'abc',
-    //   {issue: Issue},
-    //   EntityQuery<{issue: Issue}, {creatorId: string}[]>
-    // >);
     const s = issueQuery.select('issue.id', pq =>
       pq.related('abc').select('creatorId'),
     );
-
-    expectTypeOf<EntityQueryReturn<typeof s>>().toEqualTypeOf<
+    type T1 = typeof s;
+    type T2 = EntityQueryReturn<T1>;
+    expectTypeOf<T2>().toEqualTypeOf<
       {
         abc: {creatorId: string}[];
         id: string;
