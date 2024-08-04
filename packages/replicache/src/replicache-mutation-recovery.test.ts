@@ -1,11 +1,11 @@
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
 import {JSONObject, assertJSONObject} from 'shared/src/json.js';
+import {randomUint64} from 'shared/src/random-uint64.js';
 import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {FormatVersion} from './format-version.js';
-import {makeRandomID} from './make-random-id.js';
 import {
   createAndPersistClientWithPendingLocalSDD,
   createPerdag,
@@ -228,7 +228,9 @@ suite('SDD', () => {
   test('client does not attempt to recover mutations from IndexedDB with different replicache name', async () => {
     const clientWPendingMutationsID = 'client1';
     const schemaVersion = 'testSchema';
-    const replicacheNameOfClientWPendingMutations = `${makeRandomID()}:diffName-pendingClient`;
+    const replicacheNameOfClientWPendingMutations = `${randomUint64().toString(
+      36,
+    )}:diffName-pendingClient`;
     const replicachePartialNameOfClientRecoveringMutations =
       'diffName-recoveringClient';
 

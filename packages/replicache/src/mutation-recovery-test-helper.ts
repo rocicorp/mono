@@ -9,7 +9,6 @@ import {ChainBuilder} from './db/test-helpers.js';
 import {FormatVersion} from './format-version.js';
 import {assertHash, newRandomHash} from './hash.js';
 import {IDBStore} from './kv/idb-store.js';
-import {makeRandomID} from './make-random-id.js';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
 import {IDBDatabasesStore} from './persist/idb-databases-store.js';
 import {persistSDD} from './persist/persist-test-helpers.js';
@@ -65,7 +64,7 @@ export async function createAndPersistClientWithPendingLocalSDD(
   );
   const b = new ChainBuilder(testMemdag, undefined, formatVersion);
   await b.addGenesis(clientID);
-  await b.addSnapshot([['unique', makeRandomID()]], clientID);
+  await b.addSnapshot([['unique', Math.random()]], clientID);
 
   await initClientWithClientID(clientID, perdag, [], {}, formatVersion);
 
@@ -108,7 +107,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
-    [['unique', makeRandomID()]],
+    [['unique', Math.random()]],
     clientID,
     cookie,
     snapshotLastMutationIDs,
@@ -166,7 +165,7 @@ export async function persistSnapshotDD31(
 
   await b.addGenesis(clientID);
   await b.addSnapshot(
-    [['unique', makeRandomID()]],
+    [['unique', Math.random()]],
     clientID,
     cookie,
     snapshotLastMutationIDs,
