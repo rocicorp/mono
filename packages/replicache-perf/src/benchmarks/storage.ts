@@ -1,4 +1,3 @@
-import {uuid} from 'replicache/src/uuid.js';
 import {randomString} from '../data.js';
 import type {Benchmark} from '../perf.js';
 
@@ -13,7 +12,7 @@ function localStorageRead() {
     key: '',
     value: <string | null>null,
     setup() {
-      this.key = uuid();
+      this.key = randomString(36);
       localStorage.setItem(this.key, randomString(100));
     },
     teardown() {
@@ -33,7 +32,7 @@ function localStorageWrite() {
     key: '',
     value: '',
     setup() {
-      this.key = uuid();
+      this.key = randomString(36);
       this.value = randomString(100);
     },
     teardown() {

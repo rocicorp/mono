@@ -11,9 +11,9 @@ import {
   WriteTransaction,
 } from 'replicache/src/mod.js';
 import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
-import {uuid} from 'replicache/src/uuid.js';
 import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
+import {randomUint64} from 'shared/src/random-uint64.js';
 import {
   TestDataObject,
   getTmcwData,
@@ -740,7 +740,7 @@ function benchmarkTmcw(kind: 'populate' | 'persist'): Benchmark {
 }
 
 function makeRepName(): string {
-  return `bench${uuid()}`;
+  return `bench${randomUint64()}`;
 }
 
 function makeRep<MD extends MutatorDefs>(

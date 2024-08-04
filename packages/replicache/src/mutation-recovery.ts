@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
-import {throwChunkHasher, uuidChunkHasher} from './dag/chunk.js';
+import type {MaybePromise} from 'shared/src/types.js';
+import {throwChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
@@ -15,7 +16,7 @@ import {
   FormatVersion,
   parseReplicacheFormatVersion as parseFormatVersion,
 } from './format-version.js';
-import {assertHash} from './hash.js';
+import {assertHash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
 import {
@@ -46,7 +47,6 @@ import type {PushResponse, Pusher} from './pusher.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {beginPullV0, beginPullV1} from './sync/pull.js';
 import {PUSH_VERSION_DD31, PUSH_VERSION_SDD, push} from './sync/push.js';
-import type {MaybePromise} from 'shared/src/types.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
@@ -395,7 +395,7 @@ async function recoverMutationsWithNewPerdag(
   createStore: CreateStore,
 ) {
   const perKvStore = createStore(database.name);
-  const perdag = new StoreImpl(perKvStore, uuidChunkHasher, assertHash);
+  const perdag = new StoreImpl(perKvStore, newRandomHash, assertHash);
   try {
     await recoverMutationsFromPerdag(
       database,
@@ -569,9 +569,10 @@ async function recoverMutationsOfClientGroupDD31(
     wrapInReauthRetries,
     isPushDisabled,
     isPullDisabled,
+    clientGroupIDPromise,
   } = options;
 
-  const selfClientGroupID = await options.clientGroupIDPromise;
+  const selfClientGroupID = await clientGroupIDPromise;
   assertNotUndefined(selfClientGroupID);
   if (selfClientGroupID === clientGroupID) {
     return;

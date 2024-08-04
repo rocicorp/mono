@@ -11,7 +11,6 @@ import {
 } from './benchmarks/idb.js';
 import {benchmarks as replicacheBenchmarks} from './benchmarks/replicache.js';
 import {benchmarks as storageBenchmarks} from './benchmarks/storage.js';
-import {benchmarks as uuidBenchmarks} from './benchmarks/uuid.js';
 import type {RandomDataType} from './data.js';
 import {
   formatAsBenchmarkJS,
@@ -151,7 +150,6 @@ export const benchmarks = [
   ...hashBenchmarks(),
   ...storageBenchmarks(),
   ...compareBenchmarks(),
-  ...uuidBenchmarks(),
   ...mapLoopBenchmarks(),
 ];
 

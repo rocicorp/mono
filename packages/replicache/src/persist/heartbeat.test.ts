@@ -4,21 +4,21 @@ import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
-import {uuidChunkHasher} from '../dag/chunk.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {assertHash, fakeHash} from '../hash.js';
+import {assertHash, fakeHash, newRandomHash} from '../hash.js';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
 import {withRead} from '../with-transactions.js';
 import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
 import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
 import {
+  HEARTBEAT_INTERVAL,
   latestHeartbeatUpdate,
   startHeartbeats,
   writeHeartbeat,
 } from './heartbeat.js';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
 
 let clock: SinonFakeTimers;
 const START_TIME = 100000;
@@ -65,6 +65,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
     'client1',
     dagStore,
     () => undefined,
+    HEARTBEAT_INTERVAL,
     new LogContext(),
     controller.signal,
   );
@@ -134,6 +135,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
     'client1',
     dagStore,
     () => undefined,
+    HEARTBEAT_INTERVAL,
     new LogContext(),
     controller.signal,
   );
@@ -240,6 +242,7 @@ test('heartbeat with missing client calls callback', async () => {
     'client1',
     dagStore,
     onClientStateNotFound,
+    HEARTBEAT_INTERVAL,
     new LogContext(),
     controller.signal,
   );
@@ -252,7 +255,7 @@ test('heartbeat with dropped idb throws', async () => {
   const {resolve, promise} = resolver();
   const name = `heartbeat-test-dropped-idb-${Math.random()}`;
   const ibdStore = new IDBStore(name);
-  const dagStore = new StoreImpl(ibdStore, uuidChunkHasher, assertHash);
+  const dagStore = new StoreImpl(ibdStore, newRandomHash, assertHash);
   const onClientStateNotFound = sinon.fake();
   const controller = new AbortController();
 
@@ -268,6 +271,7 @@ test('heartbeat with dropped idb throws', async () => {
     'client1',
     dagStore,
     onClientStateNotFound,
+    HEARTBEAT_INTERVAL,
     new LogContext('error', undefined, testLogSink),
     controller.signal,
   );

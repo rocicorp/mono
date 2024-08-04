@@ -17,7 +17,6 @@ import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
 import {assertCookie, type Cookie} from './cookies.js';
-import {uuidChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
@@ -39,11 +38,12 @@ import {FormatVersion} from './format-version.js';
 import {deepFreeze} from './frozen-json.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
-import {assertHash, emptyHash, Hash} from './hash.js';
+import {assertHash, emptyHash, Hash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {StoreProvider} from './kv/store.js';
 import {createLogContext} from './log-options.js';
+import {makeRandomID} from './make-random-id.js';
 import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
@@ -52,7 +52,11 @@ import {
   PersistInfo,
 } from './on-persist-channel.js';
 import {PendingMutation, pendingMutationsForAPI} from './pending-mutations.js';
-import {initClientGC} from './persist/client-gc.js';
+import {
+  CLIENT_MAX_INACTIVE_TIME,
+  GC_INTERVAL,
+  initClientGC,
+} from './persist/client-gc.js';
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
 import {
@@ -61,8 +65,13 @@ import {
   initClientV6,
   hasClientState as persistHasClientState,
 } from './persist/clients.js';
-import {initCollectIDBDatabases} from './persist/collect-idb-databases.js';
-import {startHeartbeats} from './persist/heartbeat.js';
+import {
+  COLLECT_IDB_INTERVAL,
+  initCollectIDBDatabases,
+  INITIAL_COLLECT_IDB_DELAY,
+  SDD_IDB_MAX_AGE,
+} from './persist/collect-idb-databases.js';
+import {HEARTBEAT_INTERVAL, startHeartbeats} from './persist/heartbeat.js';
 import {
   IDBDatabasesStore,
   IndexedDBDatabase,
@@ -117,7 +126,6 @@ import type {
   RequestOptions,
   UpdateNeededReason,
 } from './types.js';
-import {uuid as makeUuid} from './uuid.js';
 import {version} from './version.js';
 import {
   withRead,
@@ -250,7 +258,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
   #closed = false;
   #online = true;
-  readonly #clientID = makeUuid();
+  readonly #clientID = makeRandomID();
   readonly #ready: Promise<void>;
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
@@ -404,6 +412,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     options: ReplicacheOptions<MD>,
     implOptions: ReplicacheImplOptions = {},
   ) {
+    validateOptions(options);
     const {
       name,
       logLevel = 'info',
@@ -420,6 +429,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       pusher,
       licenseKey,
       indexes = {},
+      clientMaxAgeMs = CLIENT_MAX_INACTIVE_TIME,
     } = options;
     const {
       enableMutationRecovery = true,
@@ -433,9 +443,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
-    if (typeof name !== 'string' || !name) {
-      throw new TypeError('name is required and must be non-empty');
-    }
     this.name = name;
     this.schemaVersion = schemaVersion;
     this.pullInterval = pullInterval;
@@ -465,11 +472,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const perKVStore = kvStoreProvider.create(this.idbName);
 
     this.#idbDatabases = new IDBDatabasesStore(kvStoreProvider.create);
-    this.perdag = new StoreImpl(perKVStore, uuidChunkHasher, assertHash);
+    this.perdag = new StoreImpl(perKVStore, newRandomHash, assertHash);
     this.memdag = new LazyStore(
       this.perdag,
       LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-      uuidChunkHasher,
+      newRandomHash,
       assertHash,
     );
 
@@ -534,6 +541,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     void this.#open(
       indexes,
       enableClientGroupForking,
+      clientMaxAgeMs,
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
@@ -545,6 +553,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   async #open(
     indexes: IndexDefinitions,
     enableClientGroupForking: boolean,
+    clientMaxAgeMs: number,
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
     resolveReady: () => void,
@@ -578,8 +587,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     await this.#licenseCheck(resolveLicenseCheck);
 
     if (this.#enablePullAndPushInOpen) {
-      void this.pull().catch(noop);
-      void this.push().catch(noop);
+      this.pull().catch(noop);
+      this.push().catch(noop);
     }
 
     const {signal} = this.#closeAbortController;
@@ -590,15 +599,27 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       () => {
         this.#clientStateNotFoundOnClient(clientID);
       },
+      HEARTBEAT_INTERVAL,
       this.#lc,
       signal,
     );
-    initClientGC(clientID, this.perdag, this.#lc, signal);
-    initCollectIDBDatabases(
-      this.#idbDatabases,
+    initClientGC(
+      clientID,
+      this.perdag,
+      clientMaxAgeMs,
+      GC_INTERVAL,
       this.#lc,
       signal,
+    );
+    initCollectIDBDatabases(
+      this.#idbDatabases,
       this.#kvStoreProvider.drop,
+      COLLECT_IDB_INTERVAL,
+      INITIAL_COLLECT_IDB_DELAY,
+      SDD_IDB_MAX_AGE,
+      2 * clientMaxAgeMs,
+      this.#lc,
+      signal,
     );
     initClientGroupGC(this.perdag, this.#lc, signal);
     initNewClientChannel(
@@ -1703,5 +1724,23 @@ async function throwIfError(p: Promise<undefined | {error: unknown}>) {
 function reload(): void {
   if (typeof location !== 'undefined') {
     location.reload();
+  }
+}
+
+function validateOptions<MD extends MutatorDefs>(
+  options: ReplicacheOptions<MD>,
+): void {
+  const {name, clientMaxAgeMs} = options;
+  if (typeof name !== 'string' || !name) {
+    throw new TypeError('name is required and must be non-empty');
+  }
+
+  if (clientMaxAgeMs !== undefined) {
+    const min = Math.max(GC_INTERVAL, HEARTBEAT_INTERVAL);
+    if (typeof clientMaxAgeMs !== 'number' || clientMaxAgeMs <= min) {
+      throw new TypeError(
+        `clientAgeMaxMs must be a number larger than ${min}ms`,
+      );
+    }
   }
 }

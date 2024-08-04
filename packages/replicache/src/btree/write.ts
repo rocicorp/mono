@@ -5,7 +5,7 @@ import {toRefs, type Chunk, type CreateChunk} from '../dag/chunk.js';
 import type {Write} from '../dag/store.js';
 import type {FormatVersion} from '../format-version.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
-import {Hash, emptyHash, newUUIDHash} from '../hash.js';
+import {Hash, emptyHash, newRandomHash} from '../hash.js';
 import {getSizeOfEntry} from '../size-of-value.js';
 import {
   DataNodeImpl,
@@ -69,7 +69,7 @@ export class BTreeWrite extends BTreeRead {
   updateNode(node: DataNodeImpl | InternalNodeImpl): void {
     assert(node.isMutable);
     this.#modified.delete(node.hash);
-    node.hash = newUUIDHash();
+    node.hash = newRandomHash();
     this.#addToModified(node);
   }
 
@@ -77,13 +77,13 @@ export class BTreeWrite extends BTreeRead {
     entries: Array<Entry<Hash>>,
     level: number,
   ): InternalNodeImpl {
-    const n = new InternalNodeImpl(entries, newUUIDHash(), level, true);
+    const n = new InternalNodeImpl(entries, newRandomHash(), level, true);
     this.#addToModified(n);
     return n;
   }
 
   newDataNodeImpl(entries: Entry<FrozenJSONValue>[]): DataNodeImpl {
-    const n = new DataNodeImpl(entries, newUUIDHash(), true);
+    const n = new DataNodeImpl(entries, newRandomHash(), true);
     this.#addToModified(n);
     return n;
   }
@@ -98,7 +98,7 @@ export class BTreeWrite extends BTreeRead {
     entries: Entry<Hash>[] | Entry<FrozenJSONValue>[],
     level: number,
   ): InternalNodeImpl | DataNodeImpl {
-    const n = newNodeImpl(entries, newUUIDHash(), level, true);
+    const n = newNodeImpl(entries, newRandomHash(), level, true);
     this.#addToModified(n);
     return n;
   }

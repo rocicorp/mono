@@ -1,6 +1,6 @@
 import {assert, assertString} from 'shared/src/asserts.js';
 import {assertDeepFrozen} from '../frozen-json.js';
-import {Hash, newUUIDHash} from '../hash.js';
+import type {Hash} from '../hash.js';
 
 // By using declare we tell the type system that there is a unique symbol.
 // However, there is no such symbol but the type system does not care.
@@ -85,8 +85,6 @@ export function createChunk<V>(
 export type CreateChunk = <V>(data: V, refs: Refs) => Chunk<V>;
 
 export type ChunkHasher = () => Hash;
-
-export {newUUIDHash as uuidChunkHasher};
 
 export function throwChunkHasher(): Hash {
   throw new Error('unexpected call to compute chunk hash');

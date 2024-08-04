@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import {FormatVersion} from './format-version.js';
+import {makeRandomID} from './make-random-id.js';
 import {
   createAndPersistClientWithPendingLocalDD31,
   createAndPersistClientWithPendingLocalSDD,
@@ -47,7 +48,6 @@ import {
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util.js';
-import {uuid} from './uuid.js';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
@@ -508,7 +508,7 @@ suite('DD31', () => {
     const formatVersion = FormatVersion.Latest;
     const clientWPendingMutationsID = 'client1';
     const schemaVersion = 'testSchema';
-    const replicacheNameOfClientWPendingMutations = `${uuid}:diffName-pendingClient`;
+    const replicacheNameOfClientWPendingMutations = `${makeRandomID()}:diffName-pendingClient`;
     const replicachePartialNameOfClientRecoveringMutations =
       'diffName-recoveringClient';
 
