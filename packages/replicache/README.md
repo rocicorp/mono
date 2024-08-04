@@ -53,7 +53,6 @@ npm install
 ```bash
 vim packages/replicache/package.json
 # Must be done in root of mono checkout
-npm install
 npx syncpack fix-mismatches
 npm install
 npm run build
