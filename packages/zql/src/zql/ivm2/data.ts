@@ -26,6 +26,7 @@ import type {Ordering} from '../ast2/ast.js';
  *
  * TODO: Add support for undefined to support optimistic mutations on client
  * that omit fields.
+ * TODO: This file needs unit tests.
  */
 export type Value = null | boolean | number | string;
 
