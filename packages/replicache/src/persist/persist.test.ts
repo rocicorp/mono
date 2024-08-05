@@ -23,7 +23,6 @@ import {
 } from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
-import {makeRandomID} from '../make-random-id.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
 import type {MutatorDefs} from '../types.js';
@@ -45,6 +44,7 @@ import {
   initClientV6,
   setClients,
 } from './clients.js';
+import {makeClientID} from './make-client-id.js';
 import {persistDD31} from './persist.js';
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
@@ -892,7 +892,7 @@ async function setupPersistTest() {
 
   let clientGroupID: undefined | ClientGroupID;
   const createClient = async () => {
-    const cID = makeRandomID();
+    const cID = makeClientID();
     const [c] = await initClientV6(
       cID,
       new LogContext(),

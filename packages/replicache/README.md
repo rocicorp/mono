@@ -16,7 +16,7 @@ tar -xvf replicache-$LAST_RELEASE_VERSION.tgz
 cd -
 
 # COMPARE
-diff -u /tmp/package/out/replicache.d.ts packages/out/replicache/replicache.d.ts | less
+diff -u /tmp/package/out/replicache.d.ts packages/replicache/out/replicache.d.ts | less
 # or
 # code --diff /tmp/package/out/replicache.d.ts packages/replicache/out/replicache.d.ts
 ```
@@ -28,7 +28,7 @@ Next look through all changes in the repo since the last release. To do this pro
 ```bash
 # List all commits on main from the commit prior to last tag (which should be
 # present on main) to HEAD.
-git log replicache/v$LAST_RELEASE_VERSION^..HEAD
+git log --oneline replicache/v$LAST_RELEASE_VERSION^..HEAD
 ```
 
 Build a list of all changes that affect Replicache. This will become the release notes later.
@@ -53,7 +53,6 @@ npm install
 ```bash
 vim packages/replicache/package.json
 # Must be done in root of mono checkout
-npm install
 npx syncpack fix-mismatches
 npm install
 npm run build

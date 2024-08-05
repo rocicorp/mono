@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
+import {randomUint64} from 'shared/src/random-uint64.js';
 import * as sinon from 'sinon';
 import {SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
@@ -11,7 +12,6 @@ import type {Hash} from './hash.js';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {MemStore} from './kv/mem-store.js';
 import type {Store as KVStore} from './kv/store.js';
-import {makeRandomID} from './make-random-id.js';
 import type {PatchOperation} from './patch-operation.js';
 import {
   setupForTest as setupIDBDatabasesStoreForTest,
@@ -207,7 +207,7 @@ export async function replicacheForTesting<
       pullURL,
       pushDelay,
       pushURL,
-      name: useUniqueName ? `${makeRandomID()}:${name}` : name,
+      name: useUniqueName ? `${randomUint64().toString(36)}:${name}` : name,
       licenseKey: licenseKey ?? TEST_LICENSE_KEY,
       ...rest,
     },

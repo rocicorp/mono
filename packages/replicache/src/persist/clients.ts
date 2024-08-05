@@ -24,7 +24,6 @@ import type {FormatVersion} from '../format-version.js';
 import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {Hash, hashSchema} from '../hash.js';
 import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
-import {makeRandomID} from '../make-random-id.js';
 import {
   clientGroupIDSchema,
   type ClientGroupID,
@@ -38,6 +37,7 @@ import {
   mutatorNamesEqual,
   setClientGroup,
 } from './client-groups.js';
+import {makeClientID} from './make-client-id.js';
 
 export type ClientMap = ReadonlyMap<ClientID, ClientV4 | ClientV5 | ClientV6>;
 export type ClientMapDD31 = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
@@ -318,7 +318,7 @@ export function initClientV6(
         getRefs(newSnapshotData),
       );
 
-      const newClientGroupID = makeRandomID();
+      const newClientGroupID = makeClientID();
 
       const newClient: ClientV6 = {
         heartbeatTimestampMs: Date.now(),
