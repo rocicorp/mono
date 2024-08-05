@@ -23,6 +23,9 @@ import type {Ordering} from '../ast2/ast.js';
  *
  * These two facts leave us with the following allowed types. Zero's replication
  * layer must convert other types into these for tables to be used with Zero.
+ *
+ * TODO: Add support for undefined to support optimistic mutations on client
+ * that omit fields.
  */
 export type Value = null | boolean | number | string;
 
@@ -43,6 +46,13 @@ export type Row = Record<string, Value>;
  * composed of multiple columns are supported (and required, due to junction
  * tables). Rows from the same source having the same ID are considered to be
  * the same row, without comparing other fields.
+ *
+ * The code that vends these IDs must return the columns in some consistent
+ * order over the lifetime of the process. This avoid the sort having to be done
+ * at the time of comparison.
+ *
+ * TODO: Microbenchmark this approach against the version where we put an ID
+ * symbol on each object. Benchmark maintaining some sorted list of rows.
  */
 export type ID = Value[];
 
@@ -98,8 +108,8 @@ export function compareValues(a: Value, b: Value): number {
     // and we need to match it. See:
     // https://blog.replicache.dev/blog/replicache-11-adventures-in-text-encoding.
     //
-    // TODO(aa): We could change this since SQLite supports UTF-16. Not sure
-    // how much perf it would buy us?
+    // TODO: We could change this since SQLite supports UTF-16. Microbenchmark
+    // to see if there's a big win.
     //
     // https://www.sqlite.org/c3ref/create_collation.html
     return compareUTF8(a, b);

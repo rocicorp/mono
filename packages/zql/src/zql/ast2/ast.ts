@@ -1,3 +1,7 @@
+/**
+ * As in SQL you can have multiple orderings. We don't currently
+ * support ordering on anything other than the root query.
+ */
 export type OrderPart = [field: string, direction: 'asc' | 'desc'];
 export type Ordering = OrderPart[];
 
