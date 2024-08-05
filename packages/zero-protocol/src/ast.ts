@@ -82,13 +82,27 @@ export const conjunctionSchema = v.object({
   conditions: v.array(conditionSchema),
 });
 
+const subQuerySchema: v.Type<{
+  type: 'subQuery';
+  name: string;
+  ast: AST;
+}> = v.lazy(() =>
+  v.object({
+    type: v.literal('subQuery'),
+    name: v.string(),
+    ast: astSchema,
+  }),
+);
+
+const selectSchema = readonly(
+  readonly(v.tuple([v.union(selectorSchema, subQuerySchema), v.string()])),
+);
+
 export const astSchema = v.object({
   schema: v.string().optional(),
   table: v.string(),
   alias: v.string().optional(),
-  select: readonly(
-    v.array(readonly(v.tuple([selectorSchema, v.string()]))),
-  ).optional(),
+  select: readonly(v.array(selectSchema)).optional(),
   aggregate: v.array(aggregationSchema).optional(),
   where: conditionSchema.optional(),
   joins: v.array(joinSchema).optional(),
@@ -96,6 +110,8 @@ export const astSchema = v.object({
   groupBy: v.array(selectorSchema).optional(),
   orderBy: orderingSchema.optional(),
 });
+
+type AST = v.Infer<typeof astSchema>;
 
 export const equalityOpsSchema = v.union(v.literal('='), v.literal('!='));
 

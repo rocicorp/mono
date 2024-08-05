@@ -1818,8 +1818,8 @@ test('the type of collection should be inferred from options with parse', () => 
   });
 
   const c: {
-    readonly issue: EntityQuery<{issue: Issue}, []>;
-    readonly comment: EntityQuery<{comment: Comment}, []>;
+    readonly issue: EntityQuery<{issue: Issue}>;
+    readonly comment: EntityQuery<{comment: Comment}>;
   } = r.query;
   expect(c).not.undefined;
 

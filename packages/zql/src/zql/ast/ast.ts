@@ -3,6 +3,7 @@
 
 import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
+import {assert} from 'shared/src/asserts.js';
 
 export type Selector = readonly [table: string, column: string];
 
@@ -33,6 +34,8 @@ export type Join = {
 
 // type Ref = `${string}.${string}`;
 
+type Select = readonly [selector: Selector | SubQueryAST, alias: string];
+
 /**
  * Note: We'll eventually need to start ordering conditions
  * in the dataflow graph so we get the maximum amount
@@ -42,9 +45,7 @@ export type AST = {
   readonly schema?: string | undefined;
   readonly table: string;
   readonly alias?: string | undefined;
-  readonly select?:
-    | readonly (readonly [selector: Selector, alias: string])[]
-    | undefined;
+  readonly select?: readonly Select[] | undefined;
   readonly distinct?: Selector | undefined;
   readonly aggregate?: Aggregation[] | undefined;
   // readonly subQueries?: {
@@ -59,6 +60,18 @@ export type AST = {
   readonly having?: HavingCondition | undefined;
   // readonly after?: Primitive;
 };
+
+export type SubQueryAST = {
+  type: 'subQuery';
+  name: string;
+  ast: AST;
+};
+
+export function assertSelector(
+  selector: Selector | SubQueryAST,
+): asserts selector is Selector {
+  assert(Array.isArray(selector));
+}
 
 export type Condition = SimpleCondition | Conjunction;
 export type HavingCondition = SimpleHavingCondition | HavingConjunction;
@@ -138,11 +151,7 @@ export function normalizeAST(ast: AST): AST {
     schema: ast.schema,
     table: ast.table,
     alias: ast.alias,
-    select: ast.select
-      ? [...ast.select].sort(
-          ([a], [b]) => compareUTF8(a[0], b[0]) || compareUTF8(a[1], b[1]),
-        )
-      : undefined,
+    select: ast.select && normalizeSelect(ast.select),
     aggregate: ast.aggregate
       ? [...ast.aggregate].sort((a, b) => {
           const cmp = compareUTF8(a.aggregate, b.aggregate);
@@ -172,6 +181,50 @@ export function normalizeAST(ast: AST): AST {
     // is left as is (i.e. not sorted).
     orderBy: ast.orderBy,
     limit: ast.limit,
+  };
+}
+
+function isSubQuerySelect(
+  s: Select,
+): s is readonly [SubQueryAST, alias: string] {
+  return (s[0] as {type: string}).type === 'subQuery';
+}
+function isSelectorSelect(s: Select): s is readonly [Selector, alias: string] {
+  return Array.isArray(s);
+}
+
+function compareSelect(a: Select, b: Select): number {
+  // Order selectors first, sub queries second
+  if (isSelectorSelect(a)) {
+    if (isSelectorSelect(b)) {
+      return compareUTF8(a[0][0], b[0][0]) || compareUTF8(a[0][1], b[0][1]);
+    }
+    return -1;
+  }
+  if (isSubQuerySelect(b)) {
+    return compareUTF8((a[0] as SubQueryAST).name, b[0].name);
+  }
+  return 1;
+}
+
+function normalizeSelect(select: readonly Select[]): readonly Select[] {
+  const newSelect = [...select];
+  newSelect.sort(compareSelect);
+
+  for (let i = 0; i < newSelect.length; i++) {
+    const s = newSelect[i];
+    if (isSubQuerySelect(s)) {
+      newSelect[i] = [normalizeSubQueryAST(s[0]), s[1]];
+    }
+  }
+  return newSelect;
+}
+
+function normalizeSubQueryAST(subQuery: SubQueryAST): SubQueryAST {
+  return {
+    type: 'subQuery',
+    name: subQuery.name,
+    ast: normalizeAST(subQuery.ast),
   };
 }
 

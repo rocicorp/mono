@@ -104,9 +104,11 @@ async function preload(z: Zero<Collections>) {
   console.debug('COMPLETED PRELOAD');
 }
 
+type NoRelations = Record<string, never>;
+
 async function incrementalPreload<F extends FromSet, R>(
   description: string,
-  baseQuery: EntityQuery<F, R[]>,
+  baseQuery: EntityQuery<F, NoRelations, R[]>,
   targetLimit: number,
   increment: number,
   currentLimit = 0,

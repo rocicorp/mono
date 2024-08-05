@@ -4,8 +4,10 @@ import type {FromSet} from 'zql/src/zql/query/entity-query.js';
 import type {ResultType} from 'zql/src/zql/query/statement.js';
 export type {ResultType} from 'zql/src/zql/query/statement.js';
 
+type NoRelations = Record<string, never>;
+
 export function useQuery<From extends FromSet, Return>(
-  q: EntityQuery<From, Return>,
+  q: EntityQuery<From, NoRelations, Return>,
   dependencies: readonly unknown[] = [],
   enabled = true,
 ): Return {
@@ -13,7 +15,7 @@ export function useQuery<From extends FromSet, Return>(
 }
 
 export function useQueryWithResultType<From extends FromSet, Return>(
-  q: EntityQuery<From, Return>,
+  q: EntityQuery<From, NoRelations, Return>,
   dependencies: readonly unknown[] = [],
   enabled = true,
 ): {value: Return; resultType: ResultType} {
@@ -26,7 +28,7 @@ export function useQueryWithResultType<From extends FromSet, Return>(
 }
 
 function useQueryWithMakeSnapshot<From extends FromSet, Return, Snapshot>(
-  q: EntityQuery<From, Return>,
+  q: EntityQuery<From, NoRelations, Return>,
   dependencies: readonly unknown[],
   enabled: boolean,
   makeSnapshot: (v: Return, resultType: ResultType) => Snapshot,

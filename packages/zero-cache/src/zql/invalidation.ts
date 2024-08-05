@@ -1,11 +1,12 @@
 import {compareUTF8} from 'compare-utf8';
 import {defined} from 'shared/src/arrays.js';
-import type {
-  Condition,
-  Primitive,
-  Selector,
-  SimpleCondition,
-  SimpleOperator,
+import {
+  assertSelector,
+  type Condition,
+  type Primitive,
+  type Selector,
+  type SimpleCondition,
+  type SimpleOperator,
 } from 'zql/src/zql/ast/ast.js';
 import {BigIntJSON} from '../types/bigint-json.js';
 import {
@@ -53,7 +54,11 @@ function computeInvalidationInfoNormalized(ast: ServerAST): InvalidationInfo {
   };
 
   const selected = new Map<string, Selector | undefined>([
-    ...(select ?? []).map(([col]) => [col.join('.'), col] as const),
+    ...(select ?? []).map(([col]) => {
+      // TODO(arv): Implement Sub Queries, especially nested ones...
+      assertSelector(col);
+      return [col.join('.'), col] as const;
+    }),
     ...(aggregate ?? []).map(
       agg =>
         [

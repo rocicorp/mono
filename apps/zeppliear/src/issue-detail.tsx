@@ -404,7 +404,9 @@ type FS = {
   label: Label;
 };
 
-type Q = EntityQuery<FS, {issue: Issue; labels: string[]}[]>;
+type NoRelations = Record<string, never>;
+
+type Q = EntityQuery<FS, NoRelations, {issue: Issue; labels: string[]}[]>;
 
 function getNextIssueQuery(
   issueSelectQuery: Q,

@@ -44,7 +44,7 @@ export async function benchZQL(
   preRun: Mutator | undefined,
   queries: readonly (readonly [
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    query: (queries: Queries) => EntityQuery<any, any>,
+    query: (queries: Queries) => EntityQuery<any, any, any>,
     times: number,
   ])[],
   mutations: readonly (readonly [mutation: Mutator, times: number])[],
