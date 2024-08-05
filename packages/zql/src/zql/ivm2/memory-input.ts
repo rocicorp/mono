@@ -41,10 +41,10 @@ export class MemoryInput implements Input {
 
   push(changes: Iterable<Change>) {
     assertNotNull(this.#output);
-    this.#output.push(
-      this,
-      new ChangeStream(this.#applyChanges(changes), 'needy'),
-    );
+    this.#output.push(this, {
+      sorted: false,
+      changes: new ChangeStream(this.#applyChanges(changes), 'needy'),
+    });
   }
 
   *#applyChanges(changes: Iterable<Change>) {
@@ -60,10 +60,12 @@ export class MemoryInput implements Input {
   }
 
   pull(_req: Request) {
-    // TODO(aa): Honor Request constraints.
     return {
       appliedFilters: [],
-      diff: new ChangeStream(this.#pullChanges(), 'normal'),
+      diff: {
+        sorted: true,
+        changes: new ChangeStream(this.#pullChanges(), 'normal'),
+      },
     };
   }
 

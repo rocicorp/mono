@@ -10,8 +10,28 @@ import type {Row} from './data.js';
  * consume a TreeDiff by iterating it. As each Change comes out of a level of
  * TreeDiff, you gain access to "subdiffs" that represents the changes to each
  * subquery. These in turn are also lazy.
+ *
+ * TreeDiffs come either sorted or unsorted. If sorted, the sort is by the
+ * sort of the query. The sort applies only to the the current level of the
+ * tree. Subdiffs may be sorted or unsorted.
+ *
+ * Sorted TreeDiffs are useful because they allow us to stop consuming the
+ * stream as soon as we have enough data. This is important for queries with
+ * limits.
+ *
+ * Unsorted TreeDiffs are used when new data is pushed into the pipeline. In
+ * this case, the data pushed in is not sorted - it's just in the order the
+ * changes happened in. In this case, consumers must consume the entire stream
+ * to ensure they have the complete state of the query.
+ *
+ * We enforce that unsorted TreeDiffs are completely consumed by making the
+ * initial iterator that vends the data a 'needy' ChangeStream. See
+ * ChangeStream for more information.
  */
-export type TreeDiff = Iterable<Change>;
+export type TreeDiff = {
+  readonly changes: Iterable<Change>;
+  readonly sorted: boolean;
+};
 
 /**
  * Currently, the only change types are "add" and "remove". We represent edits

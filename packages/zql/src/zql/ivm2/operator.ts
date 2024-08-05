@@ -51,8 +51,6 @@ export type Request = {
 
   // If null, it means include all subdiffs.
   restrictToSubdiffs: string[] | null;
-
-  // TODO: startAt, direction for limit?
 };
 
 export const everything = {
@@ -67,6 +65,8 @@ export const everything = {
  */
 export type Response = {
   diff: TreeDiff;
+  // The filters that the source applied to the response. This allows the
+  // Filter operator to know if it needs to reapply the filter.
   appliedFilters: Filter[];
 };
 

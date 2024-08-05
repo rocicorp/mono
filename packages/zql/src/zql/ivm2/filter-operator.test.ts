@@ -33,12 +33,12 @@ test('basics', () => {
   ]);
 
   // Pulling should only return rows that currently match filter.
-  expect([...filter.pull(everything).diff]).toEqual([
+  expect([...filter.pull(everything).diff.changes]).toEqual([
     {type: 'add', row: {id: 3, f: 1}},
   ]);
 
   // But if we look at mem, we see the non-matching rows are still there.
-  expect([...mem.pull(everything).diff]).toEqual([
+  expect([...mem.pull(everything).diff.changes]).toEqual([
     {type: 'add', row: {id: 2, f: 2}},
     {type: 'add', row: {id: 3, f: 1}},
   ]);

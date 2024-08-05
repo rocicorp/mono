@@ -31,7 +31,7 @@ test('push/pull', () => {
   ]);
 
   // Pull should see rows in correct sorted order.
-  expect([...ms.pull(everything).diff]).toEqual([
+  expect([...ms.pull(everything).diff.changes]).toEqual([
     {type: 'add', row: {id: 4, v: 'c'}},
     {type: 'add', row: {id: 1, v: 'a'}},
     {type: 'add', row: {id: 2, v: 'a'}},
@@ -47,8 +47,8 @@ test('pull during push', () => {
   const pulled: Change[][] = [];
   const output = {
     push: (input: Input, diff: TreeDiff) => {
-      for (const _ of diff) {
-        pulled.push([...input.pull(everything).diff]);
+      for (const _ of diff.changes) {
+        pulled.push([...input.pull(everything).diff.changes]);
       }
     },
   };

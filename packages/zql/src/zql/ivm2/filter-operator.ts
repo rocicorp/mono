@@ -34,7 +34,10 @@ export class FilterOperator implements Operator {
 
   push(_source: Input, diff: TreeDiff) {
     assertNotNull(this.#output);
-    this.#output.push(this, this.#apply(diff));
+    this.#output.push(this, {
+      ...diff,
+      changes: this.#apply(diff.changes),
+    });
   }
 
   pull(req: Request) {
@@ -51,12 +54,16 @@ export class FilterOperator implements Operator {
 
     return {
       ...resp,
-      diff: this.#apply(resp.diff),
+      diff: {
+        ...resp.diff,
+        changes: this.#apply(resp.diff.changes),
+      },
     };
   }
 
   *#apply(changes: Iterable<Change>) {
     for (const change of changes) {
+      // We can ignore nops because Filter doesn't support subdiffs.
       if (change.type === 'nop') {
         yield change;
       }
@@ -73,6 +80,9 @@ export class FilterOperator implements Operator {
 }
 
 function matchesPredicate(lhs: Value, op: SimpleOperator, rhs: Value): boolean {
+  // TODO: Microbenchmark this case statement against returning a lambda and
+  // calling it over and over.
+
   // TODO: What should be our policy on errors here?
   // We need to think about what happens when a pipeline fails. This
   // can happen if the db schema changes or doesn't match what dev
