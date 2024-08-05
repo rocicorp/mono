@@ -1,5 +1,11 @@
 import {assert} from 'shared/src/asserts.js';
-import type {AST, Condition, Ordering, Selector} from 'zql/src/zql/ast/ast.js';
+import {
+  assertSelector,
+  type AST,
+  type Condition,
+  type Ordering,
+  type Selector,
+} from 'zql/src/zql/ast/ast.js';
 import type {ServerAST, SubQuery} from './server-ast.js';
 
 /**
@@ -241,6 +247,8 @@ export function expandSubqueries(
   const selected = new Set<string>();
   // Add all referenced fields / selectors.
   select?.forEach(([selector, alias]) => {
+    // TODO(arv): Deal with sub queries. Especially nested...
+    assertSelector(selector);
     addSelector(selector);
     selected.add(alias);
   });
@@ -366,11 +374,13 @@ export function reAliasAndBubbleSelections(
     const defaultFrom = ast.table;
     const reAliasMap = new Map<string, string>();
     reAliasMaps.set(defaultFrom, reAliasMap);
-    select?.forEach(([parts, alias]) => {
-      reAliasMap.set(alias, parts[1]); // Use the original column name.
+    select?.forEach(([selector, alias]) => {
+      // TODO(arv): Deal with sub queries. Especially nested...
+      assertSelector(selector);
+      reAliasMap.set(alias, selector[1]); // Use the original column name.
 
       // Also map the column name to itself.
-      const column = parts[1];
+      const column = selector[1];
       reAliasMap.set(column, column);
     });
   }
@@ -400,6 +410,8 @@ export function reAliasAndBubbleSelections(
     select: [
       ...(select ?? []).map(
         ([selector, alias]): readonly [Selector, string] => {
+          // TODO(arv): Deal with sub queries. Especially nested...
+          assertSelector(selector);
           const newSelector = renameSelector(selector);
           const newAlias = [
             newSelector[0].split('.').join(ALIAS_COMPONENT_SEPARATOR),

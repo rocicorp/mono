@@ -296,7 +296,7 @@ function filterQuery(
   // TODO: having to know the from set and return type of the query to take it in as an arg is...
   // confusing at best.
   // TODO: having to know the `FromSet` is dumb.
-  q: EntityQuery<{issue: Issue; label: Label}, []>,
+  q: EntityQuery<{issue: Issue; label: Label}>,
   view: string | null,
   filters: FiltersState,
 ) {

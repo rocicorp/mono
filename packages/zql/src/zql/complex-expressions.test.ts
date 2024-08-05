@@ -1,8 +1,9 @@
 import fc from 'fast-check';
-import {test, expect} from 'vitest';
+import {expect, test} from 'vitest';
 import {TestContext} from './context/test-context.js';
 import {singleTableCases} from './prev-next-test-cases.js';
-import {and, EntityQuery, exp, or} from './query/entity-query.js';
+import * as agg from './query/agg.js';
+import {and, exp, newEntityQuery, or} from './query/entity-query.js';
 import {
   Artist,
   createRandomAlbums,
@@ -12,7 +13,6 @@ import {
   Track,
   TrackArtist,
 } from './test-helpers/create-data.js';
-import * as agg from './query/agg.js';
 
 const trackArbitrary: fc.Arbitrary<Track[]> = fc.array(
   fc.record({
@@ -62,7 +62,7 @@ async function checkSingleTable(
 
   const index = gen(fc.integer, {min: 0, max: tracks.length - 1});
   const randomTrack = tracks[index];
-  const trackQuery = new EntityQuery<{track: Track}>(context, 'track');
+  const trackQuery = newEntityQuery<{track: Track}>(context, 'track');
 
   const query = trackQuery
     .select('*')
@@ -119,12 +119,12 @@ async function checkDoubleLeftJoinGroupBy(
     }
   });
 
-  const trackQuery = new EntityQuery<{track: Track}>(context, 'track');
-  const trackArtistQuery = new EntityQuery<{trackArtist: TrackArtist}>(
+  const trackQuery = newEntityQuery<{track: Track}>(context, 'track');
+  const trackArtistQuery = newEntityQuery<{trackArtist: TrackArtist}>(
     context,
     'trackArtist',
   );
-  const artistQuery = new EntityQuery<{artist: Artist}>(context, 'artist');
+  const artistQuery = newEntityQuery<{artist: Artist}>(context, 'artist');
 
   const trackArtistsIndex = new Map<string, TrackArtist[]>();
   for (const trackArtist of trackArtists) {

@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
 import {expect, test} from 'vitest';
+import {newEntityQuery} from 'zql/src/zql/query/entity-query.js';
 import {createContext} from './context.js';
 import {ZQLite} from './ZQLite.js';
-import {EntityQuery} from 'zql/src/zql/query/entity-query.js';
 
 test('smoke test', async () => {
   const db = new Database(':memory:');
@@ -20,7 +20,7 @@ test('smoke test', async () => {
   // in zero-client tests
   // e.g. const z = newZero();
   // const q = z.query.foo;
-  const q = new EntityQuery<{foo: Foo}>(context, 'foo');
+  const q = newEntityQuery<{foo: Foo}>(context, 'foo');
 
   // A source represents a table.
   // Adding to the source is like inserting into the table.

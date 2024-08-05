@@ -3,6 +3,7 @@ import type {JSONValue} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {
   Aggregate,
+  assertSelector,
   normalizeAST,
   Selector,
   type Condition,
@@ -61,9 +62,11 @@ export class Normalized {
 
     let query = '';
     const selection = [
-      ...(select ?? []).map(
-        ([sel, alias]) => `${selector(sel)} AS ${ident(alias)}`,
-      ),
+      ...(select ?? []).map(([sel, alias]) => {
+        // TODO(arv): Implement Sub Queries, especially nested ones...
+        assertSelector(sel);
+        return `${selector(sel)} AS ${ident(alias)}`;
+      }),
       ...(aggregate ?? []).map(a => {
         // Aggregation aliases are ignored for normalization, and instead aliased
         // to the string representation of the aggregation, e.g.

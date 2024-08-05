@@ -296,11 +296,14 @@ function getModifiedDate() {
   return d.getTime();
 }
 
+type NoRelations = Record<string, never>;
+
 export type IssueQuery = EntityQuery<
   {
     issue: Issue;
     label: Label;
   },
+  NoRelations,
   {
     labels: string[];
     issue: Issue;
@@ -335,7 +338,7 @@ export function commentsForIssueQuery(z: Zero<Collections>, issueID: string) {
 export function orderQuery<R>(
   // TODO: having to know the return type of the query to take it in as an arg is...
   // confusing at best.
-  issueQuery: EntityQuery<{issue: Issue; label: Label}, R>,
+  issueQuery: EntityQuery<{issue: Issue; label: Label}, NoRelations, R>,
   order: Order,
   reverse: boolean,
 ) {

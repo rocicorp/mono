@@ -8,7 +8,7 @@ import type {Source} from '../ivm/source/source.js';
 import type {PipelineEntity} from '../ivm/types.js';
 import * as agg from '../query/agg.js';
 import {conditionToString} from '../query/condition-to-string.js';
-import {EntityQuery, astForTesting as ast} from '../query/entity-query.js';
+import {astForTesting as ast, newEntityQuery} from '../query/entity-query.js';
 
 import {buildPipeline} from './pipeline-builder.js';
 
@@ -25,7 +25,7 @@ const context = makeTestContext();
 
 const ordering = [[['e1', 'id'], 'asc']] as const;
 test('A simple select', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   let s = m.newSetSource<E1>(ordering, 'e1');
   let pipeline = buildPipeline(
@@ -64,7 +64,7 @@ test('A simple select', () => {
 });
 
 test('Count', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(ordering, 'e1');
   const pipeline = buildPipeline(
@@ -94,7 +94,7 @@ test('Count', () => {
 });
 
 test('Where', () => {
-  const q = new EntityQuery<{e1: E1}>(context, 'e1');
+  const q = newEntityQuery<{e1: E1}>(context, 'e1');
   const m = new Materialite();
   const s = m.newSetSource<E1>(ordering, 'e1');
   const pipeline = buildPipeline(
