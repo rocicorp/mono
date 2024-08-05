@@ -48,6 +48,8 @@ export class FilterOperator implements Operator {
 
     // If the source was able to honor the filter, we don't have to redo
     // the work ourselves. Yay.
+    // TODO: There could be a test that if appliedFilters are present,
+    // FilterOperator doesn't do it itself.
     if (resp.appliedFilters.some(f => deepEqual(f, this.#predicate))) {
       return resp;
     }
