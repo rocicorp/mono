@@ -86,6 +86,8 @@ export function idEquals(id1: ID, id2: ID): boolean {
  * @returns < 0 if a < b, 0 if a === b, > 0 if a > b
  */
 export function compareValues(a: Value, b: Value): number {
+  // TODO: should `null === null`? Should `undefined === undefined`?
+  // See: https://github.com/rocicorp/mono/pull/2116/files#r1704811479
   if (a === b) {
     return 0;
   }
