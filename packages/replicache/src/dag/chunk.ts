@@ -68,7 +68,6 @@ export function assertRefs(v: unknown): asserts v is Refs {
     assertString(v[0]);
     for (let i = 1; i < v.length; i++) {
       assertString(v[i]);
-      assert(v[i - 1] < v[i], 'Refs must be sorted and have no duplicates');
     }
   }
 }
