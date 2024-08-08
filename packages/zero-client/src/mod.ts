@@ -56,21 +56,9 @@ export type {
   UpdateNeededReason,
   VersionNotSupportedResponse,
   WriteTransaction,
+  
 } from 'replicache';
 export type {EntityQuery, FromSet} from 'zql/src/zql/query/entity-query.js';
 export type {Entity} from 'zql/src/zql/schema/entity-schema.js';
-export type {ZeroOptions, QueryParseDefs} from './client/options.js';
-export {
-  Zero,
-  type QueryDefs,
-  MakeEntityQueriesFromQueryDefs,
-  NoRelations
-} from './client/zero.js';
-export {
-  BaseCRUDMutate,
-  EntityCRUDMutate,
-  makeBatchCRUDMutate,
-  MakeCRUDMutate,
-  Update,
-} from './client/crud.js';
-
+export type {ZeroOptions} from './client/options.js';
+export {Zero, type QueryDefs} from './client/zero.js';

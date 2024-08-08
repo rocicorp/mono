@@ -8,6 +8,13 @@ import type {ZqlLiteZeroOptions} from './options.js';
 import type {Context as ZQLContext} from 'zql/src/zql/context/context.js';
 import {createContext} from './context.js';
 import {ZQLite} from './ZQLite.js';
+import {
+  BaseCRUDMutate,
+  EntityCRUDMutate,
+  makeBatchCRUDMutate,
+  MakeCRUDMutate,
+  Update,
+} from 'zero-client/src/client/crud.js';
 import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
 import type {Database} from 'better-sqlite3';
 import type {EntityID} from 'zero-protocol/src/entity.js';
@@ -15,13 +22,8 @@ import {
   QueryDefs,
   MakeEntityQueriesFromQueryDefs,
   NoRelations,
-  QueryParseDefs,
-  BaseCRUDMutate,
-  EntityCRUDMutate,
-  makeBatchCRUDMutate,
-  MakeCRUDMutate,
-  Update,
-} from 'zero-client';
+} from 'zero-client/src/client/zero.js';
+import {QueryParseDefs} from 'zero-client/src/client/options.js';
 
 export class ZqlLiteZero<QD extends QueryDefs> {
   readonly zqlContext: ZQLContext;
