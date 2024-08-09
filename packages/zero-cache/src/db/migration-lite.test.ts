@@ -1,11 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Database as Db} from 'better-sqlite3';
-import Database from 'better-sqlite3';
-import {unlink} from 'fs/promises';
-import {tmpdir} from 'os';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {randInt} from 'shared/src/rand.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {DbFile} from '../test/lite.js';
 import {
   SchemaVersions,
   VersionMigrationMap,
@@ -176,12 +173,12 @@ describe('db/migration-lite', () => {
     },
   ];
 
-  let dbFile: string;
+  let dbFile: DbFile;
   let db: Db;
 
   beforeEach(() => {
-    dbFile = `${tmpdir()}/migration-test-${randInt(10000, 99999)}.db`;
-    db = new Database(dbFile);
+    dbFile = new DbFile('migration-test');
+    db = dbFile.connect();
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
     db.prepare(`CREATE TABLE "MigrationHistory" (event TEXT)`).run();
@@ -189,7 +186,7 @@ describe('db/migration-lite', () => {
 
   afterEach(async () => {
     db.close();
-    await unlink(dbFile);
+    await dbFile.unlink();
   });
 
   for (const c of cases) {
@@ -209,7 +206,7 @@ describe('db/migration-lite', () => {
         await runSchemaMigrations(
           createSilentLogContext(),
           debugName,
-          dbFile,
+          dbFile.path,
           c.migrations,
         );
       } catch (e) {

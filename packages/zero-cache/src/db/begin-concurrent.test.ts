@@ -1,15 +1,12 @@
-import Database from 'better-sqlite3';
-import {unlink} from 'fs/promises';
-import {tmpdir} from 'os';
-import {randInt} from 'shared/src/rand.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {DbFile} from '../test/lite.js';
 
 describe('db/begin-concurrent', () => {
-  let dbFile: string;
+  let dbFile: DbFile;
 
   beforeEach(() => {
-    dbFile = `${tmpdir()}/begin-concurrent-${randInt(10000, 99999)}.db`;
-    const conn = new Database(dbFile);
+    dbFile = new DbFile('begin-concurrent');
+    const conn = dbFile.connect();
     conn.pragma('journal_mode = WAL');
     conn.pragma('synchronous = NORMAL');
     conn.exec('CREATE TABLE foo(id INTEGER PRIMARY KEY);');
@@ -17,16 +14,16 @@ describe('db/begin-concurrent', () => {
   });
 
   afterEach(async () => {
-    await unlink(dbFile);
+    await dbFile.unlink();
   });
 
   test('independent, concurrent actions before commit', () => {
-    const conn1 = new Database(dbFile);
+    const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
     conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
 
-    const conn2 = new Database(dbFile);
+    const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
     conn2.pragma('synchronous = NORMAL');
     conn2.prepare('BEGIN CONCURRENT').run();
@@ -45,12 +42,12 @@ describe('db/begin-concurrent', () => {
   });
 
   test('begin concurrent is deferred', () => {
-    const conn1 = new Database(dbFile);
+    const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
     conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
 
-    const conn2 = new Database(dbFile);
+    const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
     conn2.pragma('synchronous = NORMAL');
 
@@ -77,14 +74,14 @@ describe('db/begin-concurrent', () => {
   });
 
   test('simulate immediate', () => {
-    const conn1 = new Database(dbFile);
+    const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
     conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
     // Force the transaction to start immediately by accessing the database.
     expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([]);
 
-    const conn2 = new Database(dbFile);
+    const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
     conn2.pragma('synchronous = NORMAL');
     conn2.prepare('BEGIN CONCURRENT').run();
@@ -107,14 +104,14 @@ describe('db/begin-concurrent', () => {
   });
 
   test('begin concurrent with savepoints', () => {
-    const conn1 = new Database(dbFile);
+    const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
     conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
     // Force the transaction to start immediately by accessing the database.
     expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([]);
 
-    const conn2 = new Database(dbFile);
+    const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
     conn2.pragma('synchronous = NORMAL');
     conn2.prepare('BEGIN CONCURRENT').run();
