@@ -1,36 +1,19 @@
+import {randInt} from 'shared/src/rand.js';
+import {QueryDefs, Zero} from 'zero-client';
+import {QueryParseDefs} from 'zero-client/src/client/options.js';
 import type {
   Album,
   Artist,
   Playlist,
-  PlaylistTrack,
   Track,
   TrackArtist,
 } from 'zql/src/zql/test-helpers/create-data.js';
-import {nanoid} from '../../util/nanoid.js';
-import {QueryDefs, Zero} from '../zero.js';
-import {QueryParseDefs} from '../options.js';
-export {
-  createRandomAlbums,
-  createRandomArtists,
-  createRandomTracks,
-  linkTracksToArtists,
-} from 'zql/src/zql/test-helpers/create-data.js';
-export {Album, Artist, Playlist, PlaylistTrack, Track, TrackArtist};
-
-export const musicAppQueries: QueryParseDefs<QueryDefs> = {
-  track: v => v as Track,
-  album: v => v as Album,
-  artist: v => v as Artist,
-  playlist: v => v as Playlist,
-  trackArtist: v => v as TrackArtist,
-  playlistTrack: v => v as PlaylistTrack,
-};
 
 export function newZero<QD extends QueryDefs>(
   queries: QueryParseDefs<QD>,
 ): Zero<QD> {
   const z = new Zero({
-    userID: 'user-' + nanoid(),
+    userID: 'user-' + randInt(0, 1000000),
     queries,
   });
   return z;
@@ -85,16 +68,16 @@ export async function bulkRemove(
       promises.push(tx.track.delete({id: track.id}));
     }
     for (const album of items.albums ?? []) {
-      promises.push(tx.album.delete({id: album.id}));
+      promises.push(tx.album.delete(album));
     }
     for (const artist of items.artists ?? []) {
-      promises.push(tx.artist.delete({id: artist.id}));
+      promises.push(tx.artist.delete(artist));
     }
     for (const playlist of items.playlists ?? []) {
-      promises.push(tx.playlist.delete({id: playlist.id}));
+      promises.push(tx.playlist.delete(playlist));
     }
     for (const trackArtist of items.trackArtists ?? []) {
-      promises.push(tx.trackArtist.delete({id: trackArtist.id}));
+      promises.push(tx.trackArtist.delete(trackArtist));
     }
     await Promise.all(promises);
   });

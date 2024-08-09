@@ -10,6 +10,7 @@ import {
   Artist,
   bulkRemove,
   bulkSet,
+  musicAppQueries,
   newZero,
   Track,
   TrackArtist,
@@ -49,7 +50,7 @@ export async function benchZQL(
   ])[],
   mutations: readonly (readonly [mutation: Mutator, times: number])[],
 ): Promise<number> {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   async function upsertMany(data: BulkItems) {
     await bulkSet(z, data);

@@ -6,15 +6,15 @@ import {
   createRandomArtists,
   createRandomTracks,
   musicAppQueries,
-  newZero,
 } from './integration-test-util.js';
 import {QueryDefs, Zero} from 'zero-client';
-import {QueryParseDefs} from '../options.js';
-
-createTest(newZero);
+import {QueryParseDefs} from 'zero-client/src/client/options.js';
+import {ZqlLiteZero} from 'zqlite/src/zqlite-zero.js';
 
 export function createTest(
-  newZero: <QD extends QueryDefs>(z: QueryParseDefs<QD>) => Zero<QD>,
+  newZero: <QD extends QueryDefs>(
+    z: QueryParseDefs<QD>,
+  ) => Zero<QD> | ZqlLiteZero<QD>,
 ) {
   describe('count', async () => {
     const z = newZero(musicAppQueries);

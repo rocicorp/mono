@@ -56,7 +56,6 @@ export type {
   UpdateNeededReason,
   VersionNotSupportedResponse,
   WriteTransaction,
-  
 } from 'replicache';
 export type {EntityQuery, FromSet} from 'zql/src/zql/query/entity-query.js';
 export type {Entity} from 'zql/src/zql/schema/entity-schema.js';

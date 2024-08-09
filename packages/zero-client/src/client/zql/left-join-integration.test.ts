@@ -10,11 +10,12 @@ import {
   createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
+  musicAppQueries,
   newZero,
 } from './integration-test-util.js';
 
 test('left-join and aggregation to gather artists for a track', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const artists = createRandomArtists(5, true);
   const albums = createRandomAlbums(2, artists, true);
@@ -100,7 +101,7 @@ test('left-join and aggregation to gather artists for a track', async () => {
 });
 
 test('left-join through single table', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const album: Album = {
     id: '1',
@@ -207,7 +208,7 @@ test('left-join through single table', async () => {
 });
 
 test('left-join through junction edge', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const album: Album = {
     id: '1',

@@ -1,11 +1,11 @@
 import {describe, expect, test} from 'vitest';
 import {and, exp, or} from 'zql/src/zql/query/entity-query.js';
 import {singleTableCases} from 'zql/src/zql/prev-next-test-cases.js';
-import {bulkSet, newZero} from './integration-test-util.js';
+import {bulkSet, musicAppQueries, newZero} from './integration-test-util.js';
 import fc from 'fast-check';
 
 describe('complex expressions', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
   const tracks = [
     {
       id: '001',
@@ -175,7 +175,7 @@ test('fast check 3 field order by', async () => {
 });
 
 async function checkIt(tracks: readonly Track[], gen: fc.GeneratorValue) {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
   await bulkSet(z, {
     tracks,
   });

@@ -5,11 +5,12 @@ import {
   Track,
   TrackArtist,
   bulkSet,
+  musicAppQueries,
   newZero,
 } from './integration-test-util.js';
 
 describe('having against scalar', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const tracks: Track[] = [
     {
@@ -53,7 +54,7 @@ describe('having against scalar', async () => {
 });
 
 describe('having against arrays / sets', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const tracks: Track[] = [
     {
@@ -147,6 +148,9 @@ describe('having against arrays / sets', async () => {
       .prepare();
 
     const rows = await stmt.exec();
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     expect(rows.map(r => r.track.id)).toEqual(expected);
 
     stmt.destroy();

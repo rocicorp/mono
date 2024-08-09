@@ -1,9 +1,14 @@
 import {describe, expect, test} from 'vitest';
 import {joinSymbol} from '../../../../zql/src/zql/ivm/types.js';
-import {newZero, Track, TrackArtist} from './integration-test-util.js';
+import {
+  musicAppQueries,
+  newZero,
+  Track,
+  TrackArtist,
+} from './integration-test-util.js';
 
 describe('distinct', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
   const artists = [
     {
       id: '1',
