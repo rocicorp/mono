@@ -34,9 +34,8 @@ export function createTableStatementIgnoringNotNullConstraint(
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }
 
-  return [
-    `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`,
-    defs.join(',\n'),
-    ');',
-  ].join('\n');
+  const createStmt = spec.schema.length
+    ? `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`
+    : `CREATE TABLE ${id(spec.name)} (`;
+  return [createStmt, defs.join(',\n'), ');'].join('\n');
 }

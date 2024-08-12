@@ -4,7 +4,7 @@
  * https://www.postgresql.org/docs/16/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
  */
 export function id(name: string): string {
-  return '"' + name.replace(/"/g, '""').replace(/\./g, '"."') + '"';
+  return '"' + name.replace(/"/g, '""') + '"'; //.replace(/\./g, '"."') + '"';
 }
 
 /**
