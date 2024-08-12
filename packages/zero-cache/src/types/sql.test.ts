@@ -17,8 +17,8 @@ describe('types/sql', () => {
       escaped: '"containing""quotes"',
     },
     {
-      id: 'schema.table',
-      escaped: '"schema"."table"',
+      id: 'name.with.dots',
+      escaped: '"name.with.dots"',
     },
   ];
 
@@ -35,8 +35,8 @@ describe('types/sql', () => {
 
   const listCases: ListCase[] = [
     {
-      ids: ['simple', 'containing"quotes', 'schema.table'],
-      escaped: '"simple","containing""quotes","schema"."table"',
+      ids: ['simple', 'containing"quotes', 'name.with.dots'],
+      escaped: '"simple","containing""quotes","name.with.dots"',
     },
     {
       ids: ['singleton'],
