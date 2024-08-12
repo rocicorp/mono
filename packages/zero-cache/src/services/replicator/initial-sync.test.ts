@@ -207,6 +207,7 @@ describe('replicator/initial-sync', () => {
         CREATE TABLE not_published("issueID" INTEGER, "orgID" INTEGER, PRIMARY KEY ("orgID", "issueID"));
         CREATE TABLE users("userID" INTEGER, password TEXT, handle TEXT, PRIMARY KEY ("userID"));
         CREATE PUBLICATION zero_custom FOR TABLE users ("userID", handle) WHERE ("userID" % 2 = 0);
+        CREATE PUBLICATION zero_custom2 FOR TABLE users ("userID", handle) WHERE ("userID" > 1000);
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
@@ -229,18 +230,22 @@ describe('replicator/initial-sync', () => {
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
-          filterConditions: ['(("userID" % 2) = 0)'],
+          filterConditions: ['(("userID" % 2) = 0)', '("userID" > 1000)'],
         },
       },
       upstream: {
         users: [
           {userID: 123, password: 'not-replicated', handle: '@zoot'},
           {userID: 456, password: 'super-secret', handle: '@bonk'},
+          {userID: 1001, password: 'hide-me', handle: '@boom'},
         ],
       },
       replicated: {
         ['zero.clients']: [],
-        users: [{userID: 456, handle: '@bonk', ['_0_version']: '00'}],
+        users: [
+          {userID: 456, handle: '@bonk', ['_0_version']: '00'},
+          {userID: 1001, handle: '@boom', ['_0_version']: '00'},
+        ],
       },
       publications: ['zero_meta', 'zero_custom'],
     },
