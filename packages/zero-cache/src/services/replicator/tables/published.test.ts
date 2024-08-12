@@ -7,7 +7,8 @@ describe('tables/published', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: PublicationInfo;
+    expectedResult?: PublicationInfo;
+    expectedError?: string;
   };
 
   const cases: Case[] = [
@@ -58,6 +59,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['clientID'],
+            filterConditions: [],
           },
         ],
       },
@@ -150,9 +152,194 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['user_id'],
+            filterConditions: [],
           },
         ],
       },
+    },
+    {
+      name: 'row filter',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.users (
+        user_id INTEGER PRIMARY KEY,
+        org_id INTEGER,
+        handle text
+      );
+      CREATE PUBLICATION zero_data FOR TABLE test.users WHERE (org_id = 123);
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'users',
+            columns: {
+              ['user_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+                notNull: true,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+                notNull: false,
+              },
+              handle: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'text',
+                notNull: false,
+              },
+            },
+            primaryKey: ['user_id'],
+            filterConditions: ['(org_id = 123)'],
+          },
+        ],
+      },
+    },
+    {
+      name: 'multiple row filters',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.users (
+        user_id INTEGER PRIMARY KEY,
+        org_id INTEGER,
+        handle text
+      );
+      CREATE PUBLICATION zero_one FOR TABLE test.users WHERE (org_id = 123);
+      CREATE PUBLICATION zero_two FOR TABLE test.users (org_id, handle, user_id) WHERE (org_id = 456);
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_one',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+          {
+            pubname: 'zero_two',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'users',
+            columns: {
+              ['user_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+                notNull: true,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+                notNull: false,
+              },
+              handle: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'text',
+                notNull: false,
+              },
+            },
+            primaryKey: ['user_id'],
+            filterConditions: ['(org_id = 123)', '(org_id = 456)'],
+          },
+        ],
+      },
+    },
+    {
+      name: 'multiple row filters with unconditional',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.users (
+        user_id INTEGER PRIMARY KEY,
+        org_id INTEGER,
+        handle text
+      );
+      CREATE PUBLICATION zero_one FOR TABLE test.users WHERE (org_id = 123);
+      CREATE PUBLICATION zero_two FOR TABLE test.users (org_id, handle, user_id);
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_one',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+          {
+            pubname: 'zero_two',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'users',
+            columns: {
+              ['user_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+                notNull: true,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                columnDefault: null,
+                notNull: false,
+              },
+              handle: {
+                characterMaximumLength: null,
+                columnDefault: null,
+                dataType: 'text',
+                notNull: false,
+              },
+            },
+            primaryKey: ['user_id'],
+            filterConditions: [], // unconditional cancels out conditional
+          },
+        ],
+      },
+    },
+    {
+      name: 'multiple row filters with conflicting columns',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.users (
+        user_id INTEGER PRIMARY KEY,
+        org_id INTEGER,
+        handle text
+      );
+      CREATE PUBLICATION zero_one FOR TABLE test.users WHERE (org_id = 123);
+      CREATE PUBLICATION zero_two FOR TABLE test.users (org_id, user_id);
+      `,
+      expectedError:
+        'Error: Table users is exported with different columns: [user_id,org_id,handle] vs [user_id,org_id]',
     },
     {
       name: 'column subset',
@@ -211,6 +398,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['user_id'],
+            filterConditions: [],
           },
         ],
       },
@@ -269,6 +457,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['org_id', 'component_id', 'issue_id'],
+            filterConditions: [],
           },
         ],
       },
@@ -347,6 +536,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['org_id', 'component_id', 'issue_id'],
+            filterConditions: [],
           },
           {
             schema: 'test',
@@ -366,6 +556,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['user_id'],
+            filterConditions: [],
           },
           {
             schema: 'zero',
@@ -385,6 +576,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['clientID'],
+            filterConditions: [],
           },
         ],
       },
@@ -404,8 +596,12 @@ describe('tables/published', () => {
     test(c.name, async () => {
       await db.unsafe(c.setupQuery);
 
-      const tables = await getPublicationInfo(db);
-      expect(tables).toEqual(c.expectedResult);
+      try {
+        const tables = await getPublicationInfo(db);
+        expect(tables).toEqual(c.expectedResult);
+      } catch (e) {
+        expect(c.expectedError).toMatch(String(e));
+      }
     });
   }
 });

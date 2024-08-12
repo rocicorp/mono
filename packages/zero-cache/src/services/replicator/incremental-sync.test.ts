@@ -21,6 +21,7 @@ import {
   type InvalidationFilterSpec,
 } from '../../types/invalidation.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
+import {toLexiVersion} from '../../types/lsn.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
@@ -28,9 +29,8 @@ import {InvalidationFilters, Invalidator} from './invalidation.js';
 import type {RowChange, VersionChange} from './replicator.js';
 import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
-import type {TableSpec} from './tables/specs.js';
+import type {FilteredTableSpec} from './tables/specs.js';
 import {TransactionTrainService} from './transaction-train.js';
-import {toLexiVersion} from '../../types/lsn.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
@@ -75,7 +75,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     expectedTransactions?: number;
     expectedVersionChanges?: Omit<VersionChange, 'prevSnapshotID'>[];
     coalescedVersionChange?: Omit<VersionChange, 'prevSnapshotID'>;
-    specs: Record<string, TableSpec>;
+    specs: Record<string, FilteredTableSpec>;
     data: Record<string, Record<string, unknown>[]>;
   };
 
@@ -130,6 +130,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['issueID'],
+          filterConditions: [],
         },
         ['public.table-with-special-characters']: {
           schema: 'public',
@@ -149,6 +150,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['id'],
+          filterConditions: [],
         },
         ['zero.clients']: {
           schema: 'zero',
@@ -174,6 +176,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['clientID'],
+          filterConditions: [],
         },
       },
       data: {
@@ -195,7 +198,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         time TIMESTAMPTZ,
         description TEXT
       );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
+      CREATE PUBLICATION zero_all FOR TABLE issues WHERE ("issueID" < 1000);
       `,
       setupReplica: `
       CREATE TABLE issues(
@@ -268,17 +271,23 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['issueID'],
+          filterConditions: [],
         },
       },
       writeUpstream: [
         `
       INSERT INTO issues ("issueID") VALUES (123);
       INSERT INTO issues ("issueID", time) VALUES (456, '2024-03-21T18:50:23.646716Z');
+      -- Rows > 1000 should be filtered by PG.
+      INSERT INTO issues ("issueID") VALUES (1001);
       `,
         `
       INSERT INTO issues ("issueID", big) VALUES (789, 9223372036854775807);
       INSERT INTO issues ("issueID", ints) VALUES (987, '{92233720,123}');
       INSERT INTO issues ("issueID", flt) VALUES (234, 123.456);
+
+      -- Rows > 1000 should be filtered by PG.
+      INSERT INTO issues ("issueID") VALUES (2001);
 
       -- https://github.com/porsager/postgres/issues/837
       -- INSERT INTO issues ("issueID", bigs) VALUES (2468, '{9223372036854775807,123}');
@@ -734,6 +743,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['orgID', 'issueID'],
+          filterConditions: [],
         },
       },
       invalidationFilters: [
@@ -1089,6 +1099,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['orgID', 'issueID'],
+          filterConditions: [],
         },
       },
       invalidationFilters: [
@@ -1445,6 +1456,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['id'],
+          filterConditions: [],
         },
         ['public.bar']: {
           schema: 'public',
@@ -1464,6 +1476,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['id'],
+          filterConditions: [],
         },
         ['public.baz']: {
           schema: 'public',
@@ -1483,6 +1496,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['id'],
+          filterConditions: [],
         },
       },
       writeUpstream: [
@@ -1830,6 +1844,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
           },
           primaryKey: ['orgID', 'issueID'],
+          filterConditions: [],
         },
       },
       writeUpstream: [

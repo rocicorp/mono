@@ -379,7 +379,9 @@ describe('tables/create', () => {
 
         const published = await getPublicationInfo(db);
         expect(published.tables).toEqual(
-          expect.arrayContaining([c.dstTableSpec ?? c.srcTableSpec]),
+          expect.arrayContaining([
+            {...(c.dstTableSpec ?? c.srcTableSpec), filterConditions: []},
+          ]),
         );
       });
     }

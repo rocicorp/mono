@@ -1,7 +1,8 @@
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
+import {equals} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
-import type {TableSpec} from './specs.js';
+import type {FilteredTableSpec} from './specs.js';
 
 const publishedColumnsSchema = v.array(
   v.object({
@@ -16,6 +17,7 @@ const publishedColumnsSchema = v.array(
     keyPos: v.number().nullable(),
     notNull: v.boolean(),
     default: v.string().nullable(),
+    rowFilter: v.string().nullable(),
     pubname: v.string(),
   }),
 );
@@ -34,7 +36,7 @@ export type Publication = v.Infer<typeof publicationSchema>;
 
 export type PublicationInfo = {
   readonly publications: Publication[];
-  readonly tables: TableSpec[];
+  readonly tables: FilteredTableSpec[];
 };
 
 /** The publication prefix used for tables replicated to zero. */
@@ -65,6 +67,7 @@ export async function getPublicationInfo(
     ARRAY_POSITION(conkey, attnum) AS "keyPos",
     attnotnull as "notNull",
     pg_get_expr(pd.adbin, pd.adrelid) as default,
+    pb.rowfilter as "rowFilter",
     pb.pubname
   FROM pg_attribute
   JOIN pg_class pc ON pc.oid = attrelid
@@ -77,8 +80,8 @@ export async function getPublicationInfo(
   LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
   LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
   WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
-  ORDER BY nspname, pc.relname, attnum;
-  `);
+  ORDER BY nspname, pc.relname, pb.pubname, attnum;
+  `); // Sort by [schema, table, publication, column] to process tables in multiple publications consecutively.
 
   const publications = v.parse(result[0], publicationsResultSchema);
   const columns = v.parse(result[1], publishedColumnsSchema);
@@ -86,19 +89,53 @@ export async function getPublicationInfo(
   // For convenience when building the table spec. The returned TableSpec type is readonly.
   type Writeable<T> = {-readonly [P in keyof T]: Writeable<T[P]>};
 
-  const tables: Writeable<TableSpec>[] = [];
-  let table: Writeable<TableSpec> | undefined;
+  const tables: Writeable<FilteredTableSpec>[] = [];
+  let table: Writeable<FilteredTableSpec> | undefined;
+  let pubname: string | undefined;
+
+  // Check the new table against the last added table (columns are processed in <table, publication> order):
+  // 1. to ensure that a table is always published with the same set of columns
+  // 2. to collect all filter conditions for which a row may be published
+  function addOrCoalesce(t: Writeable<FilteredTableSpec>) {
+    const last = tables.at(-1);
+    if (t.schema !== last?.schema || t.name !== last?.name) {
+      tables.push(t);
+      return;
+    }
+    const lastColumns = new Set(Object.keys(last.columns));
+    const nextColumns = new Set(Object.keys(t.columns));
+    if (!equals(lastColumns, nextColumns)) {
+      throw new Error(
+        `Table ${t.name} is exported with different columns: [${[
+          ...lastColumns,
+        ]}] vs [${[...nextColumns]}]`,
+      );
+    }
+    if (last.filterConditions.length === 0 || t.filterConditions.length === 0) {
+      last.filterConditions.splice(0); // unconditional
+    } else {
+      last.filterConditions.push(...t.filterConditions); // OR all conditions
+    }
+  }
 
   columns.forEach(col => {
-    if (col.schema !== table?.schema || col.table !== table?.name) {
+    if (
+      col.schema !== table?.schema ||
+      col.table !== table?.name ||
+      col.pubname !== pubname
+    ) {
+      if (table) {
+        addOrCoalesce(table);
+      }
       // New table
+      pubname = col.pubname;
       table = {
         schema: col.schema,
         name: col.table,
         columns: {},
         primaryKey: [],
+        filterConditions: col.rowFilter ? [col.rowFilter] : [],
       };
-      tables.push(table);
     }
 
     // https://stackoverflow.com/a/52376230
@@ -124,6 +161,10 @@ export async function getPublicationInfo(
       table.primaryKey[col.keyPos - 1] = col.name;
     }
   });
+
+  if (table) {
+    addOrCoalesce(table);
+  }
 
   // Sanity check that the primary keys are filled in.
   Object.values(tables).forEach(table => {
