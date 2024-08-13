@@ -1,10 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
-import {
-  assert,
-  assertBoolean,
-  assertNumber,
-  assertString,
-} from 'shared/src/asserts.js';
+import {assertBoolean, assertNumber, assertString} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 
 /**
@@ -24,11 +19,12 @@ import type {Ordering} from '../ast2/ast.js';
  * These two facts leave us with the following allowed types. Zero's replication
  * layer must convert other types into these for tables to be used with Zero.
  *
- * TODO: Add support for undefined to support optimistic mutations on client
- * that omit fields.
+ * For developer convenience we also allow `undefined`, which we treat
+ * equivalently to `null`.
+ *
  * TODO: This file needs unit tests.
  */
-export type Value = null | boolean | number | string;
+export type Value = undefined | null | boolean | number | string;
 
 /**
  * A Row is represented as a JS Object.
@@ -43,51 +39,21 @@ export type Value = null | boolean | number | string;
 export type Row = Record<string, Value>;
 
 /**
- * Zero requires that all synced tables have a unique primary key. Primary keys
- * composed of multiple columns are supported (and required, due to junction
- * tables). Rows from the same source having the same ID are considered to be
- * the same row, without comparing other fields.
- *
- * The code that vends these IDs must return the columns in some consistent
- * order over the lifetime of the process. This avoid the sort having to be done
- * at the time of comparison.
- *
- * TODO: Microbenchmark this approach against the version where we put an ID
- * symbol on each object. Benchmark maintaining some sorted list of rows.
- */
-export type ID = Value[];
-
-/**
- * For performance reasons (to avoid expanding every single row with a new
- * object/array having the ID fields) we provide access to the identity of a row
- * externally, with a separate function when necessary.
- */
-export type GetID = (row: Row) => ID;
-
-/**
- * Check two IDs for equality. This function considers any two IDs with the same
- * components equal, even if they are from different tables.
- */
-export function idEquals(id1: ID, id2: ID): boolean {
-  if (id1.length !== id2.length) {
-    return false;
-  }
-  for (let i = 0; i < id1.length; i++) {
-    if (id1[i] !== id2[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
  * Compare two values. The values must be of the same type. This function
  * throws at runtime if the types differ.
+ *
+ * Note, this function considers `null === null` and
+ * `undefined === undefined`. This is different than SQL. In join code,
+ * null must be treated separately.
+ *
+ * See: https://github.com/rocicorp/mono/pull/2116/files#r1704811479
+ *
  * @returns < 0 if a < b, 0 if a === b, > 0 if a > b
  */
 export function compareValues(a: Value, b: Value): number {
-  // TODO: should `null === null`? Should `undefined === undefined`?
-  // See: https://github.com/rocicorp/mono/pull/2116/files#r1704811479
+  a = normalizeUndefined(a);
+  b = normalizeUndefined(b);
+
   if (a === b) {
     return 0;
   }
@@ -121,19 +87,15 @@ export function compareValues(a: Value, b: Value): number {
 }
 
 /**
- * Compare two IDs. This function throws at runtime if the IDs have different
- * lengths, or if the types of the components don't match.
- * @returns < 0 if a < b, 0 if a === b, > 0 if a > b
+ * We allow undefined to be passed for the convenience of developers, but we
+ * treat it equivalently to null. It's better for perf to not create an copy
+ * of input values, so we just normalize at use when necessary.
  */
-export function compareIDs(a: ID, b: ID): number {
-  assert(a.length === b.length, 'Mismatched ID lengths');
-  for (let i = 0; i < a.length; i++) {
-    const cmp = compareValues(a[i], b[i]);
-    if (cmp !== 0) {
-      return cmp;
-    }
+export function normalizeUndefined(v: Value): Exclude<Value, undefined> {
+  if (v === undefined) {
+    return null;
   }
-  return 0;
+  return v;
 }
 
 export type Comparator = (r1: Row, r2: Row) => number;
