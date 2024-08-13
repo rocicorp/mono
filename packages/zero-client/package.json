@@ -44,8 +44,7 @@
     "out"
   ],
   "exports": {
-    ".": "./src/mod.ts",
-    "./src/": "./src/"
+    ".": "./src/mod.ts"
   },
   "eslintConfig": {
     "extends": "@rocicorp/eslint-config"
