@@ -32,7 +32,6 @@ export type Schema = {
   compareRows: (r1: Row, r2: Row) => number;
 };
 
-// TODO: add optional filters
 export type HydrateRequest = {
   constraint?: Constraint | undefined;
 };
