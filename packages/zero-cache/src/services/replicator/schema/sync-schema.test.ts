@@ -43,12 +43,6 @@ describe('replicator/sync-schema', () => {
             lock: 'v', // Internal column, always 'v'
           },
         ],
-        ['_zero.InvalidationRegistryVersion']: [
-          {
-            lock: 'v',
-            stateVersionAtLastSpecChange: null,
-          },
-        ],
       },
     },
     {
@@ -135,8 +129,6 @@ describe('replicator/sync-schema', () => {
         await expectTables(replica, {
           ['_zero.TxLog']: [],
           ['_zero.ChangeLog']: [],
-          ['_zero.InvalidationRegistry']: [],
-          ['_zero.InvalidationIndex']: [],
         });
 
         // Subscriptions should have been dropped.

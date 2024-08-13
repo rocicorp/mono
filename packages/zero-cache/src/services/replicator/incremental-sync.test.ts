@@ -15,17 +15,11 @@ import {
   initDB,
   testDBs,
 } from '../../test/db.js';
-import {
-  invalidationHash,
-  normalizeFilterSpec,
-  type InvalidationFilterSpec,
-} from '../../types/invalidation.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {replicationSlot, setupUpstream} from './initial-sync.js';
-import {InvalidationFilters, Invalidator} from './invalidation.js';
 import type {RowChange, VersionChange} from './replicator.js';
 import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
 import {getPublicationInfo} from './tables/published.js';
@@ -41,22 +35,18 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   let replica: PostgresDB;
   let train: TransactionTrainService;
   let syncer: IncrementalSyncer;
-  let invalidator: Invalidator;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
     upstream = await testDBs.create('incremental_sync_test_upstream');
     replica = await testDBs.create('incremental_sync_test_replica');
     train = new TransactionTrainService(lc, replica);
-    const invalidationFilters = new InvalidationFilters();
     syncer = new IncrementalSyncer(
       getConnectionURI(upstream, 'external'),
       REPLICA_ID,
       replica,
       train,
-      invalidationFilters,
     );
-    invalidator = new Invalidator(replica, train, invalidationFilters);
   });
 
   afterEach(async () => {
@@ -71,7 +61,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     setupUpstream?: string;
     setupReplica?: string;
     writeUpstream?: string[];
-    invalidationFilters?: InvalidationFilterSpec[];
     expectedTransactions?: number;
     expectedVersionChanges?: Omit<VersionChange, 'prevSnapshotID'>[];
     coalescedVersionChange?: Omit<VersionChange, 'prevSnapshotID'>;
@@ -86,8 +75,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       data: {
         ['_zero.TxLog']: [],
         ['_zero.ChangeLog']: [],
-        ['_zero.InvalidationRegistry']: [],
-        ['_zero.InvalidationIndex']: [],
       },
     },
     {
@@ -182,8 +169,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       data: {
         ['_zero.TxLog']: [],
         ['_zero.ChangeLog']: [],
-        ['_zero.InvalidationRegistry']: [],
-        ['_zero.InvalidationIndex']: [],
       },
     },
     {
@@ -213,9 +198,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
-      invalidationFilters: [
-        {schema: 'public', table: 'issues', filteredColumns: {issueID: '='}},
-      ],
       specs: {
         ['public.issues']: {
           schema: 'public',
@@ -298,18 +280,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '00',
           newVersion: '01',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '123'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '456'},
-            })]: '01',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: {
@@ -346,23 +317,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '01',
           newVersion: '02',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '789'},
-            })]: '02',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '987'},
-            })]: '02',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '234'},
-            })]: '02',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: {
@@ -415,33 +370,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '02',
-        invalidations: {
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '123'},
-          })]: '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '456'},
-          })]: '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '789'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '987'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '234'},
-          })]: '02',
-        },
+        invalidations: {},
         changes: [
           {
             rowData: {
@@ -621,74 +550,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             rowKey: {issueID: 234},
           },
         ],
-        ['_zero.InvalidationIndex']: [
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '123'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '123'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '456'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '789'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '987'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '234'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-        ],
       },
     },
     {
@@ -746,13 +607,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
           filterConditions: [],
         },
       },
-      invalidationFilters: [
-        {
-          schema: 'public',
-          table: 'issues',
-          filteredColumns: {issueID: '=', orgID: '='},
-        },
-      ],
       writeUpstream: [
         `
       INSERT INTO issues ("orgID", "issueID") VALUES (1, 123);
@@ -769,23 +623,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '00',
           newVersion: '01',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '123', orgID: '1'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '456', orgID: '1'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '789', orgID: '2'},
-            })]: '01',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: {
@@ -825,23 +663,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '01',
           newVersion: '02',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '123', orgID: '1'},
-            })]: '02',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '123', orgID: '2'},
-            })]: '02',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '456', orgID: '1'},
-            })]: '02',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: {
@@ -877,28 +699,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '02',
-        invalidations: {
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '123', orgID: '1'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '123', orgID: '2'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '456', orgID: '1'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '789', orgID: '2'},
-          })]: '01',
-        },
+        invalidations: {},
         changes: [
           {
             rowData: {
@@ -999,52 +800,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             rowKey: {orgID: 2, issueID: 123},
           },
         ],
-        ['_zero.InvalidationIndex']: [
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '123', orgID: '1'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '123', orgID: '2'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '456', orgID: '1'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '789', orgID: '2'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-        ],
       },
     },
     {
@@ -1102,13 +857,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
           filterConditions: [],
         },
       },
-      invalidationFilters: [
-        {
-          schema: 'public',
-          table: 'issues',
-          filteredColumns: {issueID: '=', orgID: '='},
-        },
-      ],
       writeUpstream: [
         `
       INSERT INTO issues ("orgID", "issueID") VALUES (1, 123);
@@ -1126,28 +874,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '00',
           newVersion: '01',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '123', orgID: '1'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '456', orgID: '1'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '789', orgID: '2'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '987', orgID: '2'},
-            })]: '01',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: {
@@ -1198,23 +925,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '01',
           newVersion: '02',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '123', orgID: '1'},
-            })]: '02',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '456', orgID: '1'},
-            })]: '02',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {issueID: '987', orgID: '2'},
-            })]: '02',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: undefined,
@@ -1240,28 +951,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '02',
-        invalidations: {
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '123', orgID: '1'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '456', orgID: '1'},
-          })]: '02',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '789', orgID: '2'},
-          })]: '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {issueID: '987', orgID: '2'},
-          })]: '02',
-        },
+        invalidations: {},
         changes: [
           {
             rowData: {
@@ -1328,52 +1018,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         ],
       },
       data: {
-        ['_zero.InvalidationIndex']: [
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '123', orgID: '1'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '456', orgID: '1'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '789', orgID: '2'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '987', orgID: '2'},
-              }),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-        ],
         ['public.issues']: [
           {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
         ],
@@ -1432,11 +1076,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
-      invalidationFilters: [
-        {schema: 'public', table: 'foo', filteredColumns: {id: '='}},
-        {schema: 'public', table: 'bar', filteredColumns: {id: '='}},
-        {schema: 'public', table: 'baz', filteredColumns: {id: '='}},
-      ],
       specs: {
         ['public.foo']: {
           schema: 'public',
@@ -1523,27 +1162,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '00',
           newVersion: '01',
-          invalidations: {
-            [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
-              '01',
-            [invalidationHash({schema: 'public', table: 'baz', allRows: true})]:
-              '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'bar',
-              filteredColumns: {id: '4'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'bar',
-              filteredColumns: {id: '5'},
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'bar',
-              filteredColumns: {id: '6'},
-            })]: '01',
-          },
+          invalidations: {},
           changes: [
             {
               schema: 'public',
@@ -1585,10 +1204,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '01',
           newVersion: '02',
-          invalidations: {
-            [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
-              '02',
-          },
+          invalidations: {},
           changes: [
             {
               schema: 'public',
@@ -1609,27 +1225,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '02',
-        invalidations: {
-          [invalidationHash({schema: 'public', table: 'foo', allRows: true})]:
-            '02',
-          [invalidationHash({schema: 'public', table: 'baz', allRows: true})]:
-            '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'bar',
-            filteredColumns: {id: '4'},
-          })]: '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'bar',
-            filteredColumns: {id: '5'},
-          })]: '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'bar',
-            filteredColumns: {id: '6'},
-          })]: '01',
-        },
+        invalidations: {},
         changes: [
           {
             schema: 'public',
@@ -1733,55 +1329,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             rowKey: {id: 101},
           },
         ],
-        ['_zero.InvalidationIndex']: [
-          {
-            hash: Buffer.from(
-              invalidationHash({schema: 'public', table: 'baz', allRows: true}),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'bar',
-                filteredColumns: {id: '4'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'bar',
-                filteredColumns: {id: '5'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'bar',
-                filteredColumns: {id: '6'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({schema: 'public', table: 'foo', allRows: true}),
-              'hex',
-            ),
-            stateVersion: '02',
-          },
-        ],
       },
     },
     {
@@ -1805,14 +1352,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
-      invalidationFilters: [
-        {schema: 'public', table: 'issues', filteredColumns: {orgID: '='}},
-        {
-          schema: 'public',
-          table: 'issues',
-          filteredColumns: {orgID: '=', issueID: '='},
-        },
-      ],
       specs: {
         ['public.issues']: {
           schema: 'public',
@@ -1861,23 +1400,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {
           prevVersion: '00',
           newVersion: '01',
-          invalidations: {
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {
-                orgID: '1',
-                issueID: '456',
-              },
-            })]: '01',
-            [invalidationHash({
-              schema: 'public',
-              table: 'issues',
-              filteredColumns: {
-                orgID: '1',
-              },
-            })]: '01',
-          },
+          invalidations: {},
           changes: [
             {
               rowData: {
@@ -1896,23 +1419,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       coalescedVersionChange: {
         prevVersion: '00',
         newVersion: '01',
-        invalidations: {
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {
-              orgID: '1',
-              issueID: '456',
-            },
-          })]: '01',
-          [invalidationHash({
-            schema: 'public',
-            table: 'issues',
-            filteredColumns: {
-              orgID: '1',
-            },
-          })]: '01',
-        },
+        invalidations: {},
         changes: [
           {
             rowData: {
@@ -1940,30 +1447,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             rowKey: {orgID: 1, issueID: 456},
           },
         ],
-        ['_zero.InvalidationIndex']: [
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {orgID: '1'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-          {
-            hash: Buffer.from(
-              invalidationHash({
-                schema: 'public',
-                table: 'issues',
-                filteredColumns: {issueID: '456', orgID: '1'},
-              }),
-              'hex',
-            ),
-            stateVersion: '01',
-          },
-        ],
       },
     },
   ];
@@ -1981,12 +1464,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       expect(await queryLastLSN(replica)).toBeNull();
 
       void train.run();
-      if (c.invalidationFilters?.length) {
-        const specs = c.invalidationFilters.map(spec =>
-          normalizeFilterSpec(spec),
-        );
-        await invalidator.registerInvalidationFilters(lc, {specs});
-      }
 
       const syncing = syncer.run(lc);
       const incrementalVersionSubscription = await syncer.versionChanges();
@@ -2081,12 +1558,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       newVersion: convert(v.newVersion),
       prevVersion: convert(v.prevVersion),
       prevSnapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
-      invalidations:
-        v.invalidations === undefined
-          ? undefined
-          : Object.fromEntries(
-              Object.entries(v.invalidations).map(([k, v]) => [k, convert(v)]),
-            ),
+      invalidations: {},
       changes:
         v.changes === undefined
           ? undefined

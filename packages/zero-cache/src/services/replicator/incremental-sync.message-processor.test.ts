@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
@@ -6,7 +6,6 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {MessageProcessor} from './incremental-sync.js';
-import {InvalidationFilters} from './invalidation.js';
 import type {VersionChange} from './replicator.js';
 import {setupReplicationTables} from './schema/replication.js';
 import {TransactionTrainService} from './transaction-train.js';
@@ -406,7 +405,6 @@ describe('replicator/message-processor', () => {
           tables: [],
         },
         train,
-        new InvalidationFilters(),
         (lsn: string) => acknowledgements.enqueue(lsn),
         (v: VersionChange) => versionChanges.enqueue(v),
         (_: LogContext, err: unknown) => failures.enqueue(err),
