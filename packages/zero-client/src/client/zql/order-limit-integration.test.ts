@@ -12,11 +12,12 @@ import {
   createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
+  musicAppQueries,
   newZero,
 } from './integration-test-util.js';
 
 describe('sorting and limiting with different query operations', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
   const artists = createRandomArtists(50);
   const albums = createRandomAlbums(50, artists);
   const tracks = createRandomTracks(100, albums);

@@ -7,7 +7,8 @@ import type {
   TrackArtist,
 } from 'zql/src/zql/test-helpers/create-data.js';
 import {nanoid} from '../../util/nanoid.js';
-import {Zero} from '../zero.js';
+import {QueryDefs, Zero} from '../zero.js';
+import {QueryParseDefs} from '../options.js';
 export {
   createRandomAlbums,
   createRandomArtists,
@@ -16,17 +17,21 @@ export {
 } from 'zql/src/zql/test-helpers/create-data.js';
 export {Album, Artist, Playlist, PlaylistTrack, Track, TrackArtist};
 
-export function newZero() {
+export const musicAppQueries: QueryParseDefs<QueryDefs> = {
+  track: v => v as Track,
+  album: v => v as Album,
+  artist: v => v as Artist,
+  playlist: v => v as Playlist,
+  trackArtist: v => v as TrackArtist,
+  playlistTrack: v => v as PlaylistTrack,
+};
+
+export function newZero<QD extends QueryDefs>(
+  queries: QueryParseDefs<QD>,
+): Zero<QD> {
   const z = new Zero({
     userID: 'user-' + nanoid(),
-    queries: {
-      track: v => v as Track,
-      album: v => v as Album,
-      artist: v => v as Artist,
-      playlist: v => v as Playlist,
-      trackArtist: v => v as TrackArtist,
-      playlistTrack: v => v as PlaylistTrack,
-    },
+    queries,
   });
   return z;
 }

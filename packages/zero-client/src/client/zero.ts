@@ -89,9 +89,9 @@ export type QueryDefs = {
   readonly [name: string]: Entity;
 };
 
-type NoRelations = Record<string, never>;
+export type NoRelations = Record<string, never>;
 
-type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
+export type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
   readonly [K in keyof QD]: EntityQuery<{[P in K]: QD[K]}, NoRelations, []>;
 };
 

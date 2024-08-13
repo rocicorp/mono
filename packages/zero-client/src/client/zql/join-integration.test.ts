@@ -13,11 +13,12 @@ import {
   createRandomArtists,
   createRandomTracks,
   linkTracksToArtists,
+  musicAppQueries,
   newZero,
 } from './integration-test-util.js';
 
 test('direct foreign key join: join a track to an album', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const track: Track = {
     id: '1',
@@ -226,7 +227,7 @@ test('direct foreign key join: join a track to an album', async () => {
  * row per track.
  */
 test('junction and foreign key join, followed by aggregation: compose a playlist via a join and group by', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
   const track1: Track = {
     id: '1',
     title: 'Track 1',
@@ -413,7 +414,7 @@ test('junction and foreign key join, followed by aggregation: compose a playlist
 });
 
 test('track list composition with lots and lots of data then tracking incremental changes', async () => {
-  const z = newZero();
+  const z = newZero(musicAppQueries);
 
   const artists = createRandomArtists(100);
   const albums = createRandomAlbums(100, artists);

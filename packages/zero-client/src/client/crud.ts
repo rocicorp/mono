@@ -25,7 +25,7 @@ export type Update<E extends Entity> = Entity & Partial<E>;
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
  */
-type EntityCRUDMutate<E extends Entity> = {
+export type EntityCRUDMutate<E extends Entity> = {
   create: (value: E) => Promise<void>;
   set: (value: E) => Promise<void>;
   update: (value: Update<E>) => Promise<void>;
@@ -144,7 +144,7 @@ function makeEntityCRUDMutate<E extends Entity>(
 /**
  * Creates the `{create, set, update, delete}` object for use inside a batch.
  */
-function makeBatchCRUDMutate<E extends Entity>(
+export function makeBatchCRUDMutate<E extends Entity>(
   entityType: string,
   ops: CRUDOp[],
 ): EntityCRUDMutate<E> {
