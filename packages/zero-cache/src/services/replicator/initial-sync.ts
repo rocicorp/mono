@@ -52,34 +52,6 @@ export async function startPostgresReplication(
   // additional _0_version column to track row versions.
   const schemas = new Set<string>();
   const tablesStmts = published.tables.map(table => {
-    if (table.schema === '_zero') {
-      throw new Error(`Schema "_zero" is reserved for internal use`);
-    }
-    if (!['public', 'zero'].includes(table.schema)) {
-      // This may be relaxed in the future. We would need a plan for support in the AST first.
-      throw new Error('Only the default "public" schema is supported.');
-    }
-    if (ZERO_VERSION_COLUMN_NAME in table.columns) {
-      throw new Error(
-        `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
-      );
-    }
-    if (table.primaryKey.length === 0) {
-      throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
-    }
-    if (!ALLOWED_IDENTIFIER_CHARS.test(table.schema)) {
-      throw new Error(`Schema "${table.schema}" has invalid characters.`);
-    }
-    if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
-      throw new Error(`Table "${table.name}" has invalid characters.`);
-    }
-    for (const col in table.columns) {
-      if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
-        throw new Error(
-          `Column "${col}" in table "${table.name}" has invalid characters.`,
-        );
-      }
-    }
     schemas.add(table.schema);
 
     const tableWithVersionColumn = {
@@ -348,6 +320,38 @@ function ensurePublishedTables(
     `,
     );
 
-    return getPublicationInfo(tx, ZERO_PUB_PREFIX);
+    const newPublished = await getPublicationInfo(tx, ZERO_PUB_PREFIX);
+    newPublished.tables.forEach(table => {
+      if (table.schema === '_zero') {
+        throw new Error(`Schema "_zero" is reserved for internal use`);
+      }
+      if (!['public', 'zero'].includes(table.schema)) {
+        // This may be relaxed in the future. We would need a plan for support in the AST first.
+        throw new Error('Only the default "public" schema is supported.');
+      }
+      if (ZERO_VERSION_COLUMN_NAME in table.columns) {
+        throw new Error(
+          `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
+        );
+      }
+      if (table.primaryKey.length === 0) {
+        throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
+      }
+      if (!ALLOWED_IDENTIFIER_CHARS.test(table.schema)) {
+        throw new Error(`Schema "${table.schema}" has invalid characters.`);
+      }
+      if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
+        throw new Error(`Table "${table.name}" has invalid characters.`);
+      }
+      for (const col in table.columns) {
+        if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
+          throw new Error(
+            `Column "${col}" in table "${table.name}" has invalid characters.`,
+          );
+        }
+      }
+    });
+
+    return newPublished;
   });
 }
