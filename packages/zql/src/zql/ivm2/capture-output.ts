@@ -1,5 +1,5 @@
 import type {Input, Output} from './operator.js';
-import type {Change, TreeDiff} from './tree-diff.js';
+import type {Change} from './change.js';
 
 /**
  * A simple output that consumes and stores all pushed changes.
@@ -7,8 +7,8 @@ import type {Change, TreeDiff} from './tree-diff.js';
 export class CaptureOutput implements Output {
   readonly changes: Change[] = [];
 
-  push(_source: Input, diff: TreeDiff) {
-    this.changes.push(...diff.changes);
+  push(change: Change, _source: Input) {
+    this.changes.push(change);
   }
 
   reset() {

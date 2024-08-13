@@ -1,80 +1,140 @@
 import BTree from 'btree';
-import type {Input, Output, Request} from './operator.js';
-import {makeComparator, type Comparator, type Row} from './data.js';
+import type {
+  Input,
+  Output,
+  FetchRequest,
+  HydrateRequest,
+  Schema,
+} from './operator.js';
+import {makeComparator, valuesEqual, type Node, type Row} from './data.js';
 import type {Ordering} from '../ast2/ast.js';
-import type {Change} from './tree-diff.js';
-import {assertNotNull} from 'shared/src/asserts.js';
-import {ChangeStream} from './change-stream.js';
+import {assert} from 'shared/src/asserts.js';
+import {makeStream, type Stream} from './stream.js';
+
+export type SourceChange = {
+  type: 'add' | 'remove';
+  row: Row;
+};
 
 /**
- * A `MemoryInput` is an input that provides data to the pipeline from
+ * A `MemorySource` is a source that provides data to the pipeline from
  * an in-memory data source.
  *
  * This data is kept in sorted order as downstream pipelines will
  * always expect the data they receive from `pull` to be in sorted order.
  */
-export class MemoryInput implements Input {
-  readonly comparator: Comparator;
+export class MemorySource implements Input {
+  readonly #schema: Schema;
+  readonly data: BTree<Row, undefined>;
+  readonly #outputs: Output[] = [];
 
-  #tree: BTree<Row, undefined>;
-  #output: Output | null = null;
+  #overlay: {
+    output: Output;
+    change: SourceChange;
+  } | null = null;
 
   constructor(order: Ordering) {
-    // TODO(aa): This does not have the correct semantics at least so far as
-    // data.ts is concerned. According to that, the non-id fields should not
-    // matter for equality but here they do since we are using the sort at the
-    // comparator.
-    //
-    // I think in order to make the semantics correct, we need to have the
-    // "canonical" order source, as ivm1 did, then treat the alternate sorts
-    // as indexes.
-    //
-    // We need the canonical source to honor the request constraints in many
-    // cases anyway.
-    this.comparator = makeComparator(order);
-    this.#tree = new BTree(undefined, this.comparator);
+    this.#schema = {
+      compareRows: makeComparator(order),
+    };
+    this.data = new BTree(undefined, this.#schema.compareRows);
   }
 
-  setOutput(output: Output): void {
-    this.#output = output;
+  schema(): Schema {
+    return this.#schema;
   }
 
-  push(changes: Iterable<Change>) {
-    assertNotNull(this.#output);
-    this.#output.push(this, {
-      sorted: false,
-      changes: new ChangeStream(this.#applyChanges(changes), 'needy'),
-    });
+  addOutput(output: Output): void {
+    this.#outputs.push(output);
   }
 
-  *#applyChanges(changes: Iterable<Change>) {
-    for (const change of changes) {
-      if (change.type === 'add') {
-        this.#tree = this.#tree.with(change.row, undefined);
-        yield change;
+  hydrate(req: HydrateRequest, _output: Output) {
+    return this.#pullValues(req, this.data.entries());
+  }
+
+  fetch(req: FetchRequest, _output: Output): Stream<Node> {
+    const {start} = req;
+    let it: Iterator<[Row, undefined]> | null = null;
+    if (!start) {
+      it = this.data.entries();
+    } else {
+      const {row, basis} = start;
+      if (basis === 'before') {
+        const startKey = this.data.nextLowerKey(row);
+        it = this.data.entries(startKey);
+      } else if (basis === 'at') {
+        it = this.data.entries(row);
       } else {
-        yield change;
-        this.#tree = this.#tree.without(change.row);
+        assert(basis === 'after');
+        it = this.data.entries(row);
+        it.next();
+      }
+    }
+
+    return this.#pullValues(req, it);
+  }
+
+  *#pullValues(
+    req: HydrateRequest,
+    input: Iterator<[Row, undefined]>,
+  ): Stream<Node> {
+    let usedOverlay = false;
+
+    for (const [row] of makeStream(input)) {
+      if (this.#overlay !== null && !usedOverlay) {
+        const cmp = this.#schema.compareRows(row, this.#overlay.change.row);
+        if (this.#overlay.change.type === 'add') {
+          assert(cmp !== 0, 'Duplicate row in overlay');
+          if (cmp > 0) {
+            yield {
+              row: this.#overlay.change.row,
+              relationships: new Map(),
+            };
+            usedOverlay = true;
+          }
+        } else if (this.#overlay.change.type === 'remove') {
+          if (cmp === 0) {
+            yield {
+              row: this.#overlay.change.row,
+              relationships: new Map(),
+            };
+            usedOverlay = true;
+          }
+        }
+      }
+
+      if (valuesEqual(row[req.constraint.key], req.constraint.value)) {
+        yield {row, relationships: new Map()};
+      }
+
+      if (this.#overlay !== null && !usedOverlay) {
+        if (this.#overlay.change.type === 'add') {
+          yield {
+            row: this.#overlay.change.row,
+            relationships: new Map(),
+          };
+        }
+      } else {
+        assert(false, 'Remove change did not affect any value');
       }
     }
   }
 
-  pull(_req: Request) {
-    return {
-      appliedFilters: [],
-      diff: {
-        sorted: true,
-        changes: new ChangeStream(this.#pullChanges(), 'normal'),
-      },
-    };
-  }
-
-  *#pullChanges() {
-    for (const row of this.#tree.keys()) {
-      yield {
-        type: 'add' as const,
-        row,
-      };
+  push(change: SourceChange) {
+    for (const output of this.#outputs) {
+      this.#overlay = {output, change};
+      output.push(
+        {
+          type: change.type,
+          node: {
+            row: change.row,
+            relationships: new Map(),
+          },
+        },
+        this,
+      );
     }
+    this.#overlay = null;
+    this.data.add(change.row, undefined);
   }
 }

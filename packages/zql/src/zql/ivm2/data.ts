@@ -45,7 +45,7 @@ export type Row = Record<string, Value>;
  */
 export type Node = {
   row: Row;
-  relationships: Map<string, Stream>;
+  relationships: Map<string, Stream<Node>>;
 };
 
 /**
@@ -120,4 +120,13 @@ export function makeComparator(order: Ordering): Comparator {
     }
     return 0;
   };
+}
+
+export function valuesEqual(a: Value, b: Value): boolean {
+  a = normalizeUndefined(a);
+  b = normalizeUndefined(b);
+  if (a === null || b === null) {
+    return false;
+  }
+  return a === b;
 }

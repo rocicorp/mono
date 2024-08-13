@@ -1,77 +1,88 @@
-import type {SimpleOperator} from '../ast2/ast.js';
-import type {Value} from './data.js';
-import type {TreeDiff} from './tree-diff.js';
+// An input to an operator.
+// Inputs "vend" (chosen to avoid confusion with "output") data in some order.
+
+import type {Change} from './change.js';
+import type {Node, Row} from './data.js';
+import type {Stream} from './stream.js';
 
 /**
- * An input to an operator. Operators can pull() on their inputs to request
- * additional data from upstream operators. For example to get the intial
- * results of a query, we pull() on the end node of the pipeline.
+ * Input to an operator. Typically another Operator but can also be a Source.
  */
 export interface Input {
-  pull(req: Request): Response;
+  // The schema of the data this input returns.
+  schema(): Schema;
+
+  // Request initial result from this operator and initialize its state.
+  // Returns nodes sorted in order of schema().comparator.
+  hydrate(req: HydrateRequest, output: Output): Stream<Node>;
+
+  // Fetch data previously returned by hydrate or push.
+  // Does not modify current state.
+  // Returns nodes sorted in order of schema().comparator.
+  fetch(req: FetchRequest, output: Output): Stream<Node>;
 }
 
+// Information about the nodes output by an operator.
+export type Schema = {
+  // if ever needed ... none of current operators need.
+  // idKeys: string[];
+  // columns: Record<string, ValueType>;
+  // relationships: Map<string, Schema>;
+  // Compares two rows in the output of an operator.
+  compareRows: (r1: Row, r2: Row) => number;
+};
+
+// TODO: add optional filters
+export type HydrateRequest = {
+  constraint: Constraint;
+};
+
+export type Constraint = {
+  key: string;
+  value: string;
+};
+
+export type FetchRequest = HydrateRequest & {
+  start?:
+    | {
+        row: Row;
+        basis: 'before' | 'at' | 'after';
+      }
+    | undefined;
+};
+
 /**
- * An output from an operator. Operators can push() changelists down the graph
- * when updates happen.
+ * An output for an operator. Typically another Operator but can also be
+ * the code running the pipeline.
  */
 export interface Output {
-  push(source: Input, diff: TreeDiff): void;
+  // Push incremental changes to data previously received with hydrate().
+  // Consumers must apply all pushed changes or incremental result will
+  // be incorrect.
+  push(change: Change, input: Input): void;
 }
 
 /**
- * A Constraint is a required condition that data being returned to a Request
- * must meet. There can only ever be one constraint on a request at a time.
- * Constraints have narrower flexibility than Predicates because we need to
- * implement them client-side where we lack a real database 😢.
- */
-export type Constraint = {
-  field: string;
-  value: Value;
-};
-
-/**
- * A Filter is a more flexible version of a Constraint. It allows for more
- * complex conditions to be applied to a query. Request filters are optional. On
- * the client we won't implement them, but on the server, we'll turn them into
- * SQLite WHERE clauses.
- */
-export type Filter = {
-  field: string;
-  op: SimpleOperator;
-  value: Value;
-};
-
-/**
- * A Request is sent with pull() to tell source what data needs to be returned.
- */
-export type Request = {
-  constraint: Constraint | null;
-  optionalFilters: Filter[];
-
-  // If null, it means include all subdiffs.
-  restrictToSubdiffs: string[] | null;
-};
-
-export const everything = {
-  constraint: null,
-  optionalFilters: [],
-  restrictToSubdiffs: null,
-};
-
-/**
- * A Response is the result of pull() and indicates which of the requested
- * filters the source was able to honor.
- */
-export type Response = {
-  diff: TreeDiff;
-  // The filters that the source applied to the response. This allows the
-  // Filter operator to know if it needs to reapply the filter.
-  appliedFilters: Filter[];
-};
-
-/**
- * Operators are chained together, so each Operator itself is both an Input and
- * Output.
+ * Operators are arranged into pipelines.
+ * They are stateful.
+ * Each operator is an input to the next operator in the chain and an output
+ * to the previous.
  */
 export interface Operator extends Input, Output {}
+
+/**
+ * A source is an input that serves as the root data source of the pipeline.
+ * Sources can have multiple outputs.
+ */
+export interface Source extends Input {
+  addOutput(output: Output): void;
+}
+
+/**
+ * Operators get access to storage that they can store their internal
+ * state in.
+ */
+export interface Storage<T> {
+  put(key: string, value: T): void;
+  get(key: string, def: T | undefined): T | undefined;
+}
