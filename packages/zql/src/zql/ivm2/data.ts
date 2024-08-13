@@ -1,6 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import {assertBoolean, assertNumber, assertString} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
+import type {Stream} from './stream.js';
 
 /**
  * The data types that Zero can represent are limited by two things:
@@ -37,6 +38,15 @@ export type Value = undefined | null | boolean | number | string;
  * with we end up with a lot less copies by using objects throughout.
  */
 export type Row = Record<string, Value>;
+
+/**
+ * A row flowing thorugh the pipeline, plus its relationships.
+ * Relationships are generated lazily as read.
+ */
+export type Node = {
+  row: Row;
+  relationships: Map<string, Stream>;
+};
 
 /**
  * Compare two values. The values must be of the same type. This function
