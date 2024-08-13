@@ -22,8 +22,6 @@ import type {Stream} from './stream.js';
  *
  * For developer convenience we also allow `undefined`, which we treat
  * equivalently to `null`.
- *
- * TODO: This file needs unit tests.
  */
 export type Value = undefined | null | boolean | number | string;
 
