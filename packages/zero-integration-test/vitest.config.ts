@@ -34,10 +34,10 @@ export default defineConfig({
     // Run browser tests only for files in the "src/dom" folder
     include:
       process.env.BROWSER_TESTS === 'true'
-        ? ['src/dom/**/*.test.{js,ts,jsx,tsx}']
+        ? ['src/zero-client/**/*.test.{js,ts,jsx,tsx}']
         : [
             'src/**/*.test.{js,ts,jsx,tsx}',
-            '!src/dom/**/*.test.{js,ts,jsx,tsx}',
+            '!src/zero-client/**/*.test.{js,ts,jsx,tsx}',
           ],
     typecheck: {
       enabled: false,

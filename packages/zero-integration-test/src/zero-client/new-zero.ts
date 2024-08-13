@@ -1,6 +1,6 @@
-import {randInt} from 'shared/src/rand.js';
 import {QueryDefs, Zero} from 'zero-client';
 import {QueryParseDefs} from 'zero-client/src/client/options.js';
+import {nanoid} from 'zero-client/src/util/nanoid.js';
 import type {
   Album,
   Artist,
@@ -13,7 +13,7 @@ export function newZero<QD extends QueryDefs>(
   queries: QueryParseDefs<QD>,
 ): Zero<QD> {
   const z = new Zero({
-    userID: 'user-' + randInt(0, 1000000),
+    userID: 'user-' + nanoid(),
     queries,
   });
   return z;
