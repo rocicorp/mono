@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {compareValues, normalizeUndefined} from './data.js';
+import {compareValues, normalizeUndefined, valuesEqual} from './data.js';
 import fc from 'fast-check';
 import {compareUTF8} from 'compare-utf8';
 
@@ -84,6 +84,34 @@ test('compareValues', () => {
       fc.oneof(fc.boolean(), fc.double()),
       (s, v) => {
         expect(() => compareValues(s, v)).toThrow('expected string');
+      },
+    ),
+  );
+});
+
+test('valuesEquals', () => {
+  fc.assert(
+    fc.property(
+      fc.oneof(fc.boolean(), fc.double(), fc.fullUnicodeString()),
+      fc.oneof(fc.boolean(), fc.double(), fc.fullUnicodeString()),
+      (v1, v2) => {
+        expect(valuesEqual(v1, v2)).toBe(v1 === v2);
+      },
+    ),
+  );
+
+  fc.assert(
+    fc.property(
+      fc.constantFrom(null, undefined),
+      fc.oneof(
+        fc.constantFrom(null, undefined),
+        fc.boolean(),
+        fc.double(),
+        fc.fullUnicodeString(),
+      ),
+      (v1, v2) => {
+        expect(valuesEqual(v1, v2)).false;
+        expect(valuesEqual(v2, v1)).false;
       },
     ),
   );

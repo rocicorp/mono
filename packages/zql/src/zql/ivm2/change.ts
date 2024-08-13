@@ -1,4 +1,4 @@
-import type {Row} from './data.js';
+import type {Node, Row} from './data.js';
 
 export type Change = AddChange | RemoveChange | NopChange;
 
@@ -19,7 +19,7 @@ export type RemoveChange = {
 };
 
 /**
- * Represents a change in a child relationship.
+ * The node itself is unchanged, but one of its descendants has changed.
  */
 export type NopChange = {
   type: 'child';

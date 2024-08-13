@@ -1,21 +1,21 @@
-import type {Node} from './data.js';
-
 // streams are lazy forward-only iterables.
 // once they reach the end they can't be restarted.
 // they are iterable, not iterator, so that they can be used in for-each,
 // and so that we know when consumer has stopped iterator. this allows us
 // to clean up resources like sql statements.
-export type Stream = Iterable<Node>;
+export type Stream<T> = Iterable<T>;
 
-export function makeStream(iterable: Iterable<Node>): Stream {
+export function makeStream<T>(iterable: Iterable<T> | Iterator<T>): Stream<T> {
   return new OneTimeIterable(iterable);
 }
 
 class OneTimeIterable<T> implements Iterable<T> {
   readonly #iterator: Iterator<T>;
 
-  constructor(iterable: Iterable<T>) {
-    this.#iterator = iterable[Symbol.iterator]();
+  constructor(iterable: Iterable<T> | Iterator<T>) {
+    this.#iterator = (iterable as Iterable<T>)[Symbol.iterator]
+      ? (iterable as Iterable<T>)[Symbol.iterator]()
+      : (iterable as Iterator<T>);
   }
 
   [Symbol.iterator]() {
