@@ -25,7 +25,7 @@ export type SourceChange = {
  */
 export class MemorySource implements Input {
   readonly #schema: Schema;
-  readonly data: BTree<Row, undefined>;
+  readonly #data: BTree<Row, undefined>;
   readonly #outputs: Output[] = [];
 
   #overlay: {
@@ -37,7 +37,7 @@ export class MemorySource implements Input {
     this.#schema = {
       compareRows: makeComparator(order),
     };
-    this.data = new BTree(undefined, this.#schema.compareRows);
+    this.#data = new BTree(undefined, this.#schema.compareRows);
   }
 
   schema(): Schema {
@@ -49,24 +49,24 @@ export class MemorySource implements Input {
   }
 
   hydrate(req: HydrateRequest, _output: Output) {
-    return this.#pullValues(req, this.data.entries());
+    return this.#pullValues(req, this.#data.entries());
   }
 
   fetch(req: FetchRequest, _output: Output): Stream<Node> {
     const {start} = req;
     let it: Iterator<[Row, undefined]> | null = null;
     if (!start) {
-      it = this.data.entries();
+      it = this.#data.entries();
     } else {
       const {row, basis} = start;
       if (basis === 'before') {
-        const startKey = this.data.nextLowerKey(row);
-        it = this.data.entries(startKey);
+        const startKey = this.#data.nextLowerKey(row);
+        it = this.#data.entries(startKey);
       } else if (basis === 'at') {
-        it = this.data.entries(row);
+        it = this.#data.entries(row);
       } else {
         assert(basis === 'after');
-        it = this.data.entries(row);
+        it = this.#data.entries(row);
         it.next();
       }
     }
@@ -103,7 +103,10 @@ export class MemorySource implements Input {
         }
       }
 
-      if (valuesEqual(row[req.constraint.key], req.constraint.value)) {
+      if (
+        !req.constraint ||
+        valuesEqual(row[req.constraint.key], req.constraint.value)
+      ) {
         yield {row, relationships: new Map()};
       }
 
@@ -113,14 +116,25 @@ export class MemorySource implements Input {
             row: this.#overlay.change.row,
             relationships: new Map(),
           };
+        } else {
+          assert(false, 'Remove change did not affect any value');
         }
-      } else {
-        assert(false, 'Remove change did not affect any value');
       }
     }
   }
 
   push(change: SourceChange) {
+    if (change.type === 'add') {
+      if (this.#data.has(change.row)) {
+        throw new Error('Row already exists');
+      }
+    } else {
+      assert(change.type === 'remove');
+      if (!this.#data.has(change.row)) {
+        throw new Error('Row not found');
+      }
+    }
+
     for (const output of this.#outputs) {
       this.#overlay = {output, change};
       output.push(
@@ -135,6 +149,15 @@ export class MemorySource implements Input {
       );
     }
     this.#overlay = null;
-    this.data.add(change.row, undefined);
+    if (change.type === 'add') {
+      const added = this.#data.add(change.row, undefined);
+      // must suceed since we checked has() above.
+      assert(added);
+    } else {
+      assert(change.type === 'remove');
+      const removed = this.#data.delete(change.row);
+      // must suceed since we checked has() above.
+      assert(removed);
+    }
   }
 }

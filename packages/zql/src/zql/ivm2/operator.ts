@@ -2,7 +2,7 @@
 // Inputs "vend" (chosen to avoid confusion with "output") data in some order.
 
 import type {Change} from './change.js';
-import type {Node, Row} from './data.js';
+import type {Node, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
 
 /**
@@ -34,12 +34,12 @@ export type Schema = {
 
 // TODO: add optional filters
 export type HydrateRequest = {
-  constraint: Constraint;
+  constraint?: Constraint | undefined;
 };
 
 export type Constraint = {
   key: string;
-  value: string;
+  value: Value;
 };
 
 export type FetchRequest = HydrateRequest & {
@@ -59,6 +59,9 @@ export interface Output {
   // Push incremental changes to data previously received with hydrate().
   // Consumers must apply all pushed changes or incremental result will
   // be incorrect.
+  // Callers must maintain some invariants for correct operation:
+  // - Only add rows which do not already exist (by deep equality).
+  // - Only remove rows which do exist (by deep equality).
   push(change: Change, input: Input): void;
 }
 
