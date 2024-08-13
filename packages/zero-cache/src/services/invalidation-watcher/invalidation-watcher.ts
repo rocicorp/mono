@@ -3,7 +3,6 @@ import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {union} from 'shared/src/set-utils.js';
 import {sleep} from 'shared/src/sleep.js';
-import {max, min, type LexiVersion} from '../../types/lexi-version.js';
 import {
   Mode,
   TransactionPool,
@@ -11,6 +10,7 @@ import {
   sharedSnapshot,
 } from '../../db/transaction-pool.js';
 import {stringify} from '../../types/bigint-json.js';
+import {max, min, type LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -284,7 +284,10 @@ export class InvalidationWatcherService
         this.#lc.info?.(`No zero.clients table. Retrying in ${delay} ms`);
         await sleep(delay);
       }
-      this.#cachedTableSchemas = published.tables;
+      this.#cachedTableSchemas = published.tables.map(t => {
+        const {filterConditions: _dropped, ...table} = t;
+        return table;
+      });
     }
     return this.#cachedTableSchemas;
   }

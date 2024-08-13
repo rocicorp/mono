@@ -11,3 +11,7 @@ export type TableSpec = {
   readonly columns: Readonly<Record<string, ColumnSpec>>;
   readonly primaryKey: readonly string[];
 };
+
+export type FilteredTableSpec = TableSpec & {
+  readonly filterConditions: string[];
+};
