@@ -9,7 +9,6 @@ import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import type {LexiVersion} from '../../../types/lexi-version.js';
 import {getPublicationInfo} from '../tables/published.js';
-import {CREATE_INVALIDATION_TABLES} from './invalidation.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
@@ -78,7 +77,7 @@ export async function setupReplicationTables(
   );
 
   await Promise.all(alterStmts);
-  await tx.unsafe(CREATE_REPLICATION_TABLES + CREATE_INVALIDATION_TABLES);
+  await tx.unsafe(CREATE_REPLICATION_TABLES);
 }
 
 export function queryStateVersion(db: postgres.Sql) {

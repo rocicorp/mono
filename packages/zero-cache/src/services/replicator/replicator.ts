@@ -8,7 +8,6 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
-import {InvalidationFilters, Invalidator} from './invalidation.js';
 import {initSyncSchema} from './schema/sync-schema.js';
 import {TransactionTrainService} from './transaction-train.js';
 
@@ -170,7 +169,6 @@ export class ReplicatorService implements Replicator, Service {
   readonly #syncReplica: PostgresDB;
   readonly #txTrain: TransactionTrainService;
   readonly #incrementalSyncer: IncrementalSyncer;
-  readonly #invalidator: Invalidator;
   readonly #ready = resolver();
 
   constructor(
@@ -189,19 +187,12 @@ export class ReplicatorService implements Replicator, Service {
     this.#syncReplica = syncReplica;
 
     this.#txTrain = new TransactionTrainService(this.#lc, syncReplica);
-    const invalidationFilters = new InvalidationFilters();
 
     this.#incrementalSyncer = new IncrementalSyncer(
       upstreamUri,
       replicaID,
       this.#syncReplica,
       this.#txTrain,
-      invalidationFilters,
-    );
-    this.#invalidator = new Invalidator(
-      this.#syncReplica,
-      this.#txTrain,
-      invalidationFilters,
     );
   }
 
@@ -227,12 +218,8 @@ export class ReplicatorService implements Replicator, Service {
     await this.#incrementalSyncer.run(this.#lc);
   }
 
-  async registerInvalidationFilters(
-    req: RegisterInvalidationFiltersRequest,
-  ): Promise<RegisterInvalidationFiltersResponse> {
-    // Registration requires the sync schema to be initialized.
-    await this.#ready.promise;
-    return this.#invalidator.registerInvalidationFilters(this.#lc, req);
+  registerInvalidationFilters(): Promise<RegisterInvalidationFiltersResponse> {
+    throw new Error('obsolete');
   }
 
   versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {

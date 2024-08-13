@@ -17,17 +17,16 @@ import {
 import {epochMicrosToTimestampTz} from '../../types/big-time.js';
 import {JSONValue, stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
+import {toLexiVersion} from '../../types/lsn.js';
 import {PostgresDB, registerPostgresTypeParsers} from '../../types/pg.js';
 import type {RowKey, RowKeyType, RowValue} from '../../types/row-key.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {replicationSlot} from './initial-sync.js';
-import {InvalidationFilters, InvalidationProcessor} from './invalidation.js';
 import {InternalVersionChange, Notifier} from './notifier.js';
 import type {RowChange, VersionChange} from './replicator.js';
 import {ZERO_VERSION_COLUMN_NAME, queryLastLSN} from './schema/replication.js';
 import {PublicationInfo, getPublicationInfo} from './tables/published.js';
 import type {TransactionTrain} from './transaction-train.js';
-import {toLexiVersion} from '../../types/lsn.js';
 import {TableTracker} from './types/table-tracker.js';
 
 // BigInt support from LogicalReplicationService.
@@ -52,7 +51,6 @@ export class IncrementalSyncer {
   // across re-connects to the upstream db and multiple (temporarily)
   // running instances of the Replicator.
   readonly #txTrain: TransactionTrain;
-  readonly #invalidationFilters: InvalidationFilters;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
   #service: LogicalReplicationService | undefined;
@@ -64,14 +62,12 @@ export class IncrementalSyncer {
     replicaID: string,
     replica: PostgresDB,
     txTrain: TransactionTrain,
-    invalidationFilters: InvalidationFilters,
   ) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replica = replica;
     this.#notifier = new Notifier();
     this.#txTrain = txTrain;
-    this.#invalidationFilters = invalidationFilters;
   }
 
   async run(lc: LogContext) {
@@ -95,7 +91,6 @@ export class IncrementalSyncer {
       const processor = new MessageProcessor(
         replicated,
         this.#txTrain,
-        this.#invalidationFilters,
         (lsn: string) => {
           if (!lastLSN || toLexiVersion(lastLSN) < toLexiVersion(lsn)) {
             lastLSN = lsn;
@@ -254,7 +249,6 @@ class PrecedingTransactionError extends ControlFlowError {
 export class MessageProcessor {
   readonly #replicated: PublicationInfo;
   readonly #txTrain: TransactionTrain;
-  readonly #invalidationFilters: InvalidationFilters;
   readonly #acknowledge: (lsn: string) => unknown;
   readonly #emitVersion: (v: InternalVersionChange) => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
@@ -267,14 +261,12 @@ export class MessageProcessor {
   constructor(
     replicated: PublicationInfo,
     txTrain: TransactionTrain,
-    invalidationFilters: InvalidationFilters,
     acknowledge: (lsn: string) => unknown,
     emitVersion: (v: InternalVersionChange) => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#replicated = replicated;
     this.#txTrain = txTrain;
-    this.#invalidationFilters = invalidationFilters;
     this.#acknowledge = acknowledge;
     this.#emitVersion = emitVersion;
     this.#failService = failService;
@@ -287,19 +279,12 @@ export class MessageProcessor {
   ): void {
     const start = Date.now();
     void this.#txTrain.runNext(
-      async (
-        writer,
-        readers,
-        prevVersion,
-        invalidationRegistryVersion,
-        prevSnapshotID,
-      ) => {
+      async (writer, readers, prevVersion, prevSnapshotID) => {
         const inLock = Date.now();
         const txProcessor = new TransactionProcessor(
           commitLsn,
           writer,
           readers,
-          this.#invalidationFilters,
         );
         try {
           if (this.#failure) {
@@ -311,7 +296,7 @@ export class MessageProcessor {
           loop: for await (const msg of messages.asAsyncIterable()) {
             switch (msg.tag) {
               case 'begin':
-                txProcessor.processBegin(msg, invalidationRegistryVersion);
+                txProcessor.processBegin(msg);
                 break;
               case 'relation':
                 this.#processRelation(msg);
@@ -483,19 +468,12 @@ export class MessageProcessor {
  */
 class TransactionProcessor {
   readonly #version: LexiVersion;
-  readonly #invalidation: InvalidationProcessor;
   readonly #writer: TransactionPool;
   readonly #readers: TransactionPool;
   readonly #tableTrackers = new Map<string, TableTracker>();
 
-  constructor(
-    lsn: string,
-    writer: TransactionPool,
-    readers: TransactionPool,
-    filters: InvalidationFilters,
-  ) {
+  constructor(lsn: string, writer: TransactionPool, readers: TransactionPool) {
     this.#version = toLexiVersion(lsn);
-    this.#invalidation = new InvalidationProcessor(filters);
     this.#writer = writer;
     this.#readers = readers;
   }
@@ -504,13 +482,10 @@ class TransactionProcessor {
     Omit<VersionChange, 'prevVersion' | 'prevSnapshotID'>
   > {
     await this.#writer.done();
-    const invalidations = this.#invalidation.getInvalidations();
 
     return {
       newVersion: this.#version,
-      invalidations: Object.fromEntries(
-        [...invalidations.keys()].map(hash => [hash, this.#version]),
-      ),
+      invalidations: {}, // TODO: Remove
       changes: rowChanges(this.#tableTrackers.values()),
     };
   }
@@ -520,15 +495,7 @@ class TransactionProcessor {
     this.#readers.fail(err);
   }
 
-  processBegin(
-    begin: Pgoutput.MessageBegin,
-    invalidationRegistryVersion: LexiVersion | null,
-  ) {
-    this.#invalidation.processInitTasks(
-      this.#readers,
-      invalidationRegistryVersion,
-    );
-
+  processBegin(begin: Pgoutput.MessageBegin) {
     const row = {
       stateVersion: this.#version,
       lsn: begin.commitLsn,
@@ -658,16 +625,6 @@ class TransactionProcessor {
       }
       return changeLogEntries;
     });
-    // Invalidation tagging involves blocking on reader pool queries
-    // (which read the pre-transaction state of UPDATE'd and DELETE'd rows).
-    // Process these tasks last so that all of the user table and ChangeLog
-    // writes can be applied in parallel with the computation of the invalidation tags.
-    this.#invalidation.processFinalTasks(
-      this.#readers,
-      this.#writer,
-      this.#version,
-      this.#tableTrackers.values(),
-    );
     this.#writer.setDone();
   }
 

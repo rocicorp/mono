@@ -14,7 +14,6 @@ export type TransactionFn<T> = (
   writer: TransactionPool,
   readers: TransactionPool,
   preStateVersion: LexiVersion,
-  invalidationRegistryVersion: LexiVersion | null,
   preStateSnapshotID: string,
 ) => Promise<T> | T;
 
@@ -86,24 +85,13 @@ export class TransactionTrainService implements TransactionTrain {
 
   runNext<T>(fn: TransactionFn<T>): Promise<T> {
     return this.#lock.withLock(async () => {
-      const {
-        writer,
-        readers,
-        stateVersion,
-        invalidationRegistryVersion,
-        preStateSnapshotID,
-      } = await this.#txPools.dequeue();
+      const {writer, readers, stateVersion, preStateSnapshotID} =
+        await this.#txPools.dequeue();
 
       this.#clearIdleTimeout();
 
       try {
-        return await fn(
-          writer,
-          readers,
-          stateVersion,
-          invalidationRegistryVersion,
-          preStateSnapshotID,
-        );
+        return await fn(writer, readers, stateVersion, preStateSnapshotID);
       } finally {
         if (writer.isRunning()) {
           writer.setDone();
@@ -165,14 +153,9 @@ export class TransactionTrainService implements TransactionTrain {
 
       try {
         const versions = await writer.processReadTask(tx =>
-          tx`
-        SELECT MAX("stateVersion") FROM _zero."TxLog";
-        SELECT "stateVersionAtLastSpecChange" as version
-               FROM _zero."InvalidationRegistryVersion" 
-               FOR UPDATE;`.simple(),
+          tx`SELECT MAX("stateVersion") FROM _zero."TxLog"`.simple(),
         );
-        const stateVersion = versions[0][0].max ?? '00';
-        const invalidationRegistryVersion = versions[1][0].version;
+        const stateVersion = versions[0].max ?? '00';
         writer.addLoggingContext('version', stateVersion);
         readers.addLoggingContext('version', stateVersion);
         this.#lc.debug?.(
@@ -185,7 +168,6 @@ export class TransactionTrainService implements TransactionTrain {
           writer,
           readers,
           stateVersion,
-          invalidationRegistryVersion,
           preStateSnapshotID: await snapshotID,
         };
 
@@ -231,7 +213,6 @@ type TxPools = {
   writer: TransactionPool;
   readers: TransactionPool;
   stateVersion: LexiVersion;
-  invalidationRegistryVersion: LexiVersion | null;
   preStateSnapshotID: string;
 };
 
