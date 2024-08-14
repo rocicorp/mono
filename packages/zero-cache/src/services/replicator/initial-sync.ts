@@ -90,16 +90,6 @@ function ensureReplicationSlot(
   });
 }
 
-/* eslint-disable @typescript-eslint/naming-convention */
-// Row returned by `CREATE_REPLICATION_SLOT`
-type ReplicationSlot = {
-  slot_name: string;
-  consistent_point: string;
-  snapshot_name: string;
-  output_plugin: string;
-};
-/* eslint-enable @typescript-eslint/naming-convention */
-
 export async function initialSync(
   lc: LogContext,
   replicaID: string,
@@ -116,37 +106,14 @@ export async function initialSync(
 
   const {database, host} = upstreamDB.options;
   lc.info?.(`opening replication session to ${database}@${host}`);
-  const repl = postgres(upstreamURI, {
+  const replicationSession = postgres(upstreamURI, {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     fetch_types: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
   try {
-    // Note: The replication connection does not support the extended query protocol,
-    //       so all commands must be sent using sql.unsafe(). This is technically safe
-    //       because all placeholder values are under our control (i.e. "slotName").
-    const slotName = replicationSlot(replicaID);
-    const slots = await repl.unsafe(
-      `SELECT * FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
-    );
-
-    // Because a snapshot created by CREATE_REPLICATION_SLOT only lasts for the lifetime
-    // of the replication session, if there is an existing slot, it must be deleted so that
-    // the slot (and corresponding snapshot) can be created anew.
-    //
-    // This means that in order for initial data sync to succeed, it must fully complete
-    // within the lifetime of a replication session.
-    if (slots.length > 0) {
-      lc.info?.(`Dropping existing replication slot ${slotName}`);
-      await repl.unsafe(`DROP_REPLICATION_SLOT ${slotName}`);
-    }
-    const slot = (
-      await repl.unsafe<ReplicationSlot[]>(
-        `CREATE_REPLICATION_SLOT ${slotName} LOGICAL pgoutput`,
-      )
-    )[0];
-    lc.info?.(`Created replication slot ${slotName}`, slot);
-    const {snapshot_name: snapshot, consistent_point: lsn} = slot;
+    const {snapshot_name: snapshot, consistent_point: lsn} =
+      await createReplicationSlot(lc, replicaID, replicationSession);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const copiers = startTableCopyWorkers(
@@ -167,7 +134,7 @@ export async function initialSync(
 
     await copiers.done();
   } finally {
-    await repl.end(); // Close the replication session.
+    await replicationSession.end(); // Close the replication session.
   }
 }
 
@@ -279,6 +246,50 @@ function ensurePublishedTables(
 
     return newPublished;
   });
+}
+
+/* eslint-disable @typescript-eslint/naming-convention */
+// Row returned by `CREATE_REPLICATION_SLOT`
+type ReplicationSlot = {
+  slot_name: string;
+  consistent_point: string;
+  snapshot_name: string;
+  output_plugin: string;
+};
+/* eslint-enable @typescript-eslint/naming-convention */
+
+async function createReplicationSlot(
+  lc: LogContext,
+  replicaID: string,
+  session: postgres.Sql,
+): Promise<ReplicationSlot> {
+  // Note: The replication connection does not support the extended query protocol,
+  //       so all commands must be sent using sql.unsafe(). This is technically safe
+  //       because all placeholder values are under our control (i.e. "slotName").
+  const slotName = replicationSlot(replicaID);
+  const slots = await session.unsafe(
+    `SELECT * FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
+  );
+
+  // Because a snapshot created by CREATE_REPLICATION_SLOT only lasts for the lifetime
+  // of the replication session, if there is an existing slot, it must be deleted so that
+  // the slot (and corresponding snapshot) can be created anew.
+  //
+  // This means that in order for initial data sync to succeed, it must fully complete
+  // within the lifetime of a replication session. Note that this is same requirement
+  // (and behavior) for Postgres-to-Postgres initial sync:
+  // https://github.com/postgres/postgres/blob/5304fec4d8a141abe6f8f6f2a6862822ec1f3598/src/backend/replication/logical/tablesync.c#L1358
+  if (slots.length > 0) {
+    lc.info?.(`Dropping existing replication slot ${slotName}`);
+    await session.unsafe(`DROP_REPLICATION_SLOT ${slotName} WAIT`);
+  }
+  const slot = (
+    await session.unsafe<ReplicationSlot[]>(
+      `CREATE_REPLICATION_SLOT ${slotName} LOGICAL pgoutput`,
+    )
+  )[0];
+  lc.info?.(`Created replication slot ${slotName}`, slot);
+  return slot;
 }
 
 // TODO: Consider parameterizing these.
