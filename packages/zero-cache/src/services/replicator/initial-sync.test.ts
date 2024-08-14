@@ -24,25 +24,21 @@ const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
   columns: {
     clientGroupID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'text',
       notNull: true,
     },
     clientID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'text',
       notNull: true,
     },
     lastMutationID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'int8',
       notNull: false,
     },
     userID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'text',
       notNull: false,
     },
@@ -57,25 +53,21 @@ const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
   columns: {
     clientGroupID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'TEXT',
       notNull: false,
     },
     clientID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'TEXT',
       notNull: false,
     },
     lastMutationID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'INTEGER',
       notNull: false,
     },
     userID: {
       characterMaximumLength: null,
-      columnDefault: null,
       dataType: 'TEXT',
       notNull: false,
     },
@@ -165,13 +157,11 @@ describe('replicator/initial-sync', () => {
           columns: {
             issueID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'int4',
               notNull: true,
             },
             orgID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'int4',
               notNull: true,
             },
@@ -188,15 +178,18 @@ describe('replicator/initial-sync', () => {
           columns: {
             issueID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             orgID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'INTEGER',
               notNull: false,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: true,
             },
           },
           name: 'issues',
@@ -232,14 +225,12 @@ describe('replicator/initial-sync', () => {
           columns: {
             userID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'int4',
               notNull: true,
             },
             // Note: password is not published
             handle: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'text',
               notNull: false,
             },
@@ -256,16 +247,19 @@ describe('replicator/initial-sync', () => {
           columns: {
             userID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             // Note: password is not published
             handle: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'TEXT',
               notNull: false,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: true,
             },
           },
           name: 'users',
@@ -302,14 +296,12 @@ describe('replicator/initial-sync', () => {
           columns: {
             userID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'int4',
               notNull: true,
             },
             // Note: password is not published
             handle: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'text',
               notNull: false,
             },
@@ -326,16 +318,19 @@ describe('replicator/initial-sync', () => {
           columns: {
             userID: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             // Note: password is not published
             handle: {
               characterMaximumLength: null,
-              columnDefault: null,
               dataType: 'TEXT',
               notNull: false,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: true,
             },
           },
           name: 'users',

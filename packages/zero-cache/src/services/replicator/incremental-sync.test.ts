@@ -82,11 +82,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       setupReplica: `
       CREATE TABLE issues(
         "issueID" INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE TABLE "table-with-special-characters" (
         "id" INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;
 
@@ -94,7 +94,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       CREATE TABLE zero.clients(
         "clientID" TEXT PRIMARY KEY,
         "lastMutationID" TEXT,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
       `,
@@ -106,13 +106,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -126,13 +124,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             id: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -146,19 +142,16 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             clientID: {
               dataType: 'text',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             lastMutationID: {
               dataType: 'text',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null, // Default should be cleared.
               notNull: true,
             },
           },
@@ -194,7 +187,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         bigs BIGINT[],
         time TIMESTAMPTZ,
         description TEXT,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
@@ -206,49 +199,41 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             big: {
               dataType: 'int8',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             flt: {
               dataType: 'float8',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             ints: {
               dataType: 'int4[]',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             bigs: {
               dataType: 'int8[]',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             time: {
               dataType: 'timestamptz',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             description: {
               dataType: 'text',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -568,7 +553,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         "issueID" INTEGER,
         "orgID" INTEGER,
         description TEXT,
-        _0_version VARCHAR(38) DEFAULT '00',
+        _0_version VARCHAR(38) NOT NULL,
         PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
@@ -581,25 +566,21 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             orgID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             description: {
               dataType: 'text',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -818,7 +799,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         "issueID" INTEGER,
         "orgID" INTEGER,
         description TEXT,
-        _0_version VARCHAR(38) DEFAULT '00',
+        _0_version VARCHAR(38) NOT NULL,
         PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
@@ -831,25 +812,21 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             orgID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             description: {
               dataType: 'text',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -1064,15 +1041,15 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       setupReplica: `
       CREATE TABLE foo(
         id INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE TABLE bar(
         id INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE TABLE baz(
         id INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) DEFAULT '00'
+        _0_version VARCHAR(38) NOT NULL
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
@@ -1084,13 +1061,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             id: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -1104,13 +1079,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             id: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -1124,13 +1097,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             id: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },
@@ -1347,7 +1318,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         "issueID" INTEGER,
         "orgID" INTEGER,
         description TEXT,
-        _0_version VARCHAR(38) DEFAULT '00',
+        _0_version VARCHAR(38) NOT NULL,
         PRIMARY KEY("orgID", "issueID")
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
@@ -1360,25 +1331,21 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             orgID: {
               dataType: 'int4',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: true,
             },
             description: {
               dataType: 'text',
               characterMaximumLength: null,
-              columnDefault: null,
               notNull: false,
             },
             ['_0_version']: {
               dataType: 'varchar',
               characterMaximumLength: 38,
-              columnDefault: null,
               notNull: true,
             },
           },

@@ -48,13 +48,11 @@ describe('tables/published', () => {
               clientID: {
                 dataType: 'varchar',
                 characterMaximumLength: 180,
-                columnDefault: null,
                 notNull: true,
               },
               lastMutationID: {
                 dataType: 'int8',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
             },
@@ -76,7 +74,7 @@ describe('tables/published', () => {
         bigint_array BIGINT[],
         bool_array BOOL[],
         real_array REAL[],
-        int_array INTEGER[] DEFAULT '{1, 2, 3}',
+        int_array INTEGER[],
         json_val JSONB
       );
       CREATE PUBLICATION zero_data FOR TABLE test.users;
@@ -99,55 +97,46 @@ describe('tables/published', () => {
               ['user_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               handle: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'text',
                 notNull: false,
               },
               address: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'text[]',
                 notNull: false,
               },
               ['timez']: {
                 dataType: 'timestamptz[]',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               ['bigint_array']: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'int8[]',
                 notNull: false,
               },
               ['bool_array']: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'bool[]',
                 notNull: false,
               },
               ['real_array']: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'float4[]',
                 notNull: false,
               },
               ['int_array']: {
                 dataType: 'int4[]',
                 characterMaximumLength: null,
-                columnDefault: "'{1,2,3}'::integer[]",
                 notNull: false,
               },
               ['json_val']: {
                 dataType: 'jsonb',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
             },
@@ -186,18 +175,15 @@ describe('tables/published', () => {
               ['user_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['org_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               handle: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'text',
                 notNull: false,
               },
@@ -245,18 +231,15 @@ describe('tables/published', () => {
               ['user_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['org_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               handle: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'text',
                 notNull: false,
               },
@@ -304,18 +287,15 @@ describe('tables/published', () => {
               ['user_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['org_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               handle: {
                 characterMaximumLength: null,
-                columnDefault: null,
                 dataType: 'text',
                 notNull: false,
               },
@@ -352,7 +332,7 @@ describe('tables/published', () => {
         bigint_val BIGINT,
         bool_val BOOL,
         real_val REAL,
-        int_array INTEGER[] DEFAULT '{1, 2, 3}',
+        int_array INTEGER[],
         json_val JSONB
       );
       CREATE PUBLICATION zero_data FOR TABLE test.users (user_id, timez, int_array, json_val);
@@ -375,25 +355,21 @@ describe('tables/published', () => {
               ['user_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['timez']: {
                 dataType: 'timestamptz',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               ['int_array']: {
                 dataType: 'int4[]',
                 characterMaximumLength: null,
-                columnDefault: "'{1,2,3}'::integer[]",
                 notNull: false,
               },
               ['json_val']: {
                 dataType: 'jsonb',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
             },
@@ -434,25 +410,21 @@ describe('tables/published', () => {
               ['issue_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['description']: {
                 dataType: 'text',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               ['org_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['component_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
             },
@@ -513,25 +485,21 @@ describe('tables/published', () => {
               ['issue_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['description']: {
                 dataType: 'text',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
               ['org_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['component_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
             },
@@ -545,13 +513,11 @@ describe('tables/published', () => {
               ['user_id']: {
                 dataType: 'int4',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: true,
               },
               ['handle']: {
                 dataType: 'text',
                 characterMaximumLength: null,
-                columnDefault: "'foo'::text",
                 notNull: false,
               },
             },
@@ -565,13 +531,11 @@ describe('tables/published', () => {
               clientID: {
                 dataType: 'varchar',
                 characterMaximumLength: 180,
-                columnDefault: null,
                 notNull: true,
               },
               lastMutationID: {
                 dataType: 'int8',
                 characterMaximumLength: null,
-                columnDefault: null,
                 notNull: false,
               },
             },

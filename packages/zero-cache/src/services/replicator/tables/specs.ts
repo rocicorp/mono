@@ -1,7 +1,6 @@
 export type ColumnSpec = {
   readonly dataType: string;
   readonly characterMaximumLength: number | null;
-  readonly columnDefault: string | null;
   readonly notNull: boolean;
 };
 
