@@ -98,15 +98,15 @@ test('fetch-start', () => {
   const out = new CaptureOutput();
   ms.addOutput(out);
 
-  expect(() => [
-    ...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out),
-  ]).toThrow('Start row not found');
-  expect(() => [...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toThrow(
-    'Start row not found',
+  expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
+    asNodes([]),
   );
-  expect(() => [
-    ...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out),
-  ]).toThrow('Start row not found');
+  expect([...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toEqual(
+    asNodes([]),
+  );
+  expect([...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out)]).toEqual(
+    asNodes([]),
+  );
 
   ms.push({type: 'add', row: {a: 2}});
   ms.push({type: 'add', row: {a: 3}});
@@ -265,7 +265,7 @@ test('overlay-vs-fetch-start', () => {
         basis: 'before',
       },
       change: {type: 'add', row: {a: 1}},
-      expected: 'Start row not found',
+      expected: [{a: 1}, {a: 2}, {a: 4}],
     },
     {
       startData: [{a: 2}, {a: 4}],
