@@ -3,7 +3,8 @@ import {compareRowsTest} from './data.test.js';
 import type {Ordering} from '../ast2/ast.js';
 import {MemorySource, SourceChange} from './memory-source.js';
 import {CaptureOutput} from './capture-output.js';
-import type {Row, Node} from './data.js';
+import type {Row, Node, Value} from './data.js';
+import type {FetchRequest, Input, Output, Start} from './operator.js';
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
@@ -97,15 +98,15 @@ test('fetch-start', () => {
   const out = new CaptureOutput();
   ms.addOutput(out);
 
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
-    asNodes([]),
+  expect(() => [
+    ...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out),
+  ]).toThrow('Start row not found');
+  expect(() => [...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toThrow(
+    'Start row not found',
   );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toEqual(
-    asNodes([]),
-  );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out)]).toEqual(
-    asNodes([]),
-  );
+  expect(() => [
+    ...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out),
+  ]).toThrow('Start row not found');
 
   ms.push({type: 'add', row: {a: 2}});
   ms.push({type: 'add', row: {a: 3}});
@@ -129,23 +130,12 @@ test('fetch-start', () => {
     asNodes([]),
   );
 
-  expect([...ms.fetch({start: {row: {a: 4}, basis: 'before'}}, out)]).toEqual(
-    asNodes([{a: 3}]),
-  );
-  expect([...ms.fetch({start: {row: {a: 4}, basis: 'at'}}, out)]).toEqual(
-    asNodes([]),
-  );
-  expect([...ms.fetch({start: {row: {a: 4}, basis: 'after'}}, out)]).toEqual(
-    asNodes([]),
-  );
-
-  ms.push({type: 'remove', row: {a: 2}});
   ms.push({type: 'remove', row: {a: 3}});
   expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
-    asNodes([]),
+    asNodes([{a: 2}]),
   );
   expect([...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toEqual(
-    asNodes([]),
+    asNodes([{a: 2}]),
   );
   expect([...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out)]).toEqual(
     asNodes([]),
@@ -203,4 +193,409 @@ test('push', () => {
     'Row already exists',
   );
   expect(out.changes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
+});
+
+class OverlaySpy implements Output {
+  #input: Input;
+  fetches: Node[][] = [];
+
+  onPush = () => {};
+
+  constructor(input: Input) {
+    this.#input = input;
+  }
+
+  fetch(req: FetchRequest) {
+    this.fetches.push([...this.#input.fetch(req, this)]);
+  }
+
+  push() {
+    this.onPush();
+  }
+}
+
+test('overlay-source-isolation', () => {
+  // Ok this is a little tricky. We are trying to show that overlays
+  // only show up for one output at a time. But because calling outputs
+  // is synchronous with push, it's a little tough to catch (especially
+  // without involving joins, which is the reason we care about this).
+  // To do so, we arrange for each output to call fetch when any of the
+  // *other* outputs are pushed to. Then we can observe that the overlay
+  // only shows up in the cases it is supposed to.
+
+  const ms = new MemorySource([['a', 'asc']]);
+  const o1 = new OverlaySpy(ms);
+  const o2 = new OverlaySpy(ms);
+  const o3 = new OverlaySpy(ms);
+  ms.addOutput(o1);
+  ms.addOutput(o2);
+  ms.addOutput(o3);
+
+  function fetchAll() {
+    o1.fetch({});
+    o2.fetch({});
+    o3.fetch({});
+  }
+
+  o1.onPush = fetchAll;
+  o2.onPush = fetchAll;
+  o3.onPush = fetchAll;
+
+  ms.push({type: 'add', row: {a: 2}});
+  expect(o1.fetches).toEqual([
+    asNodes([{a: 2}]),
+    asNodes([{a: 2}]),
+    asNodes([{a: 2}]),
+  ]);
+  expect(o2.fetches).toEqual([[], asNodes([{a: 2}]), asNodes([{a: 2}])]);
+  expect(o3.fetches).toEqual([[], [], asNodes([{a: 2}])]);
+});
+
+test('overlay-vs-fetch-start', () => {
+  const cases: {
+    startData: Row[];
+    start: Start;
+    change: SourceChange;
+    expected: Row[] | string;
+  }[] = [
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 1},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 1}},
+      expected: 'Start row not found',
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 1}},
+      expected: [{a: 1}, {a: 2}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 2}},
+      expected: 'Row already exists',
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 3}},
+      expected: [{a: 2}, {a: 3}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 5}},
+      expected: [{a: 2}, {a: 4}, {a: 5}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 0}},
+      expected: [{a: 2}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 3}},
+      expected: [{a: 3}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'before',
+      },
+      change: {type: 'add', row: {a: 5}},
+      expected: [{a: 2}, {a: 4}, {a: 5}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'at',
+      },
+      change: {type: 'add', row: {a: 1}},
+      expected: [{a: 2}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'at',
+      },
+      change: {type: 'add', row: {a: 3}},
+      expected: [{a: 2}, {a: 3}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'at',
+      },
+      change: {type: 'add', row: {a: 5}},
+      expected: [{a: 2}, {a: 4}, {a: 5}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'after',
+      },
+      change: {type: 'add', row: {a: 1}},
+      expected: [{a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'after',
+      },
+      change: {type: 'add', row: {a: 3}},
+      expected: [{a: 3}, {a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'after',
+      },
+      change: {type: 'add', row: {a: 5}},
+      expected: [{a: 4}, {a: 5}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'after',
+      },
+      change: {type: 'add', row: {a: 3}},
+      expected: [],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'after',
+      },
+      change: {type: 'add', row: {a: 5}},
+      expected: [{a: 5}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'remove', row: {a: 1}},
+      expected: 'Row not found',
+    },
+    {
+      startData: [{a: 2}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [{a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'before',
+      },
+      change: {type: 'remove', row: {a: 4}},
+      expected: [{a: 2}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'before',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [{a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'before',
+      },
+      change: {type: 'remove', row: {a: 4}},
+      expected: [{a: 2}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'at',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [{a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'at',
+      },
+      change: {type: 'remove', row: {a: 4}},
+      expected: [{a: 2}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'at',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [{a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'at',
+      },
+      change: {type: 'remove', row: {a: 4}},
+      expected: [],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'after',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [{a: 4}],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 2},
+        basis: 'after',
+      },
+      change: {type: 'remove', row: {a: 4}},
+      expected: [],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'after',
+      },
+      change: {type: 'remove', row: {a: 2}},
+      expected: [],
+    },
+    {
+      startData: [{a: 2}, {a: 4}],
+      start: {
+        row: {a: 4},
+        basis: 'after',
+      },
+      change: {type: 'remove', row: {a: 4}},
+      expected: [],
+    },
+  ];
+
+  for (const c of cases) {
+    const ms = new MemorySource([['a', 'asc']]);
+    for (const row of c.startData) {
+      ms.push({type: 'add', row});
+    }
+    const out = new OverlaySpy(ms);
+    ms.addOutput(out);
+    out.onPush = () =>
+      out.fetch({
+        start: c.start,
+      });
+    if (typeof c.expected === 'string') {
+      expect(() => ms.push(c.change), JSON.stringify(c)).toThrow(c.expected);
+    } else {
+      ms.push(c.change);
+      expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+    }
+  }
+});
+
+test('overlay-vs-constraint', () => {
+  const cases: {
+    startData: Row[];
+    constraint: {key: string; value: Value};
+    change: SourceChange;
+    expected: Row[] | string;
+  }[] = [
+    {
+      startData: [
+        {a: 2, b: false},
+        {a: 4, b: true},
+      ],
+      constraint: {key: 'b', value: true},
+      change: {type: 'add', row: {a: 1, b: true}},
+      expected: [
+        {a: 1, b: true},
+        {a: 4, b: true},
+      ],
+    },
+    {
+      startData: [
+        {a: 2, b: false},
+        {a: 4, b: true},
+      ],
+      constraint: {key: 'b', value: true},
+      change: {type: 'add', row: {a: 1, b: false}},
+      expected: [{a: 4, b: true}],
+    },
+  ];
+
+  for (const c of cases) {
+    const ms = new MemorySource([['a', 'asc']]);
+    for (const row of c.startData) {
+      ms.push({type: 'add', row});
+    }
+    const out = new OverlaySpy(ms);
+    ms.addOutput(out);
+    out.onPush = () =>
+      out.fetch({
+        constraint: c.constraint,
+      });
+    if (typeof c.expected === 'string') {
+      expect(() => ms.push(c.change), JSON.stringify(c)).toThrow(c.expected);
+    } else {
+      ms.push(c.change);
+      expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+    }
+  }
 });

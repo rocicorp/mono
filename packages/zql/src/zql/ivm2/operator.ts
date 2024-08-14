@@ -42,12 +42,13 @@ export type Constraint = {
 };
 
 export type FetchRequest = HydrateRequest & {
-  start?:
-    | {
-        row: Row;
-        basis: 'before' | 'at' | 'after';
-      }
-    | undefined;
+  // If supplied, `start.row` must have previously been output.
+  start?: Start | undefined;
+};
+
+export type Start = {
+  row: Row;
+  basis: 'before' | 'at' | 'after';
 };
 
 /**
