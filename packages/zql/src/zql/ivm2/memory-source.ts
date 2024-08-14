@@ -5,17 +5,13 @@ import type {
   FetchRequest,
   HydrateRequest,
   Schema,
+  Constraint,
 } from './operator.js';
-import {
-  Comparator,
-  makeComparator,
-  valuesEqual,
-  type Node,
-  type Row,
-} from './data.js';
+import {makeComparator, valuesEqual, type Node, type Row} from './data.js';
 import type {Ordering} from '../ast2/ast.js';
 import {assert} from 'shared/src/asserts.js';
-import {makeStream, type Stream} from './stream.js';
+import {LookaheadIterator} from './lookahead-iterator.js';
+import type {Stream} from './stream.js';
 
 export type SourceChange = {
   type: 'add' | 'remove';
@@ -85,71 +81,89 @@ export class MemorySource implements Input {
       }
     }
 
-    // Find the start of the iterator, taking into account 'start' param and
-    // overlay.
-    let it: Iterator<Row>;
-    if (!req.start) {
-      it = this.#data.keys();
-    } else {
-      assert(this.#data.has(req.start.row), 'Start row not found');
-      const result = adjustStart(
-        {
-          prev: this.#data.nextLowerKey(req.start.row),
-          basis: req.start.row,
-          next: this.#data.nextHigherKey(req.start.row),
-        },
-        req.start.basis,
-        overlay,
-        this.#schema.compareRows,
-      );
-      overlay = result.overlay;
-      if (result.start === 'begin') {
-        it = this.#data.keys();
-      } else if (result.start === 'end') {
-        it = this.#data.keys(this.#data.maxKey());
-        it.next();
-      } else {
-        it = this.#data.keys(result.start);
+    const it = this.#pullWithOverlay(
+      req.start?.row ? this.#data.nextLowerKey(req.start.row) : undefined,
+      req.constraint,
+      overlay ?? undefined,
+    );
+
+    // Figure out the start row.
+    const cursor = new LookaheadIterator(it[Symbol.iterator](), 2);
+
+    let started = req.start === undefined ? true : false;
+    for (const [curr, next] of cursor) {
+      if (!started) {
+        assert(req.start);
+        if (req.start.basis === 'before') {
+          if (
+            next === undefined ||
+            this.#schema.compareRows(next.row, req.start.row) >= 0
+          ) {
+            started = true;
+          }
+        } else if (req.start.basis === 'at') {
+          if (this.#schema.compareRows(curr.row, req.start.row) >= 0) {
+            started = true;
+          }
+        } else if (req.start.basis === 'after') {
+          if (this.#schema.compareRows(curr.row, req.start.row) > 0) {
+            started = true;
+          }
+        }
+      }
+      if (started) {
+        yield curr;
       }
     }
+  }
 
-    // Process all items in the iterator, applying overlay as needed.
-    for (const row of makeStream(it)) {
+  *#pullWithOverlay(
+    startAt: Row | undefined,
+    constraint: Constraint | undefined,
+    overlay: Overlay | undefined,
+  ): Stream<Node> {
+    const compare = this.#schema.compareRows;
+
+    if (startAt && overlay && compare(overlay.change.row, startAt) < 0) {
+      overlay = undefined;
+    }
+
+    for (const change of this.#pullWithConstraint(startAt, constraint)) {
       if (overlay) {
-        const cmp = this.#schema.compareRows(overlay.change.row, row);
+        const cmp = compare(overlay.change.row, change.row);
         if (overlay.change.type === 'add') {
           if (cmp < 0) {
-            yield {
-              row: overlay.change.row,
-              relationships: new Map(),
-            };
-            overlay = null;
+            yield {row: overlay.change.row, relationships: new Map()};
+            overlay = undefined;
           }
         } else if (overlay.change.type === 'remove') {
           if (cmp < 0) {
-            overlay = null;
+            overlay = undefined;
           } else if (cmp === 0) {
-            overlay = null;
+            overlay = undefined;
             continue;
           }
         }
       }
-
-      if (
-        !req.constraint ||
-        valuesEqual(row[req.constraint.key], req.constraint.value)
-      ) {
-        yield {row, relationships: new Map()};
-      }
+      yield change;
     }
 
-    // If there is an add overlay left, it's because it's greater than all the
-    // rows.
     if (overlay && overlay.change.type === 'add') {
-      yield {
-        row: overlay.change.row,
-        relationships: new Map(),
-      };
+      yield {row: overlay.change.row, relationships: new Map()};
+    }
+  }
+
+  *#pullWithConstraint(
+    startAt: Row | undefined,
+    constraint: Constraint | undefined,
+  ): Stream<Node> {
+    const it = this.#data.keys(startAt);
+
+    // Process all items in the iterator, applying overlay as needed.
+    for (const row of it) {
+      if (!constraint || valuesEqual(row[constraint.key], constraint.value)) {
+        yield {row, relationships: new Map()};
+      }
     }
   }
 
@@ -190,76 +204,4 @@ export class MemorySource implements Input {
       assert(removed);
     }
   }
-}
-
-type Neighborhood = {
-  prev: Row | undefined;
-  basis: Row;
-  next: Row | undefined;
-};
-
-// Helper to handle the 'start' parameter in fetch.
-function adjustStart(
-  hood: Neighborhood,
-  startType: 'before' | 'at' | 'after',
-  overlay: Overlay | null,
-  compareRows: Comparator,
-): {start: Row | 'begin' | 'end'; overlay: Overlay | null} {
-  const overlayRow = overlay?.change?.row;
-
-  if (startType === 'before') {
-    // No previous row, so we're returning all rows. We start from beginning and
-    // keep overlay.
-    if (hood.prev === undefined) {
-      return {start: 'begin', overlay};
-    }
-
-    if (!overlayRow) {
-      return {start: hood.prev, overlay: null};
-    }
-
-    // Overlay is before previous, we discard it and start from previous.
-    if (compareRows(overlayRow, hood.prev) < 0) {
-      return {start: hood.prev, overlay: null};
-    }
-
-    // Overlay is equal to previous. We keep overlay and start from previous.
-    if (compareRows(overlayRow, hood.prev) === 0) {
-      return {start: hood.prev, overlay};
-    }
-
-    // Overlay between previous and start. We keep overlay and start from start,
-    // not previous.
-    if (compareRows(overlayRow, hood.basis) < 0) {
-      return {start: hood.basis, overlay};
-    }
-
-    // Overlay >= start. Start from previous and keep overlay
-    return {start: hood.prev, overlay};
-  }
-
-  if (startType === 'at') {
-    if (!overlayRow) {
-      return {start: hood.basis, overlay: null};
-    }
-    if (compareRows(overlayRow, hood.basis) < 0) {
-      return {start: hood.basis, overlay: null};
-    }
-    return {start: hood.basis, overlay};
-  }
-
-  if (startType === 'after') {
-    if (!overlayRow) {
-      return {start: hood.next ?? 'end', overlay: null};
-    }
-    if (compareRows(overlayRow, hood.basis) < 0) {
-      return {start: hood.next ?? 'end', overlay: null};
-    }
-    if (hood.next === undefined) {
-      return {start: 'end', overlay};
-    }
-    return {start: hood.next, overlay};
-  }
-
-  assert(false, 'Unreachable');
 }
