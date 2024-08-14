@@ -12,7 +12,7 @@ import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
 } from './schema/replication.js';
-import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
+import {createTableStatement} from './tables/create.js';
 import {liteTableName} from './tables/names.js';
 import {
   getPublicationInfo,
@@ -22,10 +22,9 @@ import {
 import type {ColumnSpec, FilteredTableSpec} from './tables/specs.js';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
-  characterMaximumLength: 38,
-  columnDefault: "'00'",
-  dataType: 'character varying',
-  notNull: false,
+  characterMaximumLength: null,
+  dataType: 'TEXT',
+  notNull: true,
 };
 
 export function replicationSlot(replicaID: string): string {
@@ -342,18 +341,16 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
             {
               dataType: mapToLiteDataType(spec.dataType),
               characterMaximumLength: null,
-              columnDefault: null,
+              // Omit constraints from upstream columns, as they may change without our knowledge.
+              // Instead, simply rely on upstream enforcing all column constraints.
               notNull: false,
             },
           ]),
         ),
-        [ZERO_VERSION_COLUMN_NAME]: {
-          ...ZERO_VERSION_COLUMN_SPEC,
-          dataType: 'TEXT',
-        },
+        [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
       },
     };
-    tx.exec(createTableStatementIgnoringNotNullConstraint(liteTable));
+    tx.exec(createTableStatement(liteTable));
   }
 }
 
@@ -390,17 +387,23 @@ async function copy(
 ) {
   let totalRows = 0;
   const tableName = liteTableName(table);
-  const columns = Object.keys(table.columns);
-  const columnList = columns.map(c => ident(c)).join(',');
+  const selectColumns = Object.keys(table.columns)
+    .map(c => ident(c))
+    .join(',');
+  const insertColumns = [
+    ...Object.keys(table.columns),
+    ZERO_VERSION_COLUMN_NAME,
+  ];
+  const insertColumnList = insertColumns.map(c => ident(c)).join(',');
   const insertStmt = to.prepare(
-    `INSERT INTO "${tableName}" (${columnList}) VALUES (${new Array(
-      columns.length,
+    `INSERT INTO "${tableName}" (${insertColumnList}) VALUES (${new Array(
+      insertColumns.length,
     )
       .fill('?')
       .join(',')})`,
   );
   const selectStmt =
-    `SELECT ${columnList} FROM ${ident(table.schema)}.${ident(table.name)}` +
+    `SELECT ${selectColumns} FROM ${ident(table.schema)}.${ident(table.name)}` +
     (table.filterConditions.length === 0
       ? ''
       : ` WHERE ${table.filterConditions.join(' OR ')}`);
@@ -408,7 +411,10 @@ async function copy(
   const cursor = from.unsafe(selectStmt).cursor(BATCH_SIZE);
   for await (const rows of cursor) {
     for (const row of rows) {
-      insertStmt.run(Object.values(row));
+      insertStmt.run([
+        ...Object.values(row),
+        '00', // initial _0_version
+      ]);
     }
     totalRows += rows.length;
     lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);

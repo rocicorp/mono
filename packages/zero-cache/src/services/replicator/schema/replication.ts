@@ -10,7 +10,6 @@ import {Database} from 'better-sqlite3';
 import type postgres from 'postgres';
 import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import type {LexiVersion} from '../../../types/lexi-version.js';
-import {getPublicationInfo} from '../tables/published.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
@@ -86,10 +85,6 @@ export const CREATE_REPLICATION_TABLES =
  * This includes:
  *
  * * Setting up the internal _zero tables that track replication state.
- *
- * * Removing the _0_version DEFAULT (used only for initial sync)
- *   and requiring that it be NOT NULL. This is a defensive measure to
- *   enforce that the incremental replication logic always sets the _0_version.
  */
 
 export async function setupReplicationTables(
@@ -98,17 +93,6 @@ export async function setupReplicationTables(
   upstreamUri: string,
 ) {
   lc.info?.(`Setting up replication tables for ${upstreamUri}`);
-
-  const replicated = await getPublicationInfo(tx);
-  const alterStmts = replicated.tables.map(
-    table => tx`
-      ALTER TABLE ${tx(table.schema)}.${tx(table.name)} 
-        ALTER COLUMN ${tx(ZERO_VERSION_COLUMN_NAME)} DROP DEFAULT, 
-        ALTER COLUMN ${tx(ZERO_VERSION_COLUMN_NAME)} SET NOT NULL;
-        `,
-  );
-
-  await Promise.all(alterStmts);
   await tx.unsafe(CREATE_REPLICATION_TABLES);
 }
 
