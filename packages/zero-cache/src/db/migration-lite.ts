@@ -45,7 +45,6 @@ export async function runSchemaMigrations(
   const db = new Database(dbPath);
   db.pragma('foreign_keys = OFF');
   db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = OFF'); // For schema initialization we'll wait for the disk flush on close.
 
   try {
     const versionMigrations = sorted(versionMigrationMap);
@@ -82,6 +81,8 @@ export async function runSchemaMigrations(
           log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
           void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
+          db.pragma('synchronous = OFF'); // For schema migrations we'll wait for the disk flush after the migration.
+
           // Run the optional PreMigration step before starting the transaction.
           if ('pre' in migration) {
             await migration.pre(log, db);
@@ -96,6 +97,10 @@ export async function runSchemaMigrations(
             }
             return meta;
           });
+
+          db.pragma('synchronous = NORMAL');
+          db.exec('VACUUM');
+          log.debug?.('VACUUM completed');
         }
       }
     }
