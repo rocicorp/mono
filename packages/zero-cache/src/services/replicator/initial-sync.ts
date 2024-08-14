@@ -281,6 +281,31 @@ function ensurePublishedTables(
   });
 }
 
+// TODO: Consider parameterizing these.
+const MAX_WORKERS = 5;
+const BATCH_SIZE = 100_000;
+
+function startTableCopyWorkers(
+  lc: LogContext,
+  db: PostgresDB,
+  numTables: number,
+  snapshot: string,
+): TransactionPool {
+  const {init} = importSnapshot(snapshot);
+  const numWorkers = Math.min(numTables, MAX_WORKERS);
+  const tableCopiers = new TransactionPool(
+    lc,
+    Mode.READONLY,
+    init,
+    undefined,
+    numWorkers,
+  );
+  void tableCopiers.run(db);
+
+  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
+  return tableCopiers;
+}
+
 function mapToLiteDataType(pgDataType: string): string {
   switch (pgDataType) {
     case 'smallint':
@@ -352,31 +377,6 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
     };
     tx.exec(createTableStatement(liteTable));
   }
-}
-
-// TODO: Consider parameterizing these.
-const MAX_WORKERS = 5;
-const BATCH_SIZE = 100_000;
-
-function startTableCopyWorkers(
-  lc: LogContext,
-  db: PostgresDB,
-  numTables: number,
-  snapshot: string,
-): TransactionPool {
-  const {init} = importSnapshot(snapshot);
-  const numWorkers = Math.min(numTables, MAX_WORKERS);
-  const tableCopiers = new TransactionPool(
-    lc,
-    Mode.READONLY,
-    init,
-    undefined,
-    numWorkers,
-  );
-  void tableCopiers.run(db);
-
-  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
-  return tableCopiers;
 }
 
 async function copy(
