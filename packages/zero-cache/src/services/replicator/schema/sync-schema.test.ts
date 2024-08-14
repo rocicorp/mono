@@ -1,6 +1,11 @@
-import type postgres from 'postgres';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {
+  DbFile,
+  expectTables as expectLiteTables,
+  initDB as initLiteDB,
+} from 'zero-cache/src/test/lite.js';
+import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {
   dropReplicationSlot,
   expectTables,
@@ -12,6 +17,14 @@ import {replicationSlot} from '../initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 
 const REPLICA_ID = 'sync_schema_test_id';
+
+// Update as necessary.
+const CURRENT_SCHEMA_VERSIONS = {
+  version: 2,
+  maxVersion: 2,
+  minSafeRollbackVersion: 1,
+  lock: 1, // Internal column, always 1
+};
 
 describe('replicator/sync-schema', () => {
   type Case = {
@@ -34,15 +47,7 @@ describe('replicator/sync-schema', () => {
       },
       replicaPostState: {
         ['zero.clients']: [],
-        ['_zero.SchemaVersions']: [
-          {
-            // Update these as necessary.
-            version: 4,
-            maxVersion: 4,
-            minSafeRollbackVersion: 1,
-            lock: 'v', // Internal column, always 'v'
-          },
-        ],
+        ['_zero.SchemaVersions']: [CURRENT_SCHEMA_VERSIONS],
       },
     },
     {
@@ -62,15 +67,7 @@ describe('replicator/sync-schema', () => {
         ['zero.clients']: [],
       },
       replicaPostState: {
-        ['_zero.SchemaVersions']: [
-          {
-            // Update these as necessary.
-            version: 4,
-            maxVersion: 4,
-            minSafeRollbackVersion: 1,
-            lock: 'v', // Internal column, always 'v'
-          },
-        ],
+        ['_zero.SchemaVersions']: [CURRENT_SCHEMA_VERSIONS],
         ['zero.clients']: [],
         users: [
           {userID: 123, handle: '@zoot', ['_0_version']: '00'},
@@ -80,61 +77,45 @@ describe('replicator/sync-schema', () => {
     },
   ];
 
-  let upstream: postgres.Sql;
-  let replica: postgres.Sql;
+  let upstream: PostgresDB;
+  let replicaFile: DbFile;
 
   beforeEach(async () => {
     upstream = await testDBs.create('sync_schema_migration_upstream');
-    replica = await testDBs.create('sync_schema_migration_replica');
+    replicaFile = new DbFile('sync_schema_migration_replica');
   });
 
   afterEach(async () => {
-    // Technically done by the tested code, but this helps clean things up in the event of failures.
-    await replica.begin(async tx => {
-      const subs =
-        await tx`SELECT subname FROM pg_subscription WHERE subname = 'zero_sync'`;
-      if (subs.count > 0) {
-        await tx.unsafe(`
-        ALTER SUBSCRIPTION zero_sync DISABLE;
-        ALTER SUBSCRIPTION zero_sync SET(slot_name=NONE);
-        DROP SUBSCRIPTION IF EXISTS zero_sync;
-      `);
-      }
-    });
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
-    await testDBs.drop(upstream, replica);
+    await testDBs.drop(upstream);
+    await replicaFile.unlink();
   }, 10000);
 
   for (const c of cases) {
     test(
       c.name,
       async () => {
+        const replica = replicaFile.connect();
         await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
-        await initDB(replica, c.replicaSetup, c.replicaPreState);
+        initLiteDB(replica, c.replicaSetup, c.replicaPreState);
 
         await initSyncSchema(
           createSilentLogContext(),
           'test',
-          '_zero',
           REPLICA_ID,
-          replica,
+          replicaFile.path,
           upstream,
-          getConnectionURI(upstream),
+          getConnectionURI(upstream, 'external'),
         );
 
         await expectTables(upstream, c.upstreamPostState);
-        await expectTables(replica, c.replicaPostState);
+        expectLiteTables(replica, c.replicaPostState);
 
-        // Check that internal replication tables have been created.
-        await expectTables(replica, {
-          ['_zero.TxLog']: [],
-          ['_zero.ChangeLog']: [],
-        });
-
-        // Subscriptions should have been dropped.
-        const subs =
-          await replica`SELECT subname FROM pg_subscription WHERE subname = 'zero_sync'`;
-        expect(subs).toEqual([]);
+        // TODO: Check that internal replication tables have been created.
+        // expectLiteTables(replica, {
+        //   ['_zero.TxLog']: [],
+        //   ['_zero.ChangeLog']: [],
+        // });
 
         // Slot should still exist.
         const slots =

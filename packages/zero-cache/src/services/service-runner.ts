@@ -37,6 +37,7 @@ import {
 export interface ServiceRunnerEnv {
   ['UPSTREAM_URI']: string;
   ['SYNC_REPLICA_URI']: string;
+  ['SYNC_REPLICA_DB_FILE']: string;
   ['LOG_LEVEL']: LogLevel;
   ['DATADOG_LOGS_API_KEY']?: string;
   ['DATADOG_SERVICE_LABEL']?: string;
@@ -58,6 +59,7 @@ export class ServiceRunner
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
   readonly #replica: PostgresDB;
+  readonly #replicaDbFile: string;
   readonly #lc: LogContext;
   readonly #runReplicator: boolean;
 
@@ -77,6 +79,7 @@ export class ServiceRunner
       ...postgresTypeConfig(),
       max: INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
     });
+    this.#replicaDbFile = this.#env.SYNC_REPLICA_DB_FILE;
     this.#runReplicator = runReplicator;
     this.#warmUpConnections();
   }
@@ -105,6 +108,7 @@ export class ServiceRunner
             this.#env.UPSTREAM_URI,
             this.#upstream,
             this.#replica,
+            this.#replicaDbFile,
           ),
         'ReplicatorService',
       );

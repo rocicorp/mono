@@ -195,7 +195,7 @@ describe('db/migration-lite', () => {
         getSchemaVersions(db); // Ensures that the table is created.
         db.prepare(
           `
-          INSERT INTO _zero_SchemaVersions (version, maxVersion, minSafeRollbackVersion)
+          INSERT INTO "_zero.SchemaVersions" (version, maxVersion, minSafeRollbackVersion)
           VALUES (@version, @maxVersion, @minSafeRollbackVersion)
         `,
         ).run(c.preSchema);

@@ -6,11 +6,43 @@
  */
 
 import type {LogContext} from '@rocicorp/logger';
+import {Database} from 'better-sqlite3';
 import type postgres from 'postgres';
+import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import type {LexiVersion} from '../../../types/lexi-version.js';
 import {getPublicationInfo} from '../tables/published.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
+
+const CREATE_REPLICATION_STATE_SCHEMA =
+  // publications     : JSON stringified array of publication names
+  // watermark        : Opaque, upstream-specific watermark denoting the point from which replication
+  //                    should continue. For a Postgres upstream, for example, this is the LSN string.
+  // nextStateVersion : The value to use for the _0_version column of rows in the _next_ transaction.
+  //                    This is generally a lexicographically sortable representation of the watermark.
+  // lock             : Auto-magic column for enforcing single-row semantics.
+  `
+  CREATE TABLE "_zero.ReplicationState" (
+    publications TEXT NOT NULL,
+    watermark TEXT NOT NULL,
+    nextStateVersion TEXT NOT NULL,
+    lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+  )
+  `;
+
+export function initReplicationState(
+  db: Database,
+  publications: string[],
+  lsn: string,
+) {
+  db.exec(CREATE_REPLICATION_STATE_SCHEMA);
+  db.prepare(
+    `
+      INSERT INTO "_zero.ReplicationState" 
+        (publications, watermark, nextStateVersion) VALUES (?,?,?)
+    `,
+  ).run(JSON.stringify(publications), lsn, toLexiVersion(lsn));
+}
 
 export const CREATE_REPLICATION_TABLES =
   // The transaction log maps each LSN to transaction information.

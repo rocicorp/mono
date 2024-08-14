@@ -136,7 +136,7 @@ export function getSchemaVersions(db: Db): SchemaVersions {
   // Note: The `lock` column transparently ensures that at most one row exists.
   db.prepare(
     `
-    CREATE TABLE IF NOT EXISTS _zero_SchemaVersions (
+    CREATE TABLE IF NOT EXISTS "_zero.SchemaVersions" (
       version INTEGER NOT NULL,
       maxVersion INTEGER NOT NULL,
       minSafeRollbackVersion INTEGER NOT NULL,
@@ -147,7 +147,7 @@ export function getSchemaVersions(db: Db): SchemaVersions {
   ).run();
   const result = db
     .prepare(
-      'SELECT version, maxVersion, minSafeRollbackVersion FROM _zero_SchemaVersions',
+      'SELECT version, maxVersion, minSafeRollbackVersion FROM "_zero.SchemaVersions"',
     )
     .get() as SchemaVersions;
   return result ?? {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
@@ -167,7 +167,7 @@ function setSchemaVersion(
 
   db.prepare(
     `
-    INSERT INTO _zero_SchemaVersions (version, maxVersion, minSafeRollbackVersion, lock)
+    INSERT INTO "_zero.SchemaVersions" (version, maxVersion, minSafeRollbackVersion, lock)
     VALUES (@version, @maxVersion, @minSafeRollbackVersion, 1)
     ON CONFLICT (lock) DO UPDATE
     SET version=EXCLUDED.version, 

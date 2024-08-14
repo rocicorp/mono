@@ -1,23 +1,23 @@
-import type postgres from 'postgres';
+import {Database} from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
-  dropReplicationSlot,
+  DbFile,
   expectTables,
+  initDB as initLiteDB,
+} from 'zero-cache/src/test/lite.js';
+import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {
+  dropReplicationSlot,
   getConnectionURI,
   initDB,
   testDBs,
 } from '../../test/db.js';
-import {
-  handoffPostgresReplication,
-  replicationSlot,
-  startPostgresReplication,
-  waitForInitialDataSynchronization,
-} from './initial-sync.js';
+import {initialSync, replicationSlot} from './initial-sync.js';
+import {listTables} from './tables/list.js';
 import {getPublicationInfo} from './tables/published.js';
-import type {FilteredTableSpec} from './tables/specs.js';
+import type {FilteredTableSpec, TableSpec} from './tables/specs.js';
 
-const SUB = 'test_sync';
 const REPLICA_ID = 'initial_sync_test_id';
 
 const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
@@ -53,6 +53,38 @@ const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
   filterConditions: [],
 } as const;
 
+const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
+  columns: {
+    clientGroupID: {
+      characterMaximumLength: null,
+      columnDefault: null,
+      dataType: 'TEXT',
+      notNull: false,
+    },
+    clientID: {
+      characterMaximumLength: null,
+      columnDefault: null,
+      dataType: 'TEXT',
+      notNull: false,
+    },
+    lastMutationID: {
+      characterMaximumLength: null,
+      columnDefault: null,
+      dataType: 'INTEGER',
+      notNull: false,
+    },
+    userID: {
+      characterMaximumLength: null,
+      columnDefault: null,
+      dataType: 'TEXT',
+      notNull: false,
+    },
+  },
+  name: 'zero.clients',
+  primaryKey: ['clientGroupID', 'clientID'],
+  schema: '',
+} as const;
+
 describe('replicator/initial-sync', () => {
   type Case = {
     name: string;
@@ -60,7 +92,8 @@ describe('replicator/initial-sync', () => {
     setupReplicaQuery?: string;
     published: Record<string, FilteredTableSpec>;
     upstream?: Record<string, object[]>;
-    replicated: Record<string, object[]>;
+    replicatedSchema: Record<string, TableSpec>;
+    replicatedData: Record<string, object[]>;
     publications: string[];
   };
 
@@ -70,7 +103,10 @@ describe('replicator/initial-sync', () => {
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
       },
-      replicated: {
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+      },
+      replicatedData: {
         ['zero.clients']: [],
       },
       publications: ['zero_meta', 'zero_data'],
@@ -85,7 +121,10 @@ describe('replicator/initial-sync', () => {
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
       },
-      replicated: {
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+      },
+      replicatedData: {
         ['zero.clients']: [],
       },
       publications: ['zero_meta', 'zero_data'],
@@ -107,7 +146,10 @@ describe('replicator/initial-sync', () => {
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
       },
-      replicated: {
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+      },
+      replicatedData: {
         ['zero.clients']: [],
       },
       publications: ['zero_meta', 'zero_data'],
@@ -140,13 +182,35 @@ describe('replicator/initial-sync', () => {
           filterConditions: [],
         },
       },
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['issues']: {
+          columns: {
+            issueID: {
+              characterMaximumLength: null,
+              columnDefault: null,
+              dataType: 'INTEGER',
+              notNull: false,
+            },
+            orgID: {
+              characterMaximumLength: null,
+              columnDefault: null,
+              dataType: 'INTEGER',
+              notNull: false,
+            },
+          },
+          name: 'issues',
+          primaryKey: ['orgID', 'issueID'],
+          schema: '',
+        },
+      },
       upstream: {
         issues: [
           {issueID: 123, orgID: 456},
           {issueID: 321, orgID: 789},
         ],
       },
-      replicated: {
+      replicatedData: {
         ['zero.clients']: [],
         issues: [
           {issueID: 123, orgID: 456, ['_0_version']: '00'},
@@ -186,13 +250,36 @@ describe('replicator/initial-sync', () => {
           filterConditions: [],
         },
       },
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['users']: {
+          columns: {
+            userID: {
+              characterMaximumLength: null,
+              columnDefault: null,
+              dataType: 'INTEGER',
+              notNull: false,
+            },
+            // Note: password is not published
+            handle: {
+              characterMaximumLength: null,
+              columnDefault: null,
+              dataType: 'TEXT',
+              notNull: false,
+            },
+          },
+          name: 'users',
+          primaryKey: ['userID'],
+          schema: '',
+        },
+      },
       upstream: {
         users: [
           {userID: 123, password: 'not-replicated', handle: '@zoot'},
           {userID: 456, password: 'super-secret', handle: '@bonk'},
         ],
       },
-      replicated: {
+      replicatedData: {
         ['zero.clients']: [],
         users: [
           {userID: 123, handle: '@zoot', ['_0_version']: '00'},
@@ -233,6 +320,29 @@ describe('replicator/initial-sync', () => {
           filterConditions: ['(("userID" % 2) = 0)', '("userID" > 1000)'],
         },
       },
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['users']: {
+          columns: {
+            userID: {
+              characterMaximumLength: null,
+              columnDefault: null,
+              dataType: 'INTEGER',
+              notNull: false,
+            },
+            // Note: password is not published
+            handle: {
+              characterMaximumLength: null,
+              columnDefault: null,
+              dataType: 'TEXT',
+              notNull: false,
+            },
+          },
+          name: 'users',
+          primaryKey: ['userID'],
+          schema: '',
+        },
+      },
       upstream: {
         users: [
           {userID: 123, password: 'not-replicated', handle: '@zoot'},
@@ -240,107 +350,89 @@ describe('replicator/initial-sync', () => {
           {userID: 1001, password: 'hide-me', handle: '@boom'},
         ],
       },
-      replicated: {
+      replicatedData: {
         ['zero.clients']: [],
         users: [
           {userID: 456, handle: '@bonk', ['_0_version']: '00'},
           {userID: 1001, handle: '@boom', ['_0_version']: '00'},
         ],
       },
-      publications: ['zero_meta', 'zero_custom'],
+      publications: ['zero_meta', 'zero_custom', 'zero_custom2'],
     },
   ];
 
-  let upstream: postgres.Sql;
-  let replica: postgres.Sql;
+  let upstream: PostgresDB;
+  let replicaFile: DbFile;
+  let replica: Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_upstream');
-    replica = await testDBs.create('initial_sync_replica');
+    replicaFile = new DbFile('initial_sync_replica');
+    replica = replicaFile.connect();
   });
 
   afterEach(async () => {
-    // Technically done by the tested code, but this helps clean things up in the event of failures.
-    await replica.begin(async tx => {
-      const subs =
-        await tx`SELECT subname FROM pg_subscription WHERE subname = ${SUB}`;
-      if (subs.count > 0) {
-        await tx.unsafe(`
-        ALTER SUBSCRIPTION ${SUB} DISABLE;
-        ALTER SUBSCRIPTION ${SUB} SET(slot_name=NONE);
-        DROP SUBSCRIPTION IF EXISTS ${SUB};
-      `);
-      }
-    });
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
-    await testDBs.drop(upstream, replica);
+    await testDBs.drop(upstream);
+    await replicaFile.unlink();
   }, 10000);
 
   for (const c of cases) {
     test(`startInitialDataSynchronization: ${c.name}`, async () => {
       await initDB(upstream, c.setupUpstreamQuery, c.upstream);
-      await initDB(replica, c.setupReplicaQuery);
+      initLiteDB(replica, c.setupReplicaQuery);
 
       const lc = createSilentLogContext();
-      await replica.begin(tx =>
-        startPostgresReplication(
-          lc,
-          REPLICA_ID,
-          tx,
-          upstream,
-          getConnectionURI(upstream),
-          SUB,
-        ),
+      await initialSync(
+        lc,
+        REPLICA_ID,
+        replica,
+        upstream,
+        getConnectionURI(upstream, 'external'),
       );
 
-      const published = await getPublicationInfo(upstream);
+      const {publications, tables} = await getPublicationInfo(upstream);
       expect(
         Object.fromEntries(
-          published.tables.map(table => [
-            `${table.schema}.${table.name}`,
-            table,
-          ]),
+          tables.map(table => [`${table.schema}.${table.name}`, table]),
         ),
       ).toEqual(c.published);
-      expect(published.publications.map(p => p.pubname)).toEqual(
-        expect.arrayContaining(c.publications),
+      expect(new Set(publications.map(p => p.pubname))).toEqual(
+        new Set(c.publications),
       );
 
-      const synced = await getPublicationInfo(replica);
-      // TODO: Test this against listTables() when migrating to SQLite.
-      // expect(
-      //   Object.fromEntries(
-      //     synced.tables.map(table => [`${table.schema}.${table.name}`, table]),
-      //   ),
-      // ).toMatchObject(c.published);
-      expect(synced.publications.map(p => p.pubname)).toEqual(
-        expect.arrayContaining(c.publications),
-      );
+      const synced = listTables(replica);
+      expect(
+        Object.fromEntries(synced.map(table => [table.name, table])),
+      ).toMatchObject(c.replicatedSchema);
+      const {pubNames} = replica
+        .prepare(
+          `SELECT publications as "pubNames" FROM "_zero.ReplicationState"`,
+        )
+        .get();
+      expect(new Set(JSON.parse(pubNames))).toEqual(new Set(c.publications));
 
-      await waitForInitialDataSynchronization(
-        lc,
-        replica,
-        getConnectionURI(upstream),
-        SUB,
-      );
+      expectTables(replica, c.replicatedData);
 
-      await expectTables(replica, c.replicated);
+      const replicaState = replica
+        .prepare('SELECT * FROM "_zero.ReplicationState"')
+        .get();
+      expect(replicaState).toMatchObject({
+        publications: JSON.stringify(publications.map(p => p.pubname)),
+        watermark: /[0-9A-F]+\/[0-9A-F]+/,
+        nextStateVersion: /[0-9a-f]{2,}/,
+      });
 
-      await replica.begin(tx =>
-        handoffPostgresReplication(lc, tx, getConnectionURI(upstream), SUB),
-      );
-
-      // Subscriptions should have been dropped.
-      const subs =
-        await replica`SELECT subname FROM pg_subscription WHERE subname = ${SUB}`;
-      expect(subs).toEqual([]);
-
-      // Slot should still exist.
-      const slots =
-        await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
-          REPLICA_ID,
-        )}`.values();
-      expect(slots[0]).toEqual([replicationSlot(REPLICA_ID)]);
+      // Check replica state against the upstream slot.
+      const slots = await upstream`
+        SELECT slot_name as "slotName", confirmed_flush_lsn as lsn 
+          FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
+            REPLICA_ID,
+          )}`;
+      expect(slots[0]).toEqual({
+        slotName: replicationSlot(REPLICA_ID),
+        lsn: replicaState.watermark,
+      });
     }, 10000);
 
     type InvalidUpstreamCase = {
@@ -416,18 +508,13 @@ describe('replicator/initial-sync', () => {
       test(`Invalid upstream: ${c.error}`, async () => {
         await initDB(upstream, c.setupUpstreamQuery, c.upstream);
 
-        const result = await replica
-          .begin(tx =>
-            startPostgresReplication(
-              createSilentLogContext(),
-              REPLICA_ID,
-              tx,
-              upstream,
-              getConnectionURI(upstream),
-              SUB,
-            ),
-          )
-          .catch(e => e);
+        const result = await initialSync(
+          createSilentLogContext(),
+          REPLICA_ID,
+          replica,
+          upstream,
+          getConnectionURI(upstream, 'external'),
+        ).catch(e => e);
 
         expect(result).toBeInstanceOf(Error);
         expect(String(result)).toContain(c.error);
