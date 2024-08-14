@@ -135,8 +135,8 @@ export async function initialSync(
     // of the replication session, if there is an existing slot, it must be deleted so that
     // the slot (and corresponding snapshot) can be created anew.
     //
-    // This necessarily means that the initial data sync _must_ succeed within the lifetime
-    // of this connection.
+    // This means that in order for initial data sync to succeed, it must fully complete
+    // within the lifetime of a replication session.
     if (slots.length > 0) {
       lc.info?.(`Dropping existing replication slot ${slotName}`);
       await repl.unsafe(`DROP_REPLICATION_SLOT ${slotName}`);
