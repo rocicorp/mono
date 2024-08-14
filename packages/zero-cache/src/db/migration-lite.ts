@@ -45,7 +45,6 @@ export async function runSchemaMigrations(
   const db = new Database(dbPath);
   db.pragma('foreign_keys = OFF');
   db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = OFF'); // For schema initialization we'll wait for the disk flush on close.
 
   try {
     const versionMigrations = sorted(versionMigrationMap);
@@ -82,6 +81,8 @@ export async function runSchemaMigrations(
           log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
           void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
+          db.pragma('synchronous = OFF'); // For schema migrations we'll wait for the disk flush after the migration.
+
           // Run the optional PreMigration step before starting the transaction.
           if ('pre' in migration) {
             await migration.pre(log, db);
@@ -96,6 +97,10 @@ export async function runSchemaMigrations(
             }
             return meta;
           });
+
+          db.pragma('synchronous = NORMAL');
+          db.exec('VACUUM');
+          log.debug?.('VACUUM completed');
         }
       }
     }
@@ -136,7 +141,7 @@ export function getSchemaVersions(db: Db): SchemaVersions {
   // Note: The `lock` column transparently ensures that at most one row exists.
   db.prepare(
     `
-    CREATE TABLE IF NOT EXISTS _zero_SchemaVersions (
+    CREATE TABLE IF NOT EXISTS "_zero.SchemaVersions" (
       version INTEGER NOT NULL,
       maxVersion INTEGER NOT NULL,
       minSafeRollbackVersion INTEGER NOT NULL,
@@ -147,7 +152,7 @@ export function getSchemaVersions(db: Db): SchemaVersions {
   ).run();
   const result = db
     .prepare(
-      'SELECT version, maxVersion, minSafeRollbackVersion FROM _zero_SchemaVersions',
+      'SELECT version, maxVersion, minSafeRollbackVersion FROM "_zero.SchemaVersions"',
     )
     .get() as SchemaVersions;
   return result ?? {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
@@ -167,7 +172,7 @@ function setSchemaVersion(
 
   db.prepare(
     `
-    INSERT INTO _zero_SchemaVersions (version, maxVersion, minSafeRollbackVersion, lock)
+    INSERT INTO "_zero.SchemaVersions" (version, maxVersion, minSafeRollbackVersion, lock)
     VALUES (@version, @maxVersion, @minSafeRollbackVersion, 1)
     ON CONFLICT (lock) DO UPDATE
     SET version=EXCLUDED.version, 

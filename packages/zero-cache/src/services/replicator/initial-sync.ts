@@ -1,19 +1,29 @@
 import type {LogContext} from '@rocicorp/logger';
-import type postgres from 'postgres';
-import {sleep} from 'shared/src/sleep.js';
-import {id, idList} from '../../types/sql.js';
-import {ZERO_VERSION_COLUMN_NAME} from './schema/replication.js';
-import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
+import {Database} from 'better-sqlite3';
+import {ident} from 'pg-format';
+import postgres from 'postgres';
 import {
+  importSnapshot,
+  Mode,
+  TransactionPool,
+} from 'zero-cache/src/db/transaction-pool.js';
+import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {
+  initReplicationState,
+  ZERO_VERSION_COLUMN_NAME,
+} from './schema/replication.js';
+import {createTableStatementIgnoringNotNullConstraint} from './tables/create.js';
+import {liteTableName} from './tables/names.js';
+import {
+  getPublicationInfo,
   PublicationInfo,
   ZERO_PUB_PREFIX,
-  getPublicationInfo,
 } from './tables/published.js';
-import type {ColumnSpec} from './tables/specs.js';
+import type {ColumnSpec, FilteredTableSpec} from './tables/specs.js';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: 38,
-  columnDefault: "'00'::text",
+  columnDefault: "'00'",
   dataType: 'character varying',
   notNull: false,
 };
@@ -24,191 +34,8 @@ export function replicationSlot(replicaID: string): string {
 
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
 
-/**
- * Starts Postgres logical replication from the upstream DB to the Sync Replica.
- * Specifically, we rely on Postgres to perform the "initial data synchronization" phase
- * of a logical replication subscription as described in
- * https://www.postgresql.org/docs/current/logical-replication-subscription.html
- *
- * This results in the Postgres sync replica copying a snapshot of published tables/columns
- * from upstream (using snapshot reservation and per-thread worker processes). After this
- * completes, incremental logical replication kicks in, which is where the Replicator takes over.
- */
-export async function startPostgresReplication(
-  lc: LogContext,
-  replicaID: string,
-  tx: postgres.TransactionSql,
-  upstream: postgres.Sql,
-  upstreamURI: string,
-  subName = 'zero_sync',
-) {
-  lc.info?.(`Starting initial data synchronization from ${upstreamURI}`);
-  const slotName = replicationSlot(replicaID);
-  const published = await setupUpstream(lc, upstream, slotName);
-
-  lc.info?.(`Upstream is setup for publishing`, published);
-
-  // Create the corresponding schemas and tables in the Sync Replica, with the
-  // additional _0_version column to track row versions.
-  const schemas = new Set<string>();
-  const tablesStmts = published.tables.map(table => {
-    schemas.add(table.schema);
-
-    const tableWithVersionColumn = {
-      ...table,
-      columns: {
-        ...table.columns,
-        [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
-      },
-    };
-    return createTableStatementIgnoringNotNullConstraint(
-      tableWithVersionColumn,
-    );
-  });
-
-  const schemaStmts = [...schemas].map(
-    schema => `CREATE SCHEMA IF NOT EXISTS ${id(schema)};`,
-  );
-
-  // Emulate all of the upstream zero_* PUBLICATIONS to cover all of the
-  // replicated tables (simplifying with FOR TABLES IN SCHEMA). This serves two
-  // purposes:
-  //  1. It serves as a reference for which PUBLICATIONS to subscribe to during
-  //     incremental replication.
-  //  2. It facilitates replicated table selection logic used to initialize the
-  //     incremental replication process, as the destination tables and their
-  //     structure must be known.
-  //
-  // By using PUBLICATIONS for this, the same `getPublicationInfo()` logic can
-  // be used on both the upstream and replica.
-  const publications = published.publications.map(p => p.pubname);
-  const publicationStmts = publications.map(pub =>
-    // The publication that we manage, "zero_meta", is used to track all of the
-    // replicated schemas. This is the only publication that would need to be
-    // altered if, for example, a new schema is encountered from upstream.
-    pub === ZERO_PUB_PREFIX + 'meta'
-      ? `CREATE PUBLICATION ${id(pub)} FOR TABLES IN SCHEMA ${idList(schemas)};`
-      : // All of the other publications are created simply to indicate that they should be
-        // subscribed to on upstream.
-        `CREATE PUBLICATION ${id(pub)};`,
-  );
-
-  const stmts = [
-    ...schemaStmts,
-    ...tablesStmts,
-    ...publicationStmts,
-    `
-    CREATE SUBSCRIPTION ${id(subName)}
-      CONNECTION '${upstreamURI}'
-      PUBLICATION ${idList(publications)}
-      WITH (slot_name='${slotName}', create_slot=false);`,
-  ];
-
-  // Execute all statements in a single batch.
-  await tx.unsafe(stmts.join('\n'));
-
-  lc.info?.(`Started initial data synchronization from ${upstreamURI}`);
-}
-
-type SubscribedTable = {
-  subname: string;
-  schema: string;
-  table: string;
-  state: string;
-};
-
-const MAX_POLLING_INTERVAL = 60000;
-
-/**
- * Waits for the initial data synchronization, started by the {@link startPostgresReplication}
- * migration, to complete. This is determined by polling the `pg_subscription_rel` table:
- * https://www.postgresql.org/docs/current/catalog-pg-subscription-rel.html
- *
- * Once tables are synchronized, this migration step is considered complete, to be followed up
- * with the {@link handoffPostgresReplication} step. Note that although the waiting and
- * handoff can technically be done in a single step, holding a transaction for a long time
- * and then attempting to modify a global table (`pg_subscription`) tends to cause deadlocks
- * in the testing environment.
- */
-export async function waitForInitialDataSynchronization(
-  lc: LogContext,
-  sql: postgres.Sql,
-  upstreamURI: string,
-  subName = 'zero_sync',
-) {
-  lc.info?.(`Awaiting initial data synchronization from ${upstreamURI}`);
-  for (
-    let interval = 100; // Exponential backoff, up to 30 seconds between polls.
-    ;
-    interval = Math.min(interval * 2, MAX_POLLING_INTERVAL)
-  ) {
-    const subscribed = await sql<SubscribedTable[]>`
-    SELECT p.subname, n.nspname as schema, c.relname as table, r.srsubstate as state 
-      FROM pg_subscription p
-      JOIN pg_subscription_rel r ON p.oid = r.srsubid
-      JOIN pg_class c ON c.oid = r.srrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE p.subname = ${subName};`;
-
-    if (subscribed.length === 0) {
-      // This indicates that something is wrong.
-      // At minimum there should be the zero.clients table.
-      throw new Error('No subscribed tables');
-    }
-
-    const syncing = subscribed.filter(table => table.state !== 'r');
-    if (syncing.length === 0) {
-      lc.info?.(`Finished syncing ${subscribed.length} tables`, subscribed);
-      return;
-    }
-
-    if (interval >= MAX_POLLING_INTERVAL) {
-      const postInitialize = subscribed.filter(table => table.state !== 'i');
-      if (postInitialize.length === 0) {
-        // Something is wrong here, as Postgres should be able to transition
-        // at least one table from the 'i' (initialize) state to 'd' (data copy)
-        // or later. Manual inspection is warranted. For instance, it's possible
-        // that the Postgres instance needs to be configured with more
-        // max_logical_replication_workers.
-        throw new Error(
-          'Subscribed tables have failed to pass the "initialize" state',
-        );
-      }
-    }
-    lc.info?.(
-      `Still syncing ${syncing.length} tables (${syncing.map(
-        t => t.table,
-      )}). Polling in ${interval}ms.`,
-      subscribed,
-    );
-    await sleep(interval);
-  }
-}
-
-/**
- * Following up after {@link waitForInitialDataSynchronization}, this migration step detaches
- * and drops the subscription so that the replication slot can be used by the replicator.
- */
-export async function handoffPostgresReplication(
-  lc: LogContext,
-  tx: postgres.TransactionSql,
-  upstreamUri: string,
-  subName = 'zero_sync',
-) {
-  lc.info?.(`Taking over subscription from ${upstreamUri}`);
-  await tx.unsafe(
-    // Disable and detach the subscription from the replication slot so that the slot
-    // can be handed off to the Replicator logic. See the "Notes" section in
-    // https://www.postgresql.org/docs/current/sql-dropsubscription.html
-    `
-    ALTER SUBSCRIPTION ${id(subName)} DISABLE;
-    ALTER SUBSCRIPTION ${id(subName)} SET(slot_name=NONE);
-    DROP SUBSCRIPTION IF EXISTS ${id(subName)};
-  `,
-  );
-}
-
 // Exported for testing
+// TODO: Delete
 export async function setupUpstream(
   lc: LogContext,
   upstreamDB: postgres.Sql,
@@ -223,7 +50,7 @@ export async function setupUpstream(
 
     // In parallel, ensure that the schema and publications are setup.
     // Note that both transactions must succeed for the migration to continue.
-    ensurePublishedTables(lc, upstreamDB),
+    ensurePublishedTables(lc, upstreamDB, false),
   ]);
   return published;
 }
@@ -243,6 +70,7 @@ export async function setupUpstream(
  *   PostgresError: CREATE SUBSCRIPTION ... WITH (create_slot = true) cannot run inside a transaction block
  *   ```
  */
+// TODO: Delete
 function ensureReplicationSlot(
   lc: LogContext,
   upstreamDB: postgres.Sql,
@@ -263,10 +91,105 @@ function ensureReplicationSlot(
   });
 }
 
+/* eslint-disable @typescript-eslint/naming-convention */
+// Row returned by `CREATE_REPLICATION_SLOT`
+type ReplicationSlot = {
+  slot_name: string;
+  consistent_point: string;
+  snapshot_name: string;
+  output_plugin: string;
+};
+/* eslint-enable @typescript-eslint/naming-convention */
+
+export async function initialSync(
+  lc: LogContext,
+  replicaID: string,
+  tx: Database,
+  upstreamDB: PostgresDB,
+  upstreamURI: string,
+) {
+  await checkUpstreamConfig(upstreamDB);
+  const {publications, tables} = await ensurePublishedTables(lc, upstreamDB);
+  const pubNames = publications.map(p => p.pubname);
+  lc.info?.(`Upstream is setup with publications [${pubNames}]`);
+
+  createLiteTables(tx, tables);
+
+  const {database, host} = upstreamDB.options;
+  lc.info?.(`opening replication session to ${database}@${host}`);
+  const repl = postgres(upstreamURI, {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    fetch_types: false, // Necessary for the streaming protocol
+    connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
+  });
+  try {
+    // Note: The replication connection does not support the extended query protocol,
+    //       so all commands must be sent using sql.unsafe(). This is technically safe
+    //       because all placeholder values are under our control (i.e. "slotName").
+    const slotName = replicationSlot(replicaID);
+    const slots = await repl.unsafe(
+      `SELECT * FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
+    );
+
+    // Because a snapshot created by CREATE_REPLICATION_SLOT only lasts for the lifetime
+    // of the replication session, if there is an existing slot, it must be deleted so that
+    // the slot (and corresponding snapshot) can be created anew.
+    //
+    // This means that in order for initial data sync to succeed, it must fully complete
+    // within the lifetime of a replication session.
+    if (slots.length > 0) {
+      lc.info?.(`Dropping existing replication slot ${slotName}`);
+      await repl.unsafe(`DROP_REPLICATION_SLOT ${slotName}`);
+    }
+    const slot = (
+      await repl.unsafe<ReplicationSlot[]>(
+        `CREATE_REPLICATION_SLOT ${slotName} LOGICAL pgoutput`,
+      )
+    )[0];
+    lc.info?.(`Created replication slot ${slotName}`, slot);
+    const {snapshot_name: snapshot, consistent_point: lsn} = slot;
+
+    // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
+    const copiers = startTableCopyWorkers(
+      lc,
+      upstreamDB,
+      tables.length,
+      snapshot,
+    );
+    await Promise.all(
+      tables.map(table =>
+        copiers.processReadTask(db => copy(lc, table, db, tx)),
+      ),
+    );
+    copiers.setDone();
+
+    initReplicationState(tx, pubNames, lsn);
+    lc.info?.(`Synced initial data from ${pubNames} up to ${lsn}`);
+
+    await copiers.done();
+  } finally {
+    await repl.end(); // Close the replication session.
+  }
+}
+
+async function checkUpstreamConfig(upstreamDB: PostgresDB) {
+  // Check upstream wal_level
+  const {wal_level: walLevel} = (await upstreamDB`SHOW wal_level`)[0];
+  if (walLevel !== 'logical') {
+    throw new Error(
+      `Postgres must be configured with "wal_level = logical" (currently: "${walLevel})`,
+    );
+  }
+}
+
 function ensurePublishedTables(
-  _: LogContext,
+  lc: LogContext,
   upstreamDB: postgres.Sql,
+  restrictToLiteDataTypes = true, // TODO: Remove this option
 ): Promise<PublicationInfo> {
+  const {database, host} = upstreamDB.options;
+  lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
+
   return upstreamDB.begin(async tx => {
     const published = await getPublicationInfo(tx, ZERO_PUB_PREFIX);
     if (
@@ -343,15 +266,152 @@ function ensurePublishedTables(
       if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
         throw new Error(`Table "${table.name}" has invalid characters.`);
       }
-      for (const col in table.columns) {
+      for (const [col, spec] of Object.entries(table.columns)) {
         if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
           throw new Error(
             `Column "${col}" in table "${table.name}" has invalid characters.`,
           );
+        }
+        if (restrictToLiteDataTypes) {
+          mapToLiteDataType(spec.dataType); // Throws on unsupported datatypes
         }
       }
     });
 
     return newPublished;
   });
+}
+
+function mapToLiteDataType(pgDataType: string): string {
+  switch (pgDataType) {
+    case 'smallint':
+    case 'integer':
+    case 'int':
+    case 'int2':
+    case 'int4':
+    case 'int8':
+    case 'bigint':
+    case 'smallserial':
+    case 'serial':
+    case 'serial2':
+    case 'serial4':
+    case 'serial8':
+    case 'bigserial':
+    case 'boolean':
+      return 'INTEGER';
+    case 'decimal':
+    case 'numeric':
+    case 'real':
+    case 'double precision':
+    case 'float':
+    case 'float4':
+    case 'float8':
+      return 'REAL';
+    case 'bytea':
+      return 'BLOB';
+    case 'character':
+    case 'character varying':
+    case 'text':
+      return 'TEXT';
+    // case 'date':
+    // case 'time':
+    // case 'timestamp':
+    // case 'timestamp with time zone':
+    // case 'timestamp without time zone':
+    // case 'time with time zone':
+    // case 'time without time zone':
+    //   return 'INTEGER';
+    default:
+      if (pgDataType.endsWith('[]')) {
+        throw new Error(`Array types are not supported: ${pgDataType}`);
+      }
+      throw new Error(`The "${pgDataType}" data type is not supported`);
+  }
+}
+
+function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
+  for (const t of tables) {
+    const liteTable = {
+      ...t,
+      schema: '', // SQLite does not support schemas
+      name: liteTableName(t),
+      columns: {
+        ...Object.fromEntries(
+          Object.entries(t.columns).map(([col, spec]) => [
+            col,
+            {
+              dataType: mapToLiteDataType(spec.dataType),
+              characterMaximumLength: null,
+              columnDefault: null,
+              notNull: false,
+            },
+          ]),
+        ),
+        [ZERO_VERSION_COLUMN_NAME]: {
+          ...ZERO_VERSION_COLUMN_SPEC,
+          dataType: 'TEXT',
+        },
+      },
+    };
+    tx.exec(createTableStatementIgnoringNotNullConstraint(liteTable));
+  }
+}
+
+// TODO: Consider parameterizing these.
+const MAX_WORKERS = 5;
+const BATCH_SIZE = 100_000;
+
+function startTableCopyWorkers(
+  lc: LogContext,
+  db: PostgresDB,
+  numTables: number,
+  snapshot: string,
+): TransactionPool {
+  const {init} = importSnapshot(snapshot);
+  const numWorkers = Math.min(numTables, MAX_WORKERS);
+  const tableCopiers = new TransactionPool(
+    lc,
+    Mode.READONLY,
+    init,
+    undefined,
+    numWorkers,
+  );
+  void tableCopiers.run(db);
+
+  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
+  return tableCopiers;
+}
+
+async function copy(
+  lc: LogContext,
+  table: FilteredTableSpec,
+  from: PostgresDB,
+  to: Database,
+) {
+  let totalRows = 0;
+  const tableName = liteTableName(table);
+  const columns = Object.keys(table.columns);
+  const columnList = columns.map(c => ident(c)).join(',');
+  const insertStmt = to.prepare(
+    `INSERT INTO "${tableName}" (${columnList}) VALUES (${new Array(
+      columns.length,
+    )
+      .fill('?')
+      .join(',')})`,
+  );
+  const selectStmt =
+    `SELECT ${columnList} FROM ${ident(table.schema)}.${ident(table.name)}` +
+    (table.filterConditions.length === 0
+      ? ''
+      : ` WHERE ${table.filterConditions.join(' OR ')}`);
+
+  const cursor = from.unsafe(selectStmt).cursor(BATCH_SIZE);
+  for await (const rows of cursor) {
+    for (const row of rows) {
+      insertStmt.run(Object.values(row));
+    }
+    totalRows += rows.length;
+    lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+  }
+  lc.info?.(`Finished copying ${totalRows} rows into ${tableName}`);
 }

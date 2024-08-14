@@ -167,6 +167,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly #upstreamUri: string;
   readonly #upstream: PostgresDB;
   readonly #syncReplica: PostgresDB;
+  readonly #syncReplicaDbFile: string;
   readonly #txTrain: TransactionTrainService;
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #ready = resolver();
@@ -177,6 +178,7 @@ export class ReplicatorService implements Replicator, Service {
     upstreamUri: string,
     upstream: PostgresDB,
     syncReplica: PostgresDB,
+    syncReplicaDbFile: string,
   ) {
     this.id = replicaID;
     this.#lc = lc
@@ -185,6 +187,7 @@ export class ReplicatorService implements Replicator, Service {
     this.#upstreamUri = upstreamUri;
     this.#upstream = upstream;
     this.#syncReplica = syncReplica;
+    this.#syncReplicaDbFile = syncReplicaDbFile;
 
     this.#txTrain = new TransactionTrainService(this.#lc, syncReplica);
 
@@ -204,9 +207,8 @@ export class ReplicatorService implements Replicator, Service {
     await initSyncSchema(
       this.#lc,
       'replicator',
-      '_zero',
       this.id,
-      this.#syncReplica,
+      this.#syncReplicaDbFile,
       this.#upstream,
       this.#upstreamUri,
     );
