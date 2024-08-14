@@ -317,24 +317,20 @@ export class MessageProcessor {
                 txProcessor.processCommit(msg);
                 break loop; // Done with transaction!
               }
-              case 'origin':
-                // We are agnostic as to which node a transaction originated from.
-                lc.info?.('Ignoring ORIGIN message in replication stream', msg);
-                break;
               case 'type':
                 throw new Error(
                   `Custom types are not supported (received "${msg.typeName}")`,
                 );
+              case 'origin':
+                // We do not set the `origin` option in the pgoutput parameters:
+                // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+                throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+              case 'message':
+                // We do not set the `messages` option in the pgoutput parameters:
+                // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+                throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
               default:
-                // TODO: Determine what the "Message" message is.
-                // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#:~:text=Identifies%20the%20message%20as%20a%20logical%20decoding%20message.
-                lc.error?.(
-                  `Received unexpected message of type ${msg.tag}`,
-                  msg,
-                );
-                throw new Error(
-                  `Don't know how to handle message of type ${msg.tag}`,
-                );
+                msg satisfies never;
             }
           }
 
