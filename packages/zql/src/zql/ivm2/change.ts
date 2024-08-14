@@ -1,6 +1,6 @@
 import type {Node, Row} from './data.js';
 
-export type Change = AddChange | RemoveChange | NopChange;
+export type Change = AddChange | RemoveChange | ChildChange;
 
 /**
  * Represents a node (and all its children) getting added to the result.
@@ -21,7 +21,7 @@ export type RemoveChange = {
 /**
  * The node itself is unchanged, but one of its descendants has changed.
  */
-export type NopChange = {
+export type ChildChange = {
   type: 'child';
   row: Row;
   child: {
