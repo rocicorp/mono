@@ -411,7 +411,10 @@ async function copy(
   const cursor = from.unsafe(selectStmt).cursor(BATCH_SIZE);
   for await (const rows of cursor) {
     for (const row of rows) {
-      insertStmt.run([...Object.values(row), '00']);
+      insertStmt.run([
+        ...Object.values(row),
+        '00', // initial _0_version
+      ]);
     }
     totalRows += rows.length;
     lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
