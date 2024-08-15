@@ -6,12 +6,8 @@ import WebSocket from 'ws';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
-import {
-  READER_MAX_WORKERS as INVALIDATION_WATCHER_READER_MAX_WORKERS,
-  InvalidationWatcher,
-  InvalidationWatcherService,
-} from './invalidation-watcher/invalidation-watcher.js';
-import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import {InvalidationWatcher} from './invalidation-watcher/invalidation-watcher.js';
+import {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
 import {
   REGISTER_FILTERS_PATTERN,
@@ -46,15 +42,12 @@ export interface ServiceRunnerEnv {
 }
 
 const REPLICATOR_ID = 'r1';
-const INVALIDATION_WATCHER_ID = 'iw1';
 
 export class ServiceRunner
   implements ReplicatorRegistry, InvalidationWatcherRegistry
 {
   readonly #viewSyncers: Map<string, ViewSyncerService> = new Map();
   readonly #replicators: Map<string, ReplicatorService> = new Map();
-  readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
-    new Map();
 
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
@@ -77,7 +70,7 @@ export class ServiceRunner
     });
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
-      max: INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
+      max: VIEW_SYNCER_MAX_WORKERS,
     });
     this.#replicaDbFile = this.#env.SYNC_REPLICA_DB_FILE;
     this.#runReplicator = runReplicator;
@@ -85,14 +78,7 @@ export class ServiceRunner
   }
 
   getInvalidationWatcher(): Promise<InvalidationWatcher> {
-    return Promise.resolve(
-      this.#getService(
-        INVALIDATION_WATCHER_ID,
-        this.#invalidationWatchers,
-        id => new InvalidationWatcherService(id, this.#lc, this, this.#replica),
-        'InvalidationWatcherService',
-      ),
-    );
+    throw new Error('obsolete');
   }
 
   // eslint-disable-next-line require-await
@@ -143,8 +129,7 @@ export class ServiceRunner
       this.#upstream`SELECT 1`.simple().execute(),
       ...Array.from(
         {
-          length:
-            INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
+          length: VIEW_SYNCER_MAX_WORKERS,
         },
         () => this.#replica`SELECT 1`.simple().execute(),
       ),
