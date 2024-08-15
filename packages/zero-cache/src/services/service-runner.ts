@@ -18,11 +18,10 @@ import type {ReplicatorRegistry} from './replicator/registry.js';
 import {
   RegisterInvalidationFiltersRequest,
   RegisterInvalidationFiltersResponse,
+  ReplicaVersionReady,
   Replicator,
   ReplicatorService,
-  VersionChange,
   registerInvalidationFiltersResponse,
-  versionChangeSchema,
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
 import {
@@ -93,7 +92,6 @@ export class ServiceRunner
             id,
             this.#env.UPSTREAM_URI,
             this.#upstream,
-            this.#replica,
             this.#replicaDbFile,
           ),
         'ReplicatorService',
@@ -242,7 +240,7 @@ class ReplicatorStub implements Replicator {
     return v.parse(data, registerInvalidationFiltersResponse);
   }
 
-  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
+  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
     const lc = this.#lc.withContext('method', 'versionChanges');
     const ws = new WebSocket(
       `http://${this.#host}${VERSION_CHANGES_PATTERN.replace(
@@ -251,6 +249,8 @@ class ReplicatorStub implements Replicator {
       )}`,
     );
 
-    return Promise.resolve(streamIn(lc, ws, versionChangeSchema));
+    return Promise.resolve(streamIn(lc, ws, emptySchema));
   }
 }
+
+const emptySchema = v.object({});
