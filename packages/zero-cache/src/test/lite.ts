@@ -35,7 +35,7 @@ export function initDB(
       const cols = columns.map(c => ident(c)).join(',');
       const vals = new Array(columns.length).fill('?').join(',');
       const insertStmt = db.prepare(
-        `INSERT INTO "${name}" (${cols}) VALUES (${vals})`,
+        `INSERT INTO ${ident(name)} (${cols}) VALUES (${vals})`,
       );
       for (const row of rows) {
         insertStmt.run(Object.values(row));
@@ -47,9 +47,13 @@ export function initDB(
 export function expectTables(
   db: Database.Database,
   tables?: Record<string, unknown[]>,
+  numberType: 'number' | 'bigint' = 'number',
 ) {
   for (const [table, expected] of Object.entries(tables ?? {})) {
-    const actual = db.prepare(`SELECT * FROM ${ident(table)}`).all();
+    const actual = db
+      .prepare(`SELECT * FROM ${ident(table)}`)
+      .safeIntegers(numberType === 'bigint')
+      .all();
     expect(actual).toEqual(expect.arrayContaining(expected));
     expect(expected).toEqual(expect.arrayContaining(actual));
   }
