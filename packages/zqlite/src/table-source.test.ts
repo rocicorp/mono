@@ -2,7 +2,7 @@ import type {PipelineEntity} from 'zql/src/zql/ivm/types.js';
 import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {createContext} from './context.js';
-import {ZQLite} from './ZQLite.js';
+import {ZQLite} from './zqlite.js';
 
 test('add', () => {
   const db = new Database(':memory:');

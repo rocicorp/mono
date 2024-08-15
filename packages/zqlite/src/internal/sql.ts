@@ -11,4 +11,8 @@ export function compile(sql: SQLQuery): string {
   return sql.format(sqliteFormat).text;
 }
 
+export function format(sql: SQLQuery) {
+  return sql.format(sqliteFormat);
+}
+
 export const sql = baseSql.default;

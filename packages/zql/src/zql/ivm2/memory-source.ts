@@ -18,7 +18,7 @@ export type SourceChange = {
   row: Row;
 };
 
-type Overlay = {
+export type Overlay = {
   outputIndex: number;
   change: SourceChange;
 };

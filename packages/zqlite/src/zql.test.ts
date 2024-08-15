@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import {expect, test} from 'vitest';
 import {newEntityQuery} from 'zql/src/zql/query/entity-query.js';
 import {createContext} from './context.js';
-import {ZQLite} from './ZQLite.js';
+import {ZQLite} from './zqlite.js';
 
 test('smoke test', async () => {
   const db = new Database(':memory:');
