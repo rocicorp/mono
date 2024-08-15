@@ -1,5 +1,10 @@
 import {describe, expect, test} from 'vitest';
-import {RowKey, rowIDHash, rowKeyString} from './row-key.js';
+import {
+  RowKey,
+  normalizedKeyOrder,
+  rowIDHash,
+  rowKeyString,
+} from './row-key.js';
 
 describe('types/row-key', () => {
   type Case = {
@@ -87,4 +92,21 @@ describe('types/row-key', () => {
       }
     });
   }
+
+  test('normalizedKeyOrder', () => {
+    const sorted = {a: 3, b: 2, c: 1};
+    const notSorted = [
+      {a: 3, c: 1, b: 2},
+      {b: 2, a: 3, c: 1},
+      {b: 2, c: 1, a: 3},
+      {c: 1, b: 2, a: 3},
+      {c: 1, a: 3, b: 2},
+    ];
+
+    expect(normalizedKeyOrder(sorted)).toBe(sorted);
+
+    for (const str of notSorted) {
+      expect(Object.keys(normalizedKeyOrder(str))).toEqual(['a', 'b', 'c']);
+    }
+  });
 });

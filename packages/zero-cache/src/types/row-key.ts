@@ -16,6 +16,25 @@ export type RowType = RowKeyType;
 export type RowValue = RowKey;
 
 /**
+ * Returns the `RowKey` such that key iteration produces a sorted sequence. If the
+ * keys are already sorted, the input is returned as is.
+ */
+export function normalizedKeyOrder(rowKey: RowKey) {
+  let last = '';
+  for (const col in rowKey) {
+    if (last > col) {
+      return Object.fromEntries(
+        Object.entries(rowKey).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      );
+    }
+    last = col;
+  }
+  // This case iterates over columns and avoids object allocations, which is
+  // expected to be the common case (e.g. single column key).
+  return rowKey;
+}
+
+/**
  * Returns a normalized string suitable for representing a row key in a form
  * that can be used as a Map key.
  */
@@ -24,9 +43,7 @@ export function rowKeyString(key: RowKey): string {
 }
 
 function tuples(key: RowKey) {
-  return Object.entries(key)
-    .sort(([col1], [col2]) => (col1 < col2 ? -1 : col1 > col2 ? 1 : 0))
-    .flat();
+  return Object.entries(normalizedKeyOrder(key)).flat();
 }
 
 const rowIDHashes = new WeakMap<RowID, string>();

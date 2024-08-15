@@ -26,7 +26,7 @@ const CURRENT_SCHEMA_VERSIONS = {
   lock: 1, // Internal column, always 1
 };
 
-describe('replicator/sync-schema', () => {
+describe('replicator/schema/sync-schema', () => {
   type Case = {
     name: string;
 
@@ -111,11 +111,9 @@ describe('replicator/sync-schema', () => {
         await expectTables(upstream, c.upstreamPostState);
         expectLiteTables(replica, c.replicaPostState);
 
-        // TODO: Check that internal replication tables have been created.
-        // expectLiteTables(replica, {
-        //   ['_zero.TxLog']: [],
-        //   ['_zero.ChangeLog']: [],
-        // });
+        expectLiteTables(replica, {
+          ['_zero.ChangeLog']: [],
+        });
 
         // Slot should still exist.
         const slots =

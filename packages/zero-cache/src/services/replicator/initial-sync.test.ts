@@ -417,6 +417,7 @@ describe('replicator/initial-sync', () => {
         watermark: /[0-9A-F]+\/[0-9A-F]+/,
         nextStateVersion: /[0-9a-f]{2,}/,
       });
+      expectTables(replica, {['_zero.ChangeLog']: []});
 
       // Check replica state against the upstream slot.
       const slots = await upstream`
