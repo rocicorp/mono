@@ -1,34 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import Database from 'better-sqlite3';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import * as v from 'shared/src/valita.js';
-import {normalizedFilterSpecSchema} from '../../types/invalidation.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {initSyncSchema} from './schema/sync-schema.js';
-
-export const registerInvalidationFiltersRequest = v.object({
-  specs: v.array(normalizedFilterSpecSchema),
-});
-
-export type RegisterInvalidationFiltersRequest = v.Infer<
-  typeof registerInvalidationFiltersRequest
->;
-
-export const registerInvalidationFiltersResponse = v.object({
-  specs: v.array(
-    v.object({
-      id: v.string(),
-      fromStateVersion: v.string(),
-    }),
-  ),
-});
-
-export type RegisterInvalidationFiltersResponse = v.Infer<
-  typeof registerInvalidationFiltersResponse
->;
 
 // The version ready payload is simply a signal. All of the information
 // that the consumer needs is retrieved by opening a new snapshot transaction
@@ -42,11 +19,6 @@ export interface Replicator {
    * bootstrap a new replica.
    */
   status(): Promise<ReadonlyJSONObject>;
-
-  // TODO: Delete.
-  registerInvalidationFilters(
-    req: RegisterInvalidationFiltersRequest,
-  ): Promise<RegisterInvalidationFiltersResponse>;
 
   /**
    * Creates a cancelable subscription of notifications when the replica is ready to be
@@ -109,10 +81,6 @@ export class ReplicatorService implements Replicator, Service {
     );
 
     await this.#incrementalSyncer.run(this.#lc);
-  }
-
-  registerInvalidationFilters(): Promise<RegisterInvalidationFiltersResponse> {
-    throw new Error('obsolete');
   }
 
   subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {

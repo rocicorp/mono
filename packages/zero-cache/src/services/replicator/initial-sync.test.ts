@@ -383,7 +383,7 @@ describe('replicator/initial-sync', () => {
         REPLICA_ID,
         replica,
         upstream,
-        getConnectionURI(upstream, 'external'),
+        getConnectionURI(upstream),
       );
 
       const {publications, tables} = await getPublicationInfo(upstream);

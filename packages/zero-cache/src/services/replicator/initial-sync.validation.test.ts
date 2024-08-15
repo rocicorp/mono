@@ -102,7 +102,7 @@ describe('replicator/initial-sync-validation', () => {
         REPLICA_ID,
         replica,
         upstream,
-        getConnectionURI(upstream, 'external'),
+        getConnectionURI(upstream),
       ).catch(e => e);
 
       expect(result).toBeInstanceOf(Error);

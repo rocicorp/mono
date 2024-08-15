@@ -60,7 +60,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     replicaFile = new DbFile('incremental_sync_test_replica');
     replica = replicaFile.connect();
     syncer = new IncrementalSyncer(
-      getConnectionURI(upstream, 'external'),
+      getConnectionURI(upstream),
       REPLICA_ID,
       replica,
     );
@@ -665,7 +665,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         REPLICA_ID,
         replica,
         upstream,
-        getConnectionURI(upstream, 'external'),
+        getConnectionURI(upstream),
       );
 
       const syncing = syncer.run(lc);
