@@ -2,12 +2,7 @@ import websocket, {WebSocket} from '@fastify/websocket';
 import {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
 import {streamOut} from '../types/streams.js';
-import {
-  REGISTER_FILTERS_PATTERN,
-  REPLICATOR_STATUS_PATTERN,
-  VERSION_CHANGES_PATTERN,
-} from './paths.js';
-import type {RegisterInvalidationFiltersRequest} from './replicator/replicator.js';
+import {REPLICATOR_STATUS_PATTERN, VERSION_CHANGES_PATTERN} from './paths.js';
 import {ServiceRunner, ServiceRunnerEnv} from './service-runner.js';
 
 export class Replicator {
@@ -40,20 +35,6 @@ export class Replicator {
 
   #initRoutes() {
     this.#fastify.post(REPLICATOR_STATUS_PATTERN, this.#status);
-    this.#fastify.post(
-      REGISTER_FILTERS_PATTERN,
-      async (
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        request: FastifyRequest<{Body: RegisterInvalidationFiltersRequest}>,
-        reply: FastifyReply,
-      ) => {
-        const replicator = await this.#serviceRunner.getReplicator();
-        const response = await replicator.registerInvalidationFilters(
-          request.body,
-        );
-        await reply.send(response);
-      },
-    );
     this.#fastify.get(
       VERSION_CHANGES_PATTERN,
       {websocket: true},

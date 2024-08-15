@@ -9,19 +9,12 @@ import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
 import {InvalidationWatcher} from './invalidation-watcher/invalidation-watcher.js';
 import {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
-import {
-  REGISTER_FILTERS_PATTERN,
-  REPLICATOR_STATUS_PATTERN,
-  VERSION_CHANGES_PATTERN,
-} from './paths.js';
+import {REPLICATOR_STATUS_PATTERN, VERSION_CHANGES_PATTERN} from './paths.js';
 import type {ReplicatorRegistry} from './replicator/registry.js';
 import {
-  RegisterInvalidationFiltersRequest,
-  RegisterInvalidationFiltersResponse,
   ReplicaVersionReady,
   Replicator,
   ReplicatorService,
-  registerInvalidationFiltersResponse,
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
 import {
@@ -211,33 +204,6 @@ class ReplicatorStub implements Replicator {
     const data = await res.json();
     lc.debug?.('received', data);
     return v.parse(data, jsonObjectSchema);
-  }
-
-  async registerInvalidationFilters(
-    req: RegisterInvalidationFiltersRequest,
-  ): Promise<RegisterInvalidationFiltersResponse> {
-    const lc = this.#lc.withContext('method', 'registerInvalidationFilters');
-    const res = await fetch(
-      `http://${this.#host}${REGISTER_FILTERS_PATTERN.replace(
-        ':version',
-        'v0',
-      )}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(req),
-      },
-    );
-    if (!res.ok) {
-      throw new Error(
-        `registerInvalidationFilters: ${res.status}: ${await res.text()}`,
-      );
-    }
-    const data = await res.json();
-    lc.debug?.('received', data);
-    return v.parse(data, registerInvalidationFiltersResponse);
   }
 
   subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
