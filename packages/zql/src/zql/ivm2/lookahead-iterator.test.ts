@@ -92,3 +92,64 @@ test('basics', () => {
     expect(actual, JSON.stringify({input, size, expected})).toEqual(expected);
   }
 });
+
+class ExpensiveIterator {
+  #iter = [1, 2, 3][Symbol.iterator]();
+
+  returned: unknown[] = [];
+  thrown: unknown[] = [];
+
+  next() {
+    return this.#iter.next();
+  }
+
+  return(value?: unknown) {
+    this.returned.push(value);
+    this.#iter.return?.(value);
+    return {done: true, value: undefined};
+  }
+
+  throw(e?: unknown) {
+    this.thrown.push(e);
+    this.#iter.throw?.(e);
+    return {done: true, value: undefined};
+  }
+}
+
+test('return', () => {
+  let it = new ExpensiveIterator();
+  let cursor = new LookaheadIterator(it, 2);
+  for (const _ of cursor) {
+    //
+  }
+  expect(it.returned).toEqual([]);
+  expect(it.thrown).toEqual([]);
+
+  it = new ExpensiveIterator();
+  cursor = new LookaheadIterator(it, 2);
+  for (const v of cursor) {
+    if (v[0] === 2) {
+      break;
+    }
+  }
+  expect(it.returned).toEqual([undefined]);
+  expect(it.thrown).toEqual([]);
+
+  it = new ExpensiveIterator();
+  cursor = new LookaheadIterator(it, 2);
+
+  try {
+    for (const v of cursor) {
+      if (v[0] === 2) {
+        throw 'hello';
+      }
+    }
+  } catch (e) {
+    //
+  }
+
+  // til!
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_generators#advanced_generators
+  expect(it.returned).toEqual([undefined]);
+  expect(it.thrown).toEqual([]);
+});
