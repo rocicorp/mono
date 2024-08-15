@@ -7,7 +7,7 @@ import type {Entity} from 'zql/src/zql/schema/entity-schema.js';
 import type {ZqlLiteZeroOptions} from './options.js';
 import type {Context as ZQLContext} from 'zql/src/zql/context/context.js';
 import {createContext} from './context.js';
-import {ZQLite} from './ZQLite.js';
+import {ZQLite} from './zqlite.js';
 import {
   BaseCRUDMutate,
   EntityCRUDMutate,

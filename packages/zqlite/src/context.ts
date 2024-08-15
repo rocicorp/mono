@@ -3,7 +3,7 @@ import type {Database} from 'better-sqlite3';
 import {TableSource} from './table-source.js';
 import type {PipelineEntity} from 'zql/src/zql/ivm/types.js';
 import type {Source} from 'zql/src/zql/ivm/source/source.js';
-import type {ZQLite} from './ZQLite.js';
+import type {ZQLite} from './zqlite.js';
 
 const emptyFunction = () => {};
 
