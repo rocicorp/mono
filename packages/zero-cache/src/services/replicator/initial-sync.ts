@@ -8,6 +8,7 @@ import {
   TransactionPool,
 } from 'zero-cache/src/db/transaction-pool.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {initChangeLog} from './schema/change-log.js';
 import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
@@ -130,6 +131,7 @@ export async function initialSync(
     copiers.setDone();
 
     initReplicationState(tx, pubNames, lsn);
+    initChangeLog(tx);
     lc.info?.(`Synced initial data from ${pubNames} up to ${lsn}`);
 
     await copiers.done();
