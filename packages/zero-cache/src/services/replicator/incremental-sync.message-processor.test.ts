@@ -1,43 +1,40 @@
 import {LogContext} from '@rocicorp/logger';
+import {Database} from 'better-sqlite3';
 import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {expectTables, testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
+import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
 import {MessageProcessor} from './incremental-sync.js';
-import type {VersionChange} from './replicator.js';
-import {setupReplicationTables} from './schema/replication.js';
-import {TransactionTrainService} from './transaction-train.js';
-
-const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
+import {initChangeLog} from './schema/change-log.js';
+import {
+  getReplicationState,
+  initReplicationState,
+} from './schema/replication.js';
 
 describe('replicator/message-processor', () => {
   let lc: LogContext;
-  let replica: PostgresDB;
-  let train: TransactionTrainService;
+  let replicaFile: DbFile;
+  let replica: Database;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     lc = createSilentLogContext();
-    replica = await testDBs.create('message_processor_test_replica');
+    replicaFile = new DbFile('message_processor_test_replica');
+    replica = replicaFile.connect();
 
-    await replica`
+    replica.exec(`
     CREATE TABLE "foo" (
-      id int4 PRIMARY KEY,
-      big int8,
-      _0_version VARCHAR(38) NOT NULL
+      id INTEGER PRIMARY KEY,
+      big INTEGER,
+      _0_version TEXT NOT NULL
     );
-    `;
-    await replica.begin(tx =>
-      setupReplicationTables(lc, tx, 'postgres:///unused_upstream'),
-    );
-    train = new TransactionTrainService(lc, replica);
-    void train.run();
+    `);
+
+    initReplicationState(replica, ['zero_data', 'zero_metadata'], '0/2');
+    initChangeLog(replica);
   });
 
   afterEach(async () => {
-    await train.stop();
-    await testDBs.drop(replica);
+    await replicaFile.unlink();
   });
 
   const FOO_RELATION: Pgoutput.MessageRelation = {
@@ -64,172 +61,24 @@ describe('replicator/message-processor', () => {
     name: string;
     messages: Record<string, Pgoutput.Message[]>;
     acknowledged: string[];
-    versions: Omit<VersionChange, 'prevSnapshotID'>[];
+    expectedVersionChanges: number;
     replicated: Record<string, object[]>;
     expectFailure: boolean;
   };
 
   const cases: Case[] = [
     {
-      name: 'apply error (out of range)',
+      name: 'malformed replication stream',
       messages: {
         '0/1': [
-          {tag: 'begin', commitLsn: '0/e', commitTime: 123n, xid: 123},
+          {tag: 'begin', commitLsn: '0/d', commitTime: 123n, xid: 123},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
           {
             tag: 'commit',
             flags: 0,
-            commitLsn: '0/e',
-            commitEndLsn: '0/11',
-            commitTime: 123n,
-          },
-        ],
-
-        // Induce a failure with an out-of-range integer.
-        '0/20': [
-          {tag: 'begin', commitLsn: '0/30', commitTime: 125n, xid: 125},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 456}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 2 ** 34}}, // out of range
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/30',
-            commitEndLsn: '0/31',
-            commitTime: 125n,
-          },
-        ],
-
-        // This should be dropped.
-        '0/40': [
-          {tag: 'begin', commitLsn: '0/50', commitTime: 127n, xid: 127},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 789}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 987}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/50',
-            commitEndLsn: '0/51',
-            commitTime: 127n,
-          },
-        ],
-      },
-      acknowledged: ['0/e'],
-      versions: [
-        {
-          prevVersion: '00',
-          newVersion: '0e',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {['_0_version']: '0e', id: 123},
-              rowKey: {id: 123},
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {['_0_version']: '0e', id: 234},
-              rowKey: {id: 234},
-              schema: 'public',
-              table: 'foo',
-            },
-          ],
-        },
-      ],
-      replicated: {
-        foo: [
-          {id: 123, big: null, ['_0_version']: '0e'},
-          {id: 234, big: null, ['_0_version']: '0e'},
-        ],
-      },
-      expectFailure: true,
-    },
-    {
-      name: 'apply error (duplicate key value)',
-      messages: {
-        '0/1': [
-          {tag: 'begin', commitLsn: '0/e', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/e',
-            commitEndLsn: '0/11',
-            commitTime: 123n,
-          },
-        ],
-
-        // Induce a failure with an out-of-range integer.
-        '0/20': [
-          {tag: 'begin', commitLsn: '0/30', commitTime: 125n, xid: 125},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 456}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}}, // duplicate key
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/30',
-            commitEndLsn: '0/31',
-            commitTime: 125n,
-          },
-        ],
-
-        // This should be dropped.
-        '0/40': [
-          {tag: 'begin', commitLsn: '0/50', commitTime: 127n, xid: 127},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 789}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 987}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/50',
-            commitEndLsn: '0/51',
-            commitTime: 127n,
-          },
-        ],
-      },
-      acknowledged: ['0/e'],
-      versions: [
-        {
-          prevVersion: '00',
-          newVersion: '0e',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {['_0_version']: '0e', id: 123},
-              rowKey: {id: 123},
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {['_0_version']: '0e', id: 234},
-              rowKey: {id: 234},
-              schema: 'public',
-              table: 'foo',
-            },
-          ],
-        },
-      ],
-      replicated: {
-        foo: [
-          {id: 123, big: null, ['_0_version']: '0e'},
-          {id: 234, big: null, ['_0_version']: '0e'},
-        ],
-      },
-      expectFailure: true,
-    },
-    {
-      name: 'replication stream error',
-      messages: {
-        '0/1': [
-          {tag: 'begin', commitLsn: '0/e', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/e',
-            commitEndLsn: '0/11',
+            commitLsn: '0/d',
+            commitEndLsn: '0/e',
             commitTime: 123n,
           },
         ],
@@ -262,31 +111,11 @@ describe('replicator/message-processor', () => {
         ],
       },
       acknowledged: ['0/e'],
-      versions: [
-        {
-          prevVersion: '00',
-          newVersion: '0e',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {['_0_version']: '0e', id: 123},
-              rowKey: {id: 123},
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {['_0_version']: '0e', id: 234},
-              rowKey: {id: 234},
-              schema: 'public',
-              table: 'foo',
-            },
-          ],
-        },
-      ],
+      expectedVersionChanges: 1,
       replicated: {
         foo: [
-          {id: 123, big: null, ['_0_version']: '0e'},
-          {id: 234, big: null, ['_0_version']: '0e'},
+          {id: 123, big: null, ['_0_version']: '02'},
+          {id: 234, big: null, ['_0_version']: '02'},
         ],
       },
       expectFailure: true,
@@ -295,97 +124,91 @@ describe('replicator/message-processor', () => {
       name: 'transaction replay',
       messages: {
         '0/1': [
-          {tag: 'begin', commitLsn: '0/a', commitTime: 123n, xid: 123},
+          {tag: 'begin', commitLsn: '0/2', commitTime: 123n, xid: 123},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
           {
             tag: 'commit',
             flags: 0,
-            commitLsn: '0/a',
-            commitEndLsn: '0/11',
+            commitLsn: '0/3',
+            commitEndLsn: '0/4',
             commitTime: 123n,
           },
         ],
 
-        // Simulate a reconnect with the replication stream sending the same tx again.
-        '0/2': [
-          {tag: 'begin', commitLsn: '0/a', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
+        '0/5': [
+          {tag: 'begin', commitLsn: '0/5', commitTime: 123n, xid: 123},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
           {
             tag: 'commit',
             flags: 0,
-            commitLsn: '0/a',
-            commitEndLsn: '0/11',
+            commitLsn: '0/9',
+            commitEndLsn: '0/a',
+            commitTime: 123n,
+          },
+        ],
+
+        // Simulate Postgres resending the first two transactions (e.g. reconnecting after
+        // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
+        '0/6': [
+          {tag: 'begin', commitLsn: '0/2', commitTime: 123n, xid: 123},
+          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
+          // For good measure, add new inserts that didn't appear in the previous transaction.
+          // This would not actually happen, but it allows us to confirm that no mutations
+          // are applied.
+          {tag: 'insert', relation: FOO_RELATION, new: {id: 456}},
+          {
+            tag: 'commit',
+            flags: 0,
+            commitLsn: '0/3',
+            commitEndLsn: '0/4',
+            commitTime: 123n,
+          },
+        ],
+
+        '0/7': [
+          {tag: 'begin', commitLsn: '0/5', commitTime: 123n, xid: 123},
+          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
+          // For good measure, add new inserts that didn't appear in the previous transaction.
+          // This would not actually happen, but it allows us to confirm that no mutations
+          // are applied.
+          {tag: 'insert', relation: FOO_RELATION, new: {id: 654}},
+          {
+            tag: 'commit',
+            flags: 0,
+            commitLsn: '0/9',
+            commitEndLsn: '0/a',
             commitTime: 123n,
           },
         ],
 
         // This should succeed.
         '0/40': [
-          {tag: 'begin', commitLsn: '0/f', commitTime: 127n, xid: 127},
+          {tag: 'begin', commitLsn: '0/e', commitTime: 127n, xid: 127},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 789}},
           {tag: 'insert', relation: FOO_RELATION, new: {id: 987}},
           {
             tag: 'commit',
             flags: 0,
-            commitLsn: '0/f',
-            commitEndLsn: '0/51',
+            commitLsn: '0/e',
+            commitEndLsn: '0/f',
             commitTime: 127n,
           },
         ],
       },
       acknowledged: [
+        '0/4',
         '0/a',
-        '0/a', // Note: The acknowledgement should be resent.
+        '0/4', // Note: The acknowledgements should be resent
+        '0/a', //       so that Postgres can track progress.
         '0/f',
       ],
-      versions: [
-        {
-          prevVersion: '00',
-          newVersion: '0a',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {['_0_version']: '0a', id: 123},
-              rowKey: {id: 123},
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {['_0_version']: '0a', id: 234},
-              rowKey: {id: 234},
-              schema: 'public',
-              table: 'foo',
-            },
-          ],
-        },
-        {
-          prevVersion: '0a',
-          newVersion: '0f',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {['_0_version']: '0f', id: 789},
-              rowKey: {id: 789},
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {['_0_version']: '0f', id: 987},
-              rowKey: {id: 987},
-              schema: 'public',
-              table: 'foo',
-            },
-          ],
-        },
-      ],
+      expectedVersionChanges: 3,
       replicated: {
         foo: [
-          {id: 123, big: null, ['_0_version']: '0a'},
-          {id: 234, big: null, ['_0_version']: '0a'},
-          {id: 789, big: null, ['_0_version']: '0f'},
-          {id: 987, big: null, ['_0_version']: '0f'},
+          {id: 123, big: null, ['_0_version']: '02'},
+          {id: 234, big: null, ['_0_version']: '04'},
+          {id: 789, big: null, ['_0_version']: '0a'},
+          {id: 987, big: null, ['_0_version']: '0a'},
         ],
       },
       expectFailure: false,
@@ -393,21 +216,16 @@ describe('replicator/message-processor', () => {
   ];
 
   for (const c of cases) {
-    test(c.name, async () => {
-      const failures = new Queue<unknown>();
-      const acknowledgements = new Queue<string>();
-      const versionChanges = new Queue<VersionChange>();
+    test(c.name, () => {
+      const failures: unknown[] = [];
+      const acknowledgements: string[] = [];
+      let versionChanges = 0;
 
       const processor = new MessageProcessor(
-        {
-          // Unused in this test.
-          publications: [],
-          tables: [],
-        },
-        train,
-        (lsn: string) => acknowledgements.enqueue(lsn),
-        (v: VersionChange) => versionChanges.enqueue(v),
-        (_: LogContext, err: unknown) => failures.enqueue(err),
+        replica,
+        (lsn: string) => acknowledgements.push(lsn),
+        () => versionChanges++,
+        (_: LogContext, err: unknown) => failures.push(err),
       );
 
       for (const [lsn, msgs] of Object.entries(c.messages)) {
@@ -416,19 +234,17 @@ describe('replicator/message-processor', () => {
         }
       }
 
-      for (const lsn of c.acknowledged) {
-        expect(await acknowledgements.dequeue()).toBe(lsn);
-      }
-      for (const version of c.versions) {
-        expect(await versionChanges.dequeue()).toMatchObject({
-          ...version,
-          prevSnapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
-        });
-      }
+      expect(acknowledgements).toEqual(c.acknowledged);
+      expect(versionChanges).toBe(c.expectedVersionChanges);
       if (c.expectFailure) {
-        expect(await failures.dequeue()).toBeInstanceOf(Error);
+        expect(failures[0]).toBeInstanceOf(Error);
+      } else {
+        expect(failures).toHaveLength(0);
       }
-      await expectTables(replica, c.replicated);
+      expectTables(replica, c.replicated);
+
+      const {watermark} = getReplicationState(replica);
+      expect(watermark).toBe(c.acknowledged.at(-1));
     });
   }
 });

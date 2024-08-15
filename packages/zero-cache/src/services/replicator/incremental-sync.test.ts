@@ -1,166 +1,148 @@
-import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
+import {LogContext} from '@rocicorp/logger';
+import {Database} from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {sleep} from 'shared/src/sleep.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {
-  Mode,
-  TransactionPool,
-  importSnapshot,
-} from 'zero-cache/src/db/transaction-pool.js';
+import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
 import {
   dropReplicationSlot,
-  expectTables,
   getConnectionURI,
   initDB,
   testDBs,
 } from '../../test/db.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
-import {toLexiVersion} from '../../types/lsn.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
-import {replicationSlot, setupUpstream} from './initial-sync.js';
-import type {RowChange, VersionChange} from './replicator.js';
-import {queryLastLSN, setupReplicationTables} from './schema/replication.js';
-import {getPublicationInfo} from './tables/published.js';
-import type {FilteredTableSpec} from './tables/specs.js';
-import {TransactionTrainService} from './transaction-train.js';
+import {initialSync, replicationSlot} from './initial-sync.js';
+import {getReplicationState} from './schema/replication.js';
+import {listTables} from './tables/list.js';
+import {TableSpec} from './tables/specs.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
-const SNAPSHOT_PATTERN = /([0-9A-F]+-){2}[0-9A-F]/;
+
+const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
+  columns: {
+    clientGroupID: {
+      characterMaximumLength: null,
+      dataType: 'TEXT',
+      notNull: false,
+    },
+    clientID: {
+      characterMaximumLength: null,
+      dataType: 'TEXT',
+      notNull: false,
+    },
+    lastMutationID: {
+      characterMaximumLength: null,
+      dataType: 'INTEGER',
+      notNull: false,
+    },
+    userID: {
+      characterMaximumLength: null,
+      dataType: 'TEXT',
+      notNull: false,
+    },
+  },
+  name: 'zero.clients',
+  primaryKey: ['clientGroupID', 'clientID'],
+  schema: '',
+} as const;
 
 describe('replicator/incremental-sync', {retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
-  let replica: PostgresDB;
-  let train: TransactionTrainService;
+  let replicaFile: DbFile;
+  let replica: Database;
   let syncer: IncrementalSyncer;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
     upstream = await testDBs.create('incremental_sync_test_upstream');
-    replica = await testDBs.create('incremental_sync_test_replica');
-    train = new TransactionTrainService(lc, replica);
+    replicaFile = new DbFile('incremental_sync_test_replica');
+    replica = replicaFile.connect();
     syncer = new IncrementalSyncer(
       getConnectionURI(upstream, 'external'),
       REPLICA_ID,
       replica,
-      train,
     );
   });
 
   afterEach(async () => {
-    await train.stop();
     await syncer.stop(lc);
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
-    await testDBs.drop(replica, upstream);
+    await testDBs.drop(upstream);
+    await replicaFile.unlink();
   });
 
   type Case = {
     name: string;
     setupUpstream?: string;
-    setupReplica?: string;
     writeUpstream?: string[];
-    expectedTransactions?: number;
-    expectedVersionChanges?: Omit<VersionChange, 'prevSnapshotID'>[];
-    coalescedVersionChange?: Omit<VersionChange, 'prevSnapshotID'>;
-    specs: Record<string, FilteredTableSpec>;
+    specs: Record<string, TableSpec>;
     data: Record<string, Record<string, unknown>[]>;
   };
 
   const cases: Case[] = [
     {
-      name: 'create tables',
-      specs: {},
+      name: 'no tables',
+      specs: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+      },
       data: {
-        ['_zero.TxLog']: [],
+        ['zero.clients']: [],
         ['_zero.ChangeLog']: [],
       },
     },
     {
-      name: 'alter version columns',
-      setupReplica: `
-      CREATE TABLE issues(
-        "issueID" INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) NOT NULL
+      name: 'existing tables',
+      setupUpstream: `
+      CREATE TABLE issues (
+        "issueID" INTEGER PRIMARY KEY
       );
       CREATE TABLE "table-with-special-characters" (
-        "id" INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) NOT NULL
+        "id" INTEGER PRIMARY KEY
       );
-      CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;
-
-      CREATE SCHEMA zero;
-      CREATE TABLE zero.clients(
-        "clientID" TEXT PRIMARY KEY,
-        "lastMutationID" TEXT,
-        _0_version VARCHAR(38) NOT NULL
-      );
-      CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
       `,
       specs: {
-        ['public.issues']: {
-          schema: 'public',
+        issues: {
+          schema: '',
           name: 'issues',
           columns: {
             issueID: {
-              dataType: 'int4',
-              characterMaximumLength: null,
-              notNull: true,
-            },
-            ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
-              notNull: true,
-            },
-          },
-          primaryKey: ['issueID'],
-          filterConditions: [],
-        },
-        ['public.table-with-special-characters']: {
-          schema: 'public',
-          name: 'table-with-special-characters',
-          columns: {
-            id: {
-              dataType: 'int4',
-              characterMaximumLength: null,
-              notNull: true,
-            },
-            ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
-              notNull: true,
-            },
-          },
-          primaryKey: ['id'],
-          filterConditions: [],
-        },
-        ['zero.clients']: {
-          schema: 'zero',
-          name: 'clients',
-          columns: {
-            clientID: {
-              dataType: 'text',
-              characterMaximumLength: null,
-              notNull: true,
-            },
-            lastMutationID: {
-              dataType: 'text',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
               notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
-          primaryKey: ['clientID'],
-          filterConditions: [],
+          primaryKey: ['issueID'],
         },
+        ['table-with-special-characters']: {
+          schema: '',
+          name: 'table-with-special-characters',
+          columns: {
+            id: {
+              dataType: 'INTEGER',
+              characterMaximumLength: null,
+              notNull: false,
+            },
+            ['_0_version']: {
+              dataType: 'TEXT',
+              characterMaximumLength: null,
+              notNull: true,
+            },
+          },
+          primaryKey: ['id'],
+        },
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
       },
       data: {
-        ['_zero.TxLog']: [],
+        issues: [],
+        ['table-with-special-characters']: [],
+        ['zero.clients']: [],
         ['_zero.ChangeLog']: [],
       },
     },
@@ -171,368 +153,129 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         "issueID" INTEGER PRIMARY KEY,
         big BIGINT,
         flt FLOAT8,
-        ints INTEGER[],
-        bigs BIGINT[],
-        time TIMESTAMPTZ,
         description TEXT
       );
       CREATE PUBLICATION zero_all FOR TABLE issues WHERE ("issueID" < 1000);
       `,
-      setupReplica: `
-      CREATE TABLE issues(
-        "issueID" INTEGER PRIMARY KEY,
-        big BIGINT,
-        flt FLOAT8,
-        ints INTEGER[],
-        bigs BIGINT[],
-        time TIMESTAMPTZ,
-        description TEXT,
-        _0_version VARCHAR(38) NOT NULL
-      );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
-      `,
       specs: {
-        ['public.issues']: {
-          schema: 'public',
+        issues: {
+          schema: '',
           name: 'issues',
           columns: {
             issueID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             big: {
-              dataType: 'int8',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
               notNull: false,
             },
             flt: {
-              dataType: 'float8',
-              characterMaximumLength: null,
-              notNull: false,
-            },
-            ints: {
-              dataType: 'int4[]',
-              characterMaximumLength: null,
-              notNull: false,
-            },
-            bigs: {
-              dataType: 'int8[]',
-              characterMaximumLength: null,
-              notNull: false,
-            },
-            time: {
-              dataType: 'timestamptz',
+              dataType: 'REAL',
               characterMaximumLength: null,
               notNull: false,
             },
             description: {
-              dataType: 'text',
+              dataType: 'TEXT',
               characterMaximumLength: null,
               notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['issueID'],
-          filterConditions: [],
         },
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
       },
       writeUpstream: [
         `
       INSERT INTO issues ("issueID") VALUES (123);
-      INSERT INTO issues ("issueID", time) VALUES (456, '2024-03-21T18:50:23.646716Z');
+      INSERT INTO issues ("issueID") VALUES (456);
       -- Rows > 1000 should be filtered by PG.
       INSERT INTO issues ("issueID") VALUES (1001);
       `,
         `
       INSERT INTO issues ("issueID", big) VALUES (789, 9223372036854775807);
-      INSERT INTO issues ("issueID", ints) VALUES (987, '{92233720,123}');
+      INSERT INTO issues ("issueID") VALUES (987);
       INSERT INTO issues ("issueID", flt) VALUES (234, 123.456);
 
       -- Rows > 1000 should be filtered by PG.
       INSERT INTO issues ("issueID") VALUES (2001);
-
-      -- https://github.com/porsager/postgres/issues/837
-      -- INSERT INTO issues ("issueID", bigs) VALUES (2468, '{9223372036854775807,123}');
       `,
       ],
-      expectedTransactions: 2,
-      expectedVersionChanges: [
-        {
-          prevVersion: '00',
-          newVersion: '01',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {
-                ['_0_version']: '01',
-                big: null,
-                bigs: null,
-                description: null,
-                flt: null,
-                ints: null,
-                issueID: 123,
-                time: null,
-              },
-              rowKey: {issueID: 123},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                big: null,
-                bigs: null,
-                description: null,
-                flt: null,
-                ints: null,
-                issueID: 456,
-                time: new Date('2024-03-21T18:50:23.646Z'),
-              },
-              rowKey: {issueID: 456},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-        {
-          prevVersion: '01',
-          newVersion: '02',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {
-                ['_0_version']: '02',
-                big: 9223372036854775807n,
-                bigs: null,
-                description: null,
-                flt: null,
-                ints: null,
-                issueID: 789,
-                time: null,
-              },
-              rowKey: {issueID: 789},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '02',
-                big: null,
-                bigs: null,
-                description: null,
-                flt: null,
-                ints: [92233720, 123],
-                issueID: 987,
-                time: null,
-              },
-              rowKey: {issueID: 987},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '02',
-                big: null,
-                bigs: null,
-                description: null,
-                flt: 123.456,
-                ints: null,
-                issueID: 234,
-                time: null,
-              },
-              rowKey: {issueID: 234},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-      ],
-      coalescedVersionChange: {
-        prevVersion: '00',
-        newVersion: '02',
-        invalidations: {},
-        changes: [
-          {
-            rowData: {
-              ['_0_version']: '01',
-              big: null,
-              bigs: null,
-              description: null,
-              flt: null,
-              ints: null,
-              issueID: 123,
-              time: null,
-            },
-            rowKey: {issueID: 123},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              big: null,
-              bigs: null,
-              description: null,
-              flt: null,
-              ints: null,
-              issueID: 456,
-              time: new Date('2024-03-21T18:50:23.646Z'),
-            },
-            rowKey: {issueID: 456},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '02',
-              big: 9223372036854775807n,
-              bigs: null,
-              description: null,
-              flt: null,
-              ints: null,
-              issueID: 789,
-              time: null,
-            },
-            rowKey: {issueID: 789},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '02',
-              big: null,
-              bigs: null,
-              description: null,
-              flt: null,
-              ints: [92233720, 123],
-              issueID: 987,
-              time: null,
-            },
-            rowKey: {issueID: 987},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '02',
-              big: null,
-              bigs: null,
-              description: null,
-              flt: 123.456,
-              ints: null,
-              issueID: 234,
-              time: null,
-            },
-            rowKey: {issueID: 234},
-            schema: 'public',
-            table: 'issues',
-          },
-        ],
-      },
       data: {
-        ['public.issues']: [
+        issues: [
           {
-            issueID: 123,
+            issueID: 123n,
             big: null,
             flt: null,
-            ints: null,
-            bigs: null,
-            time: null,
             description: null,
             ['_0_version']: '01',
           },
           {
-            issueID: 456,
+            issueID: 456n,
             big: null,
             flt: null,
-            ints: null,
-            bigs: null,
-            time: new Date(Date.UTC(2024, 2, 21, 18, 50, 23, 646)), // Note: we lost the microseconds
             description: null,
             ['_0_version']: '01',
           },
           {
-            issueID: 789,
+            issueID: 789n,
             big: 9223372036854775807n,
-            ints: null,
             flt: null,
-            bigs: null,
-            time: null,
             description: null,
             ['_0_version']: '02',
           },
           {
-            issueID: 987,
+            issueID: 987n,
             big: null,
             flt: null,
-            ints: [92233720, 123],
-            bigs: null,
-            time: null,
             description: null,
             ['_0_version']: '02',
           },
           {
-            issueID: 234,
+            issueID: 234n,
             big: null,
             flt: 123.456,
-            ints: null,
-            bigs: null,
-            time: null,
             description: null,
             ['_0_version']: '02',
           },
-          // https://github.com/porsager/postgres/issues/837
-          // {
-          //   issueID: 2468,
-          //   big: null,
-          //   ints: null,
-          //   bigs: [9223372036854775807n, 123n],
-          //   time: null,
-          //   description: null,
-          //   ['_0_version']: '02',
-          // },
         ],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {issueID: 123},
+            rowKey: '{"issueID":123}',
           },
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'issues',
             op: 's',
-
-            rowKey: {issueID: 456},
+            rowKey: '{"issueID":456}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {issueID: 789},
+            rowKey: '{"issueID":789}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {issueID: 987},
+            rowKey: '{"issueID":987}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {issueID: 234},
+            rowKey: '{"issueID":234}',
           },
         ],
       },
@@ -546,47 +289,36 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         description TEXT,
         PRIMARY KEY("orgID", "issueID")
       );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
-      `,
-      setupReplica: `
-      CREATE TABLE issues(
-        "issueID" INTEGER,
-        "orgID" INTEGER,
-        description TEXT,
-        _0_version VARCHAR(38) NOT NULL,
-        PRIMARY KEY("orgID", "issueID")
-      );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
       specs: {
-        ['public.issues']: {
-          schema: 'public',
+        issues: {
+          schema: '',
           name: 'issues',
           columns: {
             issueID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             orgID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             description: {
-              dataType: 'text',
+              dataType: 'TEXT',
               characterMaximumLength: null,
               notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['orgID', 'issueID'],
-          filterConditions: [],
         },
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
       },
       writeUpstream: [
         `
@@ -599,186 +331,36 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       UPDATE issues SET ("orgID", description) = ROW(2, 'bar') WHERE "issueID" = 123;
       `,
       ],
-      expectedTransactions: 2,
-      expectedVersionChanges: [
-        {
-          prevVersion: '00',
-          newVersion: '01',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 123,
-                orgID: 1,
-              },
-              rowKey: {issueID: 123, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 456,
-                orgID: 1,
-              },
-              rowKey: {issueID: 456, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 789,
-                orgID: 2,
-              },
-              rowKey: {issueID: 789, orgID: 2},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-        {
-          prevVersion: '01',
-          newVersion: '02',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {
-                ['_0_version']: '02',
-                description: 'foo',
-                issueID: 456,
-                orgID: 1,
-              },
-              rowKey: {issueID: 456, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '02',
-                description: 'bar',
-                issueID: 123,
-                orgID: 2,
-              },
-              rowKey: {issueID: 123, orgID: 2},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: undefined,
-              rowKey: {issueID: 123, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-      ],
-      coalescedVersionChange: {
-        prevVersion: '00',
-        newVersion: '02',
-        invalidations: {},
-        changes: [
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 123,
-              orgID: 1,
-            },
-            rowKey: {issueID: 123, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 456,
-              orgID: 1,
-            },
-            rowKey: {issueID: 456, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 789,
-              orgID: 2,
-            },
-            rowKey: {issueID: 789, orgID: 2},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '02',
-              description: 'foo',
-              issueID: 456,
-              orgID: 1,
-            },
-            rowKey: {issueID: 456, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '02',
-              description: 'bar',
-              issueID: 123,
-              orgID: 2,
-            },
-            rowKey: {issueID: 123, orgID: 2},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: undefined,
-            rowKey: {issueID: 123, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-        ],
-      },
       data: {
-        ['public.issues']: [
-          {orgID: 2, issueID: 123, description: 'bar', ['_0_version']: '02'},
-          {orgID: 1, issueID: 456, description: 'foo', ['_0_version']: '02'},
-          {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
+        issues: [
+          {orgID: 2n, issueID: 123n, description: 'bar', ['_0_version']: '02'},
+          {orgID: 1n, issueID: 456n, description: 'foo', ['_0_version']: '02'},
+          {orgID: 2n, issueID: 789n, description: null, ['_0_version']: '01'},
         ],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {orgID: 2, issueID: 789},
+            rowKey: '{"issueID":789,"orgID":2}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {orgID: 1, issueID: 456},
+            rowKey: '{"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKey: {orgID: 1, issueID: 123},
+            rowKey: '{"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {orgID: 2, issueID: 123},
+            rowKey: '{"issueID":123,"orgID":2}',
           },
         ],
       },
@@ -794,45 +376,35 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
-      setupReplica: `
-      CREATE TABLE issues(
-        "issueID" INTEGER,
-        "orgID" INTEGER,
-        description TEXT,
-        _0_version VARCHAR(38) NOT NULL,
-        PRIMARY KEY("orgID", "issueID")
-      );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
-      `,
       specs: {
-        ['public.issues']: {
-          schema: 'public',
+        issues: {
+          schema: '',
           name: 'issues',
           columns: {
             issueID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             orgID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             description: {
-              dataType: 'text',
+              dataType: 'TEXT',
               characterMaximumLength: null,
               notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['orgID', 'issueID'],
-          filterConditions: [],
         },
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
       },
       writeUpstream: [
         `
@@ -846,186 +418,34 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       DELETE FROM issues WHERE "issueID" = 987;
       `,
       ],
-      expectedTransactions: 2,
-      expectedVersionChanges: [
-        {
-          prevVersion: '00',
-          newVersion: '01',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 123,
-                orgID: 1,
-              },
-              rowKey: {issueID: 123, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 456,
-                orgID: 1,
-              },
-              rowKey: {issueID: 456, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 789,
-                orgID: 2,
-              },
-              rowKey: {issueID: 789, orgID: 2},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: null,
-                issueID: 987,
-                orgID: 2,
-              },
-              rowKey: {issueID: 987, orgID: 2},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-        {
-          prevVersion: '01',
-          newVersion: '02',
-          invalidations: {},
-          changes: [
-            {
-              rowData: undefined,
-              rowKey: {issueID: 123, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: undefined,
-              rowKey: {issueID: 456, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-            {
-              rowData: undefined,
-              rowKey: {issueID: 987, orgID: 2},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-      ],
-      coalescedVersionChange: {
-        prevVersion: '00',
-        newVersion: '02',
-        invalidations: {},
-        changes: [
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 123,
-              orgID: 1,
-            },
-            rowKey: {issueID: 123, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 456,
-              orgID: 1,
-            },
-            rowKey: {issueID: 456, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 789,
-              orgID: 2,
-            },
-            rowKey: {issueID: 789, orgID: 2},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: null,
-              issueID: 987,
-              orgID: 2,
-            },
-            rowKey: {issueID: 987, orgID: 2},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: undefined,
-            rowKey: {issueID: 123, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: undefined,
-            rowKey: {issueID: 456, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-          {
-            rowData: undefined,
-            rowKey: {issueID: 987, orgID: 2},
-            schema: 'public',
-            table: 'issues',
-          },
-        ],
-      },
       data: {
-        ['public.issues']: [
-          {orgID: 2, issueID: 789, description: null, ['_0_version']: '01'},
+        issues: [
+          {orgID: 2n, issueID: 789n, description: null, ['_0_version']: '01'},
         ],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'issues',
             op: 's',
-            rowKey: {orgID: 2, issueID: 789},
+            rowKey: '{"issueID":789,"orgID":2}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKey: {orgID: 1, issueID: 123},
+            rowKey: '{"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKey: {orgID: 1, issueID: 456},
+            rowKey: '{"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'issues',
             op: 'd',
-            rowKey: {orgID: 2, issueID: 987},
+            rowKey: '{"issueID":987,"orgID":2}',
           },
         ],
       },
@@ -1038,76 +458,59 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       CREATE TABLE baz(id INTEGER PRIMARY KEY);
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
-      setupReplica: `
-      CREATE TABLE foo(
-        id INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) NOT NULL
-      );
-      CREATE TABLE bar(
-        id INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) NOT NULL
-      );
-      CREATE TABLE baz(
-        id INTEGER PRIMARY KEY,
-        _0_version VARCHAR(38) NOT NULL
-      );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
-      `,
       specs: {
-        ['public.foo']: {
-          schema: 'public',
+        foo: {
+          schema: '',
           name: 'foo',
           columns: {
             id: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['id'],
-          filterConditions: [],
         },
-        ['public.bar']: {
-          schema: 'public',
+        bar: {
+          schema: '',
           name: 'bar',
           columns: {
             id: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['id'],
-          filterConditions: [],
         },
-        ['public.baz']: {
-          schema: 'public',
+        baz: {
+          schema: '',
           name: 'baz',
           columns: {
             id: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['id'],
-          filterConditions: [],
         },
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
       },
       writeUpstream: [
         `
@@ -1128,176 +531,50 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       INSERT INTO foo (id) VALUES (101);
       `,
       ],
-      expectedTransactions: 2,
-      expectedVersionChanges: [
-        {
-          prevVersion: '00',
-          newVersion: '01',
-          invalidations: {},
-          changes: [
-            {
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                id: 4,
-              },
-              rowKey: {id: 4},
-              schema: 'public',
-              table: 'bar',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                id: 5,
-              },
-              rowKey: {id: 5},
-              schema: 'public',
-              table: 'bar',
-            },
-            {
-              rowData: {
-                ['_0_version']: '01',
-                id: 6,
-              },
-              rowKey: {id: 6},
-              schema: 'public',
-              table: 'bar',
-            },
-            {
-              schema: 'public',
-              table: 'baz',
-            },
-          ],
-        },
-        {
-          prevVersion: '01',
-          newVersion: '02',
-          invalidations: {},
-          changes: [
-            {
-              schema: 'public',
-              table: 'foo',
-            },
-            {
-              rowData: {
-                ['_0_version']: '02',
-                id: 101,
-              },
-              rowKey: {id: 101},
-              schema: 'public',
-              table: 'foo',
-            },
-          ],
-        },
-      ],
-      coalescedVersionChange: {
-        prevVersion: '00',
-        newVersion: '02',
-        invalidations: {},
-        changes: [
-          {
-            schema: 'public',
-            table: 'foo',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              id: 4,
-            },
-            rowKey: {id: 4},
-            schema: 'public',
-            table: 'bar',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              id: 5,
-            },
-            rowKey: {id: 5},
-            schema: 'public',
-            table: 'bar',
-          },
-          {
-            rowData: {
-              ['_0_version']: '01',
-              id: 6,
-            },
-            rowKey: {id: 6},
-            schema: 'public',
-            table: 'bar',
-          },
-          {
-            schema: 'public',
-            table: 'baz',
-          },
-          {
-            schema: 'public',
-            table: 'foo',
-          },
-          {
-            rowData: {
-              ['_0_version']: '02',
-              id: 101,
-            },
-            rowKey: {id: 101},
-            schema: 'public',
-            table: 'foo',
-          },
-        ],
-      },
       data: {
-        ['public.foo']: [{id: 101, ['_0_version']: '02'}],
-        ['public.bar']: [
-          {id: 4, ['_0_version']: '01'},
-          {id: 5, ['_0_version']: '01'},
-          {id: 6, ['_0_version']: '01'},
+        foo: [{id: 101n, ['_0_version']: '02'}],
+        bar: [
+          {id: 4n, ['_0_version']: '01'},
+          {id: 5n, ['_0_version']: '01'},
+          {id: 6n, ['_0_version']: '01'},
         ],
-        ['public.baz']: [],
+        baz: [],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'bar',
             op: 's',
-            rowKey: {id: 4},
+            rowKey: '{"id":4}',
           },
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'bar',
             op: 's',
-            rowKey: {id: 5},
+            rowKey: '{"id":5}',
           },
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'bar',
             op: 's',
-            rowKey: {id: 6},
+            rowKey: '{"id":6}',
           },
           {
             stateVersion: '01',
-            schema: 'public',
             table: 'baz',
             op: 't',
-            rowKey: {},
+            rowKey: null,
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'foo',
             op: 't',
-            rowKey: {},
+            rowKey: null,
           },
           {
             stateVersion: '02',
-            schema: 'public',
             table: 'foo',
             op: 's',
-            rowKey: {id: 101},
+            rowKey: '{"id":101}',
           },
         ],
       },
@@ -1313,45 +590,35 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
       `,
-      setupReplica: `
-      CREATE TABLE issues(
-        "issueID" INTEGER,
-        "orgID" INTEGER,
-        description TEXT,
-        _0_version VARCHAR(38) NOT NULL,
-        PRIMARY KEY("orgID", "issueID")
-      );
-      CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA public;
-      `,
       specs: {
-        ['public.issues']: {
-          schema: 'public',
+        issues: {
+          schema: '',
           name: 'issues',
           columns: {
             issueID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             orgID: {
-              dataType: 'int4',
+              dataType: 'INTEGER',
               characterMaximumLength: null,
-              notNull: true,
+              notNull: false,
             },
             description: {
-              dataType: 'text',
+              dataType: 'TEXT',
               characterMaximumLength: null,
               notNull: false,
             },
             ['_0_version']: {
-              dataType: 'varchar',
-              characterMaximumLength: 38,
+              dataType: 'TEXT',
+              characterMaximumLength: null,
               notNull: true,
             },
           },
           primaryKey: ['orgID', 'issueID'],
-          filterConditions: [],
         },
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
       },
       writeUpstream: [
         `
@@ -1362,56 +629,28 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       UPDATE issues SET "description" = 'foo';
       `,
       ],
-      expectedTransactions: 1,
-      expectedVersionChanges: [
-        {
-          prevVersion: '00',
-          newVersion: '01',
-          invalidations: {},
-          changes: [
-            {
-              rowData: {
-                ['_0_version']: '01',
-                description: 'foo',
-                issueID: 456,
-                orgID: 1,
-              },
-              rowKey: {issueID: 456, orgID: 1},
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        },
-      ],
-      coalescedVersionChange: {
-        prevVersion: '00',
-        newVersion: '01',
-        invalidations: {},
-        changes: [
-          {
-            rowData: {
-              ['_0_version']: '01',
-              description: 'foo',
-              issueID: 456,
-              orgID: 1,
-            },
-            rowKey: {issueID: 456, orgID: 1},
-            schema: 'public',
-            table: 'issues',
-          },
-        ],
-      },
       data: {
-        ['public.issues']: [
-          {orgID: 1, issueID: 456, description: 'foo', ['_0_version']: '01'},
+        issues: [
+          {orgID: 1n, issueID: 456n, description: 'foo', ['_0_version']: '01'},
         ],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '01',
-            schema: 'public',
+            table: 'issues',
+            op: 'd',
+            rowKey: '{"issueID":123,"orgID":1}',
+          },
+          {
+            stateVersion: '01',
             table: 'issues',
             op: 's',
-            rowKey: {orgID: 1, issueID: 456},
+            rowKey: '{"issueID":456,"orgID":1}',
+          },
+          {
+            stateVersion: '01',
+            table: 'issues',
+            op: 'd',
+            rowKey: '{"issueID":789,"orgID":2}',
           },
         ],
       },
@@ -1421,128 +660,42 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   for (const c of cases) {
     test(c.name, async () => {
       await initDB(upstream, c.setupUpstream);
-      await initDB(replica, c.setupReplica);
-
-      await setupUpstream(lc, upstream, replicationSlot(REPLICA_ID));
-      await replica.begin(tx =>
-        setupReplicationTables(lc, tx, getConnectionURI(upstream)),
+      await initialSync(
+        lc,
+        REPLICA_ID,
+        replica,
+        upstream,
+        getConnectionURI(upstream, 'external'),
       );
 
-      expect(await queryLastLSN(replica)).toBeNull();
-
-      void train.run();
-
       const syncing = syncer.run(lc);
-      const incrementalVersionSubscription = await syncer.versionChanges();
-      const coalescedVersionSubscription = await syncer.versionChanges();
+      const notifications = await syncer.subscribe();
 
-      // Listen concurrently to capture incremental version changes.
-      const incrementalVersions = (async () => {
-        const versions: VersionChange[] = [];
-        if (c.expectedTransactions) {
-          for await (const v of incrementalVersionSubscription) {
-            // Verify that the snapshot ID can be imported.
-            const {init, imported} = importSnapshot(v.prevSnapshotID);
-            const txPool = new TransactionPool(lc, Mode.READONLY, init);
-            void txPool.run(replica);
-            await imported;
-            txPool.setDone();
+      const versions: string[] = ['00'];
+      const versionReady = notifications[Symbol.asyncIterator]();
+      const nextVersion = async () => {
+        await versionReady.next();
+        const {nextStateVersion} = getReplicationState(replica);
+        versions.push(nextStateVersion);
+      };
 
-            versions.push(v);
-            if (versions.length === c.expectedTransactions) {
-              break;
-            }
-          }
-        }
-        return versions;
-      })();
-
+      await nextVersion(); // Get the initial nextStateVersion.
       for (const query of c.writeUpstream ?? []) {
         await upstream.unsafe(query);
+        await Promise.race([nextVersion(), syncing]);
       }
 
-      let versions: string[] = [];
-      if (c.expectedTransactions) {
-        // TODO: Replace this with the mechanism that will be used to notify ViewSyncers.
-        for (let i = 0; i < 100; i++) {
-          const result =
-            await replica`SELECT "stateVersion" FROM _zero."TxLog"`.values();
-          versions = result.flat();
-          expect(versions.length).toBeLessThanOrEqual(c.expectedTransactions);
-          if (versions.length === c.expectedTransactions) {
-            break;
-          }
-          // Wait or throw any error from the syncer.
-          await Promise.race([sleep(50), syncing]);
-        }
-      }
-
-      if (versions.length) {
-        const lsn = await queryLastLSN(replica);
-        assert(lsn);
-        expect(toLexiVersion(lsn)).toBe(versions.at(-1));
-      } else {
-        expect(await queryLastLSN(replica)).toBeNull();
-      }
-
-      const published = await getPublicationInfo(replica);
+      const tables = listTables(replica);
       expect(
-        Object.fromEntries(
-          published.tables.map(table => [
-            `${table.schema}.${table.name}`,
-            table,
-          ]),
-        ),
-      ).toEqual(c.specs);
+        Object.fromEntries(tables.map(table => [table.name, table])),
+      ).toMatchObject(c.specs);
 
-      await expectTables(replica, replaceVersions(c.data, versions));
-
-      if (c.expectedVersionChanges) {
-        expect(await incrementalVersions).toMatchObject(
-          c.expectedVersionChanges.map(v => convertVersionChange(v, versions)),
-        );
-      }
-      if (c.coalescedVersionChange) {
-        for await (const v of coalescedVersionSubscription) {
-          expect(v).toMatchObject(
-            convertVersionChange(c.coalescedVersionChange, versions),
-          );
-          break;
-        }
-      }
+      expectTables(
+        replica,
+        replaceVersions(structuredClone(c.data), versions),
+        'bigint',
+      );
     });
-  }
-
-  function convertVersionChange(
-    v: Omit<VersionChange, 'prevSnapshotID'>,
-    versions: string[],
-  ): VersionChange {
-    const convert = (val: string) => {
-      const index = Number(versionFromLexi(val));
-      return index > 0 ? versions[index - 1] : val;
-    };
-    return {
-      newVersion: convert(v.newVersion),
-      prevVersion: convert(v.prevVersion),
-      prevSnapshotID: expect.stringMatching(SNAPSHOT_PATTERN),
-      invalidations: {},
-      changes:
-        v.changes === undefined
-          ? undefined
-          : v.changes.map(c =>
-              c.rowData === undefined
-                ? c
-                : ({
-                    ...c,
-                    rowData: {
-                      ...c.rowData,
-                      ['_0_version']: convert(
-                        c.rowData['_0_version'] as string,
-                      ),
-                    },
-                  } as RowChange),
-            ),
-    };
   }
 
   function replaceVersions(
@@ -1553,7 +706,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       const v = obj[key] as LexiVersion;
       const index = Number(versionFromLexi(v));
       if (index > 0) {
-        obj[key] = versions[index - 1];
+        obj[key] = versions[index];
       }
     };
     Object.values(data).forEach(table =>
@@ -1561,11 +714,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         for (const col of ['_0_version', 'stateVersion']) {
           if (col in row) {
             replace(col, row);
-          }
-        }
-        for (const val of Object.values(row)) {
-          if (val !== null && typeof val === 'object' && '_0_version' in val) {
-            replace('_0_version', val);
           }
         }
       }),

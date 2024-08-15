@@ -75,7 +75,7 @@ export class Replicator {
 
   #versionChanges = async (socket: WebSocket) => {
     const replicator = await this.#serviceRunner.getReplicator();
-    const subscription = await replicator.versionChanges();
+    const subscription = await replicator.subscribe();
 
     void streamOut(
       this.#lc.withContext('stream', 'VersionChange'),

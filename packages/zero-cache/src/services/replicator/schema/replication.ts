@@ -8,6 +8,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {Database} from 'better-sqlite3';
 import type postgres from 'postgres';
+import * as v from 'shared/src/valita.js';
 import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import type {LexiVersion} from '../../../types/lexi-version.js';
 
@@ -29,6 +30,21 @@ const CREATE_REPLICATION_STATE_SCHEMA =
   )
   `;
 
+const stringArray = v.array(v.string());
+
+const replicationStateSchema = v
+  .object({
+    publications: v.string(),
+    watermark: v.string(),
+    nextStateVersion: v.string(),
+  })
+  .map(s => ({
+    ...s,
+    publications: v.parse(JSON.parse(s.publications), stringArray),
+  }));
+
+export type ReplicationState = v.Infer<typeof replicationStateSchema>;
+
 export function initReplicationState(
   db: Database,
   publications: string[],
@@ -43,6 +59,29 @@ export function initReplicationState(
   ).run(JSON.stringify(publications), lsn, toLexiVersion(lsn));
 }
 
+export function updateReplicationWatermark(db: Database, lsn: string) {
+  db.prepare(
+    `UPDATE "_zero.ReplicationState" SET watermark = ?, nextStateVersion = ?`,
+  ).run(lsn, toLexiVersion(lsn));
+}
+
+export function getReplicationState(db: Database): ReplicationState {
+  const result = db
+    .prepare(
+      `SELECT publications, watermark, nextStateVersion FROM "_zero.ReplicationState"`,
+    )
+    .get();
+  return v.parse(result, replicationStateSchema);
+}
+
+export function getNextStateVersion(db: Database): string {
+  const result = db
+    .prepare(`SELECT nextStateVersion FROM "_zero.ReplicationState"`)
+    .get();
+  return v.parse(result.nextStateVersion, v.string());
+}
+
+// TODO: Delete the rest. It has been replaced by `change-log.ts`.
 export const CREATE_REPLICATION_TABLES =
   // The transaction log maps each LSN to transaction information.
   // Note that the lsn may become optional for supporting non-Postgres upstreams.

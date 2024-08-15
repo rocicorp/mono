@@ -1,6 +1,7 @@
-import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {TransactionPool} from 'zero-cache/src/db/transaction-pool.js';
+import {beforeEach, describe, expect, test} from 'vitest';
+import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
 import {Notifier} from './notifier.js';
+import {ReplicaVersionReady} from './replicator.js';
 
 describe('replicator/notifier', () => {
   let notifier: Notifier;
@@ -9,94 +10,31 @@ describe('replicator/notifier', () => {
     notifier = new Notifier();
   });
 
-  function mockTransactionPool() {
-    return {
-      ref: vi.fn(),
-      unref: vi.fn(),
-    };
+  async function expectSingleMessage(
+    sub: CancelableAsyncIterable<ReplicaVersionReady>,
+    payload: ReplicaVersionReady,
+  ) {
+    for await (const msg of sub) {
+      expect(msg).toEqual(payload);
+      break;
+    }
   }
 
-  test('coalesce, consumed, and cleanup', async () => {
-    const sub = await notifier.addSubscription();
+  test('notifyImmediately', async () => {
+    const sub = notifier.addSubscription(true);
+    await expectSingleMessage(sub, {});
+  });
 
-    const pool03 = mockTransactionPool();
-    const pool04 = mockTransactionPool();
-    const pool05 = mockTransactionPool();
+  test('coalesce', async () => {
+    const notifier = new Notifier();
+    const sub1 = notifier.addSubscription(false);
+    const sub2 = notifier.addSubscription(false);
 
-    notifier.notifySubscribers({
-      prevVersion: '03',
-      newVersion: '04',
-      prevSnapshotID: 'snapshot-03',
-      readers: pool03 as unknown as TransactionPool,
-      invalidations: {
-        foo: '04',
-        bar: '04',
-      },
-      changes: [
-        {schema: 'public', table: 'foo'},
-        {schema: 'public', table: 'bar'},
-      ],
-    });
-    notifier.notifySubscribers({
-      prevVersion: '04',
-      newVersion: '05',
-      prevSnapshotID: 'snapshot-04',
-      readers: pool04 as unknown as TransactionPool,
-      invalidations: {
-        bar: '05',
-        baz: '05',
-      },
-      changes: [
-        {schema: 'public', table: 'food'},
-        {schema: 'public', table: 'bard'},
-      ],
-    });
+    notifier.notifySubscribers({foo: 1});
+    await expectSingleMessage(sub1, {foo: 1});
 
-    let i = 0;
-    loop: for await (const msg of sub) {
-      switch (i++) {
-        case 0:
-          expect(msg).toEqual({
-            prevVersion: '03',
-            newVersion: '05',
-            prevSnapshotID: 'snapshot-03',
-            invalidations: {
-              foo: '04',
-              bar: '05',
-              baz: '05',
-            },
-            changes: [
-              {schema: 'public', table: 'foo'},
-              {schema: 'public', table: 'bar'},
-              {schema: 'public', table: 'food'},
-              {schema: 'public', table: 'bard'},
-            ],
-          });
-          expect(pool03.unref).not.toHaveBeenCalled();
-          expect(pool04.unref).toHaveBeenCalledOnce(); // coalesced pool is released
-          expect(pool05.unref).not.toHaveBeenCalled();
-
-          notifier.notifySubscribers({
-            prevVersion: '05',
-            newVersion: '06',
-            prevSnapshotID: 'snapshot-05',
-            readers: pool05 as unknown as TransactionPool,
-          });
-          break;
-
-        case 1:
-          expect(msg).toEqual({
-            prevVersion: '05',
-            newVersion: '06',
-            prevSnapshotID: 'snapshot-05',
-          });
-          expect(pool03.unref).toHaveBeenCalledOnce(); // consumed pool is released
-          expect(pool04.unref).toHaveBeenCalledOnce();
-          expect(pool05.unref).not.toHaveBeenCalled();
-          break loop;
-      }
-    }
-
-    expect(pool05.unref).toHaveBeenCalledOnce(); // unconsumed pool is released
+    notifier.notifySubscribers({foo: 2});
+    notifier.notifySubscribers({foo: 3});
+    await expectSingleMessage(sub2, {foo: 3});
   });
 });

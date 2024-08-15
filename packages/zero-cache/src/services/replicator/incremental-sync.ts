@@ -1,33 +1,29 @@
-import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {Database} from 'better-sqlite3';
+import {ident} from 'pg-format';
 import {
   LogicalReplicationService,
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
-import postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
-import {Queue} from 'shared/src/queue.js';
 import {sleep} from 'shared/src/sleep.js';
-import {
-  ControlFlowError,
-  Statement,
-  TransactionPool,
-} from '../../db/transaction-pool.js';
-import {epochMicrosToTimestampTz} from '../../types/big-time.js';
-import {JSONValue, stringify} from '../../types/bigint-json.js';
+import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
-import {PostgresDB, registerPostgresTypeParsers} from '../../types/pg.js';
-import type {RowKey, RowKeyType, RowValue} from '../../types/row-key.js';
+import {registerPostgresTypeParsers} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {replicationSlot} from './initial-sync.js';
-import {InternalVersionChange, Notifier} from './notifier.js';
-import type {RowChange, VersionChange} from './replicator.js';
-import {ZERO_VERSION_COLUMN_NAME, queryLastLSN} from './schema/replication.js';
-import {PublicationInfo, getPublicationInfo} from './tables/published.js';
-import type {TransactionTrain} from './transaction-train.js';
-import {TableTracker} from './types/table-tracker.js';
+import {Notifier} from './notifier.js';
+import {ReplicaVersionReady} from './replicator.js';
+import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
+import {
+  ZERO_VERSION_COLUMN_NAME,
+  getNextStateVersion,
+  getReplicationState,
+  updateReplicationWatermark,
+} from './schema/replication.js';
+import {liteTableName} from './tables/names.js';
 
 // BigInt support from LogicalReplicationService.
 registerPostgresTypeParsers();
@@ -44,43 +40,33 @@ const MAX_RETRY_DELAY_MS = 10000;
 export class IncrementalSyncer {
   readonly #upstreamUri: string;
   readonly #replicaID: string;
-  readonly #replica: PostgresDB;
+  readonly #replica: Database;
   readonly #notifier: Notifier;
-
-  // The train ensures that transactions are processed serially, even
-  // across re-connects to the upstream db and multiple (temporarily)
-  // running instances of the Replicator.
-  readonly #txTrain: TransactionTrain;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
   #service: LogicalReplicationService | undefined;
   #started = false;
   #stopped = false;
 
-  constructor(
-    upstreamUri: string,
-    replicaID: string,
-    replica: PostgresDB,
-    txTrain: TransactionTrain,
-  ) {
+  constructor(upstreamUri: string, replicaID: string, replica: Database) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replica = replica;
     this.#notifier = new Notifier();
-    this.#txTrain = txTrain;
   }
 
   async run(lc: LogContext) {
     assert(!this.#started, `IncrementalSyncer has already been started`);
-    this.#started = true;
     lc.info?.(`Starting IncrementalSyncer`);
-    const replicated = await getPublicationInfo(this.#replica);
-    const publicationNames = replicated.publications.map(p => p.pubname);
 
-    // Using default from https://github.com/kibae/pg-logical-replication/blob/34b90136b06aa52f7d1fd86b91c2405692445d5a/src/logical-replication-service.ts#L135C62-L135C74
-    let lastLSN = (await queryLastLSN(this.#replica)) ?? '0/00000000';
+    // Notify any waiting subscribers that the replica is ready to be read.
+    this.#started = true;
+    this.#notifier.notifySubscribers();
 
-    lc.info?.(`Syncing publications ${publicationNames}`);
+    const {publications, watermark} = getReplicationState(this.#replica);
+    let lastLSN = watermark;
+
+    lc.info?.(`Syncing publications ${publications}`);
     while (!this.#stopped) {
       const service = new LogicalReplicationService(
         {connectionString: this.#upstreamUri},
@@ -89,15 +75,14 @@ export class IncrementalSyncer {
       this.#service = service;
 
       const processor = new MessageProcessor(
-        replicated,
-        this.#txTrain,
+        this.#replica,
         (lsn: string) => {
           if (!lastLSN || toLexiVersion(lastLSN) < toLexiVersion(lsn)) {
             lastLSN = lsn;
           }
           void service.acknowledge(lsn);
         },
-        (v: InternalVersionChange) => this.#notifier.notifySubscribers(v),
+        () => this.#notifier.notifySubscribers(),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
       this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
@@ -117,7 +102,7 @@ export class IncrementalSyncer {
       try {
         // TODO: Start from the last acknowledged LSN.
         await this.#service.subscribe(
-          new PgoutputPlugin({protoVersion: 1, publicationNames}),
+          new PgoutputPlugin({protoVersion: 1, publicationNames: publications}),
           replicationSlot(this.#replicaID),
           lastLSN,
         );
@@ -134,8 +119,10 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
-    return this.#notifier.addSubscription();
+  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
+    // Note: A new subscription is notified immediately if the service has already started,
+    //       indicating that the replica is ready to be read.
+    return Promise.resolve(this.#notifier.addSubscription(this.#started));
   }
 
   async stop(lc: LogContext, err?: unknown) {
@@ -160,9 +147,12 @@ function ensureError(err: unknown): Error {
   return error;
 }
 
-class PrecedingTransactionError extends ControlFlowError {
-  constructor(err: unknown) {
-    super(err);
+class ReplayedTransactionError extends Error {
+  readonly lsn: string;
+
+  constructor(lsn: string) {
+    super(`LSN ${lsn} has already been processed.`);
+    this.lsn = lsn;
   }
 }
 
@@ -176,217 +166,31 @@ class PrecedingTransactionError extends ControlFlowError {
  * "The logical replication protocol sends individual transactions one by one.
  *  This means that all messages between a pair of Begin and Commit messages
  *  belong to the same transaction."
- *
- * Note that the processing of transactions must be serialized to guarantee that each
- * transaction can see the results of its predecessors. This is done with the
- * singleton `txSerializer` lock created in the IncrementalSyncer service.
- *
- * The logic for handling a transaction happens in two stages.
- *
- * 1. In the **Assembly** stage, logical replication messages from upstream are
- *    gathered by the MessageProcessor and passed to the TransactionProcessor.
- *    At the very first `Begin` message, a downstream Postgres transaction
- *    is enqueued to be started in the `txSerializer` lock.
- *
- * 2. In the **Processing** stage, all preceding transactions have completed,
- *    the downstream Postgres transaction has started, and the Transaction
- *    Processor executes statements on it.
- *
- * Note that the two stages can overlap; for example, a transaction with a
- * large number of messages may still be streaming in when the downstream
- * transaction handle becomes ready. However, it is more common for the
- * transaction to have already been assembled when it comes time for it
- * to be processed, either because it has a small number of messages, or
- * because a preceding transaction is still being processed while the next
- * one is assembled.
- *
- * Here is an example timeline of assembly stages `A*` and
- * their corresponding processing stages `P*`:
- *
- * ```
- *  ----> Upstream Logical Replication Messages ---->
- * ---------------------------     -------------------
- * |      A1       | A2 | A3 |     |   A4   |   A5   |
- * -------------------------------------------------------------------------
- *         |      P1        |   P2   |   P3    |      |   P4   |    P5     |
- *         -------------------------------------      ----------------------
- *                      ----> Downstream Transactions ---->
- * ```
- *
- * This is important to understand in the context of error handling. Although
- * errors are not expected to happen in the steady state, error handling is
- * necessary to avoid corrupting the replica with a state that is
- * inconsistent with a snapshot of upstream.
- *
- * An error may happen in the Assembly stage (e.g. unexpected Message formats,
- * unsupported schema changes), or the Processing stage (e.g. query execution
- * errors, constraint violations, etc.). The desired behavior when encountering
- * an error is to:
- *
- * 1. allow all preceding transactions to successfully finish processing
- *
- * 2. cancel/rollback the erroneous transaction, and disallow all subsequent
- *    transactions from proceeding
- *
- * 3. shut down the service (after which manual intervention is likely needed
- *    to address the unhandled condition).
- *
- * In order to satisfy (1) and (2), error handling is plumbed through the
- * TransactionProcessor object so that it is always surfaced in the Processing
- * stage, even if the error was encountered in the Assembly stage.
- *
- * In the unlikely event that an error is encountered _between_ assembling
- * transactions (e.g. an unexpected Message between the last MessageCommit
- * and the next MessageBegin) and there is no TransactionProcessor being
- * assembled, a callback to fail the service is manually enqueued on the
- * `txSerializer` to allow preceding transactions to complete before shutting
- * down.
- *
- * It follows that, from an implementation perspective, the MessageProcessor's
- * failure handling must always be done from within the `txSerializer` lock.
  */
 // Exported for testing.
 export class MessageProcessor {
-  readonly #replicated: PublicationInfo;
-  readonly #txTrain: TransactionTrain;
+  readonly #db: Database;
   readonly #acknowledge: (lsn: string) => unknown;
-  readonly #emitVersion: (v: InternalVersionChange) => void;
+  readonly #notifyVersionChange: () => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
-  #currentTx: Queue<Pgoutput.Message> | null = null;
+  #currentTx: TransactionProcessor | null = null;
 
   #failure: Error | undefined;
-  #tx: TransactionProcessor | undefined;
 
   constructor(
-    replicated: PublicationInfo,
-    txTrain: TransactionTrain,
+    db: Database,
     acknowledge: (lsn: string) => unknown,
-    emitVersion: (v: InternalVersionChange) => void,
+    notifyVersionChange: () => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
-    this.#replicated = replicated;
-    this.#txTrain = txTrain;
+    this.#db = db;
     this.#acknowledge = acknowledge;
-    this.#emitVersion = emitVersion;
+    this.#notifyVersionChange = notifyVersionChange;
     this.#failService = failService;
   }
 
-  #createAndEnqueueNewTransaction(
-    lc: LogContext,
-    commitLsn: string,
-    messages: Queue<Pgoutput.Message>,
-  ): void {
-    const start = Date.now();
-    void this.#txTrain.runNext(
-      async (writer, readers, prevVersion, prevSnapshotID) => {
-        const inLock = Date.now();
-        const txProcessor = new TransactionProcessor(
-          commitLsn,
-          writer,
-          readers,
-        );
-        try {
-          if (this.#failure) {
-            // If a preceding transaction failed, all subsequent transactions must also fail.
-            txProcessor.fail(new PrecedingTransactionError(this.#failure));
-            return;
-          }
-
-          loop: for await (const msg of messages.asAsyncIterable()) {
-            switch (msg.tag) {
-              case 'begin':
-                txProcessor.processBegin(msg);
-                break;
-              case 'relation':
-                this.#processRelation(msg);
-                break;
-              case 'insert':
-                txProcessor.processInsert(msg);
-                break;
-              case 'update':
-                txProcessor.processUpdate(msg);
-                break;
-              case 'delete':
-                txProcessor.processDelete(msg);
-                break;
-              case 'truncate':
-                txProcessor.processTruncate(msg);
-                break;
-              case 'commit': {
-                txProcessor.processCommit(msg);
-                break loop; // Done with transaction!
-              }
-              case 'type':
-                throw new Error(
-                  `Custom types are not supported (received "${msg.typeName}")`,
-                );
-              case 'origin':
-                // We do not set the `origin` option in the pgoutput parameters:
-                // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-                throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-              case 'message':
-                // We do not set the `messages` option in the pgoutput parameters:
-                // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-                throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-              default:
-                msg satisfies never;
-            }
-          }
-
-          const versionChange: InternalVersionChange = {
-            ...(await txProcessor.getFinalVersionChange()),
-            prevVersion,
-            prevSnapshotID,
-            readers,
-          };
-          this.#acknowledge(commitLsn);
-          this.#emitVersion(versionChange);
-          lc.debug?.(
-            `Committed tx (queued: ${inLock - start} ms) (${
-              Date.now() - start
-            } ms)`,
-          );
-        } catch (e) {
-          if (
-            // A unique violation on the TxLog means that the transaction has already been
-            // processed. This is not a real error, and can happen, for example, if the upstream
-            // the connection was lost before the acknowledgment was sent. Recover by resending
-            // the acknowledgement, and continue processing the stream.
-            e instanceof postgres.PostgresError &&
-            e.code === PG_UNIQUE_VIOLATION &&
-            e.schema_name === '_zero' &&
-            e.table_name === 'TxLog'
-          ) {
-            this.#acknowledge(commitLsn);
-            lc.debug?.(`Skipped repeat tx`);
-          } else {
-            this.#failInLock(lc, e);
-          }
-        }
-      },
-    );
-  }
-
-  /** See {@link MessageProcessor} documentation for error handling semantics. */
   #fail(lc: LogContext, err: unknown) {
-    if (this.#tx) {
-      // If a current transaction is being assembled, fail it so that the `err` is surfaced
-      // from within the transaction's processing stage, i.e. from within the `txSerializer`
-      // lock via the TransactionProcessor's `setFailed` rejection callback.
-      this.#tx.fail(err);
-    } else {
-      // Otherwise, manually enqueue the failure on the `txTrain` to allow previous
-      // transactions to complete, and prevent subsequent transactions from proceeding.
-      void this.#txTrain.runNext(() => {
-        this.#failInLock(lc, err);
-      });
-    }
-  }
-
-  // This must be called from within the txSerializer lock to allow pending
-  // (not-failed) transactions to complete.
-  #failInLock(lc: LogContext, err: unknown) {
     if (!this.#failure) {
       this.#failure = ensureError(err);
       lc.error?.('Message Processing failed:', this.#failure);
@@ -401,39 +205,78 @@ export class MessageProcessor {
       return;
     }
     try {
-      this.#processMessage(lc, lsn, message);
+      this.#processMessage(lc, message);
     } catch (e) {
-      this.#fail(lc, e);
+      if (e instanceof ReplayedTransactionError) {
+        lc.info?.(e);
+        this.#acknowledge(e.lsn);
+      } else {
+        this.#fail(lc, e);
+      }
     }
   }
 
-  #processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
-    if (message.tag === 'begin') {
-      const {commitLsn} = message;
-      assert(commitLsn);
-
+  #processMessage(lc: LogContext, msg: Pgoutput.Message) {
+    if (msg.tag === 'begin') {
       if (this.#currentTx) {
-        throw new Error(`Already in a transaction ${stringify(message)}`);
+        throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = new Queue();
-      this.#createAndEnqueueNewTransaction(
-        lc.withContext('txBegin', lsn).withContext('txCommit', commitLsn),
-        commitLsn,
-        this.#currentTx,
-      );
+      this.#currentTx = new TransactionProcessor(this.#db, msg);
+      return;
     }
-
     // For non-begin messages, there should be a #currentTx set.
     if (!this.#currentTx) {
       throw new Error(
-        `Received message outside of transaction: ${stringify(message)}`,
+        `Received message outside of transaction: ${stringify(msg)}`,
       );
     }
-    void this.#currentTx.enqueue(message);
+    const tx = this.#currentTx;
+    switch (msg.tag) {
+      case 'relation':
+        this.#processRelation(msg);
+        break;
+      case 'insert':
+        tx.processInsert(msg);
+        break;
+      case 'update':
+        tx.processUpdate(msg);
+        break;
+      case 'delete':
+        tx.processDelete(msg);
+        break;
+      case 'truncate':
+        tx.processTruncate(msg);
+        break;
+      case 'commit': {
+        // Undef this.#currentTx to allow the assembly of the next transaction.
+        this.#currentTx = null;
 
-    if (message.tag === 'commit') {
-      // Undef this.#currentTx to allow the assembly of the next transaction.
-      this.#currentTx = null;
+        const elapsedMs = tx.processCommit(msg);
+        lc.debug?.(`Committed tx (${elapsedMs} ms)`);
+
+        const lsn = msg.commitEndLsn;
+        assert(lsn);
+        this.#acknowledge(lsn);
+        this.#notifyVersionChange();
+        break;
+      }
+
+      // Unexpected message types
+      case 'type':
+        throw new Error(
+          `Custom types are not supported (received "${msg.typeName}")`,
+        );
+      case 'origin':
+        // We do not set the `origin` option in the pgoutput parameters:
+        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+      case 'message':
+        // We do not set the `messages` option in the pgoutput parameters:
+        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+        throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
+
+      default:
+        msg satisfies never;
     }
   }
 
@@ -452,8 +295,6 @@ export class MessageProcessor {
       );
     }
     // TODO: Check columns, keys, etc. for schema syncing.
-    // For now, just reference the variable to appease the compiler.
-    this.#replicated;
   }
 }
 
@@ -461,50 +302,62 @@ export class MessageProcessor {
  * The {@link TransactionProcessor} handles the sequence of messages from
  * upstream, from `BEGIN` to `COMMIT` and executes the corresponding mutations
  * on the {@link postgres.TransactionSql} on the replica.
+ *
+ * When applying row contents to the replica, the `_0_version` column is added / updated,
+ * and a corresponding entry in the `ChangeLog` is added. The version value is derived
+ * from the LSN of the preceding transaction (stored as the `nextStateVersion` in the
+ * `ReplicationState` table).
+ *
+ *   Side note: The previous implementation used the LSN of the new transaction as the
+ *   `stateVersion` of its constituent rows, but this is not compatible with the
+ *   streaming (in-progress) transaction protocol, for which the LSN of the
+ *   transaction is not known until the commit. To prepare for supporting streaming
+ *   transactions, the LSN of the _previous_ commit is used instead, which provides
+ *   an equally suitable deterministic function for row versions.
+ *
+ * Also of interest is the fact that all INSERT Messages are logically applied as
+ * UPSERTs. See {@link processInsert} for the underlying motivation.
  */
 class TransactionProcessor {
+  readonly #startMs: number;
+  readonly #db: Database;
   readonly #version: LexiVersion;
-  readonly #writer: TransactionPool;
-  readonly #readers: TransactionPool;
-  readonly #tableTrackers = new Map<string, TableTracker>();
 
-  constructor(lsn: string, writer: TransactionPool, readers: TransactionPool) {
-    this.#version = toLexiVersion(lsn);
-    this.#writer = writer;
-    this.#readers = readers;
+  constructor(db: Database, _: Pgoutput.MessageBegin) {
+    this.#startMs = Date.now();
+
+    // Although the Replicator / Incremental Syncer is the only writer of the replica,
+    // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
+    // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
+    // purpose of IVM).
+    //
+    // This TransactionProcessor is the only logic that will actually
+    // `COMMIT` any transactions to the replica.
+    db.prepare('BEGIN CONCURRENT').run();
+    this.#db = db;
+    this.#version = getNextStateVersion(db);
   }
 
-  async getFinalVersionChange(): Promise<
-    Omit<VersionChange, 'prevVersion' | 'prevSnapshotID'>
-  > {
-    await this.#writer.done();
-
-    return {
-      newVersion: this.#version,
-      invalidations: {}, // TODO: Remove
-      changes: rowChanges(this.#tableTrackers.values()),
-    };
-  }
-
-  fail(err: unknown) {
-    this.#writer.fail(err);
-    this.#readers.fail(err);
-  }
-
-  processBegin(begin: Pgoutput.MessageBegin) {
-    const row = {
-      stateVersion: this.#version,
-      lsn: begin.commitLsn,
-      time: epochMicrosToTimestampTz(begin.commitTime.valueOf()),
-      xid: begin.xid,
-    };
-
-    return this.#writer.process(tx => [
-      tx`INSERT INTO _zero."TxLog" ${tx(row)}`,
-    ]);
-  }
-
+  /**
+   * Note: All INSERTs are processed a UPSERTs in order to properly handle
+   * replayed transactions (e.g. if an LSN acknowledgement was lost). In the case
+   * of a replayed transaction, the final commit results in an rollback if the
+   * lsn is earlier than what has already been processed. See {@link processCommit}.
+   *
+   * Note that a transaction replay can be detected at the BEGIN message since it
+   * contains the commitEndLsn, but that would not generalize to streaming transactions
+   * for which the commitEndLsn is not known until STREAM COMMIT.
+   *
+   * This UPSERT strategy instead handles both protocols by accepting all messages and
+   * making the COMMIT/ROLLBACK decision when the commitEndLsn is guaranteed to be
+   * available.
+   *
+   * Note that transaction replays should theoretically never happen because the
+   * replication stream is started with the replica's current `watermark` (which would
+   * be ahead of the upstream's `confirmed_flush_lsn` if an acknowledgement were lost).
+   */
   processInsert(insert: Pgoutput.MessageInsert) {
+    const table = liteTableName(insert.relation);
     const row = {
       ...insert.new,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
@@ -512,18 +365,26 @@ class TransactionProcessor {
     const key = Object.fromEntries(
       insert.relation.keyColumns.map(col => [col, insert.new[col]]),
     );
-    this.#getTableTracker(insert.relation).add({
-      preValue: 'none',
-      postRowKey: key,
-      postValue: row,
-    });
+    const rawColumns = Object.keys(row);
+    const keyColumns = insert.relation.keyColumns.map(c => ident(c));
+    const columns = rawColumns.map(c => ident(c));
+    const upsert = rawColumns.map(c => `${ident(c)}=EXCLUDED.${ident(c)}`);
+    this.#db
+      .prepare(
+        `
+      INSERT INTO ${ident(table)} (${columns.join(',')})
+        VALUES (${new Array(columns.length).fill('?').join(',')})
+        ON CONFLICT (${keyColumns.join(',')})
+        DO UPDATE SET ${upsert.join(',')}
+      `,
+      )
+      .run(Object.values(row));
 
-    return this.#writer.process(tx => [
-      tx`INSERT INTO ${table(tx, insert)} ${tx(row)}`,
-    ]);
+    logSetOp(this.#db, this.#version, table, key);
   }
 
   processUpdate(update: Pgoutput.MessageUpdate) {
+    const table = liteTableName(update.relation);
     const row = {
       ...update.new,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
@@ -533,29 +394,24 @@ class TransactionProcessor {
     const newKey = Object.fromEntries(
       update.relation.keyColumns.map(col => [col, update.new[col]]),
     );
-    this.#getTableTracker(update.relation).add({
-      preRowKey: oldKey,
-      preValue: 'unknown',
-      postRowKey: newKey,
-      postValue: row,
-    });
+    const currKey = oldKey ?? newKey;
+    const setExprs = Object.keys(row).map(col => `${ident(col)}=?`);
+    const conds = Object.keys(currKey).map(col => `${ident(col)}=?`);
 
-    return this.#writer.process(tx => {
-      const currKey = oldKey ?? newKey;
-      const conds = Object.entries(currKey).map(
-        ([col, val]) => tx`${tx(col)} = ${val}`,
-      );
+    this.#db
+      .prepare(
+        `
+      UPDATE ${ident(table)}
+        SET ${setExprs.join(',')}
+        WHERE ${conds.join(' AND ')}
+      `,
+      )
+      .run([...Object.values(row), ...Object.values(currKey)]);
 
-      // Note: The flatMap() dance for dynamic filters is a bit obtuse, but it is
-      //       what the Postgres.js author recommends until there's a better api for it.
-      //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
-      return [
-        tx`
-        UPDATE ${table(tx, update)}
-          SET ${tx(row)}
-          WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))}`,
-      ];
-    });
+    if (oldKey) {
+      logDeleteOp(this.#db, this.#version, table, oldKey);
+    }
+    logSetOp(this.#db, this.#version, table, newKey);
   }
 
   processDelete(del: Pgoutput.MessageDelete) {
@@ -564,141 +420,42 @@ class TransactionProcessor {
     assert(del.relation.replicaIdentity === 'default');
     assert(del.key);
     const rowKey = del.key;
+    const table = liteTableName(del.relation);
 
-    this.#getTableTracker(del.relation).add({
-      preValue: 'unknown',
-      postRowKey: rowKey,
-      postValue: 'none',
-    });
+    const conds = Object.keys(rowKey).map(col => `${ident(col)}=?`);
+    this.#db
+      .prepare(`DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`)
+      .run(Object.values(rowKey));
 
-    return this.#writer.process(tx => {
-      const conds = Object.entries(rowKey).map(
-        ([col, val]) => tx`${tx(col)} = ${val}`,
-      );
-
-      // Note: The flatMap() dance for dynamic filters is a bit obtuse, but it is
-      //       what the Postgres.js author recommends until there's a better api for it.
-      //       https://github.com/porsager/postgres/issues/807#issuecomment-1949924843
-      return [
-        tx`
-      DELETE FROM ${table(tx, del)}
-        WHERE ${conds.flatMap((k, i) => (i ? [tx` AND `, k] : k))} `,
-      ];
-    });
+    logDeleteOp(this.#db, this.#version, table, rowKey);
   }
 
   processTruncate(truncate: Pgoutput.MessageTruncate) {
     for (const relation of truncate.relations) {
-      this.#getTableTracker(relation).truncate();
-    }
+      const table = liteTableName(relation);
+      // Update replica data.
+      this.#db.prepare(`DELETE FROM ${ident(table)}`).run();
 
-    const tables = truncate.relations.map(r => `${r.schema}.${r.name}`);
-    return this.#writer.process(tx => [tx`TRUNCATE ${tx(tables)}`]);
-  }
-
-  processCommit(_commit: Pgoutput.MessageCommit) {
-    this.#writer.process(tx => {
-      // Construct ChangeLog entries based on the effective row changes.
-      const changeLogEntries: Statement[] = [];
-      for (const table of this.#tableTrackers.values()) {
-        const {truncated, changes} = table.getEffectiveRowChanges();
-        if (truncated) {
-          changeLogEntries.push(
-            this.#changeLogEntry(tx, table.schema, table.table),
-          );
-        }
-        for (const [_, change] of changes) {
-          changeLogEntries.push(
-            this.#changeLogEntry(
-              tx,
-              table.schema,
-              table.table,
-              change.rowKey,
-              change.postValue === 'none' ? undefined : change.postValue,
-            ),
-          );
-        }
-      }
-      return changeLogEntries;
-    });
-    this.#writer.setDone();
-  }
-
-  #changeLogEntry(
-    tx: postgres.TransactionSql,
-    schema: string,
-    table: string,
-    key?: RowKey,
-    row?: RowValue,
-  ) {
-    const change: ChangeLogEntry = {
-      stateVersion: this.#version,
-      schema,
-      table,
-      op: row ? 's' : key ? 'd' : 't',
-      rowKey: (key as postgres.JSONValue) ?? {}, // Empty object for truncate
-    };
-    return tx`
-    INSERT INTO _zero."ChangeLog" ${tx(change)}
-      ON CONFLICT ON CONSTRAINT "RK_change_log"
-      DO UPDATE SET ${tx(change)};
-    `;
-  }
-
-  #getTableTracker(relation: Pgoutput.MessageRelation) {
-    const key = stringify([relation.schema, relation.name]);
-    const rowKeyType: RowKeyType = Object.fromEntries(
-      relation.keyColumns.map(name => {
-        const column = relation.columns.find(c => c.name === name);
-        assert(column);
-        return [name, column];
-      }),
-    );
-    let tracker = this.#tableTrackers.get(key);
-    if (!tracker) {
-      tracker = new TableTracker(relation.schema, relation.name, rowKeyType);
-      this.#tableTrackers.set(key, tracker);
-    }
-    return tracker;
-  }
-}
-
-type ChangeLogEntry = {
-  stateVersion: string;
-  schema: string;
-  table: string;
-  op: 't' | 's' | 'd';
-  rowKey: postgres.JSONValue;
-};
-
-function table(db: postgres.Sql, msg: {relation: Pgoutput.MessageRelation}) {
-  const {schema, name: table} = msg.relation;
-  return db`${db(schema)}.${db(table)}`;
-}
-
-function rowChanges(
-  tableTrackers: Iterable<TableTracker>,
-): RowChange[] | undefined {
-  const rowChanges: RowChange[] = [];
-
-  for (const tracker of tableTrackers) {
-    const {schema, table} = tracker;
-    const {truncated, changes} = tracker.getEffectiveRowChanges();
-    if (truncated) {
-      rowChanges.push({schema, table});
-    }
-    for (const [_, change] of changes) {
-      const {rowKey} = change;
-      rowChanges.push({
-        schema,
-        table,
-        rowKey: rowKey as Record<string, JSONValue>,
-        rowData:
-          change.postValue === 'none'
-            ? undefined
-            : (change.postValue as Record<string, JSONValue>),
-      });
+      // Update change log.
+      logTruncateOp(this.#db, this.#version, table);
     }
   }
-  return rowChanges;
+
+  processCommit(commit: Pgoutput.MessageCommit) {
+    const lsn = commit.commitEndLsn;
+    // The field is technically nullable because readLsn() returns null for "0/0",
+    // but in practice that can never happen for a `commitEndLsn`.
+    assert(lsn);
+
+    const nextVersion = toLexiVersion(lsn);
+    if (nextVersion <= this.#version) {
+      this.#db.prepare('ROLLBACK').run();
+      throw new ReplayedTransactionError(lsn);
+    }
+    updateReplicationWatermark(this.#db, lsn);
+    this.#db.prepare('COMMIT').run();
+
+    const elapsedMs = Date.now() - this.#startMs;
+    return elapsedMs;
+  }
 }
