@@ -118,7 +118,7 @@ export class MemorySource implements Source {
         throw new Error('Row already exists');
       }
     } else {
-      assert(change.type === 'remove');
+      change.type satisfies 'remove'; // ensures exuaustiveness of `if/else`
       if (!this.#data.has(change.row)) {
         throw new Error('Row not found');
       }
