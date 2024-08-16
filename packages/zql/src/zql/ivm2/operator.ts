@@ -80,14 +80,6 @@ export interface Output {
 export interface Operator extends Input, Output {}
 
 /**
- * A source is an input that serves as the root data source of the pipeline.
- * Sources can have multiple outputs.
- */
-export interface Source extends Input {
-  addOutput(output: Output): void;
-}
-
-/**
  * Operators get access to storage that they can store their internal
  * state in.
  */

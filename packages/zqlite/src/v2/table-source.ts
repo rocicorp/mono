@@ -1,17 +1,16 @@
 import type {
-  Input,
   Output,
   Schema,
   FetchRequest,
   HydrateRequest,
   Constraint,
 } from 'zql/src/zql/ivm2/operator.js';
-import type {SourceChange} from 'zql/src/zql/ivm2/memory-source.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
 import {Node, Row, makeComparator} from 'zql/src/zql/ivm2/data.js';
-import type {Database, Statement} from 'better-sqlite3';
+import {Database, Statement} from 'better-sqlite3';
 import {compile, format, sql} from '../internal/sql.js';
 import type {Stream} from 'zql/src/zql/ivm2/stream.js';
+import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
@@ -32,7 +31,7 @@ import {StatementCache} from '../internal/statement-cache.js';
  *
  * See comments in relevant functions for more details.
  */
-export class TableSource implements Input {
+export class TableSource implements Source {
   readonly #outputs: Output[] = [];
   readonly #insertStmt: Statement;
   readonly #deleteStmt: Statement;

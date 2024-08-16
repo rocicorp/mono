@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 import {Join} from './join.js';
-import {MemorySource, SourceChange} from './memory-source.js';
+import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {SnitchMessage, Snitch} from './snitch.js';
 import type {Row} from './data.js';
@@ -8,6 +8,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
+import {SourceChange} from './source.js';
 
 test('push one:many', () => {
   const joins = [

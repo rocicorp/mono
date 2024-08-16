@@ -1,6 +1,5 @@
 import BTree from 'btree';
 import type {
-  Input,
   Output,
   FetchRequest,
   HydrateRequest,
@@ -12,11 +11,7 @@ import type {Ordering} from '../ast2/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Stream} from './stream.js';
-
-export type SourceChange = {
-  type: 'add' | 'remove';
-  row: Row;
-};
+import {Source, SourceChange} from './source.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -30,7 +25,7 @@ export type Overlay = {
  * This data is kept in sorted order as downstream pipelines will always expect
  * the data they receive from `pull` to be in sorted order.
  */
-export class MemorySource implements Input {
+export class MemorySource implements Source {
   readonly #schema: Schema;
   readonly #data: BTree<Row, undefined>;
   readonly #outputs: Output[] = [];
