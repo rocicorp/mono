@@ -4,11 +4,11 @@ import type {
   Schema,
   FetchRequest,
   HydrateRequest,
-  Start,
+  Constraint,
 } from 'zql/src/zql/ivm2/operator.js';
 import type {SourceChange} from 'zql/src/zql/ivm2/memory-source.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
-import {Node, makeComparator} from 'zql/src/zql/ivm2/data.js';
+import {Node, Row, makeComparator} from 'zql/src/zql/ivm2/data.js';
 import {Database, Statement} from 'better-sqlite3';
 import {compile, format, sql} from '../internal/sql.js';
 import {Stream} from 'zql/src/zql/ivm2/stream.js';
@@ -65,7 +65,7 @@ export class TableSource implements Input {
     );
 
     this.#deleteStmt = db.prepare(
-      // TODO(mlaw): we need to know the columns which comprise the primary key. Defaulting to `id` for now.
+      // TODO: we need to know the columns which comprise the primary key. Defaulting to `id` for now.
       compile(
         sql`DELETE FROM ${sql.ident(tableName)} WHERE ${sql.ident('id')} = ?`,
       ),
@@ -99,32 +99,51 @@ export class TableSource implements Input {
      * To handle this, we convert `before` to `at` and re-invoke the fetch.
      */
     if (start?.basis === 'before') {
-      const preSql = requestToSQL(req, this.#table, this.#order);
+      const preSql = requestToSQL(
+        this.#table,
+        req.constraint,
+        req.start !== undefined
+          ? {
+              from: req.start.row,
+              direction: req.start.basis === 'before' ? 'before' : 'after',
+              inclusive: req.start.basis === 'at',
+            }
+          : undefined,
+        this.#order,
+      );
       const sqlAndBindings = format(preSql);
 
-      // TODO(mlaw): get from statement cache
-      const beforeRow = this.#db
+      // TODO: get from statement cache
+      newReq = {...req, start: undefined};
+      for (const beforeRow of this.#db
         .prepare(sqlAndBindings.text)
-        .all(...sqlAndBindings.values);
-
-      if (beforeRow.length === 0) {
-        newReq = {...req, start: undefined};
-      } else {
-        assert(beforeRow.length === 1);
-        newReq = {...req, start: {row: beforeRow[0], basis: 'at'}};
+        .iterate(...sqlAndBindings.values)) {
+        newReq.start = {row: beforeRow, basis: 'at'};
+        break;
       }
 
       yield* this.fetch(newReq, output);
     } else {
-      const query = requestToSQL(newReq, this.#table, this.#order);
+      const query = requestToSQL(
+        this.#table,
+        req.constraint,
+        req.start !== undefined
+          ? {
+              from: req.start.row,
+              direction: req.start.basis === 'before' ? 'before' : 'after',
+              inclusive: req.start.basis === 'at',
+            }
+          : undefined,
+        this.#order,
+      );
       const sqlAndBindings = format(query);
 
-      // TODO(mlaw): get from statement cache
+      // TODO: get from statement cache
       const rowIterator = this.#db
         .prepare(sqlAndBindings.text)
         .iterate(...sqlAndBindings.values);
 
-      // TODO(mlaw): handle the overlay
+      // TODO: handle the overlay
       for (const row of rowIterator) {
         yield {row, relationships: new Map()};
       }
@@ -153,12 +172,18 @@ export class TableSource implements Input {
   }
 }
 
+type Cursor = {
+  from: Row;
+  direction: 'before' | 'after';
+  inclusive: boolean;
+};
+
 function requestToSQL(
-  req: FetchRequest,
   table: string,
+  constraint: Constraint | undefined,
+  cursor: Cursor | undefined,
   order: Ordering,
 ): SQLQuery {
-  const {constraint, start} = req;
   let query = sql`SELECT * FROM ${sql.ident(table)}`;
   const constraints: SQLQuery[] = [];
 
@@ -166,15 +191,15 @@ function requestToSQL(
     constraints.push(sql`${sql.ident(constraint.key)} = ${constraint.value}`);
   }
 
-  if (start) {
-    constraints.push(gatherStartConstraints(start, order));
+  if (cursor) {
+    constraints.push(gatherStartConstraints(cursor, order));
   }
 
   if (constraints.length > 0) {
     query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
   }
 
-  if (start?.basis === 'before') {
+  if (cursor?.direction === 'before') {
     query = sql`${query} ORDER BY ${sql.join(
       order.map(
         s =>
@@ -184,7 +209,6 @@ function requestToSQL(
       ),
       sql`, `,
     )}`;
-    query = sql`${query} LIMIT 1`;
   } else {
     query = sql`${query} ORDER BY ${sql.join(
       order.map(
@@ -210,15 +234,12 @@ function requestToSQL(
  *
  * `WHERE a > 1 OR (a = 1 AND b < 2) OR (a = 1 AND b = 2 AND c > 3)`
  *
- * - asc vs desc flips the comparison operators.
- * - at adds a final `OR` clause for the exact match.
- *
- * Before is not handled here as `before` is a more special case.
- * The reason is that `before` fetches the row before the given row
- * but maintains the same ordering.
+ * - after vs before flips the comparison operators.
+ * - inclusive adds a final `OR` clause for the exact match.
  */
-function gatherStartConstraints(start: Start, order: Ordering): SQLQuery {
+function gatherStartConstraints(cursor: Cursor, order: Ordering): SQLQuery {
   const constraints: SQLQuery[] = [];
+  const {from, direction, inclusive} = cursor;
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -226,35 +247,33 @@ function gatherStartConstraints(start: Start, order: Ordering): SQLQuery {
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         if (iDirection === 'asc') {
-          if (start.basis === 'at' || start.basis === 'after') {
-            group.push(sql`${sql.ident(iField)} > ${start.row[iField]}`);
+          if (direction === 'after') {
+            group.push(sql`${sql.ident(iField)} > ${from[iField]}`);
           } else {
-            start.basis satisfies 'before';
-            group.push(sql`${sql.ident(iField)} < ${start.row[iField]}`);
+            direction satisfies 'before';
+            group.push(sql`${sql.ident(iField)} < ${from[iField]}`);
           }
         } else {
           iDirection satisfies 'desc';
-          if (start.basis === 'at' || start.basis === 'after') {
-            group.push(sql`${sql.ident(iField)} < ${start.row[iField]}`);
+          if (direction === 'after') {
+            group.push(sql`${sql.ident(iField)} < ${from[iField]}`);
           } else {
-            start.basis satisfies 'before';
-            group.push(sql`${sql.ident(iField)} > ${start.row[iField]}`);
+            direction satisfies 'before';
+            group.push(sql`${sql.ident(iField)} > ${from[iField]}`);
           }
         }
       } else {
         const [jField] = order[j];
-        group.push(sql`${sql.ident(jField)} = ${start.row[jField]}`);
+        group.push(sql`${sql.ident(jField)} = ${from[jField]}`);
       }
     }
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
   }
 
-  // `at` means we can start exactly at the given row.
-  // This adds an `OR` condition for the exact match.
-  if (start.basis === 'at') {
+  if (inclusive) {
     constraints.push(
       sql`(${sql.join(
-        order.map(s => sql`${sql.ident(s[0])} = ${start.row[s[0]]}`),
+        order.map(s => sql`${sql.ident(s[0])} = ${from[s[0]]}`),
         sql` AND `,
       )})`,
     );
