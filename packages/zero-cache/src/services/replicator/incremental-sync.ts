@@ -20,10 +20,10 @@ import {ReplicaVersionReady} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
 import {
   ZERO_VERSION_COLUMN_NAME,
-  getNextStateVersion,
-  getReplicationState,
+  getReplicationVersions,
+  getSubscriptionState,
   updateReplicationWatermark,
-} from './schema/replication.js';
+} from './schema/replication-state.js';
 import {liteTableName} from './tables/names.js';
 
 // BigInt support from LogicalReplicationService.
@@ -64,7 +64,7 @@ export class IncrementalSyncer {
     this.#started = true;
     this.#notifier.notifySubscribers();
 
-    const {publications, watermark} = getReplicationState(this.#replica);
+    const {publications, watermark} = getSubscriptionState(this.#replica);
     let lastLSN = watermark;
 
     lc.info?.(`Syncing publications ${publications}`);
@@ -335,8 +335,9 @@ class TransactionProcessor {
     // This TransactionProcessor is the only logic that will actually
     // `COMMIT` any transactions to the replica.
     db.beginConcurrent();
+    const {nextStateVersion} = getReplicationVersions(db);
     this.#db = db;
-    this.#version = getNextStateVersion(db);
+    this.#version = nextStateVersion;
   }
 
   /**
