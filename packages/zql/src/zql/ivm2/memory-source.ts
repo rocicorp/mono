@@ -44,7 +44,7 @@ export class MemorySource implements Input {
     this.#data = new BTree(undefined, this.#schema.compareRows);
   }
 
-  schema(): Schema {
+  get schema(): Schema {
     return this.#schema;
   }
 
@@ -115,6 +115,10 @@ export class MemorySource implements Input {
         yield curr;
       }
     }
+  }
+
+  dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
+    return this.fetch(req, output);
   }
 
   *#pullWithOverlay(
