@@ -1,14 +1,15 @@
 import {Database, RunResult, Statement} from 'better-sqlite3';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Stmt = Statement<any[]>;
+type Stmt = Statement<unknown[]>;
 
-export interface StatementPreparer {
-  // Note: Also implemented by the `Database` interface itself.
-  prepare(source: string): Stmt;
-}
-
-export class StatementCachingDatabase implements StatementPreparer {
+/**
+ * A Statement-caching wrapper for statements that are only executed
+ * synchronously and thus do not have re-entrancy issues.
+ *
+ * Specifically, this class does not provide an API for iteration of
+ * prepared statements, since that would be subject to re-entrancy.
+ */
+export class StatementRunner {
   readonly db: Database;
   readonly #cache: Map<string, Stmt> = new Map();
 
@@ -16,7 +17,11 @@ export class StatementCachingDatabase implements StatementPreparer {
     this.db = db;
   }
 
-  prepare(source: string): Stmt {
+  get size() {
+    return this.#cache.size;
+  }
+
+  #prepare(source: string): Stmt {
     let stmt = this.#cache.get(source);
     if (!stmt) {
       stmt = this.db.prepare(source);
@@ -26,11 +31,29 @@ export class StatementCachingDatabase implements StatementPreparer {
   }
 
   /**
-   * Convenience method for preparing a statement (or retrieving it
-   * from the cache) and running it.
+   * Prepares a statement (or retrieves it from the cache) and runs it
+   * with the given args.
    */
   run(staticSource: string, ...args: unknown[]): RunResult {
-    return this.prepare(staticSource).run(...args);
+    return this.#prepare(staticSource).run(...args);
+  }
+
+  /**
+   * Prepares a statement (or retrieves it from the cache) and returns
+   * the first result.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get(staticSource: string, ...args: unknown[]): any {
+    return this.#prepare(staticSource).get(...args);
+  }
+
+  /**
+   * Prepares a statement (or retrieves it from the cache) and returns
+   * all of its results.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  all(staticSource: string, ...args: unknown[]): any[] {
+    return this.#prepare(staticSource).all(...args);
   }
 
   // Syntactic sugar methods

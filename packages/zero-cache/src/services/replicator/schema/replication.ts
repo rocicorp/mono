@@ -7,7 +7,7 @@
 
 import {Database} from 'better-sqlite3';
 import * as v from 'shared/src/valita.js';
-import {StatementPreparer} from 'zero-cache/src/db/statements.js';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
@@ -57,24 +57,25 @@ export function initReplicationState(
   ).run(JSON.stringify(publications), lsn, toLexiVersion(lsn));
 }
 
-export function updateReplicationWatermark(db: StatementPreparer, lsn: string) {
-  db.prepare(
+export function updateReplicationWatermark(db: StatementRunner, lsn: string) {
+  db.run(
     `UPDATE "_zero.ReplicationState" SET watermark = ?, nextStateVersion = ?`,
-  ).run(lsn, toLexiVersion(lsn));
+    lsn,
+    toLexiVersion(lsn),
+  );
 }
 
-export function getReplicationState(db: StatementPreparer): ReplicationState {
-  const result = db
-    .prepare(
-      `SELECT publications, watermark, nextStateVersion FROM "_zero.ReplicationState"`,
-    )
-    .get();
+export function getReplicationState(db: StatementRunner): ReplicationState {
+  const result = db.get(
+    `SELECT publications, watermark, nextStateVersion FROM "_zero.ReplicationState"`,
+  );
+
   return v.parse(result, replicationStateSchema);
 }
 
-export function getNextStateVersion(db: StatementPreparer): string {
-  const result = db
-    .prepare(`SELECT nextStateVersion FROM "_zero.ReplicationState"`)
-    .get();
+export function getNextStateVersion(db: StatementRunner): string {
+  const result = db.get(
+    `SELECT nextStateVersion FROM "_zero.ReplicationState"`,
+  );
   return v.parse(result.nextStateVersion, v.string());
 }

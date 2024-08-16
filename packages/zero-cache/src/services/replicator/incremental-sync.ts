@@ -8,7 +8,7 @@ import {
 } from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
-import {StatementCachingDatabase} from 'zero-cache/src/db/statements.js';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
@@ -41,7 +41,7 @@ const MAX_RETRY_DELAY_MS = 10000;
 export class IncrementalSyncer {
   readonly #upstreamUri: string;
   readonly #replicaID: string;
-  readonly #replica: StatementCachingDatabase;
+  readonly #replica: StatementRunner;
   readonly #notifier: Notifier;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
@@ -52,7 +52,7 @@ export class IncrementalSyncer {
   constructor(upstreamUri: string, replicaID: string, replica: Database) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
-    this.#replica = new StatementCachingDatabase(replica);
+    this.#replica = new StatementRunner(replica);
     this.#notifier = new Notifier();
   }
 
@@ -170,7 +170,7 @@ class ReplayedTransactionError extends Error {
  */
 // Exported for testing.
 export class MessageProcessor {
-  readonly #db: StatementCachingDatabase;
+  readonly #db: StatementRunner;
   readonly #acknowledge: (lsn: string) => unknown;
   readonly #notifyVersionChange: () => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
@@ -180,7 +180,7 @@ export class MessageProcessor {
   #failure: Error | undefined;
 
   constructor(
-    db: StatementCachingDatabase,
+    db: StatementRunner,
     acknowledge: (lsn: string) => unknown,
     notifyVersionChange: () => void,
     failService: (lc: LogContext, err: unknown) => void,
@@ -321,10 +321,10 @@ export class MessageProcessor {
  */
 class TransactionProcessor {
   readonly #startMs: number;
-  readonly #db: StatementCachingDatabase;
+  readonly #db: StatementRunner;
   readonly #version: LexiVersion;
 
-  constructor(db: StatementCachingDatabase, _: Pgoutput.MessageBegin) {
+  constructor(db: StatementRunner, _: Pgoutput.MessageBegin) {
     this.#startMs = Date.now();
 
     // Although the Replicator / Incremental Syncer is the only writer of the replica,
@@ -370,16 +370,15 @@ class TransactionProcessor {
     const keyColumns = insert.relation.keyColumns.map(c => ident(c));
     const columns = rawColumns.map(c => ident(c));
     const upsert = rawColumns.map(c => `${ident(c)}=EXCLUDED.${ident(c)}`);
-    this.#db
-      .prepare(
-        `
+    this.#db.run(
+      `
       INSERT INTO ${ident(table)} (${columns.join(',')})
         VALUES (${new Array(columns.length).fill('?').join(',')})
         ON CONFLICT (${keyColumns.join(',')})
         DO UPDATE SET ${upsert.join(',')}
       `,
-      )
-      .run(Object.values(row));
+      Object.values(row),
+    );
 
     logSetOp(this.#db, this.#version, table, key);
   }
@@ -399,15 +398,14 @@ class TransactionProcessor {
     const setExprs = Object.keys(row).map(col => `${ident(col)}=?`);
     const conds = Object.keys(currKey).map(col => `${ident(col)}=?`);
 
-    this.#db
-      .prepare(
-        `
+    this.#db.run(
+      `
       UPDATE ${ident(table)}
         SET ${setExprs.join(',')}
         WHERE ${conds.join(' AND ')}
       `,
-      )
-      .run([...Object.values(row), ...Object.values(currKey)]);
+      [...Object.values(row), ...Object.values(currKey)],
+    );
 
     if (oldKey) {
       logDeleteOp(this.#db, this.#version, table, oldKey);
@@ -424,9 +422,10 @@ class TransactionProcessor {
     const table = liteTableName(del.relation);
 
     const conds = Object.keys(rowKey).map(col => `${ident(col)}=?`);
-    this.#db
-      .prepare(`DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`)
-      .run(Object.values(rowKey));
+    this.#db.run(
+      `DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
+      Object.values(rowKey),
+    );
 
     logDeleteOp(this.#db, this.#version, table, rowKey);
   }
@@ -435,7 +434,7 @@ class TransactionProcessor {
     for (const relation of truncate.relations) {
       const table = liteTableName(relation);
       // Update replica data.
-      this.#db.prepare(`DELETE FROM ${ident(table)}`).run();
+      this.#db.run(`DELETE FROM ${ident(table)}`);
 
       // Update change log.
       logTruncateOp(this.#db, this.#version, table);
