@@ -149,7 +149,12 @@ describe('replicator/initial-sync', () => {
     {
       name: 'existing table, default publication',
       setupUpstreamQuery: `
-        CREATE TABLE issues("issueID" INTEGER, "orgID" INTEGER, PRIMARY KEY ("orgID", "issueID"));
+        CREATE TABLE issues(
+          "issueID" INTEGER,
+          "orgID" INTEGER,
+          "isAdmin" BOOLEAN,
+          PRIMARY KEY ("orgID", "issueID")
+        );
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
@@ -164,6 +169,11 @@ describe('replicator/initial-sync', () => {
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
+            },
+            isAdmin: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              notNull: false,
             },
           },
           name: 'issues',
@@ -186,6 +196,11 @@ describe('replicator/initial-sync', () => {
               dataType: 'INTEGER',
               notNull: false,
             },
+            isAdmin: {
+              characterMaximumLength: null,
+              dataType: 'BOOL',
+              notNull: false,
+            },
             ['_0_version']: {
               characterMaximumLength: null,
               dataType: 'TEXT',
@@ -199,15 +214,17 @@ describe('replicator/initial-sync', () => {
       },
       upstream: {
         issues: [
-          {issueID: 123, orgID: 456},
-          {issueID: 321, orgID: 789},
+          {issueID: 123, orgID: 456, isAdmin: true},
+          {issueID: 321, orgID: 789, isAdmin: null},
+          {issueID: 456, orgID: 789, isAdmin: false},
         ],
       },
       replicatedData: {
         ['zero.clients']: [],
         issues: [
-          {issueID: 123, orgID: 456, ['_0_version']: '00'},
-          {issueID: 321, orgID: 789, ['_0_version']: '00'},
+          {issueID: 123, orgID: 456, isAdmin: 1, ['_0_version']: '00'},
+          {issueID: 321, orgID: 789, isAdmin: null, ['_0_version']: '00'},
+          {issueID: 456, orgID: 789, isAdmin: 0, ['_0_version']: '00'},
         ],
       },
       publications: ['zero_meta', 'zero_data'],

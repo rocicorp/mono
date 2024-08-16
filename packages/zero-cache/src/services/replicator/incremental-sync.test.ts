@@ -154,6 +154,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         "issueID" INTEGER PRIMARY KEY,
         big BIGINT,
         flt FLOAT8,
+        bool BOOLEAN,
         description TEXT
       );
       CREATE PUBLICATION zero_all FOR TABLE issues WHERE ("issueID" < 1000);
@@ -178,6 +179,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
               characterMaximumLength: null,
               notNull: false,
             },
+            bool: {
+              dataType: 'BOOL',
+              characterMaximumLength: null,
+              notNull: false,
+            },
             description: {
               dataType: 'TEXT',
               characterMaximumLength: null,
@@ -196,13 +202,13 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       writeUpstream: [
         `
       INSERT INTO issues ("issueID") VALUES (123);
-      INSERT INTO issues ("issueID") VALUES (456);
+      INSERT INTO issues ("issueID", bool) VALUES (456, false);
       -- Rows > 1000 should be filtered by PG.
       INSERT INTO issues ("issueID") VALUES (1001);
       `,
         `
       INSERT INTO issues ("issueID", big) VALUES (789, 9223372036854775807);
-      INSERT INTO issues ("issueID") VALUES (987);
+      INSERT INTO issues ("issueID", bool) VALUES (987, true);
       INSERT INTO issues ("issueID", flt) VALUES (234, 123.456);
 
       -- Rows > 1000 should be filtered by PG.
@@ -215,6 +221,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: 123n,
             big: null,
             flt: null,
+            bool: null,
             description: null,
             ['_0_version']: '01',
           },
@@ -222,6 +229,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: 456n,
             big: null,
             flt: null,
+            bool: 0n,
             description: null,
             ['_0_version']: '01',
           },
@@ -229,6 +237,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: 789n,
             big: 9223372036854775807n,
             flt: null,
+            bool: null,
             description: null,
             ['_0_version']: '02',
           },
@@ -236,6 +245,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: 987n,
             big: null,
             flt: null,
+            bool: 1n,
             description: null,
             ['_0_version']: '02',
           },
@@ -243,6 +253,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             issueID: 234n,
             big: null,
             flt: 123.456,
+            bool: null,
             description: null,
             ['_0_version']: '02',
           },
@@ -288,6 +299,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         "issueID" INTEGER,
         "orgID" INTEGER,
         description TEXT,
+        bool BOOL,
         PRIMARY KEY("orgID", "issueID")
       );
       `,
@@ -311,6 +323,11 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
               characterMaximumLength: null,
               notNull: false,
             },
+            bool: {
+              dataType: 'BOOL',
+              characterMaximumLength: null,
+              notNull: false,
+            },
             ['_0_version']: {
               dataType: 'TEXT',
               characterMaximumLength: null,
@@ -328,15 +345,33 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       INSERT INTO issues ("orgID", "issueID") VALUES (2, 789);
       `,
         `
-      UPDATE issues SET (description) = ROW('foo') WHERE "issueID" = 456;
-      UPDATE issues SET ("orgID", description) = ROW(2, 'bar') WHERE "issueID" = 123;
+      UPDATE issues SET (description, bool) = ROW('foo', true) WHERE "issueID" = 456;
+      UPDATE issues SET ("orgID", description, bool) = ROW(2, 'bar', false) WHERE "issueID" = 123;
       `,
       ],
       data: {
         issues: [
-          {orgID: 2n, issueID: 123n, description: 'bar', ['_0_version']: '02'},
-          {orgID: 1n, issueID: 456n, description: 'foo', ['_0_version']: '02'},
-          {orgID: 2n, issueID: 789n, description: null, ['_0_version']: '01'},
+          {
+            orgID: 2n,
+            issueID: 123n,
+            description: 'bar',
+            bool: 0n,
+            ['_0_version']: '02',
+          },
+          {
+            orgID: 1n,
+            issueID: 456n,
+            description: 'foo',
+            bool: 1n,
+            ['_0_version']: '02',
+          },
+          {
+            orgID: 2n,
+            issueID: 789n,
+            description: null,
+            bool: null,
+            ['_0_version']: '01',
+          },
         ],
         ['_zero.ChangeLog']: [
           {
