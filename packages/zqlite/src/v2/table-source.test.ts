@@ -182,6 +182,7 @@ describe('fetching from a table source', () => {
       sourceArgs[0],
       sourceArgs[1],
       sourceArgs[2],
+      ['id'],
     );
     const out = new CaptureOutput();
     const rows = [...source.fetch(fetchArgs, out)];
