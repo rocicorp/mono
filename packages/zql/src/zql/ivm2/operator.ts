@@ -1,6 +1,7 @@
 // An input to an operator.
 // Inputs "vend" (chosen to avoid confusion with "output") data in some order.
 
+import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
 import type {Node, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
@@ -10,7 +11,7 @@ import type {Stream} from './stream.js';
  */
 export interface Input {
   // The schema of the data this input returns.
-  schema(): Schema;
+  get schema(): Schema;
 
   // Request initial result from this operator and initialize its state.
   // Returns nodes sorted in order of schema().comparator.
@@ -20,6 +21,11 @@ export interface Input {
   // Does not modify current state.
   // Returns nodes sorted in order of schema().comparator.
   fetch(req: FetchRequest, output: Output): Stream<Node>;
+
+  // Dehydrate the operator. This is called when `output` will no longer
+  // need the data returned by hydrate(). The receiving operator should
+  // clean up any resources it has allocated.
+  dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
 }
 
 // Information about the nodes output by an operator.
@@ -85,7 +91,8 @@ export interface Source extends Input {
  * Operators get access to storage that they can store their internal
  * state in.
  */
-export interface Storage<T> {
-  put(key: string, value: T): void;
-  get(key: string, def: T | undefined): T | undefined;
+export interface Storage {
+  set(key: Value[], value: JSONValue): void;
+  get(key: Value[], def?: JSONValue): JSONValue | undefined;
+  del(key: Value[]): void;
 }

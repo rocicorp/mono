@@ -2,14 +2,14 @@ import {expect, test} from 'vitest';
 import {compareRowsTest} from './data.test.js';
 import type {Ordering} from '../ast2/ast.js';
 import {MemorySource, SourceChange} from './memory-source.js';
-import {CaptureOutput} from './capture-output.js';
+import {Snarf} from './snarf.js';
 import type {Row, Node, Value} from './data.js';
 import type {FetchRequest, Input, Output, Start} from './operator.js';
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
     const ms = new MemorySource(order);
-    return ms.schema().compareRows;
+    return ms.schema.compareRows;
   });
 });
 
@@ -24,7 +24,7 @@ test('simple-pull', () => {
   // works the same for hydrate and fetch.
   for (const m of ['hydrate', 'fetch'] as const) {
     const ms = new MemorySource([['a', 'asc']]);
-    const out = new CaptureOutput();
+    const out = new Snarf();
     expect([...ms[m]({}, out)]).toEqual([]);
 
     ms.push({type: 'add', row: {a: 3}});
@@ -47,7 +47,7 @@ test('pull-with-constraint', () => {
   // works the same for hydrate and fetch.
   for (const m of ['hydrate', 'fetch'] as const) {
     const ms = new MemorySource([['a', 'asc']]);
-    const out = new CaptureOutput();
+    const out = new Snarf();
     ms.addOutput(out);
     ms.push({type: 'add', row: {a: 3, b: true, c: 1}});
     ms.push({type: 'add', row: {a: 1, b: true, c: 2}});
@@ -95,7 +95,7 @@ test('pull-with-constraint', () => {
 
 test('fetch-start', () => {
   const ms = new MemorySource([['a', 'asc']]);
-  const out = new CaptureOutput();
+  const out = new Snarf();
   ms.addOutput(out);
 
   expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
@@ -154,7 +154,7 @@ function asChanges(sc: SourceChange[]) {
 
 test('push', () => {
   const ms = new MemorySource([['a', 'asc']]);
-  const out = new CaptureOutput();
+  const out = new Snarf();
   ms.addOutput(out);
 
   expect(out.changes).toEqual([]);
