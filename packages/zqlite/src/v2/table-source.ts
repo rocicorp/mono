@@ -4,8 +4,16 @@ import type {
   HydrateRequest,
   Constraint,
 } from 'zql/src/zql/ivm2/operator.js';
+import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
+import type {Overlay} from 'zql/src/zql/ivm2/memory-source.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
-import {Node, Row, makeComparator} from 'zql/src/zql/ivm2/data.js';
+import {
+  Node,
+  Row,
+  Value,
+  makeComparator,
+  valuesEqual,
+} from 'zql/src/zql/ivm2/data.js';
 import {Database, Statement} from 'better-sqlite3';
 import {compile, format, sql} from '../internal/sql.js';
 import type {Stream} from 'zql/src/zql/ivm2/stream.js';
@@ -13,7 +21,7 @@ import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
-import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
+import {LookaheadIterator} from 'zql/src/zql/ivm2/lookahead-iterator.js';
 
 /**
  * A source that is backed by a SQLite table.
@@ -35,24 +43,25 @@ export class TableSource implements Source {
   readonly #outputs: Output[] = [];
   readonly #insertStmt: Statement;
   readonly #deleteStmt: Statement;
-  readonly #changesStmt: Statement;
   readonly #order: Ordering;
   readonly #table: string;
   readonly #schema: Schema;
   readonly #statementCache: StatementCache;
+  readonly #checkExistsStmt: Statement;
+  #overlay?: Overlay | undefined;
 
   constructor(
     db: Database,
     tableName: string,
     columns: Record<string, ValueType>,
     order: Ordering,
-    primaryKey: readonly string[],
+    primaryKey: readonly [string, ...string[]],
   ) {
     this.#order = makeOrderUnique(order, primaryKey);
     this.#schema = {
-      compareRows: makeComparator(this.#order),
-      columns,
       primaryKey,
+      columns,
+      compareRows: makeComparator(this.#order),
     };
     this.#table = tableName;
     this.#statementCache = new StatementCache(db);
@@ -79,7 +88,14 @@ export class TableSource implements Source {
       ),
     );
 
-    this.#changesStmt = db.prepare(`SELECT changes() as changes`);
+    this.#checkExistsStmt = db.prepare(
+      compile(
+        sql`SELECT 1 AS "exists" FROM ${sql.ident(tableName)} WHERE ${sql.join(
+          primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+          sql` AND `,
+        )} LIMIT 1`,
+      ),
+    );
   }
 
   get schema(): Schema {
@@ -98,7 +114,11 @@ export class TableSource implements Source {
     return this.fetch(req, output);
   }
 
-  *fetch(req: FetchRequest, output: Output): Stream<Node> {
+  *fetch(
+    req: FetchRequest,
+    output: Output,
+    beforeRequest?: FetchRequest | undefined,
+  ): Stream<Node> {
     const {start} = req;
     let newReq = req;
 
@@ -113,6 +133,10 @@ export class TableSource implements Source {
      * To handle this, we convert `before` to `at` and re-invoke the fetch.
      */
     if (start?.basis === 'before') {
+      assert(
+        beforeRequest === undefined,
+        'Before should only be converted once.',
+      );
       const preSql = requestToSQL(
         this.#table,
         req.constraint,
@@ -130,14 +154,14 @@ export class TableSource implements Source {
       newReq = {...req, start: undefined};
       this.#statementCache.use(sqlAndBindings.text, cachedStatement => {
         for (const beforeRow of cachedStatement.statement.iterate(
-          ...sqlAndBindings.values,
+          ...sqlAndBindings.values.map(v => remapValueDown(v)),
         )) {
           newReq.start = {row: beforeRow, basis: 'at'};
           break;
         }
       });
 
-      yield* this.fetch(newReq, output);
+      yield* this.fetch(newReq, output, req);
     } else {
       const query = requestToSQL(
         this.#table,
@@ -156,19 +180,127 @@ export class TableSource implements Source {
       const cachedStatement = this.#statementCache.get(sqlAndBindings.text);
       try {
         const rowIterator = cachedStatement.statement.iterate(
-          ...sqlAndBindings.values,
+          ...sqlAndBindings.values.map(v => remapValueDown(v)),
         );
-        for (const row of rowIterator) {
-          yield {row, relationships: {}};
+
+        let overlay: Overlay | undefined;
+        if (this.#overlay) {
+          const callingOutputIndex = this.#outputs.indexOf(output);
+          assert(callingOutputIndex !== -1, 'Output not found');
+          if (callingOutputIndex <= this.#overlay.outputIndex) {
+            overlay = this.#overlay;
+          }
         }
+
+        yield* this.#startWithOverlay(
+          this.#yieldWithOverlay(
+            req.start?.row,
+            rowIterator,
+            req.constraint,
+            overlay,
+          ),
+          beforeRequest ?? req,
+        );
       } finally {
         this.#statementCache.return(cachedStatement);
       }
     }
   }
 
+  *#startWithOverlay(it: Iterator<Node>, req: FetchRequest): Stream<Node> {
+    // Figure out the start row.
+    const cursor = new LookaheadIterator(it, 2);
+
+    let started = req.start === undefined ? true : false;
+    for (const [curr, next] of cursor) {
+      if (!started) {
+        assert(req.start);
+        if (req.start.basis === 'before') {
+          if (
+            next === undefined ||
+            this.#schema.compareRows(next.row, req.start.row) >= 0
+          ) {
+            started = true;
+          }
+        } else if (req.start.basis === 'at') {
+          if (this.#schema.compareRows(curr.row, req.start.row) >= 0) {
+            started = true;
+          }
+        } else if (req.start.basis === 'after') {
+          if (this.#schema.compareRows(curr.row, req.start.row) > 0) {
+            started = true;
+          }
+        }
+      }
+      if (started) {
+        yield curr;
+      }
+    }
+  }
+
+  *#yieldWithOverlay(
+    startAt: Row | undefined,
+    rowIterator: IterableIterator<Row>,
+    constraint: Constraint | undefined,
+    overlay: Overlay | undefined,
+  ) {
+    const compare = this.#schema.compareRows;
+
+    if (startAt && overlay && compare(overlay.change.row, startAt) < 0) {
+      overlay = undefined;
+    }
+
+    if (overlay) {
+      if (constraint) {
+        const {key, value} = constraint;
+        const {change} = overlay;
+        if (!valuesEqual(change.row[key], value)) {
+          overlay = undefined;
+        }
+      }
+    }
+
+    for (const row of rowIterator) {
+      remapValuesUp(this.#schema.columns, row);
+      if (overlay) {
+        const cmp = compare(overlay.change.row, row);
+        if (overlay.change.type === 'add') {
+          if (cmp < 0) {
+            yield {row: overlay.change.row, relationships: {}};
+            overlay = undefined;
+          }
+        } else if (overlay.change.type === 'remove') {
+          if (cmp < 0) {
+            overlay = undefined;
+          } else if (cmp === 0) {
+            overlay = undefined;
+            continue;
+          }
+        }
+      }
+      yield {row, relationships: {}};
+    }
+
+    if (overlay && overlay.change.type === 'add') {
+      yield {row: overlay.change.row, relationships: {}};
+    }
+  }
+
   push(change: SourceChange) {
-    for (const output of this.#outputs) {
+    // need to check for the existence of the row before modifying
+    // the db so we don't push it to outputs if it does/doest not exist.
+    const exists =
+      this.#checkExistsStmt.get(
+        ...pickColumns(this.schema.primaryKey, change.row),
+      )?.exists === 1;
+    if (change.type === 'add') {
+      assert(!exists, 'Row already exists');
+    } else {
+      assert(exists, 'Row not found');
+    }
+
+    for (const [outputIndex, output] of this.#outputs.entries()) {
+      this.#overlay = {outputIndex, change};
       output.push(
         {
           type: change.type,
@@ -180,14 +312,16 @@ export class TableSource implements Source {
         this,
       );
     }
+    this.#overlay = undefined;
     if (change.type === 'add') {
-      this.#insertStmt.run(...Object.values(change.row));
+      this.#insertStmt.run(
+        ...remapValuesDown(Object.keys(this.schema.columns), change.row),
+      );
     } else {
       change.type satisfies 'remove';
-      const values = this.#schema.primaryKey.map(k => change.row[k]);
-      this.#deleteStmt.run(...values);
-      const {changes} = this.#changesStmt.get();
-      assert(changes === 1, 'Delete should affect exactly one row');
+      this.#deleteStmt.run(
+        ...remapValuesDown(this.schema.primaryKey, change.row),
+      );
     }
   }
 }
@@ -333,4 +467,37 @@ function makeOrderUnique(
     }
   }
   return uniqueOrder;
+}
+
+function remapValuesDown(
+  columns: readonly string[],
+  row: Row,
+): readonly unknown[] {
+  if (columns === undefined) {
+    return Object.values(row).map(v => remapValueDown(v));
+  }
+  return columns.map(col => remapValueDown(row[col]));
+}
+
+function pickColumns(columns: readonly string[], row: Row): readonly Value[] {
+  return columns.map(col => row[col]);
+}
+
+function remapValueDown(v: unknown): unknown {
+  return v === false ? 0 : v === true ? 1 : v ?? null;
+}
+
+function remapValuesUp(valueTypes: Record<string, ValueType>, row: Row) {
+  for (const key in row) {
+    row[key] = remapValueUp(valueTypes[key], row[key]);
+  }
+}
+
+function remapValueUp(valueType: ValueType, v: Value): Value {
+  switch (valueType) {
+    case 'boolean':
+      return v === 0 ? false : v === 1 ? true : v;
+    default:
+      return v;
+  }
 }

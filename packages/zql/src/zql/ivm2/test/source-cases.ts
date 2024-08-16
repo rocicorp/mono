@@ -1,12 +1,17 @@
 import {expect, test} from 'vitest';
 import {Ordering} from '../../ast2/ast.js';
 import {Node, Row, Value} from '../data.js';
-import {compareRowsTest} from '../data.test.js';
 import {FetchRequest, Input, Output, Start} from '../operator.js';
 import {Catch, expandNode} from '../catch.js';
 import {Source, SourceChange} from '../source.js';
+import {ValueType} from '../schema.js';
 
-type SourceFactory = (order: Ordering) => Source;
+type SourceFactory = (
+  name: string,
+  columns: Record<string, ValueType>,
+  order: Ordering,
+  primaryKeys: readonly [string, ...string[]],
+) => Source;
 
 function asNodes(rows: Row[]) {
   return rows.map(row => ({
@@ -45,17 +50,10 @@ class OverlaySpy implements Output {
 }
 
 const cases = {
-  'schema': (createSource: SourceFactory) => {
-    compareRowsTest((order: Ordering) => {
-      const ms = createSource(order);
-      return ms.schema.compareRows;
-    });
-  },
-
   'simple-pull': (createSource: SourceFactory) => {
     // works the same for hydrate and fetch.
     for (const m of ['hydrate', 'fetch'] as const) {
-      const ms = createSource([['a', 'asc']]);
+      const ms = createSource('table', {a: 'number'}, [['a', 'asc']], ['a']);
       const out = new Catch(ms);
       ms.addOutput(out);
       expect(out[m]()).toEqual([]);
@@ -79,26 +77,36 @@ const cases = {
   'pull-with-constraint': (createSource: SourceFactory) => {
     // works the same for hydrate and fetch.
     for (const m of ['hydrate', 'fetch'] as const) {
-      const ms = createSource([['a', 'asc']]);
+      const ms = createSource(
+        'table',
+        {
+          a: 'number',
+          b: 'boolean',
+          c: 'number',
+          d: 'string',
+        },
+        [['a', 'asc']],
+        ['a'],
+      );
       const out = new Catch(ms);
       ms.addOutput(out);
-      ms.push({type: 'add', row: {a: 3, b: true, c: 1}});
-      ms.push({type: 'add', row: {a: 1, b: true, c: 2}});
-      ms.push({type: 'add', row: {a: 2, b: false, c: null}});
+      ms.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
+      ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
+      ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
 
       expect(out[m]({constraint: {key: 'b', value: true}})).toEqual(
         asNodes([
-          {a: 1, b: true, c: 2},
-          {a: 3, b: true, c: 1},
+          {a: 1, b: true, c: 2, d: null},
+          {a: 3, b: true, c: 1, d: null},
         ]),
       );
 
       expect(out[m]({constraint: {key: 'b', value: false}})).toEqual(
-        asNodes([{a: 2, b: false, c: null}]),
+        asNodes([{a: 2, b: false, c: null, d: null}]),
       );
 
       expect(out[m]({constraint: {key: 'c', value: 1}})).toEqual(
-        asNodes([{a: 3, b: true, c: 1}]),
+        asNodes([{a: 3, b: true, c: 1, d: null}]),
       );
 
       expect(out[m]({constraint: {key: 'c', value: 0}})).toEqual(asNodes([]));
@@ -125,7 +133,14 @@ const cases = {
   },
 
   'fetch-start': (createSource: SourceFactory) => {
-    const ms = createSource([['a', 'asc']]);
+    const ms = createSource(
+      'table',
+      {
+        a: 'number',
+      },
+      [['a', 'asc']],
+      ['a'],
+    );
     const out = new Catch(ms);
     ms.addOutput(out);
 
@@ -172,7 +187,7 @@ const cases = {
   },
 
   'push': (createSource: SourceFactory) => {
-    const ms = createSource([['a', 'asc']]);
+    const ms = createSource('table', {a: 'number'}, [['a', 'asc']], ['a']);
     const out = new Catch(ms);
     ms.addOutput(out);
 
@@ -225,7 +240,7 @@ const cases = {
     // *other* outputs are pushed to. Then we can observe that the overlay
     // only shows up in the cases it is supposed to.
 
-    const ms = createSource([['a', 'asc']]);
+    const ms = createSource('table', {a: 'number'}, [['a', 'asc']], ['a']);
     const o1 = new OverlaySpy(ms);
     const o2 = new OverlaySpy(ms);
     const o3 = new OverlaySpy(ms);
@@ -533,7 +548,7 @@ const cases = {
     ];
 
     for (const c of cases) {
-      const ms = createSource([['a', 'asc']]);
+      const ms = createSource('table', {a: 'number'}, [['a', 'asc']], ['a']);
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
@@ -583,7 +598,15 @@ const cases = {
     ];
 
     for (const c of cases) {
-      const ms = createSource([['a', 'asc']]);
+      const ms = createSource(
+        'table',
+        {
+          a: 'number',
+          b: 'boolean',
+        },
+        [['a', 'asc']],
+        ['a'],
+      );
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
@@ -607,8 +630,18 @@ const cases = {
  * All sources should uphold the same contract so we can run the same tests
  * against all source implementations.
  */
-export function runCases(createSource: SourceFactory) {
+export function runCases(
+  createSource: SourceFactory,
+  omit: Set<string> = new Set(),
+  only: Set<string> = new Set(),
+) {
   for (const [name, fn] of Object.entries(cases)) {
+    if (omit.has(name)) {
+      continue;
+    }
+    if (only.size > 0 && !only.has(name)) {
+      continue;
+    }
     test(name, () => fn(createSource));
   }
 }

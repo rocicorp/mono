@@ -34,9 +34,9 @@ export class MemorySource implements Source {
 
   constructor(order: Ordering) {
     this.#schema = {
-      compareRows: makeComparator(order),
-      columns: {},
       primaryKey: [],
+      columns: {},
+      compareRows: makeComparator(order),
     };
     this.#data = new BTree(undefined, this.#schema.compareRows);
   }

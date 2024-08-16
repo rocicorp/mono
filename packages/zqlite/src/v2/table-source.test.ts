@@ -3,6 +3,10 @@ import {describe, expect, test} from 'vitest';
 import {TableSource} from './table-source.js';
 import {Catch} from 'zql/src/zql/ivm2/catch.js';
 import {makeComparator} from 'zql/src/zql/ivm2/data.js';
+import {runCases} from 'zql/src/zql/ivm2/test/source-cases.js';
+import {Ordering} from 'zql/src/zql/ast2/ast.js';
+import {compile, sql} from '../internal/sql.js';
+import {ValueType} from 'zql/src/zql/ivm2/schema.js';
 
 const columns = {
   id: 'string',
@@ -253,4 +257,31 @@ test('pushing values does the correct writes', () => {
       row: {a: 1, b: 2, c: 3},
     });
   }).toThrow();
+});
+
+describe('shared test cases', () => {
+  runCases(
+    (
+      name: string,
+      columns: Record<string, ValueType>,
+      order: Ordering,
+      primaryKeys: readonly [string, ...string[]],
+    ) => {
+      const db = new Database(':memory:');
+      // create a table with desired columns and primary keys
+      const query = compile(
+        sql`CREATE TABLE ${sql.ident(name)} (${sql.join(
+          Object.keys(columns).map(c => sql.ident(c)),
+          sql`, `,
+        )}, PRIMARY KEY (${sql.join(
+          primaryKeys.map(p => sql.ident(p)),
+          sql`, `,
+        )}));`,
+      );
+      db.exec(query);
+      return new TableSource(db, name, columns, order, primaryKeys);
+    },
+    new Set(),
+    new Set(),
+  );
 });
