@@ -1,4 +1,5 @@
 import type {Database} from 'better-sqlite3';
+import {StatementPreparer} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import type {LexiVersion} from 'zero-cache/src/types/lexi-version.js';
 import {normalizedKeyOrder, type RowKey} from 'zero-cache/src/types/row-key.js';
@@ -46,7 +47,7 @@ export function initChangeLog(db: Database) {
 }
 
 export function logSetOp(
-  db: Database,
+  db: StatementPreparer,
   version: LexiVersion,
   table: string,
   row: RowKey,
@@ -55,7 +56,7 @@ export function logSetOp(
 }
 
 export function logDeleteOp(
-  db: Database,
+  db: StatementPreparer,
   version: LexiVersion,
   table: string,
   row: RowKey,
@@ -64,7 +65,7 @@ export function logDeleteOp(
 }
 
 function logRowOp(
-  db: Database,
+  db: StatementPreparer,
   version: LexiVersion,
   table: string,
   row: RowKey,
@@ -82,7 +83,7 @@ function logRowOp(
 }
 
 export function logTruncateOp(
-  db: Database,
+  db: StatementPreparer,
   version: LexiVersion,
   table: string,
 ) {

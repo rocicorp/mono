@@ -8,6 +8,7 @@ import {
 } from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
+import {StatementCachingDatabase} from 'zero-cache/src/db/statements.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
@@ -40,7 +41,7 @@ const MAX_RETRY_DELAY_MS = 10000;
 export class IncrementalSyncer {
   readonly #upstreamUri: string;
   readonly #replicaID: string;
-  readonly #replica: Database;
+  readonly #replica: StatementCachingDatabase;
   readonly #notifier: Notifier;
 
   #retryDelay = INITIAL_RETRY_DELAY_MS;
@@ -51,7 +52,7 @@ export class IncrementalSyncer {
   constructor(upstreamUri: string, replicaID: string, replica: Database) {
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
-    this.#replica = replica;
+    this.#replica = new StatementCachingDatabase(replica);
     this.#notifier = new Notifier();
   }
 
@@ -169,7 +170,7 @@ class ReplayedTransactionError extends Error {
  */
 // Exported for testing.
 export class MessageProcessor {
-  readonly #db: Database;
+  readonly #db: StatementCachingDatabase;
   readonly #acknowledge: (lsn: string) => unknown;
   readonly #notifyVersionChange: () => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
@@ -179,7 +180,7 @@ export class MessageProcessor {
   #failure: Error | undefined;
 
   constructor(
-    db: Database,
+    db: StatementCachingDatabase,
     acknowledge: (lsn: string) => unknown,
     notifyVersionChange: () => void,
     failService: (lc: LogContext, err: unknown) => void,
@@ -320,10 +321,10 @@ export class MessageProcessor {
  */
 class TransactionProcessor {
   readonly #startMs: number;
-  readonly #db: Database;
+  readonly #db: StatementCachingDatabase;
   readonly #version: LexiVersion;
 
-  constructor(db: Database, _: Pgoutput.MessageBegin) {
+  constructor(db: StatementCachingDatabase, _: Pgoutput.MessageBegin) {
     this.#startMs = Date.now();
 
     // Although the Replicator / Incremental Syncer is the only writer of the replica,
@@ -333,7 +334,7 @@ class TransactionProcessor {
     //
     // This TransactionProcessor is the only logic that will actually
     // `COMMIT` any transactions to the replica.
-    db.prepare('BEGIN CONCURRENT').run();
+    db.beginConcurrent();
     this.#db = db;
     this.#version = getNextStateVersion(db);
   }
@@ -449,11 +450,11 @@ class TransactionProcessor {
 
     const nextVersion = toLexiVersion(lsn);
     if (nextVersion <= this.#version) {
-      this.#db.prepare('ROLLBACK').run();
+      this.#db.rollback();
       throw new ReplayedTransactionError(lsn);
     }
     updateReplicationWatermark(this.#db, lsn);
-    this.#db.prepare('COMMIT').run();
+    this.#db.commit();
 
     const elapsedMs = Date.now() - this.#startMs;
     return elapsedMs;
