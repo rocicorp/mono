@@ -8,7 +8,7 @@ import {
   logTruncateOp,
 } from './change-log.js';
 
-describe('replicator/sync-schema', () => {
+describe('replicator/schema/change-log', () => {
   let dbFile: DbFile;
   let db: StatementRunner;
 

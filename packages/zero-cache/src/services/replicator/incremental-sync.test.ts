@@ -14,7 +14,7 @@ import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
-import {getReplicationState} from './schema/replication.js';
+import {getReplicationVersions} from './schema/replication-state.js';
 import {listTables} from './tables/list.js';
 import {TableSpec} from './tables/specs.js';
 
@@ -676,7 +676,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       const versionReady = notifications[Symbol.asyncIterator]();
       const nextVersion = async () => {
         await versionReady.next();
-        const {nextStateVersion} = getReplicationState(
+        const {nextStateVersion} = getReplicationVersions(
           new StatementRunner(replica),
         );
         versions.push(nextStateVersion);

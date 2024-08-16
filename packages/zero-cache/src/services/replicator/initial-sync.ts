@@ -12,7 +12,7 @@ import {initChangeLog} from './schema/change-log.js';
 import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
-} from './schema/replication.js';
+} from './schema/replication-state.js';
 import {createTableStatement} from './tables/create.js';
 import {liteTableName} from './tables/names.js';
 import {

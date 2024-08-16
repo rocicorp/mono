@@ -400,12 +400,10 @@ describe('replicator/initial-sync', () => {
       expect(
         Object.fromEntries(synced.map(table => [table.name, table])),
       ).toMatchObject(c.replicatedSchema);
-      const {pubNames} = replica
-        .prepare(
-          `SELECT publications as "pubNames" FROM "_zero.ReplicationState"`,
-        )
+      const {pubs} = replica
+        .prepare(`SELECT publications as pubs FROM "_zero.ReplicationConfig"`)
         .get();
-      expect(new Set(JSON.parse(pubNames))).toEqual(new Set(c.publications));
+      expect(new Set(JSON.parse(pubs))).toEqual(new Set(c.publications));
 
       expectTables(replica, c.replicatedData);
 
@@ -413,8 +411,8 @@ describe('replicator/initial-sync', () => {
         .prepare('SELECT * FROM "_zero.ReplicationState"')
         .get();
       expect(replicaState).toMatchObject({
-        publications: JSON.stringify(publications.map(p => p.pubname)),
         watermark: /[0-9A-F]+\/[0-9A-F]+/,
+        stateVersion: '00',
         nextStateVersion: /[0-9a-f]{2,}/,
       });
       expectTables(replica, {['_zero.ChangeLog']: []});

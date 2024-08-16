@@ -8,9 +8,9 @@ import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
 import {MessageProcessor} from './incremental-sync.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
-  getReplicationState,
+  getSubscriptionState,
   initReplicationState,
-} from './schema/replication.js';
+} from './schema/replication-state.js';
 
 describe('replicator/message-processor', () => {
   let lc: LogContext;
@@ -244,7 +244,7 @@ describe('replicator/message-processor', () => {
       }
       expectTables(replica, c.replicated);
 
-      const {watermark} = getReplicationState(new StatementRunner(replica));
+      const {watermark} = getSubscriptionState(new StatementRunner(replica));
       expect(watermark).toBe(c.acknowledged.at(-1));
     });
   }

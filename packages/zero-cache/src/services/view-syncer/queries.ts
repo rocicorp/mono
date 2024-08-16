@@ -1,9 +1,9 @@
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {CustomKeySet} from 'shared/src/custom-key-set.js';
-import {rowIDHash} from '../../types/row-key.js';
 import type {AST, Selector} from 'zql/src/zql/ast/ast.js';
 import {stringify, type JSONObject} from '../../types/bigint-json.js';
+import {rowIDHash} from '../../types/row-key.js';
 import {deaggregateArrays} from '../../zql/deaggregation.js';
 import {
   ALIAS_COMPONENT_SEPARATOR,
@@ -15,7 +15,7 @@ import {
 } from '../../zql/invalidation.js';
 import {Normalized} from '../../zql/normalize.js';
 import type {ServerAST} from '../../zql/server-ast.js';
-import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {TableSpec} from '../replicator/tables/specs.js';
 import type {QueryRecord, RowID, RowRecord} from './schema/types.js';
 
