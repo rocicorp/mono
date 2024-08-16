@@ -14,6 +14,7 @@ import {compile, format, sql} from '../internal/sql.js';
 import {Stream} from 'zql/src/zql/ivm2/stream.js';
 import {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
+import {StatementCache} from '../internal/statement-cache.js';
 
 /**
  * A source that is backed by a SQLite table.
@@ -35,10 +36,12 @@ export class TableSource implements Input {
   readonly #outputs: Output[] = [];
   readonly #insertStmt: Statement;
   readonly #deleteStmt: Statement;
+  readonly #changesStmt: Statement;
   readonly #order: Ordering;
   readonly #table: string;
-  readonly #db: Database;
   readonly #schema: Schema;
+  readonly #statementCache: StatementCache;
+  readonly #primaryKeys: readonly string[];
 
   constructor(
     db: Database,
@@ -52,7 +55,7 @@ export class TableSource implements Input {
       compareRows: makeComparator(this.#order),
     };
     this.#table = tableName;
-    this.#db = db;
+    this.#statementCache = new StatementCache(db);
 
     assertPrimaryKeysMatch(db, tableName, primaryKeys);
 
@@ -68,11 +71,17 @@ export class TableSource implements Input {
     );
 
     this.#deleteStmt = db.prepare(
-      // TODO: we need to know the columns which comprise the primary key. Defaulting to `id` for now.
       compile(
-        sql`DELETE FROM ${sql.ident(tableName)} WHERE ${sql.ident('id')} = ?`,
+        sql`DELETE FROM ${sql.ident(tableName)} WHERE ${sql.join(
+          primaryKeys.map(k => sql`${sql.ident(k)} = ?`),
+          sql` AND `,
+        )}`,
       ),
     );
+
+    this.#changesStmt = db.prepare(`SELECT changes() as changes`);
+
+    this.#primaryKeys = primaryKeys;
   }
 
   schema(): Schema {
@@ -116,14 +125,15 @@ export class TableSource implements Input {
       );
       const sqlAndBindings = format(preSql);
 
-      // TODO: get from statement cache
       newReq = {...req, start: undefined};
-      for (const beforeRow of this.#db
-        .prepare(sqlAndBindings.text)
-        .iterate(...sqlAndBindings.values)) {
-        newReq.start = {row: beforeRow, basis: 'at'};
-        break;
-      }
+      this.#statementCache.use(sqlAndBindings.text, cachedStatement => {
+        for (const beforeRow of cachedStatement.statement.iterate(
+          ...sqlAndBindings.values,
+        )) {
+          newReq.start = {row: beforeRow, basis: 'at'};
+          break;
+        }
+      });
 
       yield* this.fetch(newReq, output);
     } else {
@@ -141,14 +151,16 @@ export class TableSource implements Input {
       );
       const sqlAndBindings = format(query);
 
-      // TODO: get from statement cache
-      const rowIterator = this.#db
-        .prepare(sqlAndBindings.text)
-        .iterate(...sqlAndBindings.values);
-
-      // TODO: handle the overlay
-      for (const row of rowIterator) {
-        yield {row, relationships: new Map()};
+      const cachedStatement = this.#statementCache.get(sqlAndBindings.text);
+      try {
+        const rowIterator = cachedStatement.statement.iterate(
+          ...sqlAndBindings.values,
+        );
+        for (const row of rowIterator) {
+          yield {row, relationships: new Map()};
+        }
+      } finally {
+        this.#statementCache.return(cachedStatement);
       }
     }
   }
@@ -169,8 +181,11 @@ export class TableSource implements Input {
     if (change.type === 'add') {
       this.#insertStmt.run(...Object.values(change.row));
     } else {
-      assert(change.type === 'remove');
-      this.#deleteStmt.run(change.row.id);
+      change.type satisfies 'remove';
+      const values = this.#primaryKeys.map(k => change.row[k]);
+      this.#deleteStmt.run(...values);
+      const {changes} = this.#changesStmt.get();
+      assert(changes === 1, 'Delete should affect exactly one row');
     }
   }
 }
