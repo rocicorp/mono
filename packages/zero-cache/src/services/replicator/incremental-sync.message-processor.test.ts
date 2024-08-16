@@ -5,12 +5,12 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
-import {MessageProcessor} from './incremental-sync.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,
   initReplicationState,
 } from './schema/replication-state.js';
+import {createMessageProcessor, ReplicationMessages} from './test-utils.js';
 
 describe('replicator/message-processor', () => {
   let lc: LogContext;
@@ -38,26 +38,6 @@ describe('replicator/message-processor', () => {
     await replicaFile.unlink();
   });
 
-  const FOO_RELATION: Pgoutput.MessageRelation = {
-    tag: 'relation',
-    relationOid: 123,
-    schema: 'public',
-    name: 'foo',
-    replicaIdentity: 'default',
-    columns: [
-      {
-        flags: 1,
-        name: 'id',
-        typeOid: 23,
-        typeMod: -1,
-        typeSchema: null,
-        typeName: null,
-        parser: () => {},
-      },
-    ],
-    keyColumns: ['id'],
-  } as const;
-
   type Case = {
     name: string;
     messages: Record<string, Pgoutput.Message[]>;
@@ -67,48 +47,32 @@ describe('replicator/message-processor', () => {
     expectFailure: boolean;
   };
 
+  const messages = new ReplicationMessages({foo: 'id'});
+
   const cases: Case[] = [
     {
       name: 'malformed replication stream',
       messages: {
         '0/1': [
-          {tag: 'begin', commitLsn: '0/d', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/d',
-            commitEndLsn: '0/e',
-            commitTime: 123n,
-          },
+          messages.begin(),
+          messages.insert('foo', {id: 123}),
+          messages.insert('foo', {id: 234}),
+          messages.commit('0/e'),
         ],
 
         // Induce a failure with a missing 'begin' message.
         '0/20': [
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 456}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 345}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/30',
-            commitEndLsn: '0/31',
-            commitTime: 125n,
-          },
+          messages.insert('foo', {id: 456}),
+          messages.insert('foo', {id: 345}),
+          messages.commit('0/31'),
         ],
 
         // This should be dropped.
         '0/40': [
-          {tag: 'begin', commitLsn: '0/50', commitTime: 127n, xid: 127},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 789}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 987}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/50',
-            commitEndLsn: '0/51',
-            commitTime: 127n,
-          },
+          messages.begin(),
+          messages.insert('foo', {id: 789}),
+          messages.insert('foo', {id: 987}),
+          messages.commit('0/51'),
         ],
       },
       acknowledged: ['0/e'],
@@ -125,75 +89,45 @@ describe('replicator/message-processor', () => {
       name: 'transaction replay',
       messages: {
         '0/1': [
-          {tag: 'begin', commitLsn: '0/2', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/3',
-            commitEndLsn: '0/4',
-            commitTime: 123n,
-          },
+          messages.begin(),
+          messages.insert('foo', {id: 123}),
+          messages.commit('0/4'),
         ],
 
         '0/5': [
-          {tag: 'begin', commitLsn: '0/5', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/9',
-            commitEndLsn: '0/a',
-            commitTime: 123n,
-          },
+          messages.begin(),
+          messages.insert('foo', {id: 234}),
+          messages.commit('0/a'),
         ],
 
         // Simulate Postgres resending the first two transactions (e.g. reconnecting after
         // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
         '0/6': [
-          {tag: 'begin', commitLsn: '0/2', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 123}},
+          messages.begin(),
+          messages.insert('foo', {id: 123}),
           // For good measure, add new inserts that didn't appear in the previous transaction.
           // This would not actually happen, but it allows us to confirm that no mutations
           // are applied.
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 456}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/3',
-            commitEndLsn: '0/4',
-            commitTime: 123n,
-          },
+          messages.insert('foo', {id: 456}),
+          messages.commit('0/4'),
         ],
 
         '0/7': [
-          {tag: 'begin', commitLsn: '0/5', commitTime: 123n, xid: 123},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 234}},
+          messages.begin(),
+          messages.insert('foo', {id: 234}),
           // For good measure, add new inserts that didn't appear in the previous transaction.
           // This would not actually happen, but it allows us to confirm that no mutations
           // are applied.
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 654}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/9',
-            commitEndLsn: '0/a',
-            commitTime: 123n,
-          },
+          messages.insert('foo', {id: 654}),
+          messages.commit('0/a'),
         ],
 
         // This should succeed.
         '0/40': [
-          {tag: 'begin', commitLsn: '0/e', commitTime: 127n, xid: 127},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 789}},
-          {tag: 'insert', relation: FOO_RELATION, new: {id: 987}},
-          {
-            tag: 'commit',
-            flags: 0,
-            commitLsn: '0/e',
-            commitEndLsn: '0/f',
-            commitTime: 127n,
-          },
+          messages.begin(),
+          messages.insert('foo', {id: 789}),
+          messages.insert('foo', {id: 987}),
+          messages.commit('0/f'),
         ],
       },
       acknowledged: [
@@ -222,8 +156,8 @@ describe('replicator/message-processor', () => {
       const acknowledgements: string[] = [];
       let versionChanges = 0;
 
-      const processor = new MessageProcessor(
-        new StatementRunner(replica),
+      const processor = createMessageProcessor(
+        replica,
         (lsn: string) => acknowledgements.push(lsn),
         () => versionChanges++,
         (_: LogContext, err: unknown) => failures.push(err),
