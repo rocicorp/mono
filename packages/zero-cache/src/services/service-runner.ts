@@ -6,27 +6,15 @@ import WebSocket from 'ws';
 import type {JSONObject} from '../types/bigint-json.js';
 import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
 import {streamIn, type CancelableAsyncIterable} from '../types/streams.js';
-import {
-  READER_MAX_WORKERS as INVALIDATION_WATCHER_READER_MAX_WORKERS,
-  InvalidationWatcher,
-  InvalidationWatcherService,
-} from './invalidation-watcher/invalidation-watcher.js';
-import type {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
+import {InvalidationWatcher} from './invalidation-watcher/invalidation-watcher.js';
+import {InvalidationWatcherRegistry} from './invalidation-watcher/registry.js';
 import {Mutagen, MutagenService} from './mutagen/mutagen.js';
-import {
-  REGISTER_FILTERS_PATTERN,
-  REPLICATOR_STATUS_PATTERN,
-  VERSION_CHANGES_PATTERN,
-} from './paths.js';
+import {REPLICATOR_STATUS_PATTERN, VERSION_CHANGES_PATTERN} from './paths.js';
 import type {ReplicatorRegistry} from './replicator/registry.js';
 import {
-  RegisterInvalidationFiltersRequest,
-  RegisterInvalidationFiltersResponse,
+  ReplicaVersionReady,
   Replicator,
   ReplicatorService,
-  VersionChange,
-  registerInvalidationFiltersResponse,
-  versionChangeSchema,
 } from './replicator/replicator.js';
 import type {Service} from './service.js';
 import {
@@ -46,15 +34,12 @@ export interface ServiceRunnerEnv {
 }
 
 const REPLICATOR_ID = 'r1';
-const INVALIDATION_WATCHER_ID = 'iw1';
 
 export class ServiceRunner
   implements ReplicatorRegistry, InvalidationWatcherRegistry
 {
   readonly #viewSyncers: Map<string, ViewSyncerService> = new Map();
   readonly #replicators: Map<string, ReplicatorService> = new Map();
-  readonly #invalidationWatchers: Map<string, InvalidationWatcherService> =
-    new Map();
 
   readonly #env: ServiceRunnerEnv;
   readonly #upstream: PostgresDB;
@@ -77,7 +62,7 @@ export class ServiceRunner
     });
     this.#replica = postgres(this.#env.SYNC_REPLICA_URI, {
       ...postgresTypeConfig(),
-      max: INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
+      max: VIEW_SYNCER_MAX_WORKERS,
     });
     this.#replicaDbFile = this.#env.SYNC_REPLICA_DB_FILE;
     this.#runReplicator = runReplicator;
@@ -85,14 +70,7 @@ export class ServiceRunner
   }
 
   getInvalidationWatcher(): Promise<InvalidationWatcher> {
-    return Promise.resolve(
-      this.#getService(
-        INVALIDATION_WATCHER_ID,
-        this.#invalidationWatchers,
-        id => new InvalidationWatcherService(id, this.#lc, this, this.#replica),
-        'InvalidationWatcherService',
-      ),
-    );
+    throw new Error('obsolete');
   }
 
   // eslint-disable-next-line require-await
@@ -107,7 +85,6 @@ export class ServiceRunner
             id,
             this.#env.UPSTREAM_URI,
             this.#upstream,
-            this.#replica,
             this.#replicaDbFile,
           ),
         'ReplicatorService',
@@ -143,8 +120,7 @@ export class ServiceRunner
       this.#upstream`SELECT 1`.simple().execute(),
       ...Array.from(
         {
-          length:
-            INVALIDATION_WATCHER_READER_MAX_WORKERS + VIEW_SYNCER_MAX_WORKERS,
+          length: VIEW_SYNCER_MAX_WORKERS,
         },
         () => this.#replica`SELECT 1`.simple().execute(),
       ),
@@ -230,34 +206,7 @@ class ReplicatorStub implements Replicator {
     return v.parse(data, jsonObjectSchema);
   }
 
-  async registerInvalidationFilters(
-    req: RegisterInvalidationFiltersRequest,
-  ): Promise<RegisterInvalidationFiltersResponse> {
-    const lc = this.#lc.withContext('method', 'registerInvalidationFilters');
-    const res = await fetch(
-      `http://${this.#host}${REGISTER_FILTERS_PATTERN.replace(
-        ':version',
-        'v0',
-      )}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(req),
-      },
-    );
-    if (!res.ok) {
-      throw new Error(
-        `registerInvalidationFilters: ${res.status}: ${await res.text()}`,
-      );
-    }
-    const data = await res.json();
-    lc.debug?.('received', data);
-    return v.parse(data, registerInvalidationFiltersResponse);
-  }
-
-  versionChanges(): Promise<CancelableAsyncIterable<VersionChange>> {
+  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
     const lc = this.#lc.withContext('method', 'versionChanges');
     const ws = new WebSocket(
       `http://${this.#host}${VERSION_CHANGES_PATTERN.replace(
@@ -266,6 +215,8 @@ class ReplicatorStub implements Replicator {
       )}`,
     );
 
-    return Promise.resolve(streamIn(lc, ws, versionChangeSchema));
+    return Promise.resolve(streamIn(lc, ws, emptySchema));
   }
 }
+
+const emptySchema = v.object({});

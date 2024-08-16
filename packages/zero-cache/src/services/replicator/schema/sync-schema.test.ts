@@ -105,7 +105,7 @@ describe('replicator/schema/sync-schema', () => {
           REPLICA_ID,
           replicaFile.path,
           upstream,
-          getConnectionURI(upstream, 'external'),
+          getConnectionURI(upstream),
         );
 
         await expectTables(upstream, c.upstreamPostState);

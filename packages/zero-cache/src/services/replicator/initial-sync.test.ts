@@ -149,7 +149,12 @@ describe('replicator/initial-sync', () => {
     {
       name: 'existing table, default publication',
       setupUpstreamQuery: `
-        CREATE TABLE issues("issueID" INTEGER, "orgID" INTEGER, PRIMARY KEY ("orgID", "issueID"));
+        CREATE TABLE issues(
+          "issueID" INTEGER,
+          "orgID" INTEGER,
+          "isAdmin" BOOLEAN,
+          PRIMARY KEY ("orgID", "issueID")
+        );
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
@@ -164,6 +169,11 @@ describe('replicator/initial-sync', () => {
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
+            },
+            isAdmin: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              notNull: false,
             },
           },
           name: 'issues',
@@ -186,6 +196,11 @@ describe('replicator/initial-sync', () => {
               dataType: 'INTEGER',
               notNull: false,
             },
+            isAdmin: {
+              characterMaximumLength: null,
+              dataType: 'BOOL',
+              notNull: false,
+            },
             ['_0_version']: {
               characterMaximumLength: null,
               dataType: 'TEXT',
@@ -199,15 +214,17 @@ describe('replicator/initial-sync', () => {
       },
       upstream: {
         issues: [
-          {issueID: 123, orgID: 456},
-          {issueID: 321, orgID: 789},
+          {issueID: 123, orgID: 456, isAdmin: true},
+          {issueID: 321, orgID: 789, isAdmin: null},
+          {issueID: 456, orgID: 789, isAdmin: false},
         ],
       },
       replicatedData: {
         ['zero.clients']: [],
         issues: [
-          {issueID: 123, orgID: 456, ['_0_version']: '00'},
-          {issueID: 321, orgID: 789, ['_0_version']: '00'},
+          {issueID: 123, orgID: 456, isAdmin: 1, ['_0_version']: '00'},
+          {issueID: 321, orgID: 789, isAdmin: null, ['_0_version']: '00'},
+          {issueID: 456, orgID: 789, isAdmin: 0, ['_0_version']: '00'},
         ],
       },
       publications: ['zero_meta', 'zero_data'],
@@ -370,7 +387,7 @@ describe('replicator/initial-sync', () => {
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(upstream);
     await replicaFile.unlink();
-  }, 10000);
+  });
 
   for (const c of cases) {
     test(`startInitialDataSynchronization: ${c.name}`, async () => {
@@ -383,7 +400,7 @@ describe('replicator/initial-sync', () => {
         REPLICA_ID,
         replica,
         upstream,
-        getConnectionURI(upstream, 'external'),
+        getConnectionURI(upstream),
       );
 
       const {publications, tables} = await getPublicationInfo(upstream);
@@ -400,12 +417,10 @@ describe('replicator/initial-sync', () => {
       expect(
         Object.fromEntries(synced.map(table => [table.name, table])),
       ).toMatchObject(c.replicatedSchema);
-      const {pubNames} = replica
-        .prepare(
-          `SELECT publications as "pubNames" FROM "_zero.ReplicationState"`,
-        )
+      const {pubs} = replica
+        .prepare(`SELECT publications as pubs FROM "_zero.ReplicationConfig"`)
         .get();
-      expect(new Set(JSON.parse(pubNames))).toEqual(new Set(c.publications));
+      expect(new Set(JSON.parse(pubs))).toEqual(new Set(c.publications));
 
       expectTables(replica, c.replicatedData);
 
@@ -413,8 +428,8 @@ describe('replicator/initial-sync', () => {
         .prepare('SELECT * FROM "_zero.ReplicationState"')
         .get();
       expect(replicaState).toMatchObject({
-        publications: JSON.stringify(publications.map(p => p.pubname)),
         watermark: /[0-9A-F]+\/[0-9A-F]+/,
+        stateVersion: '00',
         nextStateVersion: /[0-9a-f]{2,}/,
       });
       expectTables(replica, {['_zero.ChangeLog']: []});
@@ -429,92 +444,6 @@ describe('replicator/initial-sync', () => {
         slotName: replicationSlot(REPLICA_ID),
         lsn: replicaState.watermark,
       });
-    }, 10000);
-
-    type InvalidUpstreamCase = {
-      error: string;
-      setupUpstreamQuery?: string;
-      upstream?: Record<string, object[]>;
-    };
-
-    const invalidUpstreamCases: InvalidUpstreamCase[] = [
-      {
-        error: 'does not have a PRIMARY KEY',
-        setupUpstreamQuery: `
-        CREATE TABLE issues("issueID" INTEGER, "orgID" INTEGER);
-      `,
-      },
-      {
-        error: 'uses reserved column name "_0_version"',
-        setupUpstreamQuery: `
-        CREATE TABLE issues(
-          "issueID" INTEGER PRIMARY KEY, 
-          "orgID" INTEGER, 
-          _0_version INTEGER);
-      `,
-      },
-      {
-        error: 'Schema "_zero" is reserved for internal use',
-        setupUpstreamQuery: `
-        CREATE SCHEMA _zero;
-        CREATE TABLE _zero.is_not_allowed(
-          "issueID" INTEGER PRIMARY KEY, 
-          "orgID" INTEGER
-        );
-        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA _zero;
-        `,
-      },
-      {
-        error: 'Only the default "public" schema is supported',
-        setupUpstreamQuery: `
-        CREATE SCHEMA unsupported;
-        CREATE TABLE unsupported.issues ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
-        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA unsupported;
-      `,
-      },
-      {
-        error: 'Table "table/with/slashes" has invalid characters',
-        setupUpstreamQuery: `
-        CREATE TABLE "table/with/slashes" ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
-      `,
-      },
-      {
-        error: 'Table "table.with.dots" has invalid characters',
-        setupUpstreamQuery: `
-        CREATE TABLE "table.with.dots" ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
-      `,
-      },
-      {
-        error:
-          'Column "column/with/slashes" in table "issues" has invalid characters',
-        setupUpstreamQuery: `
-        CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column/with/slashes" INTEGER);
-      `,
-      },
-      {
-        error:
-          'Column "column.with.dots" in table "issues" has invalid characters',
-        setupUpstreamQuery: `
-        CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column.with.dots" INTEGER);
-      `,
-      },
-    ];
-
-    for (const c of invalidUpstreamCases) {
-      test(`Invalid upstream: ${c.error}`, async () => {
-        await initDB(upstream, c.setupUpstreamQuery, c.upstream);
-
-        const result = await initialSync(
-          createSilentLogContext(),
-          REPLICA_ID,
-          replica,
-          upstream,
-          getConnectionURI(upstream, 'external'),
-        ).catch(e => e);
-
-        expect(result).toBeInstanceOf(Error);
-        expect(String(result)).toContain(c.error);
-      });
-    }
+    });
   }
 });

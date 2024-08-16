@@ -73,22 +73,10 @@ afterAll(async () => {
 
 /**
  * Constructs a `postgres://` uri for connecting to the specified `db`.
- * @param scope `external` for a connection uri from outside of the Testcontainer,
- *               and `internal` for a connection uri between databases
- *               running within the Testcontainer (e.g. pg-to-pg replication).
- * @returns
  */
-export function getConnectionURI(
-  db: postgres.Sql,
-  scope: 'internal' | 'external' = 'internal',
-) {
+export function getConnectionURI(db: postgres.Sql) {
   const {user, pass, host, port, database} = db.options;
-  return scope === 'external'
-    ? `postgres://${user}:${pass}@${host}:${port}/${database}`
-    : // The internal uri is used for communication between databases
-      // running in the testcontainer, and thus omits the exported port.
-      // Instead, the default postgres port is used for intra-container connections.
-      `postgres://${user}:${pass}@${host}/${database}`;
+  return `postgres://${user}:${pass}@${host}:${port}/${database}`;
 }
 
 export async function initDB(
