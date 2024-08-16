@@ -189,3 +189,57 @@ describe('fetching from a table source', () => {
     expect(rows.map(r => r.row)).toEqual(expectedRows);
   });
 });
+
+test('pushing values does the correct writes', () => {
+  const db = new Database(':memory:');
+  db.exec(/* sql */ `CREATE TABLE foo (a, b, c, PRIMARY KEY (a, b));`);
+  const read = db.prepare('SELECT * FROM foo');
+
+  const source = new TableSource(
+    db,
+    'foo',
+    ['a', 'b', 'c'],
+    [['a', 'asc']],
+    ['a', 'b'],
+  );
+
+  /**
+   * Test:
+   * 1. add a row
+   * 2. remove a row
+   * 3. remove a row that doesn't exist throws
+   * 4. add a row that already exists throws
+   */
+  source.push({
+    type: 'add',
+    row: {a: 1, b: 2, c: 3},
+  });
+
+  expect(read.all()).toEqual([{a: 1, b: 2, c: 3}]);
+
+  source.push({
+    type: 'remove',
+    row: {a: 1, b: 2},
+  });
+
+  expect(read.all()).toEqual([]);
+
+  expect(() => {
+    source.push({
+      type: 'remove',
+      row: {a: 1, b: 2},
+    });
+  }).toThrow();
+
+  source.push({
+    type: 'add',
+    row: {a: 1, b: 2, c: 3},
+  });
+
+  expect(() => {
+    source.push({
+      type: 'add',
+      row: {a: 1, b: 2, c: 3},
+    });
+  }).toThrow();
+});
