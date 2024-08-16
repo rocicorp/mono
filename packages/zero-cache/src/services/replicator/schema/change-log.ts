@@ -1,5 +1,5 @@
 import type {Database} from 'better-sqlite3';
-import {StatementPreparer} from 'zero-cache/src/db/statements.js';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import type {LexiVersion} from 'zero-cache/src/types/lexi-version.js';
 import {normalizedKeyOrder, type RowKey} from 'zero-cache/src/types/row-key.js';
@@ -47,7 +47,7 @@ export function initChangeLog(db: Database) {
 }
 
 export function logSetOp(
-  db: StatementPreparer,
+  db: StatementRunner,
   version: LexiVersion,
   table: string,
   row: RowKey,
@@ -56,7 +56,7 @@ export function logSetOp(
 }
 
 export function logDeleteOp(
-  db: StatementPreparer,
+  db: StatementRunner,
   version: LexiVersion,
   table: string,
   row: RowKey,
@@ -65,38 +65,41 @@ export function logDeleteOp(
 }
 
 function logRowOp(
-  db: StatementPreparer,
+  db: StatementRunner,
   version: LexiVersion,
   table: string,
   row: RowKey,
   op: string,
 ) {
   const rowKey = stringify(normalizedKeyOrder(row));
-  db.prepare(
+  db.run(
     `
     INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op)
       VALUES (@version, @table, JSON(@rowKey), @op)
       ON CONFLICT ("table", rowKey) DO UPDATE
       SET stateVersion = @version, op = @op
     `,
-  ).run({version, table, rowKey, op});
+    {version, table, rowKey, op},
+  );
 }
 
 export function logTruncateOp(
-  db: StatementPreparer,
+  db: StatementRunner,
   version: LexiVersion,
   table: string,
 ) {
-  db.prepare(
+  db.run(
     `
     DELETE FROM "_zero.ChangeLog" WHERE "table" = ?
     `,
-  ).run(table);
+    table,
+  );
 
-  db.prepare(
+  db.run(
     `
     INSERT INTO "_zero.ChangeLog" (stateVersion, "table", op) 
       VALUES (@version, @table, @op)
     `,
-  ).run({version, table, op: TRUNCATE_OP});
+    {version, table, op: TRUNCATE_OP},
+  );
 }

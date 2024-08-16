@@ -1,15 +1,16 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {DbFile, expectTables} from '../test/lite.js';
-import {StatementCachingDatabase} from './statements.js';
+import {StatementRunner} from './statements.js';
 
 describe('db/statements', () => {
   let dbFile: DbFile;
-  let db: StatementCachingDatabase;
+  let db: StatementRunner;
 
   beforeEach(() => {
     dbFile = new DbFile('statements-test');
-    db = new StatementCachingDatabase(dbFile.connect());
-    db.run('CREATE TABLE foo(id INT PRIMARY KEY)');
+    const conn = dbFile.connect();
+    conn.exec('CREATE TABLE foo(id INT PRIMARY KEY)');
+    db = new StatementRunner(conn);
   });
 
   afterEach(async () => {
@@ -17,13 +18,20 @@ describe('db/statements', () => {
   });
 
   test('statement caching', () => {
-    const stmt1 = db.prepare('INSERT INTO foo(id) VALUES(?)');
-    const stmt2 = db.prepare('INSERT INTO foo(id) VALUES(?)');
-
-    expect(stmt1).toBe(stmt2);
-    stmt1.run(123);
-
+    expect(db.size).toBe(0);
+    db.run('INSERT INTO foo(id) VALUES(?)', 123);
     expectTables(db.db, {foo: [{id: 123}]});
+    expect(db.size).toBe(1);
+
+    db.run('INSERT INTO foo(id) VALUES(?)', 456);
+    expectTables(db.db, {foo: [{id: 123}, {id: 456}]});
+    expect(db.size).toBe(1);
+
+    expect(db.get('SELECT * FROM FOO')).toEqual({id: 123});
+    expect(db.size).toBe(2);
+
+    expect(db.all('SELECT * FROM FOO')).toEqual([{id: 123}, {id: 456}]);
+    expect(db.size).toBe(2);
   });
 
   test('convenience methods', () => {

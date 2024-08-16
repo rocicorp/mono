@@ -3,7 +3,7 @@ import {Database} from 'better-sqlite3';
 import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {StatementCachingDatabase} from 'zero-cache/src/db/statements.js';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
 import {MessageProcessor} from './incremental-sync.js';
 import {initChangeLog} from './schema/change-log.js';
@@ -223,7 +223,7 @@ describe('replicator/message-processor', () => {
       let versionChanges = 0;
 
       const processor = new MessageProcessor(
-        new StatementCachingDatabase(replica),
+        new StatementRunner(replica),
         (lsn: string) => acknowledgements.push(lsn),
         () => versionChanges++,
         (_: LogContext, err: unknown) => failures.push(err),
@@ -244,7 +244,7 @@ describe('replicator/message-processor', () => {
       }
       expectTables(replica, c.replicated);
 
-      const {watermark} = getReplicationState(replica);
+      const {watermark} = getReplicationState(new StatementRunner(replica));
       expect(watermark).toBe(c.acknowledged.at(-1));
     });
   }

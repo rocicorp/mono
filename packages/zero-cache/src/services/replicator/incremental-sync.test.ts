@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {Database} from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
 import {
   dropReplicationSlot,
@@ -675,7 +676,9 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       const versionReady = notifications[Symbol.asyncIterator]();
       const nextVersion = async () => {
         await versionReady.next();
-        const {nextStateVersion} = getReplicationState(replica);
+        const {nextStateVersion} = getReplicationState(
+          new StatementRunner(replica),
+        );
         versions.push(nextStateVersion);
       };
 
