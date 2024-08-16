@@ -45,13 +45,16 @@ export class TableSource implements Input {
     tableName: string,
     columns: readonly string[],
     order: Ordering,
+    primaryKeys: readonly string[],
   ) {
+    this.#order = makeOrderUnique(order, primaryKeys);
     this.#schema = {
-      compareRows: makeComparator(order),
+      compareRows: makeComparator(this.#order),
     };
-    this.#order = order;
     this.#table = tableName;
     this.#db = db;
+
+    assertPrimaryKeysMatch(db, tableName, primaryKeys);
 
     this.#insertStmt = db.prepare(
       compile(
@@ -280,4 +283,37 @@ function gatherStartConstraints(cursor: Cursor, order: Ordering): SQLQuery {
   }
 
   return sql`(${sql.join(constraints, sql` OR `)})`;
+}
+
+function assertPrimaryKeysMatch(
+  db: Database,
+  tableName: string,
+  primaryKeys: readonly string[],
+) {
+  const sqlAndBindings = format(
+    sql`SELECT name FROM pragma_table_info(${tableName}) WHERE pk > 0`,
+  );
+  const stmt = db.prepare(sqlAndBindings.text);
+  const pkColumns = new Set(
+    stmt.all(...sqlAndBindings.values).map(row => row.name),
+  );
+
+  assert(pkColumns.size === primaryKeys.length);
+
+  for (const key of primaryKeys) {
+    assert(pkColumns.has(key));
+  }
+}
+
+function makeOrderUnique(
+  order: Ordering,
+  primaryKeys: readonly string[],
+): Ordering {
+  const uniqueOrder = [...order];
+  for (const key of primaryKeys) {
+    if (!order.some(([k]) => k === key)) {
+      uniqueOrder.push([key, 'asc']);
+    }
+  }
+  return uniqueOrder;
 }
