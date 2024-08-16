@@ -14,6 +14,7 @@ import {compile, format, sql} from '../internal/sql.js';
 import {Stream} from 'zql/src/zql/ivm2/stream.js';
 import {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
+import {StatementCache} from '../internal/statement-cache.js';
 
 /**
  * A source that is backed by a SQLite table.
@@ -37,8 +38,8 @@ export class TableSource implements Input {
   readonly #deleteStmt: Statement;
   readonly #order: Ordering;
   readonly #table: string;
-  readonly #db: Database;
   readonly #schema: Schema;
+  readonly #statementCache: StatementCache;
 
   constructor(
     db: Database,
@@ -52,7 +53,7 @@ export class TableSource implements Input {
       compareRows: makeComparator(this.#order),
     };
     this.#table = tableName;
-    this.#db = db;
+    this.#statementCache = new StatementCache(db);
 
     assertPrimaryKeysMatch(db, tableName, primaryKeys);
 
@@ -116,14 +117,15 @@ export class TableSource implements Input {
       );
       const sqlAndBindings = format(preSql);
 
-      // TODO: get from statement cache
       newReq = {...req, start: undefined};
-      for (const beforeRow of this.#db
-        .prepare(sqlAndBindings.text)
-        .iterate(...sqlAndBindings.values)) {
-        newReq.start = {row: beforeRow, basis: 'at'};
-        break;
-      }
+      this.#statementCache.use(sqlAndBindings.text, cachedStatement => {
+        for (const beforeRow of cachedStatement.statement.iterate(
+          ...sqlAndBindings.values,
+        )) {
+          newReq.start = {row: beforeRow, basis: 'at'};
+          break;
+        }
+      });
 
       yield* this.fetch(newReq, output);
     } else {
@@ -141,14 +143,16 @@ export class TableSource implements Input {
       );
       const sqlAndBindings = format(query);
 
-      // TODO: get from statement cache
-      const rowIterator = this.#db
-        .prepare(sqlAndBindings.text)
-        .iterate(...sqlAndBindings.values);
-
-      // TODO: handle the overlay
-      for (const row of rowIterator) {
-        yield {row, relationships: new Map()};
+      const cachedStatement = this.#statementCache.get(sqlAndBindings.text);
+      try {
+        const rowIterator = cachedStatement.statement.iterate(
+          ...sqlAndBindings.values,
+        );
+        for (const row of rowIterator) {
+          yield {row, relationships: new Map()};
+        }
+      } finally {
+        this.#statementCache.return(cachedStatement);
       }
     }
   }
