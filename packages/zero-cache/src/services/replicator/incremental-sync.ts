@@ -406,7 +406,7 @@ class TransactionProcessor {
         SET ${setExprs.join(',')}
         WHERE ${conds.join(' AND ')}
       `,
-      [...liteValues(row), ...Object.values(currKey)],
+      [...liteValues(row), ...liteValues(currKey)],
     );
 
     if (oldKey) {
@@ -426,7 +426,7 @@ class TransactionProcessor {
     const conds = Object.keys(rowKey).map(col => `${ident(col)}=?`);
     this.#db.run(
       `DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
-      Object.values(rowKey),
+      liteValues(rowKey),
     );
 
     logDeleteOp(this.#db, this.#version, table, rowKey);
