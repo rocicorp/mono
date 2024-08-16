@@ -9,6 +9,7 @@ import {
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
+import {liteValues} from 'zero-cache/src/types/lite.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
@@ -378,7 +379,7 @@ class TransactionProcessor {
         ON CONFLICT (${keyColumns.join(',')})
         DO UPDATE SET ${upsert.join(',')}
       `,
-      Object.values(row),
+      liteValues(row),
     );
 
     logSetOp(this.#db, this.#version, table, key);
@@ -405,7 +406,7 @@ class TransactionProcessor {
         SET ${setExprs.join(',')}
         WHERE ${conds.join(' AND ')}
       `,
-      [...Object.values(row), ...Object.values(currKey)],
+      [...liteValues(row), ...liteValues(currKey)],
     );
 
     if (oldKey) {
@@ -425,7 +426,7 @@ class TransactionProcessor {
     const conds = Object.keys(rowKey).map(col => `${ident(col)}=?`);
     this.#db.run(
       `DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
-      Object.values(rowKey),
+      liteValues(rowKey),
     );
 
     logDeleteOp(this.#db, this.#version, table, rowKey);

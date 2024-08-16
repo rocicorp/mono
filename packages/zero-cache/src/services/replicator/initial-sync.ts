@@ -7,6 +7,10 @@ import {
   Mode,
   TransactionPool,
 } from 'zero-cache/src/db/transaction-pool.js';
+import {
+  liteValues,
+  mapPostgresToLiteDataType,
+} from 'zero-cache/src/types/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
@@ -241,7 +245,7 @@ function ensurePublishedTables(
           );
         }
         if (restrictToLiteDataTypes) {
-          mapToLiteDataType(spec.dataType); // Throws on unsupported datatypes
+          mapPostgresToLiteDataType(spec.dataType); // Throws on unsupported datatypes
         }
       }
     });
@@ -319,53 +323,6 @@ function startTableCopyWorkers(
   return tableCopiers;
 }
 
-function mapToLiteDataType(pgDataType: string): string {
-  switch (pgDataType) {
-    case 'smallint':
-    case 'integer':
-    case 'int':
-    case 'int2':
-    case 'int4':
-    case 'int8':
-    case 'bigint':
-    case 'smallserial':
-    case 'serial':
-    case 'serial2':
-    case 'serial4':
-    case 'serial8':
-    case 'bigserial':
-    case 'boolean':
-      return 'INTEGER';
-    case 'decimal':
-    case 'numeric':
-    case 'real':
-    case 'double precision':
-    case 'float':
-    case 'float4':
-    case 'float8':
-      return 'REAL';
-    case 'bytea':
-      return 'BLOB';
-    case 'character':
-    case 'character varying':
-    case 'text':
-      return 'TEXT';
-    // case 'date':
-    // case 'time':
-    // case 'timestamp':
-    // case 'timestamp with time zone':
-    // case 'timestamp without time zone':
-    // case 'time with time zone':
-    // case 'time without time zone':
-    //   return 'INTEGER';
-    default:
-      if (pgDataType.endsWith('[]')) {
-        throw new Error(`Array types are not supported: ${pgDataType}`);
-      }
-      throw new Error(`The "${pgDataType}" data type is not supported`);
-  }
-}
-
 function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
   for (const t of tables) {
     const liteTable = {
@@ -377,7 +334,7 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
           Object.entries(t.columns).map(([col, spec]) => [
             col,
             {
-              dataType: mapToLiteDataType(spec.dataType),
+              dataType: mapPostgresToLiteDataType(spec.dataType),
               characterMaximumLength: null,
               // Omit constraints from upstream columns, as they may change without our knowledge.
               // Instead, simply rely on upstream enforcing all column constraints.
@@ -425,7 +382,7 @@ async function copy(
   for await (const rows of cursor) {
     for (const row of rows) {
       insertStmt.run([
-        ...Object.values(row),
+        ...liteValues(row),
         '00', // initial _0_version
       ]);
     }
