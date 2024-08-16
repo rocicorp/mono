@@ -189,14 +189,14 @@ export class TableSource<T extends PipelineEntity> implements Source<T> {
           genMap(
             // using `iterate` allows us to enforce `limit` in the `view`
             // by having the `view` stop pulling.
-            stmt.iterate(...getConditionBindParams(sortedConditions)),
+            stmt.statement.iterate(...getConditionBindParams(sortedConditions)),
             v => [v, 1],
           ),
         ),
         createPullResponseMessage(msg, this.#name, sort),
       );
     } finally {
-      this.#historyStatements.return(sql);
+      this.#historyStatements.return(stmt);
     }
   }
 
