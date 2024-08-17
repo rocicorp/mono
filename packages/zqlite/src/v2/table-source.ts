@@ -9,10 +9,10 @@ import type {
 import type {SourceChange} from 'zql/src/zql/ivm2/memory-source.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
 import {Node, Row, makeComparator} from 'zql/src/zql/ivm2/data.js';
-import {Database, Statement} from 'better-sqlite3';
+import type {Database, Statement} from 'better-sqlite3';
 import {compile, format, sql} from '../internal/sql.js';
-import {Stream} from 'zql/src/zql/ivm2/stream.js';
-import {SQLQuery} from '@databases/sql';
+import type {Stream} from 'zql/src/zql/ivm2/stream.js';
+import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
 
@@ -84,7 +84,7 @@ export class TableSource implements Input {
     this.#primaryKeys = primaryKeys;
   }
 
-  schema(): Schema {
+  get schema(): Schema {
     return this.#schema;
   }
 
@@ -93,6 +93,10 @@ export class TableSource implements Input {
   }
 
   hydrate(req: HydrateRequest, output: Output) {
+    return this.fetch(req, output);
+  }
+
+  dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
     return this.fetch(req, output);
   }
 
