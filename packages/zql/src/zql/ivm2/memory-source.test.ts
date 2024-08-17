@@ -147,7 +147,7 @@ function asChanges(sc: SourceChange[]) {
     type: c.type,
     node: {
       row: c.row,
-      relationships: new Map(),
+      relationships: {},
     },
   }));
 }

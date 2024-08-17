@@ -18,10 +18,9 @@ import type {Change} from './change.js';
  * not a flat table. This makes it a lot more useful for UI programming and
  * avoids duplicating tons of data like left join would.
  *
- * The Nodes output from Join have a new relationship added to them, which
- * is has the name #relationshipName. The value of the relationship is a
- * stream of child nodes which are the corresponding values from the child
- * source.
+ * The Nodes output from Join have a new relationship added to them, which has
+ * the name #relationshipName. The value of the relationship is a stream of
+ * child nodes which are the corresponding values from the child source.
  */
 export class Join implements Operator {
   readonly #parent: Input;
@@ -70,7 +69,7 @@ export class Join implements Operator {
   }
 
   *dehydrate(req: HydrateRequest, _: Output): Stream<Node> {
-    for (const parentNode of this.#parent.hydrate(req, this)) {
+    for (const parentNode of this.#parent.dehydrate(req, this)) {
       yield this.#processParentNode(parentNode, 'dehydrate');
     }
   }
@@ -79,29 +78,26 @@ export class Join implements Operator {
     assert(this.#output, 'Output not set');
 
     if (input === this.#parent) {
-      let result: Change;
       if (change.type === 'add') {
-        result = {
-          type: 'add',
-          node: this.#processParentNode(change.node, 'hydrate'),
-        };
-      } else if (change.type === 'remove') {
-        result = {
-          type: 'remove',
-          node: this.#processParentNode(change.node, 'dehydrate'),
-        };
-      } else {
-        assert(change.type === 'child');
-        result = {
-          type: 'child',
-          row: change.row,
-          child: {
-            relationshipName: this.#relationshipName,
-            change,
+        this.#output.push(
+          {
+            type: 'add',
+            node: this.#processParentNode(change.node, 'hydrate'),
           },
-        };
+          this,
+        );
+      } else if (change.type === 'remove') {
+        this.#output.push(
+          {
+            type: 'remove',
+            node: this.#processParentNode(change.node, 'dehydrate'),
+          },
+          this,
+        );
+      } else {
+        change.type satisfies 'child';
+        this.#output.push(change, this);
       }
-      this.#output.push(result, this);
       return;
     }
 
