@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {TableSource} from './table-source.js';
-import {CaptureOutput} from 'zql/src/zql/ivm2/capture-output.js';
+import {Snarf} from 'zql/src/zql/ivm2/snarf.js';
 import {makeComparator} from 'zql/src/zql/ivm2/data.js';
 
 describe('fetching from a table source', () => {
@@ -184,7 +184,7 @@ describe('fetching from a table source', () => {
       sourceArgs[2],
       ['id'],
     );
-    const out = new CaptureOutput();
+    const out = new Snarf();
     const rows = [...source.fetch(fetchArgs, out)];
     expect(rows.map(r => r.row)).toEqual(expectedRows);
   });
