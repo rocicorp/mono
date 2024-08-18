@@ -174,10 +174,10 @@ export class Join implements Operator {
 
     return {
       ...parentNode,
-      relationships: new Map([
+      relationships: {
         ...parentNode.relationships,
-        [this.#relationshipName, childStream],
-      ]),
+        [this.#relationshipName]: childStream,
+      },
     };
   }
 }

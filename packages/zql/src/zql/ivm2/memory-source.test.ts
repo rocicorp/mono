@@ -16,7 +16,7 @@ test('schema', () => {
 function asNodes(rows: Row[]): Node[] {
   return rows.map(row => ({
     row,
-    relationships: new Map(),
+    relationships: {},
   }));
 }
 

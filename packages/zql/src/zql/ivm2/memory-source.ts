@@ -137,7 +137,7 @@ export class MemorySource implements Input {
         const cmp = compare(overlay.change.row, change.row);
         if (overlay.change.type === 'add') {
           if (cmp < 0) {
-            yield {row: overlay.change.row, relationships: new Map()};
+            yield {row: overlay.change.row, relationships: {}};
             overlay = undefined;
           }
         } else if (overlay.change.type === 'remove') {
@@ -153,7 +153,7 @@ export class MemorySource implements Input {
     }
 
     if (overlay && overlay.change.type === 'add') {
-      yield {row: overlay.change.row, relationships: new Map()};
+      yield {row: overlay.change.row, relationships: {}};
     }
   }
 
@@ -166,7 +166,7 @@ export class MemorySource implements Input {
     // Process all items in the iterator, applying overlay as needed.
     for (const row of it) {
       if (!constraint || valuesEqual(row[constraint.key], constraint.value)) {
-        yield {row, relationships: new Map()};
+        yield {row, relationships: {}};
       }
     }
   }
@@ -190,7 +190,7 @@ export class MemorySource implements Input {
           type: change.type,
           node: {
             row: change.row,
-            relationships: new Map(),
+            relationships: {},
           },
         },
         this,

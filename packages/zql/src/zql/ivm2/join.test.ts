@@ -3,7 +3,7 @@ import {Join} from './join.js';
 import {MemorySource, SourceChange} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snarf, expandNode} from './snarf.js';
-import type {Row} from './data.js';
+import type {Row, Node} from './data.js';
 import type {FetchRequest, HydrateRequest, Output, Source} from './operator.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
@@ -125,7 +125,7 @@ type FetchTest = {
     relationshipName: string;
   }[];
   expectedStorageCounts: Record<string, number>[];
-  expectedHydrate: unknown[];
+  expectedHydrate: Node[];
 };
 
 test('hydrate one:many', () => {
