@@ -161,7 +161,7 @@ export class TableSource implements Input {
           ...sqlAndBindings.values,
         );
         for (const row of rowIterator) {
-          yield {row, relationships: new Map()};
+          yield {row, relationships: {}};
         }
       } finally {
         this.#statementCache.return(cachedStatement);
@@ -176,7 +176,7 @@ export class TableSource implements Input {
           type: change.type,
           node: {
             row: change.row,
-            relationships: new Map(),
+            relationships: {},
           },
         },
         this,

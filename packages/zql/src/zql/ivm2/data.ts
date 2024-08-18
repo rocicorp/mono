@@ -43,7 +43,7 @@ export type Row = Record<string, Value>;
  */
 export type Node = {
   row: Row;
-  relationships: Map<string, Stream<Node>>;
+  relationships: Record<string, Stream<Node>>;
 };
 
 /**

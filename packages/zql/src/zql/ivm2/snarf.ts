@@ -17,7 +17,7 @@ export class Snarf implements Output {
   }
 }
 
-function expandChange(change: Change): unknown {
+function expandChange(change: Change): Change {
   if (change.type === 'child') {
     return {
       ...change,
@@ -33,11 +33,11 @@ function expandChange(change: Change): unknown {
   };
 }
 
-export function expandNode(node: Node): unknown {
+export function expandNode(node: Node): Node {
   return {
     ...node,
     relationships: Object.fromEntries(
-      [...node.relationships.entries()].map(([k, v]) => [
+      Object.entries(node.relationships).map(([k, v]) => [
         k,
         [...v].map(expandNode),
       ]),
