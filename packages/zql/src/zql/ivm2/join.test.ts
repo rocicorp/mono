@@ -1,12 +1,13 @@
 import {expect, test} from 'vitest';
 import {Join} from './join.js';
-import {MemorySource, SourceChange} from './memory-source.js';
+import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import {Snarf, expandNode} from './snarf.js';
+import {Snitch} from './snitch.js';
 import type {Row, Node} from './data.js';
-import type {FetchRequest, HydrateRequest, Output, Source} from './operator.js';
+import type {FetchRequest} from './operator.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
+import {Catch} from './catch.js';
 
 // Despite the name, this test runs the join through all three phases: hydrate,
 // fetch, and dehydrate.
@@ -16,26 +17,29 @@ function fetchTest(t: FetchTest) {
 
   const sources = t.sources.map(info => {
     const ordering = info.sort ?? [['id', 'asc']];
-    const source = new SpySource(new MemorySource(ordering));
+    const source = new MemorySource(ordering);
     for (const row of info.rows) {
       source.push({type: 'add', row});
     }
-    return source;
+    const snitch = new Snitch(source);
+    source.addOutput(snitch);
+    return {
+      source,
+      snitch,
+    };
   });
 
   const joins: {
     join: Join;
     storage: MemoryStorage;
-    snarf: Snarf;
   }[] = [];
-  const snarfs: Snarf[] = [];
-
   // Although we tend to think of the joins from left to right, we need to
   // build them from right to left.
   for (let i = t.joins.length - 1; i >= 0; i--) {
     const info = t.joins[i];
-    const parent = sources[i];
-    const child = i === t.joins.length - 1 ? sources[i + 1] : joins[i + 1].join;
+    const parent = sources[i].snitch;
+    const child =
+      i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
     const storage = new MemoryStorage();
     const join = new Join(
       parent,
@@ -45,32 +49,29 @@ function fetchTest(t: FetchTest) {
       info.childKey,
       info.relationshipName,
     );
-    const snarf = new Snarf();
-    join.setOutput(snarf);
+    parent.setOutput(join);
+    child.setOutput(join);
     joins[i] = {
       join,
       storage,
-      snarf,
     };
   }
 
   for (const fetchType of ['hydrate', 'fetch', 'dehydrate'] as const) {
     for (const s of sources) {
-      s.calls.length = 0;
-    }
-    for (const sn of snarfs) {
-      sn.changes.length = 0;
+      s.snitch.reset();
     }
 
     // By convention we put them in the test bottom up. Why? Easier to think
     // left-to-right.
     const finalJoin = joins[0];
-    const r = [...finalJoin.join[fetchType]({}, finalJoin.snarf)].map(
-      expandNode,
-    );
+    const c = new Catch(finalJoin.join);
+    finalJoin.join.setOutput(c);
+
+    const r = c[fetchType]();
 
     expect(r).toEqual(t.expectedHydrate);
-    expect(finalJoin.snarf.changes).toEqual([]);
+    expect(c.pushes).toEqual([]);
 
     for (const [i, j] of joins.entries()) {
       const {storage} = j;
@@ -108,7 +109,7 @@ function fetchTest(t: FetchTest) {
           seen.add(req.constraint?.value);
         }
       }
-      expect(s.calls).toEqual(expectedCalls);
+      expect(s.snitch.messages).toEqual(expectedCalls);
     }
   }
 }
@@ -983,46 +984,5 @@ test('hydrate one:many:one', () => {
     ],
   });
 });
-
-// Using a custom spy instead of vi.spyOn because I want to see the order of
-// calls to various methods.
-class SpySource implements Source {
-  #spied: MemorySource;
-
-  readonly calls: unknown[];
-
-  constructor(spied: MemorySource) {
-    this.#spied = spied;
-    this.calls = [];
-  }
-
-  get schema() {
-    return this.#spied.schema;
-  }
-
-  addOutput(output: Output) {
-    this.#spied.addOutput(output);
-  }
-
-  hydrate(req: HydrateRequest, output: Output) {
-    this.calls.push(['hydrate', req]);
-    return this.#spied.hydrate(req, output);
-  }
-
-  fetch(req: HydrateRequest, output: Output) {
-    this.calls.push(['fetch', req]);
-    return this.#spied.fetch(req, output);
-  }
-
-  dehydrate(req: HydrateRequest, output: Output) {
-    this.calls.push(['dehydrate', req]);
-    return this.#spied.dehydrate(req, output);
-  }
-
-  push(change: SourceChange) {
-    this.calls.push(change);
-    this.#spied.push(change);
-  }
-}
 
 // TODO: push

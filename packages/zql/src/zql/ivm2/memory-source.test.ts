@@ -2,9 +2,9 @@ import {expect, test} from 'vitest';
 import {compareRowsTest} from './data.test.js';
 import type {Ordering} from '../ast2/ast.js';
 import {MemorySource, SourceChange} from './memory-source.js';
-import {Snarf} from './snarf.js';
-import type {Row, Node, Value} from './data.js';
+import type {Row, Value, Node} from './data.js';
 import type {FetchRequest, Input, Output, Start} from './operator.js';
+import {Catch, expandNode} from './catch.js';
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
@@ -13,7 +13,7 @@ test('schema', () => {
   });
 });
 
-function asNodes(rows: Row[]): Node[] {
+function asNodes(rows: Row[]) {
   return rows.map(row => ({
     row,
     relationships: {},
@@ -24,22 +24,23 @@ test('simple-pull', () => {
   // works the same for hydrate and fetch.
   for (const m of ['hydrate', 'fetch'] as const) {
     const ms = new MemorySource([['a', 'asc']]);
-    const out = new Snarf();
-    expect([...ms[m]({}, out)]).toEqual([]);
+    const out = new Catch(ms);
+    ms.addOutput(out);
+    expect(out[m]()).toEqual([]);
 
     ms.push({type: 'add', row: {a: 3}});
-    expect([...ms[m]({}, out)]).toEqual(asNodes([{a: 3}]));
+    expect(out[m]()).toEqual(asNodes([{a: 3}]));
 
     ms.push({type: 'add', row: {a: 1}});
     ms.push({type: 'add', row: {a: 2}});
-    expect([...ms[m]({}, out)]).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
+    expect(out[m]()).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
 
     ms.push({type: 'remove', row: {a: 1}});
-    expect([...ms[m]({}, out)]).toEqual(asNodes([{a: 2}, {a: 3}]));
+    expect(out[m]()).toEqual(asNodes([{a: 2}, {a: 3}]));
 
     ms.push({type: 'remove', row: {a: 2}});
     ms.push({type: 'remove', row: {a: 3}});
-    expect([...ms[m]({}, out)]).toEqual([]);
+    expect(out[m]()).toEqual([]);
   }
 });
 
@@ -47,47 +48,41 @@ test('pull-with-constraint', () => {
   // works the same for hydrate and fetch.
   for (const m of ['hydrate', 'fetch'] as const) {
     const ms = new MemorySource([['a', 'asc']]);
-    const out = new Snarf();
+    const out = new Catch(ms);
     ms.addOutput(out);
     ms.push({type: 'add', row: {a: 3, b: true, c: 1}});
     ms.push({type: 'add', row: {a: 1, b: true, c: 2}});
     ms.push({type: 'add', row: {a: 2, b: false, c: null}});
 
-    expect([...ms[m]({constraint: {key: 'b', value: true}}, out)]).toEqual(
+    expect(out[m]({constraint: {key: 'b', value: true}})).toEqual(
       asNodes([
         {a: 1, b: true, c: 2},
         {a: 3, b: true, c: 1},
       ]),
     );
 
-    expect([...ms[m]({constraint: {key: 'b', value: false}}, out)]).toEqual(
+    expect(out[m]({constraint: {key: 'b', value: false}})).toEqual(
       asNodes([{a: 2, b: false, c: null}]),
     );
 
-    expect([...ms[m]({constraint: {key: 'c', value: 1}}, out)]).toEqual(
+    expect(out[m]({constraint: {key: 'c', value: 1}})).toEqual(
       asNodes([{a: 3, b: true, c: 1}]),
     );
 
-    expect([...ms[m]({constraint: {key: 'c', value: 0}}, out)]).toEqual(
-      asNodes([]),
-    );
+    expect(out[m]({constraint: {key: 'c', value: 0}})).toEqual(asNodes([]));
 
     // Constraints are used to implement joins and so should use join
     // semantics for equality. null !== null.
-    expect([...ms[m]({constraint: {key: 'c', value: null}}, out)]).toEqual(
-      asNodes([]),
-    );
-    expect([...ms[m]({constraint: {key: 'c', value: undefined}}, out)]).toEqual(
+    expect(out[m]({constraint: {key: 'c', value: null}})).toEqual(asNodes([]));
+    expect(out[m]({constraint: {key: 'c', value: undefined}})).toEqual(
       asNodes([]),
     );
 
     // Not really a feature, but because of loose typing of joins and how we
     // accept undefined we can't really tell when constraining on a field that
     // doesn't exist.
-    expect([...ms[m]({constraint: {key: 'd', value: null}}, out)]).toEqual(
-      asNodes([]),
-    );
-    expect([...ms[m]({constraint: {key: 'd', value: undefined}}, out)]).toEqual(
+    expect(out[m]({constraint: {key: 'd', value: null}})).toEqual(asNodes([]));
+    expect(out[m]({constraint: {key: 'd', value: undefined}})).toEqual(
       asNodes([]),
     );
   }
@@ -95,49 +90,47 @@ test('pull-with-constraint', () => {
 
 test('fetch-start', () => {
   const ms = new MemorySource([['a', 'asc']]);
-  const out = new Snarf();
+  const out = new Catch(ms);
   ms.addOutput(out);
 
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
     asNodes([]),
   );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toEqual(
-    asNodes([]),
-  );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(asNodes([]));
+  expect(out.fetch({start: {row: {a: 2}, basis: 'after'}})).toEqual(
     asNodes([]),
   );
 
   ms.push({type: 'add', row: {a: 2}});
   ms.push({type: 'add', row: {a: 3}});
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
     asNodes([{a: 2}, {a: 3}]),
   );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}, {a: 3}]),
   );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'after'}})).toEqual(
     asNodes([{a: 3}]),
   );
 
-  expect([...ms.fetch({start: {row: {a: 3}, basis: 'before'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 3}, basis: 'before'}})).toEqual(
     asNodes([{a: 2}, {a: 3}]),
   );
-  expect([...ms.fetch({start: {row: {a: 3}, basis: 'at'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 3}, basis: 'at'}})).toEqual(
     asNodes([{a: 3}]),
   );
-  expect([...ms.fetch({start: {row: {a: 3}, basis: 'after'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 3}, basis: 'after'}})).toEqual(
     asNodes([]),
   );
 
   ms.push({type: 'remove', row: {a: 3}});
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'before'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
     asNodes([{a: 2}]),
   );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'at'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}]),
   );
-  expect([...ms.fetch({start: {row: {a: 2}, basis: 'after'}}, out)]).toEqual(
+  expect(out.fetch({start: {row: {a: 2}, basis: 'after'}})).toEqual(
     asNodes([]),
   );
 });
@@ -154,16 +147,16 @@ function asChanges(sc: SourceChange[]) {
 
 test('push', () => {
   const ms = new MemorySource([['a', 'asc']]);
-  const out = new Snarf();
+  const out = new Catch(ms);
   ms.addOutput(out);
 
-  expect(out.changes).toEqual([]);
+  expect(out.pushes).toEqual([]);
 
   ms.push({type: 'add', row: {a: 2}});
-  expect(out.changes).toEqual(asChanges([{type: 'add', row: {a: 2}}]));
+  expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 2}}]));
 
   ms.push({type: 'add', row: {a: 1}});
-  expect(out.changes).toEqual(
+  expect(out.pushes).toEqual(
     asChanges([
       {type: 'add', row: {a: 2}},
       {type: 'add', row: {a: 1}},
@@ -172,7 +165,7 @@ test('push', () => {
 
   ms.push({type: 'remove', row: {a: 1}});
   ms.push({type: 'remove', row: {a: 2}});
-  expect(out.changes).toEqual(
+  expect(out.pushes).toEqual(
     asChanges([
       {type: 'add', row: {a: 2}},
       {type: 'add', row: {a: 1}},
@@ -184,15 +177,15 @@ test('push', () => {
   // Remove row that isn't there
   out.reset();
   expect(() => ms.push({type: 'remove', row: {a: 1}})).toThrow('Row not found');
-  expect(out.changes).toEqual(asChanges([]));
+  expect(out.pushes).toEqual(asChanges([]));
 
   // Add row twice
   ms.push({type: 'add', row: {a: 1}});
-  expect(out.changes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
+  expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
   expect(() => ms.push({type: 'add', row: {a: 1}})).toThrow(
     'Row already exists',
   );
-  expect(out.changes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
+  expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
 });
 
 class OverlaySpy implements Output {
@@ -206,7 +199,7 @@ class OverlaySpy implements Output {
   }
 
   fetch(req: FetchRequest) {
-    this.fetches.push([...this.#input.fetch(req, this)]);
+    this.fetches.push([...this.#input.fetch(req, this)].map(expandNode));
   }
 
   push() {
