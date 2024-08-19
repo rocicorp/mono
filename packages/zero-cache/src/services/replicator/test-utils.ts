@@ -4,7 +4,7 @@ import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {randInt} from 'shared/src/rand.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {RowValue} from 'zero-cache/src/types/row-key.js';
+import {RowKey, RowValue} from 'zero-cache/src/types/row-key.js';
 import {MessageProcessor} from './incremental-sync.js';
 
 const NOOP = () => {};
@@ -62,6 +62,32 @@ export class ReplicationMessages<
     row: RowValue,
   ): Pgoutput.MessageInsert {
     return {tag: 'insert', relation: this.#relationOrFail(table), new: row};
+  }
+
+  update<TableName extends string & keyof TablesAndKeys>(
+    table: TableName,
+    row: RowValue,
+    oldKey?: RowKey,
+  ): Pgoutput.MessageUpdate {
+    return {
+      tag: 'update',
+      relation: this.#relationOrFail(table),
+      new: row,
+      key: oldKey ?? null,
+      old: null,
+    };
+  }
+
+  delete<TableName extends string & keyof TablesAndKeys>(
+    table: TableName,
+    key: RowKey,
+  ): Pgoutput.MessageDelete {
+    return {
+      tag: 'delete',
+      relation: this.#relationOrFail(table),
+      key,
+      old: null,
+    };
   }
 
   commit(lsn: string): Pgoutput.MessageCommit {
