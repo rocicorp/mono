@@ -36,11 +36,12 @@ import {
  * mutations on these snapshots.
  *
  * Example:
- * 1. ViewSyncer hydrates at `t1` and keeps snapshot_a at that version of the
- *    database.
- * 2. Replicator applies a transaction to the database and notifies subscribers.
- * 3. ViewSyncer takes `snapshot_b` at `t2`, and queries its `ChangeLog` for
- *    changes since `t1`.
+ * 1. ViewSyncer takes `snapshot_a` at version `t1` of the database and
+ *    hydrates its pipeline(s).
+ * 2. Replicator applies a new transaction to the database and notifies
+ *    subscribers.
+ * 3. ViewSyncer takes `snapshot_b` at `t2`, and queries the `ChangeLog` at
+ *    that snapshot for changes since `t1`.
  * 4. ViewSyncer applies those changes to `snapshot_a` for IVM, but does not
  *    commit them. (Recall that the Replicator is the sole writer to the db, so
  *    the ViewSyncer never commits any writes.)
@@ -107,13 +108,14 @@ export class Snapshotter {
    *
    * Note that this sequence is not chronological; rather, the sequence is
    * ordered by `<table, row-key>`, such that a row can appear at most once
-   * in the sequence. This results in coalescing multiple changes to a row
-   * and bounds the amount of work needed to catch up; however, as a corollary
-   * a consistent database state is only guaranteed when the sequence has been
-   * fully consumed.
+   * in the common case, or twice if its table is `TRUNCATE`'d and a new value
+   * is subsequently `INSERT`'ed. This results in dropping most intermediate
+   * changes to a row and bounds the amount of work needed to catch up;
+   * however, as a consequence, a consistent database state is only guaranteed
+   * when the sequence has been fully consumed.
    *
-   * Note that the Change generation relies on the state of the underlying
-   * snapshots, and because the database connection for the previous snapshot
+   * Note that Change generation relies on the state of the underlying
+   * database connections, and because the connection for the previous snapshot
    * is reused to produce the next snapshot, the diff object is only valid
    * until the next call to `advance()`.
    *
@@ -124,10 +126,11 @@ export class Snapshotter {
    * deleted rows can be re-inserted, but this will also behave correctly if
    * the changes are applied).
    *
-   * Once the changes have been applied, however, a _subsequent_ iteration will
-   * not produce the correct results. In order to preform multiple
-   * change-applying iterations, the caller must create a save point
-   * before each iteration, and rollback to the save point after the iteration.
+   * Once the changes have been applied, however, a _subsequent_ iteration
+   * will not produce the correct results. In order to perform multiple
+   * change-applying iterations, the caller must (1) create a save point
+   * on `prev` before each iteration, and (2) rollback to the save point after
+   * the iteration.
    */
   advance(): SnapshotDiff {
     const next = this.#prev
