@@ -25,6 +25,7 @@ describe('view-syncer/snapshotter', () => {
       `
         CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
+        CREATE TABLE comments(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
 
         INSERT INTO issues(id, owner, desc, _0_version) VALUES(1, 10, 'foo', '00');
         INSERT INTO issues(id, owner, desc, _0_version) VALUES(2, 10, 'bar', '00');
@@ -62,9 +63,27 @@ describe('view-syncer/snapshotter', () => {
     });
   });
 
-  const messages = new ReplicationMessages({issues: 'id', users: 'id'});
+  test('empty diff', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
 
-  test('snapshot diffs', () => {
+    expect(version).toBe('00');
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('00');
+    expect(diff.changes).toBe(0);
+
+    expect([...diff]).toEqual([]);
+  });
+
+  const messages = new ReplicationMessages({
+    issues: 'id',
+    users: 'id',
+    comments: 'id',
+  });
+
+  test('concurrent snapshot diffs', () => {
     const s1 = new Snapshotter(lc, dbFile.path);
     const s2 = new Snapshotter(lc, dbFile.path);
 
@@ -110,9 +129,6 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
-          "rowKey": {
-            "id": 1,
-          },
           "table": "issues",
         },
         {
@@ -122,9 +138,6 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bar",
             "id": 2,
             "owner": 10,
-          },
-          "rowKey": {
-            "id": 2,
           },
           "table": "issues",
         },
@@ -136,9 +149,6 @@ describe('view-syncer/snapshotter', () => {
             "id": 3,
             "owner": 20,
           },
-          "rowKey": {
-            "id": 3,
-          },
           "table": "issues",
         },
         {
@@ -149,9 +159,6 @@ describe('view-syncer/snapshotter', () => {
             "owner": 20,
           },
           "prevValue": null,
-          "rowKey": {
-            "id": 4,
-          },
           "table": "issues",
         },
         {
@@ -162,9 +169,6 @@ describe('view-syncer/snapshotter', () => {
             "owner": 10,
           },
           "prevValue": null,
-          "rowKey": {
-            "id": 5,
-          },
           "table": "issues",
         },
       ]
@@ -186,9 +190,6 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
-          "rowKey": {
-            "id": 1,
-          },
           "table": "issues",
         },
         {
@@ -198,9 +199,6 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bar",
             "id": 2,
             "owner": 10,
-          },
-          "rowKey": {
-            "id": 2,
           },
           "table": "issues",
         },
@@ -212,9 +210,6 @@ describe('view-syncer/snapshotter', () => {
             "id": 3,
             "owner": 20,
           },
-          "rowKey": {
-            "id": 3,
-          },
           "table": "issues",
         },
         {
@@ -225,9 +220,6 @@ describe('view-syncer/snapshotter', () => {
             "owner": 20,
           },
           "prevValue": null,
-          "rowKey": {
-            "id": 4,
-          },
           "table": "issues",
         },
         {
@@ -238,9 +230,6 @@ describe('view-syncer/snapshotter', () => {
             "owner": 10,
           },
           "prevValue": null,
-          "rowKey": {
-            "id": 5,
-          },
           "table": "issues",
         },
       ]
@@ -271,9 +260,6 @@ describe('view-syncer/snapshotter', () => {
             "owner": 10,
           },
           "prevValue": null,
-          "rowKey": {
-            "id": 2,
-          },
           "table": "issues",
         },
         {
@@ -284,9 +270,6 @@ describe('view-syncer/snapshotter', () => {
             "id": 4,
             "owner": 20,
           },
-          "rowKey": {
-            "id": 4,
-          },
           "table": "issues",
         },
         {
@@ -296,9 +279,6 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bard",
             "id": 5,
             "owner": 10,
-          },
-          "rowKey": {
-            "id": 5,
           },
           "table": "issues",
         },
@@ -336,9 +316,6 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
-          "rowKey": {
-            "id": 1,
-          },
           "table": "issues",
         },
         {
@@ -348,9 +325,6 @@ describe('view-syncer/snapshotter', () => {
             "desc": "baz",
             "id": 3,
             "owner": 20,
-          },
-          "rowKey": {
-            "id": 3,
           },
           "table": "issues",
         },
@@ -367,26 +341,211 @@ describe('view-syncer/snapshotter', () => {
             "id": 2,
             "owner": 10,
           },
-          "rowKey": {
+          "table": "issues",
+        },
+        {
+          "nextValue": null,
+          "prevValue": null,
+          "table": "issues",
+        },
+        {
+          "nextValue": null,
+          "prevValue": null,
+          "table": "issues",
+        },
+      ]
+    `);
+  });
+
+  test('noop-truncate diff', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '0/1', messages.truncate('comments'));
+    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(1);
+
+    expect([...diff]).toEqual([]);
+  });
+
+  test('truncate diff', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '0/1', messages.truncate('users'));
+    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(1);
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "handle": "alice",
+            "id": 10,
+          },
+          "table": "users",
+        },
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "handle": "bob",
+            "id": 20,
+          },
+          "table": "users",
+        },
+      ]
+    `);
+  });
+
+  test('consecutive truncates', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '0/1', messages.truncate('issues'));
+    replicator.processMessage(lc, '0/1', messages.truncate('users'));
+    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(2);
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "desc": "foo",
+            "id": 1,
+            "owner": 10,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "desc": "bar",
             "id": 2,
+            "owner": 10,
           },
           "table": "issues",
         },
         {
           "nextValue": null,
-          "prevValue": null,
-          "rowKey": {
-            "id": 4,
+          "prevValue": {
+            "_0_version": "00",
+            "desc": "baz",
+            "id": 3,
+            "owner": 20,
           },
           "table": "issues",
         },
         {
           "nextValue": null,
-          "prevValue": null,
-          "rowKey": {
-            "id": 5,
+          "prevValue": {
+            "_0_version": "00",
+            "handle": "alice",
+            "id": 10,
           },
-          "table": "issues",
+          "table": "users",
+        },
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "handle": "bob",
+            "id": 20,
+          },
+          "table": "users",
+        },
+      ]
+    `);
+  });
+
+  test('truncate followed by inserts into same table', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '0/1', messages.truncate('users'));
+    replicator.processMessage(
+      lc,
+      '0/1',
+      messages.insert('users', {id: 20, handle: 'robert'}),
+    );
+    replicator.processMessage(
+      lc,
+      '0/1',
+      messages.insert('users', {id: 30, handle: 'candice'}),
+    );
+    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(3);
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "handle": "alice",
+            "id": 10,
+          },
+          "table": "users",
+        },
+        {
+          "nextValue": null,
+          "prevValue": {
+            "_0_version": "00",
+            "handle": "bob",
+            "id": 20,
+          },
+          "table": "users",
+        },
+        {
+          "nextValue": {
+            "_0_version": "01",
+            "handle": "robert",
+            "id": 20,
+          },
+          "prevValue": null,
+          "table": "users",
+        },
+        {
+          "nextValue": {
+            "_0_version": "01",
+            "handle": "candice",
+            "id": 30,
+          },
+          "prevValue": null,
+          "table": "users",
         },
       ]
     `);

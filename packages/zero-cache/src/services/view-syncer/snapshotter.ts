@@ -4,7 +4,7 @@ import {ident} from 'pg-format';
 import {assert} from 'shared/src/asserts.js';
 import * as v from 'shared/src/valita.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
+import {jsonObjectSchema, JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {
   normalizedKeyOrder,
   RowKey,
@@ -141,7 +141,6 @@ export class Snapshotter {
 
 export type Change = {
   readonly table: string;
-  readonly rowKey: Readonly<RowKey>;
   readonly prevValue: Readonly<RowValue> | null;
   readonly nextValue: Readonly<RowValue> | null;
 };
@@ -162,6 +161,18 @@ export interface SnapshotDiff extends Iterable<Change> {
     readonly db: StatementRunner;
     readonly version: string;
   };
+
+  /**
+   * The number of ChangeLog entries between the snapshots. Note that this
+   * may not necessarily equal the number of `Change` objects that the iteration
+   * will produce, as `TRUNCATE` entries are counted as a single log entry which
+   * may be expanded into many changes (i.e. row deletes).
+   *
+   * TODO: Determine if it is worth changing the definition to count the
+   *       truncated rows. This would make diff computation more expensive
+   *       (requiring the count to be aggregated by operation type), which
+   *       may not be worth it for a presumable rare operation.
+   */
   readonly changes: number;
 }
 
@@ -173,8 +184,9 @@ class Snapshot {
 
     const db = new StatementRunner(conn);
     db.beginConcurrent();
-    // Note: The read is necessary to acquire the read lock (which results in the logical creation
-    // of the snapshot). Calling `BEGIN CONCURRENT` on its own does not acquire the read lock.
+    // Note: The subsequent read is necessary to acquire the read lock
+    // (which results in the logical creation of the snapshot). Calling
+    // `BEGIN CONCURRENT` alone does not result in acquiring the read lock.
     const {stateVersion} = getReplicationVersions(db);
     return new Snapshot(db, stateVersion);
   }
@@ -200,7 +212,7 @@ class Snapshot {
       'SELECT * FROM "_zero.ChangeLog" WHERE stateVersion > ?',
     );
     return {
-      iter: cached.statement.iterate(prevVersion),
+      changes: cached.statement.iterate(prevVersion),
       cleanup: () => this.db.statementCache.return(cached),
     };
   }
@@ -212,6 +224,14 @@ class Snapshot {
       `SELECT * FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
       Object.values(key),
     );
+  }
+
+  getRows(table: string) {
+    const cached = this.db.statementCache.get(`SELECT * FROM ${ident(table)}`);
+    return {
+      rows: cached.statement.iterate(),
+      cleanup: () => this.db.statementCache.return(cached),
+    };
   }
 
   resetToHead(): Snapshot {
@@ -234,34 +254,44 @@ class Diff implements SnapshotDiff {
   }
 
   [Symbol.iterator](): Iterator<Change> {
-    const {iter, cleanup} = this.curr.changesSince(this.prev.version);
+    const {changes, cleanup} = this.curr.changesSince(this.prev.version);
+    const truncates = new TruncateTracker(this.prev);
+
+    const next = () => {
+      // Exhaust the TRUNCATE iteration before continuing the Change sequence.
+      const truncatedRow = truncates.next();
+      if (truncatedRow) {
+        return truncatedRow;
+      }
+
+      const {value, done} = changes.next();
+      if (done) {
+        cleanup();
+        return {value, done: true};
+      }
+
+      const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+      if (op === TRUNCATE_OP) {
+        truncates.startTruncate(table);
+        return next();
+      }
+
+      assert(rowKey !== null);
+      const prevValue = truncates.getRowIfNotTruncated(table, rowKey) ?? null;
+      const nextValue = op === SET_OP ? this.curr.getRow(table, rowKey) : null;
+
+      // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
+      this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
+
+      return {value: {table, prevValue, nextValue} satisfies Change};
+    };
+
     return {
-      next: () => {
-        const {value, done} = iter.next();
-        if (done) {
-          cleanup();
-          return {value, done: true};
-        }
-
-        const {table, rowKey, op, stateVersion} = v.parse(value, schema);
-        if (op === TRUNCATE_OP) {
-          // TODO: Implement TRUNCATE
-          throw new Error('implement me');
-        }
-        assert(rowKey !== null); // Only null for TRUNCATE.
-        const prevValue = this.prev.getRow(table, rowKey) ?? null;
-        const nextValue =
-          op === SET_OP ? this.curr.getRow(table, rowKey) : null;
-
-        // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-        this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
-
-        return {value: {table, rowKey, prevValue, nextValue} satisfies Change};
-      },
+      next,
 
       return: (value: unknown) => {
         try {
-          return iter.return?.(value) ?? {value, done: true};
+          return changes.return?.(value) ?? {value, done: true};
         } finally {
           cleanup();
         }
@@ -269,7 +299,7 @@ class Diff implements SnapshotDiff {
 
       throw: (err: unknown) => {
         try {
-          return iter.throw?.(err) ?? {value: undefined, done: true};
+          return changes.throw?.(err) ?? {value: undefined, done: true};
         } finally {
           cleanup();
         }
@@ -303,6 +333,66 @@ class Diff implements SnapshotDiff {
         'Diff is no longer valid. curr db has advanced.',
       );
     }
+  }
+}
+
+/**
+ * `TRUNCATE` changes are handled by:
+ * 1. Iterating over all of the rows in the `prev` Snapshot and returning
+ *    corresponding `DELETE` row operations for them (i.e. `nextValue: null`).
+ * 2. Tracking the fact that a table has been truncated (i.e. all row-deletes
+ *    have been returned) so that subsequent lookups of prevValues (e.g. for
+ *    inserts after the truncate) correctly return `null`.
+ */
+class TruncateTracker {
+  readonly #prev: Snapshot;
+  readonly #truncated = new Set<string>();
+
+  #truncating: {
+    table: string;
+    rows: Iterator<unknown>;
+    cleanup: () => void;
+  } | null = null;
+
+  constructor(prev: Snapshot) {
+    this.#prev = prev;
+  }
+
+  startTruncate(table: string) {
+    assert(this.#truncating === null);
+    const {rows, cleanup} = this.#prev.getRows(table);
+    this.#truncating = {table, rows, cleanup};
+  }
+
+  next(): IteratorResult<Change> | null {
+    if (this.#truncating === null) {
+      return null;
+    }
+    const {table} = this.#truncating;
+    const {value, done} = this.#truncating.rows.next();
+    if (done) {
+      this.#truncating.cleanup();
+      this.#truncating = null;
+      this.#truncated.add(table);
+      return null;
+    }
+    const prevValue = v.parse(value, jsonObjectSchema);
+
+    // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
+    if ((prevValue[ROW_VERSION] ?? '~') > this.#prev.version) {
+      throw new InvalidDiffError(
+        `Diff is no longer valid. prev db has advanced past ${
+          this.#prev.version
+        }.`,
+      );
+    }
+
+    return {value: {table, prevValue, nextValue: null} satisfies Change};
+  }
+
+  getRowIfNotTruncated(table: string, rowKey: RowKey) {
+    // If the row has been returned in a TRUNCATE iteration, its prevValue is henceforth null.
+    return this.#truncated.has(table) ? null : this.#prev.getRow(table, rowKey);
   }
 }
 
