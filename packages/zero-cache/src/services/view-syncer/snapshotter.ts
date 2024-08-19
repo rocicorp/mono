@@ -254,8 +254,13 @@ class Diff implements SnapshotDiff {
   }
 
   [Symbol.iterator](): Iterator<Change> {
-    const {changes, cleanup} = this.curr.changesSince(this.prev.version);
+    const {changes, cleanup: done} = this.curr.changesSince(this.prev.version);
     const truncates = new TruncateTracker(this.prev);
+
+    const cleanup = () => {
+      done();
+      truncates.done();
+    };
 
     const next = () => {
       // Exhaust the TRUNCATE iteration before continuing the Change sequence.
@@ -291,7 +296,10 @@ class Diff implements SnapshotDiff {
 
       return: (value: unknown) => {
         try {
-          return changes.return?.(value) ?? {value, done: true};
+          // Allow open iterators to clean up their state.
+          truncates.iterReturn(value);
+          changes.return?.(value);
+          return {value, done: true};
         } finally {
           cleanup();
         }
@@ -299,7 +307,10 @@ class Diff implements SnapshotDiff {
 
       throw: (err: unknown) => {
         try {
-          return changes.throw?.(err) ?? {value: undefined, done: true};
+          // Allow open iterators to clean up their state.
+          truncates.iterThrow(err);
+          changes.throw?.(err);
+          return {value: undefined, done: true};
         } finally {
           cleanup();
         }
@@ -393,6 +404,18 @@ class TruncateTracker {
   getRowIfNotTruncated(table: string, rowKey: RowKey) {
     // If the row has been returned in a TRUNCATE iteration, its prevValue is henceforth null.
     return this.#truncated.has(table) ? null : this.#prev.getRow(table, rowKey);
+  }
+
+  iterReturn(value: unknown) {
+    this.#truncating?.rows.return?.(value);
+  }
+
+  iterThrow(err: unknown) {
+    this.#truncating?.rows.throw?.(err);
+  }
+
+  done() {
+    this.#truncating?.cleanup();
   }
 }
 
