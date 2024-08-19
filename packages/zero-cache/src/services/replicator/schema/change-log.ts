@@ -1,6 +1,11 @@
 import type {Database} from 'better-sqlite3';
+import * as v from 'shared/src/valita.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {stringify} from 'zero-cache/src/types/bigint-json.js';
+import {
+  jsonObjectSchema,
+  parse,
+  stringify,
+} from 'zero-cache/src/types/bigint-json.js';
 import type {LexiVersion} from 'zero-cache/src/types/lexi-version.js';
 import {normalizedKeyOrder, type RowKey} from 'zero-cache/src/types/row-key.js';
 
@@ -41,6 +46,20 @@ const CREATE_CHANGELOG_SCHEMA =
     UNIQUE("table", "rowKey")
   )
   `;
+
+export const changeLogEntrySchema = v
+  .object({
+    stateVersion: v.string(),
+    table: v.string(),
+    rowKey: v.string().nullable(),
+    op: v.union(v.literal(SET_OP), v.literal(DEL_OP), v.literal(TRUNCATE_OP)),
+  })
+  .map(val => ({
+    ...val,
+    rowKey: val.rowKey ? v.parse(parse(val.rowKey), jsonObjectSchema) : null,
+  }));
+
+export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
 
 export function initChangeLog(db: Database) {
   db.exec(CREATE_CHANGELOG_SCHEMA);
