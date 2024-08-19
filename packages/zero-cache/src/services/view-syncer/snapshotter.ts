@@ -262,37 +262,45 @@ class Diff implements SnapshotDiff {
       truncates.done();
     };
 
-    const next = () => {
-      // Exhaust the TRUNCATE iteration before continuing the Change sequence.
-      const truncatedRow = truncates.next();
-      if (truncatedRow) {
-        return truncatedRow;
-      }
-
-      const {value, done} = changes.next();
-      if (done) {
-        cleanup();
-        return {value, done: true};
-      }
-
-      const {table, rowKey, op, stateVersion} = v.parse(value, schema);
-      if (op === TRUNCATE_OP) {
-        truncates.startTruncate(table);
-        return next();
-      }
-
-      assert(rowKey !== null);
-      const prevValue = truncates.getRowIfNotTruncated(table, rowKey) ?? null;
-      const nextValue = op === SET_OP ? this.curr.getRow(table, rowKey) : null;
-
-      // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-      this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
-
-      return {value: {table, prevValue, nextValue} satisfies Change};
-    };
-
     return {
-      next,
+      next: () => {
+        for (;;) {
+          // Exhaust the TRUNCATE iteration before continuing the Change sequence.
+          const truncatedRow = truncates.next();
+          if (truncatedRow) {
+            return truncatedRow;
+          }
+
+          const {value, done} = changes.next();
+          if (done) {
+            cleanup();
+            return {value, done: true};
+          }
+
+          const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+          if (op === TRUNCATE_OP) {
+            truncates.startTruncate(table);
+            continue; // loop around to pull rows from the TruncateTracker.
+          }
+
+          assert(rowKey !== null);
+          const prevValue =
+            truncates.getRowIfNotTruncated(table, rowKey) ?? null;
+          const nextValue =
+            op === SET_OP ? this.curr.getRow(table, rowKey) : null;
+
+          // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
+          this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
+
+          if (prevValue === null && nextValue === null) {
+            // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
+            // TODO: Consider doing this for deep-equal values.
+            continue;
+          }
+
+          return {value: {table, prevValue, nextValue} satisfies Change};
+        }
+      },
 
       return: (value: unknown) => {
         try {
