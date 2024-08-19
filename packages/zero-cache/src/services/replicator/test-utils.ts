@@ -90,6 +90,19 @@ export class ReplicationMessages<
     };
   }
 
+  truncate<TableName extends string & keyof TablesAndKeys>(
+    table: TableName,
+    ...moreTables: TableName[]
+  ): Pgoutput.MessageTruncate {
+    const tables = [table, ...moreTables];
+    return {
+      tag: 'truncate',
+      relations: tables.map(t => this.#relationOrFail(t)),
+      cascade: false,
+      restartIdentity: false,
+    };
+  }
+
   commit(lsn: string): Pgoutput.MessageCommit {
     return {
       tag: 'commit',
