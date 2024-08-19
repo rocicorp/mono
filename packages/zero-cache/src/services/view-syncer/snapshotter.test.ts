@@ -343,16 +343,6 @@ describe('view-syncer/snapshotter', () => {
           },
           "table": "issues",
         },
-        {
-          "nextValue": null,
-          "prevValue": null,
-          "table": "issues",
-        },
-        {
-          "nextValue": null,
-          "prevValue": null,
-          "table": "issues",
-        },
       ]
     `);
   });
