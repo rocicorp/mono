@@ -1,5 +1,4 @@
-import type {Database} from 'better-sqlite3';
-import type {Statement} from 'better-sqlite3';
+import type {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 
 export type CachedStatement = {
@@ -121,10 +120,10 @@ export class StatementCache {
    * Handles `get` and `return` for the caller by invoking them before
    * and after the callback.
    */
-  use(sql: string, cb: (statement: CachedStatement) => void) {
+  use<T>(sql: string, cb: (statement: CachedStatement) => T) {
     const statement = this.get(sql);
     try {
-      cb(statement);
+      return cb(statement);
     } finally {
       this.return(statement);
     }
