@@ -254,8 +254,13 @@ class Diff implements SnapshotDiff {
   }
 
   [Symbol.iterator](): Iterator<Change> {
-    const {changes, cleanup} = this.curr.changesSince(this.prev.version);
+    const {changes, cleanup: done} = this.curr.changesSince(this.prev.version);
     const truncates = new TruncateTracker(this.prev);
+
+    const cleanup = () => {
+      done();
+      truncates.done();
+    };
 
     const next = () => {
       // Exhaust the TRUNCATE iteration before continuing the Change sequence.
@@ -393,6 +398,10 @@ class TruncateTracker {
   getRowIfNotTruncated(table: string, rowKey: RowKey) {
     // If the row has been returned in a TRUNCATE iteration, its prevValue is henceforth null.
     return this.#truncated.has(table) ? null : this.#prev.getRow(table, rowKey);
+  }
+
+  done() {
+    this.#truncating?.cleanup();
   }
 }
 

@@ -25,7 +25,7 @@ describe('view-syncer/snapshotter', () => {
       `
         CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
-        CREATE TABLE comments(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
+        CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, _0_version TEXT NOT NULL);
 
         INSERT INTO issues(id, owner, desc, _0_version) VALUES(1, 10, 'foo', '00');
         INSERT INTO issues(id, owner, desc, _0_version) VALUES(2, 10, 'bar', '00');
@@ -549,5 +549,81 @@ describe('view-syncer/snapshotter', () => {
         },
       ]
     `);
+  });
+
+  test('changelog iterator cleaned up on aborted iteration', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '0/1', messages.insert('comments', {id: 1}));
+    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+
+    const diff = s.advance();
+    let currStmts = 0;
+
+    const abortError = new Error('aborted iteration');
+    try {
+      for (const change of diff) {
+        expect(change).toEqual({
+          nextValue: {
+            ['_0_version']: '01',
+            desc: null,
+            id: 1,
+          },
+          prevValue: null,
+          table: 'comments',
+        });
+        currStmts = diff.curr.db.statementCache.size;
+        throw abortError;
+      }
+    } catch (e) {
+      expect(e).toBe(abortError);
+    }
+
+    // The Statement for the ChangeLog iteration should have been returned to the cache.
+    expect(diff.curr.db.statementCache.size).toBe(currStmts + 1);
+  });
+
+  test('truncate iterator cleaned up on aborted iteration', () => {
+    const s = new Snapshotter(lc, dbFile.path);
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '0/1', messages.truncate('users'));
+    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+
+    const diff = s.advance();
+    let currStmts = 0;
+    let prevStmts = 0;
+
+    const abortError = new Error('aborted iteration');
+    try {
+      for (const change of diff) {
+        expect(change).toEqual({
+          nextValue: null,
+          prevValue: {
+            ['_0_version']: '00',
+            handle: 'alice',
+            id: 10,
+          },
+          table: 'users',
+        });
+        currStmts = diff.curr.db.statementCache.size;
+        prevStmts = diff.prev.db.statementCache.size;
+        throw abortError;
+      }
+    } catch (e) {
+      expect(e).toBe(abortError);
+    }
+
+    // The Statements for both the ChangeLog (curr) and truncated-row (prev)
+    // iterations should have been returned to the cache.
+    expect(diff.curr.db.statementCache.size).toBe(currStmts + 1);
+    expect(diff.prev.db.statementCache.size).toBe(prevStmts + 1);
   });
 });
