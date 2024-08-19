@@ -16,12 +16,15 @@ import {assert} from 'shared/src/asserts.js';
  */
 export class Snitch implements Operator {
   readonly #input: Input;
-  readonly messages: unknown[] = [];
+  readonly #name: string;
+  readonly log: SnitchMessage[];
 
   #output: Output | undefined;
 
-  constructor(input: Input) {
+  constructor(input: Input, name: string, log: SnitchMessage[] = []) {
     this.#input = input;
+    this.#name = name;
+    this.log = log;
   }
 
   setOutput(output: Output) {
@@ -34,7 +37,7 @@ export class Snitch implements Operator {
 
   hydrate(req: HydrateRequest, _source: Output) {
     assert(this.#output);
-    this.messages.push(['hydrate', req]);
+    this.log.push([this.#name, 'hydrate', req]);
     // Currently we don't record the `source` or the return value of hydrate().
     // If that was ever needed, we'd need to clone the stream.
     return this.#input.hydrate(req, this);
@@ -42,22 +45,19 @@ export class Snitch implements Operator {
 
   fetch(req: FetchRequest, _source: Output) {
     assert(this.#output);
-    this.messages.push(['fetch', req]);
+    this.log.push([this.#name, 'fetch', req]);
     return this.#input.fetch(req, this);
   }
 
   dehydrate(req: HydrateRequest, _source: Output) {
     assert(this.#output);
-    this.messages.push(['dehydrate', req]);
+    this.log.push([this.#name, 'dehydrate', req]);
     return this.#input.dehydrate(req, this);
   }
 
   push(change: Change, _: Input) {
-    this.messages.push(['push', toChangeRecord(change)]);
-  }
-
-  reset() {
-    this.messages.length = 0;
+    this.log.push([this.#name, 'push', toChangeRecord(change)]);
+    this.#output?.push(change, this);
   }
 }
 
@@ -75,16 +75,16 @@ function toChangeRecord(change: Change): ChangeRecord {
   };
 }
 
-export type Messages =
+export type SnitchMessage =
   | HydrateMessage
   | FetchMessage
   | DehydrateMessage
   | PushMessage;
 
-export type HydrateMessage = ['hydrate', HydrateRequest];
-export type FetchMessage = ['fetch', FetchRequest];
-export type DehydrateMessage = ['dehydrate', HydrateRequest];
-export type PushMessage = ['push', ChangeRecord];
+export type HydrateMessage = [string, 'hydrate', HydrateRequest];
+export type FetchMessage = [string, 'fetch', FetchRequest];
+export type DehydrateMessage = [string, 'dehydrate', HydrateRequest];
+export type PushMessage = [string, 'push', ChangeRecord];
 
 export type ChangeRecord =
   | AddChangeRecord
