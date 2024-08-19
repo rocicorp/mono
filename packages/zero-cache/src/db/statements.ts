@@ -1,41 +1,27 @@
-import {Database, RunResult, Statement} from 'better-sqlite3';
-
-type Stmt = Statement<unknown[]>;
+import {StatementCache} from '@rocicorp/zqlite/src/internal/statement-cache.js';
+import {Database, RunResult} from 'better-sqlite3';
 
 /**
- * A Statement-caching wrapper for statements that are only executed
- * synchronously and thus do not have re-entrancy issues.
- *
- * Specifically, this class does not provide an API for iteration of
- * prepared statements, since that would be subject to re-entrancy.
+ * A stateless wrapper around a {@link StatementCache} that facilitates single-line
+ * `printf()` style invocations of cached prepared statement operations.
  */
 export class StatementRunner {
   readonly db: Database;
-  readonly #cache: Map<string, Stmt> = new Map();
+  readonly statementCache: StatementCache;
 
   constructor(db: Database) {
     this.db = db;
-  }
-
-  get size() {
-    return this.#cache.size;
-  }
-
-  #prepare(source: string): Stmt {
-    let stmt = this.#cache.get(source);
-    if (!stmt) {
-      stmt = this.db.prepare(source);
-      this.#cache.set(source, stmt);
-    }
-    return stmt;
+    this.statementCache = new StatementCache(db);
   }
 
   /**
    * Prepares a statement (or retrieves it from the cache) and runs it
    * with the given args.
    */
-  run(staticSource: string, ...args: unknown[]): RunResult {
-    return this.#prepare(staticSource).run(...args);
+  run(sql: string, ...args: unknown[]): RunResult {
+    return this.statementCache.use(sql, cached =>
+      cached.statement.run(...args),
+    );
   }
 
   /**
@@ -43,8 +29,10 @@ export class StatementRunner {
    * the first result.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  get(staticSource: string, ...args: unknown[]): any {
-    return this.#prepare(staticSource).get(...args);
+  get(sql: string, ...args: unknown[]): any {
+    return this.statementCache.use(sql, cached =>
+      cached.statement.get(...args),
+    );
   }
 
   /**
@@ -52,8 +40,10 @@ export class StatementRunner {
    * all of its results.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  all(staticSource: string, ...args: unknown[]): any[] {
-    return this.#prepare(staticSource).all(...args);
+  all(sql: string, ...args: unknown[]): any[] {
+    return this.statementCache.use(sql, cached =>
+      cached.statement.all(...args),
+    );
   }
 
   // Syntactic sugar methods
