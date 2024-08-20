@@ -3,7 +3,6 @@ import type {
   Output,
   FetchRequest,
   HydrateRequest,
-  Schema,
   Constraint,
 } from './operator.js';
 import {makeComparator, valuesEqual, type Node, type Row} from './data.js';
@@ -12,6 +11,7 @@ import {assert} from 'shared/src/asserts.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Stream} from './stream.js';
 import {Source, SourceChange} from './source.js';
+import {Schema} from './schema.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -35,6 +35,8 @@ export class MemorySource implements Source {
   constructor(order: Ordering) {
     this.#schema = {
       compareRows: makeComparator(order),
+      columns: {},
+      primaryKey: [],
     };
     this.#data = new BTree(undefined, this.#schema.compareRows);
   }

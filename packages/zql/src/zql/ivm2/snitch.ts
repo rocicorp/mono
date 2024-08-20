@@ -4,11 +4,11 @@ import type {
   Input,
   Operator,
   Output,
-  Schema,
 } from './operator.js';
 import type {Change} from './change.js';
 import type {Row} from './data.js';
 import {assert} from 'shared/src/asserts.js';
+import {Schema} from './schema.js';
 
 /**
  * Snitch is an Operator that records all messages it receives. Useful for

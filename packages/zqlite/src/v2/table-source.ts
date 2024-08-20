@@ -1,6 +1,5 @@
 import type {
   Output,
-  Schema,
   FetchRequest,
   HydrateRequest,
   Constraint,
@@ -14,6 +13,7 @@ import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
+import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
 
 /**
  * A source that is backed by a SQLite table.
@@ -40,31 +40,32 @@ export class TableSource implements Source {
   readonly #table: string;
   readonly #schema: Schema;
   readonly #statementCache: StatementCache;
-  readonly #primaryKeys: readonly string[];
 
   constructor(
     db: Database,
     tableName: string,
-    columns: readonly string[],
+    columns: Record<string, ValueType>,
     order: Ordering,
-    primaryKeys: readonly string[],
+    primaryKey: readonly string[],
   ) {
-    this.#order = makeOrderUnique(order, primaryKeys);
+    this.#order = makeOrderUnique(order, primaryKey);
     this.#schema = {
       compareRows: makeComparator(this.#order),
+      columns,
+      primaryKey,
     };
     this.#table = tableName;
     this.#statementCache = new StatementCache(db);
 
-    assertPrimaryKeysMatch(db, tableName, primaryKeys);
+    assertPrimaryKeysMatch(db, tableName, primaryKey);
 
     this.#insertStmt = db.prepare(
       compile(
         sql`INSERT INTO ${sql.ident(tableName)} (${sql.join(
-          columns.map(c => sql.ident(c)),
+          Object.keys(columns).map(c => sql.ident(c)),
           sql`, `,
         )}) VALUES (${sql.__dangerous__rawValue(
-          new Array(columns.length).fill('?').join(', '),
+          new Array(Object.keys(columns).length).fill('?').join(', '),
         )})`,
       ),
     );
@@ -72,15 +73,13 @@ export class TableSource implements Source {
     this.#deleteStmt = db.prepare(
       compile(
         sql`DELETE FROM ${sql.ident(tableName)} WHERE ${sql.join(
-          primaryKeys.map(k => sql`${sql.ident(k)} = ?`),
+          primaryKey.map(k => sql`${sql.ident(k)} = ?`),
           sql` AND `,
         )}`,
       ),
     );
 
     this.#changesStmt = db.prepare(`SELECT changes() as changes`);
-
-    this.#primaryKeys = primaryKeys;
   }
 
   get schema(): Schema {
@@ -185,7 +184,7 @@ export class TableSource implements Source {
       this.#insertStmt.run(...Object.values(change.row));
     } else {
       change.type satisfies 'remove';
-      const values = this.#primaryKeys.map(k => change.row[k]);
+      const values = this.#schema.primaryKey.map(k => change.row[k]);
       this.#deleteStmt.run(...values);
       const {changes} = this.#changesStmt.get();
       assert(changes === 1, 'Delete should affect exactly one row');
