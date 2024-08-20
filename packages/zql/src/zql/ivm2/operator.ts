@@ -5,6 +5,7 @@ import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
 import type {Node, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
+import type {Schema} from './schema.js';
 
 /**
  * Input to an operator. Typically another Operator but can also be a Source.
@@ -29,16 +30,6 @@ export interface Input {
   // propagate the dehydrate message through the graph.
   dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
 }
-
-// Information about the nodes output by an operator.
-export type Schema = {
-  // if ever needed ... none of current operators need.
-  // idKeys: string[];
-  // columns: Record<string, ValueType>;
-  // relationships: Record<string, Schema>;
-  // Compares two rows in the output of an operator.
-  compareRows: (r1: Row, r2: Row) => number;
-};
 
 export type HydrateRequest = {
   constraint?: Constraint | undefined;

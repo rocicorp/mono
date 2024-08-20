@@ -6,11 +6,11 @@ import type {
   Input,
   Operator,
   Output,
-  Schema,
   Storage,
 } from './operator.js';
 import type {Stream} from './stream.js';
 import type {Change} from './change.js';
+import type {Schema} from './schema.js';
 
 /**
  * The Join operator joins the output from two upstream inputs. Zero's join
