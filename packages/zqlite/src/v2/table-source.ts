@@ -5,15 +5,13 @@ import type {
   Constraint,
 } from 'zql/src/zql/ivm2/operator.js';
 import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
-import type {Overlay} from 'zql/src/zql/ivm2/memory-source.js';
-import type {Ordering} from 'zql/src/zql/ast2/ast.js';
 import {
-  Node,
-  Row,
-  Value,
-  makeComparator,
-  valuesEqual,
-} from 'zql/src/zql/ivm2/data.js';
+  generateWithStart,
+  generateWithOverlay,
+  type Overlay,
+} from 'zql/src/zql/ivm2/memory-source.js';
+import type {Ordering} from 'zql/src/zql/ast2/ast.js';
+import {Node, Row, Value, makeComparator} from 'zql/src/zql/ivm2/data.js';
 import {Database, Statement} from 'better-sqlite3';
 import {compile, format, sql} from '../internal/sql.js';
 import type {Stream} from 'zql/src/zql/ivm2/stream.js';
@@ -21,7 +19,6 @@ import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
-import {LookaheadIterator} from 'zql/src/zql/ivm2/lookahead-iterator.js';
 
 /**
  * A source that is backed by a SQLite table.
@@ -154,7 +151,7 @@ export class TableSource implements Source {
       newReq = {...req, start: undefined};
       this.#statementCache.use(sqlAndBindings.text, cachedStatement => {
         for (const beforeRow of cachedStatement.statement.iterate(
-          ...sqlAndBindings.values.map(v => remapValueDown(v)),
+          ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         )) {
           newReq.start = {row: beforeRow, basis: 'at'};
           break;
@@ -180,7 +177,7 @@ export class TableSource implements Source {
       const cachedStatement = this.#statementCache.get(sqlAndBindings.text);
       try {
         const rowIterator = cachedStatement.statement.iterate(
-          ...sqlAndBindings.values.map(v => remapValueDown(v)),
+          ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         );
 
         let overlay: Overlay | undefined;
@@ -192,97 +189,20 @@ export class TableSource implements Source {
           }
         }
 
-        yield* this.#startWithOverlay(
-          this.#yieldWithOverlay(
+        yield* generateWithStart(
+          generateWithOverlay(
             req.start?.row,
-            rowIterator,
+            mapFromSQLiteTypes(this.#schema.columns, rowIterator),
             req.constraint,
             overlay,
+            this.#schema.compareRows,
           ),
           beforeRequest ?? req,
+          this.#schema.compareRows,
         );
       } finally {
         this.#statementCache.return(cachedStatement);
       }
-    }
-  }
-
-  *#startWithOverlay(it: Iterator<Node>, req: FetchRequest): Stream<Node> {
-    // Figure out the start row.
-    const cursor = new LookaheadIterator(it, 2);
-
-    let started = req.start === undefined ? true : false;
-    for (const [curr, next] of cursor) {
-      if (!started) {
-        assert(req.start);
-        if (req.start.basis === 'before') {
-          if (
-            next === undefined ||
-            this.#schema.compareRows(next.row, req.start.row) >= 0
-          ) {
-            started = true;
-          }
-        } else if (req.start.basis === 'at') {
-          if (this.#schema.compareRows(curr.row, req.start.row) >= 0) {
-            started = true;
-          }
-        } else if (req.start.basis === 'after') {
-          if (this.#schema.compareRows(curr.row, req.start.row) > 0) {
-            started = true;
-          }
-        }
-      }
-      if (started) {
-        yield curr;
-      }
-    }
-  }
-
-  *#yieldWithOverlay(
-    startAt: Row | undefined,
-    rowIterator: IterableIterator<Row>,
-    constraint: Constraint | undefined,
-    overlay: Overlay | undefined,
-  ) {
-    const compare = this.#schema.compareRows;
-
-    if (startAt && overlay && compare(overlay.change.row, startAt) < 0) {
-      overlay = undefined;
-    }
-
-    if (overlay) {
-      if (constraint) {
-        const {key, value} = constraint;
-        const {change} = overlay;
-        if (!valuesEqual(change.row[key], value)) {
-          overlay = undefined;
-        }
-      }
-    }
-
-    for (const row of rowIterator) {
-      remapValuesUp(this.#schema.columns, row);
-      if (overlay) {
-        const cmp = compare(overlay.change.row, row);
-        if (overlay.change.type === 'add') {
-          if (cmp < 0) {
-            yield {row: overlay.change.row, relationships: {}};
-            overlay = undefined;
-          }
-        } else if (overlay.change.type === 'remove') {
-          if (cmp < 0) {
-            overlay = undefined;
-          } else if (cmp === 0) {
-            overlay = undefined;
-            continue;
-          }
-        }
-      }
-      yield {row, relationships: {}};
-    }
-
-    if (overlay && overlay.change.type === 'add') {
-      yield {row: overlay.change.row, relationships: {}};
     }
   }
 
@@ -315,12 +235,12 @@ export class TableSource implements Source {
     this.#overlay = undefined;
     if (change.type === 'add') {
       this.#insertStmt.run(
-        ...remapValuesDown(Object.keys(this.schema.columns), change.row),
+        ...toSQLiteTypes(Object.keys(this.schema.columns), change.row),
       );
     } else {
       change.type satisfies 'remove';
       this.#deleteStmt.run(
-        ...remapValuesDown(this.schema.primaryKey, change.row),
+        ...toSQLiteTypes(this.schema.primaryKey, change.row),
       );
     }
   }
@@ -469,31 +389,38 @@ function makeOrderUnique(
   return uniqueOrder;
 }
 
-function remapValuesDown(
+function toSQLiteTypes(
   columns: readonly string[],
   row: Row,
 ): readonly unknown[] {
-  if (columns === undefined) {
-    return Object.values(row).map(v => remapValueDown(v));
-  }
-  return columns.map(col => remapValueDown(row[col]));
+  return columns.map(col => toSQLiteType(row[col]));
 }
 
 function pickColumns(columns: readonly string[], row: Row): readonly Value[] {
   return columns.map(col => row[col]);
 }
 
-function remapValueDown(v: unknown): unknown {
+function toSQLiteType(v: unknown): unknown {
   return v === false ? 0 : v === true ? 1 : v ?? null;
 }
 
-function remapValuesUp(valueTypes: Record<string, ValueType>, row: Row) {
-  for (const key in row) {
-    row[key] = remapValueUp(valueTypes[key], row[key]);
+function* mapFromSQLiteTypes(
+  valueTypes: Record<string, ValueType>,
+  rowIterator: IterableIterator<Row>,
+): IterableIterator<Row> {
+  for (const row of rowIterator) {
+    fromSQLiteTypes(valueTypes, row);
+    yield row;
   }
 }
 
-function remapValueUp(valueType: ValueType, v: Value): Value {
+function fromSQLiteTypes(valueTypes: Record<string, ValueType>, row: Row) {
+  for (const key in row) {
+    row[key] = fromSQLiteType(valueTypes[key], row[key]);
+  }
+}
+
+function fromSQLiteType(valueType: ValueType, v: Value): Value {
   switch (valueType) {
     case 'boolean':
       return v === 0 ? false : v === 1 ? true : v;
