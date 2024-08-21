@@ -14,6 +14,9 @@ const mockQuery = {
   related() {
     return this;
   },
+  where() {
+    return this;
+  },
 };
 
 type TestSchema = {
@@ -184,16 +187,38 @@ describe('types', () => {
     const query2 = query
       .select('s')
       .sub(query => query.related('test').select('s'));
-
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        entity: {s: string};
-        subselects: {
-          test: readonly {
-            entity: {s: string};
-            subselects: never;
+        readonly entity: {
+          readonly s: string;
+        };
+        readonly subselects: {
+          readonly test: readonly {
+            readonly entity: {
+              readonly s: string;
+            };
+            readonly subselects: never;
           }[];
         };
+      }[]
+    >();
+  });
+
+  test('where', () => {
+    const query = mockQuery as unknown as EntityQuery<TestSchema>;
+
+    const query2 = query.where('s', '=', 'foo');
+    expectTypeOf(query2.run()).toMatchTypeOf<readonly []>();
+
+    // @ts-expect-error - cannot use a field that does not exist
+    query.where('doesNotExist', '=', 'foo');
+    // @ts-expect-error - value and field types must match
+    query.where('b', '=', 'false');
+
+    expectTypeOf(query.select('b').where('b', '=', true).run()).toMatchTypeOf<
+      readonly {
+        entity: {b: boolean};
+        subselects: never;
       }[]
     >();
   });
