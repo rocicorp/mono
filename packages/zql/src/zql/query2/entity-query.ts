@@ -101,6 +101,11 @@ type SchemaValueToTSType<T extends SchemaValue> =
       : never)
   | (T extends {optional: true} ? undefined : never);
 
+type GetFieldType<
+  TSchema extends EntitySchema,
+  TField extends keyof TSchema['fields'],
+> = SchemaValueToTSType<TSchema['fields'][TField]>;
+
 /**
  * A query can have:
  * 1. Selections and
@@ -209,6 +214,8 @@ type PullSchemaForRelationship<
   ? TSchema
   : never;
 
+type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
+
 export interface EntityQuery<
   TSchema extends EntitySchema,
   TReturn extends QueryResultRow[] = [],
@@ -232,6 +239,12 @@ export interface EntityQuery<
     [],
     TRelationship & string
   >;
+
+  where<TSelector extends Selector<TSchema>>(
+    field: TSelector,
+    op: Operator,
+    value: GetFieldType<TSchema, TSelector>,
+  ): EntityQuery<TSchema, TReturn, TAs>;
 
   run(): MakeHumanReadable<TReturn>;
 }
