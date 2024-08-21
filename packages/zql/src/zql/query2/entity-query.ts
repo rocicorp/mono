@@ -185,6 +185,30 @@ type QueryResultRow = {
   subselects: Record<string, QueryResultRow[]> | undefined;
 };
 
+/**
+ * Calling `related` on `EntityQuery` returns a new EntityQuery
+ * since `related` moves through the relationship. This function takes
+ * 1. A schema
+ * 2. A relationship name
+ * and returns the schema of the entity at the other end of the
+ * relationship.
+ */
+type PullSchemaForRelationship<
+  TEntitySchema extends EntitySchema,
+  TRelationship extends keyof TEntitySchema['relationships'],
+> = TEntitySchema['relationships'][TRelationship] extends FieldRelationship<
+  EntitySchema,
+  infer TSchema
+>
+  ? TSchema
+  : TEntitySchema['relationships'][TRelationship] extends JunctionRelationship<
+      EntitySchema,
+      EntitySchema,
+      infer TSchema
+    >
+  ? TSchema
+  : never;
+
 export interface EntityQuery<
   TSchema extends EntitySchema,
   TReturn extends QueryResultRow[] = [],
@@ -200,6 +224,14 @@ export interface EntityQuery<
   ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
 
   as<TAs2 extends string>(as: TAs2): EntityQuery<TSchema, TReturn, TAs2>;
+
+  related<TRelationship extends keyof TSchema['relationships']>(
+    relationship: TRelationship,
+  ): EntityQuery<
+    PullSchemaForRelationship<TSchema, TRelationship>,
+    [],
+    TRelationship & string
+  >;
 
   run(): MakeHumanReadable<TReturn>;
 }

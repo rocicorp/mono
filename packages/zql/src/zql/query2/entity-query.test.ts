@@ -11,6 +11,9 @@ const mockQuery = {
   sub() {
     return this;
   },
+  related() {
+    return this;
+  },
 };
 
 type TestSchema = {
@@ -18,6 +21,54 @@ type TestSchema = {
     s: {type: 'string'};
     b: {type: 'boolean'};
     n: {type: 'number'};
+  };
+};
+
+type TestSchemaWithRelationships = {
+  fields: {
+    s: {type: 'string'};
+    a: {type: 'string'};
+    b: {type: 'boolean'};
+  };
+  relationships: {
+    test: {
+      source: 's';
+      dest: {
+        field: 's';
+        schema: TestSchema;
+      };
+    };
+  };
+};
+
+type TestSchemaWithMoreRelationships = {
+  fields: {
+    s: {type: 'string'};
+    a: {type: 'string'};
+    b: {type: 'boolean'};
+  };
+  relationships: {
+    testWithRelationships: {
+      source: 'a';
+      dest: {
+        field: 'a';
+        schema: TestSchemaWithRelationships;
+      };
+    };
+    test: {
+      source: 's';
+      dest: {
+        field: 's';
+        schema: TestSchema;
+      };
+    };
+    self: {
+      source: 's';
+      dest: {
+        field: 's';
+        schema: TestSchemaWithMoreRelationships;
+      };
+    };
   };
 };
 
@@ -86,6 +137,61 @@ describe('types', () => {
           second: readonly {
             entity: {readonly s: string; readonly b: boolean};
             readonly subselects: never;
+          }[];
+        };
+      }[]
+    >();
+  });
+
+  test('related', () => {
+    const query =
+      mockQuery as unknown as EntityQuery<TestSchemaWithRelationships>;
+
+    // @ts-expect-error - cannot select a field that does not exist. We moved to `related` and `a` does not exist there
+    query.related('test').select('a');
+
+    // @ts-expect-error - cannot traverse a relationship that does not exist
+    query.related('doesNotExist');
+
+    const query2 = query.related('test').select('s');
+
+    expectTypeOf(query2.run()).toMatchTypeOf<
+      readonly {
+        entity: {s: string};
+        subselects: never;
+      }[]
+    >();
+
+    // The semantics of `related` currently implemented is that we move
+    // to the related entity without adding levels of nesting.
+    const query3 =
+      mockQuery as unknown as EntityQuery<TestSchemaWithMoreRelationships>;
+    const t = query3
+      .related('self')
+      .related('testWithRelationships')
+      .related('test')
+      .select('n')
+      .run();
+    expectTypeOf(t).toMatchTypeOf<
+      readonly {entity: {n: number}; subselects: never}[]
+    >();
+  });
+
+  test('related in subquery position', () => {
+    const query =
+      mockQuery as unknown as EntityQuery<TestSchemaWithRelationships>;
+
+    const query2 = query
+      .select('s')
+      .sub(query => query.related('test').select('s'));
+
+    expectTypeOf(query2.run()).toMatchTypeOf<
+      readonly {
+        entity: {s: string};
+        subselects: {
+          test: readonly {
+            entity: {s: string};
+            subselects: never;
           }[];
         };
       }[]
