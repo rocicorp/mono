@@ -127,7 +127,7 @@ export class Join implements Operator {
     }
   }
 
-  #processParentNode(parentNode: Node, mode: ProcessParentMode) {
+  #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
     const parentKeyValue = parentNode.row[this.#parentKey];
 
     // This storage key tracks how many times we've seen each unique value for

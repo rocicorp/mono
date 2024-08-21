@@ -25,6 +25,8 @@ export interface Input {
   // Dehydrate the operator. This is called when `output` will no longer
   // need the data returned by hydrate(). The receiving operator should
   // clean up any resources it has allocated.
+  // Returns the same thing as fetch(). This is to allow callers to properly
+  // propagate the dehydrate message through the graph.
   dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
 }
 
