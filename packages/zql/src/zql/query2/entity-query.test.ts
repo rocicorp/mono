@@ -1,5 +1,5 @@
 import {describe, expectTypeOf, test} from 'vitest';
-import {EntityQuery} from './entity-query.js';
+import {EntityQuery, EntitySchema} from './entity-query.js';
 
 const mockQuery = {
   select() {
@@ -92,3 +92,82 @@ describe('types', () => {
     >();
   });
 });
+
+describe('schema structure', () => {
+  test('dag', () => {
+    const commentSchema = {
+      fields: {
+        id: {type: 'string'},
+        issueId: {type: 'string'},
+        text: {type: 'string'},
+      },
+    } as const;
+
+    const issueSchema = {
+      fields: {
+        id: {type: 'string'},
+        title: {type: 'string'},
+      },
+      relationships: {
+        comments: {
+          source: 'id',
+          dest: {
+            field: 'issueId',
+            schema: commentSchema,
+          },
+        },
+      },
+    } as const;
+
+    takeSchema(issueSchema);
+  });
+
+  test('cycle', () => {
+    const commentSchema = {
+      fields: {
+        id: {type: 'string'},
+        issueId: {type: 'string'},
+        text: {type: 'string'},
+      },
+      relationships: {
+        issue: {
+          source: 'issueId',
+          dest: {
+            field: 'id',
+            schema: () => issueSchema,
+          },
+        },
+      },
+    } as const;
+
+    const issueSchema = {
+      fields: {
+        id: {type: 'string'},
+        title: {type: 'string'},
+        parentId: {type: 'string', optional: true},
+      },
+      relationships: {
+        comments: {
+          source: 'id',
+          dest: {
+            field: 'issueId',
+            schema: commentSchema,
+          },
+        },
+        parent: {
+          source: 'parentId',
+          dest: {
+            field: 'id',
+            schema: () => issueSchema,
+          },
+        },
+      },
+    } as const;
+
+    takeSchema(issueSchema);
+  });
+});
+
+function takeSchema(x: EntitySchema) {
+  return x;
+}

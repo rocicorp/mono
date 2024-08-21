@@ -1,6 +1,68 @@
 import {Row} from '../ivm2/data.js';
+import {ValueType} from '../ivm2/schema.js';
 
 type Entity = Row;
+
+/**
+ * `related` calls need to know what the available relationships are.
+ * The `schema` type encodes this information.
+ */
+export type EntitySchema = {
+  fields: {
+    [key: string]: {
+      type: ValueType;
+      optional?: boolean;
+    };
+  };
+  relationships?: {
+    [key: string]:
+      | FieldRelationship<EntitySchema, EntitySchema>
+      | JunctionRelationship<EntitySchema, EntitySchema, EntitySchema>;
+  };
+};
+
+/**
+ * A schema might have a relationship to itself.
+ * Given we cannot reference a variable in the same statement we initialize
+ * the variable, we use a lazy function to get around this.
+ */
+type Lazy<T> = () => T;
+
+/**
+ * A relationship between two entities where
+ * that relationship is defined via fields on both entities.
+ */
+type FieldRelationship<
+  TSourceSchema extends EntitySchema,
+  TDestSchema extends EntitySchema,
+> = {
+  source: keyof TSourceSchema['fields'];
+  dest: {
+    field: keyof TDestSchema['fields'];
+    schema: TDestSchema | Lazy<TDestSchema>;
+  };
+};
+
+/**
+ * A relationship between two entities where
+ * that relationship is defined via a junction table.
+ */
+type JunctionRelationship<
+  TSourceSchema extends EntitySchema,
+  TJunctionSchema extends EntitySchema,
+  TDestSchema extends EntitySchema,
+> = {
+  source: keyof TSourceSchema['fields'];
+  junction: {
+    sourceField: keyof TJunctionSchema['fields'];
+    destField: keyof TJunctionSchema['fields'];
+    schema: TDestSchema | Lazy<TJunctionSchema>;
+  };
+  dest: {
+    field: keyof TDestSchema['fields'];
+    schema: TDestSchema | Lazy<TJunctionSchema>;
+  };
+};
 
 /**
  * The type that can be passed into `select()`. A selector
