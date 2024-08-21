@@ -13,13 +13,17 @@ const mockQuery = {
   },
 };
 
+type TestSchema = {
+  fields: {
+    s: {type: 'string'};
+    b: {type: 'boolean'};
+    n: {type: 'number'};
+  };
+};
+
 describe('types', () => {
   test('simple select', () => {
-    const query = mockQuery as unknown as EntityQuery<{
-      s: string;
-      b: boolean;
-      n: number;
-    }>;
+    const query = mockQuery as unknown as EntityQuery<TestSchema>;
 
     // @ts-expect-error - cannot select a field that does not exist
     query.select('foo');
@@ -49,11 +53,7 @@ describe('types', () => {
   });
 
   test('subquery', () => {
-    const query = mockQuery as unknown as EntityQuery<{
-      s: string;
-      b: boolean;
-      n: number;
-    }>;
+    const query = mockQuery as unknown as EntityQuery<TestSchema>;
 
     const query2 = query
       .select('s')
