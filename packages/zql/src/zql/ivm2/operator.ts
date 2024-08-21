@@ -79,7 +79,7 @@ export interface Operator extends Input, Output {}
  * state in.
  */
 export interface Storage {
-  set(key: Value[], value: JSONValue): void;
-  get(key: Value[], def?: JSONValue): JSONValue | undefined;
-  del(key: Value[]): void;
+  set(key: readonly Value[], value: JSONValue): void;
+  get(key: readonly Value[], def?: JSONValue): JSONValue | undefined;
+  del(key: readonly Value[]): void;
 }
