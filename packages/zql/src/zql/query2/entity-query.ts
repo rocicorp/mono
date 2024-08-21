@@ -7,12 +7,13 @@ type Entity = Row;
  * `related` calls need to know what the available relationships are.
  * The `schema` type encodes this information.
  */
+type SchemaValue = {
+  type: ValueType;
+  optional?: boolean;
+};
 export type EntitySchema = {
   fields: {
-    [key: string]: {
-      type: ValueType;
-      optional?: boolean;
-    };
+    [key: string]: SchemaValue;
   };
   relationships?: {
     [key: string]:
@@ -68,7 +69,7 @@ type JunctionRelationship<
  * The type that can be passed into `select()`. A selector
  * references a field on an entity.
  */
-type Selector<E extends Entity> = keyof E;
+type Selector<E extends EntitySchema> = keyof E['fields'];
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows
@@ -81,6 +82,24 @@ type Selector<E extends Entity> = keyof E;
 export type MakeHumanReadable<T> = {} & {
   readonly [P in keyof T]: T[P] extends string ? T[P] : MakeHumanReadable<T[P]>;
 };
+
+/**
+ * Given a schema value, return the TypeScript type.
+ *
+ * This allows us to create the correct return type for a
+ * query that has a selection.
+ */
+type SchemaValueToTSType<T extends SchemaValue> =
+  | (T extends {type: 'string'}
+      ? string
+      : T extends {type: 'number'}
+      ? number
+      : T extends {type: 'boolean'}
+      ? boolean
+      : T extends {type: 'null'}
+      ? null
+      : never)
+  | (T extends {optional: true} ? undefined : never);
 
 /**
  * A query can have:
@@ -97,11 +116,13 @@ export type MakeHumanReadable<T> = {} & {
  * `.select('foo')` would add `foo` to `TReturn`.
  */
 type AddSelections<
-  TEntity extends Entity,
-  TSelections extends Selector<TEntity>[],
+  TSchema extends EntitySchema,
+  TSelections extends Selector<TSchema>[],
   TReturn extends QueryResultRow[],
 > = {
-  entity: {[K in TSelections[number]]: TEntity[K]};
+  entity: {
+    [K in TSelections[number]]: SchemaValueToTSType<TSchema['fields'][K]>;
+  };
   subselects: TReturn[number]['subselects'];
 };
 
@@ -110,7 +131,7 @@ type AddSelections<
  * to the return type (TReturn).
  */
 type AddSubselect<
-  TSubquery extends EntityQuery<Entity>,
+  TSubquery extends EntityQuery<EntitySchema>,
   TReturn extends QueryResultRow[],
 > = {
   entity: TReturn[number]['entity'];
@@ -127,10 +148,10 @@ type AddSubselect<
  * `sub(query => query.select('foo').as('bar'))` would
  * return `{bar: {foo: string}}`.
  */
-type PickSubselect<TSubquery extends EntityQuery<Entity>> = {
-  [K in TSubquery extends EntityQuery<Entity, QueryResultRow[], infer TAs>
+type PickSubselect<TSubquery extends EntityQuery<EntitySchema>> = {
+  [K in TSubquery extends EntityQuery<EntitySchema, QueryResultRow[], infer TAs>
     ? TAs
-    : never]: TSubquery extends EntityQuery<Entity, infer TSubreturn>
+    : never]: TSubquery extends EntityQuery<EntitySchema, infer TSubreturn>
     ? TSubreturn
     : never;
 };
@@ -165,20 +186,20 @@ type QueryResultRow = {
 };
 
 export interface EntityQuery<
-  TEntity extends Entity,
+  TSchema extends EntitySchema,
   TReturn extends QueryResultRow[] = [],
   TAs extends string = string,
 > {
-  select<TFields extends Selector<TEntity>[]>(
+  select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
-  ): EntityQuery<TEntity, AddSelections<TEntity, TFields, TReturn>[], TAs>;
+  ): EntityQuery<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs>;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sub<TSub extends EntityQuery<Entity, any, any>>(
-    cb: (query: EntityQuery<TEntity>) => TSub,
-  ): EntityQuery<TEntity, AddSubselect<TSub, TReturn>[], TAs>;
+  sub<TSub extends EntityQuery<any, any, any>>(
+    cb: (query: EntityQuery<TSchema>) => TSub,
+  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
 
-  as<TAs2 extends string>(as: TAs2): EntityQuery<TEntity, TReturn, TAs2>;
+  as<TAs2 extends string>(as: TAs2): EntityQuery<TSchema, TReturn, TAs2>;
 
   run(): MakeHumanReadable<TReturn>;
 }
