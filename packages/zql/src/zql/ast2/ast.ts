@@ -11,28 +11,34 @@ export type OrderOps = '<' | '>' | '<=' | '>=';
 export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
 
 export type AST = {
-  readonly table: string;
+  readonly type: 'unmoored' | 'anchored';
+  // Table can be undefined if the query is an anchored subquery.
+  // Anchored subqueries start at a _row_ in a table rather than at a table.
+  readonly table?: string | undefined;
   readonly alias?: string | undefined;
 
   // `select` is missing given we return all columns for now.
 
-  readonly subqueries?: readonly SubQuery[] | undefined;
+  readonly subqueries?: readonly AST[] | undefined;
   readonly where?: Condition | undefined;
   readonly limit?: number | undefined;
-  readonly orderBy: Ordering;
+  readonly orderBy?: Ordering | undefined;
+  readonly related?: (FieldRelationship | JunctionRelationship)[] | undefined;
 };
 
-export type SubQuery = {
-  /**
-   * Only equality correlations are supported for now.
-   * E.g., direct foreign key relationships.
-   */
-  readonly correlation: {
-    readonly parentField: string;
-    readonly childField: string;
-    readonly op: '=';
-  };
-  readonly subquery: AST;
+type FieldRelationship = {
+  readonly sourceField: string;
+  readonly destField: string;
+  readonly destTable: string;
+};
+
+type JunctionRelationship = {
+  readonly sourceField: string;
+  readonly junctionTable: string;
+  readonly junctionSourceField: string;
+  readonly junctionDestField: string;
+  readonly destField: string;
+  readonly destTable: string;
 };
 
 /**

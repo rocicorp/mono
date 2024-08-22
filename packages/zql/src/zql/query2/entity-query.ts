@@ -1,75 +1,18 @@
+import {AST} from '../ast2/ast.js';
 import {Row} from '../ivm2/data.js';
-import {ValueType} from '../ivm2/schema.js';
+import {
+  EntitySchema,
+  PullSchemaForRelationship,
+  SchemaValue,
+} from './schema.js';
 
 type Entity = Row;
-
-/**
- * `related` calls need to know what the available relationships are.
- * The `schema` type encodes this information.
- */
-type SchemaValue = {
-  type: ValueType;
-  optional?: boolean;
-};
-export type EntitySchema = {
-  fields: {
-    [key: string]: SchemaValue;
-  };
-  relationships?: {
-    [key: string]:
-      | FieldRelationship<EntitySchema, EntitySchema>
-      | JunctionRelationship<EntitySchema, EntitySchema, EntitySchema>;
-  };
-};
-
-/**
- * A schema might have a relationship to itself.
- * Given we cannot reference a variable in the same statement we initialize
- * the variable, we use a lazy function to get around this.
- */
-type Lazy<T> = () => T;
-
-/**
- * A relationship between two entities where
- * that relationship is defined via fields on both entities.
- */
-type FieldRelationship<
-  TSourceSchema extends EntitySchema,
-  TDestSchema extends EntitySchema,
-> = {
-  source: keyof TSourceSchema['fields'];
-  dest: {
-    field: keyof TDestSchema['fields'];
-    schema: TDestSchema | Lazy<TDestSchema>;
-  };
-};
-
-/**
- * A relationship between two entities where
- * that relationship is defined via a junction table.
- */
-type JunctionRelationship<
-  TSourceSchema extends EntitySchema,
-  TJunctionSchema extends EntitySchema,
-  TDestSchema extends EntitySchema,
-> = {
-  source: keyof TSourceSchema['fields'];
-  junction: {
-    sourceField: keyof TJunctionSchema['fields'];
-    destField: keyof TJunctionSchema['fields'];
-    schema: TDestSchema | Lazy<TJunctionSchema>;
-  };
-  dest: {
-    field: keyof TDestSchema['fields'];
-    schema: TDestSchema | Lazy<TJunctionSchema>;
-  };
-};
 
 /**
  * The type that can be passed into `select()`. A selector
  * references a field on an entity.
  */
-type Selector<E extends EntitySchema> = keyof E['fields'];
+export type Selector<E extends EntitySchema> = keyof E['fields'];
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows
@@ -101,10 +44,14 @@ type SchemaValueToTSType<T extends SchemaValue> =
       : never)
   | (T extends {optional: true} ? undefined : never);
 
-type GetFieldType<
+export type GetFieldType<
   TSchema extends EntitySchema,
   TField extends keyof TSchema['fields'],
 > = SchemaValueToTSType<TSchema['fields'][TField]>;
+
+export type EntitySchemaToEntity<T extends EntitySchema> = {
+  [K in keyof T['fields']]: SchemaValueToTSType<T['fields'][K]>;
+};
 
 /**
  * A query can have:
@@ -120,7 +67,7 @@ type GetFieldType<
  *
  * `.select('foo')` would add `foo` to `TReturn`.
  */
-type AddSelections<
+export type AddSelections<
   TSchema extends EntitySchema,
   TSelections extends Selector<TSchema>[],
   TReturn extends QueryResultRow[],
@@ -135,7 +82,7 @@ type AddSelections<
  * Just like `AddSelections` but adds a subselect
  * to the return type (TReturn).
  */
-type AddSubselect<
+export type AddSubselect<
   TSubquery extends EntityQuery<EntitySchema>,
   TReturn extends QueryResultRow[],
 > = {
@@ -185,48 +132,27 @@ type PickSubselect<TSubquery extends EntityQuery<EntitySchema>> = {
  * }]
  * ```
  */
-type QueryResultRow = {
+export type QueryResultRow = {
   entity: Partial<Entity>;
   subselects: Record<string, QueryResultRow[]> | undefined;
 };
 
-/**
- * Calling `related` on `EntityQuery` returns a new EntityQuery
- * since `related` moves through the relationship. This function takes
- * 1. A schema
- * 2. A relationship name
- * and returns the schema of the entity at the other end of the
- * relationship.
- */
-type PullSchemaForRelationship<
-  TEntitySchema extends EntitySchema,
-  TRelationship extends keyof TEntitySchema['relationships'],
-> = TEntitySchema['relationships'][TRelationship] extends FieldRelationship<
-  EntitySchema,
-  infer TSchema
->
-  ? TSchema
-  : TEntitySchema['relationships'][TRelationship] extends JunctionRelationship<
-      EntitySchema,
-      EntitySchema,
-      infer TSchema
-    >
-  ? TSchema
-  : never;
-
-type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
+export type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
 
 export interface EntityQuery<
   TSchema extends EntitySchema,
   TReturn extends QueryResultRow[] = [],
   TAs extends string = string,
 > {
+  readonly ast: AST;
+
   select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
   ): EntityQuery<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs>;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sub<TSub extends EntityQuery<any, any, any>>(
+    // If we only want to allow `related` : Pick<EntityQuery<TSchema>, 'related'>
     cb: (query: EntityQuery<TSchema>) => TSub,
   ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
 
