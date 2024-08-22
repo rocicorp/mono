@@ -10,7 +10,7 @@ import {
   runSchemaMigrations,
 } from './migration.js';
 
-describe('schema/migration', () => {
+describe('db/migration', () => {
   const schemaName = '_zero';
   const debugName = 'debug-name';
 
