@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import Database from 'better-sqlite3';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
@@ -36,7 +35,6 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
-  readonly #upstream: PostgresDB;
   readonly #syncReplicaDbFile: string;
   readonly #incrementalSyncer: IncrementalSyncer;
 
@@ -44,7 +42,6 @@ export class ReplicatorService implements Replicator, Service {
     lc: LogContext,
     replicaID: string,
     upstreamUri: string,
-    upstream: PostgresDB,
     syncReplicaDbFile: string,
   ) {
     this.id = replicaID;
@@ -52,7 +49,6 @@ export class ReplicatorService implements Replicator, Service {
       .withContext('component', 'Replicator')
       .withContext('serviceID', this.id);
     this.#upstreamUri = upstreamUri;
-    this.#upstream = upstream;
     this.#syncReplicaDbFile = syncReplicaDbFile;
 
     const replica = new Database(syncReplicaDbFile);
@@ -76,7 +72,6 @@ export class ReplicatorService implements Replicator, Service {
       'replicator',
       this.id,
       this.#syncReplicaDbFile,
-      this.#upstream,
       this.#upstreamUri,
     );
 
