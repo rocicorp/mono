@@ -29,7 +29,7 @@ export interface Replicator {
    * the next message. The messages themselves contain no information; the subscriber queries
    * the SQLite replica for the latest replicated changes.
    */
-  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>>;
+  subscribe(): CancelableAsyncIterable<ReplicaVersionReady>;
 }
 
 export class ReplicatorService implements Replicator, Service {
@@ -83,7 +83,7 @@ export class ReplicatorService implements Replicator, Service {
     await this.#incrementalSyncer.run(this.#lc);
   }
 
-  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
+  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
     return this.#incrementalSyncer.subscribe();
   }
 
