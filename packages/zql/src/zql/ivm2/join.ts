@@ -52,8 +52,8 @@ export class Join implements Operator {
     this.#output = output;
   }
 
-  get schema(): Schema {
-    return this.#parent.schema;
+  getSchema(_output: Output): Schema {
+    return this.#parent.getSchema(this);
   }
 
   *hydrate(req: HydrateRequest, _: Output): Stream<Node> {

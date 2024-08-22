@@ -1,3 +1,4 @@
+import { Ordering } from '../ast2/ast.js';
 import {Row} from './data.js';
 import {Input, Output} from './operator.js';
 
@@ -11,6 +12,6 @@ export type SourceChange = {
  * Sources can have multiple outputs.
  */
 export interface Source extends Input {
-  addOutput(output: Output): void;
+  addOutput(output: Output, sort: Ordering): void;
   push(change: SourceChange): void;
 }

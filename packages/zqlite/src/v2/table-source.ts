@@ -20,6 +20,11 @@ import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
 
+type OutputRegistration = {
+  output: Output;
+  sort: Ordering;
+};
+
 /**
  * A source that is backed by a SQLite table.
  *
@@ -37,12 +42,12 @@ import {StatementCache} from '../internal/statement-cache.js';
  * See comments in relevant functions for more details.
  */
 export class TableSource implements Source {
-  readonly #outputs: Output[] = [];
+  readonly #outputs: OutputRegistration[] = [];
   readonly #insertStmt: Statement;
   readonly #deleteStmt: Statement;
-  readonly #order: Ordering;
   readonly #table: string;
-  readonly #schema: Schema;
+  readonly #columns: Record<string, ValueType>;
+  readonly #primaryKey: readonly string[];
   readonly #statementCache: StatementCache;
   readonly #checkExistsStmt: Statement;
   #overlay?: Overlay | undefined;
@@ -51,16 +56,11 @@ export class TableSource implements Source {
     db: Database,
     tableName: string,
     columns: Record<string, ValueType>,
-    order: Ordering,
     primaryKey: readonly [string, ...string[]],
   ) {
-    this.#order = makeOrderUnique(order, primaryKey);
-    this.#schema = {
-      primaryKey,
-      columns,
-      compareRows: makeComparator(this.#order),
-    };
     this.#table = tableName;
+    this.#columns = columns;
+    this.#primaryKey = primaryKey;
     this.#statementCache = new StatementCache(db);
 
     assertPrimaryKeysMatch(db, tableName, primaryKey);
@@ -95,12 +95,27 @@ export class TableSource implements Source {
     );
   }
 
-  get schema(): Schema {
-    return this.#schema;
+  #getRegistrationForOutput(output: Output): OutputRegistration {
+    const reg = this.#outputs.find(r => r.output === output);
+    assert(reg, 'Output not found');
+    return reg;
   }
 
-  addOutput(output: Output): void {
-    this.#outputs.push(output);
+  getSchema(output: Output): Schema {
+    const reg = this.#getRegistrationForOutput(output);
+    return {
+      columns: this.#columns,
+      primaryKey: this.#primaryKey,
+      compareRows: makeComparator(reg.sort),
+    };
+  }
+
+  addOutput(output: Output, sort: Ordering): void {
+    // TODO: Assert that SQLite has an index on this sort.
+    this.#outputs.push({
+      output,
+      sort: makeOrderUnique(sort, this.#primaryKey),
+    });
   }
 
   hydrate(req: HydrateRequest, output: Output) {
@@ -118,6 +133,8 @@ export class TableSource implements Source {
   ): Stream<Node> {
     const {start} = req;
     let newReq = req;
+    const reg = this.#getRegistrationForOutput(output);
+    const {sort} = reg;
 
     /**
      * Before isn't quite "before".
@@ -144,7 +161,7 @@ export class TableSource implements Source {
               inclusive: req.start.basis === 'at',
             }
           : undefined,
-        this.#order,
+        sort,
       );
       const sqlAndBindings = format(preSql);
 
@@ -170,7 +187,7 @@ export class TableSource implements Source {
               inclusive: req.start.basis === 'at',
             }
           : undefined,
-        this.#order,
+        sort,
       );
       const sqlAndBindings = format(query);
 
@@ -180,10 +197,15 @@ export class TableSource implements Source {
           ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         );
 
+        const callingOutputIndex = this.#outputs.findIndex(reg => reg.output === output);
+        assert(callingOutputIndex !== -1, 'Output not found');
+
+        const reg = this.#outputs[callingOutputIndex];
+        const {sort} = reg;
+        const comparator = makeComparator(sort);
+
         let overlay: Overlay | undefined;
         if (this.#overlay) {
-          const callingOutputIndex = this.#outputs.indexOf(output);
-          assert(callingOutputIndex !== -1, 'Output not found');
           if (callingOutputIndex <= this.#overlay.outputIndex) {
             overlay = this.#overlay;
           }
@@ -192,13 +214,13 @@ export class TableSource implements Source {
         yield* generateWithStart(
           generateWithOverlay(
             req.start?.row,
-            mapFromSQLiteTypes(this.#schema.columns, rowIterator),
+            mapFromSQLiteTypes(this.#columns, rowIterator),
             req.constraint,
             overlay,
-            this.#schema.compareRows,
+            comparator,
           ),
           beforeRequest ?? req,
-          this.#schema.compareRows,
+          comparator,
         );
       } finally {
         this.#statementCache.return(cachedStatement);
@@ -211,7 +233,7 @@ export class TableSource implements Source {
     // the db so we don't push it to outputs if it does/doest not exist.
     const exists =
       this.#checkExistsStmt.get(
-        ...pickColumns(this.schema.primaryKey, change.row),
+        ...pickColumns(this.#primaryKey, change.row),
       )?.exists === 1;
     if (change.type === 'add') {
       assert(!exists, 'Row already exists');
@@ -219,7 +241,7 @@ export class TableSource implements Source {
       assert(exists, 'Row not found');
     }
 
-    for (const [outputIndex, output] of this.#outputs.entries()) {
+    for (const [outputIndex, {output}] of this.#outputs.entries()) {
       this.#overlay = {outputIndex, change};
       output.push(
         {
@@ -235,12 +257,12 @@ export class TableSource implements Source {
     this.#overlay = undefined;
     if (change.type === 'add') {
       this.#insertStmt.run(
-        ...toSQLiteTypes(Object.keys(this.schema.columns), change.row),
+        ...toSQLiteTypes(Object.keys(this.#columns), change.row),
       );
     } else {
       change.type satisfies 'remove';
       this.#deleteStmt.run(
-        ...toSQLiteTypes(this.schema.primaryKey, change.row),
+        ...toSQLiteTypes(this.#primaryKey, change.row),
       );
     }
   }
