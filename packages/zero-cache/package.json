@@ -4,8 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-replicator.ts",
-    "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ./src/services/index-service-runner.ts",
     "test": "vitest run",
     "test:watch": "vitest ",
     "check-types": "tsc --noEmit",
@@ -13,7 +11,7 @@
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "local": "node --loader ts-node/esm tool/local.ts",
-    "start": "concurrently --kill-others 'npm run start-replicator' 'npm run start-service-runner'"
+    "start": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",

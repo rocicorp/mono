@@ -8,19 +8,20 @@ Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
 # To run fastify replicator and sync-runner locally
 
-update .env URIs to point to your internal ip address (169._._._ or 192._._._) do not use the 127.0.0.1 address
+add .env file:
 
 ```
-UPSTREAM_URI = "postgresql://user:password@add.your.host.ip:6432/postgres"
-SYNC_REPLICA_URI = "postgres://user:password@add.your.host.ip:6433/postgres"
-REPLICATOR_HOST="127.0.0.1:3001"
+UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6432/postgres"
+REPLICA_ID = "r1"
+REPLICA_DB_FILE = "/tmp/sync-replica.db"
+LOG_LEVEL = "debug"
 ```
 
 Open two windows one with docker-compose and the other workers:
 
 ```
 cd docker && docker-compose up
-npm run start-workers
+npm run start-zero-cache
 ```
 
 # To run web locally

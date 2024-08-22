@@ -15,9 +15,7 @@
     "publish-worker-sandbox": "npm run wrangler-sandbox -- publish",
     "worker-logs-sandbox": "npm run wrangler-sandbox -- tail",
     "worker-logs-prod": "npm run wrangler-prod -- tail",
-    "start-workers": "concurrently --kill-others 'npm run start-replicator' 'npm run start-service-runner'",
-    "start-replicator": "node --require 'dotenv/config' --loader ts-node/esm ../../packages/zero-cache/src/services/index-replicator.ts",
-    "start-service-runner": "node --require 'dotenv/config' --loader ts-node/esm ../../packages/zero-cache/src/services/index-service-runner.ts"
+    "start-zero-cache": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zeppliear/.env"
   },
   "dependencies": {
     "@emotion/react": "^11.8.2",
