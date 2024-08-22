@@ -4,7 +4,6 @@ import {TableSource} from './table-source.js';
 import {Catch} from 'zql/src/zql/ivm2/catch.js';
 import {makeComparator} from 'zql/src/zql/ivm2/data.js';
 import {runCases} from 'zql/src/zql/ivm2/test/source-cases.js';
-import {Ordering} from 'zql/src/zql/ast2/ast.js';
 import {compile, sql} from '../internal/sql.js';
 import {ValueType} from 'zql/src/zql/ivm2/schema.js';
 
@@ -188,14 +187,9 @@ describe('fetching from a table source', () => {
         .sort(compoundComparator),
     },
   ] as const)('$name', ({sourceArgs, fetchArgs, expectedRows}) => {
-    const source = new TableSource(
-      db,
-      sourceArgs[0],
-      sourceArgs[1],
-      sourceArgs[2],
-      ['id'],
-    );
+    const source = new TableSource(db, sourceArgs[0], sourceArgs[1], ['id']);
     const out = new Catch(source);
+    source.addOutput(out, sourceArgs[2]);
     const rows = out.fetch(fetchArgs);
     expect(rows.map(r => r.row)).toEqual(expectedRows);
   });
@@ -209,12 +203,7 @@ test('pushing values does the correct writes', () => {
   const source = new TableSource(
     db,
     'foo',
-    {
-      a: 'number',
-      b: 'number',
-      c: 'number',
-    },
-    [['a', 'asc']],
+    {a: 'number', b: 'number', c: 'number'},
     ['a', 'b'],
   );
 
@@ -264,8 +253,7 @@ describe('shared test cases', () => {
     (
       name: string,
       columns: Record<string, ValueType>,
-      order: Ordering,
-      primaryKeys: readonly [string, ...string[]],
+      primaryKey: readonly [string, ...string[]],
     ) => {
       const db = new Database(':memory:');
       // create a table with desired columns and primary keys
@@ -274,12 +262,12 @@ describe('shared test cases', () => {
           Object.keys(columns).map(c => sql.ident(c)),
           sql`, `,
         )}, PRIMARY KEY (${sql.join(
-          primaryKeys.map(p => sql.ident(p)),
+          primaryKey.map(p => sql.ident(p)),
           sql`, `,
         )}));`,
       );
       db.exec(query);
-      return new TableSource(db, name, columns, order, primaryKeys);
+      return new TableSource(db, name, columns, primaryKey);
     },
     new Set(),
     new Set(),

@@ -9,19 +9,22 @@ import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import {SourceChange} from './source.js';
+import { ValueType } from './schema.js';
 
 test('push one:many', () => {
-  const joins = [
-    {
+  const base = {
+    columns: [{id: 'string' as const}, {id: 'string', issueID: 'string'} as const],
+    primaryKeys: [['id'], ['id']],
+    joins: [{
       parentKey: 'id',
       childKey: 'issueID',
       relationshipName: 'comments',
-    },
-  ];
+    }],
+  };
 
   // hydrate one parent, remove parent
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], []],
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
@@ -46,7 +49,7 @@ test('push one:many', () => {
 
   // hydrate one child, remove child
   pushTest({
-    joins,
+    ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
@@ -59,7 +62,7 @@ test('push one:many', () => {
 
   // hydrate one child, add parent
   pushTest({
-    joins,
+    ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
@@ -84,7 +87,7 @@ test('push one:many', () => {
 
   // hydrate two children, add parent
   pushTest({
-    joins,
+    ...base,
     sources: [
       [],
       [
@@ -118,7 +121,7 @@ test('push one:many', () => {
 
   // hydrate one child, add wrong parent
   pushTest({
-    joins,
+    ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i2'}}]],
     expectedLog: [
@@ -143,7 +146,7 @@ test('push one:many', () => {
 
   // hydrate one parent, add child
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], []],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
@@ -176,7 +179,7 @@ test('push one:many', () => {
 
   // hydrate one parent, add wrong child
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], []],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
     expectedLog: [
@@ -189,7 +192,7 @@ test('push one:many', () => {
 
   // hydrate one parent, one child, remove parent
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
@@ -214,7 +217,7 @@ test('push one:many', () => {
 
   // hydrate one parent, two children, remove parent
   pushTest({
-    joins,
+    ...base,
     sources: [
       [{id: 'i1'}],
       [
@@ -248,7 +251,7 @@ test('push one:many', () => {
 
   // no hydrate, add parent, add child, add child, remove child, remove parent
   pushTest({
-    joins,
+    ...base,
     sources: [[], []],
     pushes: [
       [0, {type: 'add', row: {id: 'i1'}}],
@@ -355,17 +358,21 @@ test('push one:many', () => {
 });
 
 test('push many:one', () => {
-  const joins = [
-    {
-      parentKey: 'ownerID',
-      childKey: 'id',
-      relationshipName: 'owner',
-    },
-  ];
+  const base = {
+    columns: [{id: 'string', ownerID: 'string'} as const, {id: 'string'} as const],
+    primaryKeys: [['id'], ['id']],
+    joins: [
+      {
+        parentKey: 'ownerID',
+        childKey: 'id',
+        relationshipName: 'owner',
+      },
+    ]
+  }
 
   // hydrate one child, add parent
   pushTest({
-    joins,
+    ...base,
     sources: [[], [{id: 'u1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
     expectedLog: [
@@ -391,7 +398,7 @@ test('push many:one', () => {
 
   // hydrate one child, add wrong parent
   pushTest({
-    joins,
+    ...base,
     sources: [[], [{id: 'u1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
     expectedLog: [
@@ -417,7 +424,7 @@ test('push many:one', () => {
 
   // hydrate one parent, add child
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
     pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
     expectedLog: [
@@ -450,7 +457,7 @@ test('push many:one', () => {
 
   // hydrate two parents, add one child
   pushTest({
-    joins,
+    ...base,
     sources: [
       [
         {id: 'i1', ownerID: 'u1'},
@@ -508,22 +515,30 @@ test('push many:one', () => {
 });
 
 test('push one:many:many', () => {
-  const joins = [
-    {
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'comments',
-    },
-    {
-      parentKey: 'id',
-      childKey: 'commentID',
-      relationshipName: 'revisions',
-    },
-  ];
+  const base = {
+    columns: [
+      {id: 'string'} as const,
+      {id: 'string', issueID: 'string'} as const,
+      {id: 'string', labelID: 'string'} as const,
+    ],
+    primaryKeys: [['id'], ['id'], ['id']],
+    joins: [
+      {
+        parentKey: 'id',
+        childKey: 'issueID',
+        relationshipName: 'comments',
+      },
+      {
+        parentKey: 'id',
+        childKey: 'commentID',
+        relationshipName: 'revisions',
+      },
+    ],
+  };
 
   // hydrate one parent, one child, add grandchild
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}], []],
     pushes: [[2, {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
     expectedLog: [
@@ -567,7 +582,7 @@ test('push one:many:many', () => {
 
   // hydrate one parent, one grandchild, add child
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], [], [{id: 'r1', commentID: 'c1'}]],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
@@ -605,7 +620,7 @@ test('push one:many:many', () => {
 
   // hydrate one child, one grandchild, add parent
   pushTest({
-    joins,
+    ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
@@ -640,7 +655,7 @@ test('push one:many:many', () => {
 
   // hydrate one parent, one child, one grandchild, remove parent
   pushTest({
-    joins,
+    ...base,
     sources: [
       [{id: 'i1'}],
       [{id: 'c1', issueID: 'i1'}],
@@ -679,18 +694,26 @@ test('push one:many:many', () => {
 });
 
 test('push one:many:one', () => {
-  const joins = [
-    {
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'issuelabels',
-    },
-    {
-      parentKey: 'labelID',
-      childKey: 'id',
-      relationshipName: 'labels',
-    },
-  ];
+  const base = {
+    columns: [
+      {id: 'string'} as const,
+      {issueID: 'string', labelID: 'string'} as const,
+      {id: 'string'} as const,
+    ],
+    primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
+    joins: [
+      {
+        parentKey: 'id',
+        childKey: 'issueID',
+        relationshipName: 'issuelabels',
+      },
+      {
+        parentKey: 'labelID',
+        childKey: 'id',
+        relationshipName: 'labels',
+      },
+    ],
+  }
 
   const sorts = {
     1: [
@@ -701,7 +724,7 @@ test('push one:many:one', () => {
 
   // hydrate one parent, one child, add grandchild
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
     sorts,
     pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
@@ -745,7 +768,7 @@ test('push one:many:one', () => {
 
   // hydrate one parent, one grandchild, add child
   pushTest({
-    joins,
+    ...base,
     sources: [[{id: 'i1'}], [], [{id: 'l1'}]],
     sorts,
     pushes: [[1, {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}]],
@@ -782,7 +805,7 @@ test('push one:many:one', () => {
 
   // hydrate two parents, two children, add one grandchild
   pushTest({
-    joins,
+    ...base,
     sources: [
       [{id: 'i1'}, {id: 'i2'}],
       [
@@ -869,12 +892,12 @@ function pushTest(t: PushTest) {
 
   const sources = t.sources.map((hydrate, i) => {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-    const source = new MemorySource(ordering);
+    const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
     for (const row of hydrate) {
       source.push({type: 'add', row});
     }
     const snitch = new Snitch(source, String(i), log);
-    source.addOutput(snitch);
+    source.addOutput(snitch, ordering);
     return {
       source,
       snitch,
@@ -940,6 +963,8 @@ function pushTest(t: PushTest) {
 }
 
 type PushTest = {
+  columns: Record<string, ValueType>[];
+  primaryKeys: readonly string[][];
   sources: Row[][];
   sorts?: Record<number, Ordering> | undefined;
   joins: {

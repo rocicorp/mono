@@ -31,8 +31,8 @@ export class Snitch implements Operator {
     this.#output = output;
   }
 
-  get schema(): Schema {
-    return this.#input.schema;
+  getSchema(_: Output): Schema {
+    return this.#input.getSchema(this);
   }
 
   hydrate(req: HydrateRequest, _source: Output) {

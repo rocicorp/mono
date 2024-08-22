@@ -12,7 +12,7 @@ import type {Schema} from './schema.js';
  */
 export interface Input {
   // The schema of the data this input returns.
-  get schema(): Schema;
+  getSchema(output: Output): Schema;
 
   // Request initial result from this operator and initialize its state.
   // Returns nodes sorted in order of schema().comparator.
