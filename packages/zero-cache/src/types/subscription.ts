@@ -120,6 +120,11 @@ export class Subscription<T, M = T> implements CancelableAsyncIterable<T> {
     }
   }
 
+  /** False if the subscription has been canceled or has failed. */
+  get active(): boolean {
+    return this.#sentinel === undefined;
+  }
+
   /** Cancels the subscription, cleans up, and terminates any iteration. */
   cancel() {
     this.#terminate('canceled');
