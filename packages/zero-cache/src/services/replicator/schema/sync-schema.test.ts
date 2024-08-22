@@ -104,7 +104,6 @@ describe('replicator/schema/sync-schema', () => {
           'test',
           REPLICA_ID,
           replicaFile.path,
-          upstream,
           getConnectionURI(upstream),
         );
 

@@ -696,13 +696,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   for (const c of cases) {
     test(c.name, async () => {
       await initDB(upstream, c.setupUpstream);
-      await initialSync(
-        lc,
-        REPLICA_ID,
-        replica,
-        upstream,
-        getConnectionURI(upstream),
-      );
+      await initialSync(lc, REPLICA_ID, replica, getConnectionURI(upstream));
 
       const syncing = syncer.run(lc);
       const notifications = syncer.subscribe();
