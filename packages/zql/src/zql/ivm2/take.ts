@@ -2,15 +2,14 @@ import {assert} from 'shared/src/asserts.js';
 import type {Node, Row} from './data.js';
 import type {
   FetchRequest,
-  HydrateRequest,
   Input,
   Operator,
   Output,
-  Schema,
   Storage,
 } from './operator.js';
 import type {Stream} from './stream.js';
 import type {Change} from './change.js';
+import type {Schema} from './schema.js';
 
 const MAX_BOUND_KEY = ['maxBound'] as const;
 
@@ -56,7 +55,56 @@ export class Take implements Operator {
     return this.schema;
   }
 
-  *hydrate(req: HydrateRequest, _: Output): Stream<Node> {
+  *fetch(req: FetchRequest, _: Output): Stream<Node> {
+    if (
+      this.#partitionKey === undefined ||
+      req.constraint?.key === this.#partitionKey
+    ) {
+      const partitionValue =
+        this.#partitionKey === undefined ? undefined : req.constraint?.value;
+      const takeStateKey = ['take', partitionValue];
+      const takeState = this.#storage.get(takeStateKey) as
+        | TakeState
+        | undefined;
+      if (takeState === undefined) {
+        return this.#hydrate(req);
+      }
+      if (takeState.bound === undefined) {
+        return;
+      }
+      for (const inputNode of this.#input.fetch(req, this)) {
+        if (this.schema.compareRows(takeState.bound, inputNode.row) < 1) {
+          return;
+        }
+        yield inputNode;
+      }
+      return;
+    }
+    // There is a partition key, but the fetch is not constrained on it.
+    const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row;
+    if (maxBound === undefined) {
+      return;
+    }
+    for (const inputNode of this.#input.fetch(req, this)) {
+      if (this.schema.compareRows(inputNode.row, maxBound) > 0) {
+        return;
+      }
+      const partitionValue = inputNode.row[this.#partitionKey];
+      const takeStateKey = ['take', partitionValue];
+      const takeState = this.#storage.get(takeStateKey) as
+        | TakeState
+        | undefined;
+      if (
+        takeState &&
+        this.schema.compareRows(takeState.bound, inputNode.row) >= 0
+      ) {
+        yield inputNode;
+      }
+    }
+  }
+
+  *#hydrate(req: FetchRequest): Stream<Node> {
+    assert(req.start === undefined);
     assert(
       this.#partitionKey === undefined ||
         (req.constraint !== undefined &&
@@ -75,7 +123,7 @@ export class Take implements Operator {
     let bound: Row | undefined;
     let downstreamEarlyReturn = true;
     try {
-      for (const inputNode of this.#input.hydrate(req, this)) {
+      for (const inputNode of this.#input.fetch(req, this)) {
         yield inputNode;
         bound = inputNode.row;
         if (size++ === this.#limit) {
@@ -103,53 +151,7 @@ export class Take implements Operator {
     }
   }
 
-  *fetch(req: FetchRequest, _: Output): Stream<Node> {
-    if (
-      this.#partitionKey === undefined ||
-      req.constraint?.key === this.#partitionKey
-    ) {
-      const partitionValue =
-        this.#partitionKey === undefined ? undefined : req.constraint?.value;
-      const takeStateKey = ['take', partitionValue];
-      const takeState = this.#storage.get(takeStateKey) as
-        | TakeState
-        | undefined;
-      assert(takeState !== undefined);
-      if (takeState.bound === undefined) {
-        return;
-      }
-      for (const inputNode of this.#input.fetch(req, this)) {
-        if (this.schema.compareRows(takeState.bound, inputNode.row) < 1) {
-          return;
-        }
-        yield inputNode;
-      }
-      return;
-    }
-    const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row;
-    if (maxBound === undefined) {
-      return;
-    }
-    // There is a partition key, but the fetch is not constrained on it.
-    for (const inputNode of this.#input.fetch(req, this)) {
-      if (this.schema.compareRows(inputNode.row, maxBound) > 0) {
-        return;
-      }
-      const partitionValue = inputNode.row[this.#partitionKey];
-      const takeStateKey = ['take', partitionValue];
-      const takeState = this.#storage.get(takeStateKey) as
-        | TakeState
-        | undefined;
-      if (
-        takeState &&
-        this.schema.compareRows(takeState.bound, inputNode.row) >= 0
-      ) {
-        yield inputNode;
-      }
-    }
-  }
-
-  *dehydrate(req: HydrateRequest, _: Output): Stream<Node> {
+  *cleanup(req: FetchRequest, _: Output): Stream<Node> {
     assert(
       this.#partitionKey === undefined ||
         (req.constraint !== undefined &&
@@ -162,7 +164,7 @@ export class Take implements Operator {
     const takeState = this.#storage.get(takeStateKey) as TakeState | undefined;
     this.#storage.del(takeStateKey);
     assert(takeState !== undefined);
-    for (const inputNode of this.#input.dehydrate(req, this)) {
+    for (const inputNode of this.#input.cleanup(req, this)) {
       if (
         takeState.bound === undefined ||
         this.schema.compareRows(takeState.bound, inputNode.row) < 1

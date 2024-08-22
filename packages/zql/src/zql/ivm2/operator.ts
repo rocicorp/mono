@@ -14,13 +14,10 @@ export interface Input {
   // The schema of the data this input returns.
   getSchema(output: Output): Schema;
 
-  // Request initial result from this operator and initialize its state.
-  // Returns nodes sorted in order of schema().comparator.
-  hydrate(req: HydrateRequest, output: Output): Stream<Node>;
-
-  // Fetch data previously returned by hydrate or push.
+  // Fetch data.
   // Does not modify current state.
   // Returns nodes sorted in order of schema().comparator.
+  // TODO: this is also implicitly subscribing to pushes
   fetch(req: FetchRequest, output: Output): Stream<Node>;
 
   // Dehydrate the operator. This is called when `output` will no longer
@@ -28,22 +25,19 @@ export interface Input {
   // clean up any resources it has allocated.
   // Returns the same thing as fetch(). This is to allow callers to properly
   // propagate the dehydrate message through the graph.
-  dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
+  cleanup(req: FetchRequest, output: Output): Stream<Node>;
 
   setOutput(output: Output): void;
 }
-
-export type HydrateRequest = {
-  constraint?: Constraint | undefined;
-};
 
 export type Constraint = {
   key: string;
   value: Value;
 };
 
-export type FetchRequest = HydrateRequest & {
-  // If supplied, `start.row` must have previously been output.
+export type FetchRequest = {
+  constraint?: Constraint | undefined;
+  // If supplied, `start.row` must have previously been output by fetch or push.
   start?: Start | undefined;
 };
 

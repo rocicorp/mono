@@ -1,8 +1,7 @@
-import {assert, assertNumber} from 'shared/src/asserts.js';
-import type {Node} from './data.js';
+import {assert} from 'shared/src/asserts.js';
+import {NormalizedValue, normalizeUndefined, type Node} from './data.js';
 import type {
   FetchRequest,
-  HydrateRequest,
   Input,
   Operator,
   Output,
@@ -61,21 +60,15 @@ export class Join implements Operator {
     return this.#parent.getSchema(this);
   }
 
-  *hydrate(req: HydrateRequest, _: Output): Stream<Node> {
-    for (const parentNode of this.#parent.hydrate(req, this)) {
-      yield this.#processParentNode(parentNode, 'hydrate');
-    }
-  }
-
   *fetch(req: FetchRequest, _: Output): Stream<Node> {
     for (const parentNode of this.#parent.fetch(req, this)) {
       yield this.#processParentNode(parentNode, 'fetch');
     }
   }
 
-  *dehydrate(req: HydrateRequest, _: Output): Stream<Node> {
-    for (const parentNode of this.#parent.dehydrate(req, this)) {
-      yield this.#processParentNode(parentNode, 'dehydrate');
+  *cleanup(req: FetchRequest, _: Output): Stream<Node> {
+    for (const parentNode of this.#parent.cleanup(req, this)) {
+      yield this.#processParentNode(parentNode, 'cleanup');
     }
   }
 
@@ -87,7 +80,7 @@ export class Join implements Operator {
         this.#output.push(
           {
             type: 'add',
-            node: this.#processParentNode(change.node, 'hydrate'),
+            node: this.#processParentNode(change.node, 'fetch'),
           },
           this,
         );
@@ -95,7 +88,7 @@ export class Join implements Operator {
         this.#output.push(
           {
             type: 'remove',
-            node: this.#processParentNode(change.node, 'dehydrate'),
+            node: this.#processParentNode(change.node, 'cleanup'),
           },
           this,
         );
@@ -134,26 +127,33 @@ export class Join implements Operator {
 
   #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
     const parentKeyValue = parentNode.row[this.#parentKey];
+    const parentPrimaryKey: NormalizedValue[] = [];
+    for (const key of this.schema.primaryKey) {
+      parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
+    }
 
-    // This storage key tracks how many times we've seen each unique value for
-    // the parent key, and thus how many times we've hydrated it. This is used
-    // to (a) avoid hydrating the same child multiple times, and (b) to know
-    // when to dehydrate a child, thereby cleaning up its state.
-    const storageKey = ['hydrate-count', parentKeyValue];
-    const hydrateCount = this.#storage.get(storageKey, 0);
-    assertNumber(hydrateCount);
+    // This storage key tracks of the primary keys we've seen for each unique
+    // value of parent key. This is used to know when to cleanup a child,
+    // thereby cleaning up its state.
+    const storageKey = ['pKeySet', parentKeyValue];
+    const primaryKeySet: NormalizedValue[][] = this.#storage.get(
+      storageKey,
+      [],
+    ) as NormalizedValue[][];
+    const parentPrimaryKeyIndex = indexOf(primaryKeySet, parentPrimaryKey);
 
-    if (mode === 'dehydrate') {
+    if (mode === 'cleanup') {
+      // TODO: Is this correct, or can we get a remove (I'm thinking via push)
+      // for something that hasn't been fetched before.  If so, should we even
+      // forward this remove?
       assert(
-        hydrateCount > 0,
-        'dehydrate without hydrate for ' + parentKeyValue,
+        parentPrimaryKeyIndex !== -1,
+        'cleanup without fetch for ' + parentPrimaryKey,
       );
     }
 
     let method: ProcessParentMode = mode;
-    if (mode === 'hydrate' && hydrateCount > 0) {
-      method = 'fetch';
-    } else if (mode === 'dehydrate' && hydrateCount > 1) {
+    if (mode === 'cleanup' && primaryKeySet.length > 1) {
       method = 'fetch';
     }
 
@@ -167,13 +167,18 @@ export class Join implements Operator {
       this,
     );
 
-    if (mode === 'hydrate') {
-      this.#storage.set(storageKey, hydrateCount + 1);
-    } else if (mode === 'dehydrate') {
-      if (hydrateCount === 1) {
+    if (mode === 'fetch') {
+      if (parentPrimaryKeyIndex === -1) {
+        this.#storage.set(storageKey, [...primaryKeySet, parentPrimaryKey]);
+      }
+    } else if (mode === 'cleanup') {
+      if (primaryKeySet.length === 1) {
         this.#storage.del(storageKey);
       } else {
-        this.#storage.set(storageKey, hydrateCount - 1);
+        this.#storage.set(
+          storageKey,
+          [...primaryKeySet].splice(parentPrimaryKeyIndex, 1),
+        );
       }
     }
 
@@ -187,4 +192,18 @@ export class Join implements Operator {
   }
 }
 
-type ProcessParentMode = 'hydrate' | 'fetch' | 'dehydrate';
+function indexOf(keySet: NormalizedValue[][], key: NormalizedValue[]): number {
+  return keySet.findIndex(k => {
+    if (k.length !== key.length) {
+      return false;
+    }
+    for (let i = 0; i < k.length; i++) {
+      if (k[i] !== key[i]) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+type ProcessParentMode = 'fetch' | 'cleanup';
