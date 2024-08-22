@@ -1,5 +1,6 @@
 import {describe, expectTypeOf, test} from 'vitest';
-import {EntityQuery, EntitySchema} from './entity-query.js';
+import {EntityQuery} from './entity-query.js';
+import {EntitySchema} from './schema.js';
 
 const mockQuery = {
   select() {
@@ -20,14 +21,17 @@ const mockQuery = {
 };
 
 type TestSchema = {
+  table: 'test';
   fields: {
     s: {type: 'string'};
     b: {type: 'boolean'};
     n: {type: 'number'};
   };
+  primaryKey: ['s'];
 };
 
 type TestSchemaWithRelationships = {
+  table: 'testWithRelationships';
   fields: {
     s: {type: 'string'};
     a: {type: 'string'};
@@ -42,9 +46,11 @@ type TestSchemaWithRelationships = {
       };
     };
   };
+  primaryKey: ['s'];
 };
 
 type TestSchemaWithMoreRelationships = {
+  table: 'testWithMoreRelationships';
   fields: {
     s: {type: 'string'};
     a: {type: 'string'};
@@ -73,6 +79,7 @@ type TestSchemaWithMoreRelationships = {
       };
     };
   };
+  primaryKey: ['s'];
 };
 
 describe('types', () => {
@@ -114,10 +121,10 @@ describe('types', () => {
       .sub(query => query.select('s', 'b').as('first'));
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        entity: {s: string};
-        subselects: {
-          first: readonly {
-            entity: {readonly s: string; readonly b: boolean};
+        readonly entity: {readonly s: string};
+        readonly subselects: {
+          readonly first: readonly {
+            readonly entity: {readonly s: string; readonly b: boolean};
             readonly subselects: never;
           }[];
         };
@@ -131,14 +138,14 @@ describe('types', () => {
     const query3 = query2.sub(query => query.select('s', 'b').as('second'));
     expectTypeOf(query3.run()).toMatchTypeOf<
       readonly {
-        entity: {s: string};
-        subselects: {
-          first: readonly {
-            entity: {readonly s: string; readonly b: boolean};
+        readonly entity: {readonly s: string};
+        readonly subselects: {
+          readonly first: readonly {
+            readonly entity: {readonly s: string; readonly b: boolean};
             readonly subselects: never;
           }[];
-          second: readonly {
-            entity: {readonly s: string; readonly b: boolean};
+          readonly second: readonly {
+            readonly entity: {readonly s: string; readonly b: boolean};
             readonly subselects: never;
           }[];
         };
@@ -227,14 +234,17 @@ describe('types', () => {
 describe('schema structure', () => {
   test('dag', () => {
     const commentSchema = {
+      table: 'comment',
       fields: {
         id: {type: 'string'},
         issueId: {type: 'string'},
         text: {type: 'string'},
       },
+      primaryKey: ['id'],
     } as const;
 
     const issueSchema = {
+      table: 'issue',
       fields: {
         id: {type: 'string'},
         title: {type: 'string'},
@@ -248,6 +258,7 @@ describe('schema structure', () => {
           },
         },
       },
+      primaryKey: ['id'],
     } as const;
 
     takeSchema(issueSchema);
@@ -255,6 +266,8 @@ describe('schema structure', () => {
 
   test('cycle', () => {
     const commentSchema = {
+      table: 'comment',
+      primaryKey: ['id'],
       fields: {
         id: {type: 'string'},
         issueId: {type: 'string'},
@@ -272,6 +285,8 @@ describe('schema structure', () => {
     } as const;
 
     const issueSchema = {
+      table: 'issue',
+      primaryKey: ['id'],
       fields: {
         id: {type: 'string'},
         title: {type: 'string'},
