@@ -705,7 +705,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
 
       const syncing = syncer.run(lc);
-      const notifications = await syncer.subscribe();
+      const notifications = syncer.subscribe();
 
       const versions: string[] = ['00'];
       const versionReady = notifications[Symbol.asyncIterator]();

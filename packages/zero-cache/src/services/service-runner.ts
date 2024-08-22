@@ -206,7 +206,7 @@ class ReplicatorStub implements Replicator {
     return v.parse(data, jsonObjectSchema);
   }
 
-  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
+  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
     const lc = this.#lc.withContext('method', 'versionChanges');
     const ws = new WebSocket(
       `http://${this.#host}${VERSION_CHANGES_PATTERN.replace(
@@ -215,7 +215,7 @@ class ReplicatorStub implements Replicator {
       )}`,
     );
 
-    return Promise.resolve(streamIn(lc, ws, emptySchema));
+    return streamIn(lc, ws, emptySchema);
   }
 }
 

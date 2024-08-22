@@ -121,8 +121,8 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
-    return Promise.resolve(this.#notifier.addSubscription());
+  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
+    return this.#notifier.addSubscription();
   }
 
   async stop(lc: LogContext, err?: unknown) {
