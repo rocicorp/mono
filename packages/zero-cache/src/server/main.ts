@@ -1,7 +1,7 @@
 import {SHARE_ENV, Worker} from 'node:worker_threads';
 import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
-import {createLogContext} from '../services/logging.js';
 import {configFromEnv} from './config.js';
+import {createLogContext} from './logging.js';
 
 const env = configFromEnv();
 const lc = createLogContext(env, {thread: 'main'});
