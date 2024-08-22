@@ -1,6 +1,5 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import type {
   ChangeDesiredQueriesBody,
@@ -9,26 +8,15 @@ import type {
   InitConnectionMessage,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {JSONObject} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import type {QueryInvalidationUpdate} from '../invalidation-watcher/invalidation-watcher.js';
-import type {InvalidationWatcherRegistry} from '../invalidation-watcher/registry.js';
+import {ReplicaVersionReady} from '../replicator/replicator.js';
 import type {Service} from '../service.js';
 import {ClientHandler} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
-import {
-  CVRConfigDrivenUpdater,
-  CVRQueryDrivenUpdater,
-  type CVRSnapshot,
-} from './cvr.js';
-import {QueryHandler, TransformedQuery} from './queries.js';
-import {initViewSyncerSchema} from './schema/pg-migrations.js';
-import {cmpVersions, versionString} from './schema/types.js';
-
-// TODO(arv): Use TransactionTrain?
-export const MAX_WORKERS = 4;
+import {CVRConfigDrivenUpdater, type CVRSnapshot} from './cvr.js';
+import {Snapshotter} from './snapshotter.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -48,11 +36,19 @@ export interface ViewSyncer {
   ): Promise<void>;
 }
 
+type IdleToken = {
+  timeoutID?: ReturnType<typeof setTimeout>;
+};
+
+const DEFAULT_KEEPALIVE_MS = 30_000;
+
 export class ViewSyncerService implements ViewSyncer, Service {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #registry: InvalidationWatcherRegistry;
   readonly #db: PostgresDB;
+  readonly #replicaDbFile: string;
+  readonly #versionChanges: Subscription<ReplicaVersionReady>;
+  readonly #keepaliveMs: number;
 
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
@@ -60,99 +56,113 @@ export class ViewSyncerService implements ViewSyncer, Service {
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
   #cvr: CVRSnapshot | undefined;
-
-  #started = false;
-  #stopped = false;
-  readonly #shouldRun = resolver<false>();
-  #hasSyncRequests = resolver<true>();
-
-  #invalidationSubscription:
-    | CancelableAsyncIterable<QueryInvalidationUpdate>
-    | undefined;
+  #snapshots: Snapshotter | undefined;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
-    registry: InvalidationWatcherRegistry,
     db: PostgresDB,
+    replicaDbFile: string,
+    versionChanges: Subscription<ReplicaVersionReady>,
+    keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
-    this.#registry = registry;
     this.#db = db;
+    this.#replicaDbFile = replicaDbFile;
+    this.#versionChanges = versionChanges;
+    this.#keepaliveMs = keepaliveMs;
   }
 
   async run(): Promise<void> {
-    assert(!this.#started, `ViewSyncer ${this.id} has already been started`);
-    this.#started = true;
-
-    this.#lc.info?.('starting view-syncer');
-
     try {
       await this.#lock.withLock(async () => {
-        await initViewSyncerSchema(this.#lc, 'view-syncer', 'cvr', this.#db);
         const cvrStore = new CVRStore(this.#lc, this.#db, this.id);
         this.#cvr = await cvrStore.load();
       });
 
-      this.#lc.info?.('started view-syncer');
+      this.#lc.info?.('view-syncer started', this.#cvr?.version);
 
-      while (
-        await Promise.race([
-          this.#shouldRun.promise, // resolves to false on stop()
-          this.#hasSyncRequests.promise, // resolves to true on a sync request
-          // TODO: Figure out idle shutdown + incoming sync() race condition.
-          //       Maybe it's the ServiceRunner that needs to track this.
-          // sleep(IDLE_TIMEOUT_MS),
-        ])
-      ) {
-        const watching = await this.#lock.withLock(() =>
-          this.#watchInvalidations(),
-        );
-        if (!watching || this.#stopped) {
-          // Cancel the subscription that started concurrently with stop().
-          await this.stop();
-          break;
-        }
-        const {subscription, handleInvalidations} = watching;
-        for await (const update of subscription) {
-          await this.#lock.withLock(async () => {
-            if (!this.#invalidationSubscription) {
-              return; // Subscription was canceled. Update must be dropped.
-            }
-            await handleInvalidations(update);
-          });
-        }
-
-        this.#invalidationSubscription = undefined;
-        this.#lc.info?.(`waiting for syncers`);
+      for await (const _ of this.#versionChanges) {
+        await this.#lock.withLock(() => {
+          if (this.#snapshots === undefined) {
+            this.#snapshots = new Snapshotter(this.#lc, this.#replicaDbFile);
+          } else {
+            this.#snapshots.advance();
+          }
+          // TODO:
+          // - Initialize or update pipelines.
+          // - Wait for client sockets to clear (i.e. backpressure).
+        });
       }
-      await this.stop();
+
+      this.#cleanup();
     } catch (e) {
       this.#lc.error?.(e);
-      await this.stop(e);
+      this.#cleanup(e);
     } finally {
-      this.#lc.info?.('stopped');
+      this.#lc.info?.('view-syncer stopped');
     }
   }
 
-  #deleteClient(
-    lc: LogContext,
-    clientID: string,
-    client: ClientHandler,
-  ): Promise<void> {
+  // The idleToken is an object associated with an idle timeout function,
+  // the latter of which checks the token with identity equality before
+  // executing. Setting the #idleToken to a new object or to `null`
+  // effectively cancels the previous timeout.
+  #idleToken: IdleToken | null = null;
+
+  #startIdleTimer(reason: string) {
+    if (this.#idleToken) {
+      // Previous timeout is canceled for efficiency
+      // (but not necessary for correctness).
+      clearTimeout(this.#idleToken?.timeoutID);
+      this.#lc.debug?.(`${reason}. resetting idle timer`);
+    } else {
+      this.#lc.debug?.(`${reason}. starting idle timer`);
+    }
+
+    const idleToken: IdleToken = {};
+    this.#idleToken = idleToken;
+
+    idleToken.timeoutID = setTimeout(() => {
+      // If #idleToken has changed, this timeout is effectively canceled.
+      if (this.#idleToken === idleToken) {
+        this.#lc.info?.('shutting down after idle timeout');
+        this.#versionChanges.cancel(); // Note: #versionChanges.active becomes false.
+      }
+    }, this.#keepaliveMs);
+  }
+
+  /**
+   * Guarantees that the ViewSyncer will remain running for at least
+   * its configured `keepaliveMs`. This is called when establishing a
+   * new connection to ensure that its associated ViewSyncer isn't
+   * shutdown before it receives the connection.
+   *
+   * @return `true` if the ViewSyncer will stay alive, `false` if the
+   *         ViewSyncer is shutting down.
+   */
+  keepalive(): boolean {
+    if (!this.#versionChanges.active) {
+      return false;
+    }
+    if (this.#idleToken) {
+      // Resets the idle timer for another `keepaliveMs`.
+      this.#startIdleTimer('received keepalive');
+    }
+    return true;
+  }
+
+  #deleteClient(clientID: string, client: ClientHandler): Promise<void> {
     return this.#lock.withLock(() => {
       const c = this.#clients.get(clientID);
       if (c === client) {
         this.#clients.delete(clientID);
 
         if (this.#clients.size === 0) {
-          lc.info?.('no more clients. closing invalidation subscription');
-          this.#invalidationSubscription?.cancel();
-          this.#invalidationSubscription = undefined;
-          this.#hasSyncRequests = resolver<true>();
+          this.#startIdleTimer('no more clients');
         }
       }
     });
@@ -174,7 +184,7 @@ export class ViewSyncerService implements ViewSyncer, Service {
         err
           ? lc.error?.(`client closed with error`, err)
           : lc.info?.('client closed');
-        void this.#deleteClient(lc, clientID, client);
+        void this.#deleteClient(clientID, client);
       },
     });
 
@@ -198,7 +208,11 @@ export class ViewSyncerService implements ViewSyncer, Service {
       this.#clients.get(clientID)?.close();
       this.#clients.set(clientID, client);
 
-      this.#hasSyncRequests.resolve(true);
+      // Clear and cancel any idle timeout.
+      if (this.#idleToken) {
+        clearTimeout(this.#idleToken.timeoutID);
+        this.#idleToken = null;
+      }
     });
     return downstream;
   }
@@ -250,7 +264,6 @@ export class ViewSyncerService implements ViewSyncer, Service {
     client: ClientHandler,
     {desiredQueriesPatch}: ChangeDesiredQueriesBody,
   ) {
-    assert(this.#started);
     assert(this.#cvr, 'CVR must be loaded before patching queries');
 
     // Apply patches requested in the initConnectionMessage.
@@ -274,188 +287,19 @@ export class ViewSyncerService implements ViewSyncer, Service {
           break;
       }
     }
-    await this.#checkQueries(added);
 
     this.#cvr = await updater.flush(lc);
 
-    // The client will not be up to date if it is old, or if the set of queries
-    // changed. Cancel any current subscription to start a new one that takes the
-    // changed queries and/or client's baseCookie into account.
-    if (cmpVersions(client.version(), this.#cvr.version) < 0) {
-      this.#invalidationSubscription?.cancel();
-      this.#invalidationSubscription = undefined;
-    }
-  }
-
-  // Must be called in lock.
-  async #watchInvalidations() {
-    assert(this.#started);
-    assert(this.#cvr);
-
-    if (this.#clients.size === 0) {
-      // A client may have immediately disconnected before the watch could be started.
-      return null;
-    }
-    const minVersion = [...this.#clients.values()]
-      .map(c => c.version())
-      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b));
-
-    this.#lc.info?.(
-      `subscribing to invalidations ${
-        minVersion ? 'since ' + versionString(minVersion) : ''
-      }`,
-    );
-
-    const watcher = await this.#registry.getInvalidationWatcher();
-    const tableSchemas = await watcher.getTableSchemas();
-    const queryHandler = new QueryHandler(tableSchemas);
-
-    // Exclude queries that are no longer desired.
-    // These will be removed on the first invalidation.
-    const queries = Object.values(this.#cvr.queries).filter(
-      q => q.internal || Object.keys(q.desiredBy).length > 0,
-    );
-    const transformed = queryHandler.transform(queries);
-    this.#invalidationSubscription = await watcher.watch({
-      fromVersion: minVersion?.stateVersion,
-      queries: Object.fromEntries(
-        [...transformed].map(([id, t]) => [id, t.invalidationInfo]),
-      ),
-    });
-    return {
-      subscription: this.#invalidationSubscription,
-      handleInvalidations: (update: QueryInvalidationUpdate) =>
-        this.#handleInvalidations(update, queryHandler, transformed),
-    };
-  }
-
-  // Must be called in lock.
-  async #handleInvalidations(
-    invalidation: QueryInvalidationUpdate,
-    queryHandler: QueryHandler,
-    transformedQueries: Map<string, TransformedQuery>,
-  ) {
-    assert(this.#started);
-    assert(this.#cvr);
-    const cvr = this.#cvr;
-
-    const {fromVersion, version, invalidatedQueries, reader} = invalidation;
-    const lc = this.#lc
-      .withContext('fromVersion', fromVersion)
-      .withContext('newVersion', version);
-
-    const minCVRVersion = [...this.#clients.values()]
-      .map(c => c.version())
-      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b));
-
-    const queriesToExecute = [...transformedQueries.values()].filter(q => {
-      if (invalidatedQueries.has(q.transformationHash)) {
-        return true; // Invalidated.
-      }
-      for (const id of q.queryIDs) {
-        const queryRecord = cvr.queries[id];
-        if (queryRecord.transformationHash !== q.transformationHash) {
-          return true; // Transformation hash changed or doesn't exist (for first time queries).
-        }
-        if (
-          cmpVersions(
-            minCVRVersion,
-            queryRecord.transformationVersion ?? null,
-          ) < 0
-        ) {
-          return true; // Transformed since fromVersion.
-        }
-      }
-      return false;
-    });
-
-    lc.info?.(`Executing ${queriesToExecute.length} queries`);
-
-    const cvrStore = new CVRStore(this.#lc, this.#db, cvr.id);
-    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, version);
-    // Track which queries are being executed and removed.
-    const cvrVersion = updater.trackQueries(
-      lc,
-      queriesToExecute.flatMap(q =>
-        q.queryIDs.map(id => ({id, transformationHash: q.transformationHash})),
-      ),
-      Object.values(cvr.queries)
-        .filter(q => !q.internal && Object.keys(q.desiredBy).length === 0)
-        .map(q => q.id),
-      minCVRVersion,
-    );
-
-    const pokers = [...this.#clients.values()].map(c =>
-      c.startPoke(cvrVersion),
-    );
-
-    // Kick off queries in parallel. The reader pool will limit concurrent queries,
-    // and the cursor page size limits the amount of row content in memory.
-    const cursorPageSize = 1000; // TODO: something less arbitrary.
-    const queriesDone = queriesToExecute.map(q => {
-      const {queryIDs, columnAliases} = q;
-      const resultParser = queryHandler.resultParser(queryIDs, columnAliases);
-
-      return reader.processReadTask(async tx => {
-        const {query, values} = q.transformedAST.query();
-        const start = Date.now();
-        let totalResults = 0;
-        let totalRows = 0;
-        lc.debug?.(`executing [${queryIDs}]: ${query}`);
-
-        async function processBatch(results: readonly JSONObject[]) {
-          const elapsed = Date.now() - start;
-          const rows = resultParser.parseResults(results);
-          totalResults += results.length;
-          totalRows += rows.size;
-          lc.debug?.(
-            `processing ${rows.size}/${results.length} row/result(s) (of ${totalRows}/${totalResults}) for [${queryIDs}] (${elapsed} ms)`,
-          );
-          const patches = await updater.received(lc, rows);
-          patches.forEach(patch =>
-            pokers.forEach(poker => poker.addPatch(patch)),
-          );
-        }
-
-        // Pipeline the processing of each batch with Postgres' computation of the next batch.
-        let lastBatch = Promise.resolve();
-        for await (const results of tx
-          .unsafe(query, values)
-          .cursor(cursorPageSize)) {
-          await lastBatch;
-          lastBatch = processBatch(results);
-        }
-        await lastBatch;
-      });
-    });
-
-    await Promise.all(queriesDone);
-
-    lc.debug?.(`generating delete / constrain patches`);
-    for (const patch of await updater.deleteUnreferencedColumnsAndRows(lc)) {
-      pokers.forEach(poker => poker.addPatch(patch));
-    }
-    lc.debug?.(`generating config patches`);
-    for (const patch of await updater.generateConfigPatches(lc)) {
-      pokers.forEach(poker => poker.addPatch(patch));
-    }
-
-    // Commit the changes and update the CVR snapshot.
-    this.#cvr = await updater.flush(lc);
-
-    // Signal clients to commit.
-    pokers.forEach(poker => poker.end());
-
-    lc.info?.(`finished processing update`);
+    // TODO: Hydrate / update clients, etc.
   }
 
   // eslint-disable-next-line require-await
-  async stop(err?: unknown): Promise<void> {
-    this.#stopped = true;
-    this.#shouldRun.resolve(false);
-    this.#invalidationSubscription?.cancel();
-    this.#invalidationSubscription = undefined;
+  async stop(): Promise<void> {
+    this.#lc.info?.('stopping view syncer');
+    this.#versionChanges.cancel();
+  }
 
+  #cleanup(err?: unknown) {
     for (const client of this.#clients.values()) {
       if (err) {
         client.fail(err);
@@ -463,81 +307,5 @@ export class ViewSyncerService implements ViewSyncer, Service {
         client.close();
       }
     }
-  }
-
-  async #checkQueries(queries: {id: string; ast: AST}[]): Promise<void> {
-    if (queries.length === 0) {
-      return;
-    }
-    const watcher = await this.#registry.getInvalidationWatcher();
-    const tableSchemas = await watcher.getTableSchemas();
-
-    const queryHandler = new QueryHandler(tableSchemas);
-    const transformed = queryHandler.transform(queries);
-
-    await Promise.all(
-      [...transformed].map(
-        async ([
-          id,
-          {
-            transformedAST: ast,
-            invalidationInfo: {filters},
-          },
-        ]) => {
-          const parameterized = ast.query();
-          if (isAlreadyChecked(parameterized.query)) {
-            this.#lc.debug?.(`query [${id}] has been checked`);
-            return;
-          }
-          const start = Date.now();
-          this.#lc.debug?.(`checking query [${id}]`, parameterized.query);
-
-          const checked = this.#db
-            .unsafe(parameterized.query, parameterized.values)
-            .describe();
-
-          for (const filter of filters) {
-            const t = queryHandler.tableSpec(filter.schema, filter.table);
-            if (!t) {
-              throw new Error(`Invalid table ${filter.schema}.${filter.table}`);
-            }
-            for (const col of Object.keys(filter.filteredColumns)) {
-              if (!(col in t.columns)) {
-                throw new Error(
-                  `Column ${col} does not exist in ${filter.table}`,
-                );
-              }
-            }
-            for (const col of filter.selectedColumns ?? []) {
-              if (!(col in t.columns)) {
-                throw new Error(
-                  `Column ${col} does not exist in ${filter.table}`,
-                );
-              }
-            }
-          }
-
-          await checked;
-          this.#lc.debug?.(`checked [${id}] (${Date.now() - start} ms)`);
-          cacheCheckedQuery(parameterized.query);
-        },
-      ),
-    );
-  }
-}
-
-const MAX_CHECKED_QUERY_CACHE_SIZE = 100;
-const checkedQueryCache = new Set<string>();
-
-function isAlreadyChecked(query: string) {
-  return checkedQueryCache.has(query);
-}
-
-function cacheCheckedQuery(query: string) {
-  if (!checkedQueryCache.has(query)) {
-    if (checkedQueryCache.size >= MAX_CHECKED_QUERY_CACHE_SIZE) {
-      checkedQueryCache.delete(checkedQueryCache.values().next().value);
-    }
-    checkedQueryCache.add(query);
   }
 }
