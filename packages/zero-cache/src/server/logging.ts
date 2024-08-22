@@ -1,12 +1,12 @@
 import {LogContext, TeeLogSink, consoleLogSink} from '@rocicorp/logger';
 import {DatadogLogSink} from 'datadog/src/datadog-log-sink.js';
 import {threadId} from 'node:worker_threads';
-import {Config} from '../server/config.js';
+import {Config} from './config.js';
 
 const DEFAULT_LOG_LEVEL = 'info';
 const DATADOG_SOURCE = 'zeroWorker';
 
-export function createLogSink(
+function createLogSink(
   env: Pick<Config, 'DATADOG_LOGS_API_KEY' | 'DATADOG_SERVICE_LABEL'>,
 ) {
   if (env.DATADOG_LOGS_API_KEY === undefined) {
@@ -22,7 +22,7 @@ export function createLogSink(
   ]);
 }
 
-export function getLogLevel(env: Pick<Config, 'LOG_LEVEL'>) {
+function getLogLevel(env: Pick<Config, 'LOG_LEVEL'>) {
   return env.LOG_LEVEL ?? DEFAULT_LOG_LEVEL;
 }
 
