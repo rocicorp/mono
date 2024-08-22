@@ -25,7 +25,9 @@ describe('types/subscription', () => {
       }
       received.push(m);
       if (j++ === 2) {
+        expect(subscription.active).toBe(true);
         subscription.cancel();
+        expect(subscription.active).toBe(false);
       }
     }
 
@@ -59,7 +61,9 @@ describe('types/subscription', () => {
         }
         received.push(m);
         if (j++ === 2) {
+          expect(subscription.active).toBe(true);
           subscription.fail(failure);
+          expect(subscription.active).toBe(false);
         }
       }
     } catch (e) {
@@ -95,9 +99,11 @@ describe('types/subscription', () => {
       }
       received.push(m);
       if (j++ === 2) {
+        expect(subscription.active).toBe(true);
         break;
       }
     }
+    expect(subscription.active).toBe(false);
 
     expect(received).toEqual([0, 1, 2]);
     expect(consumed).toEqual(new Set(received));
@@ -129,12 +135,15 @@ describe('types/subscription', () => {
         }
         received.push(m);
         if (j++ === 2) {
+          expect(subscription.active).toBe(true);
           throw failure;
         }
       }
     } catch (e) {
+      expect(subscription.active).toBe(false);
       caught = e;
     }
+    expect(subscription.active).toBe(false);
 
     expect(caught).toBe(failure);
     expect(received).toEqual([0, 1, 2]);
