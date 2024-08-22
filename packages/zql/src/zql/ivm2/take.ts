@@ -80,7 +80,11 @@ export class Take implements Operator {
       }
       return;
     }
-    // There is a partition key, but the fetch is not constrained on it.
+    // There is a partition key, but the fetch is not constrained or constrained
+    // on a different key.  Thus we don't have a single take state to bound by.
+    // TODO(greg): This currently only happens with nested sub-queries
+    // e.g. issues include issuelabels include label.  We could remove this
+    // case if we added a translation layer (powered by some state) in join.
     const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row;
     if (maxBound === undefined) {
       return;
