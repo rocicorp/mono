@@ -395,13 +395,7 @@ describe('replicator/initial-sync', () => {
       initLiteDB(replica, c.setupReplicaQuery);
 
       const lc = createSilentLogContext();
-      await initialSync(
-        lc,
-        REPLICA_ID,
-        replica,
-        upstream,
-        getConnectionURI(upstream),
-      );
+      await initialSync(lc, REPLICA_ID, replica, getConnectionURI(upstream));
 
       const {publications, tables} = await getPublicationInfo(upstream);
       expect(

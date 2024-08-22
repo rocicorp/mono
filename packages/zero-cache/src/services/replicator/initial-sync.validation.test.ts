@@ -101,7 +101,6 @@ describe('replicator/initial-sync-validation', () => {
         createSilentLogContext(),
         REPLICA_ID,
         replica,
-        upstream,
         getConnectionURI(upstream),
       ).catch(e => e);
 

@@ -11,7 +11,7 @@ import {
   liteValues,
   mapPostgresToLiteDataType,
 } from 'zero-cache/src/types/lite.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   initReplicationState,
@@ -99,24 +99,27 @@ export async function initialSync(
   lc: LogContext,
   replicaID: string,
   tx: Database,
-  upstreamDB: PostgresDB,
   upstreamURI: string,
 ) {
-  await checkUpstreamConfig(upstreamDB);
-  const {publications, tables} = await ensurePublishedTables(lc, upstreamDB);
-  const pubNames = publications.map(p => p.pubname);
-  lc.info?.(`Upstream is setup with publications [${pubNames}]`);
-
-  createLiteTables(tx, tables);
-
-  const {database, host} = upstreamDB.options;
-  lc.info?.(`opening replication session to ${database}@${host}`);
+  const upstreamDB = postgres(upstreamURI, {
+    ...postgresTypeConfig(),
+    max: MAX_WORKERS,
+  });
   const replicationSession = postgres(upstreamURI, {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     fetch_types: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
   try {
+    await checkUpstreamConfig(upstreamDB);
+    const {publications, tables} = await ensurePublishedTables(lc, upstreamDB);
+    const pubNames = publications.map(p => p.pubname);
+    lc.info?.(`Upstream is setup with publications [${pubNames}]`);
+
+    createLiteTables(tx, tables);
+
+    const {database, host} = upstreamDB.options;
+    lc.info?.(`opening replication session to ${database}@${host}`);
     const {snapshot_name: snapshot, consistent_point: lsn} =
       await createReplicationSlot(lc, replicaID, replicationSession);
 
@@ -140,7 +143,9 @@ export async function initialSync(
 
     await copiers.done();
   } finally {
-    await replicationSession.end(); // Close the replication session.
+    // Close the upstream connections.
+    await replicationSession.end();
+    await upstreamDB.end();
   }
 }
 

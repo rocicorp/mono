@@ -155,7 +155,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         big BIGINT,
         flt FLOAT8,
         bool BOOLEAN,
-        description TEXT
+        description VARCHAR
       );
       CREATE PUBLICATION zero_all FOR TABLE issues WHERE ("issueID" < 1000);
       `,
@@ -696,16 +696,10 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   for (const c of cases) {
     test(c.name, async () => {
       await initDB(upstream, c.setupUpstream);
-      await initialSync(
-        lc,
-        REPLICA_ID,
-        replica,
-        upstream,
-        getConnectionURI(upstream),
-      );
+      await initialSync(lc, REPLICA_ID, replica, getConnectionURI(upstream));
 
       const syncing = syncer.run(lc);
-      const notifications = await syncer.subscribe();
+      const notifications = syncer.subscribe();
 
       const versions: string[] = ['00'];
       const versionReady = notifications[Symbol.asyncIterator]();

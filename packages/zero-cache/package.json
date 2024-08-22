@@ -49,6 +49,7 @@
     "@types/pg-format": "^1.0.5",
     "@types/ws": "^8.5.10",
     "concurrently": "^8.2.1",
+    "dotenv": "^16.4.5",
     "rollup-plugin-dts": "^6.1.1",
     "shared": "0.0.0",
     "ts-node": "^10.9.1",

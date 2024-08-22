@@ -20,15 +20,16 @@ describe('replicator/notifier', () => {
     }
   }
 
-  test('notifyImmediately', async () => {
-    const sub = notifier.addSubscription(true);
+  test('notify immediately if first notification received', async () => {
+    notifier.notifySubscribers();
+    const sub = notifier.addSubscription();
     await expectSingleMessage(sub, {});
   });
 
   test('coalesce', async () => {
     const notifier = new Notifier();
-    const sub1 = notifier.addSubscription(false);
-    const sub2 = notifier.addSubscription(false);
+    const sub1 = notifier.addSubscription();
+    const sub2 = notifier.addSubscription();
 
     notifier.notifySubscribers({foo: 1});
     await expectSingleMessage(sub1, {foo: 1});
