@@ -35,6 +35,7 @@ export function mapPostgresToLiteDataType(pgDataType: string): string {
     case 'character':
     case 'character varying':
     case 'text':
+    case 'varchar':
       return TEXT;
     case 'bool':
     case 'boolean':

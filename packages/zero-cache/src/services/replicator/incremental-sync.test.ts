@@ -155,7 +155,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         big BIGINT,
         flt FLOAT8,
         bool BOOLEAN,
-        description TEXT
+        description VARCHAR
       );
       CREATE PUBLICATION zero_all FOR TABLE issues WHERE ("issueID" < 1000);
       `,
