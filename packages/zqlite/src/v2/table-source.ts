@@ -1,17 +1,21 @@
 import type {
-  Input,
   Output,
-  Schema,
   FetchRequest,
   HydrateRequest,
   Constraint,
 } from 'zql/src/zql/ivm2/operator.js';
-import type {SourceChange} from 'zql/src/zql/ivm2/memory-source.js';
+import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
+import {
+  generateWithStart,
+  generateWithOverlay,
+  type Overlay,
+} from 'zql/src/zql/ivm2/memory-source.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
-import {Node, Row, makeComparator} from 'zql/src/zql/ivm2/data.js';
-import type {Database, Statement} from 'better-sqlite3';
+import {Node, Row, Value, makeComparator} from 'zql/src/zql/ivm2/data.js';
+import {Database, Statement} from 'better-sqlite3';
 import {compile, format, sql} from '../internal/sql.js';
 import type {Stream} from 'zql/src/zql/ivm2/stream.js';
+import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
@@ -32,40 +36,42 @@ import {StatementCache} from '../internal/statement-cache.js';
  *
  * See comments in relevant functions for more details.
  */
-export class TableSource implements Input {
+export class TableSource implements Source {
   readonly #outputs: Output[] = [];
   readonly #insertStmt: Statement;
   readonly #deleteStmt: Statement;
-  readonly #changesStmt: Statement;
   readonly #order: Ordering;
   readonly #table: string;
   readonly #schema: Schema;
   readonly #statementCache: StatementCache;
-  readonly #primaryKeys: readonly string[];
+  readonly #checkExistsStmt: Statement;
+  #overlay?: Overlay | undefined;
 
   constructor(
     db: Database,
     tableName: string,
-    columns: readonly string[],
+    columns: Record<string, ValueType>,
     order: Ordering,
-    primaryKeys: readonly string[],
+    primaryKey: readonly [string, ...string[]],
   ) {
-    this.#order = makeOrderUnique(order, primaryKeys);
+    this.#order = makeOrderUnique(order, primaryKey);
     this.#schema = {
+      primaryKey,
+      columns,
       compareRows: makeComparator(this.#order),
     };
     this.#table = tableName;
     this.#statementCache = new StatementCache(db);
 
-    assertPrimaryKeysMatch(db, tableName, primaryKeys);
+    assertPrimaryKeysMatch(db, tableName, primaryKey);
 
     this.#insertStmt = db.prepare(
       compile(
         sql`INSERT INTO ${sql.ident(tableName)} (${sql.join(
-          columns.map(c => sql.ident(c)),
+          Object.keys(columns).map(c => sql.ident(c)),
           sql`, `,
         )}) VALUES (${sql.__dangerous__rawValue(
-          new Array(columns.length).fill('?').join(', '),
+          new Array(Object.keys(columns).length).fill('?').join(', '),
         )})`,
       ),
     );
@@ -73,15 +79,20 @@ export class TableSource implements Input {
     this.#deleteStmt = db.prepare(
       compile(
         sql`DELETE FROM ${sql.ident(tableName)} WHERE ${sql.join(
-          primaryKeys.map(k => sql`${sql.ident(k)} = ?`),
+          primaryKey.map(k => sql`${sql.ident(k)} = ?`),
           sql` AND `,
         )}`,
       ),
     );
 
-    this.#changesStmt = db.prepare(`SELECT changes() as changes`);
-
-    this.#primaryKeys = primaryKeys;
+    this.#checkExistsStmt = db.prepare(
+      compile(
+        sql`SELECT 1 AS "exists" FROM ${sql.ident(tableName)} WHERE ${sql.join(
+          primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+          sql` AND `,
+        )} LIMIT 1`,
+      ),
+    );
   }
 
   get schema(): Schema {
@@ -100,7 +111,11 @@ export class TableSource implements Input {
     return this.fetch(req, output);
   }
 
-  *fetch(req: FetchRequest, output: Output): Stream<Node> {
+  *fetch(
+    req: FetchRequest,
+    output: Output,
+    beforeRequest?: FetchRequest | undefined,
+  ): Stream<Node> {
     const {start} = req;
     let newReq = req;
 
@@ -115,6 +130,10 @@ export class TableSource implements Input {
      * To handle this, we convert `before` to `at` and re-invoke the fetch.
      */
     if (start?.basis === 'before') {
+      assert(
+        beforeRequest === undefined,
+        'Before should only be converted once.',
+      );
       const preSql = requestToSQL(
         this.#table,
         req.constraint,
@@ -132,14 +151,14 @@ export class TableSource implements Input {
       newReq = {...req, start: undefined};
       this.#statementCache.use(sqlAndBindings.text, cachedStatement => {
         for (const beforeRow of cachedStatement.statement.iterate(
-          ...sqlAndBindings.values,
+          ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         )) {
           newReq.start = {row: beforeRow, basis: 'at'};
           break;
         }
       });
 
-      yield* this.fetch(newReq, output);
+      yield* this.fetch(newReq, output, req);
     } else {
       const query = requestToSQL(
         this.#table,
@@ -158,11 +177,29 @@ export class TableSource implements Input {
       const cachedStatement = this.#statementCache.get(sqlAndBindings.text);
       try {
         const rowIterator = cachedStatement.statement.iterate(
-          ...sqlAndBindings.values,
+          ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         );
-        for (const row of rowIterator) {
-          yield {row, relationships: {}};
+
+        let overlay: Overlay | undefined;
+        if (this.#overlay) {
+          const callingOutputIndex = this.#outputs.indexOf(output);
+          assert(callingOutputIndex !== -1, 'Output not found');
+          if (callingOutputIndex <= this.#overlay.outputIndex) {
+            overlay = this.#overlay;
+          }
         }
+
+        yield* generateWithStart(
+          generateWithOverlay(
+            req.start?.row,
+            mapFromSQLiteTypes(this.#schema.columns, rowIterator),
+            req.constraint,
+            overlay,
+            this.#schema.compareRows,
+          ),
+          beforeRequest ?? req,
+          this.#schema.compareRows,
+        );
       } finally {
         this.#statementCache.return(cachedStatement);
       }
@@ -170,7 +207,20 @@ export class TableSource implements Input {
   }
 
   push(change: SourceChange) {
-    for (const output of this.#outputs) {
+    // need to check for the existence of the row before modifying
+    // the db so we don't push it to outputs if it does/doest not exist.
+    const exists =
+      this.#checkExistsStmt.get(
+        ...pickColumns(this.schema.primaryKey, change.row),
+      )?.exists === 1;
+    if (change.type === 'add') {
+      assert(!exists, 'Row already exists');
+    } else {
+      assert(exists, 'Row not found');
+    }
+
+    for (const [outputIndex, output] of this.#outputs.entries()) {
+      this.#overlay = {outputIndex, change};
       output.push(
         {
           type: change.type,
@@ -182,14 +232,16 @@ export class TableSource implements Input {
         this,
       );
     }
+    this.#overlay = undefined;
     if (change.type === 'add') {
-      this.#insertStmt.run(...Object.values(change.row));
+      this.#insertStmt.run(
+        ...toSQLiteTypes(Object.keys(this.schema.columns), change.row),
+      );
     } else {
       change.type satisfies 'remove';
-      const values = this.#primaryKeys.map(k => change.row[k]);
-      this.#deleteStmt.run(...values);
-      const {changes} = this.#changesStmt.get();
-      assert(changes === 1, 'Delete should affect exactly one row');
+      this.#deleteStmt.run(
+        ...toSQLiteTypes(this.schema.primaryKey, change.row),
+      );
     }
   }
 }
@@ -335,4 +387,44 @@ function makeOrderUnique(
     }
   }
   return uniqueOrder;
+}
+
+function toSQLiteTypes(
+  columns: readonly string[],
+  row: Row,
+): readonly unknown[] {
+  return columns.map(col => toSQLiteType(row[col]));
+}
+
+function pickColumns(columns: readonly string[], row: Row): readonly Value[] {
+  return columns.map(col => row[col]);
+}
+
+function toSQLiteType(v: unknown): unknown {
+  return v === false ? 0 : v === true ? 1 : v ?? null;
+}
+
+function* mapFromSQLiteTypes(
+  valueTypes: Record<string, ValueType>,
+  rowIterator: IterableIterator<Row>,
+): IterableIterator<Row> {
+  for (const row of rowIterator) {
+    fromSQLiteTypes(valueTypes, row);
+    yield row;
+  }
+}
+
+function fromSQLiteTypes(valueTypes: Record<string, ValueType>, row: Row) {
+  for (const key in row) {
+    row[key] = fromSQLiteType(valueTypes[key], row[key]);
+  }
+}
+
+function fromSQLiteType(valueType: ValueType, v: Value): Value {
+  switch (valueType) {
+    case 'boolean':
+      return v === 0 ? false : v === 1 ? true : v;
+    default:
+      return v;
+  }
 }

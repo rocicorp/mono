@@ -5,6 +5,7 @@ import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
 import type {Node, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
+import type {Schema} from './schema.js';
 
 /**
  * Input to an operator. Typically another Operator but can also be a Source.
@@ -25,18 +26,10 @@ export interface Input {
   // Dehydrate the operator. This is called when `output` will no longer
   // need the data returned by hydrate(). The receiving operator should
   // clean up any resources it has allocated.
+  // Returns the same thing as fetch(). This is to allow callers to properly
+  // propagate the dehydrate message through the graph.
   dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
 }
-
-// Information about the nodes output by an operator.
-export type Schema = {
-  // if ever needed ... none of current operators need.
-  // idKeys: string[];
-  // columns: Record<string, ValueType>;
-  // relationships: Record<string, Schema>;
-  // Compares two rows in the output of an operator.
-  compareRows: (r1: Row, r2: Row) => number;
-};
 
 export type HydrateRequest = {
   constraint?: Constraint | undefined;
@@ -78,14 +71,6 @@ export interface Output {
  * to the previous.
  */
 export interface Operator extends Input, Output {}
-
-/**
- * A source is an input that serves as the root data source of the pipeline.
- * Sources can have multiple outputs.
- */
-export interface Source extends Input {
-  addOutput(output: Output): void;
-}
 
 /**
  * Operators get access to storage that they can store their internal

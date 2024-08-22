@@ -3,6 +3,17 @@ import {describe, expect, test} from 'vitest';
 import {TableSource} from './table-source.js';
 import {Catch} from 'zql/src/zql/ivm2/catch.js';
 import {makeComparator} from 'zql/src/zql/ivm2/data.js';
+import {runCases} from 'zql/src/zql/ivm2/test/source-cases.js';
+import {Ordering} from 'zql/src/zql/ast2/ast.js';
+import {compile, sql} from '../internal/sql.js';
+import {ValueType} from 'zql/src/zql/ivm2/schema.js';
+
+const columns = {
+  id: 'string',
+  a: 'number',
+  b: 'number',
+  c: 'number',
+} as const;
 
 describe('fetching from a table source', () => {
   type Foo = {id: string; a: number; b: number; c: number};
@@ -37,19 +48,19 @@ describe('fetching from a table source', () => {
   test.each([
     {
       name: 'simple source with `id` order',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {constraint: undefined, start: undefined},
       expectedRows: allRows,
     },
     {
       name: 'simple source with `id` order and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {constraint: {key: 'a', value: 2}, start: undefined},
       expectedRows: allRows.filter(r => r.a === 2),
     },
     {
       name: 'simple source with `id` order and start `before`',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
         constraint: undefined,
         start: {row: allRows[4], basis: 'before'},
@@ -58,7 +69,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'simple source with `id` order and start `before` and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
         constraint: {key: 'b', value: 2},
         start: {row: allRows[4], basis: 'before'},
@@ -67,7 +78,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'simple source with `id` order and start `after`',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
         constraint: undefined,
         start: {row: allRows[4], basis: 'after'},
@@ -76,7 +87,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'simple source with `id` order and start `after` and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
         constraint: {key: 'b', value: 2},
         start: {row: allRows[4], basis: 'after'},
@@ -85,7 +96,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'simple source with `id` order and start `at`',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
         constraint: undefined,
         start: {row: allRows[4], basis: 'at'},
@@ -94,7 +105,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'simple source with `id` order and start `at` and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], [['id', 'asc']]],
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
         constraint: {key: 'b', value: 2},
         start: {row: allRows[4], basis: 'at'},
@@ -103,19 +114,19 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'complex source with compound order',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {constraint: undefined, start: undefined},
       expectedRows: allRows.slice().sort(compoundComparator),
     },
     {
       name: 'complex source with compound order and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {constraint: {key: 'a', value: 2}, start: undefined},
       expectedRows: allRows.filter(r => r.a === 2).sort(compoundComparator),
     },
     {
       name: 'complex source with compound order and start `before`',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {
         constraint: undefined,
         start: {row: allRows[4], basis: 'before'},
@@ -124,7 +135,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'complex source with compound order and start `before` and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {
         constraint: {key: 'b', value: 2},
         start: {row: allRows[4], basis: 'before'},
@@ -136,7 +147,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'complex source with compound order and start `after`',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {
         constraint: undefined,
         start: {row: allRows[4], basis: 'after'},
@@ -145,7 +156,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'complex source with compound order and start `after` and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {
         constraint: {key: 'b', value: 2},
         start: {row: allRows[4], basis: 'after'},
@@ -157,7 +168,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'complex source with compound order and start `at`',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {
         constraint: undefined,
         start: {row: allRows[4], basis: 'at'},
@@ -166,7 +177,7 @@ describe('fetching from a table source', () => {
     },
     {
       name: 'complex source with compound order and start `at` and constraint',
-      sourceArgs: ['foo', ['id', 'a', 'b', 'c'], compoundOrder],
+      sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {
         constraint: {key: 'b', value: 2},
         start: {row: allRows[4], basis: 'at'},
@@ -198,7 +209,11 @@ test('pushing values does the correct writes', () => {
   const source = new TableSource(
     db,
     'foo',
-    ['a', 'b', 'c'],
+    {
+      a: 'number',
+      b: 'number',
+      c: 'number',
+    },
     [['a', 'asc']],
     ['a', 'b'],
   );
@@ -242,4 +257,31 @@ test('pushing values does the correct writes', () => {
       row: {a: 1, b: 2, c: 3},
     });
   }).toThrow();
+});
+
+describe('shared test cases', () => {
+  runCases(
+    (
+      name: string,
+      columns: Record<string, ValueType>,
+      order: Ordering,
+      primaryKeys: readonly [string, ...string[]],
+    ) => {
+      const db = new Database(':memory:');
+      // create a table with desired columns and primary keys
+      const query = compile(
+        sql`CREATE TABLE ${sql.ident(name)} (${sql.join(
+          Object.keys(columns).map(c => sql.ident(c)),
+          sql`, `,
+        )}, PRIMARY KEY (${sql.join(
+          primaryKeys.map(p => sql.ident(p)),
+          sql`, `,
+        )}));`,
+      );
+      db.exec(query);
+      return new TableSource(db, name, columns, order, primaryKeys);
+    },
+    new Set(),
+    new Set(),
+  );
 });

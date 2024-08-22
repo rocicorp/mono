@@ -6,11 +6,11 @@ import type {
   Input,
   Operator,
   Output,
-  Schema,
   Storage,
 } from './operator.js';
 import type {Stream} from './stream.js';
 import type {Change} from './change.js';
+import type {Schema} from './schema.js';
 
 /**
  * The Join operator joins the output from two upstream inputs. Zero's join
@@ -127,7 +127,7 @@ export class Join implements Operator {
     }
   }
 
-  #processParentNode(parentNode: Node, mode: ProcessParentMode) {
+  #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
     const parentKeyValue = parentNode.row[this.#parentKey];
 
     // This storage key tracks how many times we've seen each unique value for
