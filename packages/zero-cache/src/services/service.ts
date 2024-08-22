@@ -4,7 +4,7 @@ export interface Service {
   /**
    * `run` is called once by the Service Runner to run the service.
    * The returned Promise resolves when the service stops, either because
-   * {@link Service.stop()} was called, or because the service
+   * {@link stop()} was called, or because the service
    * has completed its work. If the Promise rejects with an error, the
    * Service Runner will restart it with exponential backoff.
    */

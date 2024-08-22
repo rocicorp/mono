@@ -1,5 +1,8 @@
+import type {WebSocket} from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
+import type {FastifyRequest} from 'fastify';
 import * as valita from 'shared/src/valita.js';
+import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import {
   ConnectedMessage,
   Downstream,
@@ -11,15 +14,12 @@ import {
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 import type {Mutagen} from './mutagen/mutagen.js';
-import type {ServiceRunner} from './service-runner.js';
 import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
-import type {FastifyRequest} from 'fastify';
-import type {WebSocket} from '@fastify/websocket';
-import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 
 export function handleConnection(
   lc: LogContext,
-  serviceRunner: ServiceRunner,
+  viewSyncer: ViewSyncer,
+  mutagen: Mutagen,
   clientConnections: Map<string, Connection>,
   socket: WebSocket,
   request: FastifyRequest,
@@ -39,11 +39,18 @@ export function handleConnection(
     if (existing) {
       existing.close();
     }
-    const connection = new Connection(lc, serviceRunner, params, socket, () => {
-      if (clientConnections.get(clientID) === connection) {
-        clientConnections.delete(clientID);
-      }
-    });
+    const connection = new Connection(
+      lc,
+      viewSyncer,
+      mutagen,
+      params,
+      socket,
+      () => {
+        if (clientConnections.get(clientID) === connection) {
+          clientConnections.delete(clientID);
+        }
+      },
+    );
     clientConnections.set(clientID, connection);
   }
 
@@ -73,7 +80,8 @@ export class Connection {
 
   constructor(
     lc: LogContext,
-    serviceRunner: ServiceRunner,
+    viewSyncer: ViewSyncer,
+    mutagen: Mutagen,
     connectParams: ConnectParams,
     ws: WebSocket,
     onClose: () => void,
@@ -89,8 +97,8 @@ export class Connection {
       .withContext('wsID', wsID);
     this.#onClose = onClose;
 
-    this.#viewSyncer = serviceRunner.getViewSyncer(clientGroupID);
-    this.#mutagen = serviceRunner.getMutagen(clientGroupID);
+    this.#viewSyncer = viewSyncer;
+    this.#mutagen = mutagen;
 
     this.#ws.addEventListener('message', this.#handleMessage);
     this.#ws.addEventListener('close', this.#handleClose);
