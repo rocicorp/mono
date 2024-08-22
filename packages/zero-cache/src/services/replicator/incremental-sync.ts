@@ -122,9 +122,7 @@ export class IncrementalSyncer {
   }
 
   subscribe(): Promise<CancelableAsyncIterable<ReplicaVersionReady>> {
-    // Note: A new subscription is notified immediately if the service has already started,
-    //       indicating that the replica is ready to be read.
-    return Promise.resolve(this.#notifier.addSubscription(this.#started));
+    return Promise.resolve(this.#notifier.addSubscription());
   }
 
   async stop(lc: LogContext, err?: unknown) {
