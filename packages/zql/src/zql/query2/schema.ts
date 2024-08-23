@@ -15,11 +15,11 @@ export type EntitySchema = {
     ...(keyof EntitySchema['fields'])[],
   ];
   readonly fields: Record<string, SchemaValue>;
-  readonly relationships?: Record<
-    string,
-    | FieldRelationship<EntitySchema, EntitySchema>
-    | JunctionRelationship<EntitySchema, EntitySchema, EntitySchema>
-  >;
+  readonly relationships?: {
+    [key: string]:
+      | FieldRelationship<EntitySchema, EntitySchema>
+      | JunctionRelationship<EntitySchema, EntitySchema, EntitySchema>;
+  };
 };
 
 /**
@@ -79,7 +79,7 @@ export function isFieldRelationship(
         EntitySchema,
         EntitySchema
       >
-    ).junction !== undefined
+    ).junction === undefined
   );
 }
 
