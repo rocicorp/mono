@@ -5,6 +5,7 @@ import {Join} from '../ivm2/join.js';
 import {Operator, Storage} from '../ivm2/operator.js';
 import {Source} from '../ivm2/source.js';
 import {createPredicate} from './filter.js';
+import {must} from 'shared/src/must.js';
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
@@ -52,10 +53,12 @@ export interface Host {
  */
 export function buildPipeline(ast: AST, host: Host) {
   const source = host.getSource(ast.table);
-  let end: Operator = source.connect(ast.orderBy);
+  let end: Operator = source.connect(must(ast.orderBy));
 
   if (ast.where) {
-    end = new Filter(end, createPredicate(ast.where));
+    for (const condition of ast.where) {
+      end = new Filter(end, createPredicate(condition));
+    }
   }
 
   if (ast.limit) {
@@ -63,8 +66,8 @@ export function buildPipeline(ast: AST, host: Host) {
     unreachable();
   }
 
-  if (ast.subqueries) {
-    for (const sq of ast.subqueries) {
+  if (ast.related) {
+    for (const sq of ast.related) {
       assert(sq.subquery.alias, 'Subquery must have an alias');
       const child = buildPipeline(sq.subquery, host);
       end = new Join(

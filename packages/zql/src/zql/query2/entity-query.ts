@@ -75,7 +75,7 @@ export type AddSelections<
   entity: {
     [K in TSelections[number]]: SchemaValueToTSType<TSchema['fields'][K]>;
   };
-  subselects: TReturn[number]['subselects'];
+  related: TReturn[number]['related'];
 };
 
 /**
@@ -87,9 +87,9 @@ export type AddSubselect<
   TReturn extends QueryResultRow[],
 > = {
   entity: TReturn[number]['entity'];
-  subselects: TReturn[number]['subselects'] extends never
+  related: TReturn[number]['related'] extends never
     ? PickSubselect<TSubquery>
-    : PickSubselect<TSubquery> & TReturn[number]['subselects'];
+    : PickSubselect<TSubquery> & TReturn[number]['related'];
 };
 
 /**
@@ -112,29 +112,10 @@ type PickSubselect<TSubquery extends EntityQuery<EntitySchema>> = {
  * The result of a ZQL query.
  *
  * Represents a tree of entities and subselects.
- *
- * ```ts
- * z.issue.select('title').sub(q => q.related('comments').select('text')).run();
- * ```
- *
- * would return:
- *
- * ```
- * [{
- *  entity: {title: 'foo'},
- *  subselects: {
- *    comments: [
- *      {
- *        entity: {text: 'bar'},
- *        subselects: undefined,
- *      },
- *    ],
- * }]
- * ```
  */
 export type QueryResultRow = {
   entity: Partial<Entity>;
-  subselects: Record<string, QueryResultRow[]> | undefined;
+  related: Record<string, QueryResultRow[]> | undefined;
 };
 
 export type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
@@ -150,22 +131,22 @@ export interface EntityQuery<
     ...x: TFields
   ): EntityQuery<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs>;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sub<TSub extends EntityQuery<any, any, any>>(
-    // If we only want to allow the subquery callback to use `related`
-    // we can change the query type to: Pick<EntityQuery<TSchema>, 'related'>
-    cb: (query: EntityQuery<TSchema>) => TSub,
-  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
-
   as<TAs2 extends string>(as: TAs2): EntityQuery<TSchema, TReturn, TAs2>;
 
-  related<TRelationship extends keyof TSchema['relationships']>(
+  related<
+    TRelationship extends keyof TSchema['relationships'],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    TSub extends EntityQuery<any, any, any>,
+  >(
     relationship: TRelationship,
-  ): EntityQuery<
-    PullSchemaForRelationship<TSchema, TRelationship>,
-    [],
-    TRelationship & string
-  >;
+    cb: (
+      query: EntityQuery<
+        PullSchemaForRelationship<TSchema, TRelationship>,
+        [],
+        TRelationship & string
+      >,
+    ) => TSub,
+  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,

@@ -11,13 +11,7 @@ export type OrderOps = '<' | '>' | '<=' | '>=';
 export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
 
 export type AST = {
-  readonly type: 'unmoored' | 'anchored';
-  // Table can be undefined if the query is an anchored subquery.
-  // Anchored subqueries start at a _row_ in a table rather than at a table.
-  // Example: `SELECT *, [true WHERE row.title LIKE '%foo%'] as hasFoo FROM table`
-  // This would return all rows from table as well as a sub-row when the row's
-  // title contains foo.
-  readonly table?: string | undefined;
+  readonly table: string;
 
   // A query would be aliased if the AST is a subquery.
   // e.g., when two subqueries select from the same table
@@ -36,26 +30,23 @@ export type AST = {
   // Choosing the first `related` entry is almost always the best choice if
   // one exists.
   readonly where?: Condition[] | undefined;
-  readonly related?: (FieldRelationship | JunctionRelationship)[] | undefined;
 
-  readonly subqueries?: readonly AST[] | undefined;
+  readonly related?: readonly CorrelatedSubQuery[] | undefined;
   readonly limit?: number | undefined;
   readonly orderBy?: Ordering | undefined;
 };
 
-type FieldRelationship = {
-  readonly sourceField: string;
-  readonly destField: string;
-  readonly destTable: string;
-};
-
-type JunctionRelationship = {
-  readonly sourceField: string;
-  readonly junctionTable: string;
-  readonly junctionSourceField: string;
-  readonly junctionDestField: string;
-  readonly destField: string;
-  readonly destTable: string;
+export type CorrelatedSubQuery = {
+  /**
+   * Only equality correlations are supported for now.
+   * E.g., direct foreign key relationships.
+   */
+  readonly correlation: {
+    readonly parentField: string;
+    readonly childField: string;
+    readonly op: '=';
+  };
+  readonly subquery: AST;
 };
 
 /**
