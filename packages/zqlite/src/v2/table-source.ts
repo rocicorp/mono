@@ -1,29 +1,36 @@
-import type {
-  Output,
-  FetchRequest,
-  Constraint,
-  Input,
-} from 'zql/src/zql/ivm2/operator.js';
-import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
+import type {SQLQuery} from '@databases/sql';
+import {Database, Statement} from 'better-sqlite3';
+import {assert} from 'shared/src/asserts.js';
+import type {Ordering} from 'zql/src/zql/ast2/ast.js';
+import {Connector} from 'zql/src/zql/ivm2/connector.js';
+import {Node, Row, Value, makeComparator} from 'zql/src/zql/ivm2/data.js';
 import {
-  generateWithStart,
   generateWithOverlay,
+  generateWithStart,
   type Overlay,
 } from 'zql/src/zql/ivm2/memory-source.js';
-import type {Ordering} from 'zql/src/zql/ast2/ast.js';
-import {Node, Row, Value, makeComparator} from 'zql/src/zql/ivm2/data.js';
-import {Database, Statement} from 'better-sqlite3';
-import {compile, format, sql} from '../internal/sql.js';
-import type {Stream} from 'zql/src/zql/ivm2/stream.js';
+import type {
+  Constraint,
+  FetchRequest,
+  Input,
+  Output,
+} from 'zql/src/zql/ivm2/operator.js';
+import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
 import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
-import type {SQLQuery} from '@databases/sql';
-import {assert} from 'shared/src/asserts.js';
+import {Stream} from 'zql/src/zql/ivm2/stream.js';
+import {compile, format, sql} from '../internal/sql.js';
 import {StatementCache} from '../internal/statement-cache.js';
-import {Connector} from 'zql/src/zql/ivm2/connector.js';
 
 type OutputRegistration = {
   output: Output;
   sort: Ordering;
+};
+
+type Statements = {
+  readonly cache: StatementCache;
+  readonly insert: Statement;
+  readonly delete: Statement;
+  readonly checkExists: Statement;
 };
 
 /**
@@ -43,14 +50,12 @@ type OutputRegistration = {
  * See comments in relevant functions for more details.
  */
 export class TableSource implements Source {
+  readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #outputs: OutputRegistration[] = [];
-  readonly #insertStmt: Statement;
-  readonly #deleteStmt: Statement;
   readonly #table: string;
   readonly #columns: Record<string, ValueType>;
   readonly #primaryKey: readonly string[];
-  readonly #statementCache: StatementCache;
-  readonly #checkExistsStmt: Statement;
+  #stmts: Statements;
   #overlay?: Overlay | undefined;
 
   constructor(
@@ -62,38 +67,57 @@ export class TableSource implements Source {
     this.#table = tableName;
     this.#columns = columns;
     this.#primaryKey = primaryKey;
-    this.#statementCache = new StatementCache(db);
+    this.#stmts = this.#getStatementsFor(db);
+  }
 
-    assertPrimaryKeysMatch(db, tableName, primaryKey);
+  /**
+   * Sets the db (snapshot) to use, to facilitate the Snapshotter leapfrog
+   * algorithm for concurrent traversal of historic timelines.
+   */
+  setDB(db: Database) {
+    this.#stmts = this.#getStatementsFor(db);
+  }
 
-    this.#insertStmt = db.prepare(
-      compile(
-        sql`INSERT INTO ${sql.ident(tableName)} (${sql.join(
-          Object.keys(columns).map(c => sql.ident(c)),
-          sql`, `,
-        )}) VALUES (${sql.__dangerous__rawValue(
-          new Array(Object.keys(columns).length).fill('?').join(', '),
-        )})`,
+  #getStatementsFor(db: Database) {
+    const cached = this.#dbCache.get(db);
+    if (cached) {
+      return cached;
+    }
+    assertPrimaryKeysMatch(db, this.#table, this.#primaryKey);
+
+    const stmts = {
+      cache: new StatementCache(db),
+      insert: db.prepare(
+        compile(
+          sql`INSERT INTO ${sql.ident(this.#table)} (${sql.join(
+            Object.keys(this.#columns).map(c => sql.ident(c)),
+            sql`, `,
+          )}) VALUES (${sql.__dangerous__rawValue(
+            new Array(Object.keys(this.#columns).length).fill('?').join(', '),
+          )})`,
+        ),
       ),
-    );
-
-    this.#deleteStmt = db.prepare(
-      compile(
-        sql`DELETE FROM ${sql.ident(tableName)} WHERE ${sql.join(
-          primaryKey.map(k => sql`${sql.ident(k)} = ?`),
-          sql` AND `,
-        )}`,
+      delete: db.prepare(
+        compile(
+          sql`DELETE FROM ${sql.ident(this.#table)} WHERE ${sql.join(
+            this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+            sql` AND `,
+          )}`,
+        ),
       ),
-    );
-
-    this.#checkExistsStmt = db.prepare(
-      compile(
-        sql`SELECT 1 AS "exists" FROM ${sql.ident(tableName)} WHERE ${sql.join(
-          primaryKey.map(k => sql`${sql.ident(k)} = ?`),
-          sql` AND `,
-        )} LIMIT 1`,
+      checkExists: db.prepare(
+        compile(
+          sql`SELECT 1 AS "exists" FROM ${sql.ident(
+            this.#table,
+          )} WHERE ${sql.join(
+            this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+            sql` AND `,
+          )} LIMIT 1`,
+        ),
       ),
-    );
+    };
+    this.#dbCache.set(db, stmts);
+    return stmts;
   }
 
   #getRegistrationForOutput(output: Output): OutputRegistration {
@@ -175,7 +199,7 @@ export class TableSource implements Source {
       const sqlAndBindings = format(preSql);
 
       newReq = {...req, start: undefined};
-      this.#statementCache.use(sqlAndBindings.text, cachedStatement => {
+      this.#stmts.cache.use(sqlAndBindings.text, cachedStatement => {
         for (const beforeRow of cachedStatement.statement.iterate(
           ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         )) {
@@ -200,7 +224,7 @@ export class TableSource implements Source {
       );
       const sqlAndBindings = format(query);
 
-      const cachedStatement = this.#statementCache.get(sqlAndBindings.text);
+      const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
       try {
         const rowIterator = cachedStatement.statement.iterate(
           ...sqlAndBindings.values.map(v => toSQLiteType(v)),
@@ -234,7 +258,7 @@ export class TableSource implements Source {
           comparator,
         );
       } finally {
-        this.#statementCache.return(cachedStatement);
+        this.#stmts.cache.return(cachedStatement);
       }
     }
   }
@@ -243,7 +267,7 @@ export class TableSource implements Source {
     // need to check for the existence of the row before modifying
     // the db so we don't push it to outputs if it does/doest not exist.
     const exists =
-      this.#checkExistsStmt.get(...pickColumns(this.#primaryKey, change.row))
+      this.#stmts.checkExists.get(...pickColumns(this.#primaryKey, change.row))
         ?.exists === 1;
     if (change.type === 'add') {
       assert(!exists, 'Row already exists');
@@ -266,12 +290,12 @@ export class TableSource implements Source {
     }
     this.#overlay = undefined;
     if (change.type === 'add') {
-      this.#insertStmt.run(
+      this.#stmts.insert.run(
         ...toSQLiteTypes(Object.keys(this.#columns), change.row),
       );
     } else {
       change.type satisfies 'remove';
-      this.#deleteStmt.run(...toSQLiteTypes(this.#primaryKey, change.row));
+      this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
     }
   }
 }
