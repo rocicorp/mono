@@ -1,8 +1,8 @@
 import {Database} from 'better-sqlite3';
 import type postgres from 'postgres';
 import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {stripCommentsAndWhitespace} from 'zero-cache/src/db/query-test-util.js';
 import {DbFile} from 'zero-cache/src/test/lite.js';
-import {stripCommentsAndWhitespace} from 'zero-cache/src/zql/query-test-util.js';
 import {testDBs} from '../../../test/db.js';
 import {createTableStatement} from './create.js';
 import {listTables} from './list.js';

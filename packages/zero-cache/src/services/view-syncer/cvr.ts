@@ -4,12 +4,12 @@ import {assert, unreachable} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
-import {rowIDHash} from '../../types/row-key.js';
+import {JSONObject} from 'zero-cache/src/types/bigint-json.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
+import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVRStore} from './cvr-store.js';
-import type {ParsedRow} from './queries.js';
 import {
   ClientQueryRecord,
   InternalQueryRecord,
@@ -28,6 +28,12 @@ import {
   type LastActive,
   type QueryRecord,
 } from './schema/types.js';
+
+// From obsolete queries.ts. Will need to be reworked for IVM.
+export type ParsedRow = {
+  record: Omit<RowRecord, 'patchVersion'>;
+  contents: JSONObject;
+};
 
 /** Internally used mutable CVR type. */
 export type CVR = {
