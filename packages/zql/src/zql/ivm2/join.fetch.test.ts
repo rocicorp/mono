@@ -7,7 +7,7 @@ import type {Row, Node} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
-import { ValueType } from './schema.js';
+import {ValueType} from './schema.js';
 test('hydrate one:many', () => {
   const base = {
     columns: [
@@ -302,8 +302,8 @@ test('hydrate one:many:many', () => {
         childKey: 'commentID',
         relationshipName: 'revisions',
       },
-    ]
-  }
+    ],
+  };
 
   // no data
   fetchTest({
@@ -487,7 +487,7 @@ test('hydrate one:many:one', () => {
         relationshipName: 'labels',
       },
     ],
-  }
+  };
 
   const sorts = [
     undefined,
@@ -702,8 +702,9 @@ function fetchTest(t: FetchTest) {
     for (const row of rows) {
       source.push({type: 'add', row});
     }
-    const snitch = new Snitch(source, String(i), log);
-    source.addOutput(snitch, ordering);
+    const connector = source.connect(ordering);
+    const snitch = new Snitch(connector, String(i), log);
+    connector.setOutput(snitch);
     return {
       source,
       snitch,

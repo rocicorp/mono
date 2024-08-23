@@ -188,8 +188,9 @@ describe('fetching from a table source', () => {
     },
   ] as const)('$name', ({sourceArgs, fetchArgs, expectedRows}) => {
     const source = new TableSource(db, sourceArgs[0], sourceArgs[1], ['id']);
-    const out = new Catch(source);
-    source.addOutput(out, sourceArgs[2]);
+    const c = source.connect(sourceArgs[2]);
+    const out = new Catch(c);
+    c.setOutput(out);
     const rows = out.fetch(fetchArgs);
     expect(rows.map(r => r.row)).toEqual(expectedRows);
   });

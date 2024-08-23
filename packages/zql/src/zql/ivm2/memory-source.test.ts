@@ -17,9 +17,10 @@ runCases(
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
     const ms = new MemorySource({a: 'string'}, ['a']);
-    const out = new Catch(ms);
-    ms.addOutput(out, order);
-    return ms.getSchema(out).compareRows;
+    const connector = ms.connect(order);
+    const out = new Catch(connector);
+    connector.setOutput(out);
+    return connector.getSchema(out).compareRows;
   });
 });
 
@@ -27,24 +28,27 @@ test('indexes get cleaned up when not needed', () => {
   const ms = new MemorySource({a: 'string', b: 'string', c: 'string'}, ['a']);
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 
-  const c1 = new Catch(ms);
-  ms.addOutput(c1, [['b', 'asc']]);
+  const conn1 = ms.connect([['b', 'asc']]);
+  const c1 = new Catch(conn1);
+  conn1.setOutput(c1);
   c1.hydrate();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  const c2 = new Catch(ms);
-  ms.addOutput(c2, [['b', 'asc']]);
+  const conn2 = ms.connect([['b', 'asc']]);
+  const c2 = new Catch(conn2);
+  conn2.setOutput(c2);
   c2.hydrate();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  const c3 = new Catch(ms);
-  ms.addOutput(c3, [['c', 'asc']]);
+  const conn3 = ms.connect([['c', 'asc']]);
+  const c3 = new Catch(conn3);
+  conn3.setOutput(c3);
   c3.hydrate();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
@@ -52,18 +56,18 @@ test('indexes get cleaned up when not needed', () => {
     JSON.stringify([['c', 'asc']]),
   ]);
 
-  ms.removeOutput(c3);
+  ms.disconnect(conn3);
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  ms.removeOutput(c2);
+  ms.disconnect(conn2);
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  ms.removeOutput(c1);
+  ms.disconnect(conn1);
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 });

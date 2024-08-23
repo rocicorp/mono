@@ -29,6 +29,8 @@ export interface Input {
   // Returns the same thing as fetch(). This is to allow callers to properly
   // propagate the dehydrate message through the graph.
   dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
+
+  setOutput(output: Output): void;
 }
 
 export type HydrateRequest = {

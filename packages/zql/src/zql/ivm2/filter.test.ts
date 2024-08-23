@@ -9,8 +9,9 @@ test('basics', () => {
   ms.push({type: 'add', row: {a: 2, b: 'bar'}});
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
 
-  const filter = new Filter(ms, row => row.b === 'foo');
-  ms.addOutput(filter, [['a', 'asc']]);
+  const connector = ms.connect([['a', 'asc']]);
+  const filter = new Filter(connector, row => row.b === 'foo');
+  connector.setOutput(filter);
 
   const out = new Catch(filter);
   filter.setOutput(out);
