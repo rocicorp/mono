@@ -18,8 +18,9 @@ import {
   Lazy,
   PullSchemaForRelationship,
 } from './schema.js';
-import {Output} from '../ivm2/operator.js';
 import {buildPipeline, Host} from '../builder/builder.js';
+import {Ordering} from '../ast2/ast.js';
+import {Input} from '../ivm2/operator.js';
 
 export function newEntityQuery<
   TSchema extends EntitySchema,
@@ -99,11 +100,15 @@ class EntityQueryImpl<
               childField: related1.dest.field,
               op: '=',
             },
-            subquery: cb(
-              this.#create(this.#host, destSchema, {
-                table: destSchema.table,
-              }),
-            ).ast,
+            subquery: addPrimaryKeysToAst(
+              destSchema,
+              cb(
+                this.#create(this.#host, destSchema, {
+                  table: destSchema.table,
+                  alias: relationship as string,
+                }),
+              ).ast,
+            ),
           },
         ],
       });
@@ -124,6 +129,8 @@ class EntityQueryImpl<
             },
             subquery: {
               table: junctionSchema.table,
+              alias: relationship as string,
+              orderBy: addPrimaryKeys(junctionSchema, undefined),
               related: [
                 {
                   correlation: {
@@ -131,11 +138,15 @@ class EntityQueryImpl<
                     childField: related2.dest.field,
                     op: '=',
                   },
-                  subquery: cb(
-                    this.#create(this.#host, destSchema, {
-                      table: destSchema.table,
-                    }),
-                  ).ast,
+                  subquery: addPrimaryKeysToAst(
+                    destSchema,
+                    cb(
+                      this.#create(this.#host, destSchema, {
+                        table: destSchema.table,
+                        alias: relationship as string,
+                      }),
+                    ).ast,
+                  ),
                 },
               ],
             },
@@ -189,8 +200,14 @@ class EntityQueryImpl<
     });
   }
 
-  toPipeline(): Output {
-    return buildPipeline(this.#ast, this.#host);
+  toPipeline(): Input {
+    return buildPipeline(
+      {
+        ...this.#ast,
+        orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
+      },
+      this.#host,
+    );
   }
 }
 
@@ -202,4 +219,33 @@ function resolveSchema(
   }
 
   return maybeSchema;
+}
+
+function addPrimaryKeys(
+  schema: EntitySchema,
+  orderBy: Ordering | undefined,
+): Ordering {
+  orderBy = orderBy ?? [];
+  const primaryKeys = schema.primaryKey;
+  const primaryKeysToAdd = new Set(primaryKeys);
+
+  for (const [field] of orderBy) {
+    primaryKeysToAdd.delete(field);
+  }
+
+  if (primaryKeysToAdd.size === 0) {
+    return orderBy;
+  }
+
+  return [
+    ...orderBy,
+    ...[...primaryKeysToAdd].map(key => [key, 'asc'] as [string, 'asc']),
+  ];
+}
+
+function addPrimaryKeysToAst(schema: EntitySchema, ast: AST): AST {
+  return {
+    ...ast,
+    orderBy: addPrimaryKeys(schema, ast.orderBy),
+  };
 }

@@ -4,7 +4,7 @@ import {Catch} from '../ivm2/catch.js';
 import {MemorySource} from '../ivm2/memory-source.js';
 import {MemoryStorage} from '../ivm2/memory-storage.js';
 
-function testSources() {
+export function testSources() {
   const users = new MemorySource({id: 'number', name: 'string'}, ['id']);
   users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}});
   users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}});
