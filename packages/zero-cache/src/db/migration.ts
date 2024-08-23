@@ -137,7 +137,7 @@ export type SchemaVersions = v.Infer<typeof schemaVersions>;
 
 // Exposed for tests
 export async function getSchemaVersions(
-  sql: postgres.TransactionSql,
+  sql: postgres.Sql,
   schemaName: string,
 ): Promise<SchemaVersions> {
   // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
