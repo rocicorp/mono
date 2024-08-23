@@ -50,84 +50,78 @@ class OverlaySpy implements Output {
 
 const cases = {
   'simple-pull': (createSource: SourceFactory) => {
-    // works the same for hydrate and fetch.
-    for (const m of ['hydrate', 'fetch'] as const) {
-      const sort = [['a', 'asc']] as const;
-      const ms = createSource('table', {a: 'number'}, ['a']);
-      const out = new Catch(ms.connect(sort));
-      expect(out[m]()).toEqual([]);
+    const sort = [['a', 'asc']] as const;
+    const ms = createSource('table', {a: 'number'}, ['a']);
+    const out = new Catch(ms.connect(sort));
+    expect(out.fetch()).toEqual([]);
 
-      ms.push({type: 'add', row: {a: 3}});
-      expect(out[m]()).toEqual(asNodes([{a: 3}]));
+    ms.push({type: 'add', row: {a: 3}});
+    expect(out.fetch()).toEqual(asNodes([{a: 3}]));
 
-      ms.push({type: 'add', row: {a: 1}});
-      ms.push({type: 'add', row: {a: 2}});
-      expect(out[m]()).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
+    ms.push({type: 'add', row: {a: 1}});
+    ms.push({type: 'add', row: {a: 2}});
+    expect(out.fetch()).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
 
-      ms.push({type: 'remove', row: {a: 1}});
-      expect(out[m]()).toEqual(asNodes([{a: 2}, {a: 3}]));
+    ms.push({type: 'remove', row: {a: 1}});
+    expect(out.fetch()).toEqual(asNodes([{a: 2}, {a: 3}]));
 
-      ms.push({type: 'remove', row: {a: 2}});
-      ms.push({type: 'remove', row: {a: 3}});
-      expect(out[m]()).toEqual([]);
-    }
+    ms.push({type: 'remove', row: {a: 2}});
+    ms.push({type: 'remove', row: {a: 3}});
+    expect(out.fetch()).toEqual([]);
   },
 
   'pull-with-constraint': (createSource: SourceFactory) => {
-    // works the same for hydrate and fetch.
-    for (const m of ['hydrate', 'fetch'] as const) {
-      const sort = [['a', 'asc']] as const;
-      const ms = createSource(
-        'table',
-        {
-          a: 'number',
-          b: 'boolean',
-          c: 'number',
-          d: 'string',
-        },
-        ['a'],
-      );
-      const out = new Catch(ms.connect(sort));
-      ms.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
-      ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
-      ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
+    const sort = [['a', 'asc']] as const;
+    const ms = createSource(
+      'table',
+      {
+        a: 'number',
+        b: 'boolean',
+        c: 'number',
+        d: 'string',
+      },
+      ['a'],
+    );
+    const out = new Catch(ms.connect(sort));
+    ms.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
+    ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
+    ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
 
-      expect(out[m]({constraint: {key: 'b', value: true}})).toEqual(
-        asNodes([
-          {a: 1, b: true, c: 2, d: null},
-          {a: 3, b: true, c: 1, d: null},
-        ]),
-      );
+    expect(out.fetch({constraint: {key: 'b', value: true}})).toEqual(
+      asNodes([
+        {a: 1, b: true, c: 2, d: null},
+        {a: 3, b: true, c: 1, d: null},
+      ]),
+    );
 
-      expect(out[m]({constraint: {key: 'b', value: false}})).toEqual(
-        asNodes([{a: 2, b: false, c: null, d: null}]),
-      );
+    expect(out.fetch({constraint: {key: 'b', value: false}})).toEqual(
+      asNodes([{a: 2, b: false, c: null, d: null}]),
+    );
 
-      expect(out[m]({constraint: {key: 'c', value: 1}})).toEqual(
-        asNodes([{a: 3, b: true, c: 1, d: null}]),
-      );
+    expect(out.fetch({constraint: {key: 'c', value: 1}})).toEqual(
+      asNodes([{a: 3, b: true, c: 1, d: null}]),
+    );
 
-      expect(out[m]({constraint: {key: 'c', value: 0}})).toEqual(asNodes([]));
+    expect(out.fetch({constraint: {key: 'c', value: 0}})).toEqual(asNodes([]));
 
-      // Constraints are used to implement joins and so should use join
-      // semantics for equality. null !== null.
-      expect(out[m]({constraint: {key: 'c', value: null}})).toEqual(
-        asNodes([]),
-      );
-      expect(out[m]({constraint: {key: 'c', value: undefined}})).toEqual(
-        asNodes([]),
-      );
+    // Constraints are used to implement joins and so should use join
+    // semantics for equality. null !== null.
+    expect(out.fetch({constraint: {key: 'c', value: null}})).toEqual(
+      asNodes([]),
+    );
+    expect(out.fetch({constraint: {key: 'c', value: undefined}})).toEqual(
+      asNodes([]),
+    );
 
-      // Not really a feature, but because of loose typing of joins and how we
-      // accept undefined we can't really tell when constraining on a field that
-      // doesn't exist.
-      expect(out[m]({constraint: {key: 'd', value: null}})).toEqual(
-        asNodes([]),
-      );
-      expect(out[m]({constraint: {key: 'd', value: undefined}})).toEqual(
-        asNodes([]),
-      );
-    }
+    // Not really a feature, but because of loose typing of joins and how we
+    // accept undefined we can't really tell when constraining on a field that
+    // doesn't exist.
+    expect(out.fetch({constraint: {key: 'd', value: null}})).toEqual(
+      asNodes([]),
+    );
+    expect(out.fetch({constraint: {key: 'd', value: undefined}})).toEqual(
+      asNodes([]),
+    );
   },
 
   'fetch-start': (createSource: SourceFactory) => {

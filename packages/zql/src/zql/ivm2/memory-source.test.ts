@@ -29,7 +29,7 @@ test('indexes get cleaned up when not needed', () => {
 
   const conn1 = ms.connect([['b', 'asc']]);
   const c1 = new Catch(conn1);
-  c1.hydrate();
+  c1.fetch();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
@@ -37,7 +37,7 @@ test('indexes get cleaned up when not needed', () => {
 
   const conn2 = ms.connect([['b', 'asc']]);
   const c2 = new Catch(conn2);
-  c2.hydrate();
+  c2.fetch();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
@@ -45,7 +45,7 @@ test('indexes get cleaned up when not needed', () => {
 
   const conn3 = ms.connect([['c', 'asc']]);
   const c3 = new Catch(conn3);
-  c3.hydrate();
+  c3.fetch();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),

@@ -94,12 +94,14 @@ export function compareValues(a: Value, b: Value): number {
   throw new Error(`Unsupported type: ${a}`);
 }
 
+export type NormalizedValue = Exclude<Value, undefined>;
+
 /**
  * We allow undefined to be passed for the convenience of developers, but we
  * treat it equivalently to null. It's better for perf to not create an copy
  * of input values, so we just normalize at use when necessary.
  */
-export function normalizeUndefined(v: Value): Exclude<Value, undefined> {
+export function normalizeUndefined(v: Value): NormalizedValue {
   if (v === undefined) {
     return null;
   }
