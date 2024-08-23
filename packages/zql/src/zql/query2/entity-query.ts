@@ -152,7 +152,8 @@ export interface EntityQuery<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sub<TSub extends EntityQuery<any, any, any>>(
-    // If we only want to allow `related` : Pick<EntityQuery<TSchema>, 'related'>
+    // If we only want to allow the subquery callback to use `related`
+    // we can change the query type to: Pick<EntityQuery<TSchema>, 'related'>
     cb: (query: EntityQuery<TSchema>) => TSub,
   ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
 

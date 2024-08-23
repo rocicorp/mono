@@ -19,11 +19,17 @@ export type AST = {
 
   // `select` is missing given we return all columns for now.
 
-  readonly subqueries?: readonly AST[] | undefined;
+  // The PipelineBuilder will need to pick what to use to correlate
+  // a subquery with a parent query. It can choose something from the
+  // where conditions or choose the _first_ `related` call.
+  // Choosing the first `related` entry is almost always the best choice when
+  // one exists.
   readonly where?: Condition | undefined;
+  readonly related?: (FieldRelationship | JunctionRelationship)[] | undefined;
+
+  readonly subqueries?: readonly AST[] | undefined;
   readonly limit?: number | undefined;
   readonly orderBy?: Ordering | undefined;
-  readonly related?: (FieldRelationship | JunctionRelationship)[] | undefined;
 };
 
 type FieldRelationship = {
