@@ -99,21 +99,23 @@ class EntityQueryImpl<
     const related1 = related;
     const related2 = related;
     if (isFieldRelationship(related1)) {
-      return this.#create(this.#context, this.#schema, {
+      const destSchema = resolveSchema(related1.dest.schema);
+      return this.#create(this.#context, destSchema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
           {
             sourceField: related1.source,
             destField: related1.dest.field,
-            destTable: resolveSchema(related1.dest.schema).table,
+            destTable: destSchema.table,
           },
         ],
       });
     }
 
     if (isJunctionRelationship(related2)) {
-      return this.#create(this.#context, this.#schema, {
+      const destSchema = resolveSchema(related2.dest.schema);
+      return this.#create(this.#context, destSchema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -123,7 +125,7 @@ class EntityQueryImpl<
             junctionSourceField: related2.junction.sourceField,
             junctionDestField: related2.junction.destField,
             destField: related.dest.field,
-            destTable: resolveSchema(related.dest.schema).table,
+            destTable: destSchema.table,
           },
         ],
       });
@@ -139,12 +141,15 @@ class EntityQueryImpl<
   ): EntityQuery<TSchema, TReturn, TAs> {
     return this.#create(this.#context, this.#schema, {
       ...this.#ast,
-      where: {
-        type: 'simple',
-        op,
-        field: field as string,
-        value,
-      },
+      where: [
+        ...(this.#ast.where ?? []),
+        {
+          type: 'simple',
+          op,
+          field: field as string,
+          value,
+        },
+      ],
     });
   }
 
