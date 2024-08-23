@@ -96,7 +96,7 @@ describe('types', () => {
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
         readonly entity: {readonly s: string};
-        subselects: never;
+        related: never;
       }[]
     >();
 
@@ -108,47 +108,7 @@ describe('types', () => {
           readonly b: boolean;
           readonly n: number;
         };
-        subselects: never;
-      }[]
-    >();
-  });
-
-  test('subquery', () => {
-    const query = mockQuery as unknown as EntityQuery<TestSchema>;
-
-    const query2 = query
-      .select('s')
-      .sub(query => query.select('s', 'b').as('first'));
-    expectTypeOf(query2.run()).toMatchTypeOf<
-      readonly {
-        readonly entity: {readonly s: string};
-        readonly subselects: {
-          readonly first: readonly {
-            readonly entity: {readonly s: string; readonly b: boolean};
-            readonly subselects: never;
-          }[];
-        };
-      }[]
-    >();
-
-    // @ts-expect-error - cannot select a field that does not exist even in subqueries
-    query.sub(query => query.select('x'));
-
-    // many subqueries
-    const query3 = query2.sub(query => query.select('s', 'b').as('second'));
-    expectTypeOf(query3.run()).toMatchTypeOf<
-      readonly {
-        readonly entity: {readonly s: string};
-        readonly subselects: {
-          readonly first: readonly {
-            readonly entity: {readonly s: string; readonly b: boolean};
-            readonly subselects: never;
-          }[];
-          readonly second: readonly {
-            readonly entity: {readonly s: string; readonly b: boolean};
-            readonly subselects: never;
-          }[];
-        };
+        related: never;
       }[]
     >();
   });
@@ -157,54 +117,81 @@ describe('types', () => {
     const query =
       mockQuery as unknown as EntityQuery<TestSchemaWithRelationships>;
 
-    // @ts-expect-error - cannot select a field that does not exist. We moved to `related` and `a` does not exist there
-    query.related('test').select('a');
+    // @ts-expect-error - cannot select a field that does not exist
+    query.related('test', q => q.select('a'));
 
     // @ts-expect-error - cannot traverse a relationship that does not exist
-    query.related('doesNotExist');
+    query.related('doesNotExist', q => q);
 
-    const query2 = query.related('test').select('s');
+    const query2 = query.related('test', q => q.select('b')).select('s');
 
-    expectTypeOf(query2.run()).toMatchTypeOf<
-      readonly {
-        entity: {s: string};
-        subselects: never;
-      }[]
-    >();
-
-    // The semantics of `related` currently implemented is that we move
-    // to the related entity without adding levels of nesting.
-    const query3 =
-      mockQuery as unknown as EntityQuery<TestSchemaWithMoreRelationships>;
-    const t = query3
-      .related('self')
-      .related('testWithRelationships')
-      .related('test')
-      .select('n')
-      .run();
-    expectTypeOf(t).toMatchTypeOf<
-      readonly {entity: {n: number}; subselects: never}[]
-    >();
-  });
-
-  test('related in subquery position', () => {
-    const query =
-      mockQuery as unknown as EntityQuery<TestSchemaWithRelationships>;
-
-    const query2 = query
-      .select('s')
-      .sub(query => query.related('test').select('s'));
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
         readonly entity: {
           readonly s: string;
         };
-        readonly subselects: {
+        readonly related: {
           readonly test: readonly {
             readonly entity: {
-              readonly s: string;
+              readonly b: boolean;
             };
-            readonly subselects: never;
+            readonly related: never;
+          }[];
+        };
+      }[]
+    >();
+
+    // Many calls to related builds up the related object.
+    const query3 =
+      mockQuery as unknown as EntityQuery<TestSchemaWithMoreRelationships>;
+    const t = query3
+      .related('self', q => q.select('s'))
+      .related('testWithRelationships', q => q.select('b'))
+      .related('test', q => q.select('n'))
+      .select('a')
+      .run();
+    expectTypeOf(t).toMatchTypeOf<
+      readonly {
+        entity: {a: string};
+        related: {
+          self: readonly {
+            entity: {s: string};
+            related: never;
+          }[];
+          testWithRelationships: readonly {
+            entity: {b: boolean};
+            related: never;
+          }[];
+          test: readonly {
+            entity: {n: number};
+            related: never;
+          }[];
+        };
+      }[]
+    >();
+  });
+
+  test('related in subquery position', () => {
+    const query =
+      mockQuery as unknown as EntityQuery<TestSchemaWithMoreRelationships>;
+
+    const query2 = query
+      .select('s')
+      .related('self', query =>
+        query.related('test', q => q.select('b')).select('s'),
+      );
+    expectTypeOf(query2.run()).toMatchTypeOf<
+      readonly {
+        entity: {s: string};
+        related: {
+          self: readonly {
+            entity: {s: string};
+            related: {
+              test: readonly {
+                entity: {b: boolean};
+                related: never;
+              }[];
+            };
           }[];
         };
       }[]
@@ -225,7 +212,7 @@ describe('types', () => {
     expectTypeOf(query.select('b').where('b', '=', true).run()).toMatchTypeOf<
       readonly {
         entity: {b: boolean};
-        subselects: never;
+        related: never;
       }[]
     >();
   });

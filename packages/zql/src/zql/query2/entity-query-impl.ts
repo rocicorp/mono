@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {assert} from '../../../../shared/src/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {AST} from '../ast2/ast.js';
-import {Context} from '../context/context.js';
 import {
   AddSelections,
   AddSubselect,
@@ -19,12 +18,13 @@ import {
   Lazy,
   PullSchemaForRelationship,
 } from './schema.js';
+import {Host} from '../builder/builder.js';
 
 export function newEntityQuery<
   TSchema extends EntitySchema,
   TReturn extends QueryResultRow[] = [],
->(context: Context, schema: TSchema): EntityQuery<TSchema, TReturn> {
-  return new EntityQueryImpl(context, schema);
+>(host: Host, schema: TSchema): EntityQuery<TSchema, TReturn> {
+  return new EntityQueryImpl(host, schema);
 }
 
 class EntityQueryImpl<
@@ -34,15 +34,14 @@ class EntityQueryImpl<
 > implements EntityQuery<TSchema, TReturn, TAs>
 {
   readonly #ast: AST;
-  readonly #context: Context;
+  readonly #context: Host;
   readonly #schema: TSchema;
 
-  constructor(context: Context, schema: TSchema, ast?: AST | undefined) {
+  constructor(host: Host, schema: TSchema, ast?: AST | undefined) {
     this.#ast = ast ?? {
-      type: 'unmoored',
       table: schema.table,
     };
-    this.#context = context;
+    this.#context = host;
     this.#schema = schema;
   }
 
@@ -50,12 +49,8 @@ class EntityQueryImpl<
     TSchema extends EntitySchema,
     TReturn extends QueryResultRow[],
     TAs extends string,
-  >(
-    context: Context,
-    schema: TSchema,
-    ast: AST,
-  ): EntityQuery<TSchema, TReturn, TAs> {
-    return new EntityQueryImpl(context, schema, ast);
+  >(host: Host, schema: TSchema, ast: AST): EntityQuery<TSchema, TReturn, TAs> {
+    return new EntityQueryImpl(host, schema, ast);
   }
 
   get ast() {
@@ -73,41 +68,41 @@ class EntityQueryImpl<
     throw new Error('Method not implemented.');
   }
 
-  sub<TSub extends EntityQuery<any, any, any>>(
-    cb: (query: EntityQuery<TSchema>) => TSub,
-  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs> {
-    const subquery = cb(
-      this.#create(this.#context, this.#schema, {
-        type: 'anchored',
-      }),
-    );
-    return this.#create(this.#context, this.#schema, {
-      ...this.#ast,
-      subqueries: [...(this.#ast.subqueries ?? []), subquery.ast],
-    });
-  }
-
-  related<TRelationship extends keyof TSchema['relationships']>(
+  related<
+    TRelationship extends keyof TSchema['relationships'],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    TSub extends EntityQuery<any, any, any>,
+  >(
     relationship: TRelationship,
-  ): EntityQuery<
-    PullSchemaForRelationship<TSchema, TRelationship>,
-    [],
-    TRelationship & string
-  > {
+    cb: (
+      query: EntityQuery<
+        PullSchemaForRelationship<TSchema, TRelationship>,
+        [],
+        TRelationship & string
+      >,
+    ) => TSub,
+  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs> {
     const related = this.#schema.relationships?.[relationship as string];
     assert(related, 'Invalid relationship');
     const related1 = related;
     const related2 = related;
     if (isFieldRelationship(related1)) {
       const destSchema = resolveSchema(related1.dest.schema);
-      return this.#create(this.#context, destSchema, {
+      return this.#create(this.#context, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
           {
-            sourceField: related1.source,
-            destField: related1.dest.field,
-            destTable: destSchema.table,
+            correlation: {
+              parentField: related1.source,
+              childField: related1.dest.field,
+              op: '=',
+            },
+            subquery: cb(
+              this.#create(this.#context, destSchema, {
+                table: destSchema.table,
+              }),
+            ).ast,
           },
         ],
       });
@@ -115,22 +110,38 @@ class EntityQueryImpl<
 
     if (isJunctionRelationship(related2)) {
       const destSchema = resolveSchema(related2.dest.schema);
-      return this.#create(this.#context, destSchema, {
+      const junctionSchema = resolveSchema(related2.junction.schema);
+      return this.#create(this.#context, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
           {
-            sourceField: related2.source,
-            junctionTable: resolveSchema(related2.junction.schema).table,
-            junctionSourceField: related2.junction.sourceField,
-            junctionDestField: related2.junction.destField,
-            destField: related.dest.field,
-            destTable: destSchema.table,
+            correlation: {
+              parentField: related2.source,
+              childField: related2.junction.sourceField,
+              op: '=',
+            },
+            subquery: {
+              table: junctionSchema.table,
+              related: [
+                {
+                  correlation: {
+                    parentField: related2.junction.destField,
+                    childField: related2.dest.field,
+                    op: '=',
+                  },
+                  subquery: cb(
+                    this.#create(this.#context, destSchema, {
+                      table: destSchema.table,
+                    }),
+                  ).ast,
+                },
+              ],
+            },
           },
         ],
       });
     }
-
     throw new Error(`Invalid relationship ${relationship as string}`);
   }
 

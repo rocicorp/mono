@@ -82,12 +82,14 @@ test('filter', () => {
       {
         table: 'users',
         orderBy: [['id', 'desc']],
-        where: {
-          type: 'simple',
-          field: 'name',
-          op: '>=',
-          value: 'c',
-        },
+        where: [
+          {
+            type: 'simple',
+            field: 'name',
+            op: '>=',
+            value: 'c',
+          },
+        ],
       },
       {
         getSource,
@@ -126,7 +128,7 @@ test('self-join', () => {
       {
         table: 'users',
         orderBy: [['id', 'asc']],
-        subqueries: [
+        related: [
           {
             correlation: {
               parentField: 'recruiterID',
@@ -290,13 +292,15 @@ test('multi-join', () => {
       {
         table: 'users',
         orderBy: [['id', 'asc']],
-        where: {
-          type: 'simple',
-          field: 'id',
-          op: '<=',
-          value: 3,
-        },
-        subqueries: [
+        where: [
+          {
+            type: 'simple',
+            field: 'id',
+            op: '<=',
+            value: 3,
+          },
+        ],
+        related: [
           {
             correlation: {
               parentField: 'id',
@@ -310,7 +314,7 @@ test('multi-join', () => {
                 ['userID', 'asc'],
                 ['stateCode', 'asc'],
               ],
-              subqueries: [
+              related: [
                 {
                   correlation: {
                     parentField: 'stateCode',

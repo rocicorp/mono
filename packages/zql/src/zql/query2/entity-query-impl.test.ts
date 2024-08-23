@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import {newEntityQuery} from './entity-query-impl.js';
-import {Context} from '../context/context.js';
+import {Host} from '../builder/builder.js';
 
-const mockContext = {} as Context;
+const mockHost = {} as Host;
 
 const issueSchema = {
   table: 'issue',
@@ -140,44 +140,39 @@ const userSchema = {
 
 describe('building the AST', () => {
   test('creates a new entity query', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
     expect(issueQuery.ast).toEqual({
-      type: 'unmoored',
       table: 'issue',
     });
   });
 
   test('selecting fields does nothing to the ast', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
     const selected = issueQuery.select('id', 'title');
     expect(selected.ast).toEqual({
-      type: 'unmoored',
       table: 'issue',
     });
   });
 
   test('as sets an alias', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
     const aliased = issueQuery.as('i');
     expect(aliased.ast).toEqual({
-      type: 'unmoored',
       table: 'issue',
       alias: 'i',
     });
   });
 
   test('where inserts a condition', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
     const where = issueQuery.where('id', '=', '1');
     expect(where.ast).toEqual({
-      type: 'unmoored',
       table: 'issue',
       where: [{type: 'simple', field: 'id', op: '=', value: '1'}],
     });
 
     const where2 = where.where('title', '=', 'foo');
     expect(where2.ast).toEqual({
-      type: 'unmoored',
       table: 'issue',
       where: [
         {type: 'simple', field: 'id', op: '=', value: '1'},
@@ -187,126 +182,167 @@ describe('building the AST', () => {
   });
 
   test('related: field edges', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
-    const related = issueQuery.related('owner');
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const related = issueQuery.related('owner', q => q);
     expect(related.ast).toEqual({
-      type: 'unmoored',
-      table: 'issue',
       related: [
         {
-          sourceField: 'ownerId',
-          destField: 'id',
-          destTable: 'user',
+          correlation: {
+            childField: 'id',
+            op: '=',
+            parentField: 'ownerId',
+          },
+          subquery: {
+            table: 'user',
+          },
         },
       ],
-    });
-  });
-  test('related: junction edges', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
-    const related = issueQuery.related('labels');
-    expect(related.ast).toEqual({
-      type: 'unmoored',
       table: 'issue',
-      related: [
-        {
-          sourceField: 'id',
-          junctionTable: 'issueLabel',
-          junctionSourceField: 'issueId',
-          junctionDestField: 'labelId',
-          destField: 'id',
-          destTable: 'label',
-        },
-      ],
-    });
-  });
-  test('related: many stacked edges', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
-    const related = issueQuery
-      .related('owner')
-      .related('issues')
-      .related('labels');
-    expect(related.ast).toEqual({
-      type: 'unmoored',
-      table: 'issue',
-      related: [
-        {
-          sourceField: 'ownerId',
-          destField: 'id',
-          destTable: 'user',
-        },
-        {
-          sourceField: 'id',
-          destField: 'ownerId',
-          destTable: 'issue',
-        },
-        {
-          sourceField: 'id',
-          junctionTable: 'issueLabel',
-          junctionSourceField: 'issueId',
-          junctionDestField: 'labelId',
-          destField: 'id',
-          destTable: 'label',
-        },
-      ],
     });
   });
 
-  test('subquery with stacked relationships', () => {
-    const issueQuery = newEntityQuery(mockContext, issueSchema);
-    const subquery = issueQuery
-      .sub(iq => iq.related('comments').sub(cq => cq.related('revisions')))
-      .sub(iq => iq.related('owner'))
-      .sub(iq => iq.related('labels'));
-    expect(subquery.ast).toEqual({
-      subqueries: [
+  test('related: junction edges', () => {
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const related = issueQuery.related('labels', q => q);
+    expect(related.ast).toEqual({
+      related: [
         {
-          related: [
-            {
-              destField: 'issueId',
-              destTable: 'comment',
-              sourceField: 'id',
-            },
-          ],
-          subqueries: [
-            {
-              related: [
-                {
-                  destField: 'commentId',
-                  destTable: 'revision',
-                  sourceField: 'id',
+          correlation: {
+            childField: 'issueId',
+            op: '=',
+            parentField: 'id',
+          },
+          subquery: {
+            related: [
+              {
+                correlation: {
+                  childField: 'id',
+                  op: '=',
+                  parentField: 'labelId',
                 },
-              ],
-              type: 'anchored',
-            },
-          ],
-          type: 'anchored',
-        },
-        {
-          related: [
-            {
-              destField: 'id',
-              destTable: 'user',
-              sourceField: 'ownerId',
-            },
-          ],
-          type: 'anchored',
-        },
-        {
-          related: [
-            {
-              destField: 'id',
-              destTable: 'label',
-              junctionDestField: 'labelId',
-              junctionSourceField: 'issueId',
-              junctionTable: 'issueLabel',
-              sourceField: 'id',
-            },
-          ],
-          type: 'anchored',
+                subquery: {
+                  table: 'label',
+                },
+              },
+            ],
+            table: 'issueLabel',
+          },
         },
       ],
       table: 'issue',
-      type: 'unmoored',
+    });
+  });
+
+  test('related: many stacked edges', () => {
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const related = issueQuery.related('owner', oq =>
+      oq.related('issues', iq => iq.related('labels', lq => lq)),
+    );
+    expect(related.ast).toEqual({
+      related: [
+        {
+          correlation: {
+            childField: 'id',
+            op: '=',
+            parentField: 'ownerId',
+          },
+          subquery: {
+            related: [
+              {
+                correlation: {
+                  childField: 'ownerId',
+                  op: '=',
+                  parentField: 'id',
+                },
+                subquery: {
+                  related: [
+                    {
+                      correlation: {
+                        childField: 'issueId',
+                        op: '=',
+                        parentField: 'id',
+                      },
+                      subquery: {
+                        related: [
+                          {
+                            correlation: {
+                              childField: 'id',
+                              op: '=',
+                              parentField: 'labelId',
+                            },
+                            subquery: {
+                              table: 'label',
+                            },
+                          },
+                        ],
+                        table: 'issueLabel',
+                      },
+                    },
+                  ],
+                  table: 'issue',
+                },
+              },
+            ],
+            table: 'user',
+          },
+        },
+      ],
+      table: 'issue',
+    });
+  });
+
+  test('related: many siblings', () => {
+    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const related = issueQuery
+      .related('owner', oq => oq)
+      .related('comments', cq => cq)
+      .related('labels', lq => lq);
+    expect(related.ast).toEqual({
+      related: [
+        {
+          correlation: {
+            childField: 'id',
+            op: '=',
+            parentField: 'ownerId',
+          },
+          subquery: {
+            table: 'user',
+          },
+        },
+        {
+          correlation: {
+            childField: 'issueId',
+            op: '=',
+            parentField: 'id',
+          },
+          subquery: {
+            table: 'comment',
+          },
+        },
+        {
+          correlation: {
+            childField: 'issueId',
+            op: '=',
+            parentField: 'id',
+          },
+          subquery: {
+            related: [
+              {
+                correlation: {
+                  childField: 'id',
+                  op: '=',
+                  parentField: 'labelId',
+                },
+                subquery: {
+                  table: 'label',
+                },
+              },
+            ],
+            table: 'issueLabel',
+          },
+        },
+      ],
+      table: 'issue',
     });
   });
 });
