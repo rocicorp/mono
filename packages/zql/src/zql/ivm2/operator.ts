@@ -3,7 +3,7 @@
 
 import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
-import type {Node, Row, Value} from './data.js';
+import type {Node, NormalizedValue, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
 import type {Schema} from './schema.js';
 
@@ -17,7 +17,6 @@ export interface Input {
   // Fetch data.
   // Does not modify current state.
   // Returns nodes sorted in order of schema().comparator.
-  // TODO: this is also implicitly subscribing to pushes
   fetch(req: FetchRequest, output: Output): Stream<Node>;
 
   // Dehydrate the operator. This is called when `output` will no longer
@@ -68,12 +67,18 @@ export interface Output {
  */
 export interface Operator extends Input, Output {}
 
+export type StorageKey = readonly NormalizedValue[];
 /**
  * Operators get access to storage that they can store their internal
  * state in.
  */
 export interface Storage {
-  set(key: readonly Value[], value: JSONValue): void;
-  get(key: readonly Value[], def?: JSONValue): JSONValue | undefined;
-  del(key: readonly Value[]): void;
+  set(key: StorageKey, value: JSONValue): void;
+  get(key: StorageKey, def?: JSONValue): JSONValue | undefined;
+  /**
+   * If options is not specified, defaults to scanning all entries.
+   * @param options
+   */
+  scan(options?: {prefix: readonly Value[]}): Stream<[StorageKey, JSONValue]>;
+  del(key: StorageKey): void;
 }

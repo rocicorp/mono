@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Node, Row} from './data.js';
+import type {Node, Row, Value} from './data.js';
 import type {
   FetchRequest,
   Input,
@@ -7,7 +7,7 @@ import type {
   Output,
   Storage,
 } from './operator.js';
-import type {Stream} from './stream.js';
+import {take, type Stream} from './stream.js';
 import type {Change} from './change.js';
 import type {Schema} from './schema.js';
 
@@ -62,12 +62,12 @@ export class Take implements Operator {
     ) {
       const partitionValue =
         this.#partitionKey === undefined ? undefined : req.constraint?.value;
-      const takeStateKey = ['take', partitionValue];
+      const takeStateKey = getTakeStateKey(partitionValue);
       const takeState = this.#storage.get(takeStateKey) as
         | TakeState
         | undefined;
       if (takeState === undefined) {
-        return this.#hydrate(req);
+        return this.#initialFetch(req);
       }
       if (takeState.bound === undefined) {
         return;
@@ -82,9 +82,10 @@ export class Take implements Operator {
     }
     // There is a partition key, but the fetch is not constrained or constrained
     // on a different key.  Thus we don't have a single take state to bound by.
-    // TODO(greg): This currently only happens with nested sub-queries
+    // This currently only happens with nested sub-queries
     // e.g. issues include issuelabels include label.  We could remove this
     // case if we added a translation layer (powered by some state) in join.
+    // Specifically we need joinKeyValue => parent constraint key
     const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row;
     if (maxBound === undefined) {
       return;
@@ -94,7 +95,7 @@ export class Take implements Operator {
         return;
       }
       const partitionValue = inputNode.row[this.#partitionKey];
-      const takeStateKey = ['take', partitionValue];
+      const takeStateKey = getTakeStateKey(partitionValue);
       const takeState = this.#storage.get(takeStateKey) as
         | TakeState
         | undefined;
@@ -107,7 +108,7 @@ export class Take implements Operator {
     }
   }
 
-  *#hydrate(req: FetchRequest): Stream<Node> {
+  *#initialFetch(req: FetchRequest): Stream<Node> {
     assert(req.start === undefined);
     assert(
       this.#partitionKey === undefined ||
@@ -117,7 +118,7 @@ export class Take implements Operator {
 
     const partitionValue =
       this.#partitionKey === undefined ? undefined : req.constraint?.value;
-    const takeStateKey = ['take', partitionValue];
+    const takeStateKey = getTakeStateKey(partitionValue);
     assert(this.#storage.get(takeStateKey) === undefined);
     if (this.#limit === 0) {
       this.#storage.set(takeStateKey, {count: 0});
@@ -156,6 +157,7 @@ export class Take implements Operator {
   }
 
   *cleanup(req: FetchRequest, _: Output): Stream<Node> {
+    assert(req.start === undefined);
     assert(
       this.#partitionKey === undefined ||
         (req.constraint !== undefined &&
@@ -164,7 +166,7 @@ export class Take implements Operator {
 
     const partitionValue =
       this.#partitionKey === undefined ? undefined : req.constraint?.value;
-    const takeStateKey = ['take', partitionValue];
+    const takeStateKey = getTakeStateKey(partitionValue);
     const takeState = this.#storage.get(takeStateKey) as TakeState | undefined;
     this.#storage.del(takeStateKey);
     assert(takeState !== undefined);
@@ -193,10 +195,10 @@ export class Take implements Operator {
       this.#partitionKey === undefined
         ? undefined
         : change.node.row[this.#partitionKey];
-    const takeStateKey = ['take', partitionValue];
+    const takeStateKey = getTakeStateKey(partitionValue);
     const takeState = this.#storage.get(takeStateKey) as TakeState | undefined;
-    // I think this is right, if this partition key wasn't hydrated
-    // we can ignore changes for it.
+
+    // The partition key was never fetched, so this push can be discarded.
     if (!takeState) {
       return;
     }
@@ -222,36 +224,38 @@ export class Take implements Operator {
         return;
       }
       // added row < bound
-      // TODO: We really just need the row not the whole node for the
-      // beforeBound, but fetch doesn't let us retrieve this
       let beforeBoundNode: Node | undefined;
       let boundNode: Node;
       if (this.#limit === 1) {
-        [boundNode] = take(
-          this.#input.fetch(
-            {
-              start: {
-                row: takeState.bound,
-                basis: 'at',
+        [boundNode] = [
+          ...take(
+            this.#input.fetch(
+              {
+                start: {
+                  row: takeState.bound,
+                  basis: 'at',
+                },
               },
-            },
-            this,
+              this,
+            ),
+            1,
           ),
-          1,
-        );
+        ];
       } else {
-        [beforeBoundNode, boundNode] = take(
-          this.#input.fetch(
-            {
-              start: {
-                row: takeState.bound,
-                basis: 'before',
+        [beforeBoundNode, boundNode] = [
+          ...take(
+            this.#input.fetch(
+              {
+                start: {
+                  row: takeState.bound,
+                  basis: 'before',
+                },
               },
-            },
-            this,
+              this,
+            ),
+            2,
           ),
-          2,
-        );
+        ];
       }
       const removeChange: Change = {
         type: 'remove',
@@ -265,7 +269,6 @@ export class Take implements Operator {
             ? change.node.row
             : beforeBoundNode.row,
       });
-      // TODO: is the order of the remove/add here important?
       this.#output.push(removeChange, this);
       this.#output.push(change, this);
     } else if (change.type === 'remove') {
@@ -325,16 +328,6 @@ export class Take implements Operator {
   }
 }
 
-function take<T>(stream: Stream<T>, limit: number): T[] {
-  const result: T[] = [];
-  if (limit < 1) {
-    return result;
-  }
-  for (const v of stream) {
-    result.push(v);
-    if (result.length === limit) {
-      break;
-    }
-  }
-  return result;
+function getTakeStateKey(partitionValue: Value): Value[] {
+  return ['take', partitionValue];
 }

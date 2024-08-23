@@ -95,6 +95,7 @@ export function compareValues(a: Value, b: Value): number {
 }
 
 export type NormalizedValue = Exclude<Value, undefined>;
+
 /**
  * We allow undefined to be passed for the convenience of developers, but we
  * treat it equivalently to null. It's better for perf to not create an copy

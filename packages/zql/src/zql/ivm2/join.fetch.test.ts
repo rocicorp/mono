@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, suite, test} from 'vitest';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
@@ -7,6 +7,7 @@ import type {Row, Node} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
+<<<<<<< HEAD
 import {ValueType} from './schema.js';
 test('hydrate one:many', () => {
   const base = {
@@ -23,47 +24,75 @@ test('hydrate one:many', () => {
       },
     ],
   };
+=======
+import type {JSONValue} from 'shared/src/json.js';
+import type {StorageKey} from './operator.js';
+suite('fetch one:many', () => {
+  const joins = [
+    {
+      parentKey: 'id',
+      childKey: 'issueID',
+      relationshipName: 'comments',
+    },
+  ];
+>>>>>>> e9c084b92 (testS)
 
-  // no data
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no data',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], []],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[]],
+    expectedFetch: [],
   });
 
-  // no parent
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no parent',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[]],
+    expectedFetch: [],
   });
 
-  // parent, no children
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'parent, no children',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], []],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
-    expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedFetch: [{row: {id: 'i1'}, relationships: {comments: []}}],
   });
 
-  // one parent, one child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one parent, one child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -73,21 +102,29 @@ test('hydrate one:many', () => {
     ],
   });
 
-  // one parent, wrong child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one parent, wrong child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i2'}]],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
-    expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedFetch: [{row: {id: 'i1'}, relationships: {comments: []}}],
   });
 
-  // one parent, one child + one wrong child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one parent, one child + one wrong child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i1'}],
       [
@@ -96,11 +133,11 @@ test('hydrate one:many', () => {
       ],
     ],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -110,9 +147,13 @@ test('hydrate one:many', () => {
     ],
   });
 
-  // two parents, each with two children
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'two parents, each with two children',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i2'}, {id: 'i1'}],
       [
@@ -123,12 +164,17 @@ test('hydrate one:many', () => {
       ],
     ],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
     ],
-    expectedStorageCounts: [{i1: 1, i2: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'i1', 'i1'],
+        ['pKeySet', 'i2', 'i2'],
+      ],
+    ],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -151,6 +197,7 @@ test('hydrate one:many', () => {
   });
 });
 
+<<<<<<< HEAD
 test('hydrate many:one', () => {
   const base = {
     columns: [
@@ -166,49 +213,75 @@ test('hydrate many:one', () => {
       },
     ],
   };
+=======
+suite('fetch many:one', () => {
+  const joins = [
+    {
+      parentKey: 'ownerID',
+      childKey: 'id',
+      relationshipName: 'owner',
+    },
+  ];
+>>>>>>> e9c084b92 (testS)
 
-  // no data
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no data',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], []],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[]],
+    expectedFetch: [],
   });
 
-  // one parent, no child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one parent, no child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
-    expectedStorageCounts: [{u1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
+    expectedFetch: [
       {row: {id: 'i1', ownerID: 'u1'}, relationships: {owner: []}},
     ],
   });
 
-  // no parent, one child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no parent, one child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'u1'}]],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[]],
+    expectedFetch: [],
   });
 
-  // one parent, one child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one parent, one child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1', ownerID: 'u1'}], [{id: 'u1'}]],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
-    expectedStorageCounts: [{u1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
+    expectedFetch: [
       {
         row: {id: 'i1', ownerID: 'u1'},
         relationships: {
@@ -218,9 +291,13 @@ test('hydrate many:one', () => {
     ],
   });
 
-  // two parents, one child
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'two parents, one child',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [
         {id: 'i2', ownerID: 'u1'},
@@ -229,12 +306,17 @@ test('hydrate many:one', () => {
       [{id: 'u1'}],
     ],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
-    expectedStorageCounts: [{u1: 2}],
-    expectedHydrate: [
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'u1', 'i1'],
+        ['pKeySet', 'u1', 'i2'],
+      ],
+    ],
+    expectedFetch: [
       {
         row: {id: 'i1', ownerID: 'u1'},
         relationships: {
@@ -250,9 +332,13 @@ test('hydrate many:one', () => {
     ],
   });
 
-  // two parents, two children
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'two parents, two children',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [
         {id: 'i2', ownerID: 'u2'},
@@ -261,12 +347,17 @@ test('hydrate many:one', () => {
       [{id: 'u2'}, {id: 'u1'}],
     ],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u1'}}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u2'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
     ],
-    expectedStorageCounts: [{u1: 1, u2: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'u1', 'i1'],
+        ['pKeySet', 'u2', 'i2'],
+      ],
+    ],
+    expectedFetch: [
       {
         row: {id: 'i1', ownerID: 'u1'},
         relationships: {
@@ -283,6 +374,7 @@ test('hydrate many:one', () => {
   });
 });
 
+<<<<<<< HEAD
 test('hydrate one:many:many', () => {
   const base = {
     columns: [
@@ -304,61 +396,96 @@ test('hydrate one:many:many', () => {
       },
     ],
   };
+=======
+suite('fetch one:many:many', () => {
+  const joins = [
+    {
+      parentKey: 'id',
+      childKey: 'issueID',
+      relationshipName: 'comments',
+    },
+    {
+      parentKey: 'id',
+      childKey: 'commentID',
+      relationshipName: 'revisions',
+    },
+  ];
+>>>>>>> e9c084b92 (testS)
 
-  // no data
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no data',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [], []],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}, {}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[], []],
+    expectedFetch: [],
   });
 
-  // no parent, one comment, no revision
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no parent, one comment, no revision',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'c1', issueID: 'i1'}], []],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}, {}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[], []],
+    expectedFetch: [],
   });
 
-  // no parent, one comment, one revision
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no parent, one comment, one revision',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}, {}],
-    expectedHydrate: [],
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[], []],
+    expectedFetch: [],
   });
 
-  // one issue, no comments or revisions
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one issue, no comments or revisions',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [], []],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {}],
-    expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], []],
+    expectedFetch: [{row: {id: 'i1'}, relationships: {comments: []}}],
   });
 
-  // one issue, one comment, one revision
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one issue, one comment, one revision',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i1'}],
       [{id: 'c1', issueID: 'i1'}],
       [{id: 'r1', commentID: 'c1'}],
     ],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {c1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -377,9 +504,13 @@ test('hydrate one:many:many', () => {
     ],
   });
 
-  // two issues, four comments, eight revisions
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'two issues, four comments, eight revisions',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i2'}, {id: 'i1'}],
       [
@@ -400,19 +531,27 @@ test('hydrate one:many:many', () => {
       ],
     ],
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c1'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c2'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c3'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c4'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c2'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c3'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c4'}}],
     ],
-    expectedStorageCounts: [
-      {i1: 1, i2: 1},
-      {c1: 1, c2: 1, c3: 1, c4: 1},
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'i1', 'i1'],
+        ['pKeySet', 'i2', 'i2'],
+      ],
+      [
+        ['pKeySet', 'c1', 'c1'],
+        ['pKeySet', 'c2', 'c2'],
+        ['pKeySet', 'c3', 'c3'],
+        ['pKeySet', 'c4', 'c4'],
+      ],
     ],
-    expectedHydrate: [
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -467,6 +606,7 @@ test('hydrate one:many:many', () => {
   });
 });
 
+<<<<<<< HEAD
 test('hydrate one:many:one', () => {
   const base = {
     columns: [
@@ -488,6 +628,21 @@ test('hydrate one:many:one', () => {
       },
     ],
   };
+=======
+suite('fetch one:many:one', () => {
+  const joins = [
+    {
+      parentKey: 'id',
+      childKey: 'issueID',
+      relationshipName: 'issuelabels',
+    },
+    {
+      parentKey: 'labelID',
+      childKey: 'id',
+      relationshipName: 'labels',
+    },
+  ];
+>>>>>>> e9c084b92 (testS)
 
   const sorts = [
     undefined,
@@ -497,51 +652,76 @@ test('hydrate one:many:one', () => {
     ] as const,
   ];
 
-  // no data
+  const primaryKeys = [undefined, ['issueID', 'labelID'] as const];
+
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no data',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [], []],
     sorts,
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}, {}],
-    expectedHydrate: [],
+    primaryKeys,
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[], []],
+    expectedFetch: [],
   });
 
-  // no issues, one issuelabel, one label
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'no issues, one issuelabel, one label',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[], [{issueID: 'i1', labelID: 'l1'}], [{id: 'l1'}]],
     sorts,
-    expectedMessages: [['0', 'hydrate', {}]],
-    expectedStorageCounts: [{}, {}],
-    expectedHydrate: [],
+    primaryKeys,
+    expectedMessages: [['0', 'fetch', {}]],
+    expectedStorageKeys: [[], []],
+    expectedFetch: [],
   });
 
-  // one issue, no issuelabels, no labels
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one issue, no issuelabels, no labels',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [], []],
     sorts,
+    primaryKeys,
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {}],
-    expectedHydrate: [{row: {id: 'i1'}, relationships: {issuelabels: []}}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], []],
+    expectedFetch: [{row: {id: 'i1'}, relationships: {issuelabels: []}}],
   });
 
-  // one issue, one issuelabel, no labels
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one issue, one issuelabel, no labels',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
     sorts,
+    primaryKeys,
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {l1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [
+      [['pKeySet', 'i1', 'i1']],
+      [['pKeySet', 'l1', 'i1', 'l1']],
+    ],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -556,18 +736,26 @@ test('hydrate one:many:one', () => {
     ],
   });
 
-  // one issue, one issuelabel, one label
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one issue, one issuelabel, one label',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], [{id: 'l1'}]],
     sorts,
+    primaryKeys,
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l1'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {l1: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [
+      [['pKeySet', 'i1', 'i1']],
+      [['pKeySet', 'l1', 'i1', 'l1']],
+    ],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -584,9 +772,13 @@ test('hydrate one:many:one', () => {
     ],
   });
 
-  // one issue, two issuelabels, two labels
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'one issue, two issuelabels, two labels',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i1'}],
       [
@@ -596,14 +788,21 @@ test('hydrate one:many:one', () => {
       [{id: 'l1'}, {id: 'l2'}],
     ],
     sorts,
+    primaryKeys,
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l2'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l2'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {l1: 1, l2: 1}],
-    expectedHydrate: [
+    expectedStorageKeys: [
+      [['pKeySet', 'i1', 'i1']],
+      [
+        ['pKeySet', 'l1', 'i1', 'l1'],
+        ['pKeySet', 'l2', 'i1', 'l2'],
+      ],
+    ],
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -626,9 +825,13 @@ test('hydrate one:many:one', () => {
     ],
   });
 
-  // two issues, four issuelabels, two labels
   fetchTest({
+<<<<<<< HEAD
     ...base,
+=======
+    name: 'two issues, four issuelabels, two labels',
+    joins,
+>>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i2'}, {id: 'i1'}],
       [
@@ -640,20 +843,29 @@ test('hydrate one:many:one', () => {
       [{id: 'l1'}, {id: 'l2'}],
     ],
     sorts,
+    primaryKeys,
     expectedMessages: [
-      ['0', 'hydrate', {}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l2'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['0', 'fetch', {}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l2'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
       ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
       ['2', 'fetch', {constraint: {key: 'id', value: 'l2'}}],
     ],
-    expectedStorageCounts: [
-      {i1: 1, i2: 1},
-      {l1: 2, l2: 2},
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'i1', 'i1'],
+        ['pKeySet', 'i2', 'i2'],
+      ],
+      [
+        ['pKeySet', 'l1', 'i1', 'l1'],
+        ['pKeySet', 'l1', 'i2', 'l1'],
+        ['pKeySet', 'l2', 'i1', 'l2'],
+        ['pKeySet', 'l2', 'i2', 'l2'],
+      ],
     ],
-    expectedHydrate: [
+    expectedFetch: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -688,14 +900,16 @@ test('hydrate one:many:one', () => {
   });
 });
 
-// Despite the name, this test runs the join through all three phases: hydrate,
-// fetch, and dehydrate.
+// Despite the name, this test runs the join through all three phases:
+// initial fetch, fetch, and cleanup.
 function fetchTest(t: FetchTest) {
-  assert(t.sources.length > 0);
-  assert(t.joins.length === t.sources.length - 1);
+  test(t.name, () => {
+    assert(t.sources.length > 0);
+    assert(t.joins.length === t.sources.length - 1);
 
-  const log: SnitchMessage[] = [];
+    const log: SnitchMessage[] = [];
 
+<<<<<<< HEAD
   const sources = t.sources.map((rows, i) => {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
     const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
@@ -763,48 +977,125 @@ function fetchTest(t: FetchTest) {
       } else {
         fetchType satisfies 'dehydrate';
         expect(storage.cloneData()).toEqual({});
+=======
+    const sources = t.sources.map((rows, i) => {
+      const ordering = t.sorts?.[i] ?? [['id', 'asc']];
+      const primaryKey = t.primaryKeys?.[i] ?? ['id'];
+      const source = new MemorySource(ordering, primaryKey);
+      for (const row of rows) {
+        source.push({type: 'add', row});
+>>>>>>> e9c084b92 (testS)
       }
+      const snitch = new Snitch(source, String(i), log);
+      source.addOutput(snitch);
+      return {
+        source,
+        snitch,
+      };
+    });
+
+    const joins: {
+      join: Join;
+      storage: MemoryStorage;
+    }[] = [];
+    // Although we tend to think of the joins from left to right, we need to
+    // build them from right to left.
+    for (let i = t.joins.length - 1; i >= 0; i--) {
+      const info = t.joins[i];
+      const parent = sources[i].snitch;
+      const child =
+        i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
+      const storage = new MemoryStorage();
+      const join = new Join(
+        parent,
+        child,
+        storage,
+        info.parentKey,
+        info.childKey,
+        info.relationshipName,
+      );
+      parent.setOutput(join);
+      child.setOutput(join);
+      joins[i] = {
+        join,
+        storage,
+      };
     }
 
-    let expectedMessages = t.expectedMessages as Exclude<
-      SnitchMessage,
-      PushMessage
-    >[];
-    if (fetchType === 'fetch') {
-      expectedMessages = expectedMessages.map(([name, _, arg]) => [
-        name,
-        'fetch',
-        arg,
-      ]);
-    } else if (fetchType === 'dehydrate') {
-      // For dehydrate, the last fetch for any constraint should be a dehydrate.
-      // Others should be fetch.
-      const seen = new Set();
-      for (let i = expectedMessages.length - 1; i >= 0; i--) {
-        const [name, _, req] = expectedMessages[i];
-        if (!seen.has(req.constraint?.value)) {
-          expectedMessages[i] = [name, 'dehydrate', req];
+    for (const fetchType of ['fetch', 'cleanup'] as const) {
+      log.length = 0;
+
+      // By convention we put them in the test bottom up. Why? Easier to think
+      // left-to-right.
+      const finalJoin = joins[0];
+      const c = new Catch(finalJoin.join);
+      finalJoin.join.setOutput(c);
+
+      const r = c[fetchType]();
+
+      expect(r).toEqual(t.expectedFetch);
+      expect(c.pushes).toEqual([]);
+
+      for (const [i, j] of joins.entries()) {
+        const {storage} = j;
+        const expectedStorageKeys = t.expectedStorageKeys[i];
+        if (fetchType === 'fetch') {
+          const expectedStorage: Record<string, JSONValue> = {};
+          for (const k of expectedStorageKeys) {
+            expectedStorage[JSON.stringify(k)] = true;
+          }
+          expect(storage.cloneData()).toEqual(expectedStorage);
         } else {
-          expectedMessages[i] = [name, 'fetch', req];
+          fetchType satisfies 'cleanup';
+          expect(storage.cloneData()).toEqual({});
         }
-        seen.add(req.constraint?.value);
       }
+
+      let expectedMessages = t.expectedMessages as Exclude<
+        SnitchMessage,
+        PushMessage
+      >[];
+      if (fetchType === 'fetch') {
+        expectedMessages = expectedMessages.map(([name, _, arg]) => [
+          name,
+          'fetch',
+          arg,
+        ]);
+      } else if (fetchType === 'cleanup') {
+        // For cleanup, the last fetch for any constraint should be a cleanup.
+        // Others should be fetch.
+        const seen = new Set();
+        for (let i = expectedMessages.length - 1; i >= 0; i--) {
+          const [name, _, req] = expectedMessages[i];
+          if (!seen.has(req.constraint?.value)) {
+            expectedMessages[i] = [name, 'cleanup', req];
+          } else {
+            expectedMessages[i] = [name, 'fetch', req];
+          }
+          seen.add(req.constraint?.value);
+        }
+      }
+      expect(log).toEqual(expectedMessages);
     }
-    expect(log).toEqual(expectedMessages);
-  }
+  });
 }
 
 type FetchTest = {
+<<<<<<< HEAD
   columns: Record<string, ValueType>[];
   primaryKeys: readonly string[][];
+=======
+  name: string;
+>>>>>>> e9c084b92 (testS)
   sources: Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
+  primaryKeys?: (readonly string[] | undefined)[] | undefined;
   joins: {
     parentKey: string;
     childKey: string;
     relationshipName: string;
   }[];
   expectedMessages: SnitchMessage[];
-  expectedStorageCounts: Record<string, number>[];
-  expectedHydrate: Node[];
+  expectedStorageKeys: StorageKey[][];
+  expectedFetch: Node[];
 };

@@ -1,5 +1,5 @@
 import type {Change} from './change.js';
-import type {FetchRequest, HydrateRequest, Input, Output} from './operator.js';
+import type {FetchRequest, Input, Output} from './operator.js';
 import type {Node} from './data.js';
 
 /**
@@ -15,16 +15,12 @@ export class Catch implements Output {
     this.#input.setOutput(this);
   }
 
-  hydrate(req: HydrateRequest = {}) {
-    return [...this.#input.hydrate(req, this)].map(expandNode);
-  }
-
   fetch(req: FetchRequest = {}) {
     return [...this.#input.fetch(req, this)].map(expandNode);
   }
 
-  dehydrate(req: HydrateRequest = {}) {
-    return [...this.#input.dehydrate(req, this)].map(expandNode);
+  cleanup(req: FetchRequest = {}) {
+    return [...this.#input.cleanup(req, this)].map(expandNode);
   }
 
   push(change: Change) {

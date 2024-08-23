@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {NormalizedValue, normalizeUndefined, type Node} from './data.js';
+import {type Node, normalizeUndefined, type NormalizedValue} from './data.js';
 import type {
   FetchRequest,
   Input,
@@ -7,7 +7,7 @@ import type {
   Output,
   Storage,
 } from './operator.js';
-import type {Stream} from './stream.js';
+import {take, type Stream} from './stream.js';
 import type {Change} from './change.js';
 import type {Schema} from './schema.js';
 
@@ -126,7 +126,7 @@ export class Join implements Operator {
   }
 
   #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
-    const parentKeyValue = parentNode.row[this.#parentKey];
+    const parentKeyValue = normalizeUndefined(parentNode.row[this.#parentKey]);
     const parentPrimaryKey: NormalizedValue[] = [];
     for (const key of this.schema.primaryKey) {
       parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
@@ -135,26 +135,18 @@ export class Join implements Operator {
     // This storage key tracks of the primary keys we've seen for each unique
     // value of parent key. This is used to know when to cleanup a child,
     // thereby cleaning up its state.
-    const storageKey = ['pKeySet', parentKeyValue];
-    const primaryKeySet: NormalizedValue[][] = this.#storage.get(
-      storageKey,
-      [],
-    ) as NormalizedValue[][];
-    const parentPrimaryKeyIndex = indexOf(primaryKeySet, parentPrimaryKey);
-
-    if (mode === 'cleanup') {
-      // TODO: Is this correct, or can we get a remove (I'm thinking via push)
-      // for something that hasn't been fetched before.  If so, should we even
-      // forward this remove?
-      assert(
-        parentPrimaryKeyIndex !== -1,
-        'cleanup without fetch for ' + parentPrimaryKey,
-      );
-    }
+    const storageKey: NormalizedValue[] = [
+      'pKeySet',
+      parentKeyValue,
+      ...parentPrimaryKey,
+    ];
 
     let method: ProcessParentMode = mode;
-    if (mode === 'cleanup' && primaryKeySet.length > 1) {
-      method = 'fetch';
+    if (mode === 'cleanup') {
+      const [, second] = [
+        ...take(this.#storage.scan({prefix: ['pKeySet', parentKeyValue]}), 2),
+      ];
+      method = second ? 'fetch' : 'cleanup';
     }
 
     const childStream = this.#child[method](
@@ -168,18 +160,9 @@ export class Join implements Operator {
     );
 
     if (mode === 'fetch') {
-      if (parentPrimaryKeyIndex === -1) {
-        this.#storage.set(storageKey, [...primaryKeySet, parentPrimaryKey]);
-      }
+      this.#storage.set(storageKey, true);
     } else if (mode === 'cleanup') {
-      if (primaryKeySet.length === 1) {
-        this.#storage.del(storageKey);
-      } else {
-        this.#storage.set(
-          storageKey,
-          [...primaryKeySet].splice(parentPrimaryKeyIndex, 1),
-        );
-      }
+      this.#storage.del(storageKey);
     }
 
     return {
@@ -190,20 +173,6 @@ export class Join implements Operator {
       },
     };
   }
-}
-
-function indexOf(keySet: NormalizedValue[][], key: NormalizedValue[]): number {
-  return keySet.findIndex(k => {
-    if (k.length !== key.length) {
-      return false;
-    }
-    for (let i = 0; i < k.length; i++) {
-      if (k[i] !== key[i]) {
-        return false;
-      }
-    }
-    return true;
-  });
 }
 
 type ProcessParentMode = 'fetch' | 'cleanup';

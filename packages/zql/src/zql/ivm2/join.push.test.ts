@@ -8,8 +8,12 @@ import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
+<<<<<<< HEAD
 import {SourceChange} from './source.js';
 import {ValueType} from './schema.js';
+=======
+import type {SourceChange} from './source.js';
+>>>>>>> e9c084b92 (testS)
 
 test('push one:many', () => {
   const base = {
@@ -27,14 +31,14 @@ test('push one:many', () => {
     ],
   };
 
-  // hydrate one parent, remove parent
+  // fetch one parent, remove parent
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], []],
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'dehydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageCounts: [{}],
     expectedOutput: [
@@ -52,7 +56,7 @@ test('push one:many', () => {
     ],
   });
 
-  // hydrate one child, remove child
+  // fetch one child, remove child
   pushTest({
     ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
@@ -65,14 +69,14 @@ test('push one:many', () => {
     expectedOutput: [],
   });
 
-  // hydrate one child, add parent
+  // fetch one child, add parent
   pushTest({
     ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageCounts: [{i1: 1}],
     expectedOutput: [
@@ -90,7 +94,7 @@ test('push one:many', () => {
     ],
   });
 
-  // hydrate two children, add parent
+  // fetch two children, add parent
   pushTest({
     ...base,
     sources: [
@@ -103,7 +107,7 @@ test('push one:many', () => {
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageCounts: [{i1: 1}],
     expectedOutput: [
@@ -124,14 +128,14 @@ test('push one:many', () => {
     ],
   });
 
-  // hydrate one child, add wrong parent
+  // fetch one child, add wrong parent
   pushTest({
     ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i2'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
     ],
     expectedStorageCounts: [{i2: 1}],
     expectedOutput: [
@@ -149,7 +153,7 @@ test('push one:many', () => {
     ],
   });
 
-  // hydrate one parent, add child
+  // fetch one parent, add child
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], []],
@@ -182,7 +186,7 @@ test('push one:many', () => {
     ],
   });
 
-  // hydrate one parent, add wrong child
+  // fetch one parent, add wrong child
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], []],
@@ -195,14 +199,14 @@ test('push one:many', () => {
     expectedOutput: [],
   });
 
-  // hydrate one parent, one child, remove parent
+  // fetch one parent, one child, remove parent
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'dehydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageCounts: [{}],
     expectedOutput: [
@@ -220,7 +224,7 @@ test('push one:many', () => {
     ],
   });
 
-  // hydrate one parent, two children, remove parent
+  // fetch one parent, two children, remove parent
   pushTest({
     ...base,
     sources: [
@@ -233,7 +237,7 @@ test('push one:many', () => {
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'dehydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageCounts: [{}],
     expectedOutput: [
@@ -254,7 +258,7 @@ test('push one:many', () => {
     ],
   });
 
-  // no hydrate, add parent, add child, add child, remove child, remove parent
+  // no fetch, add parent, add child, add child, remove child, remove parent
   pushTest({
     ...base,
     sources: [[], []],
@@ -267,7 +271,7 @@ test('push one:many', () => {
     ],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
       ['1', 'push', {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
@@ -275,7 +279,7 @@ test('push one:many', () => {
       ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'dehydrate', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageCounts: [{}, {}],
     expectedOutput: [
@@ -378,14 +382,14 @@ test('push many:one', () => {
     ],
   };
 
-  // hydrate one child, add parent
+  // fetch one child, add parent
   pushTest({
     ...base,
     sources: [[], [{id: 'u1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u1'}}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
     expectedStorageCounts: [{u1: 1}],
     expectedOutput: [
@@ -404,14 +408,14 @@ test('push many:one', () => {
     ],
   });
 
-  // hydrate one child, add wrong parent
+  // fetch one child, add wrong parent
   pushTest({
     ...base,
     sources: [[], [{id: 'u1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}],
-      ['1', 'hydrate', {constraint: {key: 'id', value: 'u2'}}],
+      ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
     ],
     expectedStorageCounts: [{u2: 1}],
     expectedOutput: [
@@ -430,7 +434,7 @@ test('push many:one', () => {
     ],
   });
 
-  // hydrate one parent, add child
+  // fetch one parent, add child
   pushTest({
     ...base,
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
@@ -463,7 +467,7 @@ test('push many:one', () => {
     ],
   });
 
-  // hydrate two parents, add one child
+  // fetch two parents, add one child
   pushTest({
     ...base,
     sources: [
@@ -544,7 +548,7 @@ test('push one:many:many', () => {
     ],
   };
 
-  // hydrate one parent, one child, add grandchild
+  // fetch one parent, one child, add grandchild
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}], []],
@@ -588,14 +592,14 @@ test('push one:many:many', () => {
     ],
   });
 
-  // hydrate one parent, one grandchild, add child
+  // fetch one parent, one grandchild, add child
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], [], [{id: 'r1', commentID: 'c1'}]],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedStorageCounts: [{i1: 1}, {c1: 1}],
@@ -626,15 +630,15 @@ test('push one:many:many', () => {
     ],
   });
 
-  // hydrate one child, one grandchild, add parent
+  // fetch one child, one grandchild, add parent
   pushTest({
     ...base,
     sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'hydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'hydrate', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
     expectedStorageCounts: [{i1: 1}, {c1: 1}],
     expectedOutput: [
@@ -661,7 +665,7 @@ test('push one:many:many', () => {
     ],
   });
 
-  // hydrate one parent, one child, one grandchild, remove parent
+  // fetch one parent, one child, one grandchild, remove parent
   pushTest({
     ...base,
     sources: [
@@ -672,8 +676,8 @@ test('push one:many:many', () => {
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'dehydrate', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'dehydrate', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['2', 'cleanup', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
     expectedStorageCounts: [{}, {}],
     expectedOutput: [
@@ -730,7 +734,7 @@ test('push one:many:one', () => {
     ] as const,
   };
 
-  // hydrate one parent, one child, add grandchild
+  // fetch one parent, one child, add grandchild
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
@@ -774,7 +778,7 @@ test('push one:many:one', () => {
     ],
   });
 
-  // hydrate one parent, one grandchild, add child
+  // fetch one parent, one grandchild, add child
   pushTest({
     ...base,
     sources: [[{id: 'i1'}], [], [{id: 'l1'}]],
@@ -782,7 +786,7 @@ test('push one:many:one', () => {
     pushes: [[1, {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}],
-      ['2', 'hydrate', {constraint: {key: 'id', value: 'l1'}}],
+      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedStorageCounts: [{i1: 1}, {l1: 1}],
@@ -811,7 +815,7 @@ test('push one:many:one', () => {
     ],
   });
 
-  // hydrate two parents, two children, add one grandchild
+  // fetch two parents, two children, add one grandchild
   pushTest({
     ...base,
     sources: [
@@ -898,10 +902,15 @@ function pushTest(t: PushTest) {
 
   const log: SnitchMessage[] = [];
 
-  const sources = t.sources.map((hydrate, i) => {
+  const sources = t.sources.map((fetch, i) => {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
+<<<<<<< HEAD
     const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
     for (const row of hydrate) {
+=======
+    const source = new MemorySource(ordering);
+    for (const row of fetch) {
+>>>>>>> e9c084b92 (testS)
       source.push({type: 'add', row});
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log);
@@ -942,7 +951,7 @@ function pushTest(t: PushTest) {
   const finalJoin = joins[0];
   const c = new Catch(finalJoin.join);
 
-  c.hydrate();
+  c.fetch();
   log.length = 0;
 
   for (const [sourceIndex, change] of t.pushes) {
@@ -955,7 +964,7 @@ function pushTest(t: PushTest) {
     expect(storage.cloneData()).toEqual(
       Object.fromEntries(
         Object.entries(expectedCounts).map(([k, v]) => [
-          JSON.stringify(['hydrate-count', k]),
+          JSON.stringify(['fetch-count', k]),
           v,
         ]),
       ),

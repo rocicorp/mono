@@ -1,18 +1,6 @@
 import BTree from 'btree';
-import type {
-  Output,
-  FetchRequest,
-  HydrateRequest,
-  Constraint,
-  Input,
-} from './operator.js';
-import {
-  Comparator,
-  makeComparator,
-  valuesEqual,
-  type Node,
-  type Row,
-} from './data.js';
+import type {Output, FetchRequest, Constraint} from './operator.js';
+import {makeComparator, valuesEqual, type Node, type Row} from './data.js';
 import type {Ordering} from '../ast2/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
