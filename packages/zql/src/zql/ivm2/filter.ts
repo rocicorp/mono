@@ -24,6 +24,7 @@ export class Filter implements Operator {
   constructor(input: Input, predicate: (row: Row) => boolean) {
     this.#input = input;
     this.#predicate = predicate;
+    this.#input.setOutput(this);
   }
 
   setOutput(output: Output) {

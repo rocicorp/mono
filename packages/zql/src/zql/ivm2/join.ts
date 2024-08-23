@@ -41,12 +41,16 @@ export class Join implements Operator {
     relationshipName: string,
   ) {
     assert(parent !== child, 'Parent and child must be different operators');
+
     this.#parent = parent;
     this.#child = child;
     this.#storage = storage;
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+
+    this.#parent.setOutput(this);
+    this.#child.setOutput(this);
   }
 
   setOutput(output: Output): void {
