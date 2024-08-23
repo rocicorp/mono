@@ -17,7 +17,7 @@ function logErrorAndExit(err: unknown) {
   process.exit(1);
 }
 
-const numSyncers = cpus().length - 1;
+const numSyncers = Math.max(1, cpus().length - 1 /* one for replicator */);
 const syncerReplicatorChannels = Array.from(
   {length: numSyncers},
   () => new MessageChannel(),
