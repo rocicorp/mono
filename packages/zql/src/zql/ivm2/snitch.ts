@@ -25,6 +25,8 @@ export class Snitch implements Operator {
     this.#input = input;
     this.#name = name;
     this.log = log;
+
+    this.#input.setOutput(this);
   }
 
   setOutput(output: Output) {

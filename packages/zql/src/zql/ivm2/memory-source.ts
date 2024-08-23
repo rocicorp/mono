@@ -4,6 +4,7 @@ import type {
   FetchRequest,
   HydrateRequest,
   Constraint,
+  Input,
 } from './operator.js';
 import {
   Comparator,
@@ -18,6 +19,7 @@ import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Stream} from './stream.js';
 import {Source, SourceChange} from './source.js';
 import {Schema, ValueType} from './schema.js';
+import {Connector} from './connector.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -73,7 +75,7 @@ export class MemorySource implements Source {
     return reg;
   }
 
-  getSchema(output: Output): Schema {
+  #getSchema(output: Output): Schema {
     const reg = this.#getRegistrationForOutput(output);
     return {
       columns: this.#columns,
@@ -82,12 +84,22 @@ export class MemorySource implements Source {
     };
   }
 
-  addOutput(output: Output, sort: Ordering): void {
-    this.#outputs.push({output, sort});
+  #input: Input = {
+    getSchema: output => this.#getSchema(output),
+    hydrate: (req, output) => this.#hydrate(req, output),
+    fetch: (req, output) => this.#fetch(req, output),
+    dehydrate: (req, output) => this.#dehydrate(req, output),
+    setOutput: output => this.#setOutput(output),
+  };
+
+  connect(sort: Ordering) {
+    const connector = new Connector(this.#input);
+    this.#outputs.push({output: connector, sort});
+    return connector;
   }
 
-  removeOutput(output: Output): void {
-    const idx = this.#outputs.findIndex(r => r.output === output);
+  disconnect(connector: Connector): void {
+    const idx = this.#outputs.findIndex(r => r.output === connector);
     assert(idx !== -1, 'Output not found');
     this.#outputs.splice(idx, 1);
 
@@ -97,15 +109,15 @@ export class MemorySource implements Source {
       if (key === primaryIndexKey) {
         continue;
       }
-      index.usedBy.delete(output);
+      index.usedBy.delete(connector);
       if (index.usedBy.size === 0) {
         this.#indexes.delete(key);
       }
     }
   }
 
-  hydrate(req: HydrateRequest, output: Output) {
-    return this.fetch(req, output);
+  #hydrate(req: HydrateRequest, output: Output) {
+    return this.#fetch(req, output);
   }
 
   #getPrimaryIndex(): Index {
@@ -151,7 +163,7 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *fetch(req: FetchRequest, output: Output): Stream<Node> {
+  *#fetch(req: FetchRequest, output: Output): Stream<Node> {
     let overlay: Overlay | undefined;
 
     const callingOutputNum = this.#outputs.findIndex(r => r.output === output);
@@ -198,8 +210,12 @@ export class MemorySource implements Source {
     );
   }
 
-  dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
-    return this.fetch(req, output);
+  #dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
+    return this.#fetch(req, output);
+  }
+
+  #setOutput(_: Output) {
+    // does nothing, MemorySource uses connect() instead.
   }
 
   *#pullWithConstraint(
@@ -218,28 +234,34 @@ export class MemorySource implements Source {
   }
 
   push(change: SourceChange) {
-    for (const [_, {data}] of this.#indexes) {
-      if (change.type === 'add') {
-        assert(!data.has(change.row), 'Row already exists');
-      } else {
-        change.type satisfies 'remove'; // ensures exuaustiveness of `if/else`
-        assert(data.has(change.row), 'Row not found');
+    const primaryIndex = this.#getPrimaryIndex();
+    const {data} = primaryIndex;
+    if (change.type === 'add') {
+      if (data.has(change.row)) {
+        throw new Error(`Row already exists: ` + JSON.stringify(change));
       }
+    } else {
+      change.type satisfies 'remove';
+      if (!data.has(change.row)) {
+        throw new Error(`Row not found: ` + JSON.stringify(change));
+      }
+    }
 
-      for (const [outputIndex, {output}] of this.#outputs.entries()) {
-        this.#overlay = {outputIndex, change};
-        output.push(
-          {
-            type: change.type,
-            node: {
-              row: change.row,
-              relationships: {},
-            },
+    for (const [outputIndex, {output}] of this.#outputs.entries()) {
+      this.#overlay = {outputIndex, change};
+      output.push(
+        {
+          type: change.type,
+          node: {
+            row: change.row,
+            relationships: {},
           },
-          this,
-        );
-      }
-      this.#overlay = undefined;
+        },
+        this.#input,
+      );
+    }
+    this.#overlay = undefined;
+    for (const [_, {data}] of this.#indexes) {
       if (change.type === 'add') {
         const added = data.add(change.row, undefined);
         // must suceed since we checked has() above.

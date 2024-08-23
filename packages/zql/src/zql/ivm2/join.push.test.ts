@@ -9,17 +9,22 @@ import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import {SourceChange} from './source.js';
-import { ValueType } from './schema.js';
+import {ValueType} from './schema.js';
 
 test('push one:many', () => {
   const base = {
-    columns: [{id: 'string' as const}, {id: 'string', issueID: 'string'} as const],
+    columns: [
+      {id: 'string' as const},
+      {id: 'string', issueID: 'string'} as const,
+    ],
     primaryKeys: [['id'], ['id']],
-    joins: [{
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'comments',
-    }],
+    joins: [
+      {
+        parentKey: 'id',
+        childKey: 'issueID',
+        relationshipName: 'comments',
+      },
+    ],
   };
 
   // hydrate one parent, remove parent
@@ -359,7 +364,10 @@ test('push one:many', () => {
 
 test('push many:one', () => {
   const base = {
-    columns: [{id: 'string', ownerID: 'string'} as const, {id: 'string'} as const],
+    columns: [
+      {id: 'string', ownerID: 'string'} as const,
+      {id: 'string'} as const,
+    ],
     primaryKeys: [['id'], ['id']],
     joins: [
       {
@@ -367,8 +375,8 @@ test('push many:one', () => {
         childKey: 'id',
         relationshipName: 'owner',
       },
-    ]
-  }
+    ],
+  };
 
   // hydrate one child, add parent
   pushTest({
@@ -713,7 +721,7 @@ test('push one:many:one', () => {
         relationshipName: 'labels',
       },
     ],
-  }
+  };
 
   const sorts = {
     1: [
@@ -896,8 +904,7 @@ function pushTest(t: PushTest) {
     for (const row of hydrate) {
       source.push({type: 'add', row});
     }
-    const snitch = new Snitch(source, String(i), log);
-    source.addOutput(snitch, ordering);
+    const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {
       source,
       snitch,
@@ -924,8 +931,6 @@ function pushTest(t: PushTest) {
       info.childKey,
       info.relationshipName,
     );
-    parent.setOutput(join);
-    child.setOutput(join);
     joins[i] = {
       join,
       storage,
@@ -936,7 +941,6 @@ function pushTest(t: PushTest) {
   // left-to-right.
   const finalJoin = joins[0];
   const c = new Catch(finalJoin.join);
-  finalJoin.join.setOutput(c);
 
   c.hydrate();
   log.length = 0;
