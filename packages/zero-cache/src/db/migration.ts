@@ -57,7 +57,7 @@ export async function runSchemaMigrations(
       `Checking schema for compatibility with ${debugName} at schema v${codeSchemaVersion}`,
     );
 
-    let meta = await db.begin('ISOLATION LEVEL SERIALIZABLE', async tx => {
+    let meta = await db.begin(async tx => {
       const meta = await getSchemaVersions(tx, schemaName);
       if (codeSchemaVersion < meta.minSafeRollbackVersion) {
         throw new Error(
@@ -85,7 +85,7 @@ export async function runSchemaMigrations(
             await migration.pre(log, db);
           }
 
-          meta = await db.begin('ISOLATION LEVEL SERIALIZABLE', async tx => {
+          meta = await db.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
             let meta = await getSchemaVersions(tx, schemaName);
             if (meta.version < dest) {
@@ -137,7 +137,7 @@ export type SchemaVersions = v.Infer<typeof schemaVersions>;
 
 // Exposed for tests
 export async function getSchemaVersions(
-  sql: postgres.Sql,
+  sql: postgres.TransactionSql,
   schemaName: string,
 ): Promise<SchemaVersions> {
   // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
