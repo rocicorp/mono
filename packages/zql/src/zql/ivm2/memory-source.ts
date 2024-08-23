@@ -1,11 +1,5 @@
 import BTree from 'btree';
-import type {
-  Output,
-  FetchRequest,
-  HydrateRequest,
-  Constraint,
-  Input,
-} from './operator.js';
+import type {Output, FetchRequest, Constraint, Input} from './operator.js';
 import {
   Comparator,
   makeComparator,
@@ -17,8 +11,8 @@ import type {Ordering} from '../ast2/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Stream} from './stream.js';
-import {Source, SourceChange} from './source.js';
-import {Schema, ValueType} from './schema.js';
+import type {Source, SourceChange} from './source.js';
+import type {Schema, ValueType} from './schema.js';
 import {Connector} from './connector.js';
 
 export type Overlay = {
@@ -86,9 +80,8 @@ export class MemorySource implements Source {
 
   #input: Input = {
     getSchema: output => this.#getSchema(output),
-    hydrate: (req, output) => this.#hydrate(req, output),
     fetch: (req, output) => this.#fetch(req, output),
-    dehydrate: (req, output) => this.#dehydrate(req, output),
+    cleanup: (req, output) => this.#cleanup(req, output),
     setOutput: output => this.#setOutput(output),
   };
 
@@ -114,10 +107,6 @@ export class MemorySource implements Source {
         this.#indexes.delete(key);
       }
     }
-  }
-
-  #hydrate(req: HydrateRequest, output: Output) {
-    return this.#fetch(req, output);
   }
 
   #getPrimaryIndex(): Index {
@@ -210,7 +199,7 @@ export class MemorySource implements Source {
     );
   }
 
-  #dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
+  #cleanup(req: FetchRequest, output: Output): Stream<Node> {
     return this.#fetch(req, output);
   }
 

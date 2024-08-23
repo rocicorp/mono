@@ -1,7 +1,6 @@
 import type {
   Output,
   FetchRequest,
-  HydrateRequest,
   Constraint,
   Input,
 } from 'zql/src/zql/ivm2/operator.js';
@@ -114,9 +113,8 @@ export class TableSource implements Source {
 
   #input: Input = {
     getSchema: output => this.#getSchema(output),
-    hydrate: (req, output) => this.#hydrate(req, output),
     fetch: (req, output) => this.#fetch(req, output),
-    dehydrate: (req, output) => this.#dehydrate(req, output),
+    cleanup: (req, output) => this.#cleanup(req, output),
     setOutput: output => this.#setOutput(output),
   };
 
@@ -129,11 +127,7 @@ export class TableSource implements Source {
     return connector;
   }
 
-  #hydrate(req: HydrateRequest, output: Output) {
-    return this.#fetch(req, output);
-  }
-
-  #dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
+  #cleanup(req: FetchRequest, output: Output): Stream<Node> {
     return this.#fetch(req, output);
   }
 

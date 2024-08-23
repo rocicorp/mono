@@ -1,12 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import {Change} from './change.js';
-import {
-  FetchRequest,
-  HydrateRequest,
-  Input,
-  Operator,
-  Output,
-} from './operator.js';
+import {FetchRequest, Input, Operator, Output} from './operator.js';
 
 /**
  * Connector is a no-op Operator that just forwards messages from input to
@@ -31,16 +25,12 @@ export class Connector implements Operator {
     return this.#input.getSchema(this);
   }
 
-  hydrate(req: HydrateRequest, _: Output) {
-    return this.#input.hydrate(req, this);
-  }
-
   fetch(req: FetchRequest, _: Output) {
     return this.#input.fetch(req, this);
   }
 
-  dehydrate(req: HydrateRequest, _: Output) {
-    return this.#input.dehydrate(req, this);
+  cleanup(req: FetchRequest, _: Output) {
+    return this.#input.cleanup(req, this);
   }
 
   push(change: Change, _: Operator) {

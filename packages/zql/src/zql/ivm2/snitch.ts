@@ -1,14 +1,8 @@
-import type {
-  FetchRequest,
-  HydrateRequest,
-  Input,
-  Operator,
-  Output,
-} from './operator.js';
+import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {Change} from './change.js';
 import type {Row} from './data.js';
 import {assert} from 'shared/src/asserts.js';
-import {Schema} from './schema.js';
+import type {Schema} from './schema.js';
 
 /**
  * Snitch is an Operator that records all messages it receives. Useful for
@@ -37,24 +31,16 @@ export class Snitch implements Operator {
     return this.#input.getSchema(this);
   }
 
-  hydrate(req: HydrateRequest, _source: Output) {
-    assert(this.#output);
-    this.log.push([this.#name, 'hydrate', req]);
-    // Currently we don't record the `source` or the return value of hydrate().
-    // If that was ever needed, we'd need to clone the stream.
-    return this.#input.hydrate(req, this);
-  }
-
   fetch(req: FetchRequest, _source: Output) {
     assert(this.#output);
     this.log.push([this.#name, 'fetch', req]);
     return this.#input.fetch(req, this);
   }
 
-  dehydrate(req: HydrateRequest, _source: Output) {
+  cleanup(req: FetchRequest, _source: Output) {
     assert(this.#output);
-    this.log.push([this.#name, 'dehydrate', req]);
-    return this.#input.dehydrate(req, this);
+    this.log.push([this.#name, 'cleanup', req]);
+    return this.#input.cleanup(req, this);
   }
 
   push(change: Change, _: Input) {
@@ -77,15 +63,10 @@ function toChangeRecord(change: Change): ChangeRecord {
   };
 }
 
-export type SnitchMessage =
-  | HydrateMessage
-  | FetchMessage
-  | DehydrateMessage
-  | PushMessage;
+export type SnitchMessage = FetchMessage | CleanupMessage | PushMessage;
 
-export type HydrateMessage = [string, 'hydrate', HydrateRequest];
 export type FetchMessage = [string, 'fetch', FetchRequest];
-export type DehydrateMessage = [string, 'dehydrate', HydrateRequest];
+export type CleanupMessage = [string, 'cleanup', FetchRequest];
 export type PushMessage = [string, 'push', ChangeRecord];
 
 export type ChangeRecord =

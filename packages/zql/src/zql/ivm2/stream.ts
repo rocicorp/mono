@@ -38,3 +38,16 @@ class OneTimeIterable<T> implements Iterable<T> {
     return {done: true, value: undefined} as const;
   }
 }
+
+export function* take<T>(stream: Stream<T>, limit: number): Stream<T> {
+  if (limit < 1) {
+    return;
+  }
+  let count = 0;
+  for (const v of stream) {
+    yield v;
+    if (count++ === limit) {
+      break;
+    }
+  }
+}

@@ -3,7 +3,7 @@
 
 import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
-import type {Node, Row, Value} from './data.js';
+import type {Node, NormalizedValue, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
 import type {Schema} from './schema.js';
 
@@ -14,36 +14,29 @@ export interface Input {
   // The schema of the data this input returns.
   getSchema(output: Output): Schema;
 
-  // Request initial result from this operator and initialize its state.
-  // Returns nodes sorted in order of schema().comparator.
-  hydrate(req: HydrateRequest, output: Output): Stream<Node>;
-
-  // Fetch data previously returned by hydrate or push.
+  // Fetch data.
   // Does not modify current state.
   // Returns nodes sorted in order of schema().comparator.
   fetch(req: FetchRequest, output: Output): Stream<Node>;
 
-  // Dehydrate the operator. This is called when `output` will no longer
-  // need the data returned by hydrate(). The receiving operator should
+  // Cleanup the operator. This is called when `output` will no longer
+  // need the data returned by fetch(). The receiving operator should
   // clean up any resources it has allocated.
-  // Returns the same thing as fetch(). This is to allow callers to properly
-  // propagate the dehydrate message through the graph.
-  dehydrate(req: HydrateRequest, output: Output): Stream<Node>;
+  // Returns the same thing as fetch(). This allows callers to properly
+  // propagate the cleanup message through the graph.
+  cleanup(req: FetchRequest, output: Output): Stream<Node>;
 
   setOutput(output: Output): void;
 }
-
-export type HydrateRequest = {
-  constraint?: Constraint | undefined;
-};
 
 export type Constraint = {
   key: string;
   value: Value;
 };
 
-export type FetchRequest = HydrateRequest & {
-  // If supplied, `start.row` must have previously been output.
+export type FetchRequest = {
+  constraint?: Constraint | undefined;
+  // If supplied, `start.row` must have previously been output by fetch or push.
   start?: Start | undefined;
 };
 
@@ -57,7 +50,7 @@ export type Start = {
  * the code running the pipeline.
  */
 export interface Output {
-  // Push incremental changes to data previously received with hydrate().
+  // Push incremental changes to data previously received with fetch().
   // Consumers must apply all pushed changes or incremental result will
   // be incorrect.
   // Callers must maintain some invariants for correct operation:
@@ -74,12 +67,18 @@ export interface Output {
  */
 export interface Operator extends Input, Output {}
 
+export type StorageKey = readonly NormalizedValue[];
 /**
  * Operators get access to storage that they can store their internal
  * state in.
  */
 export interface Storage {
-  set(key: Value[], value: JSONValue): void;
-  get(key: Value[], def?: JSONValue): JSONValue | undefined;
-  del(key: Value[]): void;
+  set(key: StorageKey, value: JSONValue): void;
+  get(key: StorageKey, def?: JSONValue): JSONValue | undefined;
+  /**
+   * If options is not specified, defaults to scanning all entries.
+   * @param options
+   */
+  scan(options?: {prefix: readonly Value[]}): Stream<[StorageKey, JSONValue]>;
+  del(key: StorageKey): void;
 }
