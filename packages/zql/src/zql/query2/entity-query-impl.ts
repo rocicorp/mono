@@ -170,6 +170,23 @@ class EntityQueryImpl<
       alias,
     });
   }
+
+  limit(limit: number): EntityQuery<TSchema, TReturn, TAs> {
+    return this.#create(this.#context, this.#schema, {
+      ...this.#ast,
+      limit,
+    });
+  }
+
+  orderBy<TSelector extends keyof TSchema['fields']>(
+    field: TSelector,
+    direction: 'asc' | 'desc',
+  ): EntityQuery<TSchema, TReturn, TAs> {
+    return this.#create(this.#context, this.#schema, {
+      ...this.#ast,
+      orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
+    });
+  }
 }
 
 function resolveSchema(

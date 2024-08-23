@@ -154,5 +154,12 @@ export interface EntityQuery<
     value: GetFieldType<TSchema, TSelector>,
   ): EntityQuery<TSchema, TReturn, TAs>;
 
+  limit(limit: number): EntityQuery<TSchema, TReturn, TAs>;
+
+  orderBy<TSelector extends Selector<TSchema>>(
+    field: TSelector,
+    direction: 'asc' | 'desc',
+  ): EntityQuery<TSchema, TReturn, TAs>;
+
   run(): MakeHumanReadable<TReturn>;
 }
