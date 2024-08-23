@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
 import {IncomingMessage} from 'http';
 import {Worker} from 'worker_threads';
-import {h64} from 'zero-cache/src/types/xxhash.js';
+import {h32} from 'zero-cache/src/types/xxhash.js';
 import {getStatusFromWorker} from '../../workers/replicator.js';
 import {Service} from '../service.js';
 import {getConnectParams} from './connect-params.js';
@@ -58,7 +58,7 @@ export class Dispatcher implements Service {
     }
     const {clientGroupID} = params;
     const {syncers} = this.#workersByHostname(host);
-    const syncer = Number(h64(clientGroupID) % BigInt(syncers.length));
+    const syncer = h32(clientGroupID) % syncers.length;
 
     this.#lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
     return {payload: params, receiver: syncers[syncer]};
