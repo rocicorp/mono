@@ -20,6 +20,7 @@ export class Connector implements Operator {
 
   constructor(input: Input) {
     this.#input = input;
+    this.#input.setOutput(this);
   }
 
   setOutput(output: Output) {

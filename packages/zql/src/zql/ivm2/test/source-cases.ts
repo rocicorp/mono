@@ -36,6 +36,7 @@ class OverlaySpy implements Output {
 
   constructor(input: Input) {
     this.#input = input;
+    this.#input.setOutput(this);
   }
 
   fetch(req: FetchRequest) {
@@ -53,9 +54,7 @@ const cases = {
     for (const m of ['hydrate', 'fetch'] as const) {
       const sort = [['a', 'asc']] as const;
       const ms = createSource('table', {a: 'number'}, ['a']);
-      const connector = ms.connect(sort);
-      const out = new Catch(connector);
-      connector.setOutput(out);
+      const out = new Catch(ms.connect(sort));
       expect(out[m]()).toEqual([]);
 
       ms.push({type: 'add', row: {a: 3}});
@@ -88,9 +87,7 @@ const cases = {
         },
         ['a'],
       );
-      const connector = ms.connect(sort);
-      const out = new Catch(connector);
-      connector.setOutput(out);
+      const out = new Catch(ms.connect(sort));
       ms.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
       ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
       ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
@@ -142,9 +139,7 @@ const cases = {
       },
       ['a'],
     );
-    const connector = ms.connect(sort);
-    const out = new Catch(connector);
-    connector.setOutput(out);
+    const out = new Catch(ms.connect(sort));
 
     expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
       asNodes([]),
@@ -191,9 +186,7 @@ const cases = {
   'push': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
     const ms = createSource('table', {a: 'number'}, ['a']);
-    const connector = ms.connect(sort);
-    const out = new Catch(connector);
-    connector.setOutput(out);
+    const out = new Catch(ms.connect(sort));
 
     expect(out.pushes).toEqual([]);
 
@@ -246,15 +239,9 @@ const cases = {
 
     const sort = [['a', 'asc']] as const;
     const ms = createSource('table', {a: 'number'}, ['a']);
-    const c1 = ms.connect(sort);
-    const c2 = ms.connect(sort);
-    const c3 = ms.connect(sort);
-    const o1 = new OverlaySpy(c1);
-    const o2 = new OverlaySpy(c2);
-    const o3 = new OverlaySpy(c3);
-    c1.setOutput(o1);
-    c2.setOutput(o2);
-    c3.setOutput(o3);
+    const o1 = new OverlaySpy(ms.connect(sort));
+    const o2 = new OverlaySpy(ms.connect(sort));
+    const o3 = new OverlaySpy(ms.connect(sort));
 
     function fetchAll() {
       o1.fetch({});
@@ -561,9 +548,7 @@ const cases = {
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
-      const connector = ms.connect(sort);
-      const out = new OverlaySpy(connector);
-      connector.setOutput(out);
+      const out = new OverlaySpy(ms.connect(sort));
       out.onPush = () =>
         out.fetch({
           start: c.start,
@@ -620,9 +605,7 @@ const cases = {
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
-      const connector = ms.connect(sort);
-      const out = new OverlaySpy(connector);
-      connector.setOutput(out);
+      const out = new OverlaySpy(ms.connect(sort));
       out.onPush = () =>
         out.fetch({
           constraint: c.constraint,
@@ -647,12 +630,8 @@ const cases = {
       },
       ['a'],
     );
-    const c1 = ms.connect(sort1);
-    const c2 = ms.connect(sort2);
-    const out1 = new Catch(c1);
-    const out2 = new Catch(c2);
-    c1.setOutput(out1);
-    c2.setOutput(out2);
+    const out1 = new Catch(ms.connect(sort1));
+    const out2 = new Catch(ms.connect(sort2));
 
     ms.push({type: 'add', row: {a: 2, b: 3}});
     ms.push({type: 'add', row: {a: 1, b: 2}});

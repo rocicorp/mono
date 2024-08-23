@@ -11,10 +11,7 @@ test('basics', () => {
 
   const connector = ms.connect([['a', 'asc']]);
   const filter = new Filter(connector, row => row.b === 'foo');
-  connector.setOutput(filter);
-
   const out = new Catch(filter);
-  filter.setOutput(out);
 
   expect(out.hydrate()).toEqual([
     {row: {a: 1, b: 'foo'}, relationships: {}},

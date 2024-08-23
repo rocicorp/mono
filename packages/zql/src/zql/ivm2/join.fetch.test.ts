@@ -702,9 +702,7 @@ function fetchTest(t: FetchTest) {
     for (const row of rows) {
       source.push({type: 'add', row});
     }
-    const connector = source.connect(ordering);
-    const snitch = new Snitch(connector, String(i), log);
-    connector.setOutput(snitch);
+    const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {
       source,
       snitch,
@@ -731,8 +729,6 @@ function fetchTest(t: FetchTest) {
       info.childKey,
       info.relationshipName,
     );
-    parent.setOutput(join);
-    child.setOutput(join);
     joins[i] = {
       join,
       storage,
@@ -746,7 +742,6 @@ function fetchTest(t: FetchTest) {
     // left-to-right.
     const finalJoin = joins[0];
     const c = new Catch(finalJoin.join);
-    finalJoin.join.setOutput(c);
 
     const r = c[fetchType]();
 

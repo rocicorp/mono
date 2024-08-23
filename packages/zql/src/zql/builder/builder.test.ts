@@ -43,16 +43,17 @@ function testSources() {
 
 test('source-only', () => {
   const {sources, getSource} = testSources();
-  const sink = buildPipeline(
-    {
-      table: 'users',
-      orderBy: [['name', 'asc']],
-    },
-    {
-      createSink: input => new Catch(input),
-      getSource,
-      createStorage: () => new MemoryStorage(),
-    },
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['name', 'asc']],
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
   );
 
   expect(sink.hydrate()).toEqual([
@@ -76,22 +77,23 @@ test('source-only', () => {
 
 test('filter', () => {
   const {sources, getSource} = testSources();
-  const sink = buildPipeline(
-    {
-      table: 'users',
-      orderBy: [['id', 'desc']],
-      where: {
-        type: 'simple',
-        field: 'name',
-        op: '>=',
-        value: 'c',
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'desc']],
+        where: {
+          type: 'simple',
+          field: 'name',
+          op: '>=',
+          value: 'c',
+        },
       },
-    },
-    {
-      createSink: input => new Catch(input),
-      getSource,
-      createStorage: () => new MemoryStorage(),
-    },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
   );
 
   expect(sink.hydrate()).toEqual([
@@ -119,30 +121,31 @@ test('filter', () => {
 
 test('self-join', () => {
   const {sources, getSource} = testSources();
-  const sink = buildPipeline(
-    {
-      table: 'users',
-      orderBy: [['id', 'asc']],
-      subqueries: [
-        {
-          correlation: {
-            parentField: 'recruiterID',
-            op: '=',
-            childField: 'id',
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        subqueries: [
+          {
+            correlation: {
+              parentField: 'recruiterID',
+              op: '=',
+              childField: 'id',
+            },
+            subquery: {
+              table: 'users',
+              alias: 'recruiter',
+              orderBy: [['id', 'asc']],
+            },
           },
-          subquery: {
-            table: 'users',
-            alias: 'recruiter',
-            orderBy: [['id', 'asc']],
-          },
-        },
-      ],
-    },
-    {
-      createSink: input => new Catch(input),
-      getSource,
-      createStorage: () => new MemoryStorage(),
-    },
+        ],
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
   );
 
   expect(sink.hydrate()).toEqual([
@@ -282,53 +285,54 @@ test('self-join', () => {
 
 test('multi-join', () => {
   const {sources, getSource} = testSources();
-  const sink = buildPipeline(
-    {
-      table: 'users',
-      orderBy: [['id', 'asc']],
-      where: {
-        type: 'simple',
-        field: 'id',
-        op: '<=',
-        value: 3,
-      },
-      subqueries: [
-        {
-          correlation: {
-            parentField: 'id',
-            op: '=',
-            childField: 'userID',
-          },
-          subquery: {
-            table: 'userStates',
-            alias: 'userStates',
-            orderBy: [
-              ['userID', 'asc'],
-              ['stateCode', 'asc'],
-            ],
-            subqueries: [
-              {
-                correlation: {
-                  parentField: 'stateCode',
-                  op: '=',
-                  childField: 'code',
-                },
-                subquery: {
-                  table: 'states',
-                  alias: 'states',
-                  orderBy: [['code', 'asc']],
-                },
-              },
-            ],
-          },
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          field: 'id',
+          op: '<=',
+          value: 3,
         },
-      ],
-    },
-    {
-      createSink: input => new Catch(input),
-      getSource,
-      createStorage: () => new MemoryStorage(),
-    },
+        subqueries: [
+          {
+            correlation: {
+              parentField: 'id',
+              op: '=',
+              childField: 'userID',
+            },
+            subquery: {
+              table: 'userStates',
+              alias: 'userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+              subqueries: [
+                {
+                  correlation: {
+                    parentField: 'stateCode',
+                    op: '=',
+                    childField: 'code',
+                  },
+                  subquery: {
+                    table: 'states',
+                    alias: 'states',
+                    orderBy: [['code', 'asc']],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
   );
 
   expect(sink.hydrate()).toEqual([

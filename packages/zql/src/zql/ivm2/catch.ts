@@ -12,6 +12,7 @@ export class Catch implements Output {
 
   constructor(input: Input) {
     this.#input = input;
+    this.#input.setOutput(this);
   }
 
   hydrate(req: HydrateRequest = {}) {
