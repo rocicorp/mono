@@ -3,6 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import {MessagePort, Worker} from 'worker_threads';
 import {Replicator} from 'zero-cache/src/services/replicator/replicator.js';
 import {Service} from 'zero-cache/src/services/service.js';
+import {Notifier} from '../services/replicator/notifier.js';
 
 export type ReplicatorWorkerData = {
   subscriberPorts: MessagePort[];
@@ -55,4 +56,10 @@ export function getStatusFromWorker(
   replicator.postMessage({});
   replicator.once('message', resolve);
   return promise;
+}
+
+export function createNotifier(replicatorPort: MessagePort): Notifier {
+  const notifier = new Notifier();
+  replicatorPort.on('message', () => notifier.notifySubscribers());
+  return notifier;
 }
