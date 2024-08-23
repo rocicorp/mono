@@ -1,6 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {Service} from './service.js';
 
+/**
+ * Manages the creation and lifecycle of objects that implement
+ * {@link Service}.
+ */
 export class ServiceRunner<S extends Service> {
   readonly #lc: LogContext;
   readonly #instances = new Map<string, S>();
@@ -17,6 +21,10 @@ export class ServiceRunner<S extends Service> {
     this.#isValid = isValid;
   }
 
+  /**
+   * Creates and runs the Service with the given `id`, returning
+   * an existing one if it is still running a valid.
+   */
   getService(id: string): S {
     const existing = this.#instances.get(id);
     if (existing && this.#isValid(existing)) {
@@ -28,7 +36,7 @@ export class ServiceRunner<S extends Service> {
       .run()
       .catch(e => {
         this.#lc.error?.(
-          `Error in run of ${service.constructor?.name} ${id}`,
+          `Error running ${service.constructor?.name} ${service.id}`,
           e,
         );
         this.#lc.info?.(e.toString());

@@ -15,10 +15,11 @@ describe('services/runner', () => {
       this.id = id;
     }
 
-    async run(): Promise<void> {
+    run(): Promise<void> {
       return this.resolver.promise;
     }
 
+    // eslint-disable-next-line require-await
     async stop(): Promise<void> {
       this.resolver.resolve();
     }
@@ -30,7 +31,7 @@ describe('services/runner', () => {
     (s: TestService) => s.valid,
   );
 
-  test('caching', async () => {
+  test('caching', () => {
     const s1 = runner.getService('foo');
     const s2 = runner.getService('bar');
     const s3 = runner.getService('foo');
@@ -57,7 +58,7 @@ describe('services/runner', () => {
     expect(s1).not.toBe(s2);
   });
 
-  test('validity', async () => {
+  test('validity', () => {
     const s1 = runner.getService('foo');
     s1.valid = false;
 
