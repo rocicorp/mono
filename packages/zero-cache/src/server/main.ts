@@ -31,19 +31,18 @@ const replicator = new Worker('./src/server/replicator.ts', {
   transferList: [...subscriberPorts],
 }).on('error', logErrorAndExit);
 
-const syncers = syncerReplicatorChannels.map(
-  c =>
-    new Worker('./src/server/syncer.ts', {
-      env: SHARE_ENV,
-      workerData: {replicatorPort: c.port2} satisfies SyncerWorkerData,
-      transferList: [c.port2],
-    }),
+const syncers = syncerReplicatorChannels.map(c =>
+  new Worker('./src/server/syncer.ts', {
+    env: SHARE_ENV,
+    workerData: {replicatorPort: c.port2} satisfies SyncerWorkerData,
+    transferList: [c.port2],
+  }).on('error', logErrorAndExit),
 );
 
 const workers: Workers = {replicator, syncers};
 
-// Technically, setting up the CVR DB is the responsibility of the Syncer,
-// it is done here in the main thread because:
+// Technically, setting up the CVR DB schema is the responsibility of the Syncer,
+// but it is done here in the main thread because:
 // * it is wasteful to have all of the Syncers attempt the migration in parallel
 // * we want to delay accepting requests (and eventually advertising health)
 //   until initialization logic is complete.

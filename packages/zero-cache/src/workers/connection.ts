@@ -19,36 +19,6 @@ import type {
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
 
-export function handleConnection(
-  lc: LogContext,
-  viewSyncer: ViewSyncer,
-  mutagen: Mutagen,
-  clientConnections: Map<string, Connection>,
-  socket: WebSocket,
-  params: ConnectParams,
-) {
-  const {clientID} = params;
-  const existing = clientConnections.get(clientID);
-  if (existing) {
-    existing.close();
-  }
-  const connection = new Connection(
-    lc,
-    viewSyncer,
-    mutagen,
-    params,
-    socket,
-    () => {
-      if (clientConnections.get(clientID) === connection) {
-        clientConnections.delete(clientID);
-      }
-    },
-  );
-  clientConnections.set(clientID, connection);
-
-  //TODO: will need to handle Sec-WebSocket-Protocol for auth
-}
-
 /**
  * Represents a connection between the client and server.
  *

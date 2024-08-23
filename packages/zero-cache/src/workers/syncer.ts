@@ -17,6 +17,13 @@ export type SyncerWorkerData = {
   replicatorPort: MessagePort;
 };
 
+/**
+ * The Syncer worker receives websocket handoffs for "/sync" connections
+ * from the Dispatcher in the main thread, and creates websocket
+ * {@link Connection}s with a corresponding {@link ViewSyncer}, {@link Mutagen},
+ * and {@link Subscription} to version notifications from the Replicator
+ * worker.
+ */
 export class Syncer {
   readonly #lc: LogContext;
   readonly #viewSyncers: ServiceRunner<ViewSyncer & ActivityBasedService>;
@@ -37,6 +44,9 @@ export class Syncer {
   ) {
     const {replicatorPort} = workerData;
     assert(replicatorPort instanceof MessagePort);
+
+    // Relays notifications from the Replicator thread subscription
+    // to ViewSyncers within this thread.
     const notifier = createNotifier(replicatorPort);
 
     this.#lc = lc;
