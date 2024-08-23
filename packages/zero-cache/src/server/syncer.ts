@@ -8,13 +8,14 @@ import {postgresTypeConfig} from '../types/pg.js';
 import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
 import {configFromEnv} from './config.js';
+import {ReadySignal} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 const config = configFromEnv();
 assert(parentPort);
 
 // Consider parameterizing these (in main) based on total number of workers.
-const MAX_CVR_CONNECTIONS = 10;
+const MAX_CVR_CONNECTIONS = 5;
 const MAX_MUTAGEN_CONNECTIONS = 5;
 
 const lc = createLogContext(config, {thread: 'syncer'});
@@ -29,6 +30,15 @@ const upstreamDB = postgres(config.UPSTREAM_URI, {
   max: MAX_MUTAGEN_CONNECTIONS,
 });
 
+const dbWarmup = Promise.allSettled([
+  ...Array.from({length: MAX_CVR_CONNECTIONS}, () =>
+    cvrDB`SELECT 1`.simple().execute(),
+  ),
+  ...Array.from({length: MAX_MUTAGEN_CONNECTIONS}, () =>
+    upstreamDB`SELECT 1`.simple().execute(),
+  ),
+]);
+
 const viewSyncerFactory = (
   id: string,
   sub: Subscription<ReplicaVersionReady>,
@@ -38,4 +48,6 @@ const mutagenFactory = (id: string) => new MutagenService(lc, id, upstreamDB);
 
 new Syncer(lc, viewSyncerFactory, mutagenFactory, parentPort, workerData).run();
 
-lc.info?.('started Syncer');
+void dbWarmup.then(
+  () => parentPort?.postMessage({ready: true} satisfies ReadySignal),
+);
