@@ -3,6 +3,7 @@ import * as v from 'shared/src/valita.js';
 const configSchema = v.object({
   ['REPLICA_ID']: v.string(),
   ['UPSTREAM_URI']: v.string(),
+  ['CVR_DB_URI']: v.string(),
   ['REPLICA_DB_FILE']: v.string(),
   ['LOG_LEVEL']: v.union(
     v.literal('debug'),

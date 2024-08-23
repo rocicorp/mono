@@ -1,5 +1,5 @@
 import xxhash from 'xxhash-wasm';
 
-const {create64, h64} = await xxhash();
+const {create64, h32, h64} = await xxhash();
 
-export {create64, h64};
+export {create64, h32, h64};
