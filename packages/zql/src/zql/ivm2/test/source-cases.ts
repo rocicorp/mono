@@ -53,8 +53,9 @@ const cases = {
     for (const m of ['hydrate', 'fetch'] as const) {
       const sort = [['a', 'asc']] as const;
       const ms = createSource('table', {a: 'number'}, ['a']);
-      const out = new Catch(ms);
-      ms.addOutput(out, sort);
+      const connector = ms.connect(sort);
+      const out = new Catch(connector);
+      connector.setOutput(out);
       expect(out[m]()).toEqual([]);
 
       ms.push({type: 'add', row: {a: 3}});
@@ -87,8 +88,9 @@ const cases = {
         },
         ['a'],
       );
-      const out = new Catch(ms);
-      ms.addOutput(out, sort);
+      const connector = ms.connect(sort);
+      const out = new Catch(connector);
+      connector.setOutput(out);
       ms.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
       ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
       ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
@@ -140,8 +142,9 @@ const cases = {
       },
       ['a'],
     );
-    const out = new Catch(ms);
-    ms.addOutput(out, sort);
+    const connector = ms.connect(sort);
+    const out = new Catch(connector);
+    connector.setOutput(out);
 
     expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
       asNodes([]),
@@ -188,8 +191,9 @@ const cases = {
   'push': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
     const ms = createSource('table', {a: 'number'}, ['a']);
-    const out = new Catch(ms);
-    ms.addOutput(out, sort);
+    const connector = ms.connect(sort);
+    const out = new Catch(connector);
+    connector.setOutput(out);
 
     expect(out.pushes).toEqual([]);
 
@@ -242,12 +246,15 @@ const cases = {
 
     const sort = [['a', 'asc']] as const;
     const ms = createSource('table', {a: 'number'}, ['a']);
-    const o1 = new OverlaySpy(ms);
-    const o2 = new OverlaySpy(ms);
-    const o3 = new OverlaySpy(ms);
-    ms.addOutput(o1, sort);
-    ms.addOutput(o2, sort);
-    ms.addOutput(o3, sort);
+    const c1 = ms.connect(sort);
+    const c2 = ms.connect(sort);
+    const c3 = ms.connect(sort);
+    const o1 = new OverlaySpy(c1);
+    const o2 = new OverlaySpy(c2);
+    const o3 = new OverlaySpy(c3);
+    c1.setOutput(o1);
+    c2.setOutput(o2);
+    c3.setOutput(o3);
 
     function fetchAll() {
       o1.fetch({});
@@ -554,8 +561,9 @@ const cases = {
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
-      const out = new OverlaySpy(ms);
-      ms.addOutput(out, sort);
+      const connector = ms.connect(sort);
+      const out = new OverlaySpy(connector);
+      connector.setOutput(out);
       out.onPush = () =>
         out.fetch({
           start: c.start,
@@ -612,8 +620,9 @@ const cases = {
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
-      const out = new OverlaySpy(ms);
-      ms.addOutput(out, sort);
+      const connector = ms.connect(sort);
+      const out = new OverlaySpy(connector);
+      connector.setOutput(out);
       out.onPush = () =>
         out.fetch({
           constraint: c.constraint,
@@ -638,17 +647,31 @@ const cases = {
       },
       ['a'],
     );
-    const out1 = new Catch(ms);
-    const out2 = new Catch(ms);
-    ms.addOutput(out1, sort1);
-    ms.addOutput(out2, sort2);
+    const c1 = ms.connect(sort1);
+    const c2 = ms.connect(sort2);
+    const out1 = new Catch(c1);
+    const out2 = new Catch(c2);
+    c1.setOutput(out1);
+    c2.setOutput(out2);
 
     ms.push({type: 'add', row: {a: 2, b: 3}});
     ms.push({type: 'add', row: {a: 1, b: 2}});
     ms.push({type: 'add', row: {a: 3, b: 1}});
 
-    expect(out1.fetch({})).toEqual(asNodes([{a: 1, b: 2}, {a: 2, b: 3}, {a: 3, b: 1}]));
-    expect(out2.fetch({})).toEqual(asNodes([{a: 3, b: 1}, {a: 1, b: 2}, {a: 2, b: 3}]));
+    expect(out1.fetch({})).toEqual(
+      asNodes([
+        {a: 1, b: 2},
+        {a: 2, b: 3},
+        {a: 3, b: 1},
+      ]),
+    );
+    expect(out2.fetch({})).toEqual(
+      asNodes([
+        {a: 3, b: 1},
+        {a: 1, b: 2},
+        {a: 2, b: 3},
+      ]),
+    );
   },
 };
 

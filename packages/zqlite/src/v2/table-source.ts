@@ -3,6 +3,7 @@ import type {
   FetchRequest,
   HydrateRequest,
   Constraint,
+  Input,
 } from 'zql/src/zql/ivm2/operator.js';
 import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
 import {
@@ -19,6 +20,7 @@ import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import type {SQLQuery} from '@databases/sql';
 import {assert} from 'shared/src/asserts.js';
 import {StatementCache} from '../internal/statement-cache.js';
+import {Connector} from 'zql/src/zql/ivm2/connector.js';
 
 type OutputRegistration = {
   output: Output;
@@ -101,7 +103,7 @@ export class TableSource implements Source {
     return reg;
   }
 
-  getSchema(output: Output): Schema {
+  #getSchema(output: Output): Schema {
     const reg = this.#getRegistrationForOutput(output);
     return {
       columns: this.#columns,
@@ -110,23 +112,36 @@ export class TableSource implements Source {
     };
   }
 
-  addOutput(output: Output, sort: Ordering): void {
-    // TODO: Assert that SQLite has an index on this sort.
+  #input: Input = {
+    getSchema: output => this.#getSchema(output),
+    hydrate: (req, output) => this.#hydrate(req, output),
+    fetch: (req, output) => this.#fetch(req, output),
+    dehydrate: (req, output) => this.#dehydrate(req, output),
+    setOutput: output => this.#setOutput(output),
+  };
+
+  connect(sort: Ordering) {
+    const connector = new Connector(this.#input);
     this.#outputs.push({
-      output,
+      output: connector,
       sort: makeOrderUnique(sort, this.#primaryKey),
     });
+    return connector;
   }
 
-  hydrate(req: HydrateRequest, output: Output) {
-    return this.fetch(req, output);
+  #hydrate(req: HydrateRequest, output: Output) {
+    return this.#fetch(req, output);
   }
 
-  dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
-    return this.fetch(req, output);
+  #dehydrate(req: HydrateRequest, output: Output): Stream<Node> {
+    return this.#fetch(req, output);
   }
 
-  *fetch(
+  #setOutput(_: Output) {
+    // does nothing, MemorySource uses connect() instead.
+  }
+
+  *#fetch(
     req: FetchRequest,
     output: Output,
     beforeRequest?: FetchRequest | undefined,
@@ -175,7 +190,7 @@ export class TableSource implements Source {
         }
       });
 
-      yield* this.fetch(newReq, output, req);
+      yield* this.#fetch(newReq, output, req);
     } else {
       const query = requestToSQL(
         this.#table,
@@ -197,7 +212,9 @@ export class TableSource implements Source {
           ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         );
 
-        const callingOutputIndex = this.#outputs.findIndex(reg => reg.output === output);
+        const callingOutputIndex = this.#outputs.findIndex(
+          reg => reg.output === output,
+        );
         assert(callingOutputIndex !== -1, 'Output not found');
 
         const reg = this.#outputs[callingOutputIndex];
@@ -232,9 +249,8 @@ export class TableSource implements Source {
     // need to check for the existence of the row before modifying
     // the db so we don't push it to outputs if it does/doest not exist.
     const exists =
-      this.#checkExistsStmt.get(
-        ...pickColumns(this.#primaryKey, change.row),
-      )?.exists === 1;
+      this.#checkExistsStmt.get(...pickColumns(this.#primaryKey, change.row))
+        ?.exists === 1;
     if (change.type === 'add') {
       assert(!exists, 'Row already exists');
     } else {
@@ -251,7 +267,7 @@ export class TableSource implements Source {
             relationships: {},
           },
         },
-        this,
+        this.#input,
       );
     }
     this.#overlay = undefined;
@@ -261,9 +277,7 @@ export class TableSource implements Source {
       );
     } else {
       change.type satisfies 'remove';
-      this.#deleteStmt.run(
-        ...toSQLiteTypes(this.#primaryKey, change.row),
-      );
+      this.#deleteStmt.run(...toSQLiteTypes(this.#primaryKey, change.row));
     }
   }
 }
