@@ -1,5 +1,6 @@
 import {AST} from '../ast2/ast.js';
 import {Row} from '../ivm2/data.js';
+import {Source} from '../ivm2/source.js';
 import {
   EntitySchema,
   PullSchemaForRelationship,
@@ -13,6 +14,11 @@ type Entity = Row;
  * references a field on an entity.
  */
 export type Selector<E extends EntitySchema> = keyof E['fields'];
+
+export type Context = {
+  getSource: (name: string) => Source;
+  createStorage: () => Storage;
+};
 
 /**
  * Have you ever noticed that when you hover over Types in TypeScript, it shows

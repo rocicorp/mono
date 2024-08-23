@@ -18,7 +18,8 @@ import {
   Lazy,
   PullSchemaForRelationship,
 } from './schema.js';
-import {Host} from '../builder/builder.js';
+import {Output} from '../ivm2/operator.js';
+import {buildPipeline, Host} from '../builder/builder.js';
 
 export function newEntityQuery<
   TSchema extends EntitySchema,
@@ -34,14 +35,14 @@ class EntityQueryImpl<
 > implements EntityQuery<TSchema, TReturn, TAs>
 {
   readonly #ast: AST;
-  readonly #context: Host;
+  readonly #host: Host;
   readonly #schema: TSchema;
 
   constructor(host: Host, schema: TSchema, ast?: AST | undefined) {
     this.#ast = ast ?? {
       table: schema.table,
     };
-    this.#context = host;
+    this.#host = host;
     this.#schema = schema;
   }
 
@@ -61,7 +62,7 @@ class EntityQueryImpl<
     ..._fields: TFields
   ): EntityQuery<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
-    return this.#create(this.#context, this.#schema, this.#ast);
+    return this.#create(this.#host, this.#schema, this.#ast);
   }
 
   run(): MakeHumanReadable<TReturn> {
@@ -88,7 +89,7 @@ class EntityQueryImpl<
     const related2 = related;
     if (isFieldRelationship(related1)) {
       const destSchema = resolveSchema(related1.dest.schema);
-      return this.#create(this.#context, this.#schema, {
+      return this.#create(this.#host, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -99,7 +100,7 @@ class EntityQueryImpl<
               op: '=',
             },
             subquery: cb(
-              this.#create(this.#context, destSchema, {
+              this.#create(this.#host, destSchema, {
                 table: destSchema.table,
               }),
             ).ast,
@@ -111,7 +112,7 @@ class EntityQueryImpl<
     if (isJunctionRelationship(related2)) {
       const destSchema = resolveSchema(related2.dest.schema);
       const junctionSchema = resolveSchema(related2.junction.schema);
-      return this.#create(this.#context, this.#schema, {
+      return this.#create(this.#host, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -131,7 +132,7 @@ class EntityQueryImpl<
                     op: '=',
                   },
                   subquery: cb(
-                    this.#create(this.#context, destSchema, {
+                    this.#create(this.#host, destSchema, {
                       table: destSchema.table,
                     }),
                   ).ast,
@@ -150,7 +151,7 @@ class EntityQueryImpl<
     op: Operator,
     value: Exclude<GetFieldType<TSchema, TSelector>, null | undefined>,
   ): EntityQuery<TSchema, TReturn, TAs> {
-    return this.#create(this.#context, this.#schema, {
+    return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       where: [
         ...(this.#ast.where ?? []),
@@ -165,14 +166,14 @@ class EntityQueryImpl<
   }
 
   as<TAs2 extends string>(alias: TAs2): EntityQuery<TSchema, TReturn, TAs2> {
-    return this.#create(this.#context, this.#schema, {
+    return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       alias,
     });
   }
 
   limit(limit: number): EntityQuery<TSchema, TReturn, TAs> {
-    return this.#create(this.#context, this.#schema, {
+    return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       limit,
     });
@@ -182,10 +183,14 @@ class EntityQueryImpl<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): EntityQuery<TSchema, TReturn, TAs> {
-    return this.#create(this.#context, this.#schema, {
+    return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
     });
+  }
+
+  toPipeline(): Output {
+    return buildPipeline(this.#ast, this.#host);
   }
 }
 
