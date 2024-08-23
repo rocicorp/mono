@@ -56,7 +56,7 @@ test('source-only', () => {
     ),
   );
 
-  expect(sink.hydrate()).toEqual([
+  expect(sink.fetch()).toEqual([
     {row: {id: 1, name: 'aaron', recruiterID: null}, relationships: {}},
     {row: {id: 7, name: 'alex', recruiterID: 1}, relationships: {}},
     {row: {id: 5, name: 'cesar', recruiterID: 3}, relationships: {}},
@@ -96,7 +96,7 @@ test('filter', () => {
     ),
   );
 
-  expect(sink.hydrate()).toEqual([
+  expect(sink.fetch()).toEqual([
     {row: {id: 6, name: 'darick', recruiterID: 3}, relationships: {}},
     {row: {id: 5, name: 'cesar', recruiterID: 3}, relationships: {}},
     {row: {id: 4, name: 'matt', recruiterID: 1}, relationships: {}},
@@ -148,7 +148,7 @@ test('self-join', () => {
     ),
   );
 
-  expect(sink.hydrate()).toEqual([
+  expect(sink.fetch()).toEqual([
     {
       row: {id: 1, name: 'aaron', recruiterID: null},
       relationships: {
@@ -335,7 +335,7 @@ test('multi-join', () => {
     ),
   );
 
-  expect(sink.hydrate()).toEqual([
+  expect(sink.fetch()).toEqual([
     {
       row: {id: 1, name: 'aaron', recruiterID: null},
       relationships: {

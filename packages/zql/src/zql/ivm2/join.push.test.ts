@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, suite, test} from 'vitest';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
@@ -8,14 +8,11 @@ import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
-<<<<<<< HEAD
-import {SourceChange} from './source.js';
-import {ValueType} from './schema.js';
-=======
 import type {SourceChange} from './source.js';
->>>>>>> e9c084b92 (testS)
+import type {ValueType} from './schema.js';
+import type {StorageKey} from './operator.js';
 
-test('push one:many', () => {
+suite('push one:many', () => {
   const base = {
     columns: [
       {id: 'string' as const},
@@ -31,16 +28,16 @@ test('push one:many', () => {
     ],
   };
 
-  // fetch one parent, remove parent
   pushTest({
     ...base,
+    name: 'fetch one parent, remove parent',
     sources: [[{id: 'i1'}], []],
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{}],
+    expectedStorageKeys: [[]],
     expectedOutput: [
       {
         type: 'remove',
@@ -56,29 +53,29 @@ test('push one:many', () => {
     ],
   });
 
-  // fetch one child, remove child
   pushTest({
     ...base,
+    name: 'fetch one child, remove child',
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{}],
+    expectedStorageKeys: [[]],
     expectedOutput: [],
   });
 
-  // fetch one child, add parent
   pushTest({
     ...base,
+    name: 'fetch one child, add parent',
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -94,9 +91,9 @@ test('push one:many', () => {
     ],
   });
 
-  // fetch two children, add parent
   pushTest({
     ...base,
+    name: 'fetch two children, add parent',
     sources: [
       [],
       [
@@ -109,7 +106,7 @@ test('push one:many', () => {
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -128,16 +125,16 @@ test('push one:many', () => {
     ],
   });
 
-  // fetch one child, add wrong parent
   pushTest({
     ...base,
+    name: 'fetch one child, add wrong parent',
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i2'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
     ],
-    expectedStorageCounts: [{i2: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i2', 'i2']]],
     expectedOutput: [
       {
         type: 'add',
@@ -153,16 +150,16 @@ test('push one:many', () => {
     ],
   });
 
-  // fetch one parent, add child
   pushTest({
     ...base,
+    name: 'fetch one parent, add child',
     sources: [[{id: 'i1'}], []],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -186,29 +183,29 @@ test('push one:many', () => {
     ],
   });
 
-  // fetch one parent, add wrong child
   pushTest({
     ...base,
+    name: 'fetch one parent, add wrong child',
     sources: [[{id: 'i1'}], []],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i2'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
     ],
-    expectedStorageCounts: [{i1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
     expectedOutput: [],
   });
 
-  // fetch one parent, one child, remove parent
   pushTest({
     ...base,
+    name: 'fetch one parent, one child, remove parent',
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{}],
+    expectedStorageKeys: [[]],
     expectedOutput: [
       {
         type: 'remove',
@@ -224,9 +221,9 @@ test('push one:many', () => {
     ],
   });
 
-  // fetch one parent, two children, remove parent
   pushTest({
     ...base,
+    name: 'fetch one parent, two children, remove parent',
     sources: [
       [{id: 'i1'}],
       [
@@ -239,7 +236,7 @@ test('push one:many', () => {
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{}],
+    expectedStorageKeys: [[]],
     expectedOutput: [
       {
         type: 'remove',
@@ -258,9 +255,9 @@ test('push one:many', () => {
     ],
   });
 
-  // no fetch, add parent, add child, add child, remove child, remove parent
   pushTest({
     ...base,
+    name: 'no fetch, add parent, add child, add child, remove child, remove parent',
     sources: [[], []],
     pushes: [
       [0, {type: 'add', row: {id: 'i1'}}],
@@ -281,7 +278,7 @@ test('push one:many', () => {
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{}, {}],
+    expectedStorageKeys: [[], []],
     expectedOutput: [
       {
         type: 'add',
@@ -366,7 +363,7 @@ test('push one:many', () => {
   });
 });
 
-test('push many:one', () => {
+suite('push many:one', () => {
   const base = {
     columns: [
       {id: 'string', ownerID: 'string'} as const,
@@ -382,16 +379,16 @@ test('push many:one', () => {
     ],
   };
 
-  // fetch one child, add parent
   pushTest({
     ...base,
+    name: 'fetch one child, add parent',
     sources: [[], [{id: 'u1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
-    expectedStorageCounts: [{u1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -408,16 +405,16 @@ test('push many:one', () => {
     ],
   });
 
-  // fetch one child, add wrong parent
   pushTest({
     ...base,
+    name: 'fetch one child, add wrong parent',
     sources: [[], [{id: 'u1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
     ],
-    expectedStorageCounts: [{u2: 1}],
+    expectedStorageKeys: [[['pKeySet', 'u2', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -434,16 +431,16 @@ test('push many:one', () => {
     ],
   });
 
-  // fetch one parent, add child
   pushTest({
     ...base,
+    name: 'fetch one parent, add child',
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
     pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'u1'}}],
       ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
     ],
-    expectedStorageCounts: [{u1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -467,9 +464,9 @@ test('push many:one', () => {
     ],
   });
 
-  // fetch two parents, add one child
   pushTest({
     ...base,
+    name: 'fetch two parents, add one child',
     sources: [
       [
         {id: 'i1', ownerID: 'u1'},
@@ -482,7 +479,12 @@ test('push many:one', () => {
       ['1', 'push', {type: 'add', row: {id: 'u1'}}],
       ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
     ],
-    expectedStorageCounts: [{u1: 2}],
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'u1', 'i1'],
+        ['pKeySet', 'u1', 'i2'],
+      ],
+    ],
     expectedOutput: [
       {
         type: 'child',
@@ -526,7 +528,7 @@ test('push many:one', () => {
   });
 });
 
-test('push one:many:many', () => {
+suite('push one:many:many', () => {
   const base = {
     columns: [
       {id: 'string'} as const,
@@ -548,9 +550,9 @@ test('push one:many:many', () => {
     ],
   };
 
-  // fetch one parent, one child, add grandchild
   pushTest({
     ...base,
+    name: 'fetch one parent, one child, add grandchild',
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}], []],
     pushes: [[2, {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
     expectedLog: [
@@ -558,7 +560,7 @@ test('push one:many:many', () => {
       ['1', 'fetch', {constraint: {key: 'id', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {c1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -592,9 +594,9 @@ test('push one:many:many', () => {
     ],
   });
 
-  // fetch one parent, one grandchild, add child
   pushTest({
     ...base,
+    name: 'fetch one parent, one grandchild, add child',
     sources: [[{id: 'i1'}], [], [{id: 'r1', commentID: 'c1'}]],
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
@@ -602,7 +604,7 @@ test('push one:many:many', () => {
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {c1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -630,9 +632,9 @@ test('push one:many:many', () => {
     ],
   });
 
-  // fetch one child, one grandchild, add parent
   pushTest({
     ...base,
+    name: 'fetch one child, one grandchild, add parent',
     sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
@@ -640,7 +642,7 @@ test('push one:many:many', () => {
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {c1: 1}],
+    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -665,9 +667,9 @@ test('push one:many:many', () => {
     ],
   });
 
-  // fetch one parent, one child, one grandchild, remove parent
   pushTest({
     ...base,
+    name: 'fetch one parent, one child, one grandchild, remove parent',
     sources: [
       [{id: 'i1'}],
       [{id: 'c1', issueID: 'i1'}],
@@ -679,7 +681,7 @@ test('push one:many:many', () => {
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
       ['2', 'cleanup', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
-    expectedStorageCounts: [{}, {}],
+    expectedStorageKeys: [[], []],
     expectedOutput: [
       {
         type: 'remove',
@@ -705,7 +707,7 @@ test('push one:many:many', () => {
   });
 });
 
-test('push one:many:one', () => {
+suite('push one:many:one', () => {
   const base = {
     columns: [
       {id: 'string'} as const,
@@ -734,9 +736,9 @@ test('push one:many:one', () => {
     ] as const,
   };
 
-  // fetch one parent, one child, add grandchild
   pushTest({
     ...base,
+    name: 'fetch one parent, one child, add grandchild',
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
     sorts,
     pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
@@ -745,7 +747,10 @@ test('push one:many:one', () => {
       ['1', 'fetch', {constraint: {key: 'labelID', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {l1: 1}],
+    expectedStorageKeys: [
+      [['pKeySet', 'i1', 'i1']],
+      [['pKeySet', 'l1', 'i1', 'l1']],
+    ],
     expectedOutput: [
       {
         type: 'child',
@@ -778,9 +783,9 @@ test('push one:many:one', () => {
     ],
   });
 
-  // fetch one parent, one grandchild, add child
   pushTest({
     ...base,
+    name: 'fetch one parent, one grandchild, add child',
     sources: [[{id: 'i1'}], [], [{id: 'l1'}]],
     sorts,
     pushes: [[1, {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}]],
@@ -789,7 +794,10 @@ test('push one:many:one', () => {
       ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageCounts: [{i1: 1}, {l1: 1}],
+    expectedStorageKeys: [
+      [['pKeySet', 'i1', 'i1']],
+      [['pKeySet', 'l1', 'i1', 'l1']],
+    ],
     expectedOutput: [
       {
         type: 'child',
@@ -815,9 +823,9 @@ test('push one:many:one', () => {
     ],
   });
 
-  // fetch two parents, two children, add one grandchild
   pushTest({
     ...base,
+    name: 'fetch two parents, two children, add one grandchild',
     sources: [
       [{id: 'i1'}, {id: 'i2'}],
       [
@@ -834,7 +842,16 @@ test('push one:many:one', () => {
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
     ],
-    expectedStorageCounts: [{i1: 1, i2: 1}, {l1: 2}],
+    expectedStorageKeys: [
+      [
+        ['pKeySet', 'i1', 'i1'],
+        ['pKeySet', 'i2', 'i2'],
+      ],
+      [
+        ['pKeySet', 'l1', 'i1', 'l1'],
+        ['pKeySet', 'l1', 'i2', 'l1'],
+      ],
+    ],
     expectedOutput: [
       {
         type: 'child',
@@ -897,85 +914,80 @@ test('push one:many:one', () => {
 });
 
 function pushTest(t: PushTest) {
-  assert(t.sources.length > 0);
-  assert(t.joins.length === t.sources.length - 1);
+  test(t.name, () => {
+    assert(t.sources.length > 0);
+    assert(t.joins.length === t.sources.length - 1);
 
-  const log: SnitchMessage[] = [];
+    const log: SnitchMessage[] = [];
 
-  const sources = t.sources.map((fetch, i) => {
-    const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-<<<<<<< HEAD
-    const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
-    for (const row of hydrate) {
-=======
-    const source = new MemorySource(ordering);
-    for (const row of fetch) {
->>>>>>> e9c084b92 (testS)
-      source.push({type: 'add', row});
+    const sources = t.sources.map((fetch, i) => {
+      const ordering = t.sorts?.[i] ?? [['id', 'asc']];
+      const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
+      for (const row of fetch) {
+        source.push({type: 'add', row});
+      }
+      const snitch = new Snitch(source.connect(ordering), String(i), log);
+      return {
+        source,
+        snitch,
+      };
+    });
+
+    const joins: {
+      join: Join;
+      storage: MemoryStorage;
+    }[] = [];
+    // Although we tend to think of the joins from left to right, we need to
+    // build them from right to left.
+    for (let i = t.joins.length - 1; i >= 0; i--) {
+      const info = t.joins[i];
+      const parent = sources[i].snitch;
+      const child =
+        i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
+      const storage = new MemoryStorage();
+      const join = new Join(
+        parent,
+        child,
+        storage,
+        info.parentKey,
+        info.childKey,
+        info.relationshipName,
+      );
+      joins[i] = {
+        join,
+        storage,
+      };
     }
-    const snitch = new Snitch(source.connect(ordering), String(i), log);
-    return {
-      source,
-      snitch,
-    };
+
+    // By convention we put them in the test bottom up. Why? Easier to think
+    // left-to-right.
+    const finalJoin = joins[0];
+    const c = new Catch(finalJoin.join);
+
+    c.fetch();
+    log.length = 0;
+
+    for (const [sourceIndex, change] of t.pushes) {
+      sources[sourceIndex].source.push(change);
+    }
+
+    for (const [i, j] of joins.entries()) {
+      const {storage} = j;
+      const expectedStorageKeys = t.expectedStorageKeys[i];
+      const expectedStorage: Record<string, boolean> = {};
+      for (const k of expectedStorageKeys) {
+        expectedStorage[JSON.stringify(k)] = true;
+      }
+      expect(storage.cloneData()).toEqual(expectedStorage);
+    }
+
+    expect(t.expectedLog).toEqual(log);
+    expect(t.expectedOutput).toEqual(c.pushes);
   });
-
-  const joins: {
-    join: Join;
-    storage: MemoryStorage;
-  }[] = [];
-  // Although we tend to think of the joins from left to right, we need to
-  // build them from right to left.
-  for (let i = t.joins.length - 1; i >= 0; i--) {
-    const info = t.joins[i];
-    const parent = sources[i].snitch;
-    const child =
-      i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
-    const storage = new MemoryStorage();
-    const join = new Join(
-      parent,
-      child,
-      storage,
-      info.parentKey,
-      info.childKey,
-      info.relationshipName,
-    );
-    joins[i] = {
-      join,
-      storage,
-    };
-  }
-
-  // By convention we put them in the test bottom up. Why? Easier to think
-  // left-to-right.
-  const finalJoin = joins[0];
-  const c = new Catch(finalJoin.join);
-
-  c.fetch();
-  log.length = 0;
-
-  for (const [sourceIndex, change] of t.pushes) {
-    sources[sourceIndex].source.push(change);
-  }
-
-  for (const [i, j] of joins.entries()) {
-    const {storage} = j;
-    const expectedCounts = t.expectedStorageCounts[i];
-    expect(storage.cloneData()).toEqual(
-      Object.fromEntries(
-        Object.entries(expectedCounts).map(([k, v]) => [
-          JSON.stringify(['fetch-count', k]),
-          v,
-        ]),
-      ),
-    );
-  }
-
-  expect(t.expectedLog).toEqual(log);
-  expect(t.expectedOutput).toEqual(c.pushes);
 }
 
 type PushTest = {
+  name: string;
   columns: Record<string, ValueType>[];
   primaryKeys: readonly string[][];
   sources: Row[][];
@@ -987,6 +999,6 @@ type PushTest = {
   }[];
   pushes: [sourceIndex: number, change: SourceChange][];
   expectedLog: SnitchMessage[];
-  expectedStorageCounts: Record<string, number>[];
+  expectedStorageKeys: StorageKey[][];
   expectedOutput: Change[];
 };

@@ -19,11 +19,11 @@ export interface Input {
   // Returns nodes sorted in order of schema().comparator.
   fetch(req: FetchRequest, output: Output): Stream<Node>;
 
-  // Dehydrate the operator. This is called when `output` will no longer
-  // need the data returned by hydrate(). The receiving operator should
+  // Cleanup the operator. This is called when `output` will no longer
+  // need the data returned by fetch(). The receiving operator should
   // clean up any resources it has allocated.
-  // Returns the same thing as fetch(). This is to allow callers to properly
-  // propagate the dehydrate message through the graph.
+  // Returns the same thing as fetch(). This allows callers to properly
+  // propagate the cleanup message through the graph.
   cleanup(req: FetchRequest, output: Output): Stream<Node>;
 
   setOutput(output: Output): void;
@@ -50,7 +50,7 @@ export type Start = {
  * the code running the pipeline.
  */
 export interface Output {
-  // Push incremental changes to data previously received with hydrate().
+  // Push incremental changes to data previously received with fetch().
   // Consumers must apply all pushed changes or incremental result will
   // be incorrect.
   // Callers must maintain some invariants for correct operation:

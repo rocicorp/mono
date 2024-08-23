@@ -1,11 +1,12 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Node, Row, Value} from './data.js';
+import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
   FetchRequest,
   Input,
   Operator,
   Output,
   Storage,
+  StorageKey,
 } from './operator.js';
 import {take, type Stream} from './stream.js';
 import type {Change} from './change.js';
@@ -51,8 +52,8 @@ export class Take implements Operator {
     this.#output = output;
   }
 
-  get schema(): Schema {
-    return this.schema;
+  getSchema(_output: Output): Schema {
+    return this.#input.getSchema(this);
   }
 
   *fetch(req: FetchRequest, _: Output): Stream<Node> {
@@ -328,6 +329,6 @@ export class Take implements Operator {
   }
 }
 
-function getTakeStateKey(partitionValue: Value): Value[] {
-  return ['take', partitionValue];
+function getTakeStateKey(partitionValue: Value): StorageKey {
+  return ['take', normalizeUndefined(partitionValue)];
 }

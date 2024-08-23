@@ -128,7 +128,7 @@ export class Join implements Operator {
   #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
     const parentKeyValue = normalizeUndefined(parentNode.row[this.#parentKey]);
     const parentPrimaryKey: NormalizedValue[] = [];
-    for (const key of this.schema.primaryKey) {
+    for (const key of this.#parent.getSchema(this).primaryKey) {
       parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
     }
 

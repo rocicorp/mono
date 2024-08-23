@@ -7,9 +7,10 @@ import type {Row, Node} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
-<<<<<<< HEAD
-import {ValueType} from './schema.js';
-test('hydrate one:many', () => {
+import type {ValueType} from './schema.js';
+import type {StorageKey} from './operator.js';
+
+suite('fetch one:many', () => {
   const base = {
     columns: [
       {id: 'string' as const},
@@ -24,75 +25,47 @@ test('hydrate one:many', () => {
       },
     ],
   };
-=======
-import type {JSONValue} from 'shared/src/json.js';
-import type {StorageKey} from './operator.js';
-suite('fetch one:many', () => {
-  const joins = [
-    {
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'comments',
-    },
-  ];
->>>>>>> e9c084b92 (testS)
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no data',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], []],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[]],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no parent',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[]],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'parent, no children',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], []],
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
-    expectedFetch: [{row: {id: 'i1'}, relationships: {comments: []}}],
+    expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one parent, one child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -102,29 +75,22 @@ suite('fetch one:many', () => {
     ],
   });
 
+  // one parent, wrong child
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one parent, wrong child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i2'}]],
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
-    expectedFetch: [{row: {id: 'i1'}, relationships: {comments: []}}],
+    expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one parent, one child + one wrong child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i1'}],
       [
@@ -137,7 +103,7 @@ suite('fetch one:many', () => {
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -148,12 +114,8 @@ suite('fetch one:many', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'two parents, each with two children',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i2'}, {id: 'i1'}],
       [
@@ -174,7 +136,7 @@ suite('fetch one:many', () => {
         ['pKeySet', 'i2', 'i2'],
       ],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -197,8 +159,7 @@ suite('fetch one:many', () => {
   });
 });
 
-<<<<<<< HEAD
-test('hydrate many:one', () => {
+suite('fetch many:one', () => {
   const base = {
     columns: [
       {id: 'string' as const, ownerID: 'string' as const},
@@ -213,75 +174,49 @@ test('hydrate many:one', () => {
       },
     ],
   };
-=======
-suite('fetch many:one', () => {
-  const joins = [
-    {
-      parentKey: 'ownerID',
-      childKey: 'id',
-      relationshipName: 'owner',
-    },
-  ];
->>>>>>> e9c084b92 (testS)
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no data',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], []],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[]],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one parent, no child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
-    expectedFetch: [
+    expectedHydrate: [
       {row: {id: 'i1', ownerID: 'u1'}, relationships: {owner: []}},
     ],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no parent, one child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'u1'}]],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[]],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one parent, one child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1', ownerID: 'u1'}], [{id: 'u1'}]],
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1', ownerID: 'u1'},
         relationships: {
@@ -292,12 +227,8 @@ suite('fetch many:one', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'two parents, one child',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [
         {id: 'i2', ownerID: 'u1'},
@@ -316,7 +247,7 @@ suite('fetch many:one', () => {
         ['pKeySet', 'u1', 'i2'],
       ],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1', ownerID: 'u1'},
         relationships: {
@@ -333,12 +264,8 @@ suite('fetch many:one', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'two parents, two children',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [
         {id: 'i2', ownerID: 'u2'},
@@ -357,7 +284,7 @@ suite('fetch many:one', () => {
         ['pKeySet', 'u2', 'i2'],
       ],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1', ownerID: 'u1'},
         relationships: {
@@ -374,8 +301,7 @@ suite('fetch many:one', () => {
   });
 });
 
-<<<<<<< HEAD
-test('hydrate one:many:many', () => {
+suite('fetch one:many:many', () => {
   const base = {
     columns: [
       {id: 'string' as const},
@@ -396,84 +322,49 @@ test('hydrate one:many:many', () => {
       },
     ],
   };
-=======
-suite('fetch one:many:many', () => {
-  const joins = [
-    {
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'comments',
-    },
-    {
-      parentKey: 'id',
-      childKey: 'commentID',
-      relationshipName: 'revisions',
-    },
-  ];
->>>>>>> e9c084b92 (testS)
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no data',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [], []],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[], []],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no parent, one comment, no revision',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'c1', issueID: 'i1'}], []],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[], []],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no parent, one comment, one revision',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[], []],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one issue, no comments or revisions',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [], []],
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], []],
-    expectedFetch: [{row: {id: 'i1'}, relationships: {comments: []}}],
+    expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one issue, one comment, one revision',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i1'}],
       [{id: 'c1', issueID: 'i1'}],
@@ -485,7 +376,7 @@ suite('fetch one:many:many', () => {
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -505,12 +396,8 @@ suite('fetch one:many:many', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'two issues, four comments, eight revisions',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i2'}, {id: 'i1'}],
       [
@@ -539,6 +426,7 @@ suite('fetch one:many:many', () => {
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c3'}}],
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c4'}}],
     ],
+
     expectedStorageKeys: [
       [
         ['pKeySet', 'i1', 'i1'],
@@ -551,7 +439,8 @@ suite('fetch one:many:many', () => {
         ['pKeySet', 'c4', 'c4'],
       ],
     ],
-    expectedFetch: [
+
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -606,8 +495,7 @@ suite('fetch one:many:many', () => {
   });
 });
 
-<<<<<<< HEAD
-test('hydrate one:many:one', () => {
+suite('fetch one:many:one', () => {
   const base = {
     columns: [
       {id: 'string' as const},
@@ -628,21 +516,6 @@ test('hydrate one:many:one', () => {
       },
     ],
   };
-=======
-suite('fetch one:many:one', () => {
-  const joins = [
-    {
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'issuelabels',
-    },
-    {
-      parentKey: 'labelID',
-      childKey: 'id',
-      relationshipName: 'labels',
-    },
-  ];
->>>>>>> e9c084b92 (testS)
 
   const sorts = [
     undefined,
@@ -652,66 +525,44 @@ suite('fetch one:many:one', () => {
     ] as const,
   ];
 
-  const primaryKeys = [undefined, ['issueID', 'labelID'] as const];
-
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no data',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [], []],
     sorts,
-    primaryKeys,
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[], []],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'no issues, one issuelabel, one label',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[], [{issueID: 'i1', labelID: 'l1'}], [{id: 'l1'}]],
     sorts,
-    primaryKeys,
     expectedMessages: [['0', 'fetch', {}]],
     expectedStorageKeys: [[], []],
-    expectedFetch: [],
+    expectedHydrate: [],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one issue, no issuelabels, no labels',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [], []],
     sorts,
-    primaryKeys,
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], []],
-    expectedFetch: [{row: {id: 'i1'}, relationships: {issuelabels: []}}],
+    expectedHydrate: [{row: {id: 'i1'}, relationships: {issuelabels: []}}],
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one issue, one issuelabel, no labels',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
     sorts,
-    primaryKeys,
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
@@ -721,7 +572,7 @@ suite('fetch one:many:one', () => {
       [['pKeySet', 'i1', 'i1']],
       [['pKeySet', 'l1', 'i1', 'l1']],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -737,15 +588,10 @@ suite('fetch one:many:one', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one issue, one issuelabel, one label',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], [{id: 'l1'}]],
     sorts,
-    primaryKeys,
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
@@ -755,7 +601,7 @@ suite('fetch one:many:one', () => {
       [['pKeySet', 'i1', 'i1']],
       [['pKeySet', 'l1', 'i1', 'l1']],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -773,12 +619,8 @@ suite('fetch one:many:one', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'one issue, two issuelabels, two labels',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i1'}],
       [
@@ -788,7 +630,6 @@ suite('fetch one:many:one', () => {
       [{id: 'l1'}, {id: 'l2'}],
     ],
     sorts,
-    primaryKeys,
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
@@ -802,7 +643,7 @@ suite('fetch one:many:one', () => {
         ['pKeySet', 'l2', 'i1', 'l2'],
       ],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -826,12 +667,8 @@ suite('fetch one:many:one', () => {
   });
 
   fetchTest({
-<<<<<<< HEAD
     ...base,
-=======
     name: 'two issues, four issuelabels, two labels',
-    joins,
->>>>>>> e9c084b92 (testS)
     sources: [
       [{id: 'i2'}, {id: 'i1'}],
       [
@@ -843,7 +680,6 @@ suite('fetch one:many:one', () => {
       [{id: 'l1'}, {id: 'l2'}],
     ],
     sorts,
-    primaryKeys,
     expectedMessages: [
       ['0', 'fetch', {}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
@@ -865,7 +701,7 @@ suite('fetch one:many:one', () => {
         ['pKeySet', 'l2', 'i2', 'l2'],
       ],
     ],
-    expectedFetch: [
+    expectedHydrate: [
       {
         row: {id: 'i1'},
         relationships: {
@@ -909,85 +745,13 @@ function fetchTest(t: FetchTest) {
 
     const log: SnitchMessage[] = [];
 
-<<<<<<< HEAD
-  const sources = t.sources.map((rows, i) => {
-    const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-    const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
-    for (const row of rows) {
-      source.push({type: 'add', row});
-    }
-    const snitch = new Snitch(source.connect(ordering), String(i), log);
-    return {
-      source,
-      snitch,
-    };
-  });
-
-  const joins: {
-    join: Join;
-    storage: MemoryStorage;
-  }[] = [];
-  // Although we tend to think of the joins from left to right, we need to
-  // build them from right to left.
-  for (let i = t.joins.length - 1; i >= 0; i--) {
-    const info = t.joins[i];
-    const parent = sources[i].snitch;
-    const child =
-      i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
-    const storage = new MemoryStorage();
-    const join = new Join(
-      parent,
-      child,
-      storage,
-      info.parentKey,
-      info.childKey,
-      info.relationshipName,
-    );
-    joins[i] = {
-      join,
-      storage,
-    };
-  }
-
-  for (const fetchType of ['hydrate', 'fetch', 'dehydrate'] as const) {
-    log.length = 0;
-
-    // By convention we put them in the test bottom up. Why? Easier to think
-    // left-to-right.
-    const finalJoin = joins[0];
-    const c = new Catch(finalJoin.join);
-
-    const r = c[fetchType]();
-
-    expect(r).toEqual(t.expectedHydrate);
-    expect(c.pushes).toEqual([]);
-
-    for (const [i, j] of joins.entries()) {
-      const {storage} = j;
-      const expectedCounts = t.expectedStorageCounts[i];
-      if (fetchType === 'hydrate' || fetchType === 'fetch') {
-        expect(storage.cloneData()).toEqual(
-          Object.fromEntries(
-            Object.entries(expectedCounts).map(([k, v]) => [
-              JSON.stringify(['hydrate-count', k]),
-              v,
-            ]),
-          ),
-        );
-      } else {
-        fetchType satisfies 'dehydrate';
-        expect(storage.cloneData()).toEqual({});
-=======
     const sources = t.sources.map((rows, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const primaryKey = t.primaryKeys?.[i] ?? ['id'];
-      const source = new MemorySource(ordering, primaryKey);
+      const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
       for (const row of rows) {
         source.push({type: 'add', row});
->>>>>>> e9c084b92 (testS)
       }
-      const snitch = new Snitch(source, String(i), log);
-      source.addOutput(snitch);
+      const snitch = new Snitch(source.connect(ordering), String(i), log);
       return {
         source,
         snitch,
@@ -1014,33 +778,30 @@ function fetchTest(t: FetchTest) {
         info.childKey,
         info.relationshipName,
       );
-      parent.setOutput(join);
-      child.setOutput(join);
       joins[i] = {
         join,
         storage,
       };
     }
 
-    for (const fetchType of ['fetch', 'cleanup'] as const) {
+    for (const fetchType of ['fetch', 'fetch', 'cleanup'] as const) {
       log.length = 0;
 
       // By convention we put them in the test bottom up. Why? Easier to think
       // left-to-right.
       const finalJoin = joins[0];
       const c = new Catch(finalJoin.join);
-      finalJoin.join.setOutput(c);
 
       const r = c[fetchType]();
 
-      expect(r).toEqual(t.expectedFetch);
+      expect(r).toEqual(t.expectedHydrate);
       expect(c.pushes).toEqual([]);
 
       for (const [i, j] of joins.entries()) {
         const {storage} = j;
-        const expectedStorageKeys = t.expectedStorageKeys[i];
         if (fetchType === 'fetch') {
-          const expectedStorage: Record<string, JSONValue> = {};
+          const expectedStorageKeys = t.expectedStorageKeys[i];
+          const expectedStorage: Record<string, boolean> = {};
           for (const k of expectedStorageKeys) {
             expectedStorage[JSON.stringify(k)] = true;
           }
@@ -1081,15 +842,11 @@ function fetchTest(t: FetchTest) {
 }
 
 type FetchTest = {
-<<<<<<< HEAD
+  name: string;
   columns: Record<string, ValueType>[];
   primaryKeys: readonly string[][];
-=======
-  name: string;
->>>>>>> e9c084b92 (testS)
   sources: Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
-  primaryKeys?: (readonly string[] | undefined)[] | undefined;
   joins: {
     parentKey: string;
     childKey: string;
@@ -1097,5 +854,5 @@ type FetchTest = {
   }[];
   expectedMessages: SnitchMessage[];
   expectedStorageKeys: StorageKey[][];
-  expectedFetch: Node[];
+  expectedHydrate: Node[];
 };

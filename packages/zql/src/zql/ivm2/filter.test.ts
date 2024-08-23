@@ -13,7 +13,7 @@ test('basics', () => {
   const filter = new Filter(connector, row => row.b === 'foo');
   const out = new Catch(filter);
 
-  expect(out.hydrate()).toEqual([
+  expect(out.fetch()).toEqual([
     {row: {a: 1, b: 'foo'}, relationships: {}},
     {row: {a: 3, b: 'foo'}, relationships: {}},
   ]);
@@ -34,7 +34,7 @@ test('basics', () => {
     },
   ]);
 
-  expect(out.dehydrate({})).toEqual([
+  expect(out.cleanup({})).toEqual([
     {
       row: {a: 1, b: 'foo'},
       relationships: {},
