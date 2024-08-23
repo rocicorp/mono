@@ -21,12 +21,12 @@ function logErrorAndExit(err: unknown) {
 }
 
 let numReady = 0;
-const {promise: allReady, resolve: setAllReady} = resolver<true>();
+const {promise: allReady, resolve: signalAllReady} = resolver<true>();
 
 function onReady(name: string, id?: number) {
   lc.debug?.(`${name}${id ? ' ' + id : ''} ready (${Date.now() - startMs} ms)`);
   if (++numReady === numSyncers + 1) {
-    setAllReady(true);
+    signalAllReady(true);
   }
 }
 
