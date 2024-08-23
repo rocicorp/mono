@@ -6,8 +6,7 @@ import {
   PullSchemaForRelationship,
   SchemaValue,
 } from './schema.js';
-
-type Entity = Row;
+import {Input} from '../ivm2/operator.js';
 
 /**
  * The type that can be passed into `select()`. A selector
@@ -120,7 +119,7 @@ type PickSubselect<TSubquery extends EntityQuery<EntitySchema>> = {
  * Represents a tree of entities and subselects.
  */
 export type QueryResultRow = {
-  entity: Partial<Entity>;
+  entity: Partial<Row>;
   related: Record<string, QueryResultRow[]> | undefined;
 };
 
@@ -168,4 +167,7 @@ export interface EntityQuery<
   ): EntityQuery<TSchema, TReturn, TAs>;
 
   run(): MakeHumanReadable<TReturn>;
+
+  // Temporary. Will be replaced when we have a proper view implementation.
+  toPipeline(): Input;
 }
