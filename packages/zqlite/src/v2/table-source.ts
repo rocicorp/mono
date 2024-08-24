@@ -2,7 +2,6 @@ import type {SQLQuery} from '@databases/sql';
 import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
-import {Connector} from 'zql/src/zql/ivm2/connector.js';
 import {Node, Row, Value, makeComparator} from 'zql/src/zql/ivm2/data.js';
 import {
   generateWithOverlay,
@@ -21,8 +20,9 @@ import {Stream} from 'zql/src/zql/ivm2/stream.js';
 import {compile, format, sql} from '../internal/sql.js';
 import {StatementCache} from '../internal/statement-cache.js';
 
-type OutputRegistration = {
-  output: Output;
+type Connection = {
+  input: Input;
+  output: Output | undefined;
   sort: Ordering;
 };
 
@@ -51,7 +51,7 @@ type Statements = {
  */
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
-  readonly #outputs: OutputRegistration[] = [];
+  readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, ValueType>;
   readonly #primaryKey: readonly string[];
@@ -120,54 +120,46 @@ export class TableSource implements Source {
     return stmts;
   }
 
-  #getRegistrationForOutput(output: Output): OutputRegistration {
-    const reg = this.#outputs.find(r => r.output === output);
-    assert(reg, 'Output not found');
-    return reg;
-  }
-
-  #getSchema(output: Output): Schema {
-    const reg = this.#getRegistrationForOutput(output);
+  #getSchema(connection: Connection): Schema {
     return {
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      compareRows: makeComparator(reg.sort),
+      compareRows: makeComparator(connection.sort),
     };
   }
 
-  #input: Input = {
-    getSchema: output => this.#getSchema(output),
-    fetch: (req, output) => this.#fetch(req, output),
-    cleanup: (req, output) => this.#cleanup(req, output),
-    setOutput: output => this.#setOutput(output),
-  };
-
   connect(sort: Ordering) {
-    const connector = new Connector(this.#input);
-    this.#outputs.push({
-      output: connector,
+    const input: Input = {
+      getSchema: () => this.#getSchema(connection),
+      fetch: req => this.#fetch(req, connection),
+      cleanup: req => this.#cleanup(req, connection),
+      setOutput: output => {
+        connection.output = output;
+      },
+    };
+
+    const connection: Connection = {
+      input,
+      output: undefined,
       sort: makeOrderUnique(sort, this.#primaryKey),
-    });
-    return connector;
+    };
+
+    this.#connections.push(connection);
+    return input;
   }
 
-  #cleanup(req: FetchRequest, output: Output): Stream<Node> {
-    return this.#fetch(req, output);
-  }
-
-  #setOutput(_: Output) {
-    // does nothing, MemorySource uses connect() instead.
+  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
+    return this.#fetch(req, connection);
   }
 
   *#fetch(
     req: FetchRequest,
-    output: Output,
+    connection: Connection,
     beforeRequest?: FetchRequest | undefined,
   ): Stream<Node> {
     const {start} = req;
     let newReq = req;
-    const reg = this.#getRegistrationForOutput(output);
-    const {sort} = reg;
+    const {sort} = connection;
 
     /**
      * Before isn't quite "before".
@@ -208,7 +200,7 @@ export class TableSource implements Source {
         }
       });
 
-      yield* this.#fetch(newReq, output, req);
+      yield* this.#fetch(newReq, connection, req);
     } else {
       const query = requestToSQL(
         this.#table,
@@ -230,18 +222,14 @@ export class TableSource implements Source {
           ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         );
 
-        const callingOutputIndex = this.#outputs.findIndex(
-          reg => reg.output === output,
-        );
-        assert(callingOutputIndex !== -1, 'Output not found');
+        const callingConnectionIndex = this.#connections.indexOf(connection);
+        assert(callingConnectionIndex !== -1, 'Connection not found');
 
-        const reg = this.#outputs[callingOutputIndex];
-        const {sort} = reg;
         const comparator = makeComparator(sort);
 
         let overlay: Overlay | undefined;
         if (this.#overlay) {
-          if (callingOutputIndex <= this.#overlay.outputIndex) {
+          if (callingConnectionIndex <= this.#overlay.outputIndex) {
             overlay = this.#overlay;
           }
         }
@@ -275,18 +263,17 @@ export class TableSource implements Source {
       assert(exists, 'Row not found');
     }
 
-    for (const [outputIndex, {output}] of this.#outputs.entries()) {
+    for (const [outputIndex, {output}] of this.#connections.entries()) {
       this.#overlay = {outputIndex, change};
-      output.push(
-        {
+      if (output) {
+        output.push({
           type: change.type,
           node: {
             row: change.row,
             relationships: {},
           },
-        },
-        this.#input,
-      );
+        });
+      }
     }
     this.#overlay = undefined;
     if (change.type === 'add') {

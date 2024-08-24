@@ -40,7 +40,7 @@ class OverlaySpy implements Output {
   }
 
   fetch(req: FetchRequest) {
-    this.fetches.push([...this.#input.fetch(req, this)].map(expandNode));
+    this.fetches.push([...this.#input.fetch(req)].map(expandNode));
   }
 
   push() {

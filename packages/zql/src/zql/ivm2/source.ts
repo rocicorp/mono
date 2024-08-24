@@ -1,6 +1,6 @@
 import {Ordering} from '../ast2/ast.js';
-import {Connector} from './connector.js';
 import {Row} from './data.js';
+import {Input} from './operator.js';
 
 export type SourceChange = {
   type: 'add' | 'remove';
@@ -13,12 +13,21 @@ export type SourceChange = {
  * hook yourself up to the returned Connector, like:
  *
  * ```ts
- * const connector = source.connect(ordering);
- * const myOperator = new MyOperator(connector);
- * connector.setOutput(myOperator);
+ * class MyOperator implements Output {
+ *   constructor(input: Input) {
+ *     input.setOutput(this);
+ *   }
+ *
+ *   push(change: Change): void {
+ *     // Handle change
+ *   }
+ * }
+ *
+ * const connection = source.connect(ordering);
+ * const myOperator = new MyOperator(connection);
  * ```
  */
 export interface Source {
-  connect(sort: Ordering): Connector;
+  connect(sort: Ordering): Input;
   push(change: SourceChange): void;
 }

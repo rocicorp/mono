@@ -25,25 +25,25 @@ export class Filter implements Operator {
     this.#output = output;
   }
 
-  getSchema(_output: Output) {
-    return this.#input.getSchema(this);
+  getSchema() {
+    return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest, _output: Output) {
+  *fetch(req: FetchRequest) {
     // In the future this should hoist the filters up to SQLite via "optionalFilters".
     // Waiting on hydrate/fetch merge.
-    for (const node of this.#input.fetch(req, this)) {
+    for (const node of this.#input.fetch(req)) {
       if (this.#predicate(node.row)) {
         yield node;
       }
     }
   }
 
-  cleanup(req: FetchRequest, output: Output): Stream<Node> {
-    return this.fetch(req, output);
+  cleanup(req: FetchRequest): Stream<Node> {
+    return this.fetch(req);
   }
 
-  push(change: Change, _input: Input) {
+  push(change: Change) {
     assert(this.#output, 'Output not set');
 
     const row =
@@ -51,7 +51,7 @@ export class Filter implements Operator {
         ? change.node.row
         : change.row;
     if (this.#predicate(row)) {
-      this.#output.push(change, this);
+      this.#output.push(change);
     }
   }
 }

@@ -1,6 +1,3 @@
-// An input to an operator.
-// Inputs "vend" (chosen to avoid confusion with "output") data in some order.
-
 import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
 import type {Node, NormalizedValue, Row, Value} from './data.js';
@@ -8,24 +5,25 @@ import type {Stream} from './stream.js';
 import type {Schema} from './schema.js';
 
 /**
- * Input to an operator. Typically another Operator but can also be a Source.
+ * Input to an operator.
  */
 export interface Input {
   // The schema of the data this input returns.
-  getSchema(output: Output): Schema;
+  getSchema(): Schema;
 
   // Fetch data.
   // Does not modify current state.
   // Returns nodes sorted in order of schema().comparator.
-  fetch(req: FetchRequest, output: Output): Stream<Node>;
+  fetch(req: FetchRequest): Stream<Node>;
 
   // Cleanup the operator. This is called when `output` will no longer
   // need the data returned by fetch(). The receiving operator should
   // clean up any resources it has allocated.
   // Returns the same thing as fetch(). This allows callers to properly
   // propagate the cleanup message through the graph.
-  cleanup(req: FetchRequest, output: Output): Stream<Node>;
+  cleanup(req: FetchRequest): Stream<Node>;
 
+  // Tell the input where to send its output.
   setOutput(output: Output): void;
 }
 
@@ -56,7 +54,7 @@ export interface Output {
   // Callers must maintain some invariants for correct operation:
   // - Only add rows which do not already exist (by deep equality).
   // - Only remove rows which do exist (by deep equality).
-  push(change: Change, input: Input): void;
+  push(change: Change): void;
 }
 
 /**
