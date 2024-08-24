@@ -1,6 +1,7 @@
 import type {Node, Row} from './data.js';
 
 export type Change = AddChange | RemoveChange | ChildChange;
+export type ChangeType = Change['type'];
 
 /**
  * Represents a node (and all its children) getting added to the result.
