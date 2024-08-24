@@ -3,12 +3,11 @@ import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
-import type {Row, Node} from './data.js';
+import type {Row, Node, NormalizedValue} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {ValueType} from './schema.js';
-import type {StorageKey} from './operator.js';
 
 suite('fetch one:many', () => {
   const base = {
@@ -853,6 +852,6 @@ type FetchTest = {
     relationshipName: string;
   }[];
   expectedMessages: SnitchMessage[];
-  expectedStorageKeys: StorageKey[][];
+  expectedStorageKeys: NormalizedValue[][][];
   expectedHydrate: Node[];
 };

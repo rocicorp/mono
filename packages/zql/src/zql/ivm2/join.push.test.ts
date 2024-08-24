@@ -3,14 +3,13 @@ import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {SnitchMessage, Snitch} from './snitch.js';
-import type {Row} from './data.js';
+import type {NormalizedValue, Row} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import type {SourceChange} from './source.js';
 import type {ValueType} from './schema.js';
-import type {StorageKey} from './operator.js';
 
 suite('push one:many', () => {
   const base = {
@@ -999,6 +998,6 @@ type PushTest = {
   }[];
   pushes: [sourceIndex: number, change: SourceChange][];
   expectedLog: SnitchMessage[];
-  expectedStorageKeys: StorageKey[][];
+  expectedStorageKeys: NormalizedValue[][][];
   expectedOutput: Change[];
 };
