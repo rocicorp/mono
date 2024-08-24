@@ -1,6 +1,7 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import Database from 'better-sqlite3';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
+import {expectTables} from 'zero-cache/src/test/lite.js';
 import {
   getReplicationVersions,
   getSubscriptionState,
@@ -9,17 +10,11 @@ import {
 } from './replication-state.js';
 
 describe('replicator/schema/replication-state', () => {
-  let dbFile: DbFile;
   let db: StatementRunner;
 
   beforeEach(() => {
-    dbFile = new DbFile('replication_state_test');
-    db = new StatementRunner(dbFile.connect());
+    db = new StatementRunner(new Database(':memory:'));
     initReplicationState(db.db, ['zero_data', 'zero_metadata'], '0/0a');
-  });
-
-  afterEach(async () => {
-    await dbFile.unlink();
   });
 
   test('initial replication state', () => {

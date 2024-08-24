@@ -1,7 +1,6 @@
-import {Database} from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {DbFile} from 'zero-cache/src/test/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {getConnectionURI, initDB, testDBs} from '../../test/db.js';
 import {initialSync} from './initial-sync.js';
@@ -10,18 +9,15 @@ const REPLICA_ID = 'initial_sync_validation_test_id';
 
 describe('replicator/initial-sync-validation', () => {
   let upstream: PostgresDB;
-  let replicaFile: DbFile;
-  let replica: Database;
+  let replica: Database.Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_validation_upstream');
-    replicaFile = new DbFile('initial_sync_validation_replica');
-    replica = replicaFile.connect();
+    replica = new Database(':memory:');
   });
 
   afterEach(async () => {
     await testDBs.drop(upstream);
-    await replicaFile.unlink();
   });
 
   type InvalidUpstreamCase = {

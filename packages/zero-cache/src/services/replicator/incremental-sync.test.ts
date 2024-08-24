@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
+import {expectTables} from 'zero-cache/src/test/lite.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -51,15 +51,13 @@ const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
 describe('replicator/incremental-sync', {retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
-  let replicaFile: DbFile;
-  let replica: Database;
+  let replica: Database.Database;
   let syncer: IncrementalSyncer;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
     upstream = await testDBs.create('incremental_sync_test_upstream');
-    replicaFile = new DbFile('incremental_sync_test_replica');
-    replica = replicaFile.connect();
+    replica = new Database(':memory:');
     syncer = new IncrementalSyncer(
       getConnectionURI(upstream),
       REPLICA_ID,
@@ -71,7 +69,6 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     await syncer.stop(lc);
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(upstream);
-    await replicaFile.unlink();
   });
 
   type Case = {

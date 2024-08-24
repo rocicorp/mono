@@ -1,11 +1,7 @@
-import {Database} from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {
-  DbFile,
-  expectTables,
-  initDB as initLiteDB,
-} from 'zero-cache/src/test/lite.js';
+import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {
   dropReplicationSlot,
@@ -374,19 +370,16 @@ describe('replicator/initial-sync', () => {
   ];
 
   let upstream: PostgresDB;
-  let replicaFile: DbFile;
-  let replica: Database;
+  let replica: Database.Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_upstream');
-    replicaFile = new DbFile('initial_sync_replica');
-    replica = replicaFile.connect();
+    replica = new Database(':memory:');
   });
 
   afterEach(async () => {
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(upstream);
-    await replicaFile.unlink();
   });
 
   for (const c of cases) {

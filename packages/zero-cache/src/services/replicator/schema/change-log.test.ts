@@ -1,6 +1,7 @@
-import {afterEach, beforeEach, describe, test} from 'vitest';
+import Database from 'better-sqlite3';
+import {beforeEach, describe, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
+import {expectTables} from 'zero-cache/src/test/lite.js';
 import {
   initChangeLog,
   logDeleteOp,
@@ -9,18 +10,12 @@ import {
 } from './change-log.js';
 
 describe('replicator/schema/change-log', () => {
-  let dbFile: DbFile;
   let db: StatementRunner;
 
   beforeEach(() => {
-    dbFile = new DbFile('change_log_test');
-    const conn = dbFile.connect();
+    const conn = new Database(':memory:');
     initChangeLog(conn);
     db = new StatementRunner(conn);
-  });
-
-  afterEach(async () => {
-    await dbFile.unlink();
   });
 
   test('replicator/schema/change-log', () => {
