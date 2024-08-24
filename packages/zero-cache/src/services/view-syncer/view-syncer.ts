@@ -12,7 +12,7 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
-import type {Service} from '../service.js';
+import type {ActivityBasedService} from '../service.js';
 import {ClientHandler} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
 import {CVRConfigDrivenUpdater, type CVRSnapshot} from './cvr.js';
@@ -42,7 +42,7 @@ type IdleToken = {
 
 const DEFAULT_KEEPALIVE_MS = 30_000;
 
-export class ViewSyncerService implements ViewSyncer, Service {
+export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #db: PostgresDB;

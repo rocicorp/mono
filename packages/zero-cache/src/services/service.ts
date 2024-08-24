@@ -16,3 +16,16 @@ export interface Service {
    */
   stop(): Promise<void>;
 }
+
+export interface ActivityBasedService extends Service {
+  /**
+   * Requests that service continue running if not already shutting down.
+   * This is applicable to services whose life cycle is tied to external
+   * activity and shutdown after a period of inactivity.
+   *
+   * @return `true` if the service will continue running for its
+   *         configured keepalive interval, or `false` if it has
+   *         already shut down or begun the shutdown process.
+   */
+  keepalive(): boolean;
+}

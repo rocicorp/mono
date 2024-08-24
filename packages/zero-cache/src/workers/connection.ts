@@ -1,6 +1,5 @@
 import type {WebSocket} from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
-import type {FastifyRequest} from 'fastify';
 import * as valita from 'shared/src/valita.js';
 import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import {
@@ -11,51 +10,14 @@ import {
   PongMessage,
   upstreamSchema,
 } from 'zero-protocol';
+import {ConnectParams} from '../services/dispatcher/connect-params.js';
+import type {Mutagen} from '../services/mutagen/mutagen.js';
+import type {
+  SyncContext,
+  ViewSyncer,
+} from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {CancelableAsyncIterable} from '../types/streams.js';
-import type {Mutagen} from './mutagen/mutagen.js';
-import type {SyncContext, ViewSyncer} from './view-syncer/view-syncer.js';
-
-export function handleConnection(
-  lc: LogContext,
-  viewSyncer: ViewSyncer,
-  mutagen: Mutagen,
-  clientConnections: Map<string, Connection>,
-  socket: WebSocket,
-  request: FastifyRequest,
-) {
-  const url = new URL(
-    request.url,
-    request.headers.origin ?? 'http://localhost',
-  );
-
-  const {params, error} = getConnectParams(url);
-
-  if (error !== null) {
-    sendError(lc, socket, ['error', ErrorKind.InvalidConnectionRequest, error]);
-  } else {
-    const {clientID} = params;
-    const existing = clientConnections.get(clientID);
-    if (existing) {
-      existing.close();
-    }
-    const connection = new Connection(
-      lc,
-      viewSyncer,
-      mutagen,
-      params,
-      socket,
-      () => {
-        if (clientConnections.get(clientID) === connection) {
-          clientConnections.delete(clientID);
-        }
-      },
-    );
-    clientConnections.set(clientID, connection);
-  }
-
-  //TODO: will need to handle Sec-WebSocket-Protocol for auth
-}
 
 /**
  * Represents a connection between the client and server.
@@ -260,89 +222,4 @@ export function sendError(
   const logLevel = thrown ? 'error' : 'info';
   lc[logLevel]?.('Sending error on WebSocket', errorMessage, thrown ?? '');
   send(ws, errorMessage);
-}
-
-type ConnectParams = {
-  readonly clientID: string;
-  readonly clientGroupID: string;
-  readonly baseCookie: string | null;
-  readonly timestamp: number;
-  readonly lmID: number;
-  readonly wsID: string;
-  readonly debugPerf: boolean;
-};
-
-function getConnectParams(url: URL):
-  | {
-      params: ConnectParams;
-      error: null;
-    }
-  | {
-      params: null;
-      error: string;
-    } {
-  function getParam(name: string, required: true): string;
-  function getParam(name: string, required: boolean): string | null;
-  function getParam(name: string, required: boolean) {
-    const value = url.searchParams.get(name);
-    if (value === '' || value === null) {
-      if (required) {
-        throw new Error(`invalid querystring - missing ${name}`);
-      }
-      return null;
-    }
-    return value;
-  }
-
-  function getIntegerParam(name: string, required: true): number;
-  function getIntegerParam(name: string, required: boolean): number | null;
-  function getIntegerParam(name: string, required: boolean) {
-    const value = getParam(name, required);
-    if (value === null) {
-      return null;
-    }
-    const int = parseInt(value);
-    if (isNaN(int)) {
-      throw new Error(
-        `invalid querystring parameter ${name}, got: ${value}, url: ${url}`,
-      );
-    }
-    return int;
-  }
-
-  function getBooleanParam(name: string): boolean {
-    const value = getParam(name, false);
-    if (value === null) {
-      return false;
-    }
-    return value === 'true';
-  }
-
-  try {
-    const clientID = getParam('clientID', true);
-    const clientGroupID = getParam('clientGroupID', true);
-    const baseCookie = getParam('baseCookie', false);
-    const timestamp = getIntegerParam('ts', true);
-    const lmID = getIntegerParam('lmid', true);
-    const wsID = getParam('wsid', false) ?? '';
-    const debugPerf = getBooleanParam('debugPerf');
-
-    return {
-      params: {
-        clientID,
-        clientGroupID,
-        baseCookie,
-        timestamp,
-        lmID,
-        wsID,
-        debugPerf,
-      },
-      error: null,
-    };
-  } catch (e) {
-    return {
-      params: null,
-      error: e instanceof Error ? e.message : String(e),
-    };
-  }
 }

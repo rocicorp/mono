@@ -1,5 +1,4 @@
 import {EventEmitter} from 'eventemitter3';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from './replicator.js';
 
@@ -38,7 +37,7 @@ export class Notifier {
     return {notify, subscription};
   }
 
-  addSubscription(): CancelableAsyncIterable<ReplicaVersionReady> {
+  addSubscription(): Subscription<ReplicaVersionReady> {
     const {notify, subscription} = this.#newSubscription();
     this.#eventEmitter.on('version', notify);
     if (this.#firstNotificationReceived) {

@@ -1,20 +1,15 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {DbFile, expectTables} from '../test/lite.js';
+import Database from 'better-sqlite3';
+import {beforeEach, describe, expect, test} from 'vitest';
+import {expectTables} from '../test/lite.js';
 import {StatementRunner} from './statements.js';
 
 describe('db/statements', () => {
-  let dbFile: DbFile;
   let db: StatementRunner;
 
   beforeEach(() => {
-    dbFile = new DbFile('statements-test');
-    const conn = dbFile.connect();
+    const conn = new Database(':memory:');
     conn.exec('CREATE TABLE foo(id INT PRIMARY KEY)');
     db = new StatementRunner(conn);
-  });
-
-  afterEach(async () => {
-    await dbFile.unlink();
   });
 
   test('statement caching', () => {

@@ -3,6 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import {MessagePort, Worker} from 'worker_threads';
 import {Replicator} from 'zero-cache/src/services/replicator/replicator.js';
 import {Service} from 'zero-cache/src/services/service.js';
+import {Notifier} from '../services/replicator/notifier.js';
 
 export type ReplicatorWorkerData = {
   subscriberPorts: MessagePort[];
@@ -32,7 +33,9 @@ export function runAsWorker(
     statusPort.postMessage(status);
   });
 
-  // Start a subscription for the MessageChannel of every Syncer Thread.
+  // Start a subscription for the MessageChannel of every Syncer thread.
+  // A Syncer thread relays this subscription to its ViewSyncers with a
+  // Notifier created by the createNotifier() function below.
   for (const subscriber of subscriberPorts) {
     const subscription = replicator.subscribe();
     subscriber.once('close', () => subscription.cancel());
@@ -55,4 +58,15 @@ export function getStatusFromWorker(
   replicator.postMessage({});
   replicator.once('message', resolve);
   return promise;
+}
+
+/**
+ * Creates a Notifier to listen to the Subscription from the other
+ * side of the `subscriberPorts` passed into the Replicator thread
+ * (i.e. from the Syncer thread).
+ */
+export function createNotifier(replicatorPort: MessagePort): Notifier {
+  const notifier = new Notifier();
+  replicatorPort.on('message', () => notifier.notifySubscribers());
+  return notifier;
 }

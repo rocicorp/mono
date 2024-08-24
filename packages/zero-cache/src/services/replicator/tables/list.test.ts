@@ -1,6 +1,5 @@
-import type {Database} from 'better-sqlite3';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {DbFile} from 'zero-cache/src/test/lite.js';
+import Database from 'better-sqlite3';
+import {describe, expect, test} from 'vitest';
 import {listTables} from './list.js';
 import {TableSpec} from './specs.js';
 
@@ -158,20 +157,9 @@ describe('tables/list', () => {
     },
   ];
 
-  let dbFile: DbFile;
-  let db: Database;
-
-  beforeEach(() => {
-    dbFile = new DbFile('list-tables');
-    db = dbFile.connect();
-  });
-
-  afterEach(async () => {
-    await dbFile.unlink();
-  });
-
   for (const c of cases) {
     test(c.name, () => {
+      const db = new Database(':memory:');
       db.exec(c.setupQuery);
 
       const tables = listTables(db);

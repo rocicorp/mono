@@ -20,12 +20,10 @@ describe('db/begin-concurrent', () => {
   test('independent, concurrent actions before commit', () => {
     const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
-    conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
 
     const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
-    conn2.pragma('synchronous = NORMAL');
     conn2.prepare('BEGIN CONCURRENT').run();
 
     conn1.prepare('INSERT INTO foo(id) VALUES(1)').run();
@@ -44,12 +42,10 @@ describe('db/begin-concurrent', () => {
   test('begin concurrent is deferred', () => {
     const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
-    conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
 
     const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
-    conn2.pragma('synchronous = NORMAL');
 
     // Note: Like BEGIN DEFERRED, the BEGIN CONCURRENT transaction does not actually start until
     // the database is first accessed
@@ -76,14 +72,12 @@ describe('db/begin-concurrent', () => {
   test('simulate immediate', () => {
     const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
-    conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
     // Force the transaction to start immediately by accessing the database.
     expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([]);
 
     const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
-    conn2.pragma('synchronous = NORMAL');
     conn2.prepare('BEGIN CONCURRENT').run();
     // Force the transaction to start immediately by accessing the database.
     expect(conn2.prepare('SELECT * FROM foo').all()).toEqual([]);
@@ -106,14 +100,12 @@ describe('db/begin-concurrent', () => {
   test('begin concurrent with savepoints', () => {
     const conn1 = dbFile.connect();
     conn1.pragma('journal_mode = WAL');
-    conn1.pragma('synchronous = NORMAL');
     conn1.prepare('BEGIN CONCURRENT').run();
     // Force the transaction to start immediately by accessing the database.
     expect(conn1.prepare('SELECT * FROM foo').all()).toEqual([]);
 
     const conn2 = dbFile.connect();
     conn2.pragma('journal_mode = WAL');
-    conn2.pragma('synchronous = NORMAL');
     conn2.prepare('BEGIN CONCURRENT').run();
     // Force the transaction to start immediately by accessing the database.
     expect(conn2.prepare('SELECT * FROM foo').all()).toEqual([]);

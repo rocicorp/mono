@@ -12,6 +12,7 @@ add .env file:
 
 ```
 UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6432/postgres"
+CVR_DB_URI = "postgresql://user:password@127.0.0.1:6433/postgres"
 REPLICA_ID = "r1"
 REPLICA_DB_FILE = "/tmp/sync-replica.db"
 LOG_LEVEL = "debug"
