@@ -1,12 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import {type Node, normalizeUndefined, type NormalizedValue} from './data.js';
-import type {
-  FetchRequest,
-  Input,
-  Operator,
-  Output,
-  Storage,
-} from './operator.js';
+import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import {take, type Stream} from './stream.js';
 import type {Change} from './change.js';
 import type {Schema} from './schema.js';
@@ -21,7 +15,7 @@ import type {Schema} from './schema.js';
  * the name #relationshipName. The value of the relationship is a stream of
  * child nodes which are the corresponding values from the child source.
  */
-export class Join implements Operator {
+export class Join implements Input {
   readonly #parent: Input;
   readonly #child: Input;
   readonly #storage: Storage;
@@ -48,69 +42,68 @@ export class Join implements Operator {
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
 
-    this.#parent.setOutput(this);
-    this.#child.setOutput(this);
+    this.#parent.setOutput({
+      push: (change: Change) => {
+        this.#push(change, 'parent');
+      },
+    });
+    this.#child.setOutput({
+      push: (change: Change) => {
+        this.#push(change, 'child');
+      },
+    });
   }
 
   setOutput(output: Output): void {
     this.#output = output;
   }
 
-  getSchema(_output: Output): Schema {
-    return this.#parent.getSchema(this);
+  getSchema(): Schema {
+    return this.#parent.getSchema();
   }
 
-  *fetch(req: FetchRequest, _: Output): Stream<Node> {
-    for (const parentNode of this.#parent.fetch(req, this)) {
+  *fetch(req: FetchRequest): Stream<Node> {
+    for (const parentNode of this.#parent.fetch(req)) {
       yield this.#processParentNode(parentNode, 'fetch');
     }
   }
 
-  *cleanup(req: FetchRequest, _: Output): Stream<Node> {
-    for (const parentNode of this.#parent.cleanup(req, this)) {
+  *cleanup(req: FetchRequest): Stream<Node> {
+    for (const parentNode of this.#parent.cleanup(req)) {
       yield this.#processParentNode(parentNode, 'cleanup');
     }
   }
 
-  push(change: Change, input: Input): void {
+  #push(change: Change, from: 'parent' | 'child'): void {
     assert(this.#output, 'Output not set');
 
-    if (input === this.#parent) {
+    if (from === 'parent') {
       if (change.type === 'add') {
-        this.#output.push(
-          {
-            type: 'add',
-            node: this.#processParentNode(change.node, 'fetch'),
-          },
-          this,
-        );
+        this.#output.push({
+          type: 'add',
+          node: this.#processParentNode(change.node, 'fetch'),
+        });
       } else if (change.type === 'remove') {
-        this.#output.push(
-          {
-            type: 'remove',
-            node: this.#processParentNode(change.node, 'cleanup'),
-          },
-          this,
-        );
+        this.#output.push({
+          type: 'remove',
+          node: this.#processParentNode(change.node, 'cleanup'),
+        });
       } else {
         change.type satisfies 'child';
-        this.#output.push(change, this);
+        this.#output.push(change);
       }
       return;
     }
 
-    assert(input === this.#child);
+    from satisfies 'child';
 
     const childRow = change.type === 'child' ? change.row : change.node.row;
-    const parentNodes = this.#parent.fetch(
-      {
-        constraint: {
-          key: this.#parentKey,
-          value: childRow[this.#childKey],
-        },
+    const parentNodes = this.#parent.fetch({
+      constraint: {
+        key: this.#parentKey,
+        value: childRow[this.#childKey],
       },
-      this,
-    );
+    });
 
     for (const parentNode of parentNodes) {
       const result: Change = {
@@ -121,14 +114,14 @@ export class Join implements Operator {
           change,
         },
       };
-      this.#output.push(result, this);
+      this.#output.push(result);
     }
   }
 
   #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
     const parentKeyValue = normalizeUndefined(parentNode.row[this.#parentKey]);
     const parentPrimaryKey: NormalizedValue[] = [];
-    for (const key of this.#parent.getSchema(this).primaryKey) {
+    for (const key of this.#parent.getSchema().primaryKey) {
       parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
     }
 
@@ -149,15 +142,12 @@ export class Join implements Operator {
       method = second ? 'fetch' : 'cleanup';
     }
 
-    const childStream = this.#child[method](
-      {
-        constraint: {
-          key: this.#childKey,
-          value: parentKeyValue,
-        },
+    const childStream = this.#child[method]({
+      constraint: {
+        key: this.#childKey,
+        value: parentKeyValue,
       },
-      this,
-    );
+    });
 
     if (mode === 'fetch') {
       this.#storage.set(storageKey, true);

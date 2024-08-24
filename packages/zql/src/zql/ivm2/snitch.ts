@@ -27,25 +27,25 @@ export class Snitch implements Operator {
     this.#output = output;
   }
 
-  getSchema(_: Output): Schema {
-    return this.#input.getSchema(this);
+  getSchema(): Schema {
+    return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest, _source: Output) {
+  fetch(req: FetchRequest) {
     assert(this.#output);
     this.log.push([this.#name, 'fetch', req]);
-    return this.#input.fetch(req, this);
+    return this.#input.fetch(req);
   }
 
-  cleanup(req: FetchRequest, _source: Output) {
+  cleanup(req: FetchRequest) {
     assert(this.#output);
     this.log.push([this.#name, 'cleanup', req]);
-    return this.#input.cleanup(req, this);
+    return this.#input.cleanup(req);
   }
 
-  push(change: Change, _: Input) {
+  push(change: Change) {
     this.log.push([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change, this);
+    this.#output?.push(change);
   }
 }
 

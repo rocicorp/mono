@@ -16,11 +16,11 @@ export class Catch implements Output {
   }
 
   fetch(req: FetchRequest = {}) {
-    return [...this.#input.fetch(req, this)].map(expandNode);
+    return [...this.#input.fetch(req)].map(expandNode);
   }
 
   cleanup(req: FetchRequest = {}) {
-    return [...this.#input.cleanup(req, this)].map(expandNode);
+    return [...this.#input.cleanup(req)].map(expandNode);
   }
 
   push(change: Change) {

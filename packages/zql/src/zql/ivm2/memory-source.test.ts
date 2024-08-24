@@ -17,9 +17,7 @@ runCases(
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
     const ms = new MemorySource({a: 'string'}, ['a']);
-    const connector = ms.connect(order);
-    const out = new Catch(connector);
-    return connector.getSchema(out).compareRows;
+    return ms.connect(order).getSchema().compareRows;
   });
 });
 

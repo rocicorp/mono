@@ -2,7 +2,7 @@ import {assert, unreachable} from 'shared/src/asserts.js';
 import {AST} from '../ast2/ast.js';
 import {Filter} from '../ivm2/filter.js';
 import {Join} from '../ivm2/join.js';
-import {Operator, Storage} from '../ivm2/operator.js';
+import {Input, Storage} from '../ivm2/operator.js';
 import {Source} from '../ivm2/source.js';
 import {createPredicate} from './filter.js';
 import {must} from 'shared/src/must.js';
@@ -53,7 +53,7 @@ export interface Host {
  */
 export function buildPipeline(ast: AST, host: Host) {
   const source = host.getSource(ast.table);
-  let end: Operator = source.connect(must(ast.orderBy));
+  let end: Input = source.connect(must(ast.orderBy));
 
   if (ast.where) {
     for (const condition of ast.where) {

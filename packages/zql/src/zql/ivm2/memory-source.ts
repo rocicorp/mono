@@ -13,7 +13,6 @@ import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Stream} from './stream.js';
 import type {Source, SourceChange} from './source.js';
 import type {Schema, ValueType} from './schema.js';
-import {Connector} from './connector.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -23,11 +22,12 @@ export type Overlay = {
 type Index = {
   comparator: Comparator;
   data: BTree<Row, undefined>;
-  usedBy: Set<Output>;
+  usedBy: Set<Connection>;
 };
 
-type OutputRegistration = {
-  output: Output;
+type Connection = {
+  input: Input;
+  output: Output | undefined;
   sort: Ordering;
 };
 
@@ -43,7 +43,7 @@ export class MemorySource implements Source {
   readonly #primaryKeys: readonly string[];
   readonly #primaryIndexSort: Ordering;
   readonly #indexes: Map<string, Index> = new Map();
-  readonly #outputs: OutputRegistration[] = [];
+  readonly #connections: Connection[] = [];
 
   #overlay: Overlay | undefined;
 
@@ -63,38 +63,39 @@ export class MemorySource implements Source {
     });
   }
 
-  #getRegistrationForOutput(output: Output): OutputRegistration {
-    const reg = this.#outputs.find(r => r.output === output);
-    assert(reg, 'Output not found');
-    return reg;
-  }
-
-  #getSchema(output: Output): Schema {
-    const reg = this.#getRegistrationForOutput(output);
+  #getSchema(connection: Connection): Schema {
     return {
       columns: this.#columns,
       primaryKey: this.#primaryKeys,
-      compareRows: makeComparator(reg.sort),
+      compareRows: makeComparator(connection.sort),
     };
   }
 
-  #input: Input = {
-    getSchema: output => this.#getSchema(output),
-    fetch: (req, output) => this.#fetch(req, output),
-    cleanup: (req, output) => this.#cleanup(req, output),
-    setOutput: output => this.#setOutput(output),
-  };
+  connect(sort: Ordering): Input {
+    const input: Input = {
+      getSchema: () => this.#getSchema(connection),
+      fetch: req => this.#fetch(req, connection),
+      cleanup: req => this.#cleanup(req, connection),
+      setOutput: output => {
+        connection.output = output;
+      },
+    };
 
-  connect(sort: Ordering) {
-    const connector = new Connector(this.#input);
-    this.#outputs.push({output: connector, sort});
-    return connector;
+    const connection: Connection = {
+      input,
+      output: undefined,
+      sort,
+    };
+
+    this.#connections.push(connection);
+    return input;
   }
 
-  disconnect(connector: Connector): void {
-    const idx = this.#outputs.findIndex(r => r.output === connector);
-    assert(idx !== -1, 'Output not found');
-    this.#outputs.splice(idx, 1);
+  disconnect(input: Input): void {
+    const idx = this.#connections.findIndex(c => c.input === input);
+    assert(idx !== -1, 'Connection not found');
+    const connection = this.#connections[idx];
+    this.#connections.splice(idx, 1);
 
     const primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
 
@@ -102,7 +103,7 @@ export class MemorySource implements Source {
       if (key === primaryIndexKey) {
         continue;
       }
-      index.usedBy.delete(connector);
+      index.usedBy.delete(connection);
       if (index.usedBy.size === 0) {
         this.#indexes.delete(key);
       }
@@ -115,13 +116,13 @@ export class MemorySource implements Source {
     return index;
   }
 
-  #getOrCreateIndex(sort: Ordering, output: Output): Index {
+  #getOrCreateIndex(sort: Ordering, usedBy: Connection): Index {
     const key = JSON.stringify(sort);
     const index = this.#indexes.get(key);
     // Future optimization could use existing index if it's the same just sorted
     // in reverse of needed.
     if (index) {
-      index.usedBy.add(output);
+      index.usedBy.add(usedBy);
       return index;
     }
 
@@ -142,7 +143,7 @@ export class MemorySource implements Source {
       data.add(row, undefined);
     }
 
-    const newIndex = {comparator, data, usedBy: new Set([output])};
+    const newIndex = {comparator, data, usedBy: new Set([usedBy])};
     this.#indexes.set(key, newIndex);
     return newIndex;
   }
@@ -152,22 +153,22 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, output: Output): Stream<Node> {
+  *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
     let overlay: Overlay | undefined;
 
-    const callingOutputNum = this.#outputs.findIndex(r => r.output === output);
-    assert(callingOutputNum !== -1, 'Output not found');
-    const reg = this.#outputs[callingOutputNum];
+    const callingConnectionNum = this.#connections.indexOf(from);
+    assert(callingConnectionNum !== -1, 'Output not found');
+    const reg = this.#connections[callingConnectionNum];
     const {sort} = reg;
 
-    const index = this.#getOrCreateIndex(sort, output);
+    const index = this.#getOrCreateIndex(sort, from);
     const {data, comparator} = index;
 
     // When we receive a push, we send it to each output one at a time. Once the
     // push is sent to an output, it should keep being sent until all datastores
     // have received it and the change has been made to the datastore.
     if (this.#overlay) {
-      if (callingOutputNum <= this.#overlay.outputIndex) {
+      if (callingConnectionNum <= this.#overlay.outputIndex) {
         overlay = this.#overlay;
       }
     }
@@ -199,12 +200,8 @@ export class MemorySource implements Source {
     );
   }
 
-  #cleanup(req: FetchRequest, output: Output): Stream<Node> {
-    return this.#fetch(req, output);
-  }
-
-  #setOutput(_: Output) {
-    // does nothing, MemorySource uses connect() instead.
+  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
+    return this.#fetch(req, connection);
   }
 
   *#pullWithConstraint(
@@ -236,18 +233,17 @@ export class MemorySource implements Source {
       }
     }
 
-    for (const [outputIndex, {output}] of this.#outputs.entries()) {
-      this.#overlay = {outputIndex, change};
-      output.push(
-        {
+    for (const [outputIndex, {output}] of this.#connections.entries()) {
+      if (output) {
+        this.#overlay = {outputIndex, change};
+        output.push({
           type: change.type,
           node: {
             row: change.row,
             relationships: {},
           },
-        },
-        this.#input,
-      );
+        });
+      }
     }
     this.#overlay = undefined;
     for (const [_, {data}] of this.#indexes) {
