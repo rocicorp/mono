@@ -4,15 +4,15 @@ import {AST} from '../ast2/ast.js';
 import {
   AddSelections,
   AddSubselect,
-  EntityQuery,
+  Query,
   GetFieldType,
   MakeHumanReadable,
   Operator,
   QueryResultRow,
   Selector,
-} from './entity-query.js';
+} from './query.js';
 import {
-  EntitySchema,
+  Schema,
   isFieldRelationship,
   isJunctionRelationship,
   Lazy,
@@ -22,18 +22,18 @@ import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
 import {Input} from '../ivm2/operator.js';
 
-export function newEntityQuery<
-  TSchema extends EntitySchema,
+export function newQuery<
+  TSchema extends Schema,
   TReturn extends QueryResultRow[] = [],
->(host: Host, schema: TSchema): EntityQuery<TSchema, TReturn> {
-  return new EntityQueryImpl(host, schema);
+>(host: Host, schema: TSchema): Query<TSchema, TReturn> {
+  return new QueryImpl(host, schema);
 }
 
-class EntityQueryImpl<
-  TSchema extends EntitySchema,
+class QueryImpl<
+  TSchema extends Schema,
   TReturn extends QueryResultRow[] = [],
   TAs extends string = string,
-> implements EntityQuery<TSchema, TReturn, TAs>
+> implements Query<TSchema, TReturn, TAs>
 {
   readonly #ast: AST;
   readonly #host: Host;
@@ -48,11 +48,11 @@ class EntityQueryImpl<
   }
 
   #create<
-    TSchema extends EntitySchema,
+    TSchema extends Schema,
     TReturn extends QueryResultRow[],
     TAs extends string,
-  >(host: Host, schema: TSchema, ast: AST): EntityQuery<TSchema, TReturn, TAs> {
-    return new EntityQueryImpl(host, schema, ast);
+  >(host: Host, schema: TSchema, ast: AST): Query<TSchema, TReturn, TAs> {
+    return new QueryImpl(host, schema, ast);
   }
 
   get ast() {
@@ -61,7 +61,7 @@ class EntityQueryImpl<
 
   select<TFields extends Selector<TSchema>[]>(
     ..._fields: TFields
-  ): EntityQuery<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs> {
+  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
     return this.#create(this.#host, this.#schema, this.#ast);
   }
@@ -73,17 +73,17 @@ class EntityQueryImpl<
   related<
     TRelationship extends keyof TSchema['relationships'],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TSub extends EntityQuery<any, any, any>,
+    TSub extends Query<any, any, any>,
   >(
     relationship: TRelationship,
     cb: (
-      query: EntityQuery<
+      query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
         [],
         TRelationship & string
       >,
     ) => TSub,
-  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs> {
+  ): Query<TSchema, AddSubselect<TSub, TReturn>[], TAs> {
     const related = this.#schema.relationships?.[relationship as string];
     assert(related, 'Invalid relationship');
     const related1 = related;
@@ -161,7 +161,7 @@ class EntityQueryImpl<
     field: TSelector,
     op: Operator,
     value: Exclude<GetFieldType<TSchema, TSelector>, null | undefined>,
-  ): EntityQuery<TSchema, TReturn, TAs> {
+  ): Query<TSchema, TReturn, TAs> {
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       where: [
@@ -176,14 +176,14 @@ class EntityQueryImpl<
     });
   }
 
-  as<TAs2 extends string>(alias: TAs2): EntityQuery<TSchema, TReturn, TAs2> {
+  as<TAs2 extends string>(alias: TAs2): Query<TSchema, TReturn, TAs2> {
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       alias,
     });
   }
 
-  limit(limit: number): EntityQuery<TSchema, TReturn, TAs> {
+  limit(limit: number): Query<TSchema, TReturn, TAs> {
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       limit,
@@ -193,7 +193,7 @@ class EntityQueryImpl<
   orderBy<TSelector extends keyof TSchema['fields']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): EntityQuery<TSchema, TReturn, TAs> {
+  ): Query<TSchema, TReturn, TAs> {
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
@@ -211,9 +211,7 @@ class EntityQueryImpl<
   }
 }
 
-function resolveSchema(
-  maybeSchema: EntitySchema | Lazy<EntitySchema>,
-): EntitySchema {
+function resolveSchema(maybeSchema: Schema | Lazy<Schema>): Schema {
   if (typeof maybeSchema === 'function') {
     return maybeSchema();
   }
@@ -222,7 +220,7 @@ function resolveSchema(
 }
 
 function addPrimaryKeys(
-  schema: EntitySchema,
+  schema: Schema,
   orderBy: Ordering | undefined,
 ): Ordering {
   orderBy = orderBy ?? [];
@@ -243,7 +241,7 @@ function addPrimaryKeys(
   ];
 }
 
-function addPrimaryKeysToAst(schema: EntitySchema, ast: AST): AST {
+function addPrimaryKeysToAst(schema: Schema, ast: AST): AST {
   return {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {newEntityQuery} from './entity-query-impl.js';
+import {newQuery} from './query-impl.js';
 import {testSources} from '../builder/builder.test.js';
 import {MemoryStorage} from '../ivm2/memory-storage.js';
 import {Catch} from '../ivm2/catch.js';
@@ -79,7 +79,7 @@ test('source-only', () => {
   const {sources, getSource} = testSources();
   const host = {getSource, createStorage: () => new MemoryStorage()};
   const sink = new Catch(
-    newEntityQuery(host, userSchema).orderBy('name', 'asc').toPipeline(),
+    newQuery(host, userSchema).orderBy('name', 'asc').toPipeline(),
   );
 
   expect(sink.fetch()).toEqual([
@@ -105,7 +105,7 @@ test('source-only', () => {
 test('self-join', () => {
   const {getSource} = testSources();
   const host = {getSource, createStorage: () => new MemoryStorage()};
-  const query = newEntityQuery(host, userSchema)
+  const query = newQuery(host, userSchema)
     .select('name')
     .related('recruits', q => q.select('name'))
     .where('name', '=', 'aaron');

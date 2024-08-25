@@ -1,6 +1,6 @@
 import {describe, expectTypeOf, test} from 'vitest';
-import {EntityQuery} from './entity-query.js';
-import {EntitySchema} from './schema.js';
+import {Query} from './query.js';
+import {Schema} from './schema.js';
 
 const mockQuery = {
   select() {
@@ -84,7 +84,7 @@ type TestSchemaWithMoreRelationships = {
 
 describe('types', () => {
   test('simple select', () => {
-    const query = mockQuery as unknown as EntityQuery<TestSchema>;
+    const query = mockQuery as unknown as Query<TestSchema>;
 
     // @ts-expect-error - cannot select a field that does not exist
     query.select('foo');
@@ -95,7 +95,7 @@ describe('types', () => {
     const query2 = query.select('s');
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        readonly entity: {readonly s: string};
+        readonly row: {readonly s: string};
         related: never;
       }[]
     >();
@@ -103,7 +103,7 @@ describe('types', () => {
     const query3 = query2.select('s', 'b', 'n');
     expectTypeOf(query3.run()).toMatchTypeOf<
       readonly {
-        readonly entity: {
+        readonly row: {
           readonly s: string;
           readonly b: boolean;
           readonly n: number;
@@ -114,8 +114,7 @@ describe('types', () => {
   });
 
   test('related', () => {
-    const query =
-      mockQuery as unknown as EntityQuery<TestSchemaWithRelationships>;
+    const query = mockQuery as unknown as Query<TestSchemaWithRelationships>;
 
     // @ts-expect-error - cannot select a field that does not exist
     query.related('test', q => q.select('a'));
@@ -127,12 +126,12 @@ describe('types', () => {
 
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        readonly entity: {
+        readonly row: {
           readonly s: string;
         };
         readonly related: {
           readonly test: readonly {
-            readonly entity: {
+            readonly row: {
               readonly b: boolean;
             };
             readonly related: never;
@@ -143,7 +142,7 @@ describe('types', () => {
 
     // Many calls to related builds up the related object.
     const query3 =
-      mockQuery as unknown as EntityQuery<TestSchemaWithMoreRelationships>;
+      mockQuery as unknown as Query<TestSchemaWithMoreRelationships>;
     const t = query3
       .related('self', q => q.select('s'))
       .related('testWithRelationships', q => q.select('b'))
@@ -152,18 +151,18 @@ describe('types', () => {
       .run();
     expectTypeOf(t).toMatchTypeOf<
       readonly {
-        entity: {a: string};
+        row: {a: string};
         related: {
           self: readonly {
-            entity: {s: string};
+            row: {s: string};
             related: never;
           }[];
           testWithRelationships: readonly {
-            entity: {b: boolean};
+            row: {b: boolean};
             related: never;
           }[];
           test: readonly {
-            entity: {n: number};
+            row: {n: number};
             related: never;
           }[];
         };
@@ -173,7 +172,7 @@ describe('types', () => {
 
   test('related in subquery position', () => {
     const query =
-      mockQuery as unknown as EntityQuery<TestSchemaWithMoreRelationships>;
+      mockQuery as unknown as Query<TestSchemaWithMoreRelationships>;
 
     const query2 = query
       .select('s')
@@ -182,13 +181,13 @@ describe('types', () => {
       );
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        entity: {s: string};
+        row: {s: string};
         related: {
           self: readonly {
-            entity: {s: string};
+            row: {s: string};
             related: {
               test: readonly {
-                entity: {b: boolean};
+                row: {b: boolean};
                 related: never;
               }[];
             };
@@ -199,7 +198,7 @@ describe('types', () => {
   });
 
   test('where', () => {
-    const query = mockQuery as unknown as EntityQuery<TestSchema>;
+    const query = mockQuery as unknown as Query<TestSchema>;
 
     const query2 = query.where('s', '=', 'foo');
     expectTypeOf(query2.run()).toMatchTypeOf<readonly []>();
@@ -211,7 +210,7 @@ describe('types', () => {
 
     expectTypeOf(query.select('b').where('b', '=', true).run()).toMatchTypeOf<
       readonly {
-        entity: {b: boolean};
+        row: {b: boolean};
         related: never;
       }[]
     >();
@@ -301,6 +300,6 @@ describe('schema structure', () => {
   });
 });
 
-function takeSchema(x: EntitySchema) {
+function takeSchema(x: Schema) {
   return x;
 }

@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {newEntityQuery} from './entity-query-impl.js';
+import {newQuery} from './query-impl.js';
 import {Host} from '../builder/builder.js';
 
 const mockHost = {} as Host;
@@ -139,15 +139,15 @@ const userSchema = {
 } as const;
 
 describe('building the AST', () => {
-  test('creates a new entity query', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+  test('creates a new query', () => {
+    const issueQuery = newQuery(mockHost, issueSchema);
     expect(issueQuery.ast).toEqual({
       table: 'issue',
     });
   });
 
   test('selecting fields does nothing to the ast', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const selected = issueQuery.select('id', 'title');
     expect(selected.ast).toEqual({
       table: 'issue',
@@ -155,7 +155,7 @@ describe('building the AST', () => {
   });
 
   test('as sets an alias', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const aliased = issueQuery.as('i');
     expect(aliased.ast).toEqual({
       table: 'issue',
@@ -164,7 +164,7 @@ describe('building the AST', () => {
   });
 
   test('where inserts a condition', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const where = issueQuery.where('id', '=', '1');
     expect(where.ast).toEqual({
       table: 'issue',
@@ -182,7 +182,7 @@ describe('building the AST', () => {
   });
 
   test('related: field edges', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const related = issueQuery.related('owner', q => q);
     expect(related.ast).toEqual({
       related: [
@@ -204,7 +204,7 @@ describe('building the AST', () => {
   });
 
   test('related: junction edges', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const related = issueQuery.related('labels', q => q);
     expect(related.ast).toEqual({
       related: [
@@ -243,7 +243,7 @@ describe('building the AST', () => {
   });
 
   test('related: many stacked edges', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const related = issueQuery.related('owner', oq =>
       oq.related('issues', iq => iq.related('labels', lq => lq)),
     );
@@ -312,7 +312,7 @@ describe('building the AST', () => {
   });
 
   test('related: many siblings', () => {
-    const issueQuery = newEntityQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockHost, issueSchema);
     const related = issueQuery
       .related('owner', oq => oq)
       .related('comments', cq => cq)
