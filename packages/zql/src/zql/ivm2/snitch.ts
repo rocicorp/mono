@@ -23,6 +23,10 @@ export class Snitch implements Operator {
     this.#input.setOutput(this);
   }
 
+  destroy(): void {
+    this.#input.destroy();
+  }
+
   setOutput(output: Output) {
     this.#output = output;
   }

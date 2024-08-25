@@ -80,6 +80,11 @@ export class MemorySource implements Source {
       setOutput: output => {
         connection.output = output;
       },
+      destroy: () => {
+        const index = this.#connections.indexOf(connection);
+        assert(index !== -1);
+        this.#connections.splice(index, 1);
+      },
     };
 
     const connection: Connection = {

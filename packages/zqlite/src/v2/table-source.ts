@@ -137,6 +137,11 @@ export class TableSource implements Source {
       setOutput: output => {
         connection.output = output;
       },
+      destroy: () => {
+        const idx = this.#connections.indexOf(connection);
+        assert(idx !== -1, 'Connection not found');
+        this.#connections.splice(idx, 1);
+      },
     };
 
     const connection: Connection = {

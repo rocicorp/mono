@@ -46,6 +46,10 @@ export class View implements Output {
     this.#listeners.delete(listener);
   }
 
+  destroy(): void {
+    this.#input.destroy();
+  }
+
   #fireListeners() {
     for (const listener of this.#listeners) {
       listener(this.#entries);

@@ -25,6 +25,11 @@ export interface Input {
 
   // Tell the input where to send its output.
   setOutput(output: Output): void;
+
+  // Completely destroy the input. Destroying an input
+  // causes it to call destroy on its upstreams, fully
+  // cleaning up a pipeline.
+  destroy(): void;
 }
 
 export type Constraint = {

@@ -51,7 +51,7 @@ export interface Host {
  * const sink = new MySink(input);
  * ```
  */
-export function buildPipeline(ast: AST, host: Host) {
+export function buildPipeline(ast: AST, host: Host): Input {
   const source = host.getSource(ast.table);
   let end: Input = source.connect(must(ast.orderBy));
 

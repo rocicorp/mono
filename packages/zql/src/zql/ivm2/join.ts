@@ -54,6 +54,11 @@ export class Join implements Input {
     });
   }
 
+  destroy(): void {
+    this.#parent.destroy();
+    this.#child.destroy();
+  }
+
   setOutput(output: Output): void {
     this.#output = output;
   }
