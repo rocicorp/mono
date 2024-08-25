@@ -27,6 +27,12 @@ export type MakeHumanReadable<T> = {} & {
   readonly [P in keyof T]: T[P] extends string ? T[P] : MakeHumanReadable<T[P]>;
 };
 
+export type Smash<T extends QueryResultRow[]> = (T[number]['row'] & {
+  [K in keyof T[number]['related']]: T[number]['related'][K] extends QueryResultRow[]
+    ? Smash<T[number]['related'][K]>
+    : undefined;
+})[];
+
 /**
  * Given a schema value, return the TypeScript type.
  *
@@ -162,7 +168,7 @@ export interface Query<
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs>;
 
-  run(): MakeHumanReadable<TReturn>;
+  run(): MakeHumanReadable<Smash<TReturn>>;
 
   // Temporary. Will be replaced when we have a proper view implementation.
   toPipeline(): Input;

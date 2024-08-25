@@ -90,25 +90,21 @@ describe('types', () => {
     query.select('foo');
 
     // Nothing selected? Return type is empty array.
-    expectTypeOf(query.run()).toMatchTypeOf<readonly []>();
+    expectTypeOf(query.run()).toMatchTypeOf<readonly never[]>();
 
     const query2 = query.select('s');
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        readonly row: {readonly s: string};
-        related: never;
+        readonly s: string;
       }[]
     >();
 
     const query3 = query2.select('s', 'b', 'n');
     expectTypeOf(query3.run()).toMatchTypeOf<
       readonly {
-        readonly row: {
-          readonly s: string;
-          readonly b: boolean;
-          readonly n: number;
-        };
-        related: never;
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
       }[]
     >();
   });
@@ -126,17 +122,10 @@ describe('types', () => {
 
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        readonly row: {
-          readonly s: string;
-        };
-        readonly related: {
-          readonly test: readonly {
-            readonly row: {
-              readonly b: boolean;
-            };
-            readonly related: never;
-          }[];
-        };
+        readonly s: string;
+        readonly test: readonly {
+          readonly b: boolean;
+        }[];
       }[]
     >();
 
@@ -151,21 +140,16 @@ describe('types', () => {
       .run();
     expectTypeOf(t).toMatchTypeOf<
       readonly {
-        row: {a: string};
-        related: {
-          self: readonly {
-            row: {s: string};
-            related: never;
-          }[];
-          testWithRelationships: readonly {
-            row: {b: boolean};
-            related: never;
-          }[];
-          test: readonly {
-            row: {n: number};
-            related: never;
-          }[];
-        };
+        a: string;
+        self: readonly {
+          s: string;
+        }[];
+        testWithRelationships: readonly {
+          b: boolean;
+        }[];
+        test: readonly {
+          n: number;
+        }[];
       }[]
     >();
   });
@@ -181,18 +165,13 @@ describe('types', () => {
       );
     expectTypeOf(query2.run()).toMatchTypeOf<
       readonly {
-        row: {s: string};
-        related: {
-          self: readonly {
-            row: {s: string};
-            related: {
-              test: readonly {
-                row: {b: boolean};
-                related: never;
-              }[];
-            };
+        s: string;
+        self: readonly {
+          s: string;
+          test: readonly {
+            b: boolean;
           }[];
-        };
+        }[];
       }[]
     >();
   });
@@ -201,7 +180,7 @@ describe('types', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
 
     const query2 = query.where('s', '=', 'foo');
-    expectTypeOf(query2.run()).toMatchTypeOf<readonly []>();
+    expectTypeOf(query2.run()).toMatchTypeOf<readonly never[]>();
 
     // @ts-expect-error - cannot use a field that does not exist
     query.where('doesNotExist', '=', 'foo');
@@ -210,8 +189,7 @@ describe('types', () => {
 
     expectTypeOf(query.select('b').where('b', '=', true).run()).toMatchTypeOf<
       readonly {
-        row: {b: boolean};
-        related: never;
+        b: boolean;
       }[]
     >();
   });

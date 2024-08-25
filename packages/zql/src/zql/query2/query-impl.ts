@@ -10,6 +10,7 @@ import {
   Operator,
   QueryResultRow,
   Selector,
+  Smash,
 } from './query.js';
 import {
   Schema,
@@ -66,7 +67,7 @@ class QueryImpl<
     return this.#create(this.#host, this.#schema, this.#ast);
   }
 
-  run(): MakeHumanReadable<TReturn> {
+  run(): MakeHumanReadable<Smash<TReturn>> {
     throw new Error('Method not implemented.');
   }
 
