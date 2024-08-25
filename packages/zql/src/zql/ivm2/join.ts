@@ -59,7 +59,15 @@ export class Join implements Input {
   }
 
   getSchema(): Schema {
-    return this.#parent.getSchema();
+    const parentSchema = this.#parent.getSchema();
+    const childSchema = this.#child.getSchema();
+    return {
+      ...parentSchema,
+      relationships: {
+        ...parentSchema.relationships,
+        [this.#relationshipName]: childSchema,
+      },
+    };
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
