@@ -125,7 +125,7 @@ export class Join implements Input {
       parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
     }
 
-    // This storage key tracks of the primary keys seen for each unique
+    // This storage key tracks the primary keys seen for each unique
     // value joined on. This is used to know when to cleanup a child's state.
     const storageKey: string = createPrimaryKeySetStorageKey([
       parentKeyValue,
@@ -137,7 +137,7 @@ export class Join implements Input {
       const [, second] = [
         ...take(
           this.#storage.scan({
-            prefix: createPrimaryKeySetStorageKeyPrefix([parentKeyValue]),
+            prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
           }),
           2,
         ),
@@ -174,12 +174,11 @@ type ProcessParentMode = 'fetch' | 'cleanup';
 export function createPrimaryKeySetStorageKey(
   values: NormalizedValue[],
 ): string {
-  return JSON.stringify(['pKeySet', ...values]);
+  return ['pKeySet', ...values].join(',');
 }
 
 export function createPrimaryKeySetStorageKeyPrefix(
-  values: NormalizedValue[],
+  value: NormalizedValue,
 ): string {
-  const key = createPrimaryKeySetStorageKey(values);
-  return key.substring(0, key.length - 1);
+  return createPrimaryKeySetStorageKey([value]) + ',';
 }

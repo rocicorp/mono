@@ -1,5 +1,5 @@
 import {expect, suite, test} from 'vitest';
-import {Join} from './join.js';
+import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {SnitchMessage, Snitch} from './snitch.js';
@@ -36,7 +36,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[]],
+    expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
       {
         type: 'remove',
@@ -61,7 +61,7 @@ suite('push one:many', () => {
       ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[]],
+    expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [],
   });
 
@@ -74,7 +74,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -105,7 +105,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -133,7 +133,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'add', row: {id: 'i2'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i2', 'i2']]],
+    expectedPrimaryKeySetStorageKeys: [[['i2', 'i2']]],
     expectedOutput: [
       {
         type: 'add',
@@ -158,7 +158,7 @@ suite('push one:many', () => {
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -191,7 +191,7 @@ suite('push one:many', () => {
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i2'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [],
   });
 
@@ -204,7 +204,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[]],
+    expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
       {
         type: 'remove',
@@ -235,7 +235,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[]],
+    expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
       {
         type: 'remove',
@@ -277,7 +277,7 @@ suite('push one:many', () => {
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[], []],
+    expectedPrimaryKeySetStorageKeys: [[], []],
     expectedOutput: [
       {
         type: 'add',
@@ -387,7 +387,7 @@ suite('push many:one', () => {
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -413,7 +413,7 @@ suite('push many:one', () => {
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'u2', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['u2', 'i1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -439,7 +439,7 @@ suite('push many:one', () => {
       ['1', 'push', {type: 'add', row: {id: 'u1'}}],
       ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'u1', 'i1']]],
+    expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -478,10 +478,10 @@ suite('push many:one', () => {
       ['1', 'push', {type: 'add', row: {id: 'u1'}}],
       ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
     ],
-    expectedStorageKeys: [
+    expectedPrimaryKeySetStorageKeys: [
       [
-        ['pKeySet', 'u1', 'i1'],
-        ['pKeySet', 'u1', 'i2'],
+        ['u1', 'i1'],
+        ['u1', 'i2'],
       ],
     ],
     expectedOutput: [
@@ -559,7 +559,7 @@ suite('push one:many:many', () => {
       ['1', 'fetch', {constraint: {key: 'id', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -603,7 +603,7 @@ suite('push one:many:many', () => {
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -641,7 +641,7 @@ suite('push one:many:many', () => {
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
-    expectedStorageKeys: [[['pKeySet', 'i1', 'i1']], [['pKeySet', 'c1', 'c1']]],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
       {
         type: 'add',
@@ -680,7 +680,7 @@ suite('push one:many:many', () => {
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
       ['2', 'cleanup', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
-    expectedStorageKeys: [[], []],
+    expectedPrimaryKeySetStorageKeys: [[], []],
     expectedOutput: [
       {
         type: 'remove',
@@ -746,10 +746,7 @@ suite('push one:many:one', () => {
       ['1', 'fetch', {constraint: {key: 'labelID', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageKeys: [
-      [['pKeySet', 'i1', 'i1']],
-      [['pKeySet', 'l1', 'i1', 'l1']],
-    ],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -793,10 +790,7 @@ suite('push one:many:one', () => {
       ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
-    expectedStorageKeys: [
-      [['pKeySet', 'i1', 'i1']],
-      [['pKeySet', 'l1', 'i1', 'l1']],
-    ],
+    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedOutput: [
       {
         type: 'child',
@@ -841,14 +835,14 @@ suite('push one:many:one', () => {
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
     ],
-    expectedStorageKeys: [
+    expectedPrimaryKeySetStorageKeys: [
       [
-        ['pKeySet', 'i1', 'i1'],
-        ['pKeySet', 'i2', 'i2'],
+        ['i1', 'i1'],
+        ['i2', 'i2'],
       ],
       [
-        ['pKeySet', 'l1', 'i1', 'l1'],
-        ['pKeySet', 'l1', 'i2', 'l1'],
+        ['l1', 'i1', 'l1'],
+        ['l1', 'i2', 'l1'],
       ],
     ],
     expectedOutput: [
@@ -972,10 +966,10 @@ function pushTest(t: PushTest) {
 
     for (const [i, j] of joins.entries()) {
       const {storage} = j;
-      const expectedStorageKeys = t.expectedStorageKeys[i];
+      const expectedStorageKeys = t.expectedPrimaryKeySetStorageKeys[i];
       const expectedStorage: Record<string, boolean> = {};
       for (const k of expectedStorageKeys) {
-        expectedStorage[JSON.stringify(k)] = true;
+        expectedStorage[createPrimaryKeySetStorageKey(k)] = true;
       }
       expect(storage.cloneData()).toEqual(expectedStorage);
     }
@@ -998,6 +992,6 @@ type PushTest = {
   }[];
   pushes: [sourceIndex: number, change: SourceChange][];
   expectedLog: SnitchMessage[];
-  expectedStorageKeys: NormalizedValue[][][];
+  expectedPrimaryKeySetStorageKeys: NormalizedValue[][][];
   expectedOutput: Change[];
 };
