@@ -25,6 +25,10 @@ export class Filter implements Operator {
     this.#output = output;
   }
 
+  destroy(): void {
+    this.#input.destroy();
+  }
+
   getSchema() {
     return this.#input.getSchema();
   }
