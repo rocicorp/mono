@@ -68,6 +68,7 @@ export class MemorySource implements Source {
       columns: this.#columns,
       primaryKey: this.#primaryKeys,
       compareRows: makeComparator(connection.sort),
+      relationships: {},
     };
   }
 

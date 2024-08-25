@@ -10,4 +10,6 @@ export type Schema = {
   // relationships: Record<string, Schema>;
   // Compares two rows in the output of an operator.
   compareRows: (r1: Row, r2: Row) => number;
+
+  relationships: Record<string, Schema>;
 };

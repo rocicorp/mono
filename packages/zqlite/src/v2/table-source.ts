@@ -125,6 +125,7 @@ export class TableSource implements Source {
       columns: this.#columns,
       primaryKey: this.#primaryKey,
       compareRows: makeComparator(connection.sort),
+      relationships: {},
     };
   }
 
