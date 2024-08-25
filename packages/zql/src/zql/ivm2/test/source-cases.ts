@@ -646,6 +646,39 @@ const cases = {
       ]),
     );
   },
+
+  'streams-are-one-time-only': (createSource: SourceFactory) => {
+    // It is very important that streams are one-time only. This is because on
+    // the server, they are backed by cursors over streaming SQL queries which
+    // can't be rewound or branched. This test ensures that streams from all
+    // sources behave this way for consistency.
+    const source = createSource('table', {a: 'number'}, ['a']);
+    source.push({type: 'add', row: {a: 1}});
+    source.push({type: 'add', row: {a: 2}});
+    source.push({type: 'add', row: {a: 3}});
+
+    const conn = source.connect([['a', 'asc']]);
+    const stream = conn.fetch({});
+    const it1 = stream[Symbol.iterator]();
+    const it2 = stream[Symbol.iterator]();
+    expect(it1.next()).toEqual({
+      done: false,
+      value: {row: {a: 1}, relationships: {}},
+    });
+    expect(it2.next()).toEqual({
+      done: false,
+      value: {row: {a: 2}, relationships: {}},
+    });
+    expect(it1.next()).toEqual({
+      done: false,
+      value: {row: {a: 3}, relationships: {}},
+    });
+    expect(it2.next()).toEqual({done: true, value: undefined});
+    expect(it1.next()).toEqual({done: true, value: undefined});
+
+    const it3 = stream[Symbol.iterator]();
+    expect(it3.next()).toEqual({done: true, value: undefined});
+  },
 };
 
 /**
