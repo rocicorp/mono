@@ -1,18 +1,14 @@
 import {AST} from '../ast2/ast.js';
 import {Row} from '../ivm2/data.js';
 import {Source} from '../ivm2/source.js';
-import {
-  EntitySchema,
-  PullSchemaForRelationship,
-  SchemaValue,
-} from './schema.js';
+import {Schema, PullSchemaForRelationship, SchemaValue} from './schema.js';
 import {Input} from '../ivm2/operator.js';
 
 /**
  * The type that can be passed into `select()`. A selector
- * references a field on an entity.
+ * references a field on an row.
  */
-export type Selector<E extends EntitySchema> = keyof E['fields'];
+export type Selector<E extends Schema> = keyof E['fields'];
 
 export type Context = {
   getSource: (name: string) => Source;
@@ -50,11 +46,11 @@ type SchemaValueToTSType<T extends SchemaValue> =
   | (T extends {optional: true} ? undefined : never);
 
 export type GetFieldType<
-  TSchema extends EntitySchema,
+  TSchema extends Schema,
   TField extends keyof TSchema['fields'],
 > = SchemaValueToTSType<TSchema['fields'][TField]>;
 
-export type EntitySchemaToEntity<T extends EntitySchema> = {
+export type SchemaToRow<T extends Schema> = {
   [K in keyof T['fields']]: SchemaValueToTSType<T['fields'][K]>;
 };
 
@@ -66,18 +62,18 @@ export type EntitySchemaToEntity<T extends EntitySchema> = {
  * The composition of these two yields the return type
  * of the query.
  *
- * This takes a return type of a query (TReturn), an entity type (TEntity),
- * and a list of selections (TSelections) made against that entity,
+ * This takes a return type of a query (TReturn), a schema type (TSchema),
+ * and a list of selections (TSelections) made against that row,
  * returning a new return type with the selections added.
  *
  * `.select('foo')` would add `foo` to `TReturn`.
  */
 export type AddSelections<
-  TSchema extends EntitySchema,
+  TSchema extends Schema,
   TSelections extends Selector<TSchema>[],
   TReturn extends QueryResultRow[],
 > = {
-  entity: {
+  row: {
     [K in TSelections[number]]: SchemaValueToTSType<TSchema['fields'][K]>;
   };
   related: TReturn[number]['related'];
@@ -88,10 +84,10 @@ export type AddSelections<
  * to the return type (TReturn).
  */
 export type AddSubselect<
-  TSubquery extends EntityQuery<EntitySchema>,
+  TSubquery extends Query<Schema>,
   TReturn extends QueryResultRow[],
 > = {
-  entity: TReturn[number]['entity'];
+  row: TReturn[number]['row'];
   related: TReturn[number]['related'] extends never
     ? PickSubselect<TSubquery>
     : PickSubselect<TSubquery> & TReturn[number]['related'];
@@ -105,10 +101,10 @@ export type AddSubselect<
  * `sub(query => query.select('foo').as('bar'))` would
  * return `{bar: {foo: string}}`.
  */
-type PickSubselect<TSubquery extends EntityQuery<EntitySchema>> = {
-  [K in TSubquery extends EntityQuery<EntitySchema, QueryResultRow[], infer TAs>
+type PickSubselect<TSubquery extends Query<Schema>> = {
+  [K in TSubquery extends Query<Schema, QueryResultRow[], infer TAs>
     ? TAs
-    : never]: TSubquery extends EntityQuery<EntitySchema, infer TSubreturn>
+    : never]: TSubquery extends Query<Schema, infer TSubreturn>
     ? TSubreturn
     : never;
 };
@@ -119,14 +115,14 @@ type PickSubselect<TSubquery extends EntityQuery<EntitySchema>> = {
  * Represents a tree of entities and subselects.
  */
 export type QueryResultRow = {
-  entity: Partial<Row>;
+  row: Partial<Row>;
   related: Record<string, QueryResultRow[]> | undefined;
 };
 
 export type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
 
-export interface EntityQuery<
-  TSchema extends EntitySchema,
+export interface Query<
+  TSchema extends Schema,
   TReturn extends QueryResultRow[] = [],
   TAs extends string = string,
 > {
@@ -134,37 +130,37 @@ export interface EntityQuery<
 
   select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
-  ): EntityQuery<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs>;
+  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs>;
 
-  as<TAs2 extends string>(as: TAs2): EntityQuery<TSchema, TReturn, TAs2>;
+  as<TAs2 extends string>(as: TAs2): Query<TSchema, TReturn, TAs2>;
 
   related<
     TRelationship extends keyof TSchema['relationships'],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TSub extends EntityQuery<any, any, any>,
+    TSub extends Query<any, any, any>,
   >(
     relationship: TRelationship,
     cb: (
-      query: EntityQuery<
+      query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
         [],
         TRelationship & string
       >,
     ) => TSub,
-  ): EntityQuery<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
+  ): Query<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
     op: Operator,
     value: GetFieldType<TSchema, TSelector>,
-  ): EntityQuery<TSchema, TReturn, TAs>;
+  ): Query<TSchema, TReturn, TAs>;
 
-  limit(limit: number): EntityQuery<TSchema, TReturn, TAs>;
+  limit(limit: number): Query<TSchema, TReturn, TAs>;
 
   orderBy<TSelector extends Selector<TSchema>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): EntityQuery<TSchema, TReturn, TAs>;
+  ): Query<TSchema, TReturn, TAs>;
 
   run(): MakeHumanReadable<TReturn>;
 
