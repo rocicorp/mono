@@ -125,19 +125,22 @@ export class Join implements Input {
       parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
     }
 
-    // This storage key tracks of the primary keys we've seen for each unique
-    // value of parent key. This is used to know when to cleanup a child,
-    // thereby cleaning up its state.
-    const storageKey: NormalizedValue[] = [
-      'pKeySet',
+    // This storage key tracks the primary keys seen for each unique
+    // value joined on. This is used to know when to cleanup a child's state.
+    const storageKey: string = createPrimaryKeySetStorageKey([
       parentKeyValue,
       ...parentPrimaryKey,
-    ];
+    ]);
 
     let method: ProcessParentMode = mode;
     if (mode === 'cleanup') {
       const [, second] = [
-        ...take(this.#storage.scan({prefix: ['pKeySet', parentKeyValue]}), 2),
+        ...take(
+          this.#storage.scan({
+            prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
+          }),
+          2,
+        ),
       ];
       method = second ? 'fetch' : 'cleanup';
     }
@@ -166,3 +169,16 @@ export class Join implements Input {
 }
 
 type ProcessParentMode = 'fetch' | 'cleanup';
+
+/** Exported for testing. */
+export function createPrimaryKeySetStorageKey(
+  values: NormalizedValue[],
+): string {
+  return ['pKeySet', ...values].join(',');
+}
+
+export function createPrimaryKeySetStorageKeyPrefix(
+  value: NormalizedValue,
+): string {
+  return createPrimaryKeySetStorageKey([value]) + ',';
+}

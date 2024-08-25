@@ -1,6 +1,6 @@
 import type {JSONValue} from 'replicache';
 import type {Change} from './change.js';
-import type {Node, NormalizedValue, Row, Value} from './data.js';
+import type {Node, Row, Value} from './data.js';
 import type {Stream} from './stream.js';
 import type {Schema} from './schema.js';
 
@@ -65,18 +65,17 @@ export interface Output {
  */
 export interface Operator extends Input, Output {}
 
-export type StorageKey = readonly NormalizedValue[];
 /**
  * Operators get access to storage that they can store their internal
  * state in.
  */
 export interface Storage {
-  set(key: StorageKey, value: JSONValue): void;
-  get(key: StorageKey, def?: JSONValue): JSONValue | undefined;
+  set(key: string, value: JSONValue): void;
+  get(key: string, def?: JSONValue): JSONValue | undefined;
   /**
    * If options is not specified, defaults to scanning all entries.
    * @param options
    */
-  scan(options?: {prefix: readonly Value[]}): Stream<[StorageKey, JSONValue]>;
-  del(key: StorageKey): void;
+  scan(options?: {prefix: string}): Stream<[string, JSONValue]>;
+  del(key: string): void;
 }
