@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import {Query} from './query.js';
 import {Schema} from './schema.js';
+import {TypedView} from './typed-view.js';
 
 const mockQuery = {
   select() {
@@ -90,22 +92,26 @@ describe('types', () => {
     query.select('foo');
 
     // Nothing selected? Return type is empty array.
-    expectTypeOf(query.run()).toMatchTypeOf<readonly never[]>();
+    expectTypeOf(query.materialize()).toMatchTypeOf<TypedView<Iterable<{}>>>();
 
     const query2 = query.select('s');
-    expectTypeOf(query2.run()).toMatchTypeOf<
-      readonly {
-        readonly s: string;
-      }[]
+    expectTypeOf(query2.materialize()).toMatchTypeOf<
+      TypedView<
+        Iterable<{
+          readonly s: string;
+        }>
+      >
     >();
 
     const query3 = query2.select('s', 'b', 'n');
-    expectTypeOf(query3.run()).toMatchTypeOf<
-      readonly {
-        readonly s: string;
-        readonly b: boolean;
-        readonly n: number;
-      }[]
+    expectTypeOf(query3.materialize()).toMatchTypeOf<
+      TypedView<
+        Iterable<{
+          readonly s: string;
+          readonly b: boolean;
+          readonly n: number;
+        }>
+      >
     >();
   });
 
@@ -119,14 +125,15 @@ describe('types', () => {
     query.related('doesNotExist', q => q);
 
     const query2 = query.related('test', q => q.select('b')).select('s');
-
-    expectTypeOf(query2.run()).toMatchTypeOf<
-      readonly {
-        readonly s: string;
-        readonly test: readonly {
-          readonly b: boolean;
-        }[];
-      }[]
+    expectTypeOf(query2.materialize()).toMatchTypeOf<
+      TypedView<
+        Iterable<{
+          readonly s: string;
+          readonly test: Iterable<{
+            readonly b: boolean;
+          }>;
+        }>
+      >
     >();
 
     // Many calls to related builds up the related object.
@@ -137,20 +144,22 @@ describe('types', () => {
       .related('testWithRelationships', q => q.select('b'))
       .related('test', q => q.select('n'))
       .select('a')
-      .run();
+      .materialize();
     expectTypeOf(t).toMatchTypeOf<
-      readonly {
-        a: string;
-        self: readonly {
-          s: string;
-        }[];
-        testWithRelationships: readonly {
-          b: boolean;
-        }[];
-        test: readonly {
-          n: number;
-        }[];
-      }[]
+      TypedView<
+        Iterable<{
+          a: string;
+          self: Iterable<{
+            s: string;
+          }>;
+          testWithRelationships: Iterable<{
+            b: boolean;
+          }>;
+          test: Iterable<{
+            n: number;
+          }>;
+        }>
+      >
     >();
   });
 
@@ -163,16 +172,19 @@ describe('types', () => {
       .related('self', query =>
         query.related('test', q => q.select('b')).select('s'),
       );
-    expectTypeOf(query2.run()).toMatchTypeOf<
-      readonly {
-        s: string;
-        self: readonly {
+
+    expectTypeOf(query2.materialize()).toMatchTypeOf<
+      TypedView<
+        Iterable<{
           s: string;
-          test: readonly {
-            b: boolean;
-          }[];
-        }[];
-      }[]
+          self: Iterable<{
+            s: string;
+            test: Iterable<{
+              b: boolean;
+            }>;
+          }>;
+        }>
+      >
     >();
   });
 
@@ -180,17 +192,21 @@ describe('types', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
 
     const query2 = query.where('s', '=', 'foo');
-    expectTypeOf(query2.run()).toMatchTypeOf<readonly never[]>();
+    expectTypeOf(query2.materialize()).toMatchTypeOf<TypedView<Iterable<{}>>>();
 
     // @ts-expect-error - cannot use a field that does not exist
     query.where('doesNotExist', '=', 'foo');
     // @ts-expect-error - value and field types must match
     query.where('b', '=', 'false');
 
-    expectTypeOf(query.select('b').where('b', '=', true).run()).toMatchTypeOf<
-      readonly {
-        b: boolean;
-      }[]
+    expectTypeOf(
+      query.select('b').where('b', '=', true).materialize(),
+    ).toMatchTypeOf<
+      TypedView<
+        Iterable<{
+          b: boolean;
+        }>
+      >
     >();
   });
 });

@@ -6,7 +6,6 @@ import {
   AddSubselect,
   Query,
   GetFieldType,
-  MakeHumanReadable,
   Operator,
   QueryResultRow,
   Selector,
@@ -21,7 +20,8 @@ import {
 } from './schema.js';
 import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
-import {Input} from '../ivm2/operator.js';
+import {TypedView} from './typed-view.js';
+import {View} from '../ivm2/view.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -67,8 +67,15 @@ class QueryImpl<
     return this.#create(this.#host, this.#schema, this.#ast);
   }
 
-  run(): MakeHumanReadable<Smash<TReturn>> {
-    throw new Error('Method not implemented.');
+  materialize(): TypedView<Smash<TReturn>> {
+    const end = buildPipeline(
+      {
+        ...this.#ast,
+        orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
+      },
+      this.#host,
+    );
+    return new View(end) as unknown as TypedView<Smash<TReturn>>;
   }
 
   related<
@@ -199,16 +206,6 @@ class QueryImpl<
       ...this.#ast,
       orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
     });
-  }
-
-  toPipeline(): Input {
-    return buildPipeline(
-      {
-        ...this.#ast,
-        orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
-      },
-      this.#host,
-    );
   }
 }
 
