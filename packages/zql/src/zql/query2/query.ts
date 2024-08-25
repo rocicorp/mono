@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/ban-types */
 import {AST} from '../ast2/ast.js';
 import {Row} from '../ivm2/data.js';
 import {Source} from '../ivm2/source.js';
 import {Schema, PullSchemaForRelationship, SchemaValue} from './schema.js';
-import {Input} from '../ivm2/operator.js';
+import {TypedView} from './typed-view.js';
 
 /**
  * The type that can be passed into `select()`. A selector
@@ -15,23 +16,36 @@ export type Context = {
   createStorage: () => Storage;
 };
 
-/**
- * Have you ever noticed that when you hover over Types in TypeScript, it shows
- * Pick<Omit<T, K>, K>? Rather than the final object structure after picking and omitting?
- * Or any time you use a type alias.
- *
- * MakeHumanReadable collapses the type aliases into their final form.
- */
-// eslint-disable-next-line @typescript-eslint/ban-types
-export type MakeHumanReadable<T> = {} & {
-  readonly [P in keyof T]: T[P] extends string ? T[P] : MakeHumanReadable<T[P]>;
-};
+export type Smash<T extends Iterable<QueryResultRow>> = {} & Iterable<
+  T extends Iterable<infer TRow extends QueryResultRow>
+    ? Collapse<
+        TRow['row'] & {
+          [K in keyof TRow['related']]: TRow['related'][K] extends Iterable<QueryResultRow>
+            ? Smash<TRow['related'][K]>
+            : undefined;
+        }
+      >
+    : never
+>;
 
-export type Smash<T extends QueryResultRow[]> = (T[number]['row'] & {
-  [K in keyof T[number]['related']]: T[number]['related'][K] extends QueryResultRow[]
-    ? Smash<T[number]['related'][K]>
-    : undefined;
-})[];
+type Collapse<T> = T extends object ? {[K in keyof T]: T[K]} : T;
+
+// type X = Smash<
+//   Iterable<{
+//     row: {s: string};
+//     related: {
+//       m: Iterable<{
+//         row: {x: string};
+//         related: {
+//           p: Iterable<{
+//             row: {z: string};
+//             related: undefined;
+//           }>;
+//         };
+//       }>;
+//     };
+//   }>
+// >;
 
 /**
  * Given a schema value, return the TypeScript type.
@@ -77,12 +91,14 @@ export type SchemaToRow<T extends Schema> = {
 export type AddSelections<
   TSchema extends Schema,
   TSelections extends Selector<TSchema>[],
-  TReturn extends QueryResultRow[],
+  TReturn extends Iterable<QueryResultRow>,
 > = {
   row: {
     [K in TSelections[number]]: SchemaValueToTSType<TSchema['fields'][K]>;
   };
-  related: TReturn[number]['related'];
+  related: TReturn extends Iterable<infer TRow extends QueryResultRow>
+    ? TRow['related']
+    : {};
 };
 
 /**
@@ -91,12 +107,14 @@ export type AddSelections<
  */
 export type AddSubselect<
   TSubquery extends Query<Schema>,
-  TReturn extends QueryResultRow[],
+  TReturn extends Iterable<QueryResultRow>,
 > = {
-  row: TReturn[number]['row'];
-  related: TReturn[number]['related'] extends never
-    ? PickSubselect<TSubquery>
-    : PickSubselect<TSubquery> & TReturn[number]['related'];
+  row: TReturn extends Iterable<infer TRow extends QueryResultRow>
+    ? TRow['row']
+    : {};
+  related: TReturn extends Iterable<infer TRow extends QueryResultRow>
+    ? PickSubselect<TSubquery> & TRow['related']
+    : PickSubselect<TSubquery>;
 };
 
 /**
@@ -107,12 +125,12 @@ export type AddSubselect<
  * `sub(query => query.select('foo').as('bar'))` would
  * return `{bar: {foo: string}}`.
  */
-type PickSubselect<TSubquery extends Query<Schema>> = {
-  [K in TSubquery extends Query<Schema, QueryResultRow[], infer TAs>
+export type PickSubselect<TSubquery extends Query<Schema>> = {
+  [K in TSubquery extends Query<Schema, Iterable<QueryResultRow>, infer TAs>
     ? TAs
     : never]: TSubquery extends Query<Schema, infer TSubreturn>
     ? TSubreturn
-    : never;
+    : EmptyQueryResultRow;
 };
 
 /**
@@ -122,21 +140,26 @@ type PickSubselect<TSubquery extends Query<Schema>> = {
  */
 export type QueryResultRow = {
   row: Partial<Row>;
-  related: Record<string, QueryResultRow[]> | undefined;
+  related: Record<string, Iterable<QueryResultRow>> | undefined;
 };
 
 export type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
 
+export type EmptyQueryResultRow = {
+  row: {};
+  related: {};
+};
+
 export interface Query<
   TSchema extends Schema,
-  TReturn extends QueryResultRow[] = [],
+  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
   TAs extends string = string,
 > {
   readonly ast: AST;
 
   select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
-  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs>;
+  ): Query<TSchema, Iterable<AddSelections<TSchema, TFields, TReturn>>, TAs>;
 
   as<TAs2 extends string>(as: TAs2): Query<TSchema, TReturn, TAs2>;
 
@@ -149,11 +172,11 @@ export interface Query<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        [],
+        Iterable<EmptyQueryResultRow>,
         TRelationship & string
       >,
     ) => TSub,
-  ): Query<TSchema, AddSubselect<TSub, TReturn>[], TAs>;
+  ): Query<TSchema, Iterable<AddSubselect<TSub, TReturn>>, TAs>;
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
@@ -168,8 +191,5 @@ export interface Query<
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs>;
 
-  run(): MakeHumanReadable<Smash<TReturn>>;
-
-  // Temporary. Will be replaced when we have a proper view implementation.
-  toPipeline(): Input;
+  materialize(): TypedView<Smash<TReturn>>;
 }
