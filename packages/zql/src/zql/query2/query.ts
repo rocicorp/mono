@@ -30,23 +30,6 @@ export type Smash<T extends Iterable<QueryResultRow>> = {} & Iterable<
 
 type Collapse<T> = T extends object ? {[K in keyof T]: T[K]} : T;
 
-// type X = Smash<
-//   Iterable<{
-//     row: {s: string};
-//     related: {
-//       m: Iterable<{
-//         row: {x: string};
-//         related: {
-//           p: Iterable<{
-//             row: {z: string};
-//             related: undefined;
-//           }>;
-//         };
-//       }>;
-//     };
-//   }>
-// >;
-
 /**
  * Given a schema value, return the TypeScript type.
  *

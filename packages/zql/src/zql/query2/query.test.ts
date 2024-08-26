@@ -8,7 +8,7 @@ const mockQuery = {
   select() {
     return this;
   },
-  run() {
+  materialize() {
     return this;
   },
   sub() {
