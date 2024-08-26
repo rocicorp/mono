@@ -13,7 +13,6 @@ import {
   pushMessageSchema,
 } from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';

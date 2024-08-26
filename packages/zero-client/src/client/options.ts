@@ -70,7 +70,7 @@ export interface ZeroOptions<QD extends QueryDefs> {
    * At the moment the parse functions are not being used to validate the data
    * stored by Zero but future work will enable this.
    */
-  schemas: QD;
+  schemas?: QD | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes
