@@ -34,19 +34,27 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    queries: {
-      e: v => v as E,
+    schemas: {
+      e: {
+        fields: {
+          id: {type: 'string'},
+          value: {type: 'number'},
+        },
+        primaryKey: ['id'],
+        table: 'e',
+      },
     },
   });
 
-  const q = r.query.e.select('*').limit(1).prepare();
+  const q = r.query.e.select('id', 'value').limit(1);
+  const view = q.materialize();
+  const log: (readonly E[])[] = [];
+  const removeListener = view.addListener(rows => {
+    log.push([...rows]);
+  });
+  view.hydrate();
 
   await r.triggerConnected();
-
-  const log: (readonly E[])[] = [];
-  const cancelSubscribe = q.subscribe(rows => {
-    log.push(rows);
-  });
 
   await sleep(1);
   assert(deepEqual(log, [[], []]));
@@ -59,11 +67,18 @@ async function testBasics(userID: string) {
     deepEqual(log, [[], [], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
-  cancelSubscribe();
+  removeListener();
 
   await r.mutate.e.set({id: 'foo', value: 3});
   assert(
     deepEqual(log, [[], [], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
-  assert(deepEqual(await q.exec(), [{id: 'foo', value: 3}]));
+
+  const view2 = q.materialize();
+  const log2: (readonly E[])[] = [];
+  view2.addListener(rows => {
+    log2.push([...rows]);
+  });
+  view2.hydrate();
+  assert(deepEqual(log2, [[{id: 'foo', value: 3}]]));
 }
