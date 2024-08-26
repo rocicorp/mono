@@ -1,22 +1,7 @@
-import type {AST} from '../ast/ast.js';
-import type {Materialite} from '../ivm/materialite.js';
-import type {Source} from '../ivm/source/source.js';
-import type {PipelineEntity} from '../ivm/types.js';
+import type {AST} from '../ast2/ast.js';
 
 export type GotCallback = (got: boolean) => void;
 
 export type SubscriptionDelegate = {
   subscriptionAdded(ast: AST, gotCallback?: GotCallback): () => void;
-};
-
-/**
- * Used to integrate with the host environment.
- *
- * A source is a table or collection which ZQL can query.
- * The name of a source represents the name of the table
- * ZQL is querying.
- */
-export type Context = SubscriptionDelegate & {
-  materialite: Materialite;
-  getSource: <T extends PipelineEntity>(name: string) => Source<T>;
 };
