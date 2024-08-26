@@ -26,14 +26,14 @@ import {ArrayView} from '../ivm2/array-view.js';
 
 export function newQuery<
   TSchema extends Schema,
-  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
 >(host: Host, schema: TSchema): Query<TSchema, TReturn> {
   return new QueryImpl(host, schema);
 }
 
 class QueryImpl<
   TSchema extends Schema,
-  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
   TAs extends string = string,
 > implements Query<TSchema, TReturn, TAs>
 {
@@ -51,7 +51,7 @@ class QueryImpl<
 
   #create<
     TSchema extends Schema,
-    TReturn extends Iterable<QueryResultRow>,
+    TReturn extends Array<QueryResultRow>,
     TAs extends string,
   >(host: Host, schema: TSchema, ast: AST): Query<TSchema, TReturn, TAs> {
     return new QueryImpl(host, schema, ast);
@@ -89,11 +89,11 @@ class QueryImpl<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        Iterable<EmptyQueryResultRow>,
+        Array<EmptyQueryResultRow>,
         TRelationship & string
       >,
     ) => TSub,
-  ): Query<TSchema, Iterable<AddSubselect<TSub, TReturn>>, TAs> {
+  ): Query<TSchema, Array<AddSubselect<TSub, TReturn>>, TAs> {
     const related = this.#schema.relationships?.[relationship as string];
     assert(related, 'Invalid relationship');
     const related1 = related;

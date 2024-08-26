@@ -16,11 +16,11 @@ export type Context = {
   createStorage: () => Storage;
 };
 
-export type Smash<T extends Iterable<QueryResultRow>> = {} & Iterable<
-  T extends Iterable<infer TRow extends QueryResultRow>
+export type Smash<T extends Array<QueryResultRow>> = {} & Array<
+  T extends Array<infer TRow extends QueryResultRow>
     ? Collapse<
         TRow['row'] & {
-          [K in keyof TRow['related']]: TRow['related'][K] extends Iterable<QueryResultRow>
+          [K in keyof TRow['related']]: TRow['related'][K] extends Array<QueryResultRow>
             ? Smash<TRow['related'][K]>
             : undefined;
         }
@@ -74,12 +74,12 @@ export type SchemaToRow<T extends Schema> = {
 export type AddSelections<
   TSchema extends Schema,
   TSelections extends Selector<TSchema>[],
-  TReturn extends Iterable<QueryResultRow>,
+  TReturn extends Array<QueryResultRow>,
 > = {
   row: {
     [K in TSelections[number]]: SchemaValueToTSType<TSchema['fields'][K]>;
   };
-  related: TReturn extends Iterable<infer TRow extends QueryResultRow>
+  related: TReturn extends Array<infer TRow extends QueryResultRow>
     ? TRow['related']
     : {};
 };
@@ -90,12 +90,12 @@ export type AddSelections<
  */
 export type AddSubselect<
   TSubquery extends Query<Schema>,
-  TReturn extends Iterable<QueryResultRow>,
+  TReturn extends Array<QueryResultRow>,
 > = {
-  row: TReturn extends Iterable<infer TRow extends QueryResultRow>
+  row: TReturn extends Array<infer TRow extends QueryResultRow>
     ? TRow['row']
     : {};
-  related: TReturn extends Iterable<infer TRow extends QueryResultRow>
+  related: TReturn extends Array<infer TRow extends QueryResultRow>
     ? PickSubselect<TSubquery> & TRow['related']
     : PickSubselect<TSubquery>;
 };
@@ -109,7 +109,7 @@ export type AddSubselect<
  * return `{bar: {foo: string}}`.
  */
 export type PickSubselect<TSubquery extends Query<Schema>> = {
-  [K in TSubquery extends Query<Schema, Iterable<QueryResultRow>, infer TAs>
+  [K in TSubquery extends Query<Schema, Array<QueryResultRow>, infer TAs>
     ? TAs
     : never]: TSubquery extends Query<Schema, infer TSubreturn>
     ? TSubreturn
@@ -123,7 +123,7 @@ export type PickSubselect<TSubquery extends Query<Schema>> = {
  */
 export type QueryResultRow = {
   row: Partial<Row>;
-  related: Record<string, Iterable<QueryResultRow>> | undefined;
+  related: Record<string, Array<QueryResultRow>> | undefined;
 };
 
 export type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
@@ -135,14 +135,14 @@ export type EmptyQueryResultRow = {
 
 export interface Query<
   TSchema extends Schema,
-  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
   TAs extends string = string,
 > {
   readonly ast: AST;
 
   select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
-  ): Query<TSchema, Iterable<AddSelections<TSchema, TFields, TReturn>>, TAs>;
+  ): Query<TSchema, Array<AddSelections<TSchema, TFields, TReturn>>, TAs>;
 
   as<TAs2 extends string>(as: TAs2): Query<TSchema, TReturn, TAs2>;
 
@@ -155,11 +155,11 @@ export interface Query<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        Iterable<EmptyQueryResultRow>,
+        Array<EmptyQueryResultRow>,
         TRelationship & string
       >,
     ) => TSub,
-  ): Query<TSchema, Iterable<AddSubselect<TSub, TReturn>>, TAs>;
+  ): Query<TSchema, Array<AddSubselect<TSub, TReturn>>, TAs>;
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
