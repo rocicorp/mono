@@ -4,7 +4,8 @@ import {Snitch} from './snitch.js';
 import {Join} from './join.js';
 import {Filter} from './filter.js';
 import {MemoryStorage} from './memory-storage.js';
-import {Entry, View} from './view.js';
+import {ArrayView, EntryList} from './array-view.js';
+import {DeepReadonly} from 'replicache';
 
 test('destroy source connections', () => {
   const ms = new MemorySource({a: 'string', b: 'string'}, ['a']);
@@ -70,19 +71,10 @@ test('destroy a pipeline from the view', () => {
     'a',
     'stuff',
   );
-  const view = new View(join);
-  let data: Entry[] = [];
-  const expand = (entries: Iterable<Entry>): Entry[] =>
-    [...entries].map(e =>
-      e.stuff
-        ? {
-            ...e,
-            stuff: expand(e.stuff as Iterable<Entry>),
-          }
-        : e,
-    );
-  const listener = (d: Iterable<Entry>) => {
-    data = expand(d);
+  const view = new ArrayView(join);
+  let data: DeepReadonly<EntryList> = [];
+  const listener = (d: DeepReadonly<EntryList>) => {
+    data = d;
   };
   view.addListener(listener);
   view.hydrate();

@@ -1,21 +1,22 @@
 import {MemorySource} from './memory-source.js';
-import {Entry, View} from './view.js';
 import {expect, test} from 'vitest';
 import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
+import {EntryList, ArrayView} from './array-view.js';
+import {DeepReadonly} from 'replicache';
 
 test('basics', () => {
   const ms = new MemorySource({a: 'number', b: 'string'}, ['a']);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
-  const view = new View(ms.connect([['b', 'asc']]));
+  const view = new ArrayView(ms.connect([['b', 'asc']]));
 
   let callCount = 0;
-  let data: Entry[] = [];
-  const listener = (d: Iterable<Entry>) => {
-    callCount++;
-    data = [...d];
+  let data: DeepReadonly<EntryList> = [];
+  const listener = (d: DeepReadonly<EntryList>) => {
+    ++callCount;
+    data = d;
   };
   view.addListener(listener);
 
@@ -81,20 +82,10 @@ test('tree', () => {
     'children',
   );
 
-  const expand = (entries: Iterable<Entry>): Entry[] =>
-    [...entries].map(e =>
-      e.children
-        ? {
-            ...e,
-            children: expand(e.children as Iterable<Entry>),
-          }
-        : e,
-    );
-
-  const view = new View(join);
-  let data: Entry[] = [];
-  const listener = (d: Iterable<Entry>) => {
-    data = expand(d);
+  const view = new ArrayView(join);
+  let data: DeepReadonly<EntryList> = [];
+  const listener = (d: DeepReadonly<EntryList>) => {
+    data = d;
   };
   view.addListener(listener);
 
@@ -315,50 +306,4 @@ test('tree', () => {
       children: [],
     },
   ]);
-});
-
-test('stop-iterators', () => {
-  const users = new MemorySource({id: 'number', name: 'string'}, ['id']);
-  users.push({
-    type: 'add',
-    row: {id: 1, name: 'foo', parentID: 3},
-  });
-  users.push({
-    type: 'add',
-    row: {id: 2, name: 'foobar', parentID: 3},
-  });
-  users.push({
-    type: 'add',
-    row: {id: 3, name: 'mon', parentID: null},
-  });
-
-  const join = new Join(
-    users.connect([['name', 'asc']]),
-    users.connect([['name', 'desc']]),
-    new MemoryStorage(),
-    'parentID',
-    'id',
-    'parent',
-  );
-
-  const view = new View(join);
-
-  const iters: Iterator<Entry>[] = [];
-
-  view.addListener(parent => {
-    const it1 = parent[Symbol.iterator]();
-    const e1 = it1.next().value;
-    iters.push(it1);
-    const it2 = e1.parent[Symbol.iterator]();
-    const e2 = it2.next().value;
-    expect(e2).toBeTruthy();
-    iters.push(it2);
-  });
-
-  view.hydrate();
-  expect(iters.length).toBe(2);
-
-  for (const it of iters) {
-    expect(() => it.next()).throws('Iterator has been stopped');
-  }
 });

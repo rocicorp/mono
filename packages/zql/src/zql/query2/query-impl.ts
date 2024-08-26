@@ -22,7 +22,7 @@ import {
 import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
 import {TypedView} from './typed-view.js';
-import {View} from '../ivm2/view.js';
+import {ArrayView} from '../ivm2/array-view.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -76,7 +76,7 @@ class QueryImpl<
       },
       this.#host,
     );
-    const view = new View(end);
+    const view = new ArrayView(end);
     return view as unknown as TypedView<Smash<TReturn>>;
   }
 
