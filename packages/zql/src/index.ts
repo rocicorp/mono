@@ -1,2 +1,3 @@
-export {newEntityQuery, type EntityQuery} from './zql/query/entity-query.js';
-export {type Entity} from './zql/schema/entity-schema.js';
+export {newQuery} from './zql/query2/query-impl.js';
+export type {Query} from './zql/query2/query.js';
+export {type Row} from './zql/ivm2/data.js';
