@@ -446,7 +446,7 @@ export class Zero<QD extends QueryDefs> {
       },
     );
 
-    this.query = this.#registerQueries(queries);
+    this.query = this.#registerQueries(schemas);
 
     reportReloadReason(this.#lc);
 
@@ -1467,14 +1467,12 @@ export class Zero<QD extends QueryDefs> {
     // }
   }
 
-  #registerQueries(
-    queryDefs: QueryParseDefs<QD>,
-  ): MakeEntityQueriesFromQueryDefs<QD> {
+  #registerQueries(queryDefs: QD): MakeEntityQueriesFromQueryDefs<QD> {
     const rv = {} as Record<string, Query<Schema>>;
     const context = this.#zqlContext;
     // Not using parse yet
-    for (const name of Object.keys(queryDefs)) {
-      rv[name] = newQuery(context, name);
+    for (const [name, schema] of Object.entries(queryDefs)) {
+      rv[name] = newQuery(context, schema);
     }
 
     return rv as MakeEntityQueriesFromQueryDefs<QD>;

@@ -72,3 +72,8 @@ export type SimpleCondition = {
    */
   value: string | number | boolean;
 };
+
+export function normalizeAST(ast: AST): AST {
+  // TODO: actually normalize!
+  return ast;
+}
