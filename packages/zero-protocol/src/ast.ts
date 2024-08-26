@@ -73,6 +73,7 @@ export const correlatedSubquerySchema: v.Type<{
 });
 
 export const astSchema = v.object({
+  schema: v.string().optional(),
   table: v.string(),
   alias: v.string().optional(),
   where: readonly(v.array(conditionSchema)).optional(),

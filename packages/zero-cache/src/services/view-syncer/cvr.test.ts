@@ -424,14 +424,14 @@ describe('view-syncer/cvr', () => {
           internal: true,
           ast: {
             table: 'clients',
-            where: and(
-              cond(['clients', 'clientGroupID'], '=', 'abc123'),
-              or(
-                ...['dooClient', 'fooClient', 'barClient', 'bonkClient'].map(
-                  id => cond(['clients', 'clientID'], '=', id),
-                ),
-              ),
-            ),
+            where: [
+              {
+                type: 'simple',
+                op: '=',
+                field: 'clientGroupID',
+                value: 'abc123',
+              },
+            ],
           },
         },
         oneHash: {

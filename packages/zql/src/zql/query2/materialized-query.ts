@@ -1,14 +1,14 @@
-import {View} from '../ivm2/view.js';
+import {ArrayView} from '../ivm2/array-view.js';
 import {EmptyQueryResultRow, QueryResultRow, Smash} from './query.js';
 import {TypedView} from './typed-view.js';
 
 export class MaterializedQuery<
-  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
 > {
   readonly #view: TypedView<TReturn>;
   #lastResult: TReturn | undefined;
 
-  constructor(view: View) {
+  constructor(view: ArrayView) {
     this.#view = view as unknown as TypedView<TReturn>;
     this.#view.addListener(data => {
       this.#lastResult = data;

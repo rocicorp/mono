@@ -1,5 +1,6 @@
 import type * as v from 'shared/src/valita.js';
 import type {
+  AST,
   Condition,
   EqualityOps,
   LikeOps,
@@ -8,6 +9,7 @@ import type {
   SimpleOperator,
 } from 'zql/src/zql/ast2/ast.js';
 import type {
+  astSchema,
   conditionSchema,
   equalityOpsSchema,
   likeOpsSchema,
@@ -21,10 +23,10 @@ import type {
   inferredT satisfies Ordering;
 };
 
-// (t: AST, inferredT: v.Infer<typeof astSchema>) => {
-//   t satisfies v.Infer<typeof astSchema>;
-//   inferredT satisfies AST;
-// };
+(t: AST, inferredT: v.Infer<typeof astSchema>) => {
+  t satisfies v.Infer<typeof astSchema>;
+  inferredT satisfies AST;
+};
 
 (t: EqualityOps, inferredT: v.Infer<typeof equalityOpsSchema>) => {
   t satisfies v.Infer<typeof equalityOpsSchema>;

@@ -11,6 +11,7 @@ export type OrderOps = '<' | '>' | '<=' | '>=';
 export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
 
 export type AST = {
+  readonly schema?: string | undefined;
   readonly table: string;
 
   // A query would be aliased if the AST is a subquery.
@@ -29,7 +30,7 @@ export type AST = {
   // where conditions or choose the _first_ `related` entry.
   // Choosing the first `related` entry is almost always the best choice if
   // one exists.
-  readonly where?: Condition[] | undefined;
+  readonly where?: readonly Condition[] | undefined;
 
   readonly related?: readonly CorrelatedSubQuery[] | undefined;
   readonly limit?: number | undefined;
