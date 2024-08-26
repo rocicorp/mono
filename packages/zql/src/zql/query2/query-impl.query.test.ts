@@ -161,9 +161,7 @@ describe('bare select', () => {
     m.subscribe(_ => {
       called = true;
     });
-    // Hmm.. we probably want a `wantInitialData` sort of API
-    // for late comers to a view.
-    expect(called).toBe(false);
+    expect(called).toBe(true);
   });
 
   test('empty source followed by changes', () => {

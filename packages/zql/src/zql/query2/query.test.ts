@@ -8,7 +8,11 @@ const mockQuery = {
     return this;
   },
   materialize() {
-    return this;
+    return {
+      get() {
+        return this;
+      },
+    };
   },
   sub() {
     return this;
