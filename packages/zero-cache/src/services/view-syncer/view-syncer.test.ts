@@ -2,7 +2,7 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type {Downstream} from 'zero-protocol';
-import type {AST} from 'zql/src/zql/ast/ast.js';
+import type {AST} from 'zql/src/zql/ast2/ast.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';

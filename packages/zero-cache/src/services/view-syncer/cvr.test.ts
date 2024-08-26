@@ -5,7 +5,6 @@ import type {PostgresDB} from '../../types/pg.js';
 import {CVRStore} from './cvr-store.js';
 
 import {expect} from 'vitest';
-import {and, cond, or} from 'zero-cache/src/db/query-test-util.js';
 import type {PatchToVersion} from './client-handler.js';
 import {
   CVRConfigDrivenUpdater,
@@ -424,13 +423,7 @@ describe('view-syncer/cvr', () => {
           id: 'lmids',
           internal: true,
           ast: {
-            schema: 'zero',
             table: 'clients',
-            select: [
-              [['clients', 'clientGroupID'], 'clientGroupID'],
-              [['clients', 'clientID'], 'clientID'],
-              [['clients', 'lastMutationID'], 'lastMutationID'],
-            ],
             where: and(
               cond(['clients', 'clientGroupID'], '=', 'abc123'),
               or(
