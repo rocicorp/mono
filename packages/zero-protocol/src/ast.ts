@@ -52,6 +52,8 @@ export const simpleOperatorSchema = v.union(
 export const conditionSchema = v.object({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
+  field: selectorSchema,
+  value: v.union(v.string(), v.number(), v.boolean()),
 });
 
 export const correlatedSubquerySchema: v.Type<{
@@ -73,8 +75,8 @@ export const correlatedSubquerySchema: v.Type<{
 export const astSchema = v.object({
   table: v.string(),
   alias: v.string().optional(),
-  where: v.readonly(v.array(conditionSchema)).optional(),
-  related: v.readonly(v.array(correlatedSubquerySchema)).optional(),
+  where: readonly(v.array(conditionSchema)).optional(),
+  related: readonly(v.array(correlatedSubquerySchema)).optional(),
   limit: v.number().optional(),
   orderBy: orderingSchema.optional(),
 });
