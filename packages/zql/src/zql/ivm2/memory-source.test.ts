@@ -50,18 +50,18 @@ test('indexes get cleaned up when not needed', () => {
     JSON.stringify([['c', 'asc']]),
   ]);
 
-  ms.disconnect(conn3);
+  conn3.destroy();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  ms.disconnect(conn2);
+  conn2.destroy();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  ms.disconnect(conn1);
+  conn1.destroy();
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 });
