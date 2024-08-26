@@ -36,13 +36,11 @@ test('add', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: 'vgoxbdhr8m7c',
+          hash: '1m2bs2hhq3g1e',
           ast: {
             table: 'issues',
-            alias: undefined,
             where: undefined,
             orderBy: [['id', 'asc']],
-            limit: undefined,
           } satisfies AST,
         },
       ],
@@ -70,13 +68,11 @@ test('remove', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: 'vgoxbdhr8m7c',
+          hash: '1m2bs2hhq3g1e',
           ast: {
             table: 'issues',
-            alias: undefined,
             where: undefined,
             orderBy: [['id', 'asc']],
-            limit: undefined,
           } satisfies AST,
         },
       ],
@@ -96,7 +92,7 @@ test('remove', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: 'vgoxbdhr8m7c',
+          hash: '1m2bs2hhq3g1e',
         },
       ],
     },
@@ -160,13 +156,13 @@ test('getQueriesPatch', async () => {
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
-  // hash: 3m39m3xhe8uxg
+  // hash: 1m2bs2hhq3g1e
   const ast1: AST = {
     table: 'issues',
     orderBy: [['id', 'asc']],
   };
   queryManager.add(ast1);
-  // hash 1wpmhwzkyaqrd
+  // hash 1m2bs2hhq3g1e
   const ast2: AST = {
     table: 'issues',
     orderBy: [['id', 'desc']],
@@ -175,7 +171,7 @@ test('getQueriesPatch', async () => {
 
   const testReadTransaction = new TestTransaction();
   testReadTransaction.scanEntries = [
-    ['d/client1/vgoxbdhr8m7c', 'unused'],
+    ['d/client1/1m2bs2hhq3g1e', 'unused'],
     ['d/client1/shouldBeDeleted', 'unused'],
   ];
 
@@ -187,13 +183,10 @@ test('getQueriesPatch', async () => {
     },
     {
       op: 'put',
-      hash: '34gh23e9vauns',
+      hash: '51ea5ipsgcxi',
       ast: {
         table: 'issues',
-        alias: undefined,
-        where: undefined,
         orderBy: [['id', 'desc']],
-        limit: undefined,
       } satisfies AST,
     },
   ]);
@@ -201,7 +194,7 @@ test('getQueriesPatch', async () => {
 });
 
 test('gotCallback, query already got', async () => {
-  const queryHash = 'vgoxbdhr8m7c';
+  const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -232,10 +225,7 @@ test('gotCallback, query already got', async () => {
           hash: queryHash,
           ast: {
             table: 'issues',
-            alias: undefined,
-            where: undefined,
             orderBy: [['id', 'asc']],
-            limit: undefined,
           } satisfies AST,
         },
       ],
@@ -260,7 +250,7 @@ test('gotCallback, query already got', async () => {
 });
 
 test('gotCallback, query got after add', async () => {
-  const queryHash = 'vgoxbdhr8m7c';
+  const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -284,10 +274,7 @@ test('gotCallback, query got after add', async () => {
           hash: queryHash,
           ast: {
             table: 'issues',
-            alias: undefined,
-            where: undefined,
             orderBy: [['id', 'asc']],
-            limit: undefined,
           } satisfies AST,
         },
       ],
@@ -312,7 +299,7 @@ test('gotCallback, query got after add', async () => {
 });
 
 test('gotCallback, query got after add then removed', async () => {
-  const queryHash = 'vgoxbdhr8m7c';
+  const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -336,10 +323,7 @@ test('gotCallback, query got after add then removed', async () => {
           hash: queryHash,
           ast: {
             table: 'issues',
-            alias: undefined,
-            where: undefined,
             orderBy: [['id', 'asc']],
-            limit: undefined,
           } satisfies AST,
         },
       ],
@@ -374,7 +358,7 @@ test('gotCallback, query got after add then removed', async () => {
 });
 
 test('gotCallback, query got after subscription removed', async () => {
-  const queryHash = 'vgoxbdhr8m7c';
+  const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const queryManager = new QueryManager('client1', send, experimentalWatch);
@@ -398,10 +382,7 @@ test('gotCallback, query got after subscription removed', async () => {
           hash: queryHash,
           ast: {
             table: 'issues',
-            alias: undefined,
-            where: undefined,
             orderBy: [['id', 'asc']],
-            limit: undefined,
           } satisfies AST,
         },
       ],
