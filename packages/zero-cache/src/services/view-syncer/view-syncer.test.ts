@@ -13,35 +13,14 @@ import {ViewSyncerService} from './view-syncer.js';
 const EXPECTED_LMIDS_AST: AST = {
   schema: 'zero',
   table: 'clients',
-  select: [
-    [['clients', 'clientGroupID'], 'clientGroupID'],
-    [['clients', 'clientID'], 'clientID'],
-    [['clients', 'lastMutationID'], 'lastMutationID'],
+  where: [
+    {
+      type: 'simple',
+      op: '=',
+      field: 'clientGroupID',
+      value: '9876',
+    },
   ],
-  where: {
-    type: 'conjunction',
-    op: 'AND',
-    conditions: [
-      {
-        type: 'simple',
-        op: '=',
-        field: ['clients', 'clientGroupID'],
-        value: {type: 'value', value: '9876'},
-      },
-      {
-        type: 'conjunction',
-        op: 'OR',
-        conditions: [
-          {
-            type: 'simple',
-            op: '=',
-            field: ['clients', 'clientID'],
-            value: {type: 'value', value: 'foo'},
-          },
-        ],
-      },
-    ],
-  },
 };
 
 describe('view-syncer/service', () => {
@@ -141,28 +120,18 @@ describe('view-syncer/service', () => {
   const serviceID = '9876';
 
   const ISSUES_TITLE_QUERY: AST = {
-    select: [
-      [['issues', 'id'], 'id'],
-      [['issues', 'title'], 'title'],
-      [['issues', 'big'], 'big'],
-    ],
     table: 'issues',
-    where: {
-      type: 'simple',
-      field: ['issues', 'id'],
-      op: 'IN',
-      value: {
-        type: 'value',
+    where: [
+      {
+        type: 'simple',
+        field: 'id',
+        op: 'IN',
         value: ['1', '2', '3', '4'],
       },
-    },
+    ],
   };
 
   const USERS_NAME_QUERY: AST = {
-    select: [
-      [['users', 'id'], 'id'],
-      [['users', 'name'], 'name'],
-    ],
     table: 'users',
   };
 

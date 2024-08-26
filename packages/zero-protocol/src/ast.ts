@@ -43,17 +43,25 @@ export const likeOpsSchema = v.union(
   v.literal('NOT ILIKE'),
 );
 
+export const inOpsSchema = v.union(v.literal('IN'), v.literal('NOT IN'));
+
 export const simpleOperatorSchema = v.union(
   equalityOpsSchema,
   orderOpsSchema,
   likeOpsSchema,
+  inOpsSchema,
 );
 
 export const conditionSchema = v.object({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
   field: selectorSchema,
-  value: v.union(v.string(), v.number(), v.boolean()),
+  value: v.union(
+    v.string(),
+    v.number(),
+    v.boolean(),
+    readonly(v.array(v.union(v.string(), v.number(), v.boolean()))),
+  ),
 });
 
 export const correlatedSubquerySchema: v.Type<{
