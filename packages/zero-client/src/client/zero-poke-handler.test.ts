@@ -1046,11 +1046,7 @@ test('mergePokes with all optionals defined', () => {
           key: 'd/c1/h1',
           value: {
             table: 'issues',
-            select: [
-              [['issues', 'id'], 'id'],
-              [['issues', 'name'], 'name'],
-            ],
-            orderBy: [[['issues', 'id'], 'asc']],
+            orderBy: [['id', 'asc']],
           },
         },
         {
@@ -1058,11 +1054,7 @@ test('mergePokes with all optionals defined', () => {
           key: 'g/h1',
           value: {
             table: 'issues',
-            select: [
-              [['issues', 'id'], 'id'],
-              [['issues', 'name'], 'name'],
-            ],
-            orderBy: [[['issues', 'id'], 'asc']],
+            orderBy: [['id', 'asc']],
           },
         },
         {
@@ -1086,11 +1078,7 @@ test('mergePokes with all optionals defined', () => {
           key: 'd/c1/h2',
           value: {
             table: 'labels',
-            select: [
-              [['labels', 'id'], 'id'],
-              [['labels', 'name'], 'name'],
-            ],
-            orderBy: [[['labels', 'id'], 'asc']],
+            orderBy: [['id', 'asc']],
           },
         },
         {
@@ -1098,11 +1086,7 @@ test('mergePokes with all optionals defined', () => {
           key: 'g/h2',
           value: {
             table: 'labels',
-            select: [
-              [['labels', 'id'], 'id'],
-              [['labels', 'name'], 'name'],
-            ],
-            orderBy: [[['labels', 'id'], 'asc']],
+            orderBy: [['id', 'asc']],
           },
         },
         {
@@ -1258,11 +1242,7 @@ test('mergePokes sparse', () => {
           key: 'd/c1/h2',
           value: {
             table: 'labels',
-            select: [
-              [['issues', 'id'], 'id'],
-              [['issues', 'name'], 'name'],
-            ],
-            orderBy: [[['issues', 'id'], 'asc']],
+            orderBy: [['id', 'asc']],
           },
         },
         {
