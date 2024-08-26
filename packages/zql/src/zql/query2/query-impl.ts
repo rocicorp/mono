@@ -10,6 +10,7 @@ import {
   QueryResultRow,
   Selector,
   Smash,
+  EmptyQueryResultRow,
 } from './query.js';
 import {
   Schema,
@@ -25,14 +26,14 @@ import {View} from '../ivm2/view.js';
 
 export function newQuery<
   TSchema extends Schema,
-  TReturn extends QueryResultRow[] = [],
+  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
 >(host: Host, schema: TSchema): Query<TSchema, TReturn> {
   return new QueryImpl(host, schema);
 }
 
 class QueryImpl<
   TSchema extends Schema,
-  TReturn extends QueryResultRow[] = [],
+  TReturn extends Iterable<QueryResultRow> = Iterable<EmptyQueryResultRow>,
   TAs extends string = string,
 > implements Query<TSchema, TReturn, TAs>
 {
@@ -50,7 +51,7 @@ class QueryImpl<
 
   #create<
     TSchema extends Schema,
-    TReturn extends QueryResultRow[],
+    TReturn extends Iterable<QueryResultRow>,
     TAs extends string,
   >(host: Host, schema: TSchema, ast: AST): Query<TSchema, TReturn, TAs> {
     return new QueryImpl(host, schema, ast);
@@ -75,7 +76,8 @@ class QueryImpl<
       },
       this.#host,
     );
-    return new View(end) as unknown as TypedView<Smash<TReturn>>;
+    const view = new View(end);
+    return view as unknown as TypedView<Smash<TReturn>>;
   }
 
   related<
@@ -87,11 +89,11 @@ class QueryImpl<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        [],
+        Iterable<EmptyQueryResultRow>,
         TRelationship & string
       >,
     ) => TSub,
-  ): Query<TSchema, AddSubselect<TSub, TReturn>[], TAs> {
+  ): Query<TSchema, Iterable<AddSubselect<TSub, TReturn>>, TAs> {
     const related = this.#schema.relationships?.[relationship as string];
     assert(related, 'Invalid relationship');
     const related1 = related;

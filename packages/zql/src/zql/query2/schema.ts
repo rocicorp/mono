@@ -19,6 +19,18 @@ export type Schema = {
   };
 };
 
+export function toInputArgs(schema: Schema) {
+  const columns: Record<string, ValueType> = {};
+  for (const [key, value] of Object.entries(schema.fields)) {
+    columns[key] = value.type;
+  }
+  return {
+    primaryKey: schema.primaryKey,
+    columns,
+    table: schema.table,
+  };
+}
+
 /**
  * A schema might have a relationship to itself.
  * Given we cannot reference a variable in the same statement we initialize
