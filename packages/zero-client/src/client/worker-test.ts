@@ -47,12 +47,11 @@ async function testBasics(userID: string) {
   });
 
   const q = r.query.e.select('id', 'value').limit(1);
-  const view = q.materialize();
+  const materialization = q.materialize();
   const log: (readonly E[])[] = [];
-  const removeListener = view.addListener(rows => {
+  const removeListener = materialization.subscribe(rows => {
     log.push([...rows]);
   });
-  view.hydrate();
 
   await r.triggerConnected();
 
@@ -75,10 +74,5 @@ async function testBasics(userID: string) {
   );
 
   const view2 = q.materialize();
-  const log2: (readonly E[])[] = [];
-  view2.addListener(rows => {
-    log2.push([...rows]);
-  });
-  view2.hydrate();
-  assert(deepEqual(log2, [[{id: 'foo', value: 3}]]));
+  assert(deepEqual([...view2.get()], [{id: 'foo', value: 3}]));
 }

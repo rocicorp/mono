@@ -9,7 +9,6 @@ import {
   Operator,
   QueryResultRow,
   Selector,
-  Smash,
   EmptyQueryResultRow,
 } from './query.js';
 import {
@@ -21,8 +20,8 @@ import {
 } from './schema.js';
 import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
-import {TypedView} from './typed-view.js';
 import {ArrayView} from '../ivm2/array-view.js';
+import {MaterializedQuery} from './materialized-query.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -68,7 +67,7 @@ class QueryImpl<
     return this.#create(this.#host, this.#schema, this.#ast);
   }
 
-  materialize(): TypedView<Smash<TReturn>> {
+  materialize(): MaterializedQuery<TReturn> {
     const end = buildPipeline(
       {
         ...this.#ast,
@@ -77,7 +76,7 @@ class QueryImpl<
       this.#host,
     );
     const view = new ArrayView(end);
-    return view as unknown as TypedView<Smash<TReturn>>;
+    return new MaterializedQuery(view);
   }
 
   related<

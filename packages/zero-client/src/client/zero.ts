@@ -347,7 +347,7 @@ export class Zero<QD extends QueryDefs> {
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
-      schemas,
+      schemas = {} as QD,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -432,7 +432,7 @@ export class Zero<QD extends QueryDefs> {
     );
 
     this.#zqlContext = new ZeroContext(
-      options.schemas,
+      schemas,
       (name, cb) =>
         rep.subscriptions.add(
           new ZQLWatchSubscription(
