@@ -16,9 +16,13 @@ export interface Input {
   // Returns nodes sorted in order of schema().comparator.
   fetch(req: FetchRequest): Stream<Node>;
 
-  // Cleanup the operator. This is called when `output` will no longer
-  // need the data returned by fetch(). The receiving operator should
-  // clean up any resources it has allocated.
+  // Cleanup maintained state. This is called when `output` will no longer need
+  // the data returned by fetch(). The receiving operator should clean up any
+  // resources it has allocated to service such requests.
+  //
+  // This is different from `destroy()` which means this input will no longer
+  // be called at all, for any input.
+  //
   // Returns the same thing as fetch(). This allows callers to properly
   // propagate the cleanup message through the graph.
   cleanup(req: FetchRequest): Stream<Node>;

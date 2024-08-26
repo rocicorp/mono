@@ -28,6 +28,15 @@ export type SourceChange = {
  * ```
  */
 export interface Source {
+  /**
+   * Creates an input that an operator can connect to. To free resources used
+   * by connection, downstream operators call `destroy()` on the returned
+   * input.
+   */
   connect(sort: Ordering): Input;
+
+  /**
+   * Pushes a change into the source and into all connected outputs.
+   */
   push(change: SourceChange): void;
 }

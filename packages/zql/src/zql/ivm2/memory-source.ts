@@ -86,9 +86,7 @@ export class MemorySource implements Source {
         connection.output = output;
       },
       destroy: () => {
-        const index = this.#connections.indexOf(connection);
-        assert(index !== -1);
-        this.#connections.splice(index, 1);
+        this.#disconnect(input);
       },
     };
 
@@ -103,7 +101,7 @@ export class MemorySource implements Source {
     return input;
   }
 
-  disconnect(input: Input): void {
+  #disconnect(input: Input): void {
     const idx = this.#connections.findIndex(c => c.input === input);
     assert(idx !== -1, 'Connection not found');
     const connection = this.#connections[idx];
