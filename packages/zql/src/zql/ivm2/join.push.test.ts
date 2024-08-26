@@ -974,8 +974,8 @@ function pushTest(t: PushTest) {
       expect(storage.cloneData()).toEqual(expectedStorage);
     }
 
-    expect(t.expectedLog).toEqual(log);
-    expect(t.expectedOutput).toEqual(c.pushes);
+    expect(log).toEqual(t.expectedLog);
+    expect(c.pushes).toEqual(t.expectedOutput);
   });
 }
 

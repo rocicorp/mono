@@ -187,11 +187,12 @@ type ProcessParentMode = 'fetch' | 'cleanup';
 export function createPrimaryKeySetStorageKey(
   values: NormalizedValue[],
 ): string {
-  return ['pKeySet', ...values].join(',');
+  const json = JSON.stringify(['pKeySet', ...values]);
+  return json.substring(1, json.length - 1) + ',';
 }
 
 export function createPrimaryKeySetStorageKeyPrefix(
   value: NormalizedValue,
 ): string {
-  return createPrimaryKeySetStorageKey([value]) + ',';
+  return createPrimaryKeySetStorageKey([value]);
 }
