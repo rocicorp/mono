@@ -23,6 +23,7 @@ function inlineWASM(): PluginOption {
 
 export default defineConfig({
   test: {
+    testTimeout: 20_000,
     include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     retry: 3,
     globalSetup: ['./test/pg-container-setup.ts'],
