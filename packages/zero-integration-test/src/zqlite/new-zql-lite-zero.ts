@@ -1,13 +1,13 @@
 import {QueryDefs} from 'zero-client';
-import {ZqlLiteZero} from 'zqlite/src/zqlite-zero.js';
+import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
 import Database from 'better-sqlite3';
 
 export function newSqliteZero<QD extends QueryDefs>(
   schemas: QD,
-): ZqlLiteZero<QD> {
+): ZQLiteZero<QD> {
   {
     const db = new Database(':memory:');
-    const z = new ZqlLiteZero({
+    const z = new ZQLiteZero({
       schemas,
       db,
     });
