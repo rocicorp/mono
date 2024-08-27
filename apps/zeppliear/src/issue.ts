@@ -1,8 +1,9 @@
 import type {Immutable} from 'shared/src/immutable.js';
-import type {Query, QueryRowType, SchemaToRow, Zero} from 'zero-client';
+import type {SchemaToRow, Zero} from 'zero-client';
 import {z} from 'zod';
 import {getCurrentDateWithFutureShift} from './util/date.js';
 import {schema, Schema} from './schema.js';
+import {IssueWithLabelsQuery} from './queries.js';
 
 export type M = Record<string, never>;
 
@@ -165,26 +166,6 @@ export type Issue = SchemaToRow<typeof schema.issue>;
 export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
 export type Label = SchemaToRow<typeof schema.label>;
 
-export type IssueWithLabels = QueryRowType<
-  ReturnType<typeof getIssueWithLabelsQuery>
->;
-
-export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
-  return zero.query.issue
-    .select(
-      'created',
-      'creatorID',
-      'description',
-      'id',
-      'kanbanOrder',
-      'modified',
-      'priority',
-      'status',
-      'title',
-    )
-    .related('labels', q => q.select('id', 'name'));
-}
-
 export type CommentCreationPartial = Omit<Comment, 'created' | 'creatorID'>;
 
 export async function createIssueComment(
@@ -293,10 +274,8 @@ function getModifiedDate() {
   return d.getTime();
 }
 
-export type IssueQuery = ReturnType<typeof getIssueWithLabelsQuery>;
-
 export function orderQuery(
-  issueQuery: Query<Schema['issue']>,
+  issueQuery: IssueWithLabelsQuery,
   order: Order,
   reverse: boolean,
 ) {

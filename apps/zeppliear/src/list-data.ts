@@ -1,16 +1,11 @@
 import {useCallback, useMemo, useState} from 'react';
 import type {ListOnItemsRenderedProps} from 'react-window';
-import {
-  orderQuery,
-  type Issue,
-  type IssueWithLabels,
-  type Priority,
-  type Status,
-} from './issue.js';
+import {orderQuery, type Issue, type Priority, type Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {assert} from './util/asserts.js';
 import {ResultType} from 'zero-client';
 import {useQueryWithResultType} from './hooks/use-query2.js';
+import {IssueWithLabels} from './queries.js';
 
 export type ListData = {
   getIssue(index: number): IssueWithLabels | undefined;

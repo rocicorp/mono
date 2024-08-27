@@ -1,14 +1,15 @@
 import {useMemo} from 'react';
-import type {IssueQuery, Order} from './issue.js';
+import type {Order} from './issue.js';
+import {IssueWithLabelsQuery} from './queries.js';
 
 export type IssuesProps = {
-  query: IssueQuery;
+  query: IssueWithLabelsQuery;
   queryDeps: readonly unknown[];
   order: Order;
 };
 
 export function useIssuesProps(
-  query: IssueQuery,
+  query: IssueWithLabelsQuery,
   queryDeps: readonly unknown[],
   order: Order,
 ): IssuesProps {
