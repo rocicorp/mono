@@ -21,6 +21,7 @@ suite('take with no partition', () => {
     ] as const,
     partition: undefined,
   };
+
   takeTest({
     ...base,
     name: 'less than limit add row at start',
@@ -80,6 +81,209 @@ suite('take with no partition', () => {
     },
     expectedOutput: [
       {type: 'add', node: {row: {id: 'i4', created: 350}, relationships: {}}},
+    ],
+  });
+
+  takeTest({
+    ...base,
+    name: 'at limit add row after bound',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 3,
+    pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
+    expectedMessages: [
+      ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 350}}],
+    ],
+    expectedStorage: {
+      '["take",null]': {
+        bound: {
+          created: 300,
+          id: 'i3',
+        },
+        size: 3,
+      },
+      'maxBound': {
+        created: 300,
+        id: 'i3',
+      },
+    },
+    expectedOutput: [],
+  });
+
+  takeTest({
+    ...base,
+    name: 'at limit add row at start',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 3,
+    pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+    expectedMessages: [
+      ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
+      [
+        'takeSnitch',
+        'fetch',
+        {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+      ],
+    ],
+    expectedStorage: {
+      '["take",null]': {
+        bound: {
+          created: 200,
+          id: 'i2',
+        },
+        size: 3,
+      },
+      'maxBound': {
+        created: 300,
+        id: 'i3',
+      },
+    },
+    expectedOutput: [
+      {
+        type: 'remove',
+        node: {row: {id: 'i3', created: 300}, relationships: {}},
+      },
+      {type: 'add', node: {row: {id: 'i4', created: 50}, relationships: {}}},
+    ],
+  });
+
+  takeTest({
+    ...base,
+    name: 'at limit add row at end',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 3,
+    pushes: [{type: 'add', row: {id: 'i4', created: 250}}],
+    expectedMessages: [
+      ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 250}}],
+      [
+        'takeSnitch',
+        'fetch',
+        {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+      ],
+    ],
+    expectedStorage: {
+      '["take",null]': {
+        bound: {
+          created: 250,
+          id: 'i4',
+        },
+        size: 3,
+      },
+      'maxBound': {
+        created: 300,
+        id: 'i3',
+      },
+    },
+    expectedOutput: [
+      {
+        type: 'remove',
+        node: {row: {id: 'i3', created: 300}, relationships: {}},
+      },
+      {type: 'add', node: {row: {id: 'i4', created: 250}, relationships: {}}},
+    ],
+  });
+
+  takeTest({
+    ...base,
+    name: 'less than limit remove row at start',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 5,
+    pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+    expectedMessages: [
+      ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+      [
+        'takeSnitch',
+        'fetch',
+        {
+          start: {
+            basis: 'before',
+            row: {
+              created: 300,
+              id: 'i3',
+            },
+          },
+        },
+      ],
+    ],
+    expectedStorage: {
+      '["take",null]': {
+        bound: {
+          created: 300,
+          id: 'i3',
+        },
+        size: 2,
+      },
+      'maxBound': {
+        created: 300,
+        id: 'i3',
+      },
+    },
+    expectedOutput: [
+      {
+        type: 'remove',
+        node: {row: {id: 'i1', created: 100}, relationships: {}},
+      },
+    ],
+  });
+
+  takeTest({
+    ...base,
+    name: 'less than limit remove row at end',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 5,
+    pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+    expectedMessages: [
+      ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
+      [
+        'takeSnitch',
+        'fetch',
+        {
+          start: {
+            basis: 'before',
+            row: {
+              created: 300,
+              id: 'i3',
+            },
+          },
+        },
+      ],
+    ],
+    expectedStorage: {
+      '["take",null]': {
+        bound: {
+          created: 200,
+          id: 'i2',
+        },
+        size: 2,
+      },
+      'maxBound': {
+        created: 300,
+        id: 'i3',
+      },
+    },
+    expectedOutput: [
+      {
+        type: 'remove',
+        node: {row: {id: 'i3', created: 300}, relationships: {}},
+      },
     ],
   });
 });
