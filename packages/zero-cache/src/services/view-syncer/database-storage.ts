@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import {JSONValue} from 'replicache';
+import {JSONValue} from 'shared/src/json.js';
 import {Storage} from 'zql/src/zql/ivm2/operator.js';
 import {Stream} from 'zql/src/zql/ivm2/stream.js';
 
