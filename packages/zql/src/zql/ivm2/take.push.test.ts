@@ -91,11 +91,12 @@ suite('take with no partition', () => {
       {id: 'i1', created: 100},
       {id: 'i2', created: 200},
       {id: 'i3', created: 300},
+      {id: 'i4', created: 400},
     ],
     limit: 3,
-    pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
+    pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
     expectedMessages: [
-      ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 350}}],
+      ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 350}}],
     ],
     expectedStorage: {
       '["take",null]': {
