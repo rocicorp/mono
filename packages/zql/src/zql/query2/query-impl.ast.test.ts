@@ -2,8 +2,9 @@ import {describe, expect, test} from 'vitest';
 import {newQuery} from './query-impl.js';
 import {Host} from '../builder/builder.js';
 import {issueSchema} from './test/testSchemas.js';
+import {SubscriptionDelegate} from '../context/context.js';
 
-const mockHost = {} as Host;
+const mockHost = {} as Host & SubscriptionDelegate;
 
 describe('building the AST', () => {
   test('creates a new query', () => {

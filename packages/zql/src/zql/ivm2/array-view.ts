@@ -6,7 +6,6 @@ import {Schema} from './schema.js';
 import {must} from 'shared/src/must.js';
 import {DeepReadonly} from 'replicache';
 import {SubscriptionDelegate} from '../context/context.js';
-import {Host} from '../builder/builder.js';
 import {AST} from '../ast2/ast.js';
 
 /**
@@ -36,16 +35,20 @@ export class ArrayView implements Output {
   readonly #view: EntryList;
   readonly #listeners = new Set<Listener>();
   readonly #schema: Schema;
-  readonly #host: Host & SubscriptionDelegate;
+  readonly #subscriptionDelegate: SubscriptionDelegate;
   readonly #ast: AST;
 
   #hydrated = false;
   #resultType: ResultType = 'none';
 
-  constructor(host: Host & SubscriptionDelegate, ast: AST, input: Input) {
+  constructor(
+    subscriptionDelegate: SubscriptionDelegate,
+    ast: AST,
+    input: Input,
+  ) {
     this.#input = input;
     this.#schema = input.getSchema();
-    this.#host = host;
+    this.#subscriptionDelegate = subscriptionDelegate;
     this.#ast = ast;
 
     this.#input.setOutput(this);
@@ -60,14 +63,17 @@ export class ArrayView implements Output {
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
 
-    const subscriptionRemoved = this.#host.subscriptionAdded(this.#ast, got => {
-      if (got) {
-        this.#resultType = 'complete';
-      }
-      if (this.#hydrated) {
-        listener(this.#view, this.#resultType);
-      }
-    });
+    const subscriptionRemoved = this.#subscriptionDelegate.subscriptionAdded(
+      this.#ast,
+      got => {
+        if (got) {
+          this.#resultType = 'complete';
+        }
+        if (this.#hydrated) {
+          listener(this.#view, this.#resultType);
+        }
+      },
+    );
 
     this.#listeners.add(listener);
     if (this.#hydrated) {

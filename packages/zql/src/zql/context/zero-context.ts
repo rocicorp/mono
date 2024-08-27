@@ -85,7 +85,7 @@ class ZeroSource {
     primaryKeys: readonly string[],
     addWatch: AddWatch,
   ) {
-    this.#canonicalSource = new MemorySource(columns, primaryKeys);
+    this.#canonicalSource = new MemorySource(name, columns, primaryKeys);
     addWatch(name, this.#handleDiff);
   }
 

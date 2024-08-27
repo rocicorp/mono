@@ -13,6 +13,7 @@ import {
 import {toInputArgs} from './schema.js';
 import {must} from 'shared/src/must.js';
 import {Host} from '../builder/builder.js';
+import {SubscriptionDelegate} from '../context/context.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -138,7 +139,7 @@ function addData(host: Host) {
   });
 }
 
-function makeHost() {
+function makeHost(): Host & SubscriptionDelegate {
   const sources = makeSources();
   return {
     getSource(tableName: string) {
@@ -146,6 +147,9 @@ function makeHost() {
     },
     createStorage() {
       return new MemoryStorage();
+    },
+    subscriptionAdded() {
+      return () => {};
     },
   };
 }
@@ -157,7 +161,7 @@ describe('bare select', () => {
     const m = issueQuery.materialize();
     m.hydrate();
 
-    let rows: {id: string}[] = [];
+    let rows: readonly {id: string}[] = [];
     let called = false;
     m.addListener(data => {
       called = true;
