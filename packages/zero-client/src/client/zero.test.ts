@@ -473,7 +473,7 @@ suite('initConnection', () => {
 
     expect(mockSocket.messages.length).toEqual(0);
     const view = r.query.e.select('id', 'value').materialize();
-    view.subscribe(() => {});
+    view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
   });
@@ -884,7 +884,7 @@ test('smokeTest', async () => {
     const unsubscribe = r.query.issues
       .select('id', 'value')
       .materialize()
-      .subscribe(spy);
+      .addListener(spy);
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
@@ -1711,16 +1711,13 @@ test('kvStore option', async () => {
         },
       },
     });
-    expect(
-      await r.query.e.select('id', 'value').materialize().get(),
-    ).deep.equal(expectedValue);
+    expect(await r.query.e.select('id', 'value').materialize().data).deep.equal(
+      expectedValue,
+    );
     await r.mutate.e.create({id: 'a', value: 1});
     expect(
-      await r.query.e
-        .select('id', 'value')
-        .where('id', '=', 'a')
-        .materialize()
-        .get(),
+      await r.query.e.select('id', 'value').where('id', '=', 'a').materialize()
+        .data,
     ).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
@@ -1899,13 +1896,13 @@ suite('CRUD', () => {
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
     await createIssue({id: 'a', title: 'A'});
     expect(
-      await z.query.issue.select('id', 'title').materialize().get(),
+      await z.query.issue.select('id', 'title').materialize().data,
     ).toEqual([{id: 'a', title: 'A'}]);
 
     // create again should not change anything
     await createIssue({id: 'a', title: 'Again'});
     expect(
-      await z.query.issue.select('id', 'title').materialize().get(),
+      await z.query.issue.select('id', 'title').materialize().data,
     ).toEqual([{id: 'a', title: 'A'}]);
   });
 
@@ -1914,14 +1911,14 @@ suite('CRUD', () => {
 
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
     ).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const setComment: (comment: Comment) => Promise<void> =
       z.mutate.comment.set;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
     expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
     ).toEqual([
       {id: 'a', issueID: '1', text: 'A text'},
       {id: 'b', issueID: '2', text: 'B text'},
@@ -1930,7 +1927,7 @@ suite('CRUD', () => {
     // set allows updating
     await setComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
     ).toEqual([
       {id: 'a', issueID: '11', text: 'AA text'},
       {id: 'b', issueID: '2', text: 'B text'},
@@ -1942,25 +1939,25 @@ suite('CRUD', () => {
 
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(
-      await z.query.comment.select('id', 'issueID').materialize().get(),
+      await z.query.comment.select('id', 'issueID').materialize().data,
     ).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const updateComment: (comment: Update<Comment>) => Promise<void> =
       z.mutate.comment.update;
     await updateComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
     ).toEqual([{id: 'a', issueID: '11', text: 'AA text'}]);
 
     await updateComment({id: 'a', text: 'AAA text'});
     expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
     ).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
 
     // update is a noop if not existing
     await updateComment({id: 'b', issueID: '2', text: 'B text'});
     expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
     ).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
   });
 
@@ -2026,11 +2023,11 @@ test('mutate is a function for batching', async () => {
 
   expect(x).toBe(123);
 
-  expect(await z.query.issue.select('id', 'title').materialize().get()).toEqual(
-    [{id: 'a', title: 'A'}],
-  );
+  expect(await z.query.issue.select('id', 'title').materialize().data).toEqual([
+    {id: 'a', title: 'A'},
+  ]);
   expect(
-    await z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+    await z.query.comment.select('id', 'issueID', 'text').materialize().data,
   ).toEqual([{id: 'b', issueID: 'a', text: 'Comment for issue A was changed'}]);
 
   expect(
@@ -2070,12 +2067,12 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
 
   // make sure that we did not update the issue collection.
   await expect(
-    z.query.issue.select('id', 'title').materialize().get(),
+    z.query.issue.select('id', 'title').materialize().data,
   ).resolves.toEqual([]);
 
   await z.mutate.comment.create({id: 'a', text: 'A', issueID: 'a'});
   await expect(
-    z.query.comment.select('id', 'issueID', 'text').materialize().get(),
+    z.query.comment.select('id', 'issueID', 'text').materialize().data,
   ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
@@ -2085,7 +2082,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   ).rejects.toThrow('Cannot call mutate.comment.update inside a batch');
   // make sure that we did not update the comment collection.
   await expect(
-    z.query.comment.select('id', 'text', 'issueID').materialize().get(),
+    z.query.comment.select('id', 'text', 'issueID').materialize().data,
   ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
@@ -2095,7 +2092,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   ).rejects.toThrow('Cannot call mutate.comment.set inside a batch');
   // make sure that we did not update the comment collection.
   await expect(
-    z.query.comment.select('id', 'text', 'text').materialize().get(),
+    z.query.comment.select('id', 'text', 'text').materialize().data,
   ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
@@ -2105,7 +2102,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   ).rejects.toThrow('Cannot call mutate.comment.delete inside a batch');
   // make sure that we did not delete the comment row
   await expect(
-    z.query.comment.select('id', 'text', 'issueID').materialize().get(),
+    z.query.comment.select('id', 'text', 'issueID').materialize().data,
   ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
