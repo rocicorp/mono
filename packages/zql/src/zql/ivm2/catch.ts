@@ -49,6 +49,7 @@ export function expandChange(change: Change): Change {
 }
 
 export function expandNode(node: Node): Node {
+  console.log('expandNode');
   return {
     ...node,
     relationships: Object.fromEntries(
