@@ -48,10 +48,13 @@ type SchemaValueToTSType<T extends SchemaValue> =
       : never)
   | (T extends {optional: true} ? undefined : never);
 
-export type GetFieldType<
+export type GetFieldTypeNoNullOrUndefined<
   TSchema extends Schema,
   TField extends keyof TSchema['fields'],
-> = SchemaValueToTSType<TSchema['fields'][TField]>;
+  TOperator extends Operator,
+> = TOperator extends 'IN' | 'NOT IN'
+  ? Exclude<SchemaValueToTSType<TSchema['fields'][TField]>, null | undefined>[]
+  : Exclude<SchemaValueToTSType<TSchema['fields'][TField]>, null | undefined>;
 
 export type SchemaToRow<T extends Schema> = {
   [K in keyof T['fields']]: SchemaValueToTSType<T['fields'][K]>;
@@ -126,7 +129,17 @@ export type QueryResultRow = {
   related: Record<string, Array<QueryResultRow>> | undefined;
 };
 
-export type Operator = '=' | '!=' | '<' | '<=' | '>' | '>=';
+export type Operator =
+  | '='
+  | '!='
+  | '<'
+  | '<='
+  | '>'
+  | '>='
+  | 'IN'
+  | 'NOT IN'
+  | 'LIKE'
+  | 'ILIKE';
 
 export type EmptyQueryResultRow = {
   row: {};
@@ -164,7 +177,7 @@ export interface Query<
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
     op: Operator,
-    value: GetFieldType<TSchema, TSelector>,
+    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs>;
 
   limit(limit: number): Query<TSchema, TReturn, TAs>;

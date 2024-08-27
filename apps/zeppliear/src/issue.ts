@@ -1,8 +1,8 @@
 import type {Immutable} from 'shared/src/immutable.js';
-import type {EntityQuery, Zero} from 'zero-client';
+import type {Query, Zero} from 'zero-client';
 import {z} from 'zod';
-import type {Collections} from './app.jsx';
 import {getCurrentDateWithFutureShift} from './util/date.js';
+import {Schema} from './schema.js';
 
 export type M = Record<string, never>;
 
@@ -191,7 +191,7 @@ export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
 export type CommentCreationPartial = Omit<Comment, 'created' | 'creatorID'>;
 
 export async function createIssueComment(
-  zero: Zero<Collections>,
+  zero: Zero<Schema>,
   c: CommentCreationPartial,
   creatorID: string,
 ): Promise<void> {
@@ -219,7 +219,7 @@ export async function createIssueComment(
 }
 
 export async function deleteIssueComment(
-  zero: Zero<Collections>,
+  zero: Zero<Schema>,
   id: string,
   issueID: string,
 ): Promise<void> {
@@ -238,7 +238,7 @@ export type IssueCreationPartial = Omit<
 >;
 
 export async function createIssue(
-  zero: Zero<Collections>,
+  zero: Zero<Schema>,
   i: IssueCreationPartial,
   creatorID: string,
 ) {
@@ -259,7 +259,7 @@ export async function createIssue(
 }
 
 export async function updateIssues(
-  zero: Zero<Collections>,
+  zero: Zero<Schema>,
   {issueUpdates}: {issueUpdates: IssueUpdate[]},
 ) {
   const modified = getModifiedDate();
@@ -296,49 +296,12 @@ function getModifiedDate() {
   return d.getTime();
 }
 
-type NoRelations = Record<string, never>;
+export type IssueQuery = Query<Schema['issue']>;
 
-export type IssueQuery = EntityQuery<
-  {
-    issue: Issue;
-    label: Label;
-  },
-  NoRelations,
-  {
-    labels: string[];
-    issue: Issue;
-  }[]
->;
-
-function commentBaseQuery(z: Zero<Collections>) {
-  return z.query.comment
-    .join(z.query.member, 'member', 'comment.creatorID', 'member.id')
-    .select(
-      'comment.id',
-      'comment.issueID',
-      'comment.created',
-      'comment.creatorID',
-      'comment.body',
-      'member.name',
-    )
-    .orderBy('comment.created', 'asc');
-}
-
-export function commentsForIssuesQuery(
-  z: Zero<Collections>,
-  issueIDs: string[],
-) {
-  return commentBaseQuery(z).where('comment.issueID', 'IN', issueIDs);
-}
-
-export function commentsForIssueQuery(z: Zero<Collections>, issueID: string) {
-  return commentBaseQuery(z).where('comment.issueID', '=', issueID);
-}
-
-export function orderQuery<R>(
+export function orderQuery(
   // TODO: having to know the return type of the query to take it in as an arg is...
   // confusing at best.
-  issueQuery: EntityQuery<{issue: Issue; label: Label}, NoRelations, R>,
+  issueQuery: Query<Schema['issue']>,
   order: Order,
   reverse: boolean,
 ) {
@@ -347,18 +310,18 @@ export function orderQuery<R>(
 
   switch (order) {
     case Order.Created:
-      return issueQuery.orderBy('issue.created', dir('desc'));
+      return issueQuery.orderBy('created', dir('desc'));
     case Order.Modified:
-      return issueQuery.orderBy('issue.modified', dir('desc'));
+      return issueQuery.orderBy('modified', dir('desc'));
     case Order.Status:
       return issueQuery
-        .orderBy('issue.status', dir('desc'))
-        .orderBy('issue.modified', dir('desc'));
+        .orderBy('status', dir('desc'))
+        .orderBy('modified', dir('desc'));
     case Order.Priority:
       return issueQuery
-        .orderBy('issue.priority', dir('desc'))
-        .orderBy('issue.modified', dir('desc'));
+        .orderBy('priority', dir('desc'))
+        .orderBy('modified', dir('desc'));
     case Order.Kanban:
-      return issueQuery.orderBy('issue.kanbanOrder', dir('asc'));
+      return issueQuery.orderBy('kanbanOrder', dir('asc'));
   }
 }

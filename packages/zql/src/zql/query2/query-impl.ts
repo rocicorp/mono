@@ -5,12 +5,12 @@ import {
   AddSelections,
   AddSubselect,
   Query,
-  GetFieldType,
   Operator,
   QueryResultRow,
   Selector,
   EmptyQueryResultRow,
   Smash,
+  GetFieldTypeNoNullOrUndefined,
 } from './query.js';
 import {
   Schema,
@@ -179,7 +179,7 @@ class QueryImpl<
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
     op: Operator,
-    value: Exclude<GetFieldType<TSchema, TSelector>, null | undefined>,
+    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs> {
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,

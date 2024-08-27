@@ -3,34 +3,33 @@ import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
 import {must} from 'shared/src/must.js';
-import type {EntityQuery} from 'zero-client';
-import {WhereCondition, and, exp, or} from 'zql/src/zql/query/entity-query.js';
-import type {Collections} from './app.jsx';
+import type {Query} from 'zero-client';
 import ArrowIcon from './assets/icons/arrow.svg?react';
 import DefaultAvatarIcon from './assets/icons/avatar.svg?react';
 import CloseIcon from './assets/icons/close.svg?react';
 import ConfirmationModal from './confirm-modal.jsx';
 import {useIssueDetailState} from './hooks/query-state-hooks.js';
 import {useKeyPressed} from './hooks/use-key-pressed.js';
-import {useQuery} from './hooks/use-query.js';
+import {useQuery} from './hooks/use-query2.js';
 import {useZero} from './hooks/use-zero.js';
 import {
   Comment,
   CommentCreationPartial,
   Issue,
   IssueUpdate,
-  Label,
   Order,
   Priority,
   Status,
-  commentsForIssueQuery,
   orderQuery,
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
 import {timeAgo} from './util/date.js';
+import {Schema} from './schema.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TODO = any;
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onAddComment: (comment: CommentCreationPartial) => void;
@@ -85,18 +84,18 @@ export default function IssueDetail({
   const [descriptionText, setDescriptionText] = useState('');
 
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
-  const zero = useZero<Collections>();
+  const zero = useZero<Schema>();
 
   const issueSelectQuery = zero.query.issue.select(
-    'issue.created',
-    'issue.creatorID',
-    'issue.description',
-    'issue.id',
-    'issue.kanbanOrder',
-    'issue.priority',
-    'issue.modified',
-    'issue.status',
-    'issue.title',
+    'created',
+    'creatorID',
+    'description',
+    'id',
+    'kanbanOrder',
+    'priority',
+    'modified',
+    'status',
+    'title',
   );
   const issue: Issue | null =
     useQuery(issueSelectQuery.where('id', '=', detailIssueID ?? ''), [
@@ -113,9 +112,7 @@ export default function IssueDetail({
     queryDeps.concat(issue),
   );
 
-  const comments = useQuery(commentsForIssueQuery(zero, detailIssueID ?? ''), [
-    detailIssueID,
-  ]);
+  const comments: TODO[] = [];
 
   const handleClose = useCallback(() => {
     setDetailIssueID(null);
@@ -148,7 +145,7 @@ export default function IssueDetail({
 
   const handleFwdPrev = useCallback(
     (direction: 'prev' | 'fwd') => {
-      let gotoIssue: {issue: Issue};
+      let gotoIssue: TODO;
       if (direction === 'fwd') {
         if (nextIssues.length < 2) {
           return;
@@ -399,14 +396,7 @@ export default function IssueDetail({
   );
 }
 
-type FS = {
-  issue: Issue;
-  label: Label;
-};
-
-type NoRelations = Record<string, never>;
-
-type Q = EntityQuery<FS, NoRelations, {issue: Issue; labels: string[]}[]>;
+type Q = Query<Schema['issue']>;
 
 function getNextIssueQuery(
   issueSelectQuery: Q,
@@ -415,7 +405,7 @@ function getNextIssueQuery(
   direction: 'fwd' | 'prev',
 ): Q {
   if (issue === null) {
-    return issueSelectQuery.where('issue.id', '<', '').limit(0);
+    return issueSelectQuery.where('id', '<', '').limit(0);
   }
 
   const filteredAndOrderedQuery = orderQuery(
@@ -424,54 +414,5 @@ function getNextIssueQuery(
     direction === 'prev',
   );
 
-  let op: '<' | '>' = direction === 'fwd' ? '<' : '>';
-
-  let primary: 'created' | 'modified' | 'status' | 'priority' | 'kanbanOrder';
-  switch (order) {
-    case Order.Created:
-      primary = 'created';
-      break;
-    case Order.Modified:
-      primary = 'modified';
-      break;
-    case Order.Status:
-      primary = 'status';
-      break;
-    case Order.Priority:
-      primary = 'priority';
-      break;
-    case Order.Kanban:
-      primary = 'kanbanOrder';
-      // also flip op for kanban order
-      op = direction === 'fwd' ? '>' : '<';
-      break;
-  }
-
-  let whereClause: WhereCondition<FS> = or(
-    and(
-      exp(`issue.${primary}`, '=', issue[primary]),
-      exp('issue.id', op === '<' ? '<=' : '>=', issue.id),
-    ),
-    exp(`issue.${primary}`, op, issue[primary]),
-  );
-
-  if (order === Order.Status || order === Order.Priority) {
-    // These sort issue[primary] desc, issue.modified desc, issue.id desc
-    whereClause = or(
-      and(
-        exp(`issue.${primary}`, '=', issue[primary]),
-        exp('issue.modified', '=', issue.modified),
-        exp('issue.id', op === '<' ? '<=' : '>=', issue.id),
-      ),
-      and(
-        exp(`issue.${primary}`, '=', issue[primary]),
-        exp('issue.modified', op, issue.modified),
-      ),
-      exp(`issue.${primary}`, op, issue[primary]),
-    );
-  }
-
-  const query = filteredAndOrderedQuery.where(whereClause).limit(2);
-
-  return query;
+  return filteredAndOrderedQuery.limit(2);
 }
