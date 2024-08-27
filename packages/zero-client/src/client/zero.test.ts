@@ -38,6 +38,7 @@ import {
   serverAheadReloadReason,
 } from './zero.js';
 import {AST} from 'zql/src/zql/ast2/ast.js';
+import {sleep} from '../../../shared/src/sleep.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -1894,41 +1895,36 @@ suite('CRUD', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
+    const view = z.query.issue.select('id', 'title').materialize();
+    view.hydrate();
     await createIssue({id: 'a', title: 'A'});
-    expect(
-      await z.query.issue.select('id', 'title').materialize().data,
-    ).toEqual([{id: 'a', title: 'A'}]);
+    expect(view.data).toEqual([{id: 'a', title: 'A'}]);
 
     // create again should not change anything
     await createIssue({id: 'a', title: 'Again'});
-    expect(
-      await z.query.issue.select('id', 'title').materialize().data,
-    ).toEqual([{id: 'a', title: 'A'}]);
+    expect(view.data).toEqual([{id: 'a', title: 'A'}]);
   });
 
   test('set', async () => {
     const z = makeZero();
 
+    const view = await z.query.comment
+      .select('id', 'issueID', 'text')
+      .materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
-    expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-    ).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
+    expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const setComment: (comment: Comment) => Promise<void> =
       z.mutate.comment.set;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
-    expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-    ).toEqual([
+    expect(view.data).toEqual([
       {id: 'a', issueID: '1', text: 'A text'},
       {id: 'b', issueID: '2', text: 'B text'},
     ]);
 
     // set allows updating
     await setComment({id: 'a', issueID: '11', text: 'AA text'});
-    expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-    ).toEqual([
+    expect(view.data).toEqual([
       {id: 'a', issueID: '11', text: 'AA text'},
       {id: 'b', issueID: '2', text: 'B text'},
     ]);
@@ -1936,29 +1932,21 @@ suite('CRUD', () => {
 
   test('update', async () => {
     const z = makeZero();
-
+    const view = z.query.comment.select('id', 'issueID').materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
-    expect(
-      await z.query.comment.select('id', 'issueID').materialize().data,
-    ).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
+    expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const updateComment: (comment: Update<Comment>) => Promise<void> =
       z.mutate.comment.update;
     await updateComment({id: 'a', issueID: '11', text: 'AA text'});
-    expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-    ).toEqual([{id: 'a', issueID: '11', text: 'AA text'}]);
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AA text'}]);
 
     await updateComment({id: 'a', text: 'AAA text'});
-    expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-    ).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
 
     // update is a noop if not existing
     await updateComment({id: 'b', issueID: '2', text: 'B text'});
-    expect(
-      await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-    ).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
   });
 
   test('do not expose _zero_crud', () => {
