@@ -157,13 +157,7 @@ export class Join implements Input {
       ];
       method = second ? 'fetch' : 'cleanup';
     }
-
-    console.log('fetch', {
-      constraint: {
-        key: this.#childKey,
-        value: parentKeyValue,
-      },
-    });
+    
     const childStream = this.#child[method]({
       constraint: {
         key: this.#childKey,
