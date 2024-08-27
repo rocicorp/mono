@@ -1,5 +1,5 @@
 import type {Immutable} from 'shared/src/immutable.js';
-import type {Query, SchemaToRow, Smash, Zero} from 'zero-client';
+import type {Query, QueryRowType, SchemaToRow, Zero} from 'zero-client';
 import {z} from 'zod';
 import {getCurrentDateWithFutureShift} from './util/date.js';
 import {schema, Schema} from './schema.js';
@@ -165,13 +165,9 @@ export type Issue = SchemaToRow<typeof schema.issue>;
 export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
 export type Label = SchemaToRow<typeof schema.label>;
 
-// TODO: need a simpler way to get the result type
-// of a query.
-export type IssueWithLabels = ReturnType<
-  typeof getIssueWithLabelsQuery
-> extends Query<Schema['issue'], infer TReturn>
-  ? Smash<TReturn>[number]
-  : never;
+export type IssueWithLabels = QueryRowType<
+  ReturnType<typeof getIssueWithLabelsQuery>
+>;
 
 export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
   return zero.query.issue
