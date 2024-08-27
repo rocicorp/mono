@@ -3,24 +3,19 @@ import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
 import {must} from 'shared/src/must.js';
-import type {Query} from 'zero-client';
-import ArrowIcon from './assets/icons/arrow.svg?react';
+import type {QueryRowType, Zero} from 'zero-client';
 import DefaultAvatarIcon from './assets/icons/avatar.svg?react';
 import CloseIcon from './assets/icons/close.svg?react';
 import ConfirmationModal from './confirm-modal.jsx';
 import {useIssueDetailState} from './hooks/query-state-hooks.js';
-import {useKeyPressed} from './hooks/use-key-pressed.js';
 import {useQuery} from './hooks/use-query2.js';
 import {useZero} from './hooks/use-zero.js';
 import {
-  Comment,
   CommentCreationPartial,
   Issue,
   IssueUpdate,
-  Order,
   Priority,
   Status,
-  orderQuery,
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import PriorityMenu from './priority-menu.jsx';
@@ -28,8 +23,6 @@ import StatusMenu from './status-menu.jsx';
 import {timeAgo} from './util/date.js';
 import {Schema} from './schema.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TODO = any;
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onAddComment: (comment: CommentCreationPartial) => void;
@@ -39,17 +32,20 @@ interface Props {
 }
 
 function CommentsList(
-  comments: {comment: Comment; member: {name: string}}[],
+  comments: IssueWithDetails['comments'],
   isLoading: boolean,
 ) {
-  const elements = comments.map(({comment, member}) => (
+  const elements = comments.map(comment => (
     <div
       key={comment.id}
       className="max-w-[85vw] mx-3 bg-gray-850 mt-0 mb-5 border-transparent rounded py-3 px-3 relative whitespace-pre-wrap overflow-auto"
     >
       <div className="h-6 mb-1 -mt-px relative">
         <DefaultAvatarIcon className="w-4.5 h-4.5 rounded-full overflow-hidden flex-shrink-0 float-left mr-2" />
-        {member.name} {timeAgo(comment.created)}
+        {
+          // TODO: creator is a 1:1 relationship. It should not be an array type
+        }
+        {comment.creator[0].name} {timeAgo(comment.created)}
       </div>
       <div className="block flex-1 whitespace-pre-wrap">
         <Remark>{comment.body}</Remark>
@@ -69,10 +65,34 @@ function CommentsList(
   return elements;
 }
 
+function getIssueDetailQuery(zero: Zero<Schema>, issueID: string) {
+  return zero.query.issue
+    .select(
+      'created',
+      'creatorID',
+      'description',
+      'id',
+      'kanbanOrder',
+      'modified',
+      'priority',
+      'status',
+      'title',
+    )
+    .related('comments', q =>
+      q
+        .select('id', 'body', 'created')
+        .related('creator', q => q.select('name')),
+    )
+    .where('id', '=', issueID);
+}
+
+export type IssueWithDetails = QueryRowType<
+  ReturnType<typeof getIssueDetailQuery>
+>;
+
 export default function IssueDetail({
   onUpdateIssues,
   onAddComment,
-  issuesProps,
   isLoading,
 }: Props) {
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
@@ -86,33 +106,10 @@ export default function IssueDetail({
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
   const zero = useZero<Schema>();
 
-  const issueSelectQuery = zero.query.issue.select(
-    'created',
-    'creatorID',
-    'description',
-    'id',
-    'kanbanOrder',
-    'priority',
-    'modified',
-    'status',
-    'title',
-  );
-  const issue: Issue | null =
-    useQuery(issueSelectQuery.where('id', '=', detailIssueID ?? ''), [
+  const issue =
+    useQuery(getIssueDetailQuery(zero, must(detailIssueID)), [
       detailIssueID,
     ])[0] ?? null;
-
-  const {query, queryDeps, order} = issuesProps;
-  const nextIssues = useQuery(
-    getNextIssueQuery(query, issue, order, 'fwd'),
-    queryDeps.concat(issue),
-  );
-  const previousIssues = useQuery(
-    getNextIssueQuery(query, issue, order, 'prev'),
-    queryDeps.concat(issue),
-  );
-
-  const comments: TODO[] = [];
 
   const handleClose = useCallback(() => {
     setDetailIssueID(null);
@@ -142,37 +139,6 @@ export default function IssueDetail({
       setCommentText('');
     }
   }, [onAddComment, commentText, issue]);
-
-  const handleFwdPrev = useCallback(
-    (direction: 'prev' | 'fwd') => {
-      let gotoIssue: TODO;
-      if (direction === 'fwd') {
-        if (nextIssues.length < 2) {
-          return;
-        }
-        gotoIssue = nextIssues[1];
-      } else {
-        if (previousIssues.length < 2) {
-          return;
-        }
-        gotoIssue = previousIssues[1];
-      }
-      setDetailIssueID(gotoIssue.issue.id);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nextIssues[0], previousIssues[0], setDetailIssueID],
-  );
-
-  const handleFwd = useCallback(() => {
-    handleFwdPrev('fwd');
-  }, [handleFwdPrev]);
-
-  const handlePrev = useCallback(() => {
-    handleFwdPrev('prev');
-  }, [handleFwdPrev]);
-
-  useKeyPressed('j', handleFwd);
-  useKeyPressed('k', handlePrev);
 
   const handleEdit = () => {
     setTitleText(issue?.title || '');
@@ -236,36 +202,6 @@ export default function IssueDetail({
             >
               <CloseIcon className="w-4" />
             </div>
-            {issue && (
-              <>
-                <div className="flex flex-row flex-initial select-none cursor-pointer">
-                  <button
-                    className="h-6 px-2 rounded border-solid border inline-flex items-center justify-center flex-shrink-0 font-medium m-0 select-none whitespace-no-wrap ml-2  hover:bg-gray-400 disabled:opacity-25"
-                    type="button"
-                    onMouseDown={() => handleFwdPrev('prev')}
-                    disabled={previousIssues.length < 2}
-                  >
-                    <ArrowIcon
-                      style={{transform: 'rotate(180deg)'}}
-                      className=""
-                    />
-                  </button>
-                </div>
-                <div
-                  role="button"
-                  className="flex flex-row flex-initial select-none cursor-pointer"
-                >
-                  <button
-                    className="h-6 px-2 rounded border-solid border inline-flex items-center justify-center flex-shrink-0 font-medium m-0 select-none whitespace-no-wrap ml-2  hover:bg-gray-400 disabled:opacity-50"
-                    type="button"
-                    onMouseDown={() => handleFwdPrev('fwd')}
-                    disabled={nextIssues.length < 2}
-                  >
-                    <ArrowIcon className="" />
-                  </button>
-                </div>
-              </>
-            )}
           </div>
         </div>
       </div>
@@ -344,7 +280,10 @@ export default function IssueDetail({
               </div>
             </div>
             <div className="text-md py-4 px-5 text-white">Comments</div>
-            {CommentsList(comments, isLoading && issue?.description === null)}
+            {CommentsList(
+              issue.comments,
+              isLoading && issue?.description === null,
+            )}
             <div className="mx-3 bg-gray-850 flex-1 mx- mt-0 mb-3 flex-1 border-transparent rounded full py-3 px-3 relative whitespace-pre-wrap ">
               <textarea
                 className="block flex-1 whitespace-pre-wrap text-size-sm w-full bg-gray-850 min-h-[6rem] placeholder-gray-300 placeholder:text-sm"
@@ -394,25 +333,4 @@ export default function IssueDetail({
       </div>
     </div>
   );
-}
-
-type Q = Query<Schema['issue']>;
-
-function getNextIssueQuery(
-  issueSelectQuery: Q,
-  issue: Issue | null,
-  order: Order,
-  direction: 'fwd' | 'prev',
-): Q {
-  if (issue === null) {
-    return issueSelectQuery.where('id', '<', '').limit(0);
-  }
-
-  const filteredAndOrderedQuery = orderQuery(
-    issueSelectQuery,
-    order,
-    direction === 'prev',
-  );
-
-  return filteredAndOrderedQuery.limit(2);
 }

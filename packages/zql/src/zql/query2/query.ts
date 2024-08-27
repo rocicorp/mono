@@ -60,6 +60,15 @@ export type SchemaToRow<T extends Schema> = {
   [K in keyof T['fields']]: SchemaValueToTSType<T['fields'][K]>;
 };
 
+export type QueryReturnType<T extends Query<Schema>> = T extends Query<
+  Schema,
+  infer TReturn
+>
+  ? Smash<TReturn>
+  : never;
+
+export type QueryRowType<T extends Query<Schema>> = QueryReturnType<T>[number];
+
 /**
  * A query can have:
  * 1. Selections and

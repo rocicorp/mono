@@ -36,6 +36,20 @@ const issueSchema = {
         schema: () => labelSchema,
       },
     },
+    comments: {
+      source: 'id',
+      dest: {
+        field: 'issueID',
+        schema: () => commentSchema,
+      },
+    },
+    creator: {
+      source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => memberSchema,
+      },
+    },
   },
 } as const;
 
@@ -49,6 +63,15 @@ const commentSchema = {
     creatorID: {type: 'string'},
   },
   primaryKey: ['id'],
+  relationships: {
+    creator: {
+      source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => memberSchema,
+      },
+    },
+  },
 } as const;
 
 const labelSchema = {
