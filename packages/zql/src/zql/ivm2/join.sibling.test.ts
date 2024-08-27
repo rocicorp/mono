@@ -58,7 +58,18 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       ['1', 'fetchCount', {constraint: {key: 'issueId', value: 'i3'}}, 0],
       ['2', 'fetchCount', {constraint: {key: 'id', value: 'o2'}}, 1],
     ],
-    expectedPrimaryKeySetStorageKeys: [[['i3', 'i3']], [['o2', 'i3']]],
+    expectedPrimaryKeySetStorageKeys: [
+      [
+        ['i1', 'i1'],
+        ['i2', 'i2'],
+        ['i3', 'i3'],
+      ],
+      [
+        ['o1', 'i1'],
+        ['o2', 'i2'],
+        ['o2', 'i3'],
+      ],
+    ],
     expectedOutput: [
       {
         type: 'add',
@@ -104,7 +115,16 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       ['1', 'fetch', {constraint: {key: 'issueId', value: 'i2'}}],
       ['0', 'fetchCount', {constraint: {key: 'ownerId', value: 'o2'}}, 1],
     ],
-    expectedPrimaryKeySetStorageKeys: [[['i2', 'i2']], []],
+    expectedPrimaryKeySetStorageKeys: [
+      [
+        ['i1', 'i1'],
+        ['i2', 'i2'],
+      ],
+      [
+        ['o1', 'i1'],
+        ['o2', 'i2'],
+      ],
+    ],
     expectedOutput: [
       {
         type: 'child',
@@ -122,6 +142,151 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       },
     ],
   });
+
+  pushSiblingTest({
+    ...base,
+    name: 'push comment',
+    sources: [
+      [
+        {id: 'i1', ownerId: 'o1'},
+        {id: 'i2', ownerId: 'o2'},
+      ],
+      [
+        {id: 'c1', issueId: 'i1'},
+        {id: 'c2', issueId: 'i1'},
+        {id: 'c3', issueId: 'i2'},
+        {id: 'c4', issueId: 'i2'},
+      ],
+      [{id: 'o1'}, {id: 'o2'}],
+    ],
+    pushes: [[1, {type: 'add', row: {id: 'c5', issueId: 'i1'}}]],
+    expectedLog: [
+      ['1', 'push', {type: 'add', row: {id: 'c5', issueId: 'i1'}}],
+      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['0', 'fetchCount', {constraint: {key: 'id', value: 'i1'}}, 1],
+    ],
+    expectedPrimaryKeySetStorageKeys: [
+      [
+        ['i1', 'i1'],
+        ['i2', 'i2'],
+      ],
+      [
+        ['o1', 'i1'],
+        ['o2', 'i2'],
+      ],
+    ],
+    expectedOutput: [
+      {
+        type: 'child',
+        row: {id: 'i1', ownerId: 'o1'},
+        child: {
+          relationshipName: 'comments',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c5', issueId: 'i1'}, relationships: {}},
+          },
+        },
+      },
+    ],
+  });
+
+  pushSiblingTest({
+    ...base,
+    name: 'remove owner',
+    sources: [
+      [
+        {id: 'i1', ownerId: 'o1'},
+        {id: 'i2', ownerId: 'o2'},
+      ],
+      [
+        {id: 'c1', issueId: 'i1'},
+        {id: 'c2', issueId: 'i1'},
+        {id: 'c3', issueId: 'i2'},
+        {id: 'c4', issueId: 'i2'},
+      ],
+      [{id: 'o1'}, {id: 'o2'}],
+    ],
+    pushes: [[2, {type: 'remove', row: {id: 'o2'}}]],
+    expectedLog: [
+      ['2', 'push', {type: 'remove', row: {id: 'o2'}}],
+      ['0', 'fetch', {constraint: {key: 'ownerId', value: 'o2'}}],
+      ['1', 'fetch', {constraint: {key: 'issueId', value: 'i2'}}],
+      ['0', 'fetchCount', {constraint: {key: 'ownerId', value: 'o2'}}, 1],
+    ],
+    expectedPrimaryKeySetStorageKeys: [
+      [
+        ['i1', 'i1'],
+        ['i2', 'i2'],
+      ],
+      [
+        ['o1', 'i1'],
+        ['o2', 'i2'],
+      ],
+    ],
+    expectedOutput: [
+      {
+        type: 'child',
+        row: {id: 'i2', ownerId: 'o2'},
+        child: {
+          relationshipName: 'owners',
+          change: {
+            type: 'remove',
+            node: {
+              relationships: {},
+              row: {id: 'o2'},
+            },
+          },
+        },
+      },
+    ],
+  });
+
+  pushSiblingTest({
+    ...base,
+    name: 'remove comment',
+    sources: [
+      [
+        {id: 'i1', ownerId: 'o1'},
+        {id: 'i2', ownerId: 'o2'},
+      ],
+      [
+        {id: 'c1', issueId: 'i1'},
+        {id: 'c2', issueId: 'i1'},
+        {id: 'c3', issueId: 'i2'},
+        {id: 'c4', issueId: 'i2'},
+      ],
+      [{id: 'o1'}, {id: 'o2'}],
+    ],
+    pushes: [[1, {type: 'remove', row: {id: 'c4', issueId: 'i2'}}]],
+    expectedLog: [
+      ['1', 'push', {type: 'remove', row: {id: 'c4', issueId: 'i2'}}],
+      ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
+      ['0', 'fetchCount', {constraint: {key: 'id', value: 'i2'}}, 1],
+    ],
+    expectedPrimaryKeySetStorageKeys: [
+      [
+        ['i1', 'i1'],
+        ['i2', 'i2'],
+      ],
+      [
+        ['o1', 'i1'],
+        ['o2', 'i2'],
+      ],
+    ],
+    expectedOutput: [
+      {
+        type: 'child',
+        row: {id: 'i2', ownerId: 'o2'},
+        child: {
+          relationshipName: 'comments',
+          change: {
+            type: 'remove',
+            node: {row: {id: 'c4', issueId: 'i2'}, relationships: {}},
+          },
+        },
+      },
+    ],
+  });
 });
 
 function pushSiblingTest(t: PushTestSibling) {
@@ -131,10 +296,10 @@ function pushSiblingTest(t: PushTestSibling) {
 
     const log: SnitchMessage[] = [];
 
-    const sources = t.sources.map((fetch, i) => {
+    const sources = t.sources.map((rows, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
       const source = new MemorySource('test', t.columns[i], t.primaryKeys[i]);
-      for (const row of fetch) {
+      for (const row of rows) {
         source.push({type: 'add', row});
       }
       const snitch = new Snitch(source.connect(ordering), String(i), log, true);
@@ -149,16 +314,6 @@ function pushSiblingTest(t: PushTestSibling) {
       storage: MemoryStorage;
     }[] = [];
 
-    // algorithm for creating sibling pipeline:
-    // index 0 is the parent
-    // traverse forward order
-    // join 0 joins source 0 and source 1 producing output 0
-    // join 1 joins output 0 and source 2 producing output 1
-    // join n joins output n-1 and source n+1 producing output n
-    // intialize parent to source 0
-    // iterate joins in order
-    // join parent to source i+1
-    // set parent = to output of join
     let parent: Input = sources[0].snitch;
 
     for (let i = 0; i < t.joins.length; i++) {
@@ -175,7 +330,6 @@ function pushSiblingTest(t: PushTestSibling) {
         info.relationshipName,
       );
 
-      console.log('join', join);
       joins[i] = {
         join,
         storage,
@@ -185,7 +339,9 @@ function pushSiblingTest(t: PushTestSibling) {
     }
 
     const finalJoin = joins[joins.length - 1];
+
     const c = new Catch(finalJoin.join);
+    c.fetch();
 
     log.length = 0;
 
