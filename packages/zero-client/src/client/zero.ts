@@ -91,8 +91,8 @@ export type SchemaDefs = {
 
 export type NoRelations = Record<string, never>;
 
-export type MakeEntityQueriesFromQueryDefs<QD extends SchemaDefs> = {
-  readonly [K in keyof QD]: Query<QD[K]>;
+export type MakeEntityQueriesFromQueryDefs<SD extends SchemaDefs> = {
+  readonly [K in keyof SD]: Query<SD[K]>;
 };
 
 declare const TESTING: boolean;
