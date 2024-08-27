@@ -1,3 +1,4 @@
+import {ValueType} from 'zql/src/zql/ivm2/schema.js';
 import {RowValue} from './row-key.js';
 
 export const INTEGER = 'INTEGER';
@@ -58,4 +59,19 @@ export function mapPostgresToLiteDataType(pgDataType: string): string {
 
 export function liteValues(row: RowValue) {
   return Object.values(row).map(v => (typeof v !== 'boolean' ? v : v ? 1 : 0));
+}
+
+export function mapLiteDataTypeToZqlValueType(liteDataType: string): ValueType {
+  switch (liteDataType) {
+    case INTEGER:
+      return 'number';
+    case REAL:
+      return 'number';
+    case TEXT:
+      return 'string';
+    case BOOL:
+      return 'boolean';
+    default: // Note: BLOB is not supported.
+      throw new Error(`Unsupported data type ${liteDataType}`);
+  }
 }
