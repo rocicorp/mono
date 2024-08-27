@@ -85,13 +85,13 @@ import {PokeHandler} from './zero-poke-handler.js';
 import {Schema} from 'zql/src/zql/query2/schema.js';
 import {Host} from '../../../zql/src/zql/builder/builder.js';
 
-export type QueryDefs = {
+export type SchemaDefs = {
   readonly [table: string]: Schema;
 };
 
 export type NoRelations = Record<string, never>;
 
-export type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
+export type MakeEntityQueriesFromQueryDefs<QD extends SchemaDefs> = {
   readonly [K in keyof QD]: Query<QD[K]>;
 };
 
@@ -120,7 +120,7 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<QD extends QueryDefs>(z: Zero<QD>): TestZero {
+function asTestZero<QD extends SchemaDefs>(z: Zero<QD>): TestZero {
   return z as TestZero;
 }
 
@@ -200,12 +200,12 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 
 export function getInternalReplicacheImplForTesting<
   MD extends MutatorDefs,
-  QD extends QueryDefs,
+  QD extends SchemaDefs,
 >(z: Zero<QD>): ReplicacheImpl<MD> {
   return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
-export class Zero<QD extends QueryDefs> {
+export class Zero<QD extends SchemaDefs> {
   readonly version = version;
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;

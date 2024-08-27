@@ -32,7 +32,7 @@ import {
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
-  QueryDefs,
+  SchemaDefs,
   RUN_LOOP_INTERVAL_MS,
   createSocket,
   serverAheadReloadReason,
@@ -1195,7 +1195,7 @@ function expectInitConnectionMessage(message: string) {
   ).not.toBeUndefined();
 }
 
-function expectLogMessages(r: TestZero<QueryDefs>) {
+function expectLogMessages(r: TestZero<SchemaDefs>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1324,7 +1324,7 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<QueryDefs>) => Promise<unknown>,
+  fn: (r: TestZero<SchemaDefs>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
@@ -1434,7 +1434,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<QueryDefs>,
+      r: TestZero<SchemaDefs>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
