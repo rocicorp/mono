@@ -59,7 +59,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestZero<QD extends SchemaDefs> extends Zero<QD> {
+export class TestZero<SD extends SchemaDefs> extends Zero<SD> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;

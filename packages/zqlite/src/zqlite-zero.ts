@@ -22,28 +22,28 @@ import {Row} from 'zql/src/zql/ivm2/data.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
-export class ZqlLiteZero<QD extends SchemaDefs> {
+export class ZqlLiteZero<SD extends SchemaDefs> {
   readonly zqlContext: Host & SubscriptionDelegate;
-  readonly query: MakeEntityQueriesFromQueryDefs<QD>;
-  readonly mutate: MakeCRUDMutate<QD>;
+  readonly query: MakeEntityQueriesFromQueryDefs<SD>;
+  readonly mutate: MakeCRUDMutate<SD>;
   db: Database;
 
-  constructor(options: ZqlLiteZeroOptions<QD>) {
-    const {schemas = {} as QD, db} = options;
+  constructor(options: ZqlLiteZeroOptions<SD>) {
+    const {schemas = {} as SD, db} = options;
     this.db = db;
     this.zqlContext = {} as TODO;
     this.query = this.#registerQueries(schemas);
-    this.mutate = this.#makeCRUDMutate<QD>(schemas, db);
+    this.mutate = this.#makeCRUDMutate<SD>(schemas, db);
   }
 
-  #registerQueries(schemas: QD): MakeEntityQueriesFromQueryDefs<QD> {
+  #registerQueries(schemas: SD): MakeEntityQueriesFromQueryDefs<SD> {
     const rv = {} as Record<string, Query<Schema>>;
     const context = this.zqlContext;
     // Not using parse yet
     for (const [name, schema] of Object.entries(schemas)) {
       rv[name] = newQuery(context, schema);
     }
-    return rv as MakeEntityQueriesFromQueryDefs<QD>;
+    return rv as MakeEntityQueriesFromQueryDefs<SD>;
   }
 
   #makeCRUDMutate<QD extends SchemaDefs>(

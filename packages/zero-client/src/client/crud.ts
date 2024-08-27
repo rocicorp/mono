@@ -35,8 +35,8 @@ export type EntityCRUDMutate<E extends Row> = {
 /**
  * This is the type of the generated mutate.<name> object.
  */
-export type MakeCRUDMutate<QD extends SchemaDefs> = BaseCRUDMutate<QD> &
-  CRUDBatch<QD>;
+export type MakeCRUDMutate<SD extends SchemaDefs> = BaseCRUDMutate<SD> &
+  CRUDBatch<SD>;
 
 export type BaseCRUDMutate<QD extends SchemaDefs> = {
   [K in keyof QD]: EntityCRUDMutate<SchemaToRow<QD[K]>>;
