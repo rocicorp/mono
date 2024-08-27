@@ -43,9 +43,13 @@ export class ArrayView implements Output {
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
+
+    return () => {
+      this.#removeListener(listener);
+    };
   }
 
-  removeListener(listener: Listener) {
+  #removeListener(listener: Listener) {
     assert(this.#listeners.has(listener), 'Listener not registered');
     this.#listeners.delete(listener);
   }

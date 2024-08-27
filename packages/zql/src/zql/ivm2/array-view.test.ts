@@ -18,7 +18,7 @@ test('basics', () => {
     ++callCount;
     data = d;
   };
-  view.addListener(listener);
+  const unlisten = view.addListener(listener);
 
   view.hydrate();
   expect(data).toEqual([
@@ -44,7 +44,7 @@ test('basics', () => {
     {a: 3, b: 'c'},
   ]);
 
-  view.removeListener(listener);
+  unlisten();
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
   expect(callCount).toBe(3);
 
