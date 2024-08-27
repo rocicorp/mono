@@ -1,8 +1,9 @@
-export type Listener<T> = (data: T) => void;
+import {DeepReadonly} from 'replicache';
+
+export type Listener<T> = (data: DeepReadonly<T>) => void;
 
 export type TypedView<T> = {
-  addListener(listener: Listener<T>): void;
-  removeListener(listener: Listener<T>): void;
+  addListener(listener: Listener<T>): () => void;
   destroy(): void;
   hydrate(): void;
 };
