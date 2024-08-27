@@ -50,7 +50,7 @@ test('basics', () => {
 
   view.addListener(listener);
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
-  expect(callCount).toBe(4);
+  expect(callCount).toBe(5);
   expect(data).toEqual([]);
 });
 

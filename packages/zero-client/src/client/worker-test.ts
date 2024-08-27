@@ -56,6 +56,7 @@ async function testBasics(userID: string) {
   await r.triggerConnected();
 
   await sleep(1);
+  console.log('log', log);
   assert(deepEqual(log, [[], []]));
 
   await r.mutate.e.set({id: 'foo', value: 1});

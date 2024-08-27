@@ -47,6 +47,9 @@ export class ArrayView implements Output {
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
+    if (this.#hydrated) {
+      listener(this.#view);
+    }
   }
 
   removeListener(listener: Listener) {

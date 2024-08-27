@@ -146,6 +146,7 @@ describe('bare select', () => {
     const host = makeHost();
     const issueQuery = newQuery(host, issueSchema).select('id');
     const m = issueQuery.materialize();
+    m.hydrate();
 
     let rows: {id: string}[] = [];
     let called = false;
@@ -168,6 +169,7 @@ describe('bare select', () => {
     const host = makeHost();
     const issueQuery = newQuery(host, issueSchema).select('id');
     const m = issueQuery.materialize();
+    m.hydrate();
 
     let rows: {id: string}[] = [];
     m.addListener(data => {
@@ -222,6 +224,7 @@ describe('bare select', () => {
 
     const issueQuery = newQuery(host, issueSchema).select('id');
     const m = issueQuery.materialize();
+    m.hydrate();
 
     let rows: {id: string}[] = [];
     m.addListener(data => {
@@ -255,6 +258,7 @@ describe('bare select', () => {
 
     const issueQuery = newQuery(host, issueSchema).select('id');
     const m = issueQuery.materialize();
+    m.hydrate();
 
     let rows: {id: string}[] = [];
     m.addListener(data => {
@@ -311,15 +315,18 @@ describe('joins and filters', () => {
       .where('title', '=', 'issue 1');
 
     const singleFilterView = issueQuery.materialize();
+    singleFilterView.hydrate();
     let singleFilterRows: {id: string}[] = [];
     let doubleFilterRows: {id: string}[] = [];
     let doubleFilterWithNoResultsRows: {id: string}[] = [];
     const doubleFilterView = issueQuery
       .where('closed', '=', false)
       .materialize();
+    doubleFilterView.hydrate();
     const doubleFilterViewWithNoResults = issueQuery
       .where('closed', '=', true)
       .materialize();
+    doubleFilterViewWithNoResults.hydrate();
 
     singleFilterView.addListener(data => {
       singleFilterRows = [...data];
@@ -377,6 +384,7 @@ describe('joins and filters', () => {
       .related('comments', q => q.select('text'))
       .select('id');
     const view = issueQuery.materialize();
+    view.hydrate();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: any[] = [];

@@ -785,7 +785,6 @@ function takeTest(t: TakeTest) {
             seen.add(req.constraint?.value);
           }
         }
-        console.log(log);
         expect(log).toEqual(expectedMessages);
       }
     }

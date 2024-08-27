@@ -1,4 +1,4 @@
-import {assert, unreachable} from 'shared/src/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {AST} from '../ast2/ast.js';
 import {Filter} from '../ivm2/filter.js';
 import {Join} from '../ivm2/join.js';
@@ -6,6 +6,7 @@ import {Input, Storage} from '../ivm2/operator.js';
 import {Source} from '../ivm2/source.js';
 import {createPredicate} from './filter.js';
 import {must} from 'shared/src/must.js';
+import {Take} from '../ivm2/take.js';
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
@@ -62,8 +63,7 @@ export function buildPipeline(ast: AST, host: Host): Input {
   }
 
   if (ast.limit) {
-    // Limit not implemented yet.
-    unreachable();
+    end = new Take(end, host.createStorage(), ast.limit);
   }
 
   if (ast.related) {
