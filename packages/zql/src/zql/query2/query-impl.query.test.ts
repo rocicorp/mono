@@ -38,12 +38,21 @@ function makeSources() {
   const labelArgs = toInputArgs(labelSchema);
   const issueLabelArgs = toInputArgs(issueLabelSchema);
   return {
-    user: new MemorySource(userArgs.columns, userArgs.primaryKey),
-    issue: new MemorySource(issueArgs.columns, issueArgs.primaryKey),
-    comment: new MemorySource(commentArgs.columns, commentArgs.primaryKey),
-    revision: new MemorySource(revisionArgs.columns, revisionArgs.primaryKey),
-    label: new MemorySource(labelArgs.columns, labelArgs.primaryKey),
+    user: new MemorySource('user', userArgs.columns, userArgs.primaryKey),
+    issue: new MemorySource('issue', issueArgs.columns, issueArgs.primaryKey),
+    comment: new MemorySource(
+      'comment',
+      commentArgs.columns,
+      commentArgs.primaryKey,
+    ),
+    revision: new MemorySource(
+      'revision',
+      revisionArgs.columns,
+      revisionArgs.primaryKey,
+    ),
+    label: new MemorySource('label', labelArgs.columns, labelArgs.primaryKey),
     issueLabel: new MemorySource(
+      'issueLabel',
       issueLabelArgs.columns,
       issueLabelArgs.primaryKey,
     ),
