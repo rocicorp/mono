@@ -19,9 +19,7 @@ export class ZQLSubscriptionsManager extends SubscriptionsManagerImpl {
     subs: readonly UnknownSubscription[],
     results: PromiseSettledResult<unknown>[],
   ): void {
-    // this.#materialite.tx(() => {
     super.callCallbacks(subs, results);
-    // });
   }
 }
 
