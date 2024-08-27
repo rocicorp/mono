@@ -29,7 +29,7 @@ function getKanbanOrderIssueUpdates(
   let beforeKey: string | null = null;
 
   for (const issue of listData.iterateIssuesBefore(issueToInsertBefore)) {
-    beforeKey = issue.issue.kanbanOrder;
+    beforeKey = issue.kanbanOrder;
     break;
   }
 
@@ -39,11 +39,11 @@ function getKanbanOrderIssueUpdates(
   // have identical kanbanOrder values, we need to fix up the
   // collision by re-keying the issues.
   for (const issue of listData.iterateIssuesAfter(issueToInsertBefore)) {
-    if (issue.issue.kanbanOrder !== beforeKey) {
-      afterKey = issue.issue.kanbanOrder;
+    if (issue.kanbanOrder !== beforeKey) {
+      afterKey = issue.kanbanOrder;
       break;
     }
-    issuesToReKey.push(issue.issue);
+    issuesToReKey.push(issue);
   }
   const newKanbanOrderKeys = generateNKeysBetween(
     beforeKey,
@@ -95,7 +95,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
         return;
       }
       const issueOrLoading = sourceListData.getIssue(source.index);
-      const draggedIssue = !issueOrLoading ? null : issueOrLoading.issue;
+      const draggedIssue = !issueOrLoading ? null : issueOrLoading;
       if (!draggedIssue) {
         return;
       }
@@ -111,7 +111,7 @@ function IssueBoard({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
         return;
       }
       const issue = destinationListData.getIssue(destinationIndex);
-      const issueToInsertBefore = !issue ? null : issue.issue;
+      const issueToInsertBefore = !issue ? null : issue;
       if (draggedIssue === issueToInsertBefore) {
         return;
       }

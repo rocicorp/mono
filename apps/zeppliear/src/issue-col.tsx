@@ -40,7 +40,7 @@ function RowPreMemo({data, index, style}: RowProps) {
   }
 
   return (
-    <Draggable draggableId={issue.issue.id} index={index} key={issue.issue.id}>
+    <Draggable draggableId={issue.id} index={index} key={issue.id}>
       {(provided: DraggableProvided) => (
         <div
           {...provided.draggableProps}
@@ -52,7 +52,7 @@ function RowPreMemo({data, index, style}: RowProps) {
           ref={provided.innerRef}
         >
           <IssueItem
-            issue={issue.issue}
+            issue={issue}
             key={index}
             onChangePriority={data.onChangePriority}
             onOpenDetail={data.onOpenDetail}

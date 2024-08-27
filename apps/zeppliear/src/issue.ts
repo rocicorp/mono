@@ -1,8 +1,8 @@
 import type {Immutable} from 'shared/src/immutable.js';
-import type {Query, Zero} from 'zero-client';
+import type {Query, SchemaToRow, Smash, Zero} from 'zero-client';
 import {z} from 'zod';
 import {getCurrentDateWithFutureShift} from './util/date.js';
-import {Schema} from './schema.js';
+import {schema, Schema} from './schema.js';
 
 export type M = Record<string, never>;
 
@@ -160,33 +160,34 @@ export enum Filter {
 const filterEnumSchema = z.nativeEnum(Filter);
 export type FilterEnum = z.infer<typeof filterEnumSchema>;
 
-export const issueSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  priority: prioritySchema,
-  status: statusSchema,
-  modified: z.number(),
-  created: z.number(),
-  creatorID: z.string(),
-  kanbanOrder: z.string(),
-  description: z.string(),
-});
-
-export type Issue = Immutable<z.TypeOf<typeof issueSchema>>;
+export type Comment = SchemaToRow<typeof schema.comment>;
+export type Issue = SchemaToRow<typeof schema.issue>;
 export type IssueUpdate = Omit<Partial<Issue>, 'modified'> & {id: string};
-export type Label = {id: string; name: string};
-export type IssueLabel = {id: string; issueID: string; labelID: string};
-export type IssueWithLabels = {issue: Issue; labels: string[]};
+export type Label = SchemaToRow<typeof schema.label>;
 
-export const commentSchema = z.object({
-  id: z.string(),
-  issueID: z.string(),
-  created: z.number(),
-  body: z.string(),
-  creatorID: z.string(),
-});
+// TODO: need a simpler way to get the result type
+// of a query.
+export type IssueWithLabels = ReturnType<
+  typeof getIssueWithLabelsQuery
+> extends Query<Schema['issue'], infer TReturn>
+  ? Smash<TReturn>[number]
+  : never;
 
-export type Comment = Immutable<z.TypeOf<typeof commentSchema>>;
+export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
+  return zero.query.issue
+    .select(
+      'created',
+      'creatorID',
+      'description',
+      'id',
+      'kanbanOrder',
+      'modified',
+      'priority',
+      'status',
+      'title',
+    )
+    .related('labels', q => q.select('id', 'name'));
+}
 
 export type CommentCreationPartial = Omit<Comment, 'created' | 'creatorID'>;
 
@@ -296,11 +297,9 @@ function getModifiedDate() {
   return d.getTime();
 }
 
-export type IssueQuery = Query<Schema['issue']>;
+export type IssueQuery = ReturnType<typeof getIssueWithLabelsQuery>;
 
 export function orderQuery(
-  // TODO: having to know the return type of the query to take it in as an arg is...
-  // confusing at best.
   issueQuery: Query<Schema['issue']>,
   order: Order,
   reverse: boolean,

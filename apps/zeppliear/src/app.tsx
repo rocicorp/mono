@@ -3,7 +3,7 @@ import classnames from 'classnames';
 import {pickBy} from 'lodash';
 import {memo, useCallback, useEffect, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
-import type {Query, Zero} from 'zero-client';
+import type {Zero} from 'zero-client';
 import {getIssueOrder, getViewStatuses} from './filters.js';
 import {
   FiltersState,
@@ -21,10 +21,12 @@ import {
   CommentCreationPartial,
   Issue,
   IssueCreationPartial,
+  IssueQuery,
   IssueUpdate,
   createIssue,
   createIssueComment,
   deleteIssueComment,
+  getIssueWithLabelsQuery,
   updateIssues,
 } from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
@@ -65,12 +67,7 @@ const App = ({undoManager}: AppProps) => {
     console.debug({activeUserName, userID});
   }, [userID]);
 
-  const issueQuery = zero.query.issue;
-
-  // TODO: fix kanban
-  //const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
-
-  const issueListQuery = issueQuery.related('labels', q => q.select('name'));
+  const issueListQuery = getIssueWithLabelsQuery(zero);
   const filteredQuery = filterQuery(issueListQuery, view, filters);
 
   const issueOrder = getIssueOrder(view, orderBy);
@@ -274,10 +271,7 @@ function RawLayout({
 const Layout = memo(RawLayout);
 
 function filterQuery(
-  // TODO: having to know the from set and return type of the query to take it in as an arg is...
-  // confusing at best.
-  // TODO: having to know the `FromSet` is dumb.
-  q: Query<Schema['issue']>,
+  q: IssueQuery,
   view: string | null,
   filters: FiltersState,
 ) {
@@ -295,17 +289,7 @@ function filterQuery(
     q = q.where('priority', 'IN', [...filters.priorityFilter]);
   }
 
-  let filteredQuery = q.select(
-    'created',
-    'creatorID',
-    'description',
-    'id',
-    'kanbanOrder',
-    'priority',
-    'modified',
-    'status',
-    'title',
-  );
+  let filteredQuery = q;
 
   if (filters.textFilter) {
     filteredQuery = filteredQuery.where(

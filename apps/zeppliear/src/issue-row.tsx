@@ -1,11 +1,17 @@
 import React from 'react';
-import {getLabelColor, Issue, Priority, Status} from './issue.js';
+import {
+  getLabelColor,
+  Issue,
+  IssueWithLabels,
+  Priority,
+  Status,
+} from './issue.js';
 import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
 import {formatDate} from './util/date.js';
 
 interface Props {
-  row: {issue: Issue; labels: string[]};
+  row: IssueWithLabels;
   onChangePriority: (issue: Issue, priority: Priority) => void;
   onChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;
@@ -17,7 +23,7 @@ function IssueRow({
   onChangeStatus,
   onOpenDetail,
 }: Props) {
-  const {issue} = row;
+  const issue = row;
   const handleChangePriority = (p: Priority) => onChangePriority(issue, p);
   const handleChangeStatus = (status: Status) => onChangeStatus(issue, status);
   const handleIssueRowClick = () => onOpenDetail(issue);
@@ -42,15 +48,26 @@ function IssueRow({
         {issue.title.slice(0, 3000) || ''}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
-        {row.labels.map(label => (
-          <span
-            key={label}
-            className="rounded-full p-1 px-3 mx-1"
-            style={{background: getLabelColor(label)}}
-          >
-            {label}
-          </span>
-        ))}
+        {row.labels.map(label => {
+          // TODO: the query layer is not omitting junction tables in the result
+          const casted = label as unknown as {
+            labels: [
+              {
+                id: string;
+                name: string;
+              },
+            ];
+          };
+          return (
+            <span
+              key={casted.labels[0].id}
+              className="rounded-full p-1 px-3 mx-1"
+              style={{background: getLabelColor(casted.labels[0].name)}}
+            >
+              {casted.labels[0].name}
+            </span>
+          );
+        })}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
         {formatDate(new Date(issue.modified), true)}

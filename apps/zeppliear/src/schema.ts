@@ -27,6 +27,7 @@ const issueSchema = {
     labels: {
       source: 'id',
       junction: {
+        schema: () => issueLabelSchema,
         sourceField: 'issueID',
         destField: 'labelID',
       },
