@@ -14,7 +14,7 @@ import {
 } from 'zero-protocol/src/push.js';
 import {toEntitiesKey} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
-import type {QueryDefs} from './zero.js';
+import type {SchemaDefs} from './zero.js';
 import {Row} from 'zql/src/zql/ivm2/data.js';
 import {SchemaToRow} from 'zql/src/zql/query2/query.js';
 
@@ -35,14 +35,14 @@ export type EntityCRUDMutate<E extends Row> = {
 /**
  * This is the type of the generated mutate.<name> object.
  */
-export type MakeCRUDMutate<QD extends QueryDefs> = BaseCRUDMutate<QD> &
+export type MakeCRUDMutate<QD extends SchemaDefs> = BaseCRUDMutate<QD> &
   CRUDBatch<QD>;
 
-export type BaseCRUDMutate<QD extends QueryDefs> = {
+export type BaseCRUDMutate<QD extends SchemaDefs> = {
   [K in keyof QD]: EntityCRUDMutate<SchemaToRow<QD[K]>>;
 };
 
-export type CRUDBatch<QD extends QueryDefs> = <R>(
+export type CRUDBatch<QD extends SchemaDefs> = <R>(
   body: (m: BaseCRUDMutate<QD>) => MaybePromise<R>,
 ) => Promise<R>;
 
@@ -55,7 +55,7 @@ type ZeroCRUDMutate = {
  * queries are `issue` and `label`, then this object will have `issue` and
  * `label` properties.
  */
-export function makeCRUDMutate<QD extends QueryDefs>(
+export function makeCRUDMutate<QD extends SchemaDefs>(
   schemas: QD,
   repMutate: ZeroCRUDMutate,
 ): MakeCRUDMutate<QD> {
@@ -197,7 +197,7 @@ export type CRUDMutator = (
   crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
-export function makeCRUDMutator<QD extends QueryDefs>(
+export function makeCRUDMutator<QD extends SchemaDefs>(
   _schemas: QD,
 ): CRUDMutator {
   return async function zeroCRUDMutator(

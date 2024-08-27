@@ -1,12 +1,12 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {KVStoreProvider} from 'replicache';
 import type {MaybePromise} from 'shared/src/types.js';
-import type {QueryDefs} from './zero.js';
+import type {SchemaDefs} from './zero.js';
 
 /**
  * Configuration for [[Zero]].
  */
-export interface ZeroOptions<QD extends QueryDefs> {
+export interface ZeroOptions<QD extends SchemaDefs> {
   /**
    * Server to connect to, for example "https://myapp-myteam.zero.ms/".
    */

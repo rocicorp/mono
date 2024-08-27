@@ -10,7 +10,7 @@ import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
 import type {Database} from 'better-sqlite3';
 import type {EntityID} from 'zero-protocol/src/entity.js';
 import {
-  QueryDefs,
+  SchemaDefs,
   MakeEntityQueriesFromQueryDefs,
 } from 'zero-client/src/client/zero.js';
 import {Host} from 'zql/src/zql/builder/builder.js';
@@ -22,7 +22,7 @@ import {Row} from 'zql/src/zql/ivm2/data.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
-export class ZqlLiteZero<QD extends QueryDefs> {
+export class ZqlLiteZero<QD extends SchemaDefs> {
   readonly zqlContext: Host & SubscriptionDelegate;
   readonly query: MakeEntityQueriesFromQueryDefs<QD>;
   readonly mutate: MakeCRUDMutate<QD>;
@@ -46,7 +46,7 @@ export class ZqlLiteZero<QD extends QueryDefs> {
     return rv as MakeEntityQueriesFromQueryDefs<QD>;
   }
 
-  #makeCRUDMutate<QD extends QueryDefs>(
+  #makeCRUDMutate<QD extends SchemaDefs>(
     schemas: QD,
     db: Database,
   ): MakeCRUDMutate<QD> {

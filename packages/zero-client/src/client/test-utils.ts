@@ -19,7 +19,7 @@ import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
   ConnectionState,
-  QueryDefs,
+  SchemaDefs,
   TestingContext,
   Zero,
   createLogOptionsSymbol,
@@ -59,7 +59,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestZero<QD extends QueryDefs> extends Zero<QD> {
+export class TestZero<QD extends SchemaDefs> extends Zero<QD> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -184,11 +184,11 @@ export class TestZero<QD extends QueryDefs> extends Zero<QD> {
 
 declare const TESTING: boolean;
 
-const testZeroInstances = new Set<TestZero<QueryDefs>>();
+const testZeroInstances = new Set<TestZero<SchemaDefs>>();
 
 let testZeroCounter = 0;
 
-export function zeroForTest<QD extends QueryDefs>(
+export function zeroForTest<QD extends SchemaDefs>(
   options: Partial<ZeroOptions<QD>> = {},
 ): TestZero<QD> {
   // Special case kvStore. If not present we default to 'mem'. This allows
@@ -212,12 +212,12 @@ export function zeroForTest<QD extends QueryDefs>(
   };
 
   // Keep track of all instances so we can close them in teardown.
-  testZeroInstances.add(r as TestZero<QueryDefs>);
+  testZeroInstances.add(r as TestZero<SchemaDefs>);
   return r;
 }
 
 export async function waitForUpstreamMessage(
-  r: TestZero<QueryDefs>,
+  r: TestZero<SchemaDefs>,
   name: string,
   clock: SinonFakeTimers,
 ) {
