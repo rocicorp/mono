@@ -121,6 +121,7 @@ export type RowsRow = {
   rowKey: JSONValue;
   rowVersion: string;
   patchVersion: string;
+  refCount: {[queryHash: string]: number} | null;
 };
 
 export function rowsRowToRowID(rowsRow: RowsRow): RowID {
@@ -136,6 +137,7 @@ export function rowsRowToRowRecord(rowsRow: RowsRow): RowRecord {
     id: rowsRowToRowID(rowsRow),
     rowVersion: rowsRow.rowVersion,
     patchVersion: versionFromString(rowsRow.patchVersion),
+    refCount: rowsRow.refCount,
   };
 }
 
@@ -150,6 +152,7 @@ export function rowRecordToRowsRow(
     rowKey: rowRecord.id.rowKey as Record<string, JSONValue>,
     rowVersion: rowRecord.rowVersion,
     patchVersion: versionString(rowRecord.patchVersion),
+    refCount: rowRecord.refCount,
   };
 }
 

@@ -243,7 +243,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
 type Hash = string;
 export type Column = string;
-export type QueriedColumns = Record<Hash, Column[]>;
+export type RefCount = Record<Hash, number>;
 
 /**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
@@ -251,8 +251,8 @@ export type QueriedColumns = Record<Hash, Column[]>;
  *
  * * {@link trackQueries} for queries that are being executed or removed.
  * * {@link received} for all rows received from the executed queries
- * * {@link deleteUnreferencedColumnsAndRows} to remove any columns or
- *                    rows that have fallen out of the query result view.
+ * * {@link deleteUnreferencedRows} to remove any rows that have
+ *       fallen out of the query result view.
  * * {@link generateConfigPatches} to send any config changes
  * * {@link flush}
  */
@@ -325,15 +325,15 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // can be optimized by tracking an index from query to row.
     //
     // We can use something like:
-    //   SELECT * FROM cvr.rows WHERE "queriedColumns" ?| array[...queryHashes...];
+    //   SELECT * FROM cvr.rows WHERE "refCount" ?| array[...queryHashes...];
 
     const allRowRecords = this._cvrStore.allRowRecords();
 
     let total = 0;
     for await (const existing of allRowRecords) {
       total++;
-      assert(existing.queriedColumns !== null); // allRowRecords does not include null.
-      for (const id of Object.keys(existing.queriedColumns)) {
+      assert(existing.refCount !== null); // allRowRecords does not include null.
+      for (const id of Object.keys(existing.refCount)) {
         if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
           break;
@@ -382,9 +382,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * Tracks a query removed from the "gotten" set. In addition to producing the
    * appropriate patches for deleting the query, the removed query is taken into
    * account when computing the final row records in
-   * {@link deleteUnreferencedColumnsAndRows}.
-   * Namely, any rows with columns that are no longer referenced by a query are
-   * patched, or deleted if no columns are referenced.
+   * {@link deleteUnreferencedRows}.
+   * Namely, any rows with columns that are no longer referenced by a
+   * query are deleted.
    *
    * This must only be called on queries that are not "desired" by any client.
    */
@@ -445,10 +445,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     for (const parsedRow of rows.values()) {
       const {
         contents,
-        record: {id, rowVersion},
+        record: {id, rowVersion, refCount},
       } = parsedRow;
 
-      assert(queriedColumns !== null); // We never "receive" tombstones.
+      assert(refCount !== null); // We never "receive" tombstones.
 
       const existing = existingRows.get(id);
 
@@ -482,7 +482,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       merges.push({
         patch: {
           type: 'row',
-          op: existing?.queriedColumns ? 'merge' : 'put',
+          op: 'put',
           id,
           contents,
         },
@@ -504,9 +504,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This is Step [5] of the
    * [CVR Sync Algorithm](https://www.notion.so/replicache/Sync-and-Client-View-Records-CVR-a18e02ec3ec543449ea22070855ff33d?pvs=4#7874f9b80a514be2b8cd5cf538b88d37).
    */
-  async deleteUnreferencedColumnsAndRows(
-    lc: LogContext,
-  ): Promise<PatchToVersion[]> {
+  async deleteUnreferencedRows(lc: LogContext): Promise<PatchToVersion[]> {
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config-only changes.
       assert(this.#receivedRows.size === 0);
@@ -518,23 +516,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     assert(this.#existingRows, `trackQueries() was not called`);
     for (const existing of await this.#existingRows) {
-      const update = this.#deleteUnreferencedColumnsOrRow(existing);
+      const update = this.#deleteUnreferencedRow(existing);
       if (update === null) {
         continue;
       }
 
-      const {id, columns} = update;
-      if (columns) {
-        patches.push({
-          toVersion: this._cvr.version,
-          patch: {type: 'row', op: 'constrain', id, columns},
-        });
-      } else {
-        patches.push({
-          toVersion: this._cvr.version,
-          patch: {type: 'row', op: 'del', id},
-        });
-      }
+      const {id} = update;
+      patches.push({
+        toVersion: this._cvr.version,
+        patch: {type: 'row', op: 'del', id},
+      });
     }
 
     // Now catch up clients with row patches that haven't been deleted.
@@ -548,9 +539,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       const {id} = rowPatch;
       if (rowPatch.op === 'put') {
-        const {columns} = rowPatch;
         patches.push({
-          patch: {type: 'row', op: 'constrain', id, columns},
+          patch: {type: 'row', op: 'constrain', id},
           toVersion,
         });
       } else {
@@ -597,9 +587,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return patches;
   }
 
-  #deleteUnreferencedColumnsOrRow(
-    existing: RowRecord,
-  ): {id: RowID; columns?: string[]} | null {
+  #deleteUnreferencedRow(existing: RowRecord): {id: RowID} | null {
     const received = this.#receivedRows.get(existing.id);
 
     const newQueriedColumns =

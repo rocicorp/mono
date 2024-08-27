@@ -24,7 +24,6 @@ import {
   ClientQueryRecord,
   ClientRecord,
   DelRowPatch,
-  getAllColumnsSorted,
   InternalQueryRecord,
   MetadataPatch,
   PutRowPatch,
@@ -421,13 +420,12 @@ export class CVRStore {
         table: row.table,
         rowKey: row.rowKey as Record<string, JSONValue>,
       } as const;
-      const rowPatch: RowPatch = row.queriedColumns
+      const rowPatch: RowPatch = row.refCount
         ? ({
             type: 'row',
             op: 'put',
             id,
             rowVersion: row.rowVersion,
-            columns: getAllColumnsSorted(row.queriedColumns),
           } satisfies PutRowPatch)
         : ({
             type: 'row',
@@ -497,7 +495,7 @@ export class CVRStore {
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
       this.#id
-    } AND "queriedColumns" IS NOT NULL`
+    } AND "refCount" IS NOT NULL`
       // TODO(arv): Arbitrary page size
       .cursor(1000)) {
       for (const row of rows) {
