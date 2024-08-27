@@ -8,7 +8,7 @@ import {ArrayView, EntryList} from './array-view.js';
 import {DeepReadonly} from 'replicache';
 
 test('destroy source connections', () => {
-  const ms = new MemorySource({a: 'string', b: 'string'}, ['a']);
+  const ms = new MemorySource('table', {a: 'string', b: 'string'}, ['a']);
   const connection1 = ms.connect([['a', 'asc']]);
   const connection2 = ms.connect([['a', 'asc']]);
 
@@ -58,8 +58,8 @@ test('destroy a pipeline from the view', () => {
   // two sources
   // filtered
   // joined
-  const source1 = new MemorySource({a: 'string', b: 'string'}, ['b']);
-  const source2 = new MemorySource({a: 'string', b: 'string'}, ['b']);
+  const source1 = new MemorySource('table', {a: 'string', b: 'string'}, ['b']);
+  const source2 = new MemorySource('table', {a: 'string', b: 'string'}, ['b']);
 
   const filter1 = new Filter(source1.connect([['b', 'asc']]), () => true);
   const filter2 = new Filter(source2.connect([['b', 'asc']]), () => true);

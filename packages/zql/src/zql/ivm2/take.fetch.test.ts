@@ -712,7 +712,7 @@ suite('take with partition', () => {
 function takeTest(t: TakeTest) {
   test(t.name, () => {
     const log: SnitchMessage[] = [];
-    const source = new MemorySource(t.columns, t.primaryKeys);
+    const source = new MemorySource('table', t.columns, t.primaryKeys);
     for (const row of t.sourceRows) {
       source.push({type: 'add', row});
     }

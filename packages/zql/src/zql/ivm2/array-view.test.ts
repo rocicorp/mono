@@ -6,7 +6,7 @@ import {EntryList, ArrayView} from './array-view.js';
 import {DeepReadonly} from 'replicache';
 
 test('basics', () => {
-  const ms = new MemorySource({a: 'number', b: 'string'}, ['a']);
+  const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -55,7 +55,7 @@ test('basics', () => {
 });
 
 test('tree', () => {
-  const ms = new MemorySource({id: 'number', name: 'string'}, ['id']);
+  const ms = new MemorySource('table', {id: 'number', name: 'string'}, ['id']);
   ms.push({
     type: 'add',
     row: {id: 1, name: 'foo', childID: 2},

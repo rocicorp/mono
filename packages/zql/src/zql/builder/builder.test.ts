@@ -5,7 +5,9 @@ import {MemorySource} from '../ivm2/memory-source.js';
 import {MemoryStorage} from '../ivm2/memory-storage.js';
 
 export function testSources() {
-  const users = new MemorySource({id: 'number', name: 'string'}, ['id']);
+  const users = new MemorySource('table', {id: 'number', name: 'string'}, [
+    'id',
+  ]);
   users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}});
   users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}});
   users.push({type: 'add', row: {id: 3, name: 'greg', recruiterID: 1}});
@@ -14,17 +16,18 @@ export function testSources() {
   users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}});
   users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}});
 
-  const states = new MemorySource({code: 'string'}, ['code']);
+  const states = new MemorySource('table', {code: 'string'}, ['code']);
   states.push({type: 'add', row: {code: 'CA'}});
   states.push({type: 'add', row: {code: 'HI'}});
   states.push({type: 'add', row: {code: 'AZ'}});
   states.push({type: 'add', row: {code: 'MD'}});
   states.push({type: 'add', row: {code: 'GA'}});
 
-  const userStates = new MemorySource({userID: 'number', stateCode: 'string'}, [
-    'userID',
-    'stateCode',
-  ]);
+  const userStates = new MemorySource(
+    'table',
+    {userID: 'number', stateCode: 'string'},
+    ['userID', 'stateCode'],
+  );
   userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}});
   userStates.push({type: 'add', row: {userID: 3, stateCode: 'AZ'}});
   userStates.push({type: 'add', row: {userID: 3, stateCode: 'CA'}});

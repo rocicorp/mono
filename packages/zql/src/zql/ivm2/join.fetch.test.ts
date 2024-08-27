@@ -11,7 +11,7 @@ import type {Row, Node, NormalizedValue} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from '../ast2/ast.js';
 import {Catch} from './catch.js';
-import type {ValueType} from './schema.js';
+import type {Schema, ValueType} from './schema.js';
 
 suite('fetch one:many', () => {
   const base = {
@@ -744,7 +744,7 @@ function fetchTest(t: FetchTest) {
 
     const sources = t.sources.map((rows, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
+      const source = new MemorySource(`t${i}`, t.columns[i], t.primaryKeys[i]);
       for (const row of rows) {
         source.push({type: 'add', row});
       }
@@ -787,8 +787,24 @@ function fetchTest(t: FetchTest) {
       // By convention we put them in the test bottom up. Why? Easier to think
       // left-to-right.
       const finalJoin = joins[0];
-      const c = new Catch(finalJoin.join);
 
+      let expectedSchema: Schema | undefined;
+      for (let i = sources.length - 1; i >= 0; i--) {
+        const schema = sources[i].snitch.getSchema();
+        if (expectedSchema) {
+          expectedSchema = {
+            ...schema,
+            relationships: {[t.joins[i].relationshipName]: expectedSchema},
+          };
+        } else {
+          expectedSchema = schema;
+        }
+      }
+
+      // toEqual doesn't work here for some reason that I am too lazy to find.
+      expect(finalJoin.join.getSchema()).toStrictEqual(expectedSchema);
+
+      const c = new Catch(finalJoin.join);
       const r = c[fetchType]();
 
       expect(r).toEqual(t.expectedHydrate);
