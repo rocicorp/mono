@@ -25,7 +25,7 @@ const itemKey = (index: number, data: ListData) => {
   if (data.isLoadingIndicator(index)) {
     return loadingIndicatorKey;
   }
-  return data.mustGetIssue(index).issue.id;
+  return data.mustGetIssue(index).id;
 };
 
 function RawRow({
