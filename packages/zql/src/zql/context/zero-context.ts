@@ -10,6 +10,7 @@ import {Source} from '../ivm2/source.js';
 import {AST} from '../ast2/ast.js';
 import {Storage} from '../ivm2/operator.js';
 import {MemoryStorage} from '../ivm2/memory-storage.js';
+import {assert} from 'shared/src/asserts.js';
 
 export type AddWatch = (name: string, cb: WatchCallback) => void;
 
@@ -77,7 +78,7 @@ class ZeroSourceStore {
 }
 
 class ZeroSource {
-  readonly #canonicalSource: MemorySource;
+  readonly #source: MemorySource;
 
   constructor(
     name: string,
@@ -85,20 +86,22 @@ class ZeroSource {
     primaryKeys: readonly string[],
     addWatch: AddWatch,
   ) {
-    this.#canonicalSource = new MemorySource(name, columns, primaryKeys);
+    this.#source = new MemorySource(name, columns, primaryKeys);
     addWatch(name, this.#handleDiff);
   }
 
   #handleDiff = (changes: ExperimentalNoIndexDiff) => {
     for (const diff of changes) {
       if (diff.op === 'del' || diff.op === 'change') {
-        this.#canonicalSource.push({
+        assert(typeof diff.oldValue === 'object');
+        this.#source.push({
           type: 'remove',
           row: diff.oldValue as Row,
         });
       }
       if (diff.op === 'add' || diff.op === 'change') {
-        this.#canonicalSource.push({
+        assert(typeof diff.newValue === 'object');
+        this.#source.push({
           type: 'add',
           row: diff.newValue as Row,
         });
@@ -107,6 +110,6 @@ class ZeroSource {
   };
 
   get() {
-    return this.#canonicalSource;
+    return this.#source;
   }
 }
