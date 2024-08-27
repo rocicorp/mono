@@ -80,11 +80,6 @@ export class ArrayView implements Output {
     };
   }
 
-  removeListener(listener: Listener) {
-    assert(this.#listeners.has(listener), 'Listener not registered');
-    this.#listeners.delete(listener);
-  }
-
   #fireListeners() {
     if (this.#resultType === 'none') {
       this.#resultType = 'partial';

@@ -2,7 +2,13 @@ import type {SQLQuery} from '@databases/sql';
 import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering} from 'zql/src/zql/ast2/ast.js';
-import {Node, Row, Value, makeComparator} from 'zql/src/zql/ivm2/data.js';
+import {
+  Comparator,
+  Node,
+  Row,
+  Value,
+  makeComparator,
+} from 'zql/src/zql/ivm2/data.js';
 import {
   generateWithOverlay,
   generateWithStart,
@@ -24,6 +30,7 @@ type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
+  compareRows: Comparator;
 };
 
 type Statements = {
@@ -122,9 +129,10 @@ export class TableSource implements Source {
 
   #getSchema(connection: Connection): Schema {
     return {
+      tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      compareRows: makeComparator(connection.sort),
+      compareRows: connection.compareRows,
       relationships: {},
     };
   }
@@ -148,6 +156,7 @@ export class TableSource implements Source {
       input,
       output: undefined,
       sort: makeOrderUnique(sort, this.#primaryKey),
+      compareRows: makeComparator(sort),
     };
 
     this.#connections.push(connection);

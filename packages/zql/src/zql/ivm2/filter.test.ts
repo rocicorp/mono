@@ -4,7 +4,7 @@ import {Filter} from './filter.js';
 import {Catch} from './catch.js';
 
 test('basics', () => {
-  const ms = new MemorySource({a: 'number', b: 'string'}, ['a']);
+  const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
   ms.push({type: 'add', row: {a: 3, b: 'foo'}});
   ms.push({type: 'add', row: {a: 2, b: 'bar'}});
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});

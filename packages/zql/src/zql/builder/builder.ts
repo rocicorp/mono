@@ -53,6 +53,14 @@ export interface Host {
  * ```
  */
 export function buildPipeline(ast: AST, host: Host): Input {
+  return buildPipelineInternal(ast, host);
+}
+
+function buildPipelineInternal(
+  ast: AST,
+  host: Host,
+  partitionKey?: string | undefined,
+): Input {
   const source = host.getSource(ast.table);
   let end: Input = source.connect(must(ast.orderBy));
 
@@ -63,13 +71,17 @@ export function buildPipeline(ast: AST, host: Host): Input {
   }
 
   if (ast.limit) {
-    end = new Take(end, host.createStorage(), ast.limit);
+    end = new Take(end, host.createStorage(), ast.limit, partitionKey);
   }
 
   if (ast.related) {
     for (const sq of ast.related) {
       assert(sq.subquery.alias, 'Subquery must have an alias');
-      const child = buildPipeline(sq.subquery, host);
+      const child = buildPipelineInternal(
+        sq.subquery,
+        host,
+        sq.correlation.childField,
+      );
       end = new Join(
         end,
         child,

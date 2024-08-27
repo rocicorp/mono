@@ -6,7 +6,7 @@ import {EntryList, ArrayView} from './array-view.js';
 import {DeepReadonly} from 'replicache';
 
 test('basics', () => {
-  const ms = new MemorySource({a: 'number', b: 'string'}, ['a']);
+  const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -18,7 +18,7 @@ test('basics', () => {
     ++callCount;
     data = d;
   };
-  view.addListener(listener);
+  const unlisten = view.addListener(listener);
 
   view.hydrate();
   expect(data).toEqual([
@@ -44,7 +44,7 @@ test('basics', () => {
     {a: 3, b: 'c'},
   ]);
 
-  view.removeListener(listener);
+  unlisten();
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
   expect(callCount).toBe(3);
 
@@ -55,7 +55,7 @@ test('basics', () => {
 });
 
 test('tree', () => {
-  const ms = new MemorySource({id: 'number', name: 'string'}, ['id']);
+  const ms = new MemorySource('table', {id: 'number', name: 'string'}, ['id']);
   ms.push({
     type: 'add',
     row: {id: 1, name: 'foo', childID: 2},
