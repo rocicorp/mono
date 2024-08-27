@@ -1,12 +1,12 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {KVStoreProvider} from 'replicache';
 import type {MaybePromise} from 'shared/src/types.js';
-import type {QueryDefs} from './zero.js';
+import type {SchemaDefs} from './zero.js';
 
 /**
  * Configuration for [[Zero]].
  */
-export interface ZeroOptions<QD extends QueryDefs> {
+export interface ZeroOptions<SD extends SchemaDefs> {
   /**
    * Server to connect to, for example "https://myapp-myteam.zero.ms/".
    */
@@ -64,13 +64,10 @@ export interface ZeroOptions<QD extends QueryDefs> {
   logLevel?: LogLevel | undefined;
 
   /**
-   * This defines the names and types of the queries that Zero manages. The
-   * return type of the parse function is used to infer the type of the query.
-   *
-   * At the moment the parse functions are not being used to validate the data
-   * stored by Zero but future work will enable this.
+   * This defines the schemas of the tables used in Zero and
+   * their relationships to one another.
    */
-  schemas?: QD | undefined;
+  schemas?: SD | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes
