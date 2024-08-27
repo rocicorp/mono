@@ -21,8 +21,6 @@ export type ListData = {
   readonly resultType: ResultType;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TODO = any;
 export function useListData({
   issuesProps,
   onChangePriority,
@@ -54,7 +52,7 @@ export function useListData({
   return useMemo(
     () =>
       new ListDataImpl(
-        issues as TODO,
+        issues,
         onChangePriority,
         onChangeStatus,
         onOpenDetail,
