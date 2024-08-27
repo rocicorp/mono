@@ -1,4 +1,4 @@
-import type {ZqlLiteZeroOptions} from './options.js';
+import type {ZQLiteZeroOptions} from './options.js';
 import {
   BaseCRUDMutate,
   EntityCRUDMutate,
@@ -22,13 +22,13 @@ import {Row} from 'zql/src/zql/ivm2/data.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
-export class ZqlLiteZero<SD extends SchemaDefs> {
+export class ZQLiteZero<SD extends SchemaDefs> {
   readonly zqlContext: Host & SubscriptionDelegate;
   readonly query: MakeEntityQueriesFromQueryDefs<SD>;
   readonly mutate: MakeCRUDMutate<SD>;
   db: Database;
 
-  constructor(options: ZqlLiteZeroOptions<SD>) {
+  constructor(options: ZQLiteZeroOptions<SD>) {
     const {schemas = {} as SD, db} = options;
     this.db = db;
     this.zqlContext = {} as TODO;
