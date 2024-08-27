@@ -18,6 +18,8 @@ type Statements = {
   del: Database.Statement;
   scan: Database.Statement;
   clear: Database.Statement;
+  commit: Database.Statement;
+  begin: Database.Statement;
 };
 
 // Exported for testing.
@@ -31,8 +33,16 @@ export const CREATE_STORAGE_TABLE = `
   )
   `;
 
+const defaultOptions = {
+  commitInterval: 5_000,
+};
+
 export class DatabaseStorage {
-  static create(lc: LogContext, path: string) {
+  static create(
+    lc: LogContext,
+    path: string,
+    options = defaultOptions,
+  ): DatabaseStorage {
     // SQLite is used for ephemeral storage (i.e. similar to RAM) that can spill to
     // disk to avoid consuming too much memory. Each worker thread gets its own
     // database (file) and acts as the single reader/writer of the DB, so
@@ -45,12 +55,15 @@ export class DatabaseStorage {
 
     db.prepare(CREATE_STORAGE_TABLE).run();
     lc.info?.(`Created DatabaseStorage backed by ${path}`);
-    return new DatabaseStorage(db);
+    return new DatabaseStorage(db, options);
   }
 
   readonly #stmts: Statements;
+  readonly #options: typeof defaultOptions;
+  readonly #db: Database.Database;
+  #numWrites = 0;
 
-  constructor(db: Database.Database) {
+  constructor(db: Database.Database, options = defaultOptions) {
     this.#stmts = {
       get: db.prepare(`
         SELECT val FROM storage WHERE
@@ -71,7 +84,17 @@ export class DatabaseStorage {
       clear: db.prepare(`
         DELETE FROM storage WHERE clientGroupID = ?
       `),
+      commit: db.prepare('COMMIT'),
+      begin: db.prepare('BEGIN'),
     };
+    this.#stmts.begin.run();
+    this.#options = options;
+    this.#db = db;
+  }
+
+  close() {
+    this.#checkpoint();
+    this.#db.close();
   }
 
   #get(
@@ -80,16 +103,37 @@ export class DatabaseStorage {
     key: string,
     def?: JSONValue,
   ): JSONValue | undefined {
+    this.#maybeCheckpoint();
     const {val} = this.#stmts.get.get(cgID, opID, key);
     return val ? JSON.parse(val) : def;
   }
 
   #set(cgID: string, opID: number, key: string, val: JSONValue) {
+    this.#maybeCheckpoint();
     this.#stmts.set.run(cgID, opID, key, JSON.stringify(val));
   }
 
   #del(cgID: string, opID: number, key: string) {
+    this.#maybeCheckpoint();
     this.#stmts.del.run(cgID, opID, key);
+  }
+
+  /**
+   * We don't need to commit every single write to the DB
+   * since we're not concerned with durability.
+   * Waiting on commits can be expensive, so we commit
+   * every `COMMIT_INTERVAL` writes.
+   */
+  #maybeCheckpoint() {
+    if (++this.#numWrites >= this.#options.commitInterval) {
+      this.#checkpoint();
+    }
+  }
+
+  #checkpoint() {
+    this.#stmts.commit.run();
+    this.#stmts.begin.run();
+    this.#numWrites = 0;
   }
 
   *#scan(
@@ -107,7 +151,10 @@ export class DatabaseStorage {
   }
 
   createClientGroupStorage(cgID: string): ClientGroupStorage {
-    const destroy = () => this.#stmts.clear.run(cgID);
+    const destroy = () => {
+      this.#stmts.clear.run(cgID);
+      this.#checkpoint();
+    };
     destroy();
 
     let nextOpID = 1;
