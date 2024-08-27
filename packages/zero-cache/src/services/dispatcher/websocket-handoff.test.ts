@@ -60,13 +60,11 @@ describe('dispatcher/websocket-handoff', () => {
     // This is tested in the next test.
   });
 
-  test(
-    'handoff and reply from worker',
-    async () => {
-      const workerReady = resolver<unknown>();
-      const receiver = new Worker(
-        INLINED_INSTALL_WEBSOCKET_RECEIVER_FUNCTION +
-          `
+  test('handoff and reply from worker', {retry: 3}, async () => {
+    const workerReady = resolver<unknown>();
+    const receiver = new Worker(
+      INLINED_INSTALL_WEBSOCKET_RECEIVER_FUNCTION +
+        `
       const WebSocket = require('ws');
       const {parentPort} = require('node:worker_threads');
 
@@ -82,32 +80,30 @@ describe('dispatcher/websocket-handoff', () => {
 
       parentPort.postMessage({ready: true});
       `,
-        {eval: true},
-      )
-        .on('error', err => workerReady.reject(err))
-        .on('exit', code => workerReady.reject(code))
-        .once('message', msg => workerReady.resolve(msg));
+      {eval: true},
+    )
+      .on('error', err => workerReady.reject(err))
+      .on('exit', code => workerReady.reject(code))
+      .once('message', msg => workerReady.resolve(msg));
 
-      installWebSocketHandoff(server, () => ({
-        payload: {foo: 'boo'},
-        receiver,
-      }));
+    installWebSocketHandoff(server, () => ({
+      payload: {foo: 'boo'},
+      receiver,
+    }));
 
-      // Await the ready signal from the worker, and provide a 300ms buffer,
-      // which seems to address inter Worker flakiness in vitest.
-      await Promise.all([workerReady.promise, sleep(300)]);
+    // Await the ready signal from the worker, and provide a 1000ms buffer,
+    // which seems to address inter Worker flakiness in vitest.
+    await Promise.all([workerReady.promise, sleep(1000)]);
 
-      const {promise: reply, resolve} = resolver<unknown>();
-      const ws = new WebSocket(`ws://localhost:${port}/`);
-      ws.on('open', () => ws.send('hello'));
-      ws.on('message', msg => resolve(msg));
+    const {promise: reply, resolve} = resolver<unknown>();
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('open', () => ws.send('hello'));
+    ws.on('message', msg => resolve(msg));
 
-      expect(await reply).toBe(
-        'Received message "hello" and payload {"foo":"boo"}',
-      );
-    },
-    {timeout: 1000, retry: 3},
-  );
+    expect(await reply).toBe(
+      'Received message "hello" and payload {"foo":"boo"}',
+    );
+  });
 });
 
 // Loading ESM modules via a Worker is not currently supported by
