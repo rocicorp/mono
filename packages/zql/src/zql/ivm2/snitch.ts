@@ -12,7 +12,7 @@ import {Stream} from './stream.js';
 export class Snitch implements Operator {
   readonly #input: Input;
   readonly #name: string;
-  readonly #countReads: boolean;
+  readonly #logTypes: LogType[];
   readonly log: SnitchMessage[];
 
   #output: Output | undefined;
@@ -21,13 +21,12 @@ export class Snitch implements Operator {
     input: Input,
     name: string,
     log: SnitchMessage[] = [],
-    countReads = false,
+    logTypes: LogType[] = ['fetch', 'push', 'cleanup'],
   ) {
     this.#input = input;
     this.#name = name;
     this.log = log;
-    this.#countReads = countReads;
-
+    this.#logTypes = logTypes;
     this.#input.setOutput(this);
   }
 
@@ -43,12 +42,19 @@ export class Snitch implements Operator {
     return this.#input.getSchema();
   }
 
+  #log(message: SnitchMessage) {
+    if (!this.#logTypes.includes(message[1])) {
+      return;
+    }
+    this.log.push(message);
+  }
+
   fetch(req: FetchRequest): Stream<Node> {
     assert(this.#output);
-    this.log.push([this.#name, 'fetch', req]);
+    this.#log([this.#name, 'fetch', req]);
     return this.fetchGenerator(req);
   }
-  
+
   *fetchGenerator(req: FetchRequest): Stream<Node> {
     let count = 0;
     try {
@@ -57,20 +63,18 @@ export class Snitch implements Operator {
         yield node;
       }
     } finally {
-      if (this.#countReads) {
-        this.log.push([this.#name, 'fetchCount', req, count]);
-      }
+      this.#log([this.#name, 'fetchCount', req, count]);
     }
   }
 
   cleanup(req: FetchRequest) {
     assert(this.#output);
-    this.log.push([this.#name, 'cleanup', req]);
+    this.#log([this.#name, 'cleanup', req]);
     return this.#input.cleanup(req);
   }
 
   push(change: Change) {
-    this.log.push([this.#name, 'push', toChangeRecord(change)]);
+    this.#log([this.#name, 'push', toChangeRecord(change)]);
     this.#output?.push(change);
   }
 }
@@ -122,3 +126,5 @@ export type ChildChangeRecord = {
   row: Row;
   child: ChangeRecord;
 };
+
+export type LogType = 'fetch' | 'push' | 'cleanup' | 'fetchCount';

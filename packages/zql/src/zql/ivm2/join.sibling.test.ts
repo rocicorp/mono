@@ -94,7 +94,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
 
   pushSiblingTest({
     ...base,
-    name: 'dangling ownerId, push existing ownerId',
+    name: 'push owner',
     sources: [
       [
         {id: 'i1', ownerId: 'o1'},
@@ -302,7 +302,12 @@ function pushSiblingTest(t: PushTestSibling) {
       for (const row of rows) {
         source.push({type: 'add', row});
       }
-      const snitch = new Snitch(source.connect(ordering), String(i), log, true);
+      const snitch = new Snitch(source.connect(ordering), String(i), log, [
+        'fetch',
+        'fetchCount',
+        'push',
+        'cleanup',
+      ]);
       return {
         source,
         snitch,
