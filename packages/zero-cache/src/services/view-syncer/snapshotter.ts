@@ -81,18 +81,34 @@ import {
  */
 export class Snapshotter {
   readonly #lc: LogContext;
-  #curr: Snapshot;
+  readonly #dbFile: string;
+  #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
 
   constructor(lc: LogContext, dbFile: string) {
     this.#lc = lc;
-    this.#curr = Snapshot.create(dbFile);
-
-    this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
+    this.#dbFile = dbFile;
   }
 
-  /** Returns the current snapshot. */
+  /**
+   * Initializes the snapshot to the current head of the database. This must be
+   * only be called once. The state of whether a Snapshotter has been initialized
+   * can be determined by calling {@link initialized()}.
+   */
+  init(): this {
+    assert(this.#curr === undefined, 'Already initialized');
+    this.#curr = Snapshot.create(this.#dbFile);
+    this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
+    return this;
+  }
+
+  initialized(): boolean {
+    return this.#curr !== undefined;
+  }
+
+  /** Returns the current snapshot. Asserts if {@link initialized()} is false. */
   current(): {db: StatementRunner; version: string} {
+    assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     return this.#curr;
   }
 
@@ -100,7 +116,8 @@ export class Snapshotter {
    * Advances to the head of the Database, returning a diff between the
    * previously current Snapshot and a new Snapshot at head. This is called
    * in response to a notification from a Replicator subscription. Subsequent
-   * calls to {@link current()} return the new Snapshot.
+   * calls to {@link current()} return the new Snapshot. Note that the Snapshotter
+   * must be initialized before advancing.
    *
    * The returned {@link SnapshotDiff} contains snapshots at the endpoints
    * of the database timeline. Iterating over the diff generates a sequence
@@ -133,6 +150,7 @@ export class Snapshotter {
    * the iteration.
    */
   advance(): SnapshotDiff {
+    assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     const next = this.#prev
       ? this.#prev.resetToHead()
       : Snapshot.create(this.#curr.db.db.name);
