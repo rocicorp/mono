@@ -4,7 +4,7 @@ import type {Database} from 'better-sqlite3';
 /**
  * Configuration for [[ZqlLiteZero]].
  */
-export interface ZqlLiteZeroOptions<QD extends SchemaDefs> {
-  schemas?: QD | undefined;
+export interface ZQLiteZeroOptions<SD extends SchemaDefs> {
+  schemas?: SD | undefined;
   db: Database;
 }
