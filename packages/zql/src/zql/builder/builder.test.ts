@@ -370,6 +370,12 @@ test('multi-join', () => {
               states: [{row: {code: 'AZ'}, relationships: {}}],
             },
           },
+          {
+            row: {userID: 3, stateCode: 'CA'},
+            relationships: {
+              states: [{row: {code: 'CA'}, relationships: {}}],
+            },
+          },
         ],
       },
     },
@@ -404,21 +410,13 @@ test('join with limit', () => {
       {
         table: 'users',
         orderBy: [['id', 'asc']],
-        where: [
-          {
-            type: 'simple',
-            field: 'id',
-            op: '<=',
-            value: 3,
-          },
-        ],
-        limit: 2,
+        limit: 3,
         related: [
           {
             correlation: {
               parentField: 'id',
               op: '=',
-              childField: 'issueID',
+              childField: 'userID',
             },
             subquery: {
               table: 'userStates',
@@ -427,6 +425,7 @@ test('join with limit', () => {
                 ['userID', 'asc'],
                 ['stateCode', 'asc'],
               ],
+              limit: 1,
               related: [
                 {
                   correlation: {
