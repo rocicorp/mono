@@ -3,7 +3,6 @@ import {nanoid} from 'nanoid';
 import {useCallback, useState} from 'react';
 import {Remark} from 'react-remark';
 import {must} from 'shared/src/must.js';
-import type {QueryRowType, Zero} from 'zero-client';
 import DefaultAvatarIcon from './assets/icons/avatar.svg?react';
 import CloseIcon from './assets/icons/close.svg?react';
 import ConfirmationModal from './confirm-modal.jsx';
@@ -22,6 +21,7 @@ import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
 import {timeAgo} from './util/date.js';
 import {Schema} from './schema.js';
+import {getIssueDetailQuery, IssueWithDetails} from './queries.js';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
@@ -64,31 +64,6 @@ function CommentsList(
   }
   return elements;
 }
-
-function getIssueDetailQuery(zero: Zero<Schema>, issueID: string) {
-  return zero.query.issue
-    .select(
-      'created',
-      'creatorID',
-      'description',
-      'id',
-      'kanbanOrder',
-      'modified',
-      'priority',
-      'status',
-      'title',
-    )
-    .related('comments', q =>
-      q
-        .select('id', 'body', 'created')
-        .related('creator', q => q.select('name')),
-    )
-    .where('id', '=', issueID);
-}
-
-export type IssueWithDetails = QueryRowType<
-  ReturnType<typeof getIssueDetailQuery>
->;
 
 export default function IssueDetail({
   onUpdateIssues,

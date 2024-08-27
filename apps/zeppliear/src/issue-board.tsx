@@ -2,16 +2,11 @@ import {generateNKeysBetween} from 'fractional-indexing';
 import {memo, useCallback, useMemo} from 'react';
 import {DragDropContext, DropResult} from 'react-beautiful-dnd';
 import IssueCol from './issue-col.jsx';
-import {
-  Issue,
-  IssueUpdate,
-  IssueWithLabels,
-  Priority,
-  Status,
-} from './issue.js';
+import {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import type {ListData} from './list-data.js';
 import {assert} from './util/asserts.js';
+import {IssueWithLabels} from './queries.js';
 
 export type IssuesByStatusType = {
   [Status.Backlog]: IssueWithLabels[];

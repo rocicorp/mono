@@ -21,12 +21,10 @@ import {
   CommentCreationPartial,
   Issue,
   IssueCreationPartial,
-  IssueQuery,
   IssueUpdate,
   createIssue,
   createIssueComment,
   deleteIssueComment,
-  getIssueWithLabelsQuery,
   updateIssues,
 } from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
@@ -34,12 +32,17 @@ import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
 import {escapeLike} from './util/escape-like.js';
 import {Schema} from './schema.js';
+import {
+  crewNames,
+  getCrewQuery,
+  getIssueWithLabelsQuery,
+  IssueWithLabelsQuery,
+} from './queries.js';
 
 type AppProps = {
   undoManager: UndoManager;
 };
 
-const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
 const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -54,9 +57,7 @@ const App = ({undoManager}: AppProps) => {
   // Sync the user rows for the entire crew so that when we pick a random
   // crew member below to be the current active user, we already have it
   // synced.
-  useQuery(
-    zero.query.member.select('id', 'name').where('name', 'IN', crewNames),
-  );
+  useQuery(getCrewQuery(zero));
 
   const userID =
     useQuery(
@@ -271,7 +272,7 @@ function RawLayout({
 const Layout = memo(RawLayout);
 
 function filterQuery(
-  q: IssueQuery,
+  q: IssueWithLabelsQuery,
   view: string | null,
   filters: FiltersState,
 ) {
