@@ -64,11 +64,8 @@ export interface ZeroOptions<QD extends QueryDefs> {
   logLevel?: LogLevel | undefined;
 
   /**
-   * This defines the names and types of the queries that Zero manages. The
-   * return type of the parse function is used to infer the type of the query.
-   *
-   * At the moment the parse functions are not being used to validate the data
-   * stored by Zero but future work will enable this.
+   * This defines the schemas of the tables used in Zero and
+   * their relationships to one another.
    */
   schemas?: QD | undefined;
 
