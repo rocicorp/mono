@@ -49,7 +49,7 @@ class OverlaySpy implements Output {
 }
 
 const cases = {
-  'simple-pull': (createSource: SourceFactory) => {
+  'simple-fetch': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
     const ms = createSource('table', {a: 'number'}, ['a']);
     const out = new Catch(ms.connect(sort));
@@ -70,7 +70,7 @@ const cases = {
     expect(out.fetch()).toEqual([]);
   },
 
-  'pull-with-constraint': (createSource: SourceFactory) => {
+  'fetch-with-constraint': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
     const ms = createSource(
       'table',
