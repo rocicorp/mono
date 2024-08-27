@@ -554,76 +554,75 @@ suite('take with partition', () => {
       ],
     });
 
-    // TODO: Uncomment when constraint+start fetch is fixed in MemorySource.
-    // takeTest({
-    //   ...base,
-    //   name: 'at limit add row at end',
-    //   partition: {
-    //     key: 'issueID',
-    //     values: ['i1', 'i2'],
-    //   },
-    //   sourceRows: [
-    //     {id: 'c1', issueID: 'i1', created: 100},
-    //     {id: 'c2', issueID: 'i1', created: 200},
-    //     // 580 to test that it constrains looking for previous
-    //     // to constraint issueID: 'i2'
-    //     {id: 'c3', issueID: 'i1', created: 580},
-    //     {id: 'c4', issueID: 'i2', created: 400},
-    //     {id: 'c5', issueID: 'i2', created: 500},
-    //     {id: 'c6', issueID: 'i2', created: 600},
-    //     {id: 'c7', issueID: 'i2', created: 700},
-    //   ],
-    //   limit: 3,
-    //   pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
-    //   expectedMessages: [
-    //     [
-    //       'takeSnitch',
-    //       'push',
-    //       {type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}},
-    //     ],
-    //     [
-    //       'takeSnitch',
-    //       'fetch',
-    //       {
-    //         constraint: {
-    //           key: 'issueID',
-    //           value: 'i2',
-    //         },
-    //         start: {
-    //           basis: 'before',
-    //           row: {id: 'c6', issueID: 'i2', created: 600},
-    //         },
-    //       },
-    //     ],
-    //   ],
-    //   expectedStorage: {
-    //     '["take","i1"]': {
-    //       bound: {id: 'c3', issueID: 'i1', created: 580},
-    //       size: 3,
-    //     },
-    //     '["take","i2"]': {
-    //       bound: {id: 'c8', issueID: 'i2', created: 550},
-    //       size: 3,
-    //     },
-    //     'maxBound': {id: 'c6', issueID: 'i2', created: 600},
-    //   },
-    //   expectedOutput: [
-    //     {
-    //       type: 'remove',
-    //       node: {
-    //         row: {id: 'i6', issueID: 'i2', created: 600},
-    //         relationships: {},
-    //       },
-    //     },
-    //     {
-    //       type: 'add',
-    //       node: {
-    //         row: {id: 'c3', issueID: 'i2', created: 550},
-    //         relationships: {},
-    //       },
-    //     },
-    //   ],
-    // });
+    takeTest({
+      ...base,
+      name: 'at limit add row at end',
+      partition: {
+        key: 'issueID',
+        values: ['i1', 'i2'],
+      },
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        // 580 to test that it constrains looking for previous
+        // to constraint issueID: 'i2'
+        {id: 'c3', issueID: 'i1', created: 580},
+        {id: 'c4', issueID: 'i2', created: 400},
+        {id: 'c5', issueID: 'i2', created: 500},
+        {id: 'c6', issueID: 'i2', created: 600},
+        {id: 'c7', issueID: 'i2', created: 700},
+      ],
+      limit: 3,
+      pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}},
+        ],
+        [
+          'takeSnitch',
+          'fetch',
+          {
+            constraint: {
+              key: 'issueID',
+              value: 'i2',
+            },
+            start: {
+              basis: 'before',
+              row: {id: 'c6', issueID: 'i2', created: 600},
+            },
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take","i1"]': {
+          bound: {id: 'c3', issueID: 'i1', created: 580},
+          size: 3,
+        },
+        '["take","i2"]': {
+          bound: {id: 'c8', issueID: 'i2', created: 550},
+          size: 3,
+        },
+        'maxBound': {id: 'c6', issueID: 'i2', created: 600},
+      },
+      expectedOutput: [
+        {
+          type: 'remove',
+          node: {
+            row: {id: 'c6', issueID: 'i2', created: 600},
+            relationships: {},
+          },
+        },
+        {
+          type: 'add',
+          node: {
+            row: {id: 'c8', issueID: 'i2', created: 550},
+            relationships: {},
+          },
+        },
+      ],
+    });
 
     takeTest({
       ...base,
