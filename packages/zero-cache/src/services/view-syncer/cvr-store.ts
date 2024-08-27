@@ -492,9 +492,7 @@ export class CVRStore {
     return rv;
   }
 
-  async *allRowRecords(): AsyncIterable<
-    RowRecord & {queriedColumns: JSONValue}
-  > {
+  async *allRowRecords(): AsyncIterable<RowRecord> {
     for await (const rows of this.#db<
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${

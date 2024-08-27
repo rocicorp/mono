@@ -20,8 +20,6 @@ import {
   RowPatch,
   RowRecord,
   cmpVersions,
-  getAllColumns,
-  getAllColumnsSorted,
   oneAfter,
   type CVRVersion,
   type ClientRecord,
@@ -447,7 +445,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     for (const parsedRow of rows.values()) {
       const {
         contents,
-        record: {id, rowVersion, queriedColumns},
+        record: {id, rowVersion},
       } = parsedRow;
 
       assert(queriedColumns !== null); // We never "receive" tombstones.
@@ -647,80 +645,4 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         {id, columns} // UpdateOp
       : {id}; // DeleteOp
   }
-}
-
-function mergeQueriedColumns(
-  existing: QueriedColumns | null | undefined,
-  received: QueriedColumns | null | undefined,
-  removeIDs?: Set<string>,
-): QueriedColumns {
-  if (!existing) {
-    return received ?? {};
-  }
-  const merged: QueriedColumns = {};
-
-  [existing, received].forEach((row, i) => {
-    if (!row) {
-      return;
-    }
-    for (const [id, columns] of Object.entries(row)) {
-      if (i === 0 /* existing */ && removeIDs?.has(id)) {
-        continue; // removeIDs from existing row.
-      }
-      let col = merged[id];
-      if (!col) {
-        col = merged[id] = [];
-      }
-      const set = new Set([...col, ...columns]);
-      merged[id] = [...set];
-      if (set.size > 1) {
-        merged[id].sort(); // Determinism is needed for diffing.
-      }
-    }
-
-    return merged;
-  });
-
-  return merged;
-}
-
-function sameColumns(a: QueriedColumns, b: QueriedColumns | null): boolean {
-  const aColumns = getAllColumns(a);
-  if (b === null) {
-    return aColumns.size === 0;
-  }
-  const bColumns = getAllColumns(b);
-  if (aColumns.size !== bColumns.size) {
-    return false;
-  }
-  for (const col of aColumns) {
-    if (!bColumns.has(col)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Determines if b has all the columns a has. b can have more columns than a.
- */
-function columnsAreASubset(
-  a: QueriedColumns,
-  b: QueriedColumns | null,
-): boolean {
-  const aColumns = getAllColumns(a);
-  if (b === null) {
-    return aColumns.size === 0;
-  }
-  const bColumns = new Set(getAllColumns(b));
-  if (aColumns.size > bColumns.size) {
-    return false;
-  }
-  for (const col of aColumns) {
-    if (!bColumns.has(col)) {
-      return false;
-    }
-  }
-  return true;
 }

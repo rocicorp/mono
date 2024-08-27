@@ -121,7 +121,6 @@ export type RowsRow = {
   rowKey: JSONValue;
   rowVersion: string;
   patchVersion: string;
-  queriedColumns: {[queryHash: string]: string[]} | null;
 };
 
 export function rowsRowToRowID(rowsRow: RowsRow): RowID {
@@ -137,7 +136,6 @@ export function rowsRowToRowRecord(rowsRow: RowsRow): RowRecord {
     id: rowsRowToRowID(rowsRow),
     rowVersion: rowsRow.rowVersion,
     patchVersion: versionFromString(rowsRow.patchVersion),
-    queriedColumns: rowsRow.queriedColumns,
   };
 }
 
@@ -152,7 +150,6 @@ export function rowRecordToRowsRow(
     rowKey: rowRecord.id.rowKey as Record<string, JSONValue>,
     rowVersion: rowRecord.rowVersion,
     patchVersion: versionString(rowRecord.patchVersion),
-    queriedColumns: rowRecord.queriedColumns,
   };
 }
 
@@ -164,7 +161,7 @@ CREATE TABLE cvr.rows (
   "rowKey"           JSONB,
   "rowVersion"       TEXT NOT NULL,
   "patchVersion"     TEXT NOT NULL,
-  "queriedColumns"   JSONB,  -- {[queryHash: string]: string[]}, NULL for tombstone
+  "refCount"         JSONB,  -- {[queryHash: string]: number}, NULL for tombstone
 
   PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey"),
 
@@ -177,8 +174,8 @@ CREATE TABLE cvr.rows (
 CREATE INDEX row_patch_version ON cvr.rows ("patchVersion");
 
 -- For listing rows returned by one or more query hashes. e.g.
--- SELECT * FROM cvr.rows WHERE "queriedColumns" ?| array[...queryHashes...];
-CREATE INDEX row_queried_columns ON cvr.rows USING GIN ("queriedColumns");
+-- SELECT * FROM cvr.rows WHERE "refCount" ?| array[...queryHashes...];
+CREATE INDEX row_ref_counts ON cvr.rows USING GIN ("refCount");
 `;
 
 const CREATE_CVR_TABLES =
