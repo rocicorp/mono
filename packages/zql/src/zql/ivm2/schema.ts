@@ -4,6 +4,7 @@ export type ValueType = 'string' | 'number' | 'boolean' | 'null';
 
 // Information about the nodes output by an operator.
 export type Schema = {
+  tableName: string;
   primaryKey: readonly string[];
   columns: Record<string, ValueType>;
 
