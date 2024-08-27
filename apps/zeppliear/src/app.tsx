@@ -3,8 +3,7 @@ import classnames from 'classnames';
 import {pickBy} from 'lodash';
 import {memo, useCallback, useEffect, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
-import type {EntityQuery, Zero} from 'zero-client';
-import * as agg from 'zql/src/zql/query/agg.js';
+import type {Query, Zero} from 'zero-client';
 import {getIssueOrder, getViewStatuses} from './filters.js';
 import {
   FiltersState,
@@ -13,20 +12,16 @@ import {
   useOrderByState,
   useViewState,
 } from './hooks/query-state-hooks.js';
-import {useQuery} from './hooks/use-query.js';
+import {useQuery} from './hooks/use-query2.js';
 import {useZero} from './hooks/use-zero.js';
 import IssueBoard from './issue-board.jsx';
 import IssueDetail from './issue-detail.jsx';
 import IssueList from './issue-list.jsx';
 import {
-  Comment,
   CommentCreationPartial,
   Issue,
   IssueCreationPartial,
-  IssueLabel,
   IssueUpdate,
-  Label,
-  Member,
   createIssue,
   createIssueComment,
   deleteIssueComment,
@@ -36,14 +31,7 @@ import {useIssuesProps, type IssuesProps} from './issues-props.js';
 import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
 import {escapeLike} from './util/escape-like.js';
-
-export type Collections = {
-  member: Member;
-  issue: Issue;
-  comment: Comment;
-  label: Label;
-  issueLabel: IssueLabel;
-};
+import {Schema} from './schema.js';
 
 type AppProps = {
   undoManager: UndoManager;
@@ -59,7 +47,7 @@ const App = ({undoManager}: AppProps) => {
   const [orderBy] = useOrderByState();
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
   const [menuVisible, setMenuVisible] = useState(false);
-  const zero = useZero<Collections>();
+  const zero = useZero<Schema>();
 
   // Sync the user rows for the entire crew so that when we pick a random
   // crew member below to be the current active user, we already have it
@@ -82,14 +70,7 @@ const App = ({undoManager}: AppProps) => {
   // TODO: fix kanban
   //const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
 
-  const issueListQuery = issueQuery
-    .leftJoin(
-      zero.query.issueLabel,
-      'issueLabel',
-      'issue.id',
-      'issueLabel.issueID',
-    )
-    .leftJoin(zero.query.label, 'label', 'issueLabel.labelID', 'label.id');
+  const issueListQuery = issueQuery.related('labels', q => q.select('name'));
   const filteredQuery = filterQuery(issueListQuery, view, filters);
 
   const issueOrder = getIssueOrder(view, orderBy);
@@ -198,7 +179,7 @@ interface LayoutProps {
   viewIssueCount: number;
   issuesProps: IssuesProps;
   hasNonViewFilters: boolean;
-  zero: Zero<Collections>;
+  zero: Zero<Schema>;
   userID: string;
   onCloseMenu: () => void;
   onToggleMenu: () => void;
@@ -296,7 +277,7 @@ function filterQuery(
   // TODO: having to know the from set and return type of the query to take it in as an arg is...
   // confusing at best.
   // TODO: having to know the `FromSet` is dumb.
-  q: EntityQuery<{issue: Issue; label: Label}>,
+  q: Query<Schema['issue']>,
   view: string | null,
   filters: FiltersState,
 ) {
@@ -304,41 +285,31 @@ function filterQuery(
 
   // Apply view filter
   if (viewStatuses && viewStatuses.size > 0) {
-    q = q.where('issue.status', 'IN', [...viewStatuses]);
+    q = q.where('status', 'IN', [...viewStatuses]);
   }
 
   if (filters.statusFilter) {
-    q = q.where('issue.status', 'IN', [...filters.statusFilter]);
+    q = q.where('status', 'IN', [...filters.statusFilter]);
   }
   if (filters.priorityFilter) {
-    q = q.where('issue.priority', 'IN', [...filters.priorityFilter]);
+    q = q.where('priority', 'IN', [...filters.priorityFilter]);
   }
 
-  let filteredQuery = q
-    .groupBy('issue.id')
-    .select(
-      'issue.created',
-      'issue.creatorID',
-      'issue.description',
-      'issue.id',
-      'issue.kanbanOrder',
-      'issue.priority',
-      'issue.modified',
-      'issue.status',
-      'issue.title',
-      agg.array('label.name', 'labels'),
-    );
-  if (filters.labelFilter) {
-    // TODO: if `having` has been applied then selection
-    // set should not be updated to remove what `having` operates against.
-    filteredQuery = filteredQuery.having('labels', 'INTERSECTS', [
-      ...filters.labelFilter,
-    ]);
-  }
+  let filteredQuery = q.select(
+    'created',
+    'creatorID',
+    'description',
+    'id',
+    'kanbanOrder',
+    'priority',
+    'modified',
+    'status',
+    'title',
+  );
 
   if (filters.textFilter) {
     filteredQuery = filteredQuery.where(
-      'issue.title',
+      'title',
       'ILIKE',
       `%${escapeLike(filters.textFilter)}%`,
     );

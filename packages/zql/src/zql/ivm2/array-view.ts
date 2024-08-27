@@ -5,13 +5,19 @@ import {assert} from 'shared/src/asserts.js';
 import {Schema} from './schema.js';
 import {must} from 'shared/src/must.js';
 import {DeepReadonly} from 'replicache';
+import {SubscriptionDelegate} from '../context/context.js';
+import {AST} from '../ast2/ast.js';
 
 /**
  * Called when the view changes. The received data should be considered
  * immutable. Caller must not modify it. Passed data is valid until next
  * time listener is called.
  */
-export type Listener = (entries: DeepReadonly<EntryList>) => void;
+export type Listener = (
+  entries: DeepReadonly<EntryList>,
+  resultType: ResultType,
+) => void;
+export type ResultType = 'complete' | 'partial' | 'none';
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -29,34 +35,63 @@ export class ArrayView implements Output {
   readonly #view: EntryList;
   readonly #listeners = new Set<Listener>();
   readonly #schema: Schema;
+  readonly #subscriptionDelegate: SubscriptionDelegate;
+  readonly #ast: AST;
 
   #hydrated = false;
+  #resultType: ResultType = 'none';
 
-  constructor(input: Input) {
+  constructor(
+    subscriptionDelegate: SubscriptionDelegate,
+    ast: AST,
+    input: Input,
+  ) {
     this.#input = input;
     this.#schema = input.getSchema();
+    this.#subscriptionDelegate = subscriptionDelegate;
+    this.#ast = ast;
 
     this.#input.setOutput(this);
     this.#view = [];
   }
 
+  get data() {
+    return this.#view;
+  }
+
+  // Need the host so we can call `subscriptionAdded`
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
+
+    const subscriptionRemoved = this.#subscriptionDelegate.subscriptionAdded(
+      this.#ast,
+      got => {
+        if (got) {
+          this.#resultType = 'complete';
+        }
+        if (this.#hydrated) {
+          listener(this.#view, this.#resultType);
+        }
+      },
+    );
+
     this.#listeners.add(listener);
+    if (this.#hydrated) {
+      listener(this.#view, this.#resultType);
+    }
 
     return () => {
-      this.#removeListener(listener);
+      subscriptionRemoved();
+      this.#listeners.delete(listener);
     };
   }
 
-  #removeListener(listener: Listener) {
-    assert(this.#listeners.has(listener), 'Listener not registered');
-    this.#listeners.delete(listener);
-  }
-
   #fireListeners() {
+    if (this.#resultType === 'none') {
+      this.#resultType = 'partial';
+    }
     for (const listener of this.#listeners) {
-      listener(this.#view);
+      listener(this.#view, this.#resultType);
     }
   }
 

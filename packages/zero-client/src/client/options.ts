@@ -1,12 +1,7 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {KVStoreProvider} from 'replicache';
-import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import type {QueryDefs} from './zero.js';
-
-export type QueryParseDefs<QD extends QueryDefs> = {
-  readonly [K in keyof QD]: (value: ReadonlyJSONObject) => QD[K];
-};
 
 /**
  * Configuration for [[Zero]].
@@ -75,7 +70,7 @@ export interface ZeroOptions<QD extends QueryDefs> {
    * At the moment the parse functions are not being used to validate the data
    * stored by Zero but future work will enable this.
    */
-  queries?: QueryParseDefs<QD> | undefined;
+  schemas?: QD | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes

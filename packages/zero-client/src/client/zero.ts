@@ -47,12 +47,10 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from 'zero-protocol/src/pull.js';
-import type {Context as ZQLContext} from 'zql/src/zql/context/context.js';
+import type {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
 import {ZeroContext} from 'zql/src/zql/context/zero-context.js';
-import {Materialite} from 'zql/src/zql/ivm/materialite.js';
-import type {FromSet} from 'zql/src/zql/query/entity-query.js';
-import {EntityQuery, newEntityQuery} from 'zql/src/zql/query/entity-query.js';
-import type {Entity} from 'zql/src/zql/schema/entity-schema.js';
+import {Query} from 'zql/src/zql/query2/query.js';
+import {newQuery} from 'zql/src/zql/query2/query-impl.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {
@@ -73,7 +71,7 @@ import {
   Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {QueryParseDefs, ZeroOptions} from './options.js';
+import type {ZeroOptions} from './options.js';
 import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
@@ -84,15 +82,17 @@ import {
 } from './subscriptions.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
+import {Schema} from 'zql/src/zql/query2/schema.js';
+import {Host} from '../../../zql/src/zql/builder/builder.js';
 
 export type QueryDefs = {
-  readonly [name: string]: Entity;
+  readonly [table: string]: Schema;
 };
 
 export type NoRelations = Record<string, never>;
 
 export type MakeEntityQueriesFromQueryDefs<QD extends QueryDefs> = {
-  readonly [K in keyof QD]: EntityQuery<{[P in K]: QD[K]}, NoRelations, []>;
+  readonly [K in keyof QD]: Query<QD[K]>;
 };
 
 declare const TESTING: boolean;
@@ -249,8 +249,7 @@ export class Zero<QD extends QueryDefs> {
     // intentionally empty
   };
 
-  readonly #zqlContext: ZQLContext;
-  readonly #materialite = new Materialite();
+  readonly #zqlContext: Host & SubscriptionDelegate;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -348,7 +347,7 @@ export class Zero<QD extends QueryDefs> {
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
-      queries = {} as QueryParseDefs<QD>,
+      schemas = {} as QD,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -379,7 +378,7 @@ export class Zero<QD extends QueryDefs> {
     const logOptions = this.#logOptions;
 
     const replicacheMutators = {
-      ['_zero_crud']: makeCRUDMutator(queries),
+      ['_zero_crud']: makeCRUDMutator(schemas),
     };
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
@@ -402,7 +401,7 @@ export class Zero<QD extends QueryDefs> {
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableLicensing: false,
       makeSubscriptionsManager: (queryInternal, lc) =>
-        new ZQLSubscriptionsManager(this.#materialite, queryInternal, lc),
+        new ZQLSubscriptionsManager(queryInternal, lc),
       enableClientGroupForking: false,
     };
 
@@ -424,7 +423,7 @@ export class Zero<QD extends QueryDefs> {
       logOptions.logSink,
     );
 
-    this.mutate = makeCRUDMutate<QD>(queries, rep.mutate);
+    this.mutate = makeCRUDMutate<QD>(schemas, rep.mutate);
 
     this.#queryManager = new QueryManager(
       rep.clientID,
@@ -433,7 +432,7 @@ export class Zero<QD extends QueryDefs> {
     );
 
     this.#zqlContext = new ZeroContext(
-      this.#materialite,
+      schemas,
       (name, cb) =>
         rep.subscriptions.add(
           new ZQLWatchSubscription(
@@ -447,7 +446,7 @@ export class Zero<QD extends QueryDefs> {
       },
     );
 
-    this.query = this.#registerQueries(queries);
+    this.query = this.#registerQueries(schemas);
 
     reportReloadReason(this.#lc);
 
@@ -1468,14 +1467,12 @@ export class Zero<QD extends QueryDefs> {
     // }
   }
 
-  #registerQueries(
-    queryDefs: QueryParseDefs<QD>,
-  ): MakeEntityQueriesFromQueryDefs<QD> {
-    const rv = {} as Record<string, EntityQuery<FromSet, NoRelations, []>>;
+  #registerQueries(queryDefs: QD): MakeEntityQueriesFromQueryDefs<QD> {
+    const rv = {} as Record<string, Query<Schema>>;
     const context = this.#zqlContext;
     // Not using parse yet
-    for (const name of Object.keys(queryDefs)) {
-      rv[name] = newEntityQuery(context, name);
+    for (const [name, schema] of Object.entries(queryDefs)) {
+      rv[name] = newQuery(context, schema);
     }
 
     return rv as MakeEntityQueriesFromQueryDefs<QD>;

@@ -12,20 +12,20 @@ import {
   SetOp,
   UpdateOp,
 } from 'zero-protocol/src/push.js';
-import type {Entity} from 'zql/src/zql/schema/entity-schema.js';
 import {toEntitiesKey} from './keys.js';
-import type {QueryParseDefs} from './options.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {QueryDefs} from './zero.js';
+import {Row} from 'zql/src/zql/ivm2/data.js';
+import {SchemaToRow} from 'zql/src/zql/query2/query.js';
 
-export type Parse<E extends Entity> = (v: ReadonlyJSONObject) => E;
+export type Parse<E extends Row> = (v: ReadonlyJSONObject) => E;
 
-export type Update<E extends Entity> = Entity & Partial<E>;
+export type Update<E extends Row> = Partial<E>;
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
  */
-export type EntityCRUDMutate<E extends Entity> = {
+export type EntityCRUDMutate<E extends Row> = {
   create: (value: E) => Promise<void>;
   set: (value: E) => Promise<void>;
   update: (value: Update<E>) => Promise<void>;
@@ -39,7 +39,7 @@ export type MakeCRUDMutate<QD extends QueryDefs> = BaseCRUDMutate<QD> &
   CRUDBatch<QD>;
 
 export type BaseCRUDMutate<QD extends QueryDefs> = {
-  [K in keyof QD]: EntityCRUDMutate<QD[K]>;
+  [K in keyof QD]: EntityCRUDMutate<SchemaToRow<QD[K]>>;
 };
 
 export type CRUDBatch<QD extends QueryDefs> = <R>(
@@ -56,7 +56,7 @@ type ZeroCRUDMutate = {
  * `label` properties.
  */
 export function makeCRUDMutate<QD extends QueryDefs>(
-  queries: QueryParseDefs<QD>,
+  schemas: QD,
   repMutate: ZeroCRUDMutate,
 ): MakeCRUDMutate<QD> {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
@@ -71,7 +71,7 @@ export function makeCRUDMutate<QD extends QueryDefs>(
     try {
       const ops: CRUDOp[] = [];
       const m = {} as Record<string, unknown>;
-      for (const name of Object.keys(queries)) {
+      for (const name of Object.keys(schemas)) {
         m[name] = makeBatchCRUDMutate(name, ops);
       }
 
@@ -89,8 +89,8 @@ export function makeCRUDMutate<QD extends QueryDefs>(
     }
   };
 
-  for (const name of Object.keys(queries)) {
-    (mutate as unknown as Record<string, EntityCRUDMutate<Entity>>)[name] =
+  for (const name of Object.keys(schemas)) {
+    (mutate as unknown as Record<string, EntityCRUDMutate<Row>>)[name] =
       makeEntityCRUDMutate(name, zeroCRUD, assertNotInBatch);
   }
   return mutate as MakeCRUDMutate<QD>;
@@ -99,7 +99,7 @@ export function makeCRUDMutate<QD extends QueryDefs>(
 /**
  * Creates the `{create, set, update, delete}` object for use outside a batch.
  */
-function makeEntityCRUDMutate<E extends Entity>(
+function makeEntityCRUDMutate<E extends Row>(
   entityType: string,
   zeroCRUD: CRUDMutate,
   assertNotInBatch: (entityType: string, op: CRUDOpKind) => void,
@@ -111,7 +111,8 @@ function makeEntityCRUDMutate<E extends Entity>(
       const op: CreateOp = {
         op: 'create',
         entityType,
-        id: {id},
+        // TODO: Current crud mutators expect id to always exist
+        id: {id: id as string},
         value,
       };
       return zeroCRUD({ops: [op]});
@@ -119,7 +120,7 @@ function makeEntityCRUDMutate<E extends Entity>(
     set: (value: E) => {
       assertNotInBatch(entityType, 'set');
       const {id} = value;
-      const op: SetOp = {op: 'set', entityType, id: {id}, value};
+      const op: SetOp = {op: 'set', entityType, id: {id: id as string}, value};
       return zeroCRUD({ops: [op]});
     },
     update: (value: Update<E>) => {
@@ -128,7 +129,7 @@ function makeEntityCRUDMutate<E extends Entity>(
       const op: UpdateOp = {
         op: 'update',
         entityType,
-        id: {id},
+        id: {id: id as string},
         partialValue: value,
       };
       return zeroCRUD({ops: [op]});
@@ -144,7 +145,7 @@ function makeEntityCRUDMutate<E extends Entity>(
 /**
  * Creates the `{create, set, update, delete}` object for use inside a batch.
  */
-export function makeBatchCRUDMutate<E extends Entity>(
+export function makeBatchCRUDMutate<E extends Row>(
   entityType: string,
   ops: CRUDOp[],
 ): EntityCRUDMutate<E> {
@@ -154,7 +155,7 @@ export function makeBatchCRUDMutate<E extends Entity>(
       const op: CreateOp = {
         op: 'create',
         entityType,
-        id: {id},
+        id: {id: id as string},
         value,
       };
       ops.push(op);
@@ -162,7 +163,7 @@ export function makeBatchCRUDMutate<E extends Entity>(
     },
     set: (value: E) => {
       const {id} = value;
-      const op: SetOp = {op: 'set', entityType, id: {id}, value};
+      const op: SetOp = {op: 'set', entityType, id: {id: id as string}, value};
       ops.push(op);
       return promiseVoid;
     },
@@ -171,7 +172,7 @@ export function makeBatchCRUDMutate<E extends Entity>(
       const op: UpdateOp = {
         op: 'update',
         entityType,
-        id: {id},
+        id: {id: id as string},
         partialValue: value,
       };
       ops.push(op);
@@ -197,7 +198,7 @@ export type CRUDMutator = (
 ) => Promise<void>;
 
 export function makeCRUDMutator<QD extends QueryDefs>(
-  queries: QueryParseDefs<QD>,
+  _schemas: QD,
 ): CRUDMutator {
   return async function zeroCRUDMutator(
     tx: WriteTransaction,
@@ -206,13 +207,13 @@ export function makeCRUDMutator<QD extends QueryDefs>(
     for (const op of crudArg.ops) {
       switch (op.op) {
         case 'create':
-          await createImpl(tx, op, queries[op.entityType]);
+          await createImpl(tx, op);
           break;
         case 'set':
-          await setImpl(tx, op, queries[op.entityType]);
+          await setImpl(tx, op);
           break;
         case 'update':
-          await updateImpl(tx, op, queries[op.entityType]);
+          await updateImpl(tx, op);
           break;
         case 'delete':
           await deleteImpl(tx, op);
@@ -222,32 +223,24 @@ export function makeCRUDMutator<QD extends QueryDefs>(
   };
 }
 
-export async function createImpl<E extends Entity>(
+export async function createImpl(
   tx: WriteTransaction,
   arg: CreateOp,
-  parse: Parse<E>,
 ): Promise<void> {
-  const value = parse(arg.value);
   const key = toEntitiesKey(arg.entityType, arg.id);
   if (!(await tx.has(key))) {
-    await tx.set(key, value);
+    await tx.set(key, arg.value);
   }
 }
 
-export async function setImpl<E extends Entity>(
-  tx: WriteTransaction,
-  arg: SetOp,
-  parse: Parse<E>,
-): Promise<void> {
-  const value = parse(arg.value);
+export async function setImpl(tx: WriteTransaction, arg: SetOp): Promise<void> {
   const key = toEntitiesKey(arg.entityType, arg.id);
-  await tx.set(key, value);
+  await tx.set(key, arg.value);
 }
 
-export async function updateImpl<E extends Entity>(
+export async function updateImpl(
   tx: WriteTransaction,
   arg: UpdateOp,
-  parse: Parse<E>,
 ): Promise<void> {
   const key = toEntitiesKey(arg.entityType, arg.id);
   const prev = await tx.get(key);
@@ -256,8 +249,7 @@ export async function updateImpl<E extends Entity>(
   }
   const update = arg.partialValue;
   const next = {...(prev as object), ...(update as object)};
-  const parsed = parse(next);
-  await tx.set(key, parsed);
+  await tx.set(key, next);
 }
 
 export async function deleteImpl(

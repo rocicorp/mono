@@ -1,10 +1,10 @@
 import {useState} from 'react';
-import type {Collections} from './app.jsx';
-import {useQuery} from './hooks/use-query.js';
+import {useQuery} from './hooks/use-query2.js';
 import {useZero} from './hooks/use-zero.js';
 import {getLabelColor} from './issue.js';
 import {LabelTypeahead} from './label-typeahead.jsx';
 import {escapeLike} from './util/escape-like.js';
+import {Schema} from './schema.js';
 
 export function LabelMenu({
   onSelectLabel,
@@ -27,7 +27,7 @@ function LabelsComponent({
   filter?: string | undefined;
   onSelectLabel: (label: string) => void;
 }) {
-  const zero = useZero<Collections>();
+  const zero = useZero<Schema>();
   const query = filter
     ? zero.query.label.where('name', 'ILIKE', `%${escapeLike(filter)}%`)
     : zero.query.label;

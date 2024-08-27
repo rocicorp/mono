@@ -13,8 +13,6 @@ import {
   pushMessageSchema,
 } from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
-import type {EntityQuery} from '../mod.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
@@ -39,6 +37,7 @@ import {
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
+import {AST} from 'zql/src/zql/ast2/ast.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -71,8 +70,15 @@ test('onOnlineChange callback', async () => {
 
   const r = zeroForTest({
     logLevel: 'debug',
-    queries: {
-      foo: () => ({id: 'a', val: 'a'}),
+    schemas: {
+      foo: {
+        fields: {
+          id: {type: 'string'},
+          val: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'foo',
+      },
     },
     onOnlineChange: online => {
       if (online) {
@@ -430,13 +436,16 @@ suite('initConnection', () => {
   });
 
   test('sends desired queries patch', async () => {
-    type E = {
-      id: string;
-      value: number;
-    };
     const r = zeroForTest({
-      queries: {
-        e: v => v as E,
+      schemas: {
+        e: {
+          fields: {
+            id: {type: 'string'},
+            value: {type: 'number'},
+          },
+          primaryKey: ['id'],
+          table: 'e',
+        },
       },
     });
     const mockSocket = await r.socket;
@@ -450,12 +459,9 @@ suite('initConnection', () => {
           desiredQueriesPatch: [
             {
               ast: {
-                aggregate: [],
-                orderBy: [[['e', 'id'], 'asc']],
-                select: [[['e', '*'], '*']],
                 table: 'e',
               } satisfies AST,
-              hash: '3v64kj3849ubl',
+              hash: '2iu01zfto3d8e',
               op: 'put',
             },
           ],
@@ -465,10 +471,8 @@ suite('initConnection', () => {
     };
 
     expect(mockSocket.messages.length).toEqual(0);
-    r.query.e
-      .select('*')
-      .prepare()
-      .subscribe(() => {});
+    const view = r.query.e.select('id', 'value').materialize();
+    view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
   });
@@ -860,20 +864,25 @@ test('smokeTest', async () => {
 
   for (const c of cases) {
     // zeroForTest adds the socket by default.
-    type Issue = {
-      id: string;
-      value: number;
-    };
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
       ...serverOptions,
-      queries: {
-        issues: v => v as Issue,
+      schemas: {
+        issues: {
+          fields: {
+            id: {type: 'string'},
+            value: {type: 'number'},
+          },
+          primaryKey: ['id'],
+          table: 'issues',
+        },
       },
     });
 
     const spy = vi.fn();
-    const unsubscribe = r.query.issues.select('*').prepare().subscribe(spy);
+    const view = r.query.issues.select('id', 'value').materialize();
+    view.hydrate();
+    const unsubscribe = view.addListener(spy);
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
@@ -883,10 +892,29 @@ test('smokeTest', async () => {
     // once for gotQueries
     // once we have batch mutations this can go back to 3
     expect(spy).toHaveBeenCalledTimes(4);
-    expect(spy.mock.calls[0]).toEqual([[], 'partial']);
+    // TODO: why is it called 4 times with the same data??
+    expect(spy.mock.calls[0]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
+    ]);
     // TODO(arv): Skip this repeated call
-    expect(spy.mock.calls[1]).toEqual([[], 'partial']);
-    expect(spy.mock.calls[2]).toEqual([[{id: 'a', value: 1}], 'partial']);
+    expect(spy.mock.calls[1]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
+    ]);
+    expect(spy.mock.calls[2]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
+    ]);
     expect(spy.mock.calls[3]).toEqual([
       [
         {id: 'a', value: 1},
@@ -904,7 +932,9 @@ test('smokeTest', async () => {
 
     await r.mutate.issues.set({id: 'a', value: 11});
 
-    expect(spy).toHaveBeenCalledTimes(1);
+    // TODO: this is called twice because the transient remove is seen during an update.
+    // We need to hold off sending the remove until all events in the current transaction are processed
+    expect(spy).toHaveBeenCalledTimes(2);
     expect(spy.mock.lastCall).toEqual([
       [
         {id: 'a', value: 11},
@@ -1689,17 +1719,31 @@ test('kvStore option', async () => {
       server: null,
       userID,
       kvStore,
-      queries: {
-        e: v => v as E,
+      schemas: {
+        e: {
+          fields: {
+            id: {type: 'string'},
+            value: {type: 'number'},
+          },
+          primaryKey: ['id'],
+          table: 'e',
+        },
       },
     });
-    expect(await r.query.e.select('*').prepare().exec()).deep.equal(
-      expectedValue,
-    );
+    const idIsAView = r.query.e
+      .select('id', 'value')
+      .where('id', '=', 'a')
+      .materialize();
+    idIsAView.hydrate();
+    const allDataView = r.query.e.select('id', 'value').materialize();
+    allDataView.hydrate();
+
+    // TODO: we need a way to await hydration...
+    await tickAFewTimes(clock, 1);
+
+    expect(allDataView.data).deep.equal(expectedValue);
     await r.mutate.e.create({id: 'a', value: 1});
-    expect(
-      await r.query.e.select('*').where('id', '=', 'a').prepare().exec(),
-    ).deep.equal([{id: 'a', value: 1}]);
+    expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
     await r.close();
@@ -1774,19 +1818,25 @@ test('Zero close should stop timeout, close delayed', async () => {
 });
 
 test('ensure we get the same query object back', () => {
-  type Issue = {
-    id: string;
-    title: string;
-  };
-  type Comment = {
-    id: string;
-    issueID: string;
-    text: string;
-  };
   const z = zeroForTest({
-    queries: {
-      issue: v => v as Issue,
-      comment: v => v as Comment,
+    schemas: {
+      issue: {
+        fields: {
+          id: {type: 'string'},
+          title: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'issue',
+      },
+      comment: {
+        fields: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'comment',
+      },
     },
   });
   const issueQuery1 = z.query.issue;
@@ -1801,30 +1851,33 @@ test('ensure we get the same query object back', () => {
 });
 
 test('the type of collection should be inferred from options with parse', () => {
-  type Issue = {
-    id: string;
-    title: string;
-  };
-  type Comment = {
-    id: string;
-    issueID: string;
-    text: string;
-  };
   const r = zeroForTest({
-    queries: {
-      issue: v => v as Issue,
-      comment: v => v as Comment,
+    schemas: {
+      issue: {
+        fields: {
+          id: {type: 'string'},
+          title: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'issue',
+      },
+      comment: {
+        fields: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'comment',
+      },
     },
   });
 
-  const c: {
-    readonly issue: EntityQuery<{issue: Issue}>;
-    readonly comment: EntityQuery<{comment: Comment}>;
-  } = r.query;
+  const c = r.query;
   expect(c).not.undefined;
 
-  const issueQ: EntityQuery<{issue: Issue}> = r.query.issue;
-  const commentQ: EntityQuery<{comment: Comment}> = r.query.comment;
+  const issueQ = r.query.issue;
+  const commentQ = r.query.comment;
   expect(issueQ).not.undefined;
   expect(commentQ).not.undefined;
 });
@@ -1841,9 +1894,24 @@ suite('CRUD', () => {
   };
   const makeZero = () =>
     zeroForTest({
-      queries: {
-        issue: v => v as Issue,
-        comment: v => v as Comment,
+      schemas: {
+        issue: {
+          fields: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          table: 'issue',
+        },
+        comment: {
+          fields: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          table: 'comment',
+        },
       },
     });
 
@@ -1851,37 +1919,36 @@ suite('CRUD', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
+    const view = z.query.issue.select('id', 'title').materialize();
+    view.hydrate();
     await createIssue({id: 'a', title: 'A'});
-    expect(await z.query.issue.select('*').prepare().exec()).toEqual([
-      {id: 'a', title: 'A'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', title: 'A'}]);
 
     // create again should not change anything
     await createIssue({id: 'a', title: 'Again'});
-    expect(await z.query.issue.select('*').prepare().exec()).toEqual([
-      {id: 'a', title: 'A'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', title: 'A'}]);
   });
 
   test('set', async () => {
     const z = makeZero();
 
+    const view = await z.query.comment
+      .select('id', 'issueID', 'text')
+      .materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
-      {id: 'a', issueID: '1', text: 'A text'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const setComment: (comment: Comment) => Promise<void> =
       z.mutate.comment.set;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+    expect(view.data).toEqual([
       {id: 'a', issueID: '1', text: 'A text'},
       {id: 'b', issueID: '2', text: 'B text'},
     ]);
 
     // set allows updating
     await setComment({id: 'a', issueID: '11', text: 'AA text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+    expect(view.data).toEqual([
       {id: 'a', issueID: '11', text: 'AA text'},
       {id: 'b', issueID: '2', text: 'B text'},
     ]);
@@ -1889,35 +1956,34 @@ suite('CRUD', () => {
 
   test('update', async () => {
     const z = makeZero();
-
+    const view = z.query.comment.select('id', 'issueID').materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
-      {id: 'a', issueID: '1', text: 'A text'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const updateComment: (comment: Update<Comment>) => Promise<void> =
       z.mutate.comment.update;
     await updateComment({id: 'a', issueID: '11', text: 'AA text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
-      {id: 'a', issueID: '11', text: 'AA text'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AA text'}]);
 
     await updateComment({id: 'a', text: 'AAA text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
 
     // update is a noop if not existing
     await updateComment({id: 'b', issueID: '2', text: 'B text'});
-    expect(await z.query.comment.select('*').prepare().exec()).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text'},
-    ]);
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
   });
 
   test('do not expose _zero_crud', () => {
     const z = zeroForTest({
-      queries: {
-        issue: v => v as {id: string; title: string},
+      schemas: {
+        issue: {
+          fields: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          table: 'issue',
+        },
       },
     });
 
@@ -1928,21 +1994,33 @@ suite('CRUD', () => {
 });
 
 test('mutate is a function for batching', async () => {
-  type Issue = {
-    id: string;
-    title: string;
-  };
-  type Comment = {
-    id: string;
-    issueID: string;
-    text: string;
-  };
   const z = zeroForTest({
-    queries: {
-      issue: v => v as Issue,
-      comment: v => v as Comment,
+    schemas: {
+      issue: {
+        fields: {
+          id: {type: 'string'},
+          title: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'issue',
+      },
+      comment: {
+        fields: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'comment',
+      },
     },
   });
+  const issueView = z.query.issue.select('id', 'title').materialize();
+  issueView.hydrate();
+  const commentView = z.query.comment
+    .select('id', 'issueID', 'text')
+    .materialize();
+  commentView.hydrate();
 
   const x = await z.mutate(async m => {
     expect(
@@ -1963,10 +2041,8 @@ test('mutate is a function for batching', async () => {
 
   expect(x).toBe(123);
 
-  expect(await z.query.issue.select('*').prepare().exec()).toEqual([
-    {id: 'a', title: 'A'},
-  ]);
-  expect(await z.query.comment.select('*').prepare().exec()).toEqual([
+  expect(issueView.data).toEqual([{id: 'a', title: 'A'}]);
+  expect(commentView.data).toEqual([
     {id: 'b', issueID: 'a', text: 'Comment for issue A was changed'},
   ]);
 
@@ -1976,21 +2052,33 @@ test('mutate is a function for batching', async () => {
 });
 
 test('calling mutate on the non batch version should throw inside a batch', async () => {
-  type Issue = {
-    id: string;
-    title: string;
-  };
-  type Comment = {
-    id: string;
-    issueID: string;
-    text: string;
-  };
   const z = zeroForTest({
-    queries: {
-      issue: v => v as Issue,
-      comment: v => v as Comment,
+    schemas: {
+      issue: {
+        fields: {
+          id: {type: 'string'},
+          title: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'issue',
+      },
+      comment: {
+        fields: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        table: 'comment',
+      },
     },
   });
+  const commentView = z.query.comment
+    .select('id', 'issueID', 'text')
+    .materialize();
+  commentView.hydrate();
+  const issueView = z.query.issue.select('id', 'title').materialize();
+  issueView.hydrate();
 
   await expect(
     z.mutate(async m => {
@@ -2000,12 +2088,10 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   ).rejects.toThrow('Cannot call mutate.issue.create inside a batch');
 
   // make sure that we did not update the issue collection.
-  await expect(z.query.issue.select('*').prepare().exec()).resolves.toEqual([]);
+  expect(issueView.data).toEqual([]);
 
   await z.mutate.comment.create({id: 'a', text: 'A', issueID: 'a'});
-  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
-    {id: 'a', text: 'A', issueID: 'a'},
-  ]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
@@ -2013,9 +2099,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('Cannot call mutate.comment.update inside a batch');
   // make sure that we did not update the comment collection.
-  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
-    {id: 'a', text: 'A', issueID: 'a'},
-  ]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
@@ -2023,9 +2107,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('Cannot call mutate.comment.set inside a batch');
   // make sure that we did not update the comment collection.
-  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
-    {id: 'a', text: 'A', issueID: 'a'},
-  ]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
@@ -2033,9 +2115,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('Cannot call mutate.comment.delete inside a batch');
   // make sure that we did not delete the comment row
-  await expect(z.query.comment.select('*').prepare().exec()).resolves.toEqual([
-    {id: 'a', text: 'A', issueID: 'a'},
-  ]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {

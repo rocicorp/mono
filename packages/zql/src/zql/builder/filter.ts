@@ -1,3 +1,4 @@
+import {assert} from 'shared/src/asserts.js';
 import {SimpleOperator, SimpleCondition} from '../ast2/ast.js';
 import {Row, Value} from '../ivm2/data.js';
 import {getLikePredicate} from './like.js';
@@ -17,7 +18,7 @@ export function createPredicate(condition: SimpleCondition) {
 }
 
 function createPredicateImpl(
-  rhs: NonNullValue,
+  rhs: NonNullValue | readonly NonNullValue[],
   operator: SimpleOperator,
 ): SimplePredicate {
   switch (operator) {
@@ -34,13 +35,23 @@ function createPredicateImpl(
     case '>=':
       return lhs => lhs >= rhs;
     case 'LIKE':
-      return getLikePredicate(rhs, '');
+      return getLikePredicate(rhs as NonNullValue, '');
     case 'NOT LIKE':
-      return not(getLikePredicate(rhs, ''));
+      return not(getLikePredicate(rhs as NonNullValue, ''));
     case 'ILIKE':
-      return getLikePredicate(rhs, 'i');
+      return getLikePredicate(rhs as NonNullValue, 'i');
     case 'NOT ILIKE':
-      return not(getLikePredicate(rhs, 'i'));
+      return not(getLikePredicate(rhs as NonNullValue, 'i'));
+    case 'IN': {
+      assert(Array.isArray(rhs));
+      const set = new Set(rhs);
+      return lhs => set.has(lhs);
+    }
+    case 'NOT IN': {
+      assert(Array.isArray(rhs));
+      const set = new Set(rhs);
+      return lhs => !set.has(lhs);
+    }
     default:
       operator satisfies never;
       throw new Error(`Unexpected operator: ${operator}`);

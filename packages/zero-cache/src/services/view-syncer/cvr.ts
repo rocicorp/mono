@@ -5,7 +5,7 @@ import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
 import {JSONObject} from 'zero-cache/src/types/bigint-json.js';
-import type {AST} from 'zql/src/zql/ast/ast.js';
+import type {AST} from 'zql/src/zql/ast2/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
@@ -155,39 +155,14 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       ast: {
         schema: 'zero',
         table: 'clients',
-        select: [
-          [['clients', 'clientGroupID'], 'clientGroupID'],
-          [['clients', 'clientID'], 'clientID'],
-          [['clients', 'lastMutationID'], 'lastMutationID'],
+        where: [
+          {
+            type: 'simple',
+            field: 'clientGroupID',
+            op: '=',
+            value: this._cvr.id,
+          },
         ],
-        where: {
-          type: 'conjunction',
-          op: 'AND',
-          conditions: [
-            {
-              type: 'simple',
-              field: ['clients', 'clientGroupID'],
-              op: '=',
-              value: {
-                type: 'value',
-                value: this._cvr.id,
-              },
-            },
-            {
-              type: 'conjunction',
-              op: 'OR',
-              conditions: Object.keys(this._cvr.clients).map(clientID => ({
-                type: 'simple',
-                field: ['clients', 'clientID'],
-                op: '=',
-                value: {
-                  type: 'value',
-                  value: clientID,
-                },
-              })),
-            },
-          ],
-        },
       },
       internal: true,
     };

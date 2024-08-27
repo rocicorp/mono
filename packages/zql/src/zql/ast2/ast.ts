@@ -5,12 +5,14 @@
 export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
 export type Ordering = readonly OrderPart[];
 
-export type SimpleOperator = EqualityOps | OrderOps | LikeOps;
+export type SimpleOperator = EqualityOps | OrderOps | LikeOps | InOps;
 export type EqualityOps = '=' | '!=';
 export type OrderOps = '<' | '>' | '<=' | '>=';
 export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
+export type InOps = 'IN' | 'NOT IN';
 
 export type AST = {
+  readonly schema?: string | undefined;
   readonly table: string;
 
   // A query would be aliased if the AST is a subquery.
@@ -29,7 +31,7 @@ export type AST = {
   // where conditions or choose the _first_ `related` entry.
   // Choosing the first `related` entry is almost always the best choice if
   // one exists.
-  readonly where?: Condition[] | undefined;
+  readonly where?: readonly Condition[] | undefined;
 
   readonly related?: readonly CorrelatedSubQuery[] | undefined;
   readonly limit?: number | undefined;
@@ -70,5 +72,10 @@ export type SimpleCondition = {
    * `null` is absent since we do not have an `IS` or `IS NOT`
    * operator defined and `null != null` in SQL.
    */
-  value: string | number | boolean;
+  value: string | number | boolean | ReadonlyArray<string | number | boolean>;
 };
+
+export function normalizeAST(ast: AST): AST {
+  // TODO: actually normalize!
+  return ast;
+}

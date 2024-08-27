@@ -3,7 +3,7 @@ import type {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import {must} from 'shared/src/must.js';
 import xxh from 'xxhashjs';
 import type {ChangeDesiredQueriesMessage, QueriesPatch} from 'zero-protocol';
-import {AST, normalizeAST} from 'zql/src/zql/ast/ast.js';
+import {normalizeAST, type AST} from 'zql/src/zql/ast2/ast.js';
 import type {GotCallback} from 'zql/src/zql/context/context.js';
 import type {ReadTransaction} from '../mod.js';
 import {GOT_QUERIES_KEY_PREFIX, desiredQueriesPrefixForClient} from './keys.js';

@@ -75,7 +75,7 @@ function IssueCol({
   onListData,
 }: Props) {
   const issuesProps = useIssuesProps(
-    query.where('issue.status', '=', status),
+    query.where('status', '=', status),
     queryDeps.concat(status),
     order,
   );

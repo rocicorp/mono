@@ -7,29 +7,19 @@ import {
   type WatchCallback,
 } from 'replicache/src/subscriptions.js';
 import type {QueryInternal} from 'replicache/src/types.js';
-import type {Materialite} from 'zql/src/zql/ivm/materialite.js';
 
 type UnknownSubscription = Subscription<unknown>;
 
 export class ZQLSubscriptionsManager extends SubscriptionsManagerImpl {
-  readonly #materialite: Materialite;
-
-  constructor(
-    materialite: Materialite,
-    queryInternal: QueryInternal,
-    lc: LogContext,
-  ) {
+  constructor(queryInternal: QueryInternal, lc: LogContext) {
     super(queryInternal, lc);
-    this.#materialite = materialite;
   }
 
   callCallbacks(
     subs: readonly UnknownSubscription[],
     results: PromiseSettledResult<unknown>[],
   ): void {
-    this.#materialite.tx(() => {
-      super.callCallbacks(subs, results);
-    });
+    super.callCallbacks(subs, results);
   }
 }
 

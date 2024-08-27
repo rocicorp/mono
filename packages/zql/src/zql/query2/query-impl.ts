@@ -5,12 +5,12 @@ import {
   AddSelections,
   AddSubselect,
   Query,
-  GetFieldType,
   Operator,
   QueryResultRow,
   Selector,
-  Smash,
   EmptyQueryResultRow,
+  Smash,
+  GetFieldTypeNoNullOrUndefined,
 } from './query.js';
 import {
   Schema,
@@ -21,13 +21,14 @@ import {
 } from './schema.js';
 import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
-import {TypedView} from './typed-view.js';
 import {ArrayView} from '../ivm2/array-view.js';
+import {TypedView} from './typed-view.js';
+import {SubscriptionDelegate} from '../context/context.js';
 
 export function newQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
->(host: Host, schema: TSchema): Query<TSchema, TReturn> {
+>(host: Host & SubscriptionDelegate, schema: TSchema): Query<TSchema, TReturn> {
   return new QueryImpl(host, schema);
 }
 
@@ -38,10 +39,14 @@ class QueryImpl<
 > implements Query<TSchema, TReturn, TAs>
 {
   readonly #ast: AST;
-  readonly #host: Host;
+  readonly #host: Host & SubscriptionDelegate;
   readonly #schema: TSchema;
 
-  constructor(host: Host, schema: TSchema, ast?: AST | undefined) {
+  constructor(
+    host: Host & SubscriptionDelegate,
+    schema: TSchema,
+    ast?: AST | undefined,
+  ) {
     this.#ast = ast ?? {
       table: schema.table,
     };
@@ -53,7 +58,11 @@ class QueryImpl<
     TSchema extends Schema,
     TReturn extends Array<QueryResultRow>,
     TAs extends string,
-  >(host: Host, schema: TSchema, ast: AST): Query<TSchema, TReturn, TAs> {
+  >(
+    host: Host & SubscriptionDelegate,
+    schema: TSchema,
+    ast: AST,
+  ): Query<TSchema, TReturn, TAs> {
     return new QueryImpl(host, schema, ast);
   }
 
@@ -76,7 +85,7 @@ class QueryImpl<
       },
       this.#host,
     );
-    const view = new ArrayView(end);
+    const view = new ArrayView(this.#host, this.#ast, end);
     return view as unknown as TypedView<Smash<TReturn>>;
   }
 
@@ -170,7 +179,7 @@ class QueryImpl<
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
     op: Operator,
-    value: Exclude<GetFieldType<TSchema, TSelector>, null | undefined>,
+    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs> {
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,

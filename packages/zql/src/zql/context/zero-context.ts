@@ -1,40 +1,51 @@
 import type {ExperimentalNoIndexDiff} from 'replicache';
-import {assert} from 'shared/src//asserts.js';
-import type {AST} from '../ast/ast.js';
-import type {Materialite} from '../ivm/materialite.js';
-import type {SetSource} from '../ivm/source/set-source.js';
-import type {Source} from '../ivm/source/source.js';
-import type {PipelineEntity} from '../ivm/types.js';
-import type {Entity} from '../schema/entity-schema.js';
-import {mapIter} from '../util/iterables.js';
-import type {Context, GotCallback, SubscriptionDelegate} from './context.js';
+
+import type {GotCallback, SubscriptionDelegate} from './context.js';
+import {MemorySource} from '../ivm2/memory-source.js';
+import {ValueType} from '../ivm2/schema.js';
+import {Row} from '../ivm2/data.js';
+import {Schema, toInputArgs} from '../query2/schema.js';
+import {Host} from '../builder/builder.js';
+import {Source} from '../ivm2/source.js';
+import {AST} from '../ast2/ast.js';
+import {Storage} from '../ivm2/operator.js';
+import {MemoryStorage} from '../ivm2/memory-storage.js';
 
 export type AddWatch = (name: string, cb: WatchCallback) => void;
 
 export type WatchCallback = (changes: ExperimentalNoIndexDiff) => void;
 
-export class ZeroContext implements Context {
-  readonly materialite: Materialite;
+export class ZeroContext implements Host {
   readonly #sourceStore: ZeroSourceStore;
   readonly #subscriptionDelegate: SubscriptionDelegate;
+  readonly #schemas: Record<string, Schema>;
 
   constructor(
-    materialite: Materialite,
+    schemas: Record<string, Schema>,
     addWatch: AddWatch,
     subscriptionDelegate: SubscriptionDelegate,
   ) {
-    this.materialite = materialite;
-    this.#sourceStore = new ZeroSourceStore(materialite, addWatch);
+    this.#schemas = schemas;
+    this.#sourceStore = new ZeroSourceStore(addWatch);
     this.#subscriptionDelegate = subscriptionDelegate;
   }
 
-  getSource<T extends PipelineEntity>(name: string): Source<T> {
-    // TODO(mlaw): we should eventually evict sources that are no longer used.
-    return this.#sourceStore.getSource(name) as unknown as Source<T>;
+  getSource(name: string): Source {
+    const schema = this.#schemas[name];
+    const sourceArgs = toInputArgs(schema);
+    return this.#sourceStore.getSource(
+      name,
+      sourceArgs.columns,
+      sourceArgs.primaryKey,
+    );
   }
 
   subscriptionAdded(ast: AST, gotCallback: GotCallback): () => void {
     return this.#subscriptionDelegate.subscriptionAdded(ast, gotCallback);
+  }
+
+  createStorage(): Storage {
+    return new MemoryStorage();
   }
 }
 
@@ -43,19 +54,21 @@ export class ZeroContext implements Context {
  * queries that may exist.
  */
 class ZeroSourceStore {
-  readonly #materialite: Materialite;
   readonly #sources = new Map<string, ZeroSource>();
   readonly #addWatch: AddWatch;
 
-  constructor(materialite: Materialite, addWatch: AddWatch) {
-    this.#materialite = materialite;
+  constructor(addWatch: AddWatch) {
     this.#addWatch = addWatch;
   }
 
-  getSource(name: string) {
+  getSource(
+    name: string,
+    columns: Record<string, ValueType>,
+    primaryKeys: readonly string[],
+  ) {
     let source = this.#sources.get(name);
     if (source === undefined) {
-      source = new ZeroSource(this.#materialite, name, this.#addWatch);
+      source = new ZeroSource(name, columns, primaryKeys, this.#addWatch);
       this.#sources.set(name, source);
     }
 
@@ -64,40 +77,31 @@ class ZeroSourceStore {
 }
 
 class ZeroSource {
-  readonly #canonicalSource: SetSource<Entity>;
-  #receivedFirstDiff = false;
+  readonly #canonicalSource: MemorySource;
 
-  constructor(materialite: Materialite, name: string, addWatch: AddWatch) {
-    this.#canonicalSource = materialite.newSetSource<Entity>(
-      [[[name, 'id'], 'asc']],
-      name,
-    );
+  constructor(
+    name: string,
+    columns: Record<string, ValueType>,
+    primaryKeys: readonly string[],
+    addWatch: AddWatch,
+  ) {
+    this.#canonicalSource = new MemorySource(name, columns, primaryKeys);
     addWatch(name, this.#handleDiff);
   }
 
   #handleDiff = (changes: ExperimentalNoIndexDiff) => {
-    // The first diff is the set of initial values
-    // to seed the source. We call `seed`, rather than add,
-    // to process these. `seed` will only send to changes
-    // to views that have explicitly requested history whereas `add` will
-    // send them to everyone as if they were changes happening _now_.
-    if (this.#receivedFirstDiff === false) {
-      this.#canonicalSource.seed(
-        mapIter(changes, diff => {
-          assert(diff.op === 'add');
-          return diff.newValue as Entity;
-        }),
-      );
-      this.#receivedFirstDiff = true;
-
-      return;
-    }
     for (const diff of changes) {
       if (diff.op === 'del' || diff.op === 'change') {
-        this.#canonicalSource.delete(diff.oldValue as Entity);
+        this.#canonicalSource.push({
+          type: 'remove',
+          row: diff.oldValue as Row,
+        });
       }
       if (diff.op === 'add' || diff.op === 'change') {
-        this.#canonicalSource.add(diff.newValue as Entity);
+        this.#canonicalSource.push({
+          type: 'add',
+          row: diff.newValue as Row,
+        });
       }
     }
   };
