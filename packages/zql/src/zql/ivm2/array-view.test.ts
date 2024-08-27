@@ -3,7 +3,7 @@ import {expect, test} from 'vitest';
 import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import {EntryList, ArrayView} from './array-view.js';
-import {DeepReadonly} from 'replicache';
+import {Immutable} from 'shared/src/immutable.js';
 import {SubscriptionDelegate} from '../context/context.js';
 
 const mockSubscriptionDelegate: SubscriptionDelegate = {
@@ -22,8 +22,8 @@ test('basics', () => {
   );
 
   let callCount = 0;
-  let data: DeepReadonly<EntryList> = [];
-  const listener = (d: DeepReadonly<EntryList>) => {
+  let data: Immutable<EntryList> = [];
+  const listener = (d: Immutable<EntryList>) => {
     ++callCount;
     data = d;
   };
@@ -92,8 +92,8 @@ test('tree', () => {
   );
 
   const view = new ArrayView(mockSubscriptionDelegate, {table: ''}, join);
-  let data: DeepReadonly<EntryList> = [];
-  const listener = (d: DeepReadonly<EntryList>) => {
+  let data: Immutable<EntryList> = [];
+  const listener = (d: Immutable<EntryList>) => {
     data = d;
   };
   view.addListener(listener);

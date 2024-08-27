@@ -1,6 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
+  Constraint,
   FetchRequest,
   Input,
   Operator,
@@ -195,6 +196,12 @@ export class Take implements Operator {
     const takeStateKey = getTakeStateKey(partitionValue);
     const takeState = this.#storage.get(takeStateKey) as TakeState | undefined;
     const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row | undefined;
+    const constraint: Constraint | undefined = this.#partitionKey
+      ? {
+          key: this.#partitionKey,
+          value: change.node.row[this.#partitionKey],
+        }
+      : undefined;
 
     // The partition key was never fetched, so this push can be discarded.
     if (!takeState) {
@@ -233,6 +240,7 @@ export class Take implements Operator {
                 row: takeState.bound,
                 basis: 'at',
               },
+              constraint,
             }),
             1,
           ),
@@ -245,6 +253,7 @@ export class Take implements Operator {
                 row: takeState.bound,
                 basis: 'before',
               },
+              constraint,
             }),
             2,
           ),
@@ -286,15 +295,33 @@ export class Take implements Operator {
         this.#output.push(change);
         return;
       }
-      const [beforeBoundNode, boundNode, afterBoundNode] = take(
-        this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'before',
-          },
-        }),
-        3,
-      );
+      // The bound is removed
+      let beforeBoundNode: Node | undefined = undefined;
+      let afterBoundNode: Node | undefined = undefined;
+      if (compToBound === 0) {
+        [beforeBoundNode, afterBoundNode] = take(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'before',
+            },
+            constraint,
+          }),
+          2,
+        );
+      } else {
+        [beforeBoundNode, , afterBoundNode] = take(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'before',
+            },
+            constraint,
+          }),
+          3,
+        );
+      }
+
       if (afterBoundNode) {
         this.#setTakeState(
           takeStateKey,
@@ -312,7 +339,7 @@ export class Take implements Operator {
       this.#setTakeState(
         takeStateKey,
         takeState.size - 1,
-        compToBound === 0 ? beforeBoundNode.row : boundNode.row,
+        compToBound === 0 ? beforeBoundNode.row : takeState.bound,
         maxBound,
       );
       this.#output.push(change);

@@ -5,7 +5,7 @@ import {Join} from './join.js';
 import {Filter} from './filter.js';
 import {MemoryStorage} from './memory-storage.js';
 import {ArrayView, EntryList} from './array-view.js';
-import {DeepReadonly} from 'replicache';
+import {Immutable} from 'shared/src/immutable.js';
 import {SubscriptionDelegate} from '../context/context.js';
 
 const mockSubscriptionDelegate: SubscriptionDelegate = {
@@ -77,8 +77,8 @@ test('destroy a pipeline from the view', () => {
     'stuff',
   );
   const view = new ArrayView(mockSubscriptionDelegate, {table: ''}, join);
-  let data: DeepReadonly<EntryList> = [];
-  const listener = (d: DeepReadonly<EntryList>) => {
+  let data: Immutable<EntryList> = [];
+  const listener = (d: Immutable<EntryList>) => {
     data = d;
   };
   view.addListener(listener);
