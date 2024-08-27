@@ -45,7 +45,7 @@ function CommentsList(
         {
           // TODO: creator is a 1:1 relationship. It should not be an array type
         }
-        {comment.creator[0].name} {timeAgo(comment.created)}
+        {comment.creator[0]?.name} {timeAgo(comment.created)}
       </div>
       <div className="block flex-1 whitespace-pre-wrap">
         <Remark>{comment.body}</Remark>
@@ -82,9 +82,8 @@ export default function IssueDetail({
   const zero = useZero<Schema>();
 
   const issue =
-    useQuery(getIssueDetailQuery(zero, must(detailIssueID)), [
-      detailIssueID,
-    ])[0] ?? null;
+    useQuery(getIssueDetailQuery(zero, detailIssueID), [detailIssueID])[0] ??
+    null;
 
   const handleClose = useCallback(() => {
     setDetailIssueID(null);
@@ -255,10 +254,11 @@ export default function IssueDetail({
               </div>
             </div>
             <div className="text-md py-4 px-5 text-white">Comments</div>
-            {CommentsList(
-              issue.comments,
-              isLoading && issue?.description === null,
-            )}
+            {issue &&
+              CommentsList(
+                issue.comments,
+                isLoading && issue?.description === null,
+              )}
             <div className="mx-3 bg-gray-850 flex-1 mx- mt-0 mb-3 flex-1 border-transparent rounded full py-3 px-3 relative whitespace-pre-wrap ">
               <textarea
                 className="block flex-1 whitespace-pre-wrap text-size-sm w-full bg-gray-850 min-h-[6rem] placeholder-gray-300 placeholder:text-sm"

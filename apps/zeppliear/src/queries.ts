@@ -31,7 +31,10 @@ export type IssueWithDetails = QueryRowType<
   ReturnType<typeof getIssueDetailQuery>
 >;
 
-export function getIssueDetailQuery(zero: Zero<Schema>, issueID: string) {
+export function getIssueDetailQuery(
+  zero: Zero<Schema>,
+  issueID: string | null,
+) {
   return zero.query.issue
     .select(
       'created',
@@ -49,5 +52,5 @@ export function getIssueDetailQuery(zero: Zero<Schema>, issueID: string) {
         .select('id', 'body', 'created')
         .related('creator', q => q.select('name')),
     )
-    .where('id', '=', issueID);
+    .where('id', '=', issueID ?? '');
 }
