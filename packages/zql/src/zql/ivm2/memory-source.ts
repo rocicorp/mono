@@ -29,6 +29,7 @@ type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
+  compareRows: Comparator;
 };
 
 /**
@@ -39,6 +40,7 @@ type Connection = {
  * the data they receive from `pull` to be in sorted order.
  */
 export class MemorySource implements Source {
+  readonly #tableName: string;
   readonly #columns: Record<string, ValueType>;
   readonly #primaryKeys: readonly string[];
   readonly #primaryIndexSort: Ordering;
@@ -48,9 +50,11 @@ export class MemorySource implements Source {
   #overlay: Overlay | undefined;
 
   constructor(
+    tableName: string,
     columns: Record<string, ValueType>,
     primaryKeys: readonly string[],
   ) {
+    this.#tableName = tableName;
     this.#columns = columns;
     this.#primaryKeys = primaryKeys;
     this.#primaryIndexSort = primaryKeys.map(k => [k, 'asc']);
@@ -65,9 +69,10 @@ export class MemorySource implements Source {
 
   #getSchema(connection: Connection): Schema {
     return {
+      tableName: this.#tableName,
       columns: this.#columns,
       primaryKey: this.#primaryKeys,
-      compareRows: makeComparator(connection.sort),
+      compareRows: connection.compareRows,
       relationships: {},
     };
   }
@@ -81,9 +86,7 @@ export class MemorySource implements Source {
         connection.output = output;
       },
       destroy: () => {
-        const index = this.#connections.indexOf(connection);
-        assert(index !== -1);
-        this.#connections.splice(index, 1);
+        this.#disconnect(input);
       },
     };
 
@@ -91,13 +94,14 @@ export class MemorySource implements Source {
       input,
       output: undefined,
       sort,
+      compareRows: makeComparator(sort),
     };
 
     this.#connections.push(connection);
     return input;
   }
 
-  disconnect(input: Input): void {
+  #disconnect(input: Input): void {
     const idx = this.#connections.findIndex(c => c.input === input);
     assert(idx !== -1, 'Connection not found');
     const connection = this.#connections[idx];

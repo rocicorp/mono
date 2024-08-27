@@ -915,7 +915,7 @@ function pushTest(t: PushTest) {
 
     const sources = t.sources.map((fetch, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = new MemorySource(t.columns[i], t.primaryKeys[i]);
+      const source = new MemorySource('test', t.columns[i], t.primaryKeys[i]);
       for (const row of fetch) {
         source.push({type: 'add', row});
       }
@@ -974,8 +974,8 @@ function pushTest(t: PushTest) {
       expect(storage.cloneData()).toEqual(expectedStorage);
     }
 
-    expect(t.expectedLog).toEqual(log);
-    expect(t.expectedOutput).toEqual(c.pushes);
+    expect(log).toEqual(t.expectedLog);
+    expect(c.pushes).toEqual(t.expectedOutput);
   });
 }
 

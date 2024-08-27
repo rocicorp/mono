@@ -8,21 +8,25 @@ import {Catch} from './catch.js';
 
 runCases(
   (
-    _name: string,
+    name: string,
     columns: Record<string, ValueType>,
     primaryKeys: readonly string[],
-  ) => new MemorySource(columns, primaryKeys),
+  ) => new MemorySource(name, columns, primaryKeys),
 );
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
-    const ms = new MemorySource({a: 'string'}, ['a']);
+    const ms = new MemorySource('table', {a: 'string'}, ['a']);
     return ms.connect(order).getSchema().compareRows;
   });
 });
 
 test('indexes get cleaned up when not needed', () => {
-  const ms = new MemorySource({a: 'string', b: 'string', c: 'string'}, ['a']);
+  const ms = new MemorySource(
+    'table',
+    {a: 'string', b: 'string', c: 'string'},
+    ['a'],
+  );
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 
   const conn1 = ms.connect([['b', 'asc']]);
@@ -50,18 +54,18 @@ test('indexes get cleaned up when not needed', () => {
     JSON.stringify([['c', 'asc']]),
   ]);
 
-  ms.disconnect(conn3);
+  conn3.destroy();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  ms.disconnect(conn2);
+  conn2.destroy();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
     JSON.stringify([['b', 'asc']]),
   ]);
 
-  ms.disconnect(conn1);
+  conn1.destroy();
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 });

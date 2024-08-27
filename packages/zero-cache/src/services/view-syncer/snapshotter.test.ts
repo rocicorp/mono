@@ -46,7 +46,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('initial snapshot', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {db, version} = s.current();
 
     expect(version).toBe('00');
@@ -64,7 +64,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('empty diff', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -84,8 +84,8 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('concurrent snapshot diffs', () => {
-    const s1 = new Snapshotter(lc, dbFile.path);
-    const s2 = new Snapshotter(lc, dbFile.path);
+    const s1 = new Snapshotter(lc, dbFile.path).init();
+    const s2 = new Snapshotter(lc, dbFile.path).init();
 
     expect(s1.current().version).toBe('00');
     expect(s2.current().version).toBe('00');
@@ -348,7 +348,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('noop-truncate diff', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -366,7 +366,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('truncate diff', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -405,7 +405,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('consecutive truncates', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -475,7 +475,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('truncate followed by inserts into same table', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -542,7 +542,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('changelog iterator cleaned up on aborted iteration', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -578,7 +578,7 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('truncate iterator cleaned up on aborted iteration', () => {
-    const s = new Snapshotter(lc, dbFile.path);
+    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
