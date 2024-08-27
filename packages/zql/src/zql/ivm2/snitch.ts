@@ -1,8 +1,9 @@
 import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {Change} from './change.js';
-import type {Row} from './data.js';
+import type {Node, Row} from './data.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Schema} from './schema.js';
+import {Stream} from './stream.js';
 
 /**
  * Snitch is an Operator that records all messages it receives. Useful for
@@ -11,14 +12,21 @@ import type {Schema} from './schema.js';
 export class Snitch implements Operator {
   readonly #input: Input;
   readonly #name: string;
+  readonly #countReads: boolean;
   readonly log: SnitchMessage[];
 
   #output: Output | undefined;
 
-  constructor(input: Input, name: string, log: SnitchMessage[] = []) {
+  constructor(
+    input: Input,
+    name: string,
+    log: SnitchMessage[] = [],
+    countReads = false,
+  ) {
     this.#input = input;
     this.#name = name;
     this.log = log;
+    this.#countReads = countReads;
 
     this.#input.setOutput(this);
   }
@@ -35,10 +43,24 @@ export class Snitch implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest) {
+  fetch(req: FetchRequest): Stream<Node> {
     assert(this.#output);
     this.log.push([this.#name, 'fetch', req]);
-    return this.#input.fetch(req);
+    return this.fetchGenerator(req);
+  }
+  
+  *fetchGenerator(req: FetchRequest): Stream<Node> {
+    let count = 0;
+    try {
+      for (const node of this.#input.fetch(req)) {
+        count++;
+        yield node;
+      }
+    } finally {
+      if (this.#countReads) {
+        this.log.push([this.#name, 'fetchCount', req, count]);
+      }
+    }
   }
 
   cleanup(req: FetchRequest) {
@@ -67,8 +89,13 @@ function toChangeRecord(change: Change): ChangeRecord {
   };
 }
 
-export type SnitchMessage = FetchMessage | CleanupMessage | PushMessage;
+export type SnitchMessage =
+  | FetchMessage
+  | FetchCountMessage
+  | CleanupMessage
+  | PushMessage;
 
+export type FetchCountMessage = [string, 'fetchCount', FetchRequest, number];
 export type FetchMessage = [string, 'fetch', FetchRequest];
 export type CleanupMessage = [string, 'cleanup', FetchRequest];
 export type PushMessage = [string, 'push', ChangeRecord];
