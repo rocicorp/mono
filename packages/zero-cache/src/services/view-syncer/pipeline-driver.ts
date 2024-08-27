@@ -54,10 +54,14 @@ export class PipelineDriver {
   }
 
   /**
-   * Initializes the pipeline driver to the current head of the database.
+   * Initializes the PipelineDriver to the current head of the database.
    * Queries can then be added (i.e. hydrated) with {@link addQuery()}.
+   *
+   * Must only be called once.
    */
   init() {
+    assert(!this.#snapshotter.initialized(), 'Already initialized');
+
     const {db} = this.#snapshotter.init().current();
     this.#tableSpecs = new Map(
       listTables(db.db).map(spec => [spec.name, spec]),
@@ -65,15 +69,15 @@ export class PipelineDriver {
   }
 
   /**
-   * @returns Whether the pipeline driver has been initialized.
+   * @returns Whether the PipelineDriver has been initialized.
    */
   initialized(): boolean {
     return this.#snapshotter.initialized();
   }
 
   /**
-   * Clears storage used for the pipelines. Call this only when the
-   * pipeline driver will no longer be used.
+   * Clears storage used for the pipelines. Call this when the
+   * PipelineDriver will no longer be used.
    */
   destroy() {
     this.#storage.destroy();
@@ -144,13 +148,14 @@ export class PipelineDriver {
       }
     }
 
-    // Set the new snapshot on all TableSources'.
+    // Set the new snapshot on all TableSources.
     for (const table of this.#tables.values()) {
       table.setDB(this.#snapshotter.current().db.db);
     }
     this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
+  /** Implements `Host.getSource()` */
   #getSource(tableName: string): Source {
     assert(this.#tableSpecs, 'Pipelines have not be initialized');
     let source = this.#tables.get(tableName);
@@ -182,6 +187,7 @@ export class PipelineDriver {
     return source;
   }
 
+  /** Implements `Host.createStorage()` */
   #createStorage(): Storage {
     return this.#storage.createStorage();
   }
