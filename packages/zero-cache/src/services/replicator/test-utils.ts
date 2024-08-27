@@ -9,6 +9,49 @@ import {MessageProcessor} from './incremental-sync.js';
 
 const NOOP = () => {};
 
+export interface FakeReplicator {
+  process(...msgs: Pgoutput.Message[]): void;
+
+  processTransaction(
+    finalLSN: string,
+    ...msgs: (
+      | Pgoutput.MessageInsert
+      | Pgoutput.MessageDelete
+      | Pgoutput.MessageUpdate
+    )[]
+  ): void;
+}
+
+export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
+  const messageProcessor = createMessageProcessor(db);
+  return {
+    process: (...msgs) => {
+      for (const msg of msgs) {
+        messageProcessor.processMessage(lc, '0/1', msg);
+      }
+    },
+
+    processTransaction: (commitEndLsn, ...msgs) => {
+      messageProcessor.processMessage(lc, '0/1', {
+        tag: 'begin',
+        commitLsn: null,
+        commitTime: 0n,
+        xid: 0,
+      });
+      for (const msg of msgs) {
+        messageProcessor.processMessage(lc, '0/1', msg);
+      }
+      messageProcessor.processMessage(lc, '0/1', {
+        tag: 'commit',
+        flags: 0,
+        commitLsn: null,
+        commitEndLsn,
+        commitTime: 0n,
+      });
+    },
+  };
+}
+
 export function createMessageProcessor(
   db: Database,
   ack: (lsn: string) => void = NOOP,
