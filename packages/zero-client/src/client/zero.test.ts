@@ -38,7 +38,6 @@ import {
   serverAheadReloadReason,
 } from './zero.js';
 import {AST} from 'zql/src/zql/ast2/ast.js';
-import {sleep} from '../../../shared/src/sleep.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;

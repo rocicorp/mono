@@ -5,13 +5,20 @@ import {assert} from 'shared/src/asserts.js';
 import {Schema} from './schema.js';
 import {must} from 'shared/src/must.js';
 import {DeepReadonly} from 'replicache';
+import {SubscriptionDelegate} from '../context/context.js';
+import {Host} from '../builder/builder.js';
+import {AST} from '../ast2/ast.js';
 
 /**
  * Called when the view changes. The received data should be considered
  * immutable. Caller must not modify it. Passed data is valid until next
  * time listener is called.
  */
-export type Listener = (entries: DeepReadonly<EntryList>) => void;
+export type Listener = (
+  entries: DeepReadonly<EntryList>,
+  resultType: ResultType,
+) => void;
+export type ResultType = 'complete' | 'partial' | 'none';
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -29,12 +36,17 @@ export class ArrayView implements Output {
   readonly #view: EntryList;
   readonly #listeners = new Set<Listener>();
   readonly #schema: Schema;
+  readonly #host: Host & SubscriptionDelegate;
+  readonly #ast: AST;
 
   #hydrated = false;
+  #resultType: ResultType = 'none';
 
-  constructor(input: Input) {
+  constructor(host: Host & SubscriptionDelegate, ast: AST, input: Input) {
     this.#input = input;
     this.#schema = input.getSchema();
+    this.#host = host;
+    this.#ast = ast;
 
     this.#input.setOutput(this);
     this.#view = [];
@@ -44,13 +56,26 @@ export class ArrayView implements Output {
     return this.#view;
   }
 
+  // Need the host so we can call `subscriptionAdded`
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
+
+    const subscriptionRemoved = this.#host.subscriptionAdded(this.#ast, got => {
+      if (got) {
+        this.#resultType = 'complete';
+      }
+      if (this.#hydrated) {
+        listener(this.#view, this.#resultType);
+      }
+    });
+
     this.#listeners.add(listener);
     if (this.#hydrated) {
-      listener(this.#view);
+      listener(this.#view, this.#resultType);
     }
+
     return () => {
+      subscriptionRemoved();
       this.#listeners.delete(listener);
     };
   }
@@ -62,7 +87,7 @@ export class ArrayView implements Output {
 
   #fireListeners() {
     for (const listener of this.#listeners) {
-      listener(this.#view);
+      listener(this.#view, this.#resultType);
     }
   }
 
