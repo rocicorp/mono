@@ -4,7 +4,7 @@ import {Input, Output} from './operator.js';
 import {assert} from 'shared/src/asserts.js';
 import {Schema} from './schema.js';
 import {must} from 'shared/src/must.js';
-import {DeepReadonly} from 'replicache';
+import {Immutable} from 'shared/src/immutable.js';
 import {SubscriptionDelegate} from '../context/context.js';
 import {AST} from '../ast2/ast.js';
 
@@ -14,7 +14,7 @@ import {AST} from '../ast2/ast.js';
  * time listener is called.
  */
 export type Listener = (
-  entries: DeepReadonly<EntryList>,
+  entries: Immutable<EntryList>,
   resultType: ResultType,
 ) => void;
 export type ResultType = 'complete' | 'partial' | 'none';
