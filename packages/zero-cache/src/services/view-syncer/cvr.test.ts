@@ -424,6 +424,7 @@ describe('view-syncer/cvr', () => {
           internal: true,
           ast: {
             table: 'clients',
+            schema: 'zero',
             where: [
               {
                 type: 'simple',
@@ -520,69 +521,15 @@ describe('view-syncer/cvr', () => {
         {
           clientAST: {
             schema: 'zero',
-            select: [
-              [['clients', 'clientGroupID'], 'clientGroupID'],
-              [['clients', 'clientID'], 'clientID'],
-              [['clients', 'lastMutationID'], 'lastMutationID'],
-            ],
             table: 'clients',
-            where: {
-              conditions: [
-                {
-                  field: ['clients', 'clientGroupID'],
-                  op: '=',
-                  type: 'simple',
-                  value: {
-                    type: 'value',
-                    value: 'abc123',
-                  },
-                },
-                {
-                  conditions: [
-                    {
-                      field: ['clients', 'clientID'],
-                      op: '=',
-                      type: 'simple',
-                      value: {
-                        type: 'value',
-                        value: 'dooClient',
-                      },
-                    },
-                    {
-                      field: ['clients', 'clientID'],
-                      op: '=',
-                      type: 'simple',
-                      value: {
-                        type: 'value',
-                        value: 'fooClient',
-                      },
-                    },
-                    {
-                      field: ['clients', 'clientID'],
-                      op: '=',
-                      type: 'simple',
-                      value: {
-                        type: 'value',
-                        value: 'barClient',
-                      },
-                    },
-                    {
-                      field: ['clients', 'clientID'],
-                      op: '=',
-                      type: 'simple',
-                      value: {
-                        type: 'value',
-                        value: 'bonkClient',
-                      },
-                    },
-                  ],
-                  op: 'OR',
-                  type: 'conjunction',
-                },
-              ],
-              op: 'AND',
-              type: 'conjunction',
-            },
+            where: [
+              {
+                field: 'clientGroupID',
+                op: '=',
+                type: 'simple',
+                value: 'abc123',
+              },
+            ],
           },
           clientGroupID: 'abc123',
           deleted: false,
