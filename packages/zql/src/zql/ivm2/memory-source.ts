@@ -183,20 +183,36 @@ export class MemorySource implements Source {
       }
     }
 
+    const matchesConstraint = (row: Row) => {
+      if (!req.constraint) {
+        return true;
+      }
+      const {key, value} = req.constraint;
+      return valuesEqual(row[key], value);
+    };
+
     // If there is an overlay for this output, does it match the requested
     // constraints?
     if (overlay) {
-      if (req.constraint) {
-        const {key, value} = req.constraint;
-        if (!valuesEqual(overlay.change.row[key], value)) {
-          overlay = undefined;
-        }
+      if (!matchesConstraint(overlay.change.row)) {
+        overlay = undefined;
       }
     }
 
-    const startAt = req.start?.row
-      ? data.nextLowerKey(req.start.row)
-      : undefined;
+    const nextLowerKey = (row: Row | undefined) => {
+      while (row !== undefined) {
+        row = data.nextLowerKey(row);
+        if (row && matchesConstraint(row)) {
+          return row;
+        }
+      }
+      return row;
+    };
+
+    const startAt =
+      req.start?.basis === 'before'
+        ? nextLowerKey(req.start.row)
+        : req.start?.row;
     yield* generateWithStart(
       generateWithOverlay(
         startAt,

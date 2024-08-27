@@ -177,6 +177,93 @@ const cases = {
     );
   },
 
+  'fetch-with-constraint-and-start': (createSource: SourceFactory) => {
+    const cases: {
+      startData: Row[];
+      start: Start;
+      constraint: {key: string; value: Value};
+      expected: Row[];
+    }[] = [
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'before',
+        },
+        constraint: {key: 'b', value: false},
+        expected: [
+          {a: 3, b: false},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'at',
+        },
+        constraint: {key: 'b', value: false},
+        expected: [
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+          {a: 8, b: true},
+          {a: 9, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'after',
+        },
+        constraint: {key: 'b', value: false},
+        expected: [
+          {a: 7, b: false},
+          {a: 9, b: false},
+        ],
+      },
+    ];
+
+    for (const c of cases) {
+      const sort = [['a', 'asc']] as const;
+      const ms = createSource(
+        'table',
+        {
+          a: 'number',
+          b: 'boolean',
+        },
+        ['a'],
+      );
+      for (const row of c.startData) {
+        ms.push({type: 'add', row});
+      }
+      const out = new Catch(ms.connect(sort));
+      expect(
+        out.fetch({constraint: c.constraint, start: c.start}),
+        JSON.stringify(c),
+      ).toEqual(asNodes(c.expected));
+    }
+  },
+
   'push': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
     const ms = createSource('table', {a: 'number'}, ['a']);
@@ -602,6 +689,163 @@ const cases = {
       const out = new OverlaySpy(ms.connect(sort));
       out.onPush = () =>
         out.fetch({
+          constraint: c.constraint,
+        });
+      if (typeof c.expected === 'string') {
+        expect(() => ms.push(c.change), JSON.stringify(c)).toThrow(c.expected);
+      } else {
+        ms.push(c.change);
+        expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+      }
+    }
+  },
+
+  'overlay-vs-constraint-and-start': (createSource: SourceFactory) => {
+    const cases: {
+      startData: Row[];
+      start: Start;
+      constraint: {key: string; value: Value};
+      change: SourceChange;
+      expected: Row[] | string;
+    }[] = [
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'before',
+        },
+        constraint: {key: 'b', value: false},
+        change: {type: 'add', row: {a: 4, b: false}},
+        expected: [
+          {a: 4, b: false},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'before',
+        },
+        constraint: {key: 'b', value: false},
+        change: {type: 'add', row: {a: 2.5, b: false}},
+        expected: [
+          {a: 3, b: false},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        constraint: {key: 'b', value: false},
+        change: {type: 'add', row: {a: 5.75, b: false}},
+        expected: [
+          {a: 5.75, b: false},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        constraint: {key: 'b', value: false},
+        change: {type: 'add', row: {a: 4, b: false}},
+        expected: [
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        constraint: {key: 'b', value: false},
+        change: {type: 'add', row: {a: 8, b: false}},
+        expected: [
+          {a: 6, b: false},
+          {a: 7, b: false},
+          {a: 8, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'after',
+        },
+        constraint: {key: 'b', value: false},
+        change: {type: 'add', row: {a: 6.5, b: false}},
+        expected: [
+          {a: 6, b: false},
+          {a: 6.5, b: false},
+          {a: 7, b: false},
+        ],
+      },
+    ];
+
+    for (const c of cases) {
+      const sort = [['a', 'asc']] as const;
+      const ms = createSource(
+        'table',
+        {
+          a: 'number',
+          b: 'boolean',
+        },
+        ['a'],
+      );
+      for (const row of c.startData) {
+        ms.push({type: 'add', row});
+      }
+      const out = new OverlaySpy(ms.connect(sort));
+      out.onPush = () =>
+        out.fetch({
+          start: c.start,
           constraint: c.constraint,
         });
       if (typeof c.expected === 'string') {
