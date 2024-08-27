@@ -47,33 +47,37 @@ async function testBasics(userID: string) {
   });
 
   const q = r.query.e.select('id', 'value').limit(1);
-  const materialization = q.materialize();
+  const view = q.materialize();
+  view.hydrate();
   const log: (readonly E[])[] = [];
-  const removeListener = materialization.addListener(rows => {
-    log.push(rows);
+  const removeListener = view.addListener(rows => {
+    log.push([...rows]);
   });
 
   await r.triggerConnected();
 
   await sleep(1);
-  console.log('log', log);
-  assert(deepEqual(log, [[], []]));
+  assert(deepEqual(log, [[]]));
 
   await r.mutate.e.set({id: 'foo', value: 1});
-  assert(deepEqual(log, [[], [], [{id: 'foo', value: 1}]]));
+  assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
   await r.mutate.e.set({id: 'foo', value: 2});
+  // TODO: Called with an empty value because
+  // we have no concept of a transaction and the intermediate removal
+  // is seen
   assert(
-    deepEqual(log, [[], [], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
   await r.mutate.e.set({id: 'foo', value: 3});
   assert(
-    deepEqual(log, [[], [], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [], [{id: 'foo', value: 2}]]),
   );
 
   const view2 = q.materialize();
+  view2.hydrate();
   assert(deepEqual([...view2.data], [{id: 'foo', value: 3}]));
 }

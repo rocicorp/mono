@@ -50,6 +50,9 @@ export class ArrayView implements Output {
     if (this.#hydrated) {
       listener(this.#view);
     }
+    return () => {
+      this.#listeners.delete(listener);
+    };
   }
 
   removeListener(listener: Listener) {
