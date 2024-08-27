@@ -27,6 +27,7 @@ export function testSources() {
   ]);
   userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}});
   userStates.push({type: 'add', row: {userID: 3, stateCode: 'AZ'}});
+  userStates.push({type: 'add', row: {userID: 3, stateCode: 'CA'}});
   userStates.push({type: 'add', row: {userID: 4, stateCode: 'MD'}});
   userStates.push({type: 'add', row: {userID: 5, stateCode: 'AZ'}});
   userStates.push({type: 'add', row: {userID: 6, stateCode: 'CA'}});
@@ -306,6 +307,118 @@ test('multi-join', () => {
               parentField: 'id',
               op: '=',
               childField: 'userID',
+            },
+            subquery: {
+              table: 'userStates',
+              alias: 'userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+              related: [
+                {
+                  correlation: {
+                    parentField: 'stateCode',
+                    op: '=',
+                    childField: 'code',
+                  },
+                  subquery: {
+                    table: 'states',
+                    alias: 'states',
+                    orderBy: [['code', 'asc']],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([
+    {
+      row: {id: 1, name: 'aaron', recruiterID: null},
+      relationships: {
+        userStates: [
+          {
+            row: {userID: 1, stateCode: 'HI'},
+            relationships: {
+              states: [{row: {code: 'HI'}, relationships: {}}],
+            },
+          },
+        ],
+      },
+    },
+    {
+      row: {id: 2, name: 'erik', recruiterID: 1},
+      relationships: {
+        userStates: [],
+      },
+    },
+    {
+      row: {id: 3, name: 'greg', recruiterID: 1},
+      relationships: {
+        userStates: [
+          {
+            row: {userID: 3, stateCode: 'AZ'},
+            relationships: {
+              states: [{row: {code: 'AZ'}, relationships: {}}],
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+
+  expect(sink.pushes).toEqual([
+    {
+      type: 'child',
+      row: {id: 2, name: 'erik', recruiterID: 1},
+      child: {
+        relationshipName: 'userStates',
+        change: {
+          type: 'add',
+          node: {
+            row: {userID: 2, stateCode: 'HI'},
+            relationships: {
+              states: [{row: {code: 'HI'}, relationships: {}}],
+            },
+          },
+        },
+      },
+    },
+  ]);
+});
+
+test('join with limit', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: [
+          {
+            type: 'simple',
+            field: 'id',
+            op: '<=',
+            value: 3,
+          },
+        ],
+        limit: 2,
+        related: [
+          {
+            correlation: {
+              parentField: 'id',
+              op: '=',
+              childField: 'issueID',
             },
             subquery: {
               table: 'userStates',
