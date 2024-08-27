@@ -75,11 +75,6 @@ export class Take implements Operator {
         return;
       }
       for (const inputNode of this.#input.fetch(req)) {
-        console.log(
-          takeState.bound,
-          inputNode.row,
-          this.getSchema().compareRows(takeState.bound, inputNode.row),
-        );
         if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
           return;
         }
