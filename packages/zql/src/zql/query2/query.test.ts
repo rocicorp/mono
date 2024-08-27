@@ -95,18 +95,18 @@ describe('types', () => {
     query.select('foo');
 
     // Nothing selected? Return type is empty array.
-    expectTypeOf(query.materialize().get()).toMatchTypeOf<Iterable<{}>>();
+    expectTypeOf(query.materialize().data).toMatchTypeOf<Array<{}>>();
 
     const query2 = query.select('s');
-    expectTypeOf(query2.materialize().get()).toMatchTypeOf<
-      Iterable<{
+    expectTypeOf(query2.materialize().data).toMatchTypeOf<
+      Array<{
         readonly s: string;
       }>
     >();
 
     const query3 = query2.select('s', 'b', 'n');
-    expectTypeOf(query3.materialize().get()).toMatchTypeOf<
-      Iterable<{
+    expectTypeOf(query3.materialize().data).toMatchTypeOf<
+      Array<{
         readonly s: string;
         readonly b: boolean;
         readonly n: number;
@@ -124,10 +124,10 @@ describe('types', () => {
     query.related('doesNotExist', q => q);
 
     const query2 = query.related('test', q => q.select('b')).select('s');
-    expectTypeOf(query2.materialize().get()).toMatchTypeOf<
-      Iterable<{
+    expectTypeOf(query2.materialize().data).toMatchTypeOf<
+      Array<{
         readonly s: string;
-        readonly test: Iterable<{
+        readonly test: Array<{
           readonly b: boolean;
         }>;
       }>
@@ -141,18 +141,17 @@ describe('types', () => {
       .related('testWithRelationships', q => q.select('b'))
       .related('test', q => q.select('n'))
       .select('a')
-      .materialize()
-      .get();
+      .materialize().data;
     expectTypeOf(t).toMatchTypeOf<
-      Iterable<{
+      Array<{
         a: string;
-        self: Iterable<{
+        self: Array<{
           s: string;
         }>;
-        testWithRelationships: Iterable<{
+        testWithRelationships: Array<{
           b: boolean;
         }>;
-        test: Iterable<{
+        test: Array<{
           n: number;
         }>;
       }>
@@ -169,12 +168,12 @@ describe('types', () => {
         query.related('test', q => q.select('b')).select('s'),
       );
 
-    expectTypeOf(query2.materialize().get()).toMatchTypeOf<
-      Iterable<{
+    expectTypeOf(query2.materialize().data).toMatchTypeOf<
+      Array<{
         s: string;
-        self: Iterable<{
+        self: Array<{
           s: string;
-          test: Iterable<{
+          test: Array<{
             b: boolean;
           }>;
         }>;
@@ -186,7 +185,7 @@ describe('types', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
 
     const query2 = query.where('s', '=', 'foo');
-    expectTypeOf(query2.materialize().get()).toMatchTypeOf<Iterable<{}>>();
+    expectTypeOf(query2.materialize().data).toMatchTypeOf<Array<{}>>();
 
     // @ts-expect-error - cannot use a field that does not exist
     query.where('doesNotExist', '=', 'foo');
@@ -194,9 +193,9 @@ describe('types', () => {
     query.where('b', '=', 'false');
 
     expectTypeOf(
-      query.select('b').where('b', '=', true).materialize().get(),
+      query.select('b').where('b', '=', true).materialize().data,
     ).toMatchTypeOf<
-      Iterable<{
+      Array<{
         b: boolean;
       }>
     >();

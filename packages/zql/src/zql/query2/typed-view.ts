@@ -5,4 +5,5 @@ export type TypedView<T> = {
   removeListener(listener: Listener<T>): void;
   destroy(): void;
   hydrate(): void;
+  readonly data: T;
 };

@@ -10,6 +10,7 @@ import {
   QueryResultRow,
   Selector,
   EmptyQueryResultRow,
+  Smash,
 } from './query.js';
 import {
   Schema,
@@ -21,7 +22,7 @@ import {
 import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
 import {ArrayView} from '../ivm2/array-view.js';
-import {MaterializedQuery} from './materialized-query.js';
+import {TypedView} from './typed-view.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -67,7 +68,7 @@ class QueryImpl<
     return this.#create(this.#host, this.#schema, this.#ast);
   }
 
-  materialize(): MaterializedQuery<TReturn> {
+  materialize(): TypedView<Smash<TReturn>> {
     const end = buildPipeline(
       {
         ...this.#ast,
@@ -76,7 +77,7 @@ class QueryImpl<
       this.#host,
     );
     const view = new ArrayView(end);
-    return new MaterializedQuery(view);
+    return view as unknown as TypedView<Smash<TReturn>>;
   }
 
   related<

@@ -149,16 +149,16 @@ describe('bare select', () => {
 
     let rows: {id: string}[] = [];
     let called = false;
-    m.subscribe(data => {
+    m.addListener(data => {
       called = true;
-      rows = [...data];
+      rows = data;
     });
 
     expect(called).toBe(true);
     expect(rows).toEqual([]);
 
     called = false;
-    m.subscribe(_ => {
+    m.addListener(_ => {
       called = true;
     });
     expect(called).toBe(true);
@@ -170,7 +170,7 @@ describe('bare select', () => {
     const m = issueQuery.materialize();
 
     let rows: {id: string}[] = [];
-    m.subscribe(data => {
+    m.addListener(data => {
       rows = [...data];
     });
 
@@ -224,7 +224,7 @@ describe('bare select', () => {
     const m = issueQuery.materialize();
 
     let rows: {id: string}[] = [];
-    m.subscribe(data => {
+    m.addListener(data => {
       rows = [...data];
     });
 
@@ -257,7 +257,7 @@ describe('bare select', () => {
     const m = issueQuery.materialize();
 
     let rows: {id: string}[] = [];
-    m.subscribe(data => {
+    m.addListener(data => {
       rows = [...data];
     });
 
@@ -321,13 +321,13 @@ describe('joins and filters', () => {
       .where('closed', '=', true)
       .materialize();
 
-    singleFilterView.subscribe(data => {
+    singleFilterView.addListener(data => {
       singleFilterRows = [...data];
     });
-    doubleFilterView.subscribe(data => {
+    doubleFilterView.addListener(data => {
       doubleFilterRows = [...data];
     });
-    doubleFilterViewWithNoResults.subscribe(data => {
+    doubleFilterViewWithNoResults.addListener(data => {
       doubleFilterWithNoResultsRows = [...data];
     });
 
@@ -380,7 +380,7 @@ describe('joins and filters', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: any[] = [];
-    view.subscribe(data => {
+    view.addListener(data => {
       rows = [...data].map(row => ({
         ...row,
         owner: [...row.owner],

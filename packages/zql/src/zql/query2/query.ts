@@ -2,8 +2,8 @@
 import {AST} from '../ast2/ast.js';
 import {Row} from '../ivm2/data.js';
 import {Source} from '../ivm2/source.js';
-import {MaterializedQuery} from './materialized-query.js';
 import {Schema, PullSchemaForRelationship, SchemaValue} from './schema.js';
+import {TypedView} from './typed-view.js';
 
 /**
  * The type that can be passed into `select()`. A selector
@@ -174,5 +174,5 @@ export interface Query<
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs>;
 
-  materialize(): MaterializedQuery<TReturn>;
+  materialize(): TypedView<Smash<TReturn>>;
 }

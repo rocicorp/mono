@@ -40,6 +40,10 @@ export class ArrayView implements Output {
     this.#view = [];
   }
 
+  get data() {
+    return this.#view;
+  }
+
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
