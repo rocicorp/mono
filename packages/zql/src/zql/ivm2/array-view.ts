@@ -86,6 +86,9 @@ export class ArrayView implements Output {
   }
 
   #fireListeners() {
+    if (this.#resultType === 'none') {
+      this.#resultType = 'partial';
+    }
     for (const listener of this.#listeners) {
       listener(this.#view, this.#resultType);
     }

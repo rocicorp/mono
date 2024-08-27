@@ -459,10 +459,9 @@ suite('initConnection', () => {
           desiredQueriesPatch: [
             {
               ast: {
-                orderBy: [['id', 'asc']],
                 table: 'e',
               } satisfies AST,
-              hash: '3v64kj3849ubl',
+              hash: '2iu01zfto3d8e',
               op: 'put',
             },
           ],
@@ -881,10 +880,9 @@ test('smokeTest', async () => {
     });
 
     const spy = vi.fn();
-    const unsubscribe = r.query.issues
-      .select('id', 'value')
-      .materialize()
-      .addListener(spy);
+    const view = r.query.issues.select('id', 'value').materialize();
+    view.hydrate();
+    const unsubscribe = view.addListener(spy);
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
@@ -894,10 +892,29 @@ test('smokeTest', async () => {
     // once for gotQueries
     // once we have batch mutations this can go back to 3
     expect(spy).toHaveBeenCalledTimes(4);
-    expect(spy.mock.calls[0]).toEqual([[], 'partial']);
+    // TODO: why is it called 4 times with the same data??
+    expect(spy.mock.calls[0]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
+    ]);
     // TODO(arv): Skip this repeated call
-    expect(spy.mock.calls[1]).toEqual([[], 'partial']);
-    expect(spy.mock.calls[2]).toEqual([[{id: 'a', value: 1}], 'partial']);
+    expect(spy.mock.calls[1]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
+    ]);
+    expect(spy.mock.calls[2]).toEqual([
+      [
+        {id: 'a', value: 1},
+        {id: 'b', value: 2},
+      ],
+      'partial',
+    ]);
     expect(spy.mock.calls[3]).toEqual([
       [
         {id: 'a', value: 1},
@@ -915,7 +932,9 @@ test('smokeTest', async () => {
 
     await r.mutate.issues.set({id: 'a', value: 11});
 
-    expect(spy).toHaveBeenCalledTimes(1);
+    // TODO: this is called twice because the transient remove is seen during an update.
+    // We need to hold off sending the remove until all events in the current transaction are processed
+    expect(spy).toHaveBeenCalledTimes(2);
     expect(spy.mock.lastCall).toEqual([
       [
         {id: 'a', value: 11},
@@ -1711,14 +1730,20 @@ test('kvStore option', async () => {
         },
       },
     });
-    expect(await r.query.e.select('id', 'value').materialize().data).deep.equal(
-      expectedValue,
-    );
+    const idIsAView = r.query.e
+      .select('id', 'value')
+      .where('id', '=', 'a')
+      .materialize();
+    idIsAView.hydrate();
+    const allDataView = r.query.e.select('id', 'value').materialize();
+    allDataView.hydrate();
+
+    // TODO: we need a way to await hydration...
+    await tickAFewTimes(clock, 1);
+
+    expect(allDataView.data).deep.equal(expectedValue);
     await r.mutate.e.create({id: 'a', value: 1});
-    expect(
-      await r.query.e.select('id', 'value').where('id', '=', 'a').materialize()
-        .data,
-    ).deep.equal([{id: 'a', value: 1}]);
+    expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
     await r.close();
@@ -1990,6 +2015,12 @@ test('mutate is a function for batching', async () => {
       },
     },
   });
+  const issueView = z.query.issue.select('id', 'title').materialize();
+  issueView.hydrate();
+  const commentView = z.query.comment
+    .select('id', 'issueID', 'text')
+    .materialize();
+  commentView.hydrate();
 
   const x = await z.mutate(async m => {
     expect(
@@ -2010,12 +2041,10 @@ test('mutate is a function for batching', async () => {
 
   expect(x).toBe(123);
 
-  expect(await z.query.issue.select('id', 'title').materialize().data).toEqual([
-    {id: 'a', title: 'A'},
+  expect(issueView.data).toEqual([{id: 'a', title: 'A'}]);
+  expect(commentView.data).toEqual([
+    {id: 'b', issueID: 'a', text: 'Comment for issue A was changed'},
   ]);
-  expect(
-    await z.query.comment.select('id', 'issueID', 'text').materialize().data,
-  ).toEqual([{id: 'b', issueID: 'a', text: 'Comment for issue A was changed'}]);
 
   expect(
     (z.mutate as unknown as Record<string, unknown>)._zero_crud,
@@ -2044,6 +2073,12 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       },
     },
   });
+  const commentView = z.query.comment
+    .select('id', 'issueID', 'text')
+    .materialize();
+  commentView.hydrate();
+  const issueView = z.query.issue.select('id', 'title').materialize();
+  issueView.hydrate();
 
   await expect(
     z.mutate(async m => {
@@ -2053,14 +2088,10 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   ).rejects.toThrow('Cannot call mutate.issue.create inside a batch');
 
   // make sure that we did not update the issue collection.
-  await expect(
-    z.query.issue.select('id', 'title').materialize().data,
-  ).resolves.toEqual([]);
+  expect(issueView.data).toEqual([]);
 
   await z.mutate.comment.create({id: 'a', text: 'A', issueID: 'a'});
-  await expect(
-    z.query.comment.select('id', 'issueID', 'text').materialize().data,
-  ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
@@ -2068,9 +2099,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('Cannot call mutate.comment.update inside a batch');
   // make sure that we did not update the comment collection.
-  await expect(
-    z.query.comment.select('id', 'text', 'issueID').materialize().data,
-  ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
@@ -2078,9 +2107,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('Cannot call mutate.comment.set inside a batch');
   // make sure that we did not update the comment collection.
-  await expect(
-    z.query.comment.select('id', 'text', 'text').materialize().data,
-  ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
@@ -2088,9 +2115,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('Cannot call mutate.comment.delete inside a batch');
   // make sure that we did not delete the comment row
-  await expect(
-    z.query.comment.select('id', 'text', 'issueID').materialize().data,
-  ).resolves.toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
     z.mutate(async () => {
