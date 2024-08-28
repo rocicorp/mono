@@ -848,7 +848,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1a0'},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'should-show-up-in-patch'},
         },
@@ -901,7 +901,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'new version patch', name: 'because of new field'},
         },
@@ -910,7 +910,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1a0'},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID2,
           contents: {id: 'same column selection as twoHash'},
         },
@@ -947,7 +947,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'patch stays at new version'},
         },
