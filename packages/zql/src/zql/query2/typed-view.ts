@@ -1,5 +1,5 @@
 import {Immutable} from 'shared/src/immutable.js';
-import {ResultType} from '../ivm2/array-view.js';
+import {ResultType} from './hybrid-query-view.js';
 
 export type Listener<T> = (data: Immutable<T>, resultType: ResultType) => void;
 

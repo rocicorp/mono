@@ -25,6 +25,7 @@ import {Ordering} from '../ast2/ast.js';
 import {ArrayView} from '../ivm2/array-view.js';
 import {TypedView} from './typed-view.js';
 import {SubscriptionDelegate} from '../context/context.js';
+import {HybridQueryView} from './hybrid-query-view.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -79,8 +80,11 @@ class QueryImpl<
   }
 
   materialize(): TypedView<Smash<TReturn>> {
-    const end = buildPipeline(this.#completeAst(), this.#host);
-    const view = new ArrayView(this.#host, this.#ast, end);
+    const view = new HybridQueryView(
+      this.#host,
+      this.#ast,
+      new ArrayView(buildPipeline(this.#completeAst(), this.#host)),
+    );
     return view as unknown as TypedView<Smash<TReturn>>;
   }
 
