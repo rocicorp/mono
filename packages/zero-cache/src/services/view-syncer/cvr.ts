@@ -580,15 +580,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   #deleteUnreferencedRow(existing: RowRecord): RowID | null {
     const received = this.#receivedRows.get(existing.id);
-
-    const newRefCounts =
-      received ?? // optimization: already merged in received()
-      mergeRefCounts(
-        existing.refCounts,
-        undefined,
-        this.#removedOrExecutedQueryIDs,
-      );
-
     if (received) {
       const pending = this._cvrStore.getPendingRowRecord(existing.id);
       if (
@@ -600,8 +591,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
       return null;
     }
-    const newPatchVersion = this.#assertNewVersion();
 
+    const newPatchVersion = this.#assertNewVersion();
+    const newRefCounts = mergeRefCounts(
+      existing.refCounts,
+      undefined,
+      this.#removedOrExecutedQueryIDs,
+    );
     const hasRef = Object.values(newRefCounts).some(v => v > 0);
     const rowRecord: RowRecord = {
       ...existing,
