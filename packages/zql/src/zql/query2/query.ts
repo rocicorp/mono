@@ -177,6 +177,26 @@ export interface Query<
 
   as<TAs2 extends string>(as: TAs2): Query<TSchema, TReturn, TAs2>;
 
+  related<TRelationship extends keyof TSchema['relationships']>(
+    relationship: TRelationship,
+  ): Query<
+    TSchema,
+    Array<
+      AddSubselect<
+        Query<
+          PullSchemaForRelationship<TSchema, TRelationship>,
+          Array<
+            DefaultQueryResultRow<
+              PullSchemaForRelationship<TSchema, TRelationship>
+            >
+          >,
+          TRelationship & string
+        >,
+        TReturn
+      >
+    >,
+    TAs
+  >;
   related<
     TRelationship extends keyof TSchema['relationships'],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
