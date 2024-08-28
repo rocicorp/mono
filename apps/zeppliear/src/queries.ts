@@ -26,6 +26,27 @@ export function getIssueListQuery(zero: Zero<Schema>) {
     );
 }
 
+export function getIssuePreloadQuery(
+  zero: Zero<Schema>,
+  sort: 'modified' | 'created' | 'priority' | 'status',
+) {
+  return zero.query.issue
+    .select(
+      'created',
+      'creatorID',
+      'description',
+      'id',
+      'kanbanOrder',
+      'modified',
+      'priority',
+      'status',
+      'title',
+    )
+    .related('labels', q => q.select('id', 'name'))
+    .orderBy(sort, 'desc')
+    .limit(2000);
+}
+
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
 export function getCrewQuery(zero: Zero<Schema>) {
   return zero.query.member.select('id', 'name').where('name', 'IN', crewNames);
