@@ -23,6 +23,9 @@ const mockQuery = {
   where() {
     return this;
   },
+  start() {
+    return this;
+  },
 };
 
 type TestSchema = {
@@ -205,6 +208,14 @@ describe('types', () => {
         b: boolean;
       }>
     >();
+  });
+
+  test('start', () => {
+    const query = mockQuery as unknown as Query<TestSchema>;
+    const query2 = query.start({b: true, s: 'foo'});
+    expectTypeOf(query2.materialize().data).toMatchTypeOf<Array<{}>>();
+    const query3 = query.start({b: true, s: 'foo'}, {inclusive: true});
+    expectTypeOf(query3.materialize().data).toMatchTypeOf<Array<{}>>();
   });
 });
 

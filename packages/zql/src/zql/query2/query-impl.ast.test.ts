@@ -49,6 +49,26 @@ describe('building the AST', () => {
     });
   });
 
+  test('start adds a start field', () => {
+    const issueQuery = newQuery(mockHost, issueSchema);
+    const start = issueQuery.start({id: '1'});
+    expect(start.ast).toEqual({
+      table: 'issue',
+      start: {
+        row: {id: '1'},
+        exclusive: true,
+      },
+    });
+    const start2 = issueQuery.start({id: '2', closed: true}, {inclusive: true});
+    expect(start2.ast).toEqual({
+      table: 'issue',
+      start: {
+        row: {id: '2', closed: true},
+        exclusive: false,
+      },
+    });
+  });
+
   test('related: field edges', () => {
     const issueQuery = newQuery(mockHost, issueSchema);
     const related = issueQuery.related('owner', q => q);

@@ -12,6 +12,7 @@ import {
   DefaultQueryResultRow,
   Smash,
   GetFieldTypeNoNullOrUndefined,
+  SchemaToRow,
 } from './query.js';
 import {
   Schema,
@@ -252,6 +253,19 @@ class QueryImpl<
     return this.#create(this.#host, this.#schema, {
       ...this.#ast,
       alias,
+    });
+  }
+
+  start(
+    row: Partial<SchemaToRow<TSchema>>,
+    opts?: {inclusive: boolean} | undefined,
+  ): Query<TSchema, TReturn, TAs> {
+    return this.#create(this.#host, this.#schema, {
+      ...this.#ast,
+      start: {
+        row,
+        exclusive: !opts?.inclusive,
+      },
     });
   }
 

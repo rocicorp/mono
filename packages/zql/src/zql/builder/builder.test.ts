@@ -510,3 +510,35 @@ test('join with limit', () => {
     },
   ]);
 });
+
+test('skip', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        start: {row: {id: 3}, exclusive: true},
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([
+    {row: {id: 4, name: 'matt', recruiterID: 1}, relationships: {}},
+    {row: {id: 5, name: 'cesar', recruiterID: 3}, relationships: {}},
+    {row: {id: 6, name: 'darick', recruiterID: 3}, relationships: {}},
+    {row: {id: 7, name: 'alex', recruiterID: 1}, relationships: {}},
+  ]);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([
+    {
+      type: 'add',
+      node: {row: {id: 8, name: 'sam'}, relationships: {}},
+    },
+  ]);
+});
