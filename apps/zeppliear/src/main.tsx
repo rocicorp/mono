@@ -23,6 +23,10 @@ function init() {
     query.preload();
   }
 
+  // Exposed so we can mess around in the terminal and add/remove issues
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).z = z;
+
   function Home({
     zero,
     undoManager,

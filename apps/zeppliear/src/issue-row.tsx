@@ -44,22 +44,13 @@ function IssueRow({
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">
         {row.labels.map(label => {
-          // TODO: the query layer is not omitting junction tables in the result
-          const casted = label as unknown as {
-            labels: [
-              {
-                id: string;
-                name: string;
-              },
-            ];
-          };
           return (
             <span
-              key={casted.labels[0].id}
+              key={label.id}
               className="rounded-full p-1 px-3 mx-1"
-              style={{background: getLabelColor(casted.labels[0].name)}}
+              style={{background: getLabelColor(label.name)}}
             >
-              {casted.labels[0].name}
+              {label.name}
             </span>
           );
         })}

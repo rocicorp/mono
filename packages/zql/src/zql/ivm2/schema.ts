@@ -9,6 +9,7 @@ export type Schema = {
   tableName: string;
   primaryKey: readonly string[];
   columns: Record<string, ValueType>;
+  isHidden: boolean;
 
   /**
    * Compares two rows in the output of an operator.

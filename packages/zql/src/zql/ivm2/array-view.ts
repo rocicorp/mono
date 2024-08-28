@@ -35,7 +35,6 @@ export class ArrayView implements Output {
   constructor(input: Input) {
     this.#input = input;
     this.#schema = input.getSchema();
-
     this.#input.setOutput(this);
     this.#view = [];
   }
@@ -44,7 +43,6 @@ export class ArrayView implements Output {
     return this.#view;
   }
 
-  // Need the host so we can call `subscriptionAdded`
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
@@ -88,6 +86,32 @@ export type EntryList = Entry[];
 export type Entry = Record<string, Value | EntryList>;
 
 function applyChange(view: EntryList, change: Change, schema: Schema) {
+  if (schema.isHidden) {
+    switch (change.type) {
+      case 'add':
+      case 'remove': {
+        for (const [relationship, children] of Object.entries(
+          change.node.relationships,
+        )) {
+          const childSchema = must(schema.relationships[relationship]);
+          for (const node of children) {
+            applyChange(view, {type: change.type, node}, childSchema);
+          }
+        }
+        return;
+      }
+      case 'child': {
+        const childSchema = must(
+          schema.relationships[change.child.relationshipName],
+        );
+        applyChange(view, change.child.change, childSchema);
+        return;
+      }
+      default:
+        change satisfies never;
+    }
+  }
+
   if (change.type === 'add') {
     const newEntry: Entry = {
       ...change.node.row,

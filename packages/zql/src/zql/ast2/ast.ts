@@ -54,6 +54,7 @@ export type CorrelatedSubQuery = {
     readonly op: '=';
   };
   readonly subquery: AST;
+  readonly hidden?: boolean | undefined;
 };
 
 /**
@@ -88,14 +89,18 @@ export function normalizeAST(ast: AST): Required<AST> {
     where: ast.where ? sortedWhere(ast.where) : undefined,
     related: ast.related
       ? sortedRelated(
-          ast.related.map(r => ({
-            correlation: {
-              parentField: r.correlation.parentField,
-              childField: r.correlation.childField,
-              op: r.correlation.op,
-            },
-            subquery: normalizeAST(r.subquery),
-          })),
+          ast.related.map(
+            r =>
+              ({
+                correlation: {
+                  parentField: r.correlation.parentField,
+                  childField: r.correlation.childField,
+                  op: r.correlation.op,
+                },
+                hidden: r.hidden,
+                subquery: normalizeAST(r.subquery),
+              }) satisfies Required<CorrelatedSubQuery>,
+          ),
         )
       : undefined,
     start: ast.start,
