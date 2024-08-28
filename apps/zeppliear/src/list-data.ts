@@ -5,14 +5,14 @@ import type {IssuesProps} from './issues-props.js';
 import {assert} from './util/asserts.js';
 import {ResultType} from 'zero-client';
 import {useQueryWithResultType} from './hooks/use-query2.js';
-import {IssueWithLabels} from './queries.js';
+import {IssueListRow} from './queries.js';
 
 export type ListData = {
-  getIssue(index: number): IssueWithLabels | undefined;
-  mustGetIssue(index: number): IssueWithLabels;
+  getIssue(index: number): IssueListRow | undefined;
+  mustGetIssue(index: number): IssueListRow;
   isLoadingIndicator(index: number): boolean;
-  iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels>;
-  iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels>;
+  iterateIssuesAfter(issue: Issue): Iterable<IssueListRow>;
+  iterateIssuesBefore(issue: Issue): Iterable<IssueListRow>;
   onItemsRendered: (props: ListOnItemsRenderedProps) => void;
   readonly onChangePriority: (issue: Issue, priority: Priority) => void;
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
@@ -71,7 +71,7 @@ export function useListData({
 }
 
 class ListDataImpl implements ListData {
-  readonly #issues: readonly IssueWithLabels[];
+  readonly #issues: readonly IssueListRow[];
   readonly onChangePriority: (issue: Issue, priority: Priority) => void;
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
   readonly onOpenDetail: (issue: Issue) => void;
@@ -80,7 +80,7 @@ class ListDataImpl implements ListData {
   readonly resultType: ResultType;
 
   constructor(
-    issues: IssueWithLabels[],
+    issues: IssueListRow[],
     onChangePriority: (issue: Issue, priority: Priority) => void,
     onChangeStatus: (issue: Issue, status: Status) => void,
     onOpenDetail: (issue: Issue) => void,
@@ -96,11 +96,11 @@ class ListDataImpl implements ListData {
     this.resultType = resultType;
   }
 
-  getIssue(index: number): IssueWithLabels | undefined {
+  getIssue(index: number): IssueListRow | undefined {
     return this.#issues[index];
   }
 
-  mustGetIssue(index: number): IssueWithLabels {
+  mustGetIssue(index: number): IssueListRow {
     if (index < 0 || index >= this.#issues.length) {
       throw new Error(`Invalid index: ${index}`);
     }
@@ -120,7 +120,7 @@ class ListDataImpl implements ListData {
     return this.#issues.findIndex(issue => issue.id === issueID);
   }
 
-  *iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels> {
+  *iterateIssuesAfter(issue: Issue): Iterable<IssueListRow> {
     const index = this.#findIndex(issue);
     if (index === -1) {
       return;
@@ -130,7 +130,7 @@ class ListDataImpl implements ListData {
     }
   }
 
-  *iterateIssuesBefore(issue: Issue): Iterable<IssueWithLabels> {
+  *iterateIssuesBefore(issue: Issue): Iterable<IssueListRow> {
     const index = this.#findIndex(issue);
     for (let i = index - 1; i >= 0; i--) {
       yield this.#issues[i];

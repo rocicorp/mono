@@ -6,14 +6,14 @@ import {Issue, IssueUpdate, Priority, Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import type {ListData} from './list-data.js';
 import {assert} from './util/asserts.js';
-import {IssueWithLabels} from './queries.js';
+import {IssueListRow} from './queries.js';
 
 export type IssuesByStatusType = {
-  [Status.Backlog]: IssueWithLabels[];
-  [Status.Todo]: IssueWithLabels[];
-  [Status.InProgress]: IssueWithLabels[];
-  [Status.Done]: IssueWithLabels[];
-  [Status.Canceled]: IssueWithLabels[];
+  [Status.Backlog]: IssueListRow[];
+  [Status.Todo]: IssueListRow[];
+  [Status.InProgress]: IssueListRow[];
+  [Status.Done]: IssueListRow[];
+  [Status.Canceled]: IssueListRow[];
 };
 
 function getKanbanOrderIssueUpdates(

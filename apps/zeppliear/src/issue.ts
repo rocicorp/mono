@@ -3,7 +3,7 @@ import type {SchemaToRow, Zero} from 'zero-client';
 import {z} from 'zod';
 import {getCurrentDateWithFutureShift} from './util/date.js';
 import {schema, Schema} from './schema.js';
-import {IssueWithLabelsQuery} from './queries.js';
+import {IssueListQuery} from './queries.js';
 
 export type M = Record<string, never>;
 
@@ -275,7 +275,7 @@ function getModifiedDate() {
 }
 
 export function orderQuery(
-  issueQuery: IssueWithLabelsQuery,
+  issueQuery: IssueListQuery,
   order: Order,
   reverse: boolean,
 ) {
