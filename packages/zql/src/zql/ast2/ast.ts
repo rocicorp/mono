@@ -4,6 +4,8 @@
  */
 export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
 export type Ordering = readonly OrderPart[];
+import {compareUTF8} from 'compare-utf8';
+import {must} from 'shared/src/must.js';
 
 export type SimpleOperator = EqualityOps | OrderOps | LikeOps | InOps;
 export type EqualityOps = '=' | '!=';
@@ -75,7 +77,63 @@ export type SimpleCondition = {
   value: string | number | boolean | ReadonlyArray<string | number | boolean>;
 };
 
-export function normalizeAST(ast: AST): AST {
-  // TODO: actually normalize!
-  return ast;
+export function normalizeAST(ast: AST): Required<AST> {
+  return {
+    schema: ast.schema,
+    table: ast.table,
+    alias: ast.alias,
+    where: ast.where ? sortedWhere(ast.where) : undefined,
+    related: ast.related
+      ? sortedRelated(
+          ast.related.map(r => ({
+            correlation: {
+              parentField: r.correlation.parentField,
+              childField: r.correlation.childField,
+              op: r.correlation.op,
+            },
+            subquery: normalizeAST(r.subquery),
+          })),
+        )
+      : undefined,
+    limit: ast.limit,
+    orderBy: ast.orderBy,
+  };
+}
+
+function sortedWhere(where: readonly Condition[]): readonly Condition[] {
+  return [...where].sort(cmpCondition);
+}
+
+function sortedRelated(
+  related: CorrelatedSubQuery[],
+): readonly CorrelatedSubQuery[] {
+  return related.sort(cmpRelated);
+}
+
+function cmpCondition(a: Condition, b: Condition): number {
+  return (
+    compareUTF8MaybeNull(a.field, b.field) ||
+    compareUTF8MaybeNull(a.op, b.op) ||
+    // Comparing the same field with the same op more than once doesn't make logical
+    // sense, but is technically possible. Assume the values are of the same type and
+    // sort by their String forms.
+    compareUTF8MaybeNull(String(a.value), String(b.value))
+  );
+}
+
+function cmpRelated(a: CorrelatedSubQuery, b: CorrelatedSubQuery): number {
+  return compareUTF8(must(a.subquery.alias), must(b.subquery.alias));
+}
+
+function compareUTF8MaybeNull(a: string | null, b: string | null): number {
+  if (a !== null && b !== null) {
+    return compareUTF8(a, b);
+  }
+  if (b !== null) {
+    return -1;
+  }
+  if (a !== null) {
+    return 1;
+  }
+  return 0;
 }
