@@ -588,33 +588,31 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         undefined,
         this.#removedOrExecutedQueryIDs,
       );
-    if (existing.refCounts && deepEqual(existing.refCounts, newRefCounts)) {
-      if (received) {
-        const pending = this._cvrStore.getPendingRowRecord(existing.id);
-        if (
-          pending &&
-          deepEqual(pending as ReadonlyJSONValue, existing as ReadonlyJSONValue)
-        ) {
-          // Remove no-op writes from the WriteCache.
-          this._cvrStore.cancelPendingRowRecordWrite(existing.id);
-        }
+
+    if (received) {
+      const pending = this._cvrStore.getPendingRowRecord(existing.id);
+      if (
+        pending &&
+        deepEqual(pending as ReadonlyJSONValue, existing as ReadonlyJSONValue)
+      ) {
+        // Remove no-op writes from the WriteCache.
+        this._cvrStore.cancelPendingRowRecordWrite(existing.id);
       }
       return null;
     }
     const newPatchVersion = this.#assertNewVersion();
-    const {id} = existing;
-    const hasRef = Object.values(newRefCounts).some(v => v > 0);
 
+    const hasRef = Object.values(newRefCounts).some(v => v > 0);
     const rowRecord: RowRecord = {
       ...existing,
       patchVersion: newPatchVersion,
-      refCounts: hasRef ? newRefCounts : null, // tombstone,
+      refCounts: hasRef ? newRefCounts : null,
     };
 
     this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
 
-    // Return the id to delete if there are no remaining references.
-    return hasRef ? null : id;
+    // Return the id to delete if no longer referenced.
+    return hasRef ? null : existing.id;
   }
 }
 
