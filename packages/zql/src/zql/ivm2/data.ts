@@ -122,6 +122,12 @@ export function makeComparator(order: Ordering): Comparator {
   };
 }
 
+/**
+ * Determine if two values are equal. Note that unlike compareValues() above,
+ * this function treats `null` as unequal to itself (and same for `undefined`).
+ * This is required to make joins work correctly, but may not be the right
+ * semantic for your application.
+ */
 export function valuesEqual(a: Value, b: Value): boolean {
   a = normalizeUndefined(a);
   b = normalizeUndefined(b);
