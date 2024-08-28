@@ -16,7 +16,7 @@ import type {ActivityBasedService} from '../service.js';
 import {ClientHandler} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
 import {CVRConfigDrivenUpdater, type CVRSnapshot} from './cvr.js';
-import {Snapshotter} from './snapshotter.js';
+import {PipelineDriver} from './pipeline-driver.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -46,7 +46,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
-  readonly #replicaDbFile: string;
+  readonly #pipelines: PipelineDriver;
   readonly #versionChanges: Subscription<ReplicaVersionReady>;
   readonly #keepaliveMs: number;
 
@@ -56,13 +56,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
   #cvr: CVRSnapshot | undefined;
-  #snapshots: Snapshotter | undefined;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
     db: PostgresDB,
-    replicaDbFile: string,
+    pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaVersionReady>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
@@ -71,7 +70,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
     this.#db = db;
-    this.#replicaDbFile = replicaDbFile;
+    this.#pipelines = pipelineDriver;
     this.#versionChanges = versionChanges;
     this.#keepaliveMs = keepaliveMs;
   }
@@ -87,10 +86,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       for await (const _ of this.#versionChanges) {
         await this.#lock.withLock(() => {
-          if (this.#snapshots === undefined) {
-            this.#snapshots = new Snapshotter(this.#lc, this.#replicaDbFile);
+          if (!this.#pipelines.initialized()) {
+            this.#pipelines.init();
+            // Add / hydrate queries here
           } else {
-            this.#snapshots.advance();
+            // Process changes and send updates here
+            [...this.#pipelines.advance()];
           }
           // TODO:
           // - Initialize or update pipelines.

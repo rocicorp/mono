@@ -1,13 +1,20 @@
+import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {DbFile} from 'zero-cache/src/test/lite.js';
 import type {Downstream} from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast2/ast.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
+import {initChangeLog} from '../replicator/schema/change-log.js';
+import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {CVRStore} from './cvr-store.js';
+import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
+import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
+import {Snapshotter} from './snapshotter.js';
 import {ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
@@ -24,7 +31,9 @@ const EXPECTED_LMIDS_AST: AST = {
 };
 
 describe('view-syncer/service', () => {
-  let db: PostgresDB;
+  let storageDB: Database.Database;
+  let replicaDbFile: DbFile;
+  let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
 
   let vs: ViewSyncerService;
@@ -34,36 +43,42 @@ describe('view-syncer/service', () => {
   const SYNC_CONTEXT = {clientID: 'foo', wsID: 'ws1', baseCookie: null};
 
   beforeEach(async () => {
-    db = await testDBs.create('view_syncer_service_test');
-    await db`
-    CREATE SCHEMA zero;
-    CREATE TABLE zero.clients (
-      "clientGroupID"  TEXT NOT NULL,
-      "clientID"       TEXT NOT NULL,
-      "lastMutationID" BIGINT,
+    storageDB = new Database(':memory:');
+    storageDB.prepare(CREATE_STORAGE_TABLE).run();
+
+    replicaDbFile = new DbFile('view_syncer_service_test');
+    const replica = replicaDbFile.connect();
+    initChangeLog(replica);
+    initReplicationState(replica, ['zero_data'], '0/1');
+
+    replica.exec(`
+    CREATE TABLE "zero.clients" (
+      "clientGroupID"  TEXT,
+      "clientID"       TEXT,
+      "lastMutationID" INTEGER,
       "userID"         TEXT,
-      _0_version VARCHAR(38),
+      _0_version       TEXT NOT NULL,
       PRIMARY KEY ("clientGroupID", "clientID")
     );
     CREATE TABLE issues (
       id text PRIMARY KEY,
       owner_id text,
       parent_id text,
-      big int8,
+      big INTEGER,
       title text,
-      _0_version VARCHAR(38)
+      _0_version TEXT NOT NULL
     );
     CREATE TABLE users (
       id text PRIMARY KEY,
       name text,
-      _0_version VARCHAR(38)
+      _0_version TEXT NOT NULL
     );
 
-    INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID", _0_version)
+    INSERT INTO "zero.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
                       VALUES ('9876', 'foo', 42, '0a');
 
     INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '0a');
-    INSERT INTO users (id, name,  _0_version) VALUES ('101', 'Bob', '0b');
+    INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '0b');
     INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '0c');
 
     INSERT INTO issues (id, title, owner_id, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '1a0');
@@ -72,17 +87,20 @@ describe('view-syncer/service', () => {
     INSERT INTO issues (id, title, owner_id, parent_id, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '1cd');
     -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
     INSERT INTO issues (id, title, owner_id, parent_id, big, _0_version) VALUES ('5', 'not matched', 101, 2, 100, '1cd');
+    `);
 
-    CREATE PUBLICATION zero_all FOR ALL TABLES;
-    `.simple();
-
-    await initViewSyncerSchema(lc, 'view-syncer', 'cvr', db);
+    cvrDB = await testDBs.create('view_syncer_service_test');
+    await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
 
     vs = new ViewSyncerService(
       lc,
       serviceID,
-      db,
-      'not used yet',
+      cvrDB,
+      new PipelineDriver(
+        lc,
+        new Snapshotter(lc, replicaDbFile.path),
+        new DatabaseStorage(storageDB).createClientGroupStorage(serviceID),
+      ),
       Subscription.create(),
     );
     viewSyncerDone = vs.run();
@@ -114,7 +132,8 @@ describe('view-syncer/service', () => {
   afterEach(async () => {
     await vs.stop();
     await viewSyncerDone;
-    await testDBs.drop(db);
+    await testDBs.drop(cvrDB);
+    await replicaDbFile.unlink();
   });
 
   const serviceID = '9876';
@@ -136,7 +155,7 @@ describe('view-syncer/service', () => {
   };
 
   test('adds desired queries from initConnectionMessage', async () => {
-    const cvrStore = new CVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {
@@ -180,7 +199,7 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const cvrStore = new CVRStore(lc, db, serviceID);
+    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
       clients: {

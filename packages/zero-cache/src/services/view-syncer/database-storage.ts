@@ -1,3 +1,4 @@
+import {LogContext} from '@rocicorp/logger';
 import Database from 'better-sqlite3';
 import {JSONValue} from 'shared/src/json.js';
 import {Storage} from 'zql/src/zql/ivm2/operator.js';
@@ -31,7 +32,7 @@ export const CREATE_STORAGE_TABLE = `
   `;
 
 export class DatabaseStorage {
-  static create(path: string) {
+  static create(lc: LogContext, path: string) {
     // SQLite is used for ephemeral storage (i.e. similar to RAM) that can spill to
     // disk to avoid consuming too much memory. Each worker thread gets its own
     // database (file) and acts as the single reader/writer of the DB, so
@@ -43,6 +44,7 @@ export class DatabaseStorage {
     db.pragma('locking_mode = EXCLUSIVE');
 
     db.prepare(CREATE_STORAGE_TABLE).run();
+    lc.info?.(`Created DatabaseStorage backed by ${path}`);
     return new DatabaseStorage(db);
   }
 
