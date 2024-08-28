@@ -956,10 +956,6 @@ describe('view-syncer/cvr', () => {
 
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
       {
-        patch: {id: ROW_ID2, op: 'constrain', type: 'row', columns: ['id']},
-        toVersion: {stateVersion: '1a0'},
-      },
-      {
         patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
         toVersion: {stateVersion: '1aa'},
       },
@@ -1276,7 +1272,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'existing patch'},
         },
@@ -1321,10 +1317,6 @@ describe('view-syncer/cvr', () => {
     const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
-      {
-        patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
-        toVersion: newVersion,
-      },
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
@@ -1643,7 +1635,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'existing-patch'},
         },
@@ -1673,7 +1665,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1ba', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'new-column-bumps-cvr-version'},
         },
@@ -1720,15 +1712,6 @@ describe('view-syncer/cvr', () => {
     const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
-      {
-        patch: {
-          type: 'row',
-          op: 'constrain',
-          id: ROW_ID1,
-          columns: ['desc', 'id'],
-        },
-        toVersion: newVersion,
-      },
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
@@ -2013,20 +1996,12 @@ describe('view-syncer/cvr', () => {
     const newVersion = {stateVersion: '1ba', minorVersion: 1};
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
       {
-        patch: {type: 'row', op: 'constrain', id: ROW_ID1, columns: ['id']},
-        toVersion: newVersion,
-      },
-      {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
       },
       {
         patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
         toVersion: {stateVersion: '19z'},
-      },
-      {
-        patch: {type: 'row', op: 'constrain', id: ROW_ID2, columns: ['id']},
-        toVersion: {stateVersion: '1ba'},
       },
     ] satisfies PatchToVersion[]);
 
@@ -2379,7 +2354,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'existing-patch'},
         },
@@ -2407,7 +2382,7 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa', minorVersion: 1},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: ROW_ID1,
           contents: {id: 'existing-patch'},
         },
@@ -2452,33 +2427,6 @@ describe('view-syncer/cvr', () => {
 
     expect(new Set(await updater.deleteUnreferencedRows(lc))).toEqual(
       new Set([
-        {
-          patch: {
-            type: 'row',
-            op: 'constrain',
-            id: ROW_ID2,
-            columns: ['id'],
-          },
-          toVersion: {stateVersion: '1a0'}, // Same patch.
-        },
-        {
-          patch: {
-            type: 'row',
-            op: 'constrain',
-            id: ROW_ID1,
-            columns: 1,
-          },
-          toVersion: {stateVersion: '1aa', minorVersion: 1}, // Same patch.
-        },
-        {
-          patch: {
-            type: 'row',
-            op: 'constrain',
-            id: ROW_ID3,
-            columns: ['id'],
-          },
-          toVersion: {stateVersion: '1aa', minorVersion: 1}, // Same patch.
-        },
         {
           patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
           toVersion: {stateVersion: '1ba'},
