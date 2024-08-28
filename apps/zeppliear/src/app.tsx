@@ -35,8 +35,8 @@ import {Schema} from './schema.js';
 import {
   crewNames,
   getCrewQuery,
-  getIssueWithLabelsQuery,
-  IssueWithLabelsQuery,
+  getIssueListQuery,
+  IssueListQuery,
 } from './queries.js';
 
 type AppProps = {
@@ -68,7 +68,7 @@ const App = ({undoManager}: AppProps) => {
     console.debug({activeUserName, userID});
   }, [userID]);
 
-  const issueListQuery = getIssueWithLabelsQuery(zero);
+  const issueListQuery = getIssueListQuery(zero);
   const filteredQuery = filterQuery(issueListQuery, view, filters);
 
   const issueOrder = getIssueOrder(view, orderBy);
@@ -272,7 +272,7 @@ function RawLayout({
 const Layout = memo(RawLayout);
 
 function filterQuery(
-  q: IssueWithLabelsQuery,
+  q: IssueListQuery,
   view: string | null,
   filters: FiltersState,
 ) {

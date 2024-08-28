@@ -8,6 +8,7 @@ export type SchemaValue = {
   type: ValueType;
   optional?: boolean;
 };
+
 export type Schema = {
   readonly table: string;
   primaryKey: readonly [keyof Schema['fields'], ...(keyof Schema['fields'])[]];

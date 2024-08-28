@@ -3,10 +3,10 @@ import {getLabelColor, Issue, Priority, Status} from './issue.js';
 import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
 import {formatDate} from './util/date.js';
-import {IssueWithLabels} from './queries.js';
+import {IssueListRow} from './queries.js';
 
 interface Props {
-  row: IssueWithLabels;
+  row: IssueListRow;
   onChangePriority: (issue: Issue, priority: Priority) => void;
   onChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;

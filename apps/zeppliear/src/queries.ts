@@ -1,12 +1,10 @@
 import {QueryRowType, Zero} from 'zero-client';
 import {Schema} from './schema.js';
 
-export type IssueWithLabels = QueryRowType<
-  ReturnType<typeof getIssueWithLabelsQuery>
->;
-export type IssueWithLabelsQuery = ReturnType<typeof getIssueWithLabelsQuery>;
+export type IssueListRow = QueryRowType<ReturnType<typeof getIssueListQuery>>;
+export type IssueListQuery = ReturnType<typeof getIssueListQuery>;
 
-export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
+export function getIssueListQuery(zero: Zero<Schema>) {
   return zero.query.issue
     .select(
       'created',
@@ -19,7 +17,13 @@ export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
       'status',
       'title',
     )
-    .related('labels', q => q.select('id', 'name'));
+    .related('labels', q => q.select('id', 'name'))
+    .related('comments', q =>
+      q
+        .select('id', 'body', 'created', 'creatorID')
+        .related('creator', q => q.select('id', 'name'))
+        .limit(10),
+    );
 }
 
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
@@ -35,22 +39,26 @@ export function getIssueDetailQuery(
   zero: Zero<Schema>,
   issueID: string | null,
 ) {
-  return zero.query.issue
-    .select(
-      'created',
-      'creatorID',
-      'description',
-      'id',
-      'kanbanOrder',
-      'modified',
-      'priority',
-      'status',
-      'title',
-    )
-    .related('comments', q =>
-      q
-        .select('id', 'body', 'created')
-        .related('creator', q => q.select('name')),
-    )
-    .where('id', '=', issueID ?? '');
+  return (
+    zero.query.issue
+      .select(
+        'created',
+        'creatorID',
+        'description',
+        'id',
+        'kanbanOrder',
+        'modified',
+        'priority',
+        'status',
+        'title',
+      )
+      // labels?
+      // owner?
+      .related('comments', q =>
+        q
+          .select('id', 'body', 'created')
+          .related('creator', q => q.select('name')),
+      )
+      .where('id', '=', issueID ?? '')
+  );
 }
