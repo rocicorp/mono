@@ -6,11 +6,6 @@ import {Filter} from './filter.js';
 import {MemoryStorage} from './memory-storage.js';
 import {ArrayView, EntryList} from './array-view.js';
 import {Immutable} from 'shared/src/immutable.js';
-import {SubscriptionDelegate} from '../context/context.js';
-
-const mockSubscriptionDelegate: SubscriptionDelegate = {
-  subscriptionAdded: () => () => {},
-};
 
 test('destroy source connections', () => {
   const ms = new MemorySource('table', {a: 'string', b: 'string'}, ['a']);
@@ -76,7 +71,7 @@ test('destroy a pipeline from the view', () => {
     'a',
     'stuff',
   );
-  const view = new ArrayView(mockSubscriptionDelegate, {table: ''}, join);
+  const view = new ArrayView(join);
   let data: Immutable<EntryList> = [];
   const listener = (d: Immutable<EntryList>) => {
     data = d;

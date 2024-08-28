@@ -4,22 +4,13 @@ import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import {EntryList, ArrayView} from './array-view.js';
 import {Immutable} from 'shared/src/immutable.js';
-import {SubscriptionDelegate} from '../context/context.js';
-
-const mockSubscriptionDelegate: SubscriptionDelegate = {
-  subscriptionAdded: () => () => {},
-};
 
 test('basics', () => {
   const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
-  const view = new ArrayView(
-    mockSubscriptionDelegate,
-    {table: ''},
-    ms.connect([['b', 'asc']]),
-  );
+  const view = new ArrayView(ms.connect([['b', 'asc']]));
 
   let callCount = 0;
   let data: Immutable<EntryList> = [];
@@ -91,7 +82,7 @@ test('tree', () => {
     'children',
   );
 
-  const view = new ArrayView(mockSubscriptionDelegate, {table: ''}, join);
+  const view = new ArrayView(join);
   let data: Immutable<EntryList> = [];
   const listener = (d: Immutable<EntryList>) => {
     data = d;

@@ -1,12 +1,9 @@
 import {QueryRowType, Zero} from 'zero-client';
 import {Schema} from './schema.js';
 
-export type IssueWithLabels = QueryRowType<
-  ReturnType<typeof getIssueWithLabelsQuery>
->;
-export type IssueWithLabelsQuery = ReturnType<typeof getIssueWithLabelsQuery>;
-
-export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
+export type IssueListQuery = ReturnType<typeof getIssueListQuery>;
+export type IssueListRow = QueryRowType<ReturnType<typeof getIssueListQuery>>;
+export function getIssueListQuery(zero: Zero<Schema>) {
   return zero.query.issue
     .select(
       'created',
@@ -19,7 +16,34 @@ export function getIssueWithLabelsQuery(zero: Zero<Schema>) {
       'status',
       'title',
     )
-    .related('labels', q => q.select('id', 'name'));
+    .related('labels', q => q.select('id', 'name'))
+    .related('comments', q =>
+      q
+        .select('id', 'body', 'created', 'creatorID')
+        .related('creator', q => q.select('id', 'name'))
+        .limit(10),
+    );
+}
+
+export function getIssuePreloadQuery(
+  zero: Zero<Schema>,
+  sort: 'modified' | 'created' | 'priority' | 'status',
+) {
+  return zero.query.issue
+    .select(
+      'created',
+      'creatorID',
+      'description',
+      'id',
+      'kanbanOrder',
+      'modified',
+      'priority',
+      'status',
+      'title',
+    )
+    .related('labels', q => q.select('id', 'name'))
+    .orderBy(sort, 'desc')
+    .limit(10_000);
 }
 
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];

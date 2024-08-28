@@ -25,7 +25,7 @@ import {
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
 } from './cvr.js';
-import {PipelineDriver} from './pipeline-driver.js';
+import {PipelineDriver, RowChange} from './pipeline-driver.js';
 import {cmpVersions, RowID} from './schema/types.js';
 
 export type SyncContext = {
@@ -422,7 +422,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     for (const hash of addQueries) {
       const {ast} = cvr.queries[hash];
-      await this.#addQuery(hash, ast, updater, pokers);
+      lc.debug?.(`adding pipeline for query ${hash}`, ast);
+      await this.#processChanges(
+        lc,
+        this.#pipelines.addQuery(hash, ast),
+        updater,
+        pokers,
+      );
     }
 
     lc.debug?.(`generating delete patches`);
@@ -443,9 +449,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc.info?.(`finished processing update`);
   }
 
-  async #addQuery(
-    hash: string,
-    ast: AST,
+  async #processChanges(
+    lc: LogContext,
+    changes: Iterable<RowChange>,
     _updater: CVRQueryDrivenUpdater,
     _pokers: PokeHandler[],
   ) {
@@ -455,8 +461,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // eslint-disable-next-line require-await
     const processBatch = async () => {
       const elapsed = Date.now() - start;
-      this.#lc.debug?.(
-        `processing ${rows.size} rows of ${count} for ${hash} (${elapsed} ms)`,
+      lc.debug?.(
+        `processing ${rows.size} rows of ${count} for (${elapsed} ms)`,
       );
       // TODO: Update CVRQueryDrivenUpdater.received() method with new type.
       // const patches = await updater.received(this.#lc, rows);
@@ -466,8 +472,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     let count = 0;
 
-    for (const change of this.#pipelines.addQuery(hash, ast)) {
-      const {table, rowKey, row} = change;
+    for (const change of changes) {
+      const {queryHash, table, rowKey, row} = change;
       assert(row, 'hydration only results in RowAdd');
       // TODO: Remove obsolete `schema` field.
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
@@ -478,10 +484,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (typeof version !== 'string' || version.length === 0) {
           throw new Error(`Invalid _0_version in ${stringify(row)}`);
         }
-        parsedRow = {version, contents, refCountDeltas: {[hash]: 0}};
+        parsedRow = {version, contents, refCountDeltas: {[queryHash]: 0}};
         rows.set(rowID, parsedRow);
       }
-      parsedRow.refCountDeltas[hash]++;
+      parsedRow.refCountDeltas[queryHash]++;
 
       if (++count % CURSOR_PAGE_SIZE === 0) {
         await processBatch();

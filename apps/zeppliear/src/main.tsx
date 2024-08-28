@@ -6,6 +6,7 @@ import App from './app.jsx';
 import {ZeroProvider} from './hooks/use-zero.jsx';
 import './index.css';
 import {Schema, schema} from './schema.js';
+import {getIssuePreloadQuery} from './queries.js';
 
 function init() {
   const z = new Zero({
@@ -15,6 +16,12 @@ function init() {
     schemas: schema,
   });
   const undoManager = new UndoManager();
+
+  const sorts = ['modified', 'created', 'priority', 'status'] as const;
+  for (const sort of sorts) {
+    const query = getIssuePreloadQuery(z, sort);
+    query.preload();
+  }
 
   function Home({
     zero,
