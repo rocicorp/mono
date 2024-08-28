@@ -9,7 +9,7 @@ import {
   Operator,
   QueryResultRow,
   Selector,
-  EmptyQueryResultRow,
+  DefaultQueryResultRow,
   Smash,
   GetFieldTypeNoNullOrUndefined,
 } from './query.js';
@@ -29,14 +29,14 @@ import {HybridQueryView} from './hybrid-query-view.js';
 
 export function newQuery<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
 >(host: Host & SubscriptionDelegate, schema: TSchema): Query<TSchema, TReturn> {
   return new QueryImpl(host, schema);
 }
 
 class QueryImpl<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
   TAs extends string = string,
 > implements Query<TSchema, TReturn, TAs>
 {
@@ -127,7 +127,11 @@ class QueryImpl<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        Array<EmptyQueryResultRow>,
+        Array<
+          DefaultQueryResultRow<
+            PullSchemaForRelationship<TSchema, TRelationship>
+          >
+        >,
         TRelationship & string
       >,
     ) => TSub,

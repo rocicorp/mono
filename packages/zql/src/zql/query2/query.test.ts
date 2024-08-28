@@ -94,9 +94,6 @@ describe('types', () => {
     // @ts-expect-error - cannot select a field that does not exist
     query.select('foo');
 
-    // Nothing selected? Return type is empty array.
-    expectTypeOf(query.materialize().data).toMatchTypeOf<Array<{}>>();
-
     const query2 = query.select('s');
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
       Array<{
@@ -110,6 +107,15 @@ describe('types', () => {
         readonly s: string;
         readonly b: boolean;
         readonly n: number;
+      }>
+    >();
+
+    // no select? All fields are returned.
+    expectTypeOf(query.materialize().data).toMatchTypeOf<
+      Array<{
+        s: string;
+        b: boolean;
+        n: number;
       }>
     >();
   });
