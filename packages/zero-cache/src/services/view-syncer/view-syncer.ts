@@ -450,7 +450,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     _pokers: PokeHandler[],
   ) {
     const start = Date.now();
-    const rows = new CustomKeyMap<RowID, ParsedRow>(rowIDHash);
+    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDHash);
 
     // eslint-disable-next-line require-await
     const processBatch = async () => {
@@ -473,16 +473,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
       let parsedRow = rows.get(rowID);
-      if (parsedRow) {
-        parsedRow.count++;
-      } else {
+      if (!parsedRow) {
         const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
         if (typeof version !== 'string' || version.length === 0) {
           throw new Error(`Invalid _0_version in ${stringify(row)}`);
         }
-        parsedRow = {version, contents, count: 1};
+        parsedRow = {version, contents, refCountDeltas: {[hash]: 0}};
         rows.set(rowID, parsedRow);
       }
+      parsedRow.refCountDeltas[hash]++;
 
       if (++count % CURSOR_PAGE_SIZE === 0) {
         await processBatch();
@@ -510,10 +509,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 }
 
-type ParsedRow = {
-  version: string;
-  contents: JSONObject;
-  count: number;
+// TODO: Move declaration to cvr.ts.
+type RowUpdate = {
+  // Undefined for an unref.
+  version?: string;
+  // Undefined for an unref.
+  contents?: JSONObject;
+  // Deltas are negative when a row is unrefed.
+  refCountDeltas: {[hash: string]: number};
 };
 
 const CURSOR_PAGE_SIZE = 1000;
