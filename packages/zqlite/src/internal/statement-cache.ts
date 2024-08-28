@@ -1,16 +1,11 @@
 import type {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 
+export type CachedStatementMap = Map<string, Statement[]>;
 export type CachedStatement = {
   sql: string;
   statement: Statement;
 };
-
-type Entry = CachedStatement & {
-  prev?: Entry | undefined;
-  next?: Entry | undefined;
-};
-
 /**
  * SQLite statement preparation isn't cheap as it involves evaluating possible
  * query plans and picking the best one (in addition to parsing the SQL).
@@ -37,10 +32,9 @@ type Entry = CachedStatement & {
  * by other callers. It will not cause a resource leak.
  */
 export class StatementCache {
-  #head?: Entry | undefined;
-  #tail?: Entry | undefined;
+  #cache: CachedStatementMap = new Map<string, Statement[]>();
   readonly #db: Database;
-  #size = 0;
+  #size: number = 0;
 
   /**
    * The db connection used to prepare the statement.
@@ -51,6 +45,7 @@ export class StatementCache {
     this.#db = db;
   }
 
+  // the number of statements in the cache
   get size() {
     return this.#size;
   }
@@ -58,27 +53,19 @@ export class StatementCache {
   drop(n: number) {
     assert(n >= 0, 'Cannot drop a negative number of items');
     assert(n <= this.#size, 'Cannot drop more items than are in the cache');
-    if (n === this.#size) {
-      this.#head = undefined;
-      this.#tail = undefined;
-      this.#size = 0;
-      return;
-    }
 
-    let entry = this.#tail;
-    const originalN = n;
-    while (entry && n > 0) {
-      if (!entry.next) {
+    let remaining = n;
+    for (const [sql, statements] of this.#cache.entries()) {
+      if (remaining >= statements.length) {
+        this.#cache.delete(sql);
+        remaining -= statements.length;
+        this.#size -= statements.length;
+      } else {
+        statements.splice(0, remaining);
+        this.#size -= remaining;
         break;
       }
-      entry = entry.next;
-      --n;
     }
-    assert(entry, 'Malformed list');
-
-    entry.prev!.next = undefined;
-    entry.prev = undefined;
-    this.#size -= originalN;
   }
 
   /**
@@ -96,21 +83,14 @@ export class StatementCache {
    */
   get(sql: string): CachedStatement {
     sql = normalizeWhitespace(sql);
-    let entry = this.#head;
-    while (entry) {
-      if (entry.sql === sql) {
-        const {sql, statement} = entry;
-        if (entry === this.#head) {
-          this.#head = entry.prev;
-        }
-        if (entry === this.#tail) {
-          this.#tail = entry.next;
-        }
-        unlink(entry);
-        --this.#size;
-        return {sql, statement};
+    const statements = this.#cache.get(sql);
+    if (statements && statements.length > 0) {
+      const statement = statements.pop()!;
+      this.#size--;
+      if (statements.length === 0) {
+        this.#cache.delete(sql);
       }
-      entry = entry.prev;
+      return {sql, statement};
     }
     const statement = this.#db.prepare(sql);
     return {sql, statement};
@@ -134,31 +114,17 @@ export class StatementCache {
    * @param statement
    */
   return(statement: CachedStatement) {
-    const entry: Entry = {
-      sql: statement.sql,
-      statement: statement.statement,
-      prev: this.#head,
-    };
-    if (this.#head) {
-      this.#head.next = entry;
+    const {sql} = statement;
+    if (!this.#cache.has(sql)) {
+      this.#cache.set(sql, []);
     }
-    if (!this.#tail) {
-      this.#tail = entry;
+    const statements = this.#cache.get(sql);
+    if (statements) {
+      statements.push(statement.statement);
+      this.#size++;
     }
-    this.#head = entry;
-    ++this.#size;
   }
-}
 
-function unlink(entry: Entry) {
-  if (entry.prev) {
-    entry.prev.next = entry.next;
-  }
-  if (entry.next) {
-    entry.next.prev = entry.prev;
-  }
-  entry.prev = undefined;
-  entry.next = undefined;
 }
 
 function normalizeWhitespace(sql: string) {
