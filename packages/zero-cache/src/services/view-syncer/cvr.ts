@@ -513,15 +513,14 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     assert(this.#existingRows, `trackQueries() was not called`);
     for (const existing of await this.#existingRows) {
-      const update = this.#deleteUnreferencedRow(existing);
-      if (update === null) {
+      const deletedID = this.#deleteUnreferencedRow(existing);
+      if (deletedID === null) {
         continue;
       }
 
-      const {id} = update;
       patches.push({
         toVersion: this._cvr.version,
-        patch: {type: 'row', op: 'del', id},
+        patch: {type: 'row', op: 'del', id: deletedID},
       });
     }
 
@@ -579,20 +578,17 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return patches;
   }
 
-  #deleteUnreferencedRow(existing: RowRecord): {id: RowID} | null {
+  #deleteUnreferencedRow(existing: RowRecord): RowID | null {
     const received = this.#receivedRows.get(existing.id);
 
-    const newQueriedColumns =
+    const newRefCount =
       received ?? // optimization: already merged in received()
       mergeRefCounts(
         existing.refCount,
         undefined,
         this.#removedOrExecutedQueryIDs,
       );
-    if (
-      existing.refCount &&
-      sameColumns(existing.queriedColumns, newQueriedColumns)
-    ) {
+    if (existing.refCount && deepEqual(existing.refCount, newRefCount)) {
       if (received) {
         const pending = this._cvrStore.getPendingRowRecord(existing.id);
         if (
@@ -603,27 +599,23 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           this._cvrStore.cancelPendingRowRecordWrite(existing.id);
         }
       }
-
-      // No columns deleted.
       return null;
     }
     const newPatchVersion = this.#assertNewVersion();
     const {id} = existing;
-    const columns = getAllColumnsSorted(newQueriedColumns);
-    const isPut = columns.length > 0;
+    const hasRef = Object.values(newRefCount).find(v => v > 0) !== -1;
 
     const rowRecord: RowRecord = {
       ...existing,
       patchVersion: newPatchVersion,
-      queriedColumns: isPut ? newQueriedColumns : null,
     };
 
     this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
 
-    return isPut
-      ? // TODO(arv): Should this be updated?
-        {id, columns} // UpdateOp
-      : {id}; // DeleteOp
+    if (hasRef) {
+      return null;
+    }
+    return id;
   }
 }
 
