@@ -65,7 +65,7 @@ export type {
   QueryRowType,
   QueryReturnType,
 } from 'zql/src/zql/query2/query.js';
-export type {ResultType} from 'zql/src/zql/ivm2/array-view.js';
+export type {ResultType} from 'zql/src/zql/query2/hybrid-query-view.js';
 export type {Schema} from 'zql/src/zql/query2/schema.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero, type SchemaDefs as QueryDefs} from './client/zero.js';
