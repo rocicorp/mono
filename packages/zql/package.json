@@ -37,6 +37,7 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
+    "@rocicorp/resolver": "^1.0.2",
     "compare-utf8": "^0.1.1"
   }
 }
