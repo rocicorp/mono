@@ -362,7 +362,10 @@ describe('view-syncer/pipeline-driver', () => {
   test('remove query', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+
+    expect([...pipelines.addedQueries()]).toEqual(['hash1']);
     pipelines.removeQuery('hash1');
+    expect([...pipelines.addedQueries()]).toEqual([]);
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
@@ -372,6 +375,8 @@ describe('view-syncer/pipeline-driver', () => {
       messages.insert('issues', {id: 4}),
     );
 
+    expect(pipelines.currentVersion()).toBe('00');
     expect([...pipelines.advance()]).toHaveLength(0);
+    expect(pipelines.currentVersion()).toBe('183');
   });
 });
