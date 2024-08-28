@@ -774,6 +774,7 @@ function fetchTest(t: FetchTest) {
         info.parentKey,
         info.childKey,
         info.relationshipName,
+        false,
       );
       joins[i] = {
         join,

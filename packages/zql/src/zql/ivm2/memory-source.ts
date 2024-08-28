@@ -73,6 +73,7 @@ export class MemorySource implements Source {
       primaryKey: this.#primaryKeys,
       compareRows: connection.compareRows,
       relationships: {},
+      isHidden: false,
     };
   }
 

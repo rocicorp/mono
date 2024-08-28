@@ -22,6 +22,7 @@ export class Join implements Input {
   readonly #parentKey: string;
   readonly #childKey: string;
   readonly #relationshipName: string;
+  readonly #hidden: boolean;
 
   #output: Output | null = null;
 
@@ -32,6 +33,7 @@ export class Join implements Input {
     parentKey: string,
     childKey: string,
     relationshipName: string,
+    hidden: boolean,
   ) {
     assert(parent !== child, 'Parent and child must be different operators');
 
@@ -41,6 +43,7 @@ export class Join implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+    this.#hidden = hidden;
 
     this.#parent.setOutput({
       push: (change: Change) => {
@@ -66,13 +69,15 @@ export class Join implements Input {
   getSchema(): Schema {
     const parentSchema = this.#parent.getSchema();
     const childSchema = this.#child.getSchema();
-    return {
+    const ret = {
       ...parentSchema,
+      isHidden: this.#hidden,
       relationships: {
         ...parentSchema.relationships,
         [this.#relationshipName]: childSchema,
       },
     };
+    return ret;
   }
 
   *fetch(req: FetchRequest): Stream<Node> {

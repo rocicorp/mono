@@ -78,6 +78,7 @@ test('destroy a pipeline from the view', () => {
     'a',
     'a',
     'stuff',
+    false,
   );
   const view = new ArrayView(join);
   let data: Immutable<EntryList> = [];

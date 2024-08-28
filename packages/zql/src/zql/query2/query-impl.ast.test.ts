@@ -110,6 +110,7 @@ describe('building the AST', () => {
                   op: '=',
                   parentField: 'labelId',
                 },
+                hidden: true,
                 subquery: {
                   table: 'label',
                   alias: 'labels',
@@ -167,6 +168,7 @@ describe('building the AST', () => {
                               op: '=',
                               parentField: 'labelId',
                             },
+                            hidden: true,
                             subquery: {
                               table: 'label',
                               alias: 'labels',
@@ -245,6 +247,7 @@ describe('building the AST', () => {
                   op: '=',
                   parentField: 'labelId',
                 },
+                hidden: true,
                 subquery: {
                   table: 'label',
                   alias: 'labels',

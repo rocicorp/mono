@@ -212,6 +212,7 @@ class QueryImpl<
                     childField: related2.dest.field,
                     op: '=',
                   },
+                  hidden: true,
                   subquery: addPrimaryKeysToAst(
                     destSchema,
                     cb(

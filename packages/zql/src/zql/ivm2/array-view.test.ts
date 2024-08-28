@@ -4,6 +4,8 @@ import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import {EntryList, ArrayView} from './array-view.js';
 import {Immutable} from 'shared/src/immutable.js';
+import {Schema} from './schema.js';
+import {Change} from './change.js';
 
 test('basics', () => {
   const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
@@ -80,6 +82,7 @@ test('tree', () => {
     'childID',
     'id',
     'children',
+    false,
   );
 
   const view = new ArrayView(join);
@@ -304,6 +307,174 @@ test('tree', () => {
       name: 'monkey',
       childID: null,
       children: [],
+    },
+  ]);
+});
+
+test('collapse hidden relationships', () => {
+  // add
+  // remove
+  // child change
+  const schema: Schema = {
+    tableName: 'issue',
+    primaryKey: ['id'],
+    columns: {
+      id: 'number',
+      name: 'string',
+    },
+    isHidden: false,
+    compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+    relationships: {
+      labels: {
+        tableName: 'issueLabel',
+        primaryKey: ['id'],
+        columns: {
+          id: 'number',
+          issueId: 'number',
+          labelId: 'number',
+        },
+        isHidden: true,
+        compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+        relationships: {
+          labels: {
+            tableName: 'label',
+            primaryKey: ['id'],
+            columns: {
+              id: 'number',
+              name: 'string',
+            },
+            isHidden: false,
+            compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+            relationships: {},
+          },
+        },
+      },
+    },
+  };
+
+  const input = {
+    cleanup() {
+      throw new Error('not implemented');
+    },
+    fetch() {
+      throw new Error('not implemented');
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+    push(change: Change) {
+      view.push(change);
+    },
+  };
+
+  const view = new ArrayView(input);
+  const changeSansType = {
+    node: {
+      row: {
+        id: 1,
+        name: 'issue',
+      },
+      relationships: {
+        labels: [
+          {
+            row: {
+              id: 1,
+              issueId: 1,
+              labelId: 1,
+            },
+            relationships: {
+              labels: [
+                {
+                  row: {
+                    id: 1,
+                    name: 'label',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  } as const;
+  view.push({
+    type: 'add',
+    ...changeSansType,
+  });
+
+  expect(view.data).toEqual([
+    {
+      id: 1,
+      labels: [
+        {
+          id: 1,
+          name: 'label',
+        },
+      ],
+      name: 'issue',
+    },
+  ]);
+
+  view.push({
+    type: 'remove',
+    ...changeSansType,
+  });
+
+  expect(view.data).toEqual([]);
+
+  view.push({
+    type: 'add',
+    ...changeSansType,
+  });
+  view.push({
+    type: 'child',
+    row: {
+      id: 1,
+      name: 'issue',
+    },
+    child: {
+      relationshipName: 'labels',
+      change: {
+        type: 'add',
+        node: {
+          row: {
+            id: 2,
+            issueId: 1,
+            labelId: 2,
+          },
+          relationships: {
+            labels: [
+              {
+                row: {
+                  id: 2,
+                  name: 'label2',
+                },
+                relationships: {},
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  expect(view.data).toEqual([
+    {
+      id: 1,
+      labels: [
+        {
+          id: 1,
+          name: 'label',
+        },
+        {
+          id: 2,
+          name: 'label2',
+        },
+      ],
+      name: 'issue',
     },
   ]);
 });

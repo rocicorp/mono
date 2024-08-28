@@ -405,15 +405,7 @@ describe('joins and filters', () => {
       rows = [...data].map(row => ({
         ...row,
         owner: [...row.owner],
-        labels: [...row.labels].map(label => ({
-          ...label,
-          // The type of `rows` when going through a junction edge
-          // is incorrect. The TS Type is hiding the junction table,
-          // the actual data has it. Need to pick which one is correct
-          // and fix.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          labels: [...(label as any).labels],
-        })),
+        labels: [...row.labels],
         comments: [...row.comments],
       }));
     });
@@ -439,14 +431,8 @@ describe('joins and filters', () => {
         id: '0001',
         labels: [
           {
-            issueId: '0001',
-            labelId: '0001',
-            labels: [
-              {
-                id: '0001',
-                name: 'label 1',
-              },
-            ],
+            id: '0001',
+            name: 'label 1',
           },
         ],
         owner: [

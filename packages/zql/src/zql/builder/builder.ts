@@ -100,6 +100,7 @@ function buildPipelineInternal(
         sq.correlation.parentField,
         sq.correlation.childField,
         sq.subquery.alias,
+        sq.hidden ?? false,
       );
     }
   }
