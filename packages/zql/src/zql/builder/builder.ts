@@ -7,6 +7,7 @@ import {Source} from '../ivm2/source.js';
 import {createPredicate} from './filter.js';
 import {must} from 'shared/src/must.js';
 import {Take} from '../ivm2/take.js';
+import {Skip} from '../ivm2/skip.js';
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
@@ -63,6 +64,10 @@ function buildPipelineInternal(
 ): Input {
   const source = host.getSource(ast.table);
   let end: Input = source.connect(must(ast.orderBy));
+
+  if (ast.start) {
+    end = new Skip(end, ast.start);
+  }
 
   if (ast.where) {
     for (const condition of ast.where) {

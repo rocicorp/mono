@@ -1,3 +1,5 @@
+import {Bound} from '../ivm2/skip.js';
+
 /**
  * As in SQL you can have multiple orderings. We don't currently
  * support ordering on anything other than the root query.
@@ -36,6 +38,7 @@ export type AST = {
   readonly where?: readonly Condition[] | undefined;
 
   readonly related?: readonly CorrelatedSubQuery[] | undefined;
+  readonly start?: Bound | undefined;
   readonly limit?: number | undefined;
   readonly orderBy?: Ordering | undefined;
 };
@@ -95,6 +98,7 @@ export function normalizeAST(ast: AST): Required<AST> {
           })),
         )
       : undefined,
+    start: ast.start,
     limit: ast.limit,
     orderBy: ast.orderBy,
   };
