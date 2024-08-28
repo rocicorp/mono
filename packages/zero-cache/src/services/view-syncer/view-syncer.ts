@@ -101,8 +101,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#hydrateUnchangedQueries();
             await this.#syncQueryPipelineSet();
           } else {
-            // Process incremental changes and send updates here
-            [...this.#pipelines.advance()];
+            await this.#advancePipelines();
           }
         });
       }
@@ -389,6 +388,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     removeQueries: string[],
   ) {
     assert(addQueries.length > 0 || removeQueries.length > 0);
+    const start = Date.now();
+
     const stateVersion = this.#pipelines.currentVersion();
     const lc = this.#lc.withContext('newVersion', stateVersion);
     lc.info?.(`hydrating ${addQueries.length} queries`);
@@ -446,7 +447,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
 
-    lc.info?.(`finished processing update`);
+    lc.info?.(`finished processing queries (${Date.now() - start} ms)`);
   }
 
   async #processChanges(
@@ -461,9 +462,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // eslint-disable-next-line require-await
     const processBatch = async () => {
       const elapsed = Date.now() - start;
-      lc.debug?.(
-        `processing ${rows.size} rows of ${count} for (${elapsed} ms)`,
-      );
+      lc.debug?.(`processing ${rows.size} rows of ${count} (${elapsed} ms)`);
       // TODO: Update CVRQueryDrivenUpdater.received() method with new type.
       // const patches = await updater.received(this.#lc, rows);
       // patches.forEach(patch => pokers.forEach(poker => poker.addPatch(patch)));
@@ -474,20 +473,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     for (const change of changes) {
       const {queryHash, table, rowKey, row} = change;
-      assert(row, 'hydration only results in RowAdd');
-      // TODO: Remove obsolete `schema` field.
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
       let parsedRow = rows.get(rowID);
       if (!parsedRow) {
+        parsedRow = {refCountDeltas: {}};
+        rows.set(rowID, parsedRow);
+      }
+      parsedRow.refCountDeltas[queryHash] ??= 0;
+      parsedRow.refCountDeltas[queryHash] += row ? 1 : -1;
+
+      if (row && !parsedRow.version) {
         const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
         if (typeof version !== 'string' || version.length === 0) {
           throw new Error(`Invalid _0_version in ${stringify(row)}`);
         }
-        parsedRow = {version, contents, refCountDeltas: {[queryHash]: 0}};
-        rows.set(rowID, parsedRow);
+        parsedRow.version = version;
+        parsedRow.contents = contents;
       }
-      parsedRow.refCountDeltas[queryHash]++;
 
       if (++count % CURSOR_PAGE_SIZE === 0) {
         await processBatch();
@@ -496,6 +499,48 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (rows.size) {
       await processBatch();
     }
+  }
+
+  /**
+   * Advance to the current snapshot of the replica and apply / send
+   * changes.
+   *
+   * Must be called from within the #lock.
+   */
+  async #advancePipelines() {
+    assert(this.#cvr, 'service must be running');
+    assert(this.#pipelines.initialized());
+    const start = Date.now();
+
+    const {version, numChanges, changes} = this.#pipelines.advance();
+    const lc = this.#lc.withContext('newVersion', version);
+    const cvr = this.#cvr;
+
+    // Probably need a new updater type. CVRAdvancementUpdater?
+    const updater = new CVRQueryDrivenUpdater(
+      new CVRStore(this.#lc, this.#db, cvr.id),
+      cvr,
+      version,
+    );
+    const pokers = [...this.#clients.values()].map(c =>
+      c.startPoke(updater.updatedVersion()),
+    );
+
+    lc.debug?.(`applying ${numChanges} to advance to ${version}`);
+    await this.#processChanges(lc, changes, updater, pokers);
+
+    lc.debug?.(`generating delete patches`);
+    for (const patch of await updater.deleteUnreferencedColumnsAndRows(lc)) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
+
+    // Commit the changes and update the CVR snapshot.
+    this.#cvr = await updater.flush(lc);
+
+    // Signal clients to commit.
+    pokers.forEach(poker => poker.end());
+
+    lc.info?.(`finished processing advancement (${Date.now() - start} ms)`);
   }
 
   // eslint-disable-next-line require-await

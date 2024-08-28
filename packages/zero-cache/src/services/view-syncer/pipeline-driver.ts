@@ -12,7 +12,7 @@ import {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
 import {listTables} from '../replicator/tables/list.js';
 import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
-import {Snapshotter} from './snapshotter.js';
+import {SnapshotDiff, Snapshotter} from './snapshotter.js';
 
 export type RowAdd = {
   readonly queryHash: string;
@@ -146,15 +146,28 @@ export class PipelineDriver {
   /**
    * Advances to the new head of the database.
    *
-   * @return The resulting row changes for all added queries.
+   * @return The resulting row changes for all added queries. Note that the
+   *         `changes` must be iterated over in their entirety in order to
+   *         advance the database snapshot.
    */
-  *advance(): Iterable<RowChange> {
+  advance(): {
+    version: string;
+    numChanges: number;
+    changes: Iterable<RowChange>;
+  } {
     assert(this.initialized());
     const diff = this.#snapshotter.advance();
     const {prev, curr, changes} = diff;
-
     this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
 
+    return {
+      version: curr.version,
+      numChanges: changes,
+      changes: this.#advance(diff),
+    };
+  }
+
+  *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
         yield* this.#push(table, {type: 'remove', row: prevValue as Row});
@@ -168,7 +181,7 @@ export class PipelineDriver {
     for (const table of this.#tables.values()) {
       table.setDB(this.#snapshotter.current().db.db);
     }
-    this.#lc.debug?.(`Advanced to ${curr.version}`);
+    this.#lc.debug?.(`Advanced to ${diff.curr.version}`);
   }
 
   /** Implements `Host.getSource()` */
