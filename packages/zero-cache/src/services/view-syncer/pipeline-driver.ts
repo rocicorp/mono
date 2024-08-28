@@ -76,11 +76,26 @@ export class PipelineDriver {
   }
 
   /**
+   * Returns the current version of the database. This will reflect the
+   * latest version change when calling {@link advance()} once the
+   * iteration has begun.
+   */
+  currentVersion(): string {
+    assert(this.initialized(), 'Not yet initialized');
+    return this.#snapshotter.current().version;
+  }
+
+  /**
    * Clears storage used for the pipelines. Call this when the
    * PipelineDriver will no longer be used.
    */
   destroy() {
     this.#storage.destroy();
+  }
+
+  /** @return The Set of query hashes for all added queries. */
+  addedQueries(): Set<string> {
+    return new Set(this.#pipelines.keys());
   }
 
   /**
@@ -117,14 +132,15 @@ export class PipelineDriver {
   }
 
   /**
-   * Removes the pipeline for the query.
+   * Removes the pipeline for the query. This is a no-op if the query
+   * was not added.
    */
   removeQuery(hash: string) {
     const input = this.#pipelines.get(hash);
-    assert(input, `Query ${hash} does not exist`);
-
-    this.#pipelines.delete(hash);
-    input.destroy();
+    if (input) {
+      this.#pipelines.delete(hash);
+      input.destroy();
+    }
   }
 
   /**
@@ -165,7 +181,7 @@ export class PipelineDriver {
 
     const tableSpec = this.#tableSpecs.get(tableName);
     if (!tableSpec) {
-      throw new Error(`Unknown table ${tableSpec}`);
+      throw new Error(`Unknown table ${tableName}`);
     }
     const {columns, primaryKey} = tableSpec;
     assert(primaryKey.length);

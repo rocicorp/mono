@@ -1,6 +1,10 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
+import {CustomKeyMap} from 'shared/src/custom-key-map.js';
+import {difference} from 'shared/src/set-utils.js';
+import {JSONObject, stringify} from 'zero-cache/src/types/bigint-json.js';
+import {rowIDHash, RowKey} from 'zero-cache/src/types/row-key.js';
 import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
@@ -12,11 +16,17 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {ActivityBasedService} from '../service.js';
-import {ClientHandler} from './client-handler.js';
+import {ClientHandler, PokeHandler} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
-import {CVRConfigDrivenUpdater, type CVRSnapshot} from './cvr.js';
+import {
+  CVRConfigDrivenUpdater,
+  CVRQueryDrivenUpdater,
+  type CVRSnapshot,
+} from './cvr.js';
 import {PipelineDriver} from './pipeline-driver.js';
+import {cmpVersions, RowID} from './schema/types.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -85,17 +95,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.info?.('view-syncer started', this.#cvr?.version);
 
       for await (const _ of this.#versionChanges) {
-        await this.#lock.withLock(() => {
+        await this.#lock.withLock(async () => {
           if (!this.#pipelines.initialized()) {
             this.#pipelines.init();
-            // Add / hydrate queries here
+            this.#hydrateUnchangedQueries();
+            await this.#syncQueryPipelineSet();
           } else {
-            // Process changes and send updates here
+            // Process incremental changes and send updates here
             [...this.#pipelines.advance()];
           }
-          // TODO:
-          // - Initialize or update pipelines.
-          // - Wait for client sockets to clear (i.e. backpressure).
         });
       }
 
@@ -291,7 +299,198 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     this.#cvr = await updater.flush(lc);
 
-    // TODO: Hydrate / update clients, etc.
+    if (this.#pipelines.initialized()) {
+      await this.#syncQueryPipelineSet();
+    }
+  }
+
+  /**
+   * Adds and hydrates pipelines for queries whose results are already
+   * recorded in the CVR. Namely:
+   *
+   * 1. The CVR state version and database version are the same.
+   * 2. The transformation hash of the queries equal those in the CVR.
+   *
+   * Note that by definition, only "got" queries can satisfy condition (2),
+   * as desired queries do not have a transformation hash.
+   *
+   * This is an initialization step that sets up pipeline state without
+   * the expensive of loading and diffing CVR row state.
+   *
+   * This must be called from within the #lock.
+   */
+  #hydrateUnchangedQueries() {
+    assert(this.#cvr, 'service must be running');
+    assert(this.#pipelines.initialized());
+
+    const dbVersion = this.#pipelines.currentVersion();
+    const cvrVersion = this.#cvr.version;
+
+    if (cvrVersion.stateVersion !== dbVersion) {
+      this.#lc.info?.(`CVR (${cvrVersion}) is behind db ${dbVersion}`);
+      return; // hydration needs to be run with the CVR updater.
+    }
+
+    const gotQueries = Object.entries(this.#cvr.queries).filter(
+      ([_, state]) => state.transformationHash !== undefined,
+    );
+
+    for (const [hash, query] of gotQueries) {
+      const {ast, transformationHash} = query;
+      if (!query.internal && Object.keys(query.desiredBy).length === 0) {
+        continue; // No longer desired.
+      }
+      const newTransformationHash = hash; // Currently, no transformations are done.
+      if (newTransformationHash !== transformationHash) {
+        continue; // Query results have changed.
+      }
+      const start = Date.now();
+      let count = 0;
+      for (const _ of this.#pipelines.addQuery(hash, ast)) {
+        count++;
+      }
+      const elapsed = Date.now() - start;
+      this.#lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
+    }
+  }
+
+  /**
+   * Adds and/or removes queries to/from the PipelineDriver to bring it
+   * in sync with the set of queries in the CVR (both got and desired).
+   * If queries are added, removed, or queried due to a new state version,
+   * a new CVR version is created and pokes sent to connected clients.
+   */
+  async #syncQueryPipelineSet() {
+    assert(this.#cvr, 'service must be running');
+    assert(this.#pipelines.initialized());
+    const cvr = this.#cvr;
+
+    const hydratedQueries = this.#pipelines.addedQueries();
+    const allClientQueries = new Set(Object.keys(cvr.queries));
+    const desiredClientQueries = new Set(
+      Object.keys(cvr.queries).filter(id => {
+        const q = cvr.queries[id];
+        return q.internal || Object.keys(q.desiredBy).length > 0;
+      }),
+    );
+
+    const addQueries = [...difference(desiredClientQueries, hydratedQueries)];
+    const removeQueries = [
+      ...difference(allClientQueries, desiredClientQueries),
+    ];
+    if (addQueries.length > 0 || removeQueries.length > 0) {
+      await this.#addAndRemoveQueries(cvr, addQueries, removeQueries);
+    }
+  }
+
+  async #addAndRemoveQueries(
+    cvr: CVRSnapshot,
+    addQueries: string[],
+    removeQueries: string[],
+  ) {
+    assert(addQueries.length > 0 || removeQueries.length > 0);
+    const stateVersion = this.#pipelines.currentVersion();
+    const lc = this.#lc.withContext('newVersion', stateVersion);
+    lc.info?.(`hydrating ${addQueries.length} queries`);
+
+    const updater = new CVRQueryDrivenUpdater(
+      new CVRStore(this.#lc, this.#db, cvr.id),
+      cvr,
+      stateVersion,
+    );
+    const minClientVersion = [...this.#clients.values()]
+      .map(c => c.version())
+      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b), {stateVersion});
+
+    // Note: This kicks of background PG queries for CVR data associated with the
+    // executed and removed queries.
+    const cvrVersion = updater.trackQueries(
+      lc,
+      addQueries.map(hash => ({id: hash, transformationHash: hash})),
+      removeQueries,
+      minClientVersion,
+    );
+    const pokers = [...this.#clients.values()].map(c =>
+      c.startPoke(cvrVersion),
+    );
+
+    // Removing queries is easy. The pipelines are dropped, and the CVR
+    // updater handles the updates and pokes.
+    for (const hash of removeQueries) {
+      this.#pipelines.removeQuery(hash);
+    }
+
+    for (const hash of addQueries) {
+      const {ast} = cvr.queries[hash];
+      await this.#addQuery(hash, ast, updater, pokers);
+    }
+
+    lc.debug?.(`generating delete patches`);
+    for (const patch of await updater.deleteUnreferencedColumnsAndRows(lc)) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
+    lc.debug?.(`generating config patches`);
+    for (const patch of await updater.generateConfigPatches(lc)) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
+
+    // Commit the changes and update the CVR snapshot.
+    this.#cvr = await updater.flush(lc);
+
+    // Signal clients to commit.
+    pokers.forEach(poker => poker.end());
+
+    lc.info?.(`finished processing update`);
+  }
+
+  async #addQuery(
+    hash: string,
+    ast: AST,
+    _updater: CVRQueryDrivenUpdater,
+    _pokers: PokeHandler[],
+  ) {
+    const start = Date.now();
+    const rows = new CustomKeyMap<RowID, ParsedRow>(rowIDHash);
+
+    // eslint-disable-next-line require-await
+    const processBatch = async () => {
+      const elapsed = Date.now() - start;
+      this.#lc.debug?.(
+        `processing ${rows.size} rows of ${count} for ${hash} (${elapsed} ms)`,
+      );
+      // TODO: Update CVRQueryDrivenUpdater.received() method with new type.
+      // const patches = await updater.received(this.#lc, rows);
+      // patches.forEach(patch => pokers.forEach(poker => poker.addPatch(patch)));
+      rows.clear();
+    };
+
+    let count = 0;
+
+    for (const change of this.#pipelines.addQuery(hash, ast)) {
+      const {table, rowKey, row} = change;
+      assert(row, 'hydration only results in RowAdd');
+      // TODO: Remove obsolete `schema` field.
+      const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
+
+      let parsedRow = rows.get(rowID);
+      if (parsedRow) {
+        parsedRow.count++;
+      } else {
+        const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
+        if (typeof version !== 'string' || version.length === 0) {
+          throw new Error(`Invalid _0_version in ${stringify(row)}`);
+        }
+        parsedRow = {version, contents, count: 1};
+        rows.set(rowID, parsedRow);
+      }
+
+      if (++count % CURSOR_PAGE_SIZE === 0) {
+        await processBatch();
+      }
+    }
+    if (rows.size) {
+      await processBatch();
+    }
   }
 
   // eslint-disable-next-line require-await
@@ -310,3 +509,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 }
+
+type ParsedRow = {
+  version: string;
+  contents: JSONObject;
+  count: number;
+};
+
+const CURSOR_PAGE_SIZE = 1000;

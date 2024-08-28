@@ -153,8 +153,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     const lmidsQuery: InternalQueryRecord = {
       id: CLIENT_LMID_QUERY_ID,
       ast: {
-        schema: 'zero',
-        table: 'clients',
+        schema: '',
+        table: 'zero.clients',
         where: [
           {
             type: 'simple',
@@ -163,6 +163,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
             value: this._cvr.id,
           },
         ],
+        orderBy: [['clientID', 'asc']],
       },
       internal: true,
     };
