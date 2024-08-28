@@ -208,9 +208,9 @@ export type RowID = v.Infer<typeof rowIDSchema>;
 export const rowRecordSchema = cvrRecordSchema.extend({
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
-  // query IDS => refCount, or `null` for a row that was removed from the view
-  // (i.e. tombstone).
-  refCount: v.record(v.number()).nullable(),
+  // query hashes => refCount, or `null` for a row that was removed from the
+  // view (i.e. tombstone).
+  refCounts: v.record(v.number()).nullable(),
 });
 
 export type RowRecord = v.Infer<typeof rowRecordSchema>;

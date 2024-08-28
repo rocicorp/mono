@@ -420,7 +420,7 @@ export class CVRStore {
         table: row.table,
         rowKey: row.rowKey as Record<string, JSONValue>,
       } as const;
-      const rowPatch: RowPatch = row.refCount
+      const rowPatch: RowPatch = row.refCounts
         ? ({
             type: 'row',
             op: 'put',

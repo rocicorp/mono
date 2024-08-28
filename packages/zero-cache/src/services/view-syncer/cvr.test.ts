@@ -769,7 +769,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          refCount: {twoHash: 1},
+          refCounts: {twoHash: 1},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -778,7 +778,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          refCount: {twoHash: 1},
+          refCounts: {twoHash: 1},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -787,7 +787,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY3,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '19z',
           schema: 'public',
           table: 'issues',
@@ -796,7 +796,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '189',
           schema: 'public',
           table: 'issues',
@@ -805,7 +805,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '1aa',
           schema: 'public',
           table: 'issues',
@@ -859,20 +859,6 @@ describe('view-syncer/cvr', () => {
         lc,
         new Map([
           [
-            ROW_ID1,
-            {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCount: {oneHash: 1},
-              },
-              contents: {
-                id: 'new version patch',
-                name: 'because of new field',
-              },
-            },
-          ],
-          [
             ROW_ID2,
             {
               record: {
@@ -897,15 +883,6 @@ describe('view-syncer/cvr', () => {
         ]),
       ),
     ).toEqual([
-      {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: ROW_ID1,
-          contents: {id: 'new version patch', name: 'because of new field'},
-        },
-      },
       {
         toVersion: {stateVersion: '1a0'},
         patch: {
@@ -1075,7 +1052,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '189',
-          refCount: null,
+          refCounts: null,
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
           schema: 'public',
@@ -1084,7 +1061,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1aa',
-          refCount: null,
+          refCounts: null,
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
           schema: 'public',
@@ -1093,7 +1070,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1a0',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1105,7 +1082,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
-          refCount: {
+          refCounts: {
             oneHash: 1,
           },
           rowKey: ROW_KEY3,
@@ -1116,7 +1093,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1192,7 +1169,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1204,7 +1181,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          refCount: {twoHash: 1},
+          refCounts: {twoHash: 1},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -1213,7 +1190,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY3,
           rowVersion: '09',
-          refCount: {oneHash: 1},
+          refCounts: {oneHash: 1},
           patchVersion: '1aa:01',
           schema: 'public',
           table: 'issues',
@@ -1222,7 +1199,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '189',
           schema: 'public',
           table: 'issues',
@@ -1231,7 +1208,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '1ba',
           schema: 'public',
           table: 'issues',
@@ -1551,7 +1528,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '189',
           schema: 'public',
           table: 'issues',
@@ -1560,7 +1537,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           patchVersion: '1ba',
           schema: 'public',
           table: 'issues',
@@ -1569,7 +1546,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1581,7 +1558,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          refCount: {twoHash: 1},
+          refCounts: {twoHash: 1},
           patchVersion: '1a0',
           schema: 'public',
           table: 'issues',
@@ -1590,7 +1567,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           rowKey: ROW_KEY3,
           rowVersion: '09',
-          refCount: {oneHash: 1},
+          refCounts: {oneHash: 1},
           patchVersion: '1aa:01',
           schema: 'public',
           table: 'issues',
@@ -1838,7 +1815,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '189',
-          refCount: null,
+          refCounts: null,
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
           schema: 'public',
@@ -1847,7 +1824,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba',
-          refCount: null,
+          refCounts: null,
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
           schema: 'public',
@@ -1856,7 +1833,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1868,7 +1845,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1880,7 +1857,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
-          refCount: null,
+          refCounts: null,
           rowKey: ROW_KEY3,
           rowVersion: '09',
           schema: 'public',
@@ -1939,7 +1916,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '189',
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           schema: 'public',
           table: 'issues',
         },
@@ -1948,7 +1925,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '19z',
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           schema: 'public',
           table: 'issues',
         },
@@ -1956,7 +1933,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
           rowKey: ROW_KEY1,
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -1968,7 +1945,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1ba',
           rowKey: ROW_KEY2,
-          refCount: {twoHash: 1},
+          refCounts: {twoHash: 1},
           rowVersion: '03',
           schema: 'public',
           table: 'issues',
@@ -1977,7 +1954,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           patchVersion: '1aa:01',
           rowKey: ROW_KEY3,
-          refCount: {oneHash: 1},
+          refCounts: {oneHash: 1},
           rowVersion: '09',
           schema: 'public',
           table: 'issues',
@@ -2072,7 +2049,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '189',
-          refCount: null,
+          refCounts: null,
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
           schema: 'public',
@@ -2081,7 +2058,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '19z',
-          refCount: null,
+          refCounts: null,
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
           schema: 'public',
@@ -2090,7 +2067,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba',
-          refCount: {
+          refCounts: {
             twoHash: 1,
           },
           rowKey: ROW_KEY2,
@@ -2101,7 +2078,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
-          refCount: {
+          refCounts: {
             twoHash: 1,
           },
           rowKey: ROW_KEY1,
@@ -2112,7 +2089,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           patchVersion: '1ba:01',
-          refCount: null,
+          refCounts: null,
           rowKey: ROW_KEY3,
           rowVersion: '09',
           schema: 'public',
@@ -2203,7 +2180,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '189',
           rowKey: IN_OLD_PATCH_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           schema: 'public',
           table: 'issues',
         },
@@ -2212,7 +2189,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1ba',
           rowKey: DELETE_ROW_KEY,
           rowVersion: '03',
-          refCount: null,
+          refCounts: null,
           schema: 'public',
           table: 'issues',
         },
@@ -2221,7 +2198,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           rowKey: ROW_KEY1,
           rowVersion: '03',
-          refCount: {
+          refCounts: {
             oneHash: 1,
             twoHash: 1,
           },
@@ -2233,7 +2210,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a0',
           rowKey: ROW_KEY2,
           rowVersion: '03',
-          refCount: {twoHash: 1},
+          refCounts: {twoHash: 1},
           schema: 'public',
           table: 'issues',
         },
@@ -2242,7 +2219,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           rowKey: ROW_KEY3,
           rowVersion: '09',
-          refCount: {oneHash: 1},
+          refCounts: {oneHash: 1},
           schema: 'public',
           table: 'issues',
         },
