@@ -495,7 +495,7 @@ export class CVRStore {
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
       this.#id
-    } AND "refCount" IS NOT NULL`
+    } AND "refCounts" IS NOT NULL`
       // TODO(arv): Arbitrary page size
       .cursor(1000)) {
       for (const row of rows) {
