@@ -45,13 +45,13 @@ test('Same sql results in same statement instance. The same instance is not outs
 
   expect(cache.size).toBe(LOOP_COUNT * 2);
 
-  // // drops the least recently used LOOP_COUNT statements
+  // drops the least recently used LOOP_COUNT statements
   cache.drop(LOOP_COUNT);
 
   expect(cache.size).toBe(LOOP_COUNT);
 
-  // // the most recently used are `duplicatedExpected` and should all be
-  // // present in the cache
+  // the most recently used are `duplicatedExpected` and should all be
+  // present in the cache
   expect(duplicatedExpected.length).toBe(LOOP_COUNT);
   for (let i = 0; i < LOOP_COUNT * 2; ++i) {
     cache.get(`SELECT ${i % 100}`);
