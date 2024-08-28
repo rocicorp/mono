@@ -40,17 +40,22 @@ test('Same sql results in same statement instance. The same instance is not outs
     expect(cache.size).toBe(100 + i + 1);
   }
 
+  expect(cache.size).toBe(200);
+  expect(cache.mapSize).toBe(100);
+
   // drops the least recently used 100 statements
   cache.drop(100);
 
   expect(cache.size).toBe(100);
+  expect(cache.mapSize).toBe(50);
   // the most recently used are `duplicatedExpected` and should all be
   // present in the cache
+  expect(duplicatedExpected.length).toBe(100);
   for (let i = 0; i < 100; ++i) {
     const stmt = cache.get(`SELECT ${i}`);
-    expect(stmt.statement).toBe(duplicatedExpected[i].statement);
+    expect(stmt.statement).toStrictEqual(duplicatedExpected[i].statement);
   }
 
   // all statements are outstanding
-  expect(cache.size).toBe(0);
+  expect(cache.size).toBe(50);
 });
