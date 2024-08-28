@@ -2,27 +2,11 @@ import {QueryRowType, Zero} from 'zero-client';
 import {Schema} from './schema.js';
 
 export type IssueListQuery = ReturnType<typeof getIssueListQuery>;
-export type IssueListRow = QueryRowType<ReturnType<typeof getIssueListQuery>>;
+export type IssueListRow = QueryRowType<IssueListQuery>;
 export function getIssueListQuery(zero: Zero<Schema>) {
   return zero.query.issue
-    .select(
-      'created',
-      'creatorID',
-      'description',
-      'id',
-      'kanbanOrder',
-      'modified',
-      'priority',
-      'status',
-      'title',
-    )
-    .related('labels', q => q.select('id', 'name'))
-    .related('comments', q =>
-      q
-        .select('id', 'body', 'created', 'creatorID')
-        .related('creator', q => q.select('id', 'name'))
-        .limit(10),
-    );
+    .related('labels', q => q)
+    .related('comments', q => q.related('creator', q => q).limit(10));
 }
 
 export function getIssuePreloadQuery(
@@ -30,25 +14,14 @@ export function getIssuePreloadQuery(
   sort: 'modified' | 'created' | 'priority' | 'status',
 ) {
   return zero.query.issue
-    .select(
-      'created',
-      'creatorID',
-      'description',
-      'id',
-      'kanbanOrder',
-      'modified',
-      'priority',
-      'status',
-      'title',
-    )
-    .related('labels', q => q.select('id', 'name'))
+    .related('labels', q => q)
     .orderBy(sort, 'desc')
     .limit(10_000);
 }
 
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
 export function getCrewQuery(zero: Zero<Schema>) {
-  return zero.query.member.select('id', 'name').where('name', 'IN', crewNames);
+  return zero.query.member.where('name', 'IN', crewNames);
 }
 
 export type IssueWithDetails = QueryRowType<
@@ -60,21 +33,6 @@ export function getIssueDetailQuery(
   issueID: string | null,
 ) {
   return zero.query.issue
-    .select(
-      'created',
-      'creatorID',
-      'description',
-      'id',
-      'kanbanOrder',
-      'modified',
-      'priority',
-      'status',
-      'title',
-    )
-    .related('comments', q =>
-      q
-        .select('id', 'body', 'created')
-        .related('creator', q => q.select('name')),
-    )
+    .related('comments', q => q.related('creator', q => q))
     .where('id', '=', issueID ?? '');
 }

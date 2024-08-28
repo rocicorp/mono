@@ -67,7 +67,9 @@ export type QueryReturnType<T extends Query<Schema>> = T extends Query<
   ? Smash<TReturn>
   : never;
 
-export type QueryRowType<T extends Query<Schema>> = QueryReturnType<T>[number];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type QueryRowType<T extends Query<any, any, any>> =
+  QueryReturnType<T>[number];
 
 /**
  * A query can have:
@@ -138,6 +140,11 @@ export type QueryResultRow = {
   related: Record<string, Array<QueryResultRow>> | undefined;
 };
 
+type EmptyQueryResultRow = {
+  row: {};
+  related: {};
+};
+
 export type Operator =
   | '='
   | '!='
@@ -150,14 +157,16 @@ export type Operator =
   | 'LIKE'
   | 'ILIKE';
 
-export type EmptyQueryResultRow = {
-  row: {};
+export type DefaultQueryResultRow<TSchema extends Schema> = {
+  row: {
+    [K in keyof TSchema['fields']]: SchemaValueToTSType<TSchema['fields'][K]>;
+  };
   related: {};
 };
 
 export interface Query<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow> = Array<EmptyQueryResultRow>,
+  TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
   TAs extends string = string,
 > {
   readonly ast: AST;
@@ -177,7 +186,11 @@ export interface Query<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        Array<EmptyQueryResultRow>,
+        Array<
+          DefaultQueryResultRow<
+            PullSchemaForRelationship<TSchema, TRelationship>
+          >
+        >,
         TRelationship & string
       >,
     ) => TSub,

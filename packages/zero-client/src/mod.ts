@@ -59,7 +59,7 @@ export type {
 } from 'replicache';
 export type {
   Query,
-  EmptyQueryResultRow,
+  DefaultQueryResultRow as EmptyQueryResultRow,
   SchemaToRow,
   Smash,
   QueryRowType,
