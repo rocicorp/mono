@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {assert} from 'shared/src/asserts.js';
+import {resolver} from '@rocicorp/resolver';
 import {AST} from '../ast2/ast.js';
 import {
   AddSelections,
@@ -78,15 +79,39 @@ class QueryImpl<
   }
 
   materialize(): TypedView<Smash<TReturn>> {
-    const end = buildPipeline(
-      {
-        ...this.#ast,
-        orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
-      },
-      this.#host,
-    );
+    const end = buildPipeline(this.#completeAst(), this.#host);
     const view = new ArrayView(this.#host, this.#ast, end);
     return view as unknown as TypedView<Smash<TReturn>>;
+  }
+
+  preload(): {
+    cleanup: () => void;
+    preloaded: Promise<boolean>;
+  } {
+    const {resolve, promise: preloaded} = resolver<boolean>();
+    const subscriptionRemoved = this.#host.subscriptionAdded(
+      this.#completeAst(),
+      got => {
+        if (got) {
+          resolve(true);
+        }
+      },
+    );
+    const cleanup = () => {
+      subscriptionRemoved();
+      resolve(false);
+    };
+    return {
+      cleanup,
+      preloaded,
+    };
+  }
+
+  #completeAst(): AST {
+    return {
+      ...this.#ast,
+      orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
+    };
   }
 
   related<

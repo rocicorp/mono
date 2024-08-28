@@ -1,9 +1,8 @@
 import {QueryRowType, Zero} from 'zero-client';
 import {Schema} from './schema.js';
 
-export type IssueListRow = QueryRowType<ReturnType<typeof getIssueListQuery>>;
 export type IssueListQuery = ReturnType<typeof getIssueListQuery>;
-
+export type IssueListRow = QueryRowType<ReturnType<typeof getIssueListQuery>>;
 export function getIssueListQuery(zero: Zero<Schema>) {
   return zero.query.issue
     .select(

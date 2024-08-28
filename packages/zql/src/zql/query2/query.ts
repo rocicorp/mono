@@ -197,4 +197,8 @@ export interface Query<
   ): Query<TSchema, TReturn, TAs>;
 
   materialize(): TypedView<Smash<TReturn>>;
+  preload(): {
+    cleanup: () => void;
+    preloaded: Promise<boolean>;
+  };
 }
