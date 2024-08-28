@@ -61,11 +61,13 @@ export class StatementCache {
 
     let remaining = n;
     for (const [sql, statements] of this.#cache.entries()) {
-      this.#cache.delete(sql);
-      this.#size -= statements.length;
-      remaining -= statements.length;
-
-      if (remaining <= 0) {
+      if (remaining >= statements.length) {
+        this.#cache.delete(sql);
+        remaining -= statements.length;
+        this.#size -= statements.length;
+      } else {
+        statements.splice(0, remaining);
+        this.#size -= remaining;
         break;
       }
     }
