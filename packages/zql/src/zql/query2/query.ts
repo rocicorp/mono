@@ -222,6 +222,11 @@ export interface Query<
     value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs>;
 
+  start(
+    row: Partial<SchemaToRow<TSchema>>,
+    opts?: {inclusive: boolean} | undefined,
+  ): Query<TSchema, TReturn, TAs>;
+
   limit(limit: number): Query<TSchema, TReturn, TAs>;
 
   orderBy<TSelector extends Selector<TSchema>>(
