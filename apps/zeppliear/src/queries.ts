@@ -5,18 +5,15 @@ export type IssueListQuery = ReturnType<typeof getIssueListQuery>;
 export type IssueListRow = QueryRowType<IssueListQuery>;
 export function getIssueListQuery(zero: Zero<Schema>) {
   return zero.query.issue
-    .related('labels', q => q)
-    .related('comments', q => q.related('creator', q => q).limit(10));
+    .related('labels')
+    .related('comments', q => q.related('creator').limit(10));
 }
 
 export function getIssuePreloadQuery(
   zero: Zero<Schema>,
   sort: 'modified' | 'created' | 'priority' | 'status',
 ) {
-  return zero.query.issue
-    .related('labels', q => q)
-    .orderBy(sort, 'desc')
-    .limit(10_000);
+  return zero.query.issue.related('labels').orderBy(sort, 'desc').limit(10_000);
 }
 
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
@@ -33,6 +30,6 @@ export function getIssueDetailQuery(
   issueID: string | null,
 ) {
   return zero.query.issue
-    .related('comments', q => q.related('creator', q => q))
+    .related('comments', q => q.related('creator'))
     .where('id', '=', issueID ?? '');
 }

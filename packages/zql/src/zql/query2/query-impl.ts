@@ -118,6 +118,26 @@ class QueryImpl<
     };
   }
 
+  related<TRelationship extends keyof TSchema['relationships']>(
+    relationship: TRelationship,
+  ): Query<
+    TSchema,
+    Array<
+      AddSubselect<
+        Query<
+          PullSchemaForRelationship<TSchema, TRelationship>,
+          Array<
+            DefaultQueryResultRow<
+              PullSchemaForRelationship<TSchema, TRelationship>
+            >
+          >,
+          TRelationship & string
+        >,
+        TReturn
+      >
+    >,
+    TAs
+  >;
   related<
     TRelationship extends keyof TSchema['relationships'],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,7 +154,7 @@ class QueryImpl<
         >,
         TRelationship & string
       >,
-    ) => TSub,
+    ) => TSub = q => q as any,
   ): Query<TSchema, Array<AddSubselect<TSub, TReturn>>, TAs> {
     const related = this.#schema.relationships?.[relationship as string];
     assert(related, 'Invalid relationship');
