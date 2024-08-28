@@ -172,7 +172,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.insert('issues', {id: 4}),
     );
 
-    expect([...pipelines.advance()]).toMatchInlineSnapshot(`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -224,7 +224,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.delete('comments', {id: 21}),
     );
 
-    expect([...pipelines.advance()]).toMatchInlineSnapshot(`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -264,7 +264,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.update('comments', {id: 22, issueID: 3}),
     );
 
-    expect([...pipelines.advance()]).toMatchInlineSnapshot(`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -297,7 +297,7 @@ describe('view-syncer/pipeline-driver', () => {
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction('0/234', messages.insert('issues', {id: 4}));
 
-    expect([...pipelines.advance()]).toMatchInlineSnapshot(`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -318,7 +318,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.insert('comments', {id: 41, issueID: 4}),
     );
 
-    expect([...pipelines.advance()]).toMatchInlineSnapshot(`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -337,7 +337,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     replicator.processTransaction('0/789', messages.delete('issues', {id: 4}));
 
-    expect([...pipelines.advance()]).toMatchInlineSnapshot(`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -376,7 +376,7 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(pipelines.currentVersion()).toBe('00');
-    expect([...pipelines.advance()]).toHaveLength(0);
+    expect([...pipelines.advance().changes]).toHaveLength(0);
     expect(pipelines.currentVersion()).toBe('183');
   });
 });

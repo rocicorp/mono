@@ -11,6 +11,7 @@ import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
 import {CVRStore} from './cvr-store.js';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
 import {PipelineDriver} from './pipeline-driver.js';
@@ -35,6 +36,7 @@ const EXPECTED_LMIDS_AST: AST = {
 describe('view-syncer/service', () => {
   let storageDB: Database.Database;
   let replicaDbFile: DbFile;
+  let replica: Database.Database;
   let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
   let versionNotifications: Subscription<ReplicaVersionReady>;
@@ -45,12 +47,14 @@ describe('view-syncer/service', () => {
 
   const SYNC_CONTEXT = {clientID: 'foo', wsID: 'ws1', baseCookie: null};
 
+  const messages = new ReplicationMessages({issues: 'id', users: 'id'});
+
   beforeEach(async () => {
     storageDB = new Database(':memory:');
     storageDB.prepare(CREATE_STORAGE_TABLE).run();
 
     replicaDbFile = new DbFile('view_syncer_service_test');
-    const replica = replicaDbFile.connect();
+    replica = replicaDbFile.connect();
     initChangeLog(replica);
     initReplicationState(replica, ['zero_data'], '0/1');
 
@@ -65,8 +69,8 @@ describe('view-syncer/service', () => {
     );
     CREATE TABLE issues (
       id text PRIMARY KEY,
-      owner_id text,
-      parent_id text,
+      owner text,
+      parent text,
       big INTEGER,
       title text,
       _0_version TEXT NOT NULL
@@ -78,18 +82,18 @@ describe('view-syncer/service', () => {
     );
 
     INSERT INTO "zero.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
-                      VALUES ('9876', 'foo', 42, '0a');
+                      VALUES ('9876', 'foo', 42, '00');
 
-    INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '0a');
-    INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '0b');
-    INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '0c');
+    INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '00');
+    INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '00');
+    INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '00');
 
-    INSERT INTO issues (id, title, owner_id, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '1a0');
-    INSERT INTO issues (id, title, owner_id, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '1ab');
-    INSERT INTO issues (id, title, owner_id, parent_id, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '1ca');
-    INSERT INTO issues (id, title, owner_id, parent_id, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '1cd');
+    INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '00');
+    INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '00');
+    INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '00');
+    INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '00');
     -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
-    INSERT INTO issues (id, title, owner_id, parent_id, big, _0_version) VALUES ('5', 'not matched', 101, 2, 100, '1cd');
+    INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('5', 'not matched', 101, 2, 100, '00');
     `);
 
     cvrDB = await testDBs.create('view_syncer_service_test');
@@ -113,7 +117,7 @@ describe('view-syncer/service', () => {
       'initConnection',
       {
         desiredQueriesPatch: [
-          {op: 'put', hash: 'query-hash1', ast: ISSUES_TITLE_QUERY},
+          {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
         ],
       },
     ]);
@@ -154,7 +158,7 @@ describe('view-syncer/service', () => {
 
   const serviceID = '9876';
 
-  const ISSUES_TITLE_QUERY: AST = {
+  const ISSUES_QUERY: AST = {
     table: 'issues',
     where: [
       {
@@ -167,7 +171,7 @@ describe('view-syncer/service', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const USERS_NAME_QUERY: AST = {
+  const USERS_QUERY: AST = {
     table: 'users',
   };
 
@@ -185,7 +189,7 @@ describe('view-syncer/service', () => {
       id: '9876',
       queries: {
         'query-hash1': {
-          ast: ISSUES_TITLE_QUERY,
+          ast: ISSUES_QUERY,
           desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
           id: 'query-hash1',
         },
@@ -200,7 +204,7 @@ describe('view-syncer/service', () => {
       'changeDesiredQueries',
       {
         desiredQueriesPatch: [
-          {op: 'put', hash: 'query-hash-1234567890', ast: USERS_NAME_QUERY},
+          {op: 'put', hash: 'query-hash-1234567890', ast: USERS_QUERY},
         ],
       },
     ]);
@@ -210,7 +214,7 @@ describe('view-syncer/service', () => {
       'changeDesiredQueries',
       {
         desiredQueriesPatch: [
-          {op: 'put', hash: 'query-hash2', ast: USERS_NAME_QUERY},
+          {op: 'put', hash: 'query-hash2', ast: USERS_QUERY},
           {op: 'del', hash: 'query-hash1'},
         ],
       },
@@ -234,7 +238,7 @@ describe('view-syncer/service', () => {
           id: 'lmids',
         },
         'query-hash2': {
-          ast: USERS_NAME_QUERY,
+          ast: USERS_QUERY,
           desiredBy: {foo: {stateVersion: '00', minorVersion: 2}},
           id: 'query-hash2',
         },
@@ -330,6 +334,52 @@ describe('view-syncer/service', () => {
           "pokeEnd",
           {
             "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('process advancement', async () => {
+    versionNotifications.push({});
+    expect((await nextPoke())[0]).toEqual([
+      'pokeStart',
+      {
+        baseCookie: null,
+        cookie: '00:02',
+        pokeID: '00:02',
+      },
+    ]);
+
+    const replicator = fakeReplicator(lc, replica);
+    replicator.processTransaction(
+      '0/123',
+      messages.update('issues', {
+        id: '1',
+        title: 'new title',
+        owner: 100,
+        parent: null,
+        big: 9007199254740991n,
+      }),
+      messages.delete('issues', {id: '2'}),
+    );
+
+    versionNotifications.push({});
+    // TODO: Get RowPatches working.
+    expect(await nextPoke()).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01",
           },
         ],
       ]
