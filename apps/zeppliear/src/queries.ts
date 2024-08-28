@@ -43,7 +43,7 @@ export function getIssuePreloadQuery(
     )
     .related('labels', q => q.select('id', 'name'))
     .orderBy(sort, 'desc')
-    .limit(2000);
+    .limit(10_000);
 }
 
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
@@ -59,26 +59,22 @@ export function getIssueDetailQuery(
   zero: Zero<Schema>,
   issueID: string | null,
 ) {
-  return (
-    zero.query.issue
-      .select(
-        'created',
-        'creatorID',
-        'description',
-        'id',
-        'kanbanOrder',
-        'modified',
-        'priority',
-        'status',
-        'title',
-      )
-      // labels?
-      // owner?
-      .related('comments', q =>
-        q
-          .select('id', 'body', 'created')
-          .related('creator', q => q.select('name')),
-      )
-      .where('id', '=', issueID ?? '')
-  );
+  return zero.query.issue
+    .select(
+      'created',
+      'creatorID',
+      'description',
+      'id',
+      'kanbanOrder',
+      'modified',
+      'priority',
+      'status',
+      'title',
+    )
+    .related('comments', q =>
+      q
+        .select('id', 'body', 'created')
+        .related('creator', q => q.select('name')),
+    )
+    .where('id', '=', issueID ?? '');
 }
