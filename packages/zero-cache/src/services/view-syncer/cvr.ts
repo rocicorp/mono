@@ -608,6 +608,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const rowRecord: RowRecord = {
       ...existing,
       patchVersion: newPatchVersion,
+      refCount: null, // tombstone
     };
 
     this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
