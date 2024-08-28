@@ -27,12 +27,27 @@ const issueSchema = {
     labels: {
       source: 'id',
       junction: {
+        schema: () => issueLabelSchema,
         sourceField: 'issueID',
         destField: 'labelID',
       },
       dest: {
         field: 'id',
         schema: () => labelSchema,
+      },
+    },
+    comments: {
+      source: 'id',
+      dest: {
+        field: 'issueID',
+        schema: () => commentSchema,
+      },
+    },
+    creator: {
+      source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => memberSchema,
       },
     },
   },
@@ -48,6 +63,15 @@ const commentSchema = {
     creatorID: {type: 'string'},
   },
   primaryKey: ['id'],
+  relationships: {
+    creator: {
+      source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => memberSchema,
+      },
+    },
+  },
 } as const;
 
 const labelSchema = {

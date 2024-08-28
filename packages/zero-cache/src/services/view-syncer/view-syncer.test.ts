@@ -8,6 +8,7 @@ import type {AST} from 'zql/src/zql/ast2/ast.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
+import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {CVRStore} from './cvr-store.js';
@@ -18,8 +19,8 @@ import {Snapshotter} from './snapshotter.js';
 import {ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
-  schema: 'zero',
-  table: 'clients',
+  schema: '',
+  table: 'zero.clients',
   where: [
     {
       type: 'simple',
@@ -28,6 +29,7 @@ const EXPECTED_LMIDS_AST: AST = {
       value: '9876',
     },
   ],
+  orderBy: [['clientID', 'asc']],
 };
 
 describe('view-syncer/service', () => {
@@ -35,6 +37,7 @@ describe('view-syncer/service', () => {
   let replicaDbFile: DbFile;
   let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
+  let versionNotifications: Subscription<ReplicaVersionReady>;
 
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
@@ -92,6 +95,7 @@ describe('view-syncer/service', () => {
     cvrDB = await testDBs.create('view_syncer_service_test');
     await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
 
+    versionNotifications = Subscription.create();
     vs = new ViewSyncerService(
       lc,
       serviceID,
@@ -101,7 +105,7 @@ describe('view-syncer/service', () => {
         new Snapshotter(lc, replicaDbFile.path),
         new DatabaseStorage(storageDB).createClientGroupStorage(serviceID),
       ),
-      Subscription.create(),
+      versionNotifications,
     );
     viewSyncerDone = vs.run();
     downstream = new Queue();
@@ -129,6 +133,18 @@ describe('view-syncer/service', () => {
     }
   }
 
+  async function nextPoke(): Promise<Downstream[]> {
+    const received: Downstream[] = [];
+    for (;;) {
+      const msg = await downstream.dequeue();
+      received.push(msg);
+      if (msg[0] === 'pokeEnd') {
+        break;
+      }
+    }
+    return received;
+  }
+
   afterEach(async () => {
     await vs.stop();
     await viewSyncerDone;
@@ -148,6 +164,7 @@ describe('view-syncer/service', () => {
         value: ['1', '2', '3', '4'],
       },
     ],
+    orderBy: [['id', 'asc']],
   };
 
   const USERS_NAME_QUERY: AST = {
@@ -224,6 +241,99 @@ describe('view-syncer/service', () => {
       },
       version: {stateVersion: '00', minorVersion: 2},
     });
+  });
+
+  test('initial hydration', async () => {
+    versionNotifications.push({});
+    // TODO: Get RowPatches working.
+    expect(await nextPoke()).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:02",
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": [
+                    {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                  ],
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
   });
 
   // Does not test the actual timeout logic, but better than nothing.

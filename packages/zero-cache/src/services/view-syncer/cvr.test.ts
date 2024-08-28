@@ -423,8 +423,8 @@ describe('view-syncer/cvr', () => {
           id: 'lmids',
           internal: true,
           ast: {
-            table: 'clients',
-            schema: 'zero',
+            table: 'zero.clients',
+            schema: '',
             where: [
               {
                 type: 'simple',
@@ -433,6 +433,7 @@ describe('view-syncer/cvr', () => {
                 value: 'abc123',
               },
             ],
+            orderBy: [['clientID', 'asc']],
           },
         },
         oneHash: {
@@ -520,8 +521,8 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientAST: {
-            schema: 'zero',
-            table: 'clients',
+            schema: '',
+            table: 'zero.clients',
             where: [
               {
                 field: 'clientGroupID',
@@ -530,6 +531,7 @@ describe('view-syncer/cvr', () => {
                 value: 'abc123',
               },
             ],
+            orderBy: [['clientID', 'asc']],
           },
           clientGroupID: 'abc123',
           deleted: false,

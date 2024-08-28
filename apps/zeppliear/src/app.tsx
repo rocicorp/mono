@@ -3,7 +3,7 @@ import classnames from 'classnames';
 import {pickBy} from 'lodash';
 import {memo, useCallback, useEffect, useState} from 'react';
 import {HotKeys} from 'react-hotkeys';
-import type {Query, Zero} from 'zero-client';
+import type {Zero} from 'zero-client';
 import {getIssueOrder, getViewStatuses} from './filters.js';
 import {
   FiltersState,
@@ -32,12 +32,17 @@ import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
 import {escapeLike} from './util/escape-like.js';
 import {Schema} from './schema.js';
+import {
+  crewNames,
+  getCrewQuery,
+  getIssueWithLabelsQuery,
+  IssueWithLabelsQuery,
+} from './queries.js';
 
 type AppProps = {
   undoManager: UndoManager;
 };
 
-const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
 const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -52,9 +57,7 @@ const App = ({undoManager}: AppProps) => {
   // Sync the user rows for the entire crew so that when we pick a random
   // crew member below to be the current active user, we already have it
   // synced.
-  useQuery(
-    zero.query.member.select('id', 'name').where('name', 'IN', crewNames),
-  );
+  useQuery(getCrewQuery(zero));
 
   const userID =
     useQuery(
@@ -65,12 +68,7 @@ const App = ({undoManager}: AppProps) => {
     console.debug({activeUserName, userID});
   }, [userID]);
 
-  const issueQuery = zero.query.issue;
-
-  // TODO: fix kanban
-  //const allIssues = useQuery(issueQuery.select('kanbanOrder').limit(200));
-
-  const issueListQuery = issueQuery.related('labels', q => q.select('name'));
+  const issueListQuery = getIssueWithLabelsQuery(zero);
   const filteredQuery = filterQuery(issueListQuery, view, filters);
 
   const issueOrder = getIssueOrder(view, orderBy);
@@ -274,10 +272,7 @@ function RawLayout({
 const Layout = memo(RawLayout);
 
 function filterQuery(
-  // TODO: having to know the from set and return type of the query to take it in as an arg is...
-  // confusing at best.
-  // TODO: having to know the `FromSet` is dumb.
-  q: Query<Schema['issue']>,
+  q: IssueWithLabelsQuery,
   view: string | null,
   filters: FiltersState,
 ) {
@@ -295,17 +290,7 @@ function filterQuery(
     q = q.where('priority', 'IN', [...filters.priorityFilter]);
   }
 
-  let filteredQuery = q.select(
-    'created',
-    'creatorID',
-    'description',
-    'id',
-    'kanbanOrder',
-    'priority',
-    'modified',
-    'status',
-    'title',
-  );
+  let filteredQuery = q;
 
   if (filters.textFilter) {
     filteredQuery = filteredQuery.where(

@@ -1,14 +1,11 @@
 import {useCallback, useMemo, useState} from 'react';
 import type {ListOnItemsRenderedProps} from 'react-window';
-import {
-  type Issue,
-  type IssueWithLabels,
-  type Priority,
-  type Status,
-} from './issue.js';
+import {orderQuery, type Issue, type Priority, type Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {assert} from './util/asserts.js';
 import {ResultType} from 'zero-client';
+import {useQueryWithResultType} from './hooks/use-query2.js';
+import {IssueWithLabels} from './queries.js';
 
 export type ListData = {
   getIssue(index: number): IssueWithLabels | undefined;
@@ -24,10 +21,8 @@ export type ListData = {
   readonly resultType: ResultType;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TODO = any;
-const emptyArray: TODO = [];
 export function useListData({
+  issuesProps,
   onChangePriority,
   onChangeStatus,
   onOpenDetail,
@@ -38,7 +33,13 @@ export function useListData({
   onOpenDetail: (issue: Issue) => void;
 }): ListData {
   const pageSize = 500;
+  const {query, queryDeps, order} = issuesProps;
+  const issueQueryOrdered = orderQuery(query, order, false);
   const [limit, setLimit] = useState(pageSize);
+  const {snapshot: issues, resultType} = useQueryWithResultType(
+    issueQueryOrdered.limit(limit),
+    queryDeps.concat(limit),
+  );
   const onItemsRendered = useCallback(
     ({overscanStopIndex}: ListOnItemsRenderedProps) => {
       if (overscanStopIndex > limit - pageSize / 2) {
@@ -47,9 +48,6 @@ export function useListData({
     },
     [limit],
   );
-
-  const issues: TODO = emptyArray;
-  const resultType = 'none';
 
   return useMemo(
     () =>
@@ -119,7 +117,7 @@ class ListDataImpl implements ListData {
 
   #findIndex(issue: Issue): number {
     const issueID = issue.id;
-    return this.#issues.findIndex(issue => issue.issue.id === issueID);
+    return this.#issues.findIndex(issue => issue.id === issueID);
   }
 
   *iterateIssuesAfter(issue: Issue): Iterable<IssueWithLabels> {
