@@ -125,22 +125,6 @@ export class StatementCache {
     }
   }
 
-  printCacheStats() {
-    console.log('\nStatement Cache Statistics:');
-    console.log('---------------------------');
-    console.log('| SQL                     | Count |');
-    console.log('|-------------------------|-------|');
-
-    for (const [sql, statements] of this.#cache.entries()) {
-      const truncatedSql =
-        sql.length > 20 ? sql.substring(0, 17) + '...' : sql.padEnd(20);
-      console.log(
-        `| ${truncatedSql} | ${statements.length.toString().padStart(5)} |`,
-      );
-    }
-    console.log('---------------------------');
-    console.log(`Total Statements: ${this.size}`);
-  }
 }
 
 function normalizeWhitespace(sql: string) {
