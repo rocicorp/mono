@@ -50,11 +50,6 @@ export class StatementCache {
     return this.#size;
   }
 
-  // the number of keys in the map
-  get mapSize() {
-    return this.#cache.size;
-  }
-
   drop(n: number) {
     assert(n >= 0, 'Cannot drop a negative number of items');
     assert(n <= this.#size, 'Cannot drop more items than are in the cache');
@@ -128,6 +123,23 @@ export class StatementCache {
       statements.push(statement.statement);
       this.#size++;
     }
+  }
+
+  printCacheStats() {
+    console.log('\nStatement Cache Statistics:');
+    console.log('---------------------------');
+    console.log('| SQL                     | Count |');
+    console.log('|-------------------------|-------|');
+
+    for (const [sql, statements] of this.#cache.entries()) {
+      const truncatedSql =
+        sql.length > 20 ? sql.substring(0, 17) + '...' : sql.padEnd(20);
+      console.log(
+        `| ${truncatedSql} | ${statements.length.toString().padStart(5)} |`,
+      );
+    }
+    console.log('---------------------------');
+    console.log(`Total Statements: ${this.size}`);
   }
 }
 
