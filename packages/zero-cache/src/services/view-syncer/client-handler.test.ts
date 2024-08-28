@@ -127,7 +127,7 @@ describe('view-syncer/client-handler', () => {
         toVersion: {stateVersion: '121'},
         patch: {
           type: 'row',
-          op: 'merge',
+          op: 'put',
           id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
           contents: {id: 'boo', name: 'world', num: 123456},
         },
@@ -136,16 +136,7 @@ describe('view-syncer/client-handler', () => {
         toVersion: {stateVersion: '121'},
         patch: {
           type: 'row',
-          op: 'constrain',
-          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-          columns: ['id', 'name', 'num'],
-        },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '121'},
-        patch: {
-          type: 'row',
-          op: 'merge',
+          op: 'put',
           id: {
             schema: 'zero',
             table: 'clients',
@@ -296,7 +287,7 @@ describe('view-syncer/client-handler', () => {
     for (const patch of [
       {
         type: 'row',
-        op: 'merge',
+        op: 'put',
         id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
         contents: {id: 'boo', name: 'world', big: 12345231234123414n},
       },
