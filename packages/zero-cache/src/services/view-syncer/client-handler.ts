@@ -29,31 +29,13 @@ export type PutRowPatch = {
   contents: JSONObject;
 };
 
-export type MergeRowPatch = {
-  type: 'row';
-  op: 'merge';
-  id: RowID;
-  contents: JSONObject;
-};
-
-export type ConstrainRowPatch = {
-  type: 'row';
-  op: 'constrain';
-  id: RowID;
-  columns: string[];
-};
-
 export type DeleteRowPatch = {
   type: 'row';
   op: 'del';
   id: RowID;
 };
 
-export type RowPatch =
-  | PutRowPatch
-  | MergeRowPatch
-  | ConstrainRowPatch
-  | DeleteRowPatch;
+export type RowPatch = PutRowPatch | DeleteRowPatch;
 export type ConfigPatch =
   | ClientPatch
   | DelQueryPatch
@@ -203,7 +185,7 @@ export class ClientHandler {
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {
-    if (patch.op === 'put' || patch.op === 'merge') {
+    if (patch.op === 'put') {
       const row = ensureSafeJSON(patch.contents);
       const {clientGroupID, clientID, lastMutationID} = v.parse(
         row,
@@ -242,15 +224,9 @@ function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
   const entity = {entityType, entityID};
 
   switch (op) {
-    case 'constrain':
-      return {...entity, op: 'update', constrain: patch.columns};
     case 'put': {
       const {contents} = patch;
       return {...entity, op: 'put', value: ensureSafeJSON(contents)};
-    }
-    case 'merge': {
-      const {contents} = patch;
-      return {...entity, op: 'update', merge: ensureSafeJSON(contents)};
     }
     case 'del':
       return {...entity, op};

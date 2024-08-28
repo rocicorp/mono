@@ -2,7 +2,6 @@ import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
-import type {Column, QueriedColumns} from '../cvr.js';
 
 export const cvrVersionSchema = v.object({
   /**
@@ -209,8 +208,9 @@ export type RowID = v.Infer<typeof rowIDSchema>;
 export const rowRecordSchema = cvrRecordSchema.extend({
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
-  // query IDS => column, or `null` for a row that was removed from the view (i.e. tombstone).
-  queriedColumns: v.record(v.array(v.string())).nullable(),
+  // query hashes => refCount, or `null` for a row that was removed from the
+  // view (i.e. tombstone).
+  refCounts: v.record(v.number()).nullable(),
 });
 
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
@@ -225,7 +225,6 @@ export const putRowPatchSchema = patchSchema.extend({
   op: v.literal('put'),
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
-  columns: v.array(v.string()),
 });
 
 export type PutRowPatch = v.Infer<typeof putRowPatchSchema>;
@@ -292,26 +291,4 @@ export function versionFromString(str: string): CVRVersion {
     default:
       throw new TypeError(`Invalid version string ${str}`);
   }
-}
-
-/**
- * Returns the union of all columns in the queriedColumns object. The order is
- * not yet sorted.
- */
-export function getAllColumns(queriedColumns: QueriedColumns): Set<Column> {
-  const columns = new Set<Column>();
-  for (const cols of Object.values(queriedColumns)) {
-    cols.forEach(c => columns.add(c));
-  }
-  return columns;
-}
-
-/**
- * Returns the union of all columns in the queriedColumns object as a sorted
- * array.
- */
-export function getAllColumnsSorted(queriedColumns: QueriedColumns): Column[] {
-  // This can be done more efficiently since QueriedColumns should already be sorted
-  // so we can do binary search insertions.
-  return [...getAllColumns(queriedColumns)].sort();
 }

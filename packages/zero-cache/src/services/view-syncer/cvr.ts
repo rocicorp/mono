@@ -20,8 +20,6 @@ import {
   RowPatch,
   RowRecord,
   cmpVersions,
-  getAllColumns,
-  getAllColumnsSorted,
   oneAfter,
   type CVRVersion,
   type ClientRecord,
@@ -245,7 +243,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
 type Hash = string;
 export type Column = string;
-export type QueriedColumns = Record<Hash, Column[]>;
+export type RefCounts = Record<Hash, number>;
 
 /**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
@@ -253,14 +251,14 @@ export type QueriedColumns = Record<Hash, Column[]>;
  *
  * * {@link trackQueries} for queries that are being executed or removed.
  * * {@link received} for all rows received from the executed queries
- * * {@link deleteUnreferencedColumnsAndRows} to remove any columns or
- *                    rows that have fallen out of the query result view.
+ * * {@link deleteUnreferencedRows} to remove any rows that have
+ *       fallen out of the query result view.
  * * {@link generateConfigPatches} to send any config changes
  * * {@link flush}
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #removedOrExecutedQueryIDs = new Set<string>();
-  readonly #receivedRows = new CustomKeyMap<RowID, QueriedColumns>(rowIDHash);
+  readonly #receivedRows = new CustomKeyMap<RowID, RefCounts>(rowIDHash);
   readonly #newConfigPatches: MetadataPatch[] = [];
   #existingRows: Promise<RowRecord[]> | undefined = undefined;
   #catchupRowPatches: Promise<[RowPatch, CVRVersion][]> | undefined = undefined;
@@ -281,8 +279,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   /**
    * Initiates the tracking of the specified `executed` and `removed` queries.
-   * This kicks of a lookup of existing {@link RowRecord}s currently associated with
-   * those queries, which will be used to reconcile the columns and rows to keep
+   * This kicks of a lookup of existing {@link RowRecord}s currently associated
+   * with those queries, which will be used to reconcile the rows to keep
    * after all rows have been {@link received()}.
    *
    * @returns The new CVRVersion to be used when all changes are committed.
@@ -327,15 +325,15 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // can be optimized by tracking an index from query to row.
     //
     // We can use something like:
-    //   SELECT * FROM cvr.rows WHERE "queriedColumns" ?| array[...queryHashes...];
+    //   SELECT * FROM cvr.rows WHERE "refCounts" ?| array[...queryHashes...];
 
     const allRowRecords = this._cvrStore.allRowRecords();
 
     let total = 0;
     for await (const existing of allRowRecords) {
       total++;
-      assert(existing.queriedColumns !== null); // allRowRecords does not include null.
-      for (const id of Object.keys(existing.queriedColumns)) {
+      assert(existing.refCounts !== null); // allRowRecords does not include null.
+      for (const id of Object.keys(existing.refCounts)) {
         if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
           break;
@@ -384,9 +382,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * Tracks a query removed from the "gotten" set. In addition to producing the
    * appropriate patches for deleting the query, the removed query is taken into
    * account when computing the final row records in
-   * {@link deleteUnreferencedColumnsAndRows}.
-   * Namely, any rows with columns that are no longer referenced by a query are
-   * patched, or deleted if no columns are referenced.
+   * {@link deleteUnreferencedRows}.
+   * Namely, any rows with columns that are no longer referenced by a
+   * query are deleted.
    *
    * This must only be called on queries that are not "desired" by any client.
    */
@@ -428,17 +426,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
-   * Tracks rows received from executing queries. This will update row records and
-   * row patches if the received rows have a new version or contain columns that
-   * are not currently in the view. The method also returns (merge) patches to be
-   * returned to update their state, versioned by patchVersion so that only the
-   * patches new to the clients are sent.
+   * Tracks rows received from executing queries. This will update row records
+   * and row patches if the received rows have a new version. The method also
+   * returns (put) patches to be returned to update their state, versioned by
+   * patchVersion so that only the patches new to the clients are sent.
    */
   async received(
     _: LogContext,
     rows: Map<RowID, ParsedRow>,
   ): Promise<PatchToVersion[]> {
-    const merges: PatchToVersion[] = [];
+    const puts: PatchToVersion[] = [];
 
     const existingRows = await this._cvrStore.getMultipleRowEntries(
       rows.keys(),
@@ -447,29 +444,27 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     for (const parsedRow of rows.values()) {
       const {
         contents,
-        record: {id, rowVersion, queriedColumns},
+        record: {id, rowVersion, refCounts},
       } = parsedRow;
 
-      assert(queriedColumns !== null); // We never "receive" tombstones.
+      assert(refCounts !== null); // We never "receive" tombstones.
 
       const existing = existingRows.get(id);
 
       // Accumulate all received columns to determine which columns to prune at the end.
       const previouslyReceived = this.#receivedRows.get(id);
       const merged = previouslyReceived
-        ? mergeQueriedColumns(previouslyReceived, queriedColumns)
-        : mergeQueriedColumns(
-            existing?.queriedColumns,
-            queriedColumns,
+        ? mergeRefCounts(previouslyReceived, refCounts)
+        : mergeRefCounts(
+            existing?.refCounts,
+            refCounts,
             this.#removedOrExecutedQueryIDs,
           );
 
       this.#receivedRows.set(id, merged);
 
       const patchVersion =
-        // not the same
-        existing?.rowVersion === rowVersion &&
-        columnsAreASubset(merged, existing?.queriedColumns)
+        existing?.rowVersion === rowVersion
           ? existing.patchVersion
           : this.#assertNewVersion();
 
@@ -477,21 +472,21 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         id,
         rowVersion,
         patchVersion,
-        queriedColumns: merged,
+        refCounts: merged,
       };
       this._cvrStore.putRowRecord(updated, existing?.patchVersion);
 
-      merges.push({
+      puts.push({
         patch: {
           type: 'row',
-          op: existing?.queriedColumns ? 'merge' : 'put',
+          op: 'put',
           id,
           contents,
         },
         toVersion: patchVersion,
       });
     }
-    return merges;
+    return puts;
   }
 
   /**
@@ -501,14 +496,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * * The {@link received} rows
    *
    * Returns the final delete and patch ops that must be sent to the client
-   * to delete rows or columns that are no longer referenced by any query.
+   * to delete rows that are no longer referenced by any query.
    *
    * This is Step [5] of the
    * [CVR Sync Algorithm](https://www.notion.so/replicache/Sync-and-Client-View-Records-CVR-a18e02ec3ec543449ea22070855ff33d?pvs=4#7874f9b80a514be2b8cd5cf538b88d37).
    */
-  async deleteUnreferencedColumnsAndRows(
-    lc: LogContext,
-  ): Promise<PatchToVersion[]> {
+  async deleteUnreferencedRows(lc: LogContext): Promise<PatchToVersion[]> {
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config-only changes.
       assert(this.#receivedRows.size === 0);
@@ -520,23 +513,15 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     assert(this.#existingRows, `trackQueries() was not called`);
     for (const existing of await this.#existingRows) {
-      const update = this.#deleteUnreferencedColumnsOrRow(existing);
-      if (update === null) {
+      const deletedID = this.#deleteUnreferencedRow(existing);
+      if (deletedID === null) {
         continue;
       }
 
-      const {id, columns} = update;
-      if (columns) {
-        patches.push({
-          toVersion: this._cvr.version,
-          patch: {type: 'row', op: 'constrain', id, columns},
-        });
-      } else {
-        patches.push({
-          toVersion: this._cvr.version,
-          patch: {type: 'row', op: 'del', id},
-        });
-      }
+      patches.push({
+        toVersion: this._cvr.version,
+        patch: {type: 'row', op: 'del', id: deletedID},
+      });
     }
 
     // Now catch up clients with row patches that haven't been deleted.
@@ -549,13 +534,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
 
       const {id} = rowPatch;
-      if (rowPatch.op === 'put') {
-        const {columns} = rowPatch;
-        patches.push({
-          patch: {type: 'row', op: 'constrain', id, columns},
-          toVersion,
-        });
-      } else {
+      if (rowPatch.op === 'del') {
         patches.push({patch: {type: 'row', op: 'del', id}, toVersion});
       }
     }
@@ -599,128 +578,67 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return patches;
   }
 
-  #deleteUnreferencedColumnsOrRow(
-    existing: RowRecord,
-  ): {id: RowID; columns?: string[]} | null {
+  #deleteUnreferencedRow(existing: RowRecord): RowID | null {
     const received = this.#receivedRows.get(existing.id);
 
-    const newQueriedColumns =
+    const newRefCounts =
       received ?? // optimization: already merged in received()
-      mergeQueriedColumns(
-        existing.queriedColumns,
+      mergeRefCounts(
+        existing.refCounts,
         undefined,
         this.#removedOrExecutedQueryIDs,
       );
-    if (
-      existing.queriedColumns &&
-      sameColumns(existing.queriedColumns, newQueriedColumns)
-    ) {
-      if (received) {
-        const pending = this._cvrStore.getPendingRowRecord(existing.id);
-        if (
-          pending &&
-          deepEqual(pending as ReadonlyJSONValue, existing as ReadonlyJSONValue)
-        ) {
-          // Remove no-op writes from the WriteCache.
-          this._cvrStore.cancelPendingRowRecordWrite(existing.id);
-        }
-      }
 
-      // No columns deleted.
+    if (received) {
+      const pending = this._cvrStore.getPendingRowRecord(existing.id);
+      if (
+        pending &&
+        deepEqual(pending as ReadonlyJSONValue, existing as ReadonlyJSONValue)
+      ) {
+        // Remove no-op writes from the WriteCache.
+        this._cvrStore.cancelPendingRowRecordWrite(existing.id);
+      }
       return null;
     }
     const newPatchVersion = this.#assertNewVersion();
-    const {id} = existing;
-    const columns = getAllColumnsSorted(newQueriedColumns);
-    const isPut = columns.length > 0;
 
+    const hasRef = Object.values(newRefCounts).some(v => v > 0);
     const rowRecord: RowRecord = {
       ...existing,
       patchVersion: newPatchVersion,
-      queriedColumns: isPut ? newQueriedColumns : null,
+      refCounts: hasRef ? newRefCounts : null,
     };
 
     this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
 
-    return isPut
-      ? // TODO(arv): Should this be updated?
-        {id, columns} // UpdateOp
-      : {id}; // DeleteOp
+    // Return the id to delete if no longer referenced.
+    return hasRef ? null : existing.id;
   }
 }
 
-function mergeQueriedColumns(
-  existing: QueriedColumns | null | undefined,
-  received: QueriedColumns | null | undefined,
-  removeIDs?: Set<string>,
-): QueriedColumns {
+function mergeRefCounts(
+  existing: RefCounts | null | undefined,
+  received: RefCounts | null | undefined,
+  removeHashes?: Set<string>,
+): RefCounts {
   if (!existing) {
     return received ?? {};
   }
-  const merged: QueriedColumns = {};
+  const merged: RefCounts = {};
 
-  [existing, received].forEach((row, i) => {
-    if (!row) {
+  [existing, received].forEach((refCounts, i) => {
+    if (!refCounts) {
       return;
     }
-    for (const [id, columns] of Object.entries(row)) {
-      if (i === 0 /* existing */ && removeIDs?.has(id)) {
-        continue; // removeIDs from existing row.
+    for (const [hash, count] of Object.entries(refCounts)) {
+      if (i === 0 /* existing */ && removeHashes?.has(hash)) {
+        continue; // removeHashes from existing row.
       }
-      let col = merged[id];
-      if (!col) {
-        col = merged[id] = [];
-      }
-      const set = new Set([...col, ...columns]);
-      merged[id] = [...set];
-      if (set.size > 1) {
-        merged[id].sort(); // Determinism is needed for diffing.
-      }
+      merged[hash] = (merged[hash] ?? 0) + count;
     }
 
     return merged;
   });
 
   return merged;
-}
-
-function sameColumns(a: QueriedColumns, b: QueriedColumns | null): boolean {
-  const aColumns = getAllColumns(a);
-  if (b === null) {
-    return aColumns.size === 0;
-  }
-  const bColumns = getAllColumns(b);
-  if (aColumns.size !== bColumns.size) {
-    return false;
-  }
-  for (const col of aColumns) {
-    if (!bColumns.has(col)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Determines if b has all the columns a has. b can have more columns than a.
- */
-function columnsAreASubset(
-  a: QueriedColumns,
-  b: QueriedColumns | null,
-): boolean {
-  const aColumns = getAllColumns(a);
-  if (b === null) {
-    return aColumns.size === 0;
-  }
-  const bColumns = new Set(getAllColumns(b));
-  if (aColumns.size > bColumns.size) {
-    return false;
-  }
-  for (const col of aColumns) {
-    if (!bColumns.has(col)) {
-      return false;
-    }
-  }
-  return true;
 }

@@ -433,7 +433,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     lc.debug?.(`generating delete patches`);
-    for (const patch of await updater.deleteUnreferencedColumnsAndRows(lc)) {
+    for (const patch of await updater.deleteUnreferencedRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
     lc.debug?.(`generating config patches`);
@@ -530,7 +530,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#processChanges(lc, changes, updater, pokers);
 
     lc.debug?.(`generating delete patches`);
-    for (const patch of await updater.deleteUnreferencedColumnsAndRows(lc)) {
+    for (const patch of await updater.deleteUnreferencedRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
 
