@@ -185,4 +185,24 @@ describe('view-syncer/database-storage', () => {
       ]
     `);
   });
+
+  test('set duplicate key', () => {
+    const store = storage.createClientGroupStorage('foo-bar').createStorage();
+    store.set('foo', '2');
+    expect(store.get('foo')).toBe('2');
+
+    store.set('foo', '3');
+    expect(store.get('foo')).toBe('3');
+
+    expect(dumpDB()).toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "foo-bar",
+          "key": "foo",
+          "op": 1,
+          "val": ""3"",
+        },
+      ]
+    `);
+  });
 });

@@ -72,6 +72,9 @@ export class DatabaseStorage {
       set: db.prepare(`
         INSERT INTO storage (clientGroupID, op, key, val)
           VALUES(?, ?, ?, ?)
+        ON CONFLICT(clientGroupID, op, key) 
+        DO 
+          UPDATE SET val = excluded.val
       `),
       del: db.prepare(`
         DELETE FROM storage WHERE
