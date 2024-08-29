@@ -9,7 +9,7 @@ export function useQueryWithResultType<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow>,
 >(
-  q: Query<TSchema, TReturn>,
+  q: Query<TSchema, TReturn> | undefined,
   dependencies: readonly unknown[] = [],
   enabled = true,
 ): {snapshot: Smash<TReturn>; resultType: ResultType} {
@@ -20,7 +20,7 @@ export function useQueryWithResultType<
   );
 
   useLayoutEffect(() => {
-    if (enabled) {
+    if (enabled && q) {
       const view = q.materialize();
       setView(view);
       const unsubscribe = view.addListener((snapshot, resultType) => {
@@ -46,7 +46,7 @@ export function useQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow>,
 >(
-  q: Query<TSchema, TReturn>,
+  q: Query<TSchema, TReturn> | undefined,
   dependencies: readonly unknown[] = [],
   enabled = true,
 ): Smash<TReturn> {
