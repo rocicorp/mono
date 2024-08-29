@@ -24,7 +24,7 @@ import {
   PublicationInfo,
   ZERO_PUB_PREFIX,
 } from './tables/published.js';
-import type {ColumnSpec, FilteredTableSpec} from './tables/specs.js';
+import type {ColumnSpec, FilteredTableSpec, IndexSpec} from './tables/specs.js';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: null,
@@ -112,11 +112,15 @@ export async function initialSync(
   });
   try {
     await checkUpstreamConfig(upstreamDB);
-    const {publications, tables} = await ensurePublishedTables(lc, upstreamDB);
+    const {publications, tables, indices} = await ensurePublishedTables(
+      lc,
+      upstreamDB,
+    );
     const pubNames = publications.map(p => p.pubname);
     lc.info?.(`Upstream is setup with publications [${pubNames}]`);
 
     createLiteTables(tx, tables);
+    createLiteIndices(tx, indices);
 
     const {database, host} = upstreamDB.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
@@ -351,6 +355,22 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
       },
     };
     tx.exec(createTableStatement(liteTable));
+  }
+}
+
+function createLiteIndices(tx: Database, indices: IndexSpec[]) {
+  for (const index of indices) {
+    const tableName = liteTableName({
+      schema: index.schemaName,
+      name: index.tableName,
+    });
+    const columns = index.columns.map(c => ident(c)).join(',');
+    const unique = index.unique ? 'UNIQUE ' : '';
+    tx.exec(
+      `CREATE ${unique} INDEX ${ident(index.name)} ON ${ident(
+        tableName,
+      )} (${columns})`,
+    );
   }
 }
 
