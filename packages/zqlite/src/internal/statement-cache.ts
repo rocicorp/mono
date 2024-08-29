@@ -124,7 +124,6 @@ export class StatementCache {
       this.#size++;
     }
   }
-
 }
 
 function normalizeWhitespace(sql: string) {
