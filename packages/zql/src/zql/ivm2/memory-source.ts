@@ -7,11 +7,11 @@ import {
   type Node,
   type Row,
 } from './data.js';
-import type {Ordering} from '../ast2/ast.js';
+import type {Ordering, SimpleCondition} from '../ast2/ast.js';
 import {assert} from 'shared/src/asserts.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Stream} from './stream.js';
-import type {Source, SourceChange} from './source.js';
+import type {Source, SourceChange, SourceInput} from './source.js';
 import type {Schema, ValueType} from './schema.js';
 
 export type Overlay = {
@@ -77,8 +77,11 @@ export class MemorySource implements Source {
     };
   }
 
-  connect(sort: Ordering): Input {
-    const input: Input = {
+  connect(
+    sort: Ordering,
+    _optionalFilters?: SimpleCondition[] | undefined,
+  ): SourceInput {
+    const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
       cleanup: req => this.#cleanup(req, connection),
@@ -88,6 +91,7 @@ export class MemorySource implements Source {
       destroy: () => {
         this.#disconnect(input);
       },
+      appliedFilters: false,
     };
 
     const connection: Connection = {

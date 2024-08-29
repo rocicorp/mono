@@ -1,4 +1,4 @@
-import {Ordering} from '../ast2/ast.js';
+import {Ordering, SimpleCondition} from '../ast2/ast.js';
 import {Row} from './data.js';
 import {Input} from './operator.js';
 
@@ -32,11 +32,22 @@ export interface Source {
    * Creates an input that an operator can connect to. To free resources used
    * by connection, downstream operators call `destroy()` on the returned
    * input.
+   *
+   * @param sort The ordering of the rows. Source must return rows in this
+   * order.
+   * @param optionalFilters Optional filters to apply to the source.
    */
-  connect(sort: Ordering): Input;
+  connect(
+    sort: Ordering,
+    optionalFilters?: readonly SimpleCondition[] | undefined,
+  ): SourceInput;
 
   /**
    * Pushes a change into the source and into all connected outputs.
    */
   push(change: SourceChange): void;
+}
+
+export interface SourceInput extends Input {
+  readonly appliedFilters: boolean;
 }

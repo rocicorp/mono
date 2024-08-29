@@ -63,7 +63,9 @@ function buildPipelineInternal(
   partitionKey?: string | undefined,
 ): Input {
   const source = host.getSource(ast.table);
-  let end: Input = source.connect(must(ast.orderBy));
+  const conn = source.connect(must(ast.orderBy), ast.where ?? []);
+  let end: Input = conn;
+  const {appliedFilters} = conn;
 
   if (ast.start) {
     end = new Skip(end, ast.start);
@@ -71,7 +73,11 @@ function buildPipelineInternal(
 
   if (ast.where) {
     for (const condition of ast.where) {
-      end = new Filter(end, createPredicate(condition));
+      end = new Filter(
+        end,
+        appliedFilters ? 'push-only' : 'all',
+        createPredicate(condition),
+      );
     }
   }
 
