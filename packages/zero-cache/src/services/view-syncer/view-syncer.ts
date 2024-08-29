@@ -545,6 +545,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #cleanup(err?: unknown) {
+    this.#pipelines.destroy();
     for (const client of this.#clients.values()) {
       if (err) {
         client.fail(err);
