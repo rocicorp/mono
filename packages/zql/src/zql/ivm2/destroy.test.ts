@@ -71,15 +71,15 @@ test('destroy a pipeline from the view', () => {
     'all',
     () => true,
   );
-  const join = new Join(
-    filter1,
-    filter2,
-    new MemoryStorage(),
-    'a',
-    'a',
-    'stuff',
-    false,
-  );
+  const join = new Join({
+    parent: filter1,
+    child: filter2,
+    storage: new MemoryStorage(),
+    parentKey: 'a',
+    childKey: 'a',
+    relationshipName: 'stuff',
+    hidden: false,
+  });
   const view = new ArrayView(join);
   let data: Immutable<EntryList> = [];
   const listener = (d: Immutable<EntryList>) => {

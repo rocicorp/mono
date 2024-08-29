@@ -5,6 +5,15 @@ import {take, type Stream} from './stream.js';
 import type {Change} from './change.js';
 import type {Schema} from './schema.js';
 
+type Args = {
+  parent: Input;
+  child: Input;
+  storage: Storage;
+  parentKey: string;
+  childKey: string;
+  relationshipName: string;
+  hidden: boolean;
+};
 /**
  * The Join operator joins the output from two upstream inputs. Zero's join
  * is a little different from SQL's join in that we output hierarchical data,
@@ -26,15 +35,15 @@ export class Join implements Input {
 
   #output: Output | null = null;
 
-  constructor(
-    parent: Input,
-    child: Input,
-    storage: Storage,
-    parentKey: string,
-    childKey: string,
-    relationshipName: string,
-    hidden: boolean,
-  ) {
+  constructor({
+    parent,
+    child,
+    storage,
+    parentKey,
+    childKey,
+    relationshipName,
+    hidden,
+  }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
 
     this.#parent = parent;

@@ -326,15 +326,13 @@ function pushSiblingTest(t: PushTestSibling) {
       const child = sources[i + 1].snitch;
       const storage = new MemoryStorage();
 
-      const join = new Join(
+      const join = new Join({
         parent,
         child,
         storage,
-        info.parentKey,
-        info.childKey,
-        info.relationshipName,
-        false,
-      );
+        ...info,
+        hidden: false,
+      });
 
       joins[i] = {
         join,

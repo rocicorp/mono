@@ -767,15 +767,13 @@ function fetchTest(t: FetchTest) {
       const child =
         i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
       const storage = new MemoryStorage();
-      const join = new Join(
+      const join = new Join({
         parent,
         child,
         storage,
-        info.parentKey,
-        info.childKey,
-        info.relationshipName,
-        false,
-      );
+        ...info,
+        hidden: false,
+      });
       joins[i] = {
         join,
         storage,

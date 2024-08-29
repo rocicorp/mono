@@ -75,15 +75,15 @@ test('tree', () => {
     row: {id: 4, name: 'monkey', childID: null},
   });
 
-  const join = new Join(
-    ms.connect([['name', 'asc']]),
-    ms.connect([['name', 'desc']]),
-    new MemoryStorage(),
-    'childID',
-    'id',
-    'children',
-    false,
-  );
+  const join = new Join({
+    parent: ms.connect([['name', 'asc']]),
+    child: ms.connect([['name', 'desc']]),
+    storage: new MemoryStorage(),
+    parentKey: 'childID',
+    childKey: 'id',
+    relationshipName: 'children',
+    hidden: false,
+  });
 
   const view = new ArrayView(join);
   let data: Immutable<EntryList> = [];
