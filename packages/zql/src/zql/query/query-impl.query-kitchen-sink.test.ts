@@ -60,13 +60,11 @@ function makeHost(): Host & SubscriptionDelegate {
 }
 
 function addData(host: Host) {
-  // Add users
   host.getSource('user').push({type: 'add', row: {id: '001', name: 'Alice'}});
   host.getSource('user').push({type: 'add', row: {id: '002', name: 'Bob'}});
   host.getSource('user').push({type: 'add', row: {id: '003', name: 'Charlie'}});
   host.getSource('user').push({type: 'add', row: {id: '004', name: 'Daniel'}});
 
-  // Add issues
   host.getSource('issue').push({
     type: 'add',
     row: {
@@ -128,7 +126,6 @@ function addData(host: Host) {
       ownerId: '002',
     },
   });
-
   host.getSource('issue').push({
     type: 'add',
     row: {
@@ -169,7 +166,7 @@ function addData(host: Host) {
       ownerId: '004',
     },
   });
-  // Add comments
+
   host.getSource('comment').push({
     type: 'add',
     row: {
@@ -291,7 +288,6 @@ function addData(host: Host) {
     },
   });
 
-  // Add revisions
   host.getSource('revision').push({
     type: 'add',
     row: {id: '301', commentId: '209', text: 'Revision 1', authorId: '001'},
@@ -329,13 +325,11 @@ function addData(host: Host) {
     row: {id: '309', commentId: '211', text: 'Revision 3', authorId: '003'},
   });
 
-  // Add labels
   host.getSource('label').push({type: 'add', row: {id: '401', name: 'bug'}});
   host
     .getSource('label')
     .push({type: 'add', row: {id: '402', name: 'feature'}});
 
-  // Add issue labels
   host
     .getSource('issueLabel')
     .push({type: 'add', row: {issueId: '103', labelId: '401'}});
