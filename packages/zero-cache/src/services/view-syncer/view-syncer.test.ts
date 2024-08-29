@@ -249,7 +249,6 @@ describe('view-syncer/service', () => {
 
   test('initial hydration', async () => {
     versionNotifications.push({});
-    // TODO: Get RowPatches working.
     expect(await nextPoke()).toMatchInlineSnapshot(`
       [
         [
@@ -299,6 +298,78 @@ describe('view-syncer/service', () => {
                 },
               ],
             },
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "clientGroupID": "9876",
+                  "clientID": "foo",
+                },
+                "entityType": "zero.clients",
+                "op": "put",
+                "value": {
+                  "clientGroupID": "9876",
+                  "clientID": "foo",
+                  "lastMutationID": 42,
+                  "userID": null,
+                },
+              },
+              {
+                "entityID": {
+                  "id": "1",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "2",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "3",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "4",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+            ],
             "gotQueriesPatch": [
               {
                 "ast": {
@@ -338,6 +409,77 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+
+    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "lmids": 1,
+          },
+          "rowKey": {
+            "clientGroupID": "9876",
+            "clientID": "foo",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "zero.clients",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "4",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+      ]
+    `);
   });
 
   test('process advancement', async () => {
@@ -365,7 +507,6 @@ describe('view-syncer/service', () => {
     );
 
     versionNotifications.push({});
-    // TODO: Get RowPatches working.
     expect(await nextPoke()).toMatchInlineSnapshot(`
       [
         [
@@ -377,11 +518,109 @@ describe('view-syncer/service', () => {
           },
         ],
         [
+          "pokePart",
+          {
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "id": "1",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "2",
+                },
+                "entityType": "issues",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01",
+          },
+        ],
+        [
           "pokeEnd",
           {
             "pokeID": "01",
           },
         ],
+      ]
+    `);
+
+    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "lmids": 1,
+          },
+          "rowKey": {
+            "clientGroupID": "9876",
+            "clientID": "foo",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "zero.clients",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "4",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "01",
+          "refCounts": {
+            "query-hash1": 1,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "rowVersion": "01",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "01",
+          "refCounts": null,
+          "rowKey": {
+            "id": "2",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
       ]
     `);
   });
