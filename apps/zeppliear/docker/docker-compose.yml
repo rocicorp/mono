@@ -1,6 +1,7 @@
 x-postgres-common:
   &postgres-common
   image: postgres:16.2-alpine
+  shm_size: 1g
   user: postgres
   restart: always
   healthcheck:
