@@ -833,11 +833,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {oneHash: 1},
-              },
+              version: '03',
+              refCounts: {oneHash: 1},
               contents: {id: 'should-show-up-in-patch'},
             },
           ],
@@ -861,22 +858,16 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID2,
             {
-              record: {
-                id: ROW_ID2,
-                rowVersion: '03',
-                refCounts: {oneHash: 1},
-              },
+              version: '03',
+              refCounts: {oneHash: 1},
               contents: {id: 'same column selection as twoHash'},
             },
           ],
           [
             ROW_ID3,
             {
-              record: {
-                id: ROW_ID3,
-                rowVersion: '09',
-                refCounts: {oneHash: 1},
-              },
+              version: '09',
+              refCounts: {oneHash: 1},
               contents: {id: 'new version patch'},
             },
           ],
@@ -909,11 +900,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {oneHash: 1},
-              },
+              version: '03',
+              refCounts: {oneHash: 1},
               contents: {id: 'should-show-up-in-patch'},
             },
           ],
@@ -1234,11 +1222,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {oneHash: 1},
-              },
+              version: '03',
+              refCounts: {oneHash: 1},
               contents: {id: 'existing patch'},
             },
           ],
@@ -1269,11 +1254,8 @@ describe('view-syncer/cvr', () => {
             // Now referencing ROW_ID2 instead of ROW_ID3
             ROW_ID2,
             {
-              record: {
-                id: ROW_ID2,
-                rowVersion: '09',
-                refCounts: {oneHash: 1},
-              },
+              version: '09',
+              refCounts: {oneHash: 1},
               contents: {id: 'new-row-version-should-bump-cvr-version'},
             },
           ],
@@ -1597,11 +1579,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {oneHash: 1},
-              },
+              version: '03',
+              refCounts: {oneHash: 1},
               contents: {id: 'existing-patch'},
             },
           ],
@@ -1625,13 +1604,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {
-                  twoHash: 1,
-                },
-              },
+              version: '03',
+              refCounts: {twoHash: 1},
               contents: {id: 'existing-patch'},
             },
           ],
@@ -1655,11 +1629,8 @@ describe('view-syncer/cvr', () => {
           // Now referencing ROW_ID2 instead of ROW_ID3
           ROW_ID2,
           {
-            record: {
-              id: ROW_ID2,
-              rowVersion: '09',
-              refCounts: {oneHash: 1},
-            },
+            version: '09',
+            refCounts: {oneHash: 1},
             contents: {
               /* ignored */
             },
@@ -1673,11 +1644,8 @@ describe('view-syncer/cvr', () => {
         [
           ROW_ID2,
           {
-            record: {
-              id: ROW_ID2,
-              rowVersion: '09',
-              refCounts: {twoHash: 1},
-            },
+            version: '09',
+            refCounts: {twoHash: 1},
             contents: {
               /* ignored */
             },
@@ -2314,13 +2282,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {
-                  oneHash: 1,
-                },
-              },
+              version: '03',
+              refCounts: {oneHash: 1},
               contents: {id: 'existing-patch'},
             },
           ],
@@ -2344,11 +2307,8 @@ describe('view-syncer/cvr', () => {
           [
             ROW_ID1,
             {
-              record: {
-                id: ROW_ID1,
-                rowVersion: '03',
-                refCounts: {twoHash: 1},
-              },
+              version: '03',
+              refCounts: {twoHash: 1},
               contents: {id: 'existing-patch'},
             },
           ],
@@ -2371,11 +2331,8 @@ describe('view-syncer/cvr', () => {
         [
           ROW_ID3,
           {
-            record: {
-              id: ROW_ID3,
-              rowVersion: '09',
-              refCounts: {oneHash: 1},
-            },
+            version: '09',
+            refCounts: {oneHash: 1},
             contents: {
               /* ignored */
             },
@@ -2389,11 +2346,8 @@ describe('view-syncer/cvr', () => {
         [
           ROW_ID2,
           {
-            record: {
-              id: ROW_ID2,
-              rowVersion: '03',
-              refCounts: {twoHash: 1},
-            },
+            version: '03',
+            refCounts: {twoHash: 1},
             contents: {
               /* ignored */
             },

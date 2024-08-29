@@ -1,7 +1,7 @@
-import type {WebSocket} from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import * as valita from 'shared/src/valita.js';
 import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
+import WebSocket from 'ws';
 import {
   ConnectedMessage,
   Downstream,

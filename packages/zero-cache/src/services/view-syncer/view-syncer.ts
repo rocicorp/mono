@@ -3,7 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {difference} from 'shared/src/set-utils.js';
-import {JSONObject, stringify} from 'zero-cache/src/types/bigint-json.js';
+import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {rowIDHash, RowKey} from 'zero-cache/src/types/row-key.js';
 import type {
   ChangeDesiredQueriesBody,
@@ -23,6 +23,7 @@ import {CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
+  RowUpdate,
   type CVRSnapshot,
 } from './cvr.js';
 import {PipelineDriver, RowChange} from './pipeline-driver.js';
@@ -453,23 +454,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #processChanges(
     lc: LogContext,
     changes: Iterable<RowChange>,
-    _updater: CVRQueryDrivenUpdater,
-    _pokers: PokeHandler[],
+    updater: CVRQueryDrivenUpdater,
+    pokers: PokeHandler[],
   ) {
     const start = Date.now();
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDHash);
+    let total = 0;
 
     // eslint-disable-next-line require-await
     const processBatch = async () => {
       const elapsed = Date.now() - start;
-      lc.debug?.(`processing ${rows.size} rows of ${count} (${elapsed} ms)`);
-      // TODO: Update CVRQueryDrivenUpdater.received() method with new type.
-      // const patches = await updater.received(this.#lc, rows);
-      // patches.forEach(patch => pokers.forEach(poker => poker.addPatch(patch)));
+      total += rows.size;
+      lc.debug?.(`processing ${rows.size} (of ${total}) rows (${elapsed} ms)`);
+      const patches = await updater.received(this.#lc, rows);
+      patches.forEach(patch => pokers.forEach(poker => poker.addPatch(patch)));
       rows.clear();
     };
-
-    let count = 0;
 
     for (const change of changes) {
       const {queryHash, table, rowKey, row} = change;
@@ -477,11 +477,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       let parsedRow = rows.get(rowID);
       if (!parsedRow) {
-        parsedRow = {refCountDeltas: {}};
+        parsedRow = {refCounts: {}};
         rows.set(rowID, parsedRow);
       }
-      parsedRow.refCountDeltas[queryHash] ??= 0;
-      parsedRow.refCountDeltas[queryHash] += row ? 1 : -1;
+      parsedRow.refCounts[queryHash] ??= 0;
+      parsedRow.refCounts[queryHash] += row ? 1 : -1;
 
       if (row && !parsedRow.version) {
         const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
@@ -492,7 +492,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         parsedRow.contents = contents;
       }
 
-      if (++count % CURSOR_PAGE_SIZE === 0) {
+      if (rows.size % CURSOR_PAGE_SIZE === 0) {
         await processBatch();
       }
     }
@@ -529,11 +529,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc.debug?.(`applying ${numChanges} to advance to ${version}`);
     await this.#processChanges(lc, changes, updater, pokers);
 
-    lc.debug?.(`generating delete patches`);
-    for (const patch of await updater.deleteUnreferencedRows(lc)) {
-      pokers.forEach(poker => poker.addPatch(patch));
-    }
-
     // Commit the changes and update the CVR snapshot.
     this.#cvr = await updater.flush(lc);
 
@@ -560,14 +555,5 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 }
 
-// TODO: Move declaration to cvr.ts.
-type RowUpdate = {
-  // Undefined for an unref.
-  version?: string;
-  // Undefined for an unref.
-  contents?: JSONObject;
-  // Deltas are negative when a row is unrefed.
-  refCountDeltas: {[hash: string]: number};
-};
-
-const CURSOR_PAGE_SIZE = 1000;
+// TODO: Increase this once performance issues are resolved.
+const CURSOR_PAGE_SIZE = 10;
