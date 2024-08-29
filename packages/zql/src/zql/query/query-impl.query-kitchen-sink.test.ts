@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, test} from 'vitest';
 import {newQuery} from './query-impl.js';
 import {MemoryStorage} from '../ivm2/memory-storage.js';
 import {MemorySource} from '../ivm2/memory-source.js';
@@ -254,7 +254,7 @@ function addData(host: Host) {
 }
 
 describe('kitchen sink query', () => {
-  test.only('complex query with filters, limits, and multiple joins', () => {
+  test('complex query with filters, limits, and multiple joins', () => {
     const host = makeHost();
     addData(host);
 
@@ -268,6 +268,7 @@ describe('kitchen sink query', () => {
           .limit(1),
       )
       .related('labels', q => q.select('name'))
+      .start({id: '101'})
       .limit(2);
 
     const view = issueQuery.materialize();
