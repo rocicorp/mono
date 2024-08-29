@@ -93,15 +93,15 @@ function buildPipelineInternal(
         host,
         sq.correlation.childField,
       );
-      end = new Join(
-        end,
+      end = new Join({
+        parent: end,
         child,
-        host.createStorage(),
-        sq.correlation.parentField,
-        sq.correlation.childField,
-        sq.subquery.alias,
-        sq.hidden ?? false,
-      );
+        storage: host.createStorage(),
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
+        relationshipName: sq.subquery.alias,
+        hidden: sq.hidden ?? false,
+      });
     }
   }
 

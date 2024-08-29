@@ -54,6 +54,12 @@ export type CorrelatedSubQuery = {
     readonly op: '=';
   };
   readonly subquery: AST;
+  // If a hop in the subquery chain should be hidden from the output view.
+  // A common example is junction edges. The query API provides the illusion
+  // that they don't exist: `issue.related('labels')` instead of `issue.related('issue_labels').related('labels')`.
+  // To maintain this illusion, the junction edge should be hidden.
+  // When `hidden` is set to true, this hop will not be included in the output view
+  // but its children will be.
   readonly hidden?: boolean | undefined;
 };
 
