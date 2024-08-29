@@ -1,5 +1,6 @@
 import {QueryRowType, Zero} from 'zero-client';
 import {Schema} from './schema.js';
+import {Order, orderQuery} from './issue.js';
 
 export type IssueListQuery = ReturnType<typeof getIssueListQuery>;
 export type IssueListRow = QueryRowType<IssueListQuery>;
@@ -21,10 +22,8 @@ export function getCrewQuery(zero: Zero<Schema>) {
   return zero.query.member.where('name', 'IN', crewNames);
 }
 
-export type IssueWithDetails = QueryRowType<
-  ReturnType<typeof getIssueDetailQuery>
->;
-
+type IssueDetailQuery = ReturnType<typeof getIssueDetailQuery>;
+export type IssueWithDetails = QueryRowType<IssueDetailQuery>;
 export function getIssueDetailQuery(
   zero: Zero<Schema>,
   issueID: string | null,
@@ -32,4 +31,17 @@ export function getIssueDetailQuery(
   return zero.query.issue
     .related('comments', q => q.related('creator'))
     .where('id', '=', issueID ?? '');
+}
+
+export function getNextIssueQuery(
+  q: IssueListQuery,
+  issue: IssueWithDetails | null,
+  order: Order,
+  direction: 'fwd' | 'prev',
+) {
+  return issue
+    ? orderQuery(q, order, direction === 'prev')
+        .start(issue)
+        .limit(1)
+    : undefined;
 }

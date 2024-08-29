@@ -2,7 +2,7 @@
 
 A test-bed app for Zero based on Repliear a Replicache based high-performance issue tracker in the style of [Linear](https://linear.app/).
 
-Built with Zero and [Vite](https://vitejs.dev/),).
+Built with Zero and [Vite](https://vitejs.dev/).
 
 Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
@@ -21,6 +21,7 @@ LOG_LEVEL = "debug"
 Open two windows one with docker-compose and the other workers:
 
 ```
+# note: on mac os, this might be `docker compose` (with a space not dash)
 cd docker && docker-compose up
 npm run start-zero-cache
 ```
