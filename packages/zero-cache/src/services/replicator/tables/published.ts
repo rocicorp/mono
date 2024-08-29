@@ -2,7 +2,7 @@ import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {equals} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
-import type {FilteredTableSpec} from './specs.js';
+import type {FilteredTableSpec, IndexSpec, MutableIndexSpec} from './specs.js';
 
 const publishedColumnsSchema = v.array(
   v.object({
@@ -36,6 +36,7 @@ export type Publication = v.Infer<typeof publicationSchema>;
 export type PublicationInfo = {
   readonly publications: Publication[];
   readonly tables: FilteredTableSpec[];
+  readonly indices: IndexSpec[];
 };
 
 /** The publication prefix used for tables replicated to zero. */
@@ -171,8 +172,56 @@ export async function getPublicationInfo(
     );
   });
 
+  // now go find all the indices for each table
+  const indexDefinitions = await sql`SELECT
+      pg_indexes.indexname,
+      pg_attribute.attname as col,
+      pg_constraint.contype as idx_type
+    FROM pg_indexes
+    JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
+    JOIN pg_class ON
+      pg_class.relname = pg_indexes.indexname
+      AND pg_class.relnamespace = pg_namespace.oid
+    JOIN pg_attribute ON pg_attribute.attrelid = pg_class.oid
+    LEFT JOIN pg_constraint ON pg_constraint.conindid = pg_class.oid
+    WHERE
+      (pg_indexes.schemaname, pg_indexes.tablename) IN (${tables.map(t => [
+        t.schema,
+        t.name,
+      ])})
+      AND pg_constraint.contype is distinct from 'p'
+      AND pg_constraint.contype is distinct from 'f'
+    ORDER BY
+      pg_indexes.schemaname,
+      pg_indexes.tablename,
+      pg_indexes.indexname,
+      pg_attribute.attnum ASC;`;
+
+  const indices: IndexSpec[] = [];
+  let index: MutableIndexSpec | undefined;
+  indexDefinitions.forEach(row => {
+    if (
+      row.schemaname !== index?.schemaName ||
+      row.tablename !== index?.tableName ||
+      row.indexname !== index?.name
+    ) {
+      if (index) {
+        indices.push(index);
+      }
+      index = {
+        schemaName: row.schemaname,
+        tableName: row.schemaname,
+        name: row.indexname,
+        unique: row.idx_type === 'u',
+        columns: [],
+      };
+    }
+    index!.columns.push(row.col);
+  });
+
   return {
     publications,
     tables,
+    indices,
   };
 }

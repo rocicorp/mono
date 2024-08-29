@@ -14,3 +14,15 @@ export type TableSpec = {
 export type FilteredTableSpec = TableSpec & {
   readonly filterConditions: string[];
 };
+
+export type IndexSpec = {
+  readonly schemaName: string;
+  readonly tableName: string;
+  readonly name: string;
+  readonly unique: boolean;
+  readonly columns: readonly string[];
+};
+
+export type MutableIndexSpec = IndexSpec & {
+  readonly columns: string[];
+};
