@@ -1,4 +1,4 @@
-import {describe, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {newQuery} from './query-impl.js';
 import {MemoryStorage} from '../ivm2/memory-storage.js';
 import {MemorySource} from '../ivm2/memory-source.js';
@@ -64,6 +64,7 @@ function addData(host: Host) {
   host.getSource('user').push({type: 'add', row: {id: '001', name: 'Alice'}});
   host.getSource('user').push({type: 'add', row: {id: '002', name: 'Bob'}});
   host.getSource('user').push({type: 'add', row: {id: '003', name: 'Charlie'}});
+  host.getSource('user').push({type: 'add', row: {id: '004', name: 'Daniel'}});
 
   // Add issues
   host.getSource('issue').push({
@@ -82,7 +83,7 @@ function addData(host: Host) {
       id: '102',
       title: 'Issue 2',
       description: 'Description 2',
-      closed: true,
+      closed: false,
       ownerId: '001',
     },
   });
@@ -113,7 +114,7 @@ function addData(host: Host) {
       id: '105',
       title: 'Issue 5',
       description: 'Description 5',
-      closed: true,
+      closed: false,
       ownerId: '002',
     },
   });
@@ -123,7 +124,7 @@ function addData(host: Host) {
       id: '106',
       title: 'Issue 6',
       description: 'Description 6',
-      closed: false,
+      closed: true,
       ownerId: '002',
     },
   });
@@ -134,7 +135,7 @@ function addData(host: Host) {
       id: '107',
       title: 'Issue 7',
       description: 'Description 7',
-      closed: false,
+      closed: true,
       ownerId: '003',
     },
   });
@@ -158,81 +159,174 @@ function addData(host: Host) {
       ownerId: '003',
     },
   });
-
+  host.getSource('issue').push({
+    type: 'add',
+    row: {
+      id: '110',
+      title: 'Issue 10',
+      description: 'Description 10',
+      closed: false,
+      ownerId: '004',
+    },
+  });
   // Add comments
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '201', issueId: '101', text: 'Comment 1', authorId: '001'},
+    row: {
+      id: '201',
+      issueId: '101',
+      text: 'Comment 1',
+      authorId: '001',
+      createdAt: 1,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '202', issueId: '101', text: 'Comment 2', authorId: '002'},
+    row: {
+      id: '202',
+      issueId: '101',
+      text: 'Comment 2',
+      authorId: '002',
+      createdAt: 2,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '203', issueId: '101', text: 'Comment 3', authorId: '003'},
+    row: {
+      id: '203',
+      issueId: '101',
+      text: 'Comment 3',
+      authorId: '003',
+      createdAt: 3,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '204', issueId: '102', text: 'Comment 4', authorId: '001'},
+    row: {
+      id: '204',
+      issueId: '102',
+      text: 'Comment 4',
+      authorId: '001',
+      createdAt: 4,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '205', issueId: '102', text: 'Comment 5', authorId: '002'},
+    row: {
+      id: '205',
+      issueId: '102',
+      text: 'Comment 5',
+      authorId: '002',
+      createdAt: 5,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '206', issueId: '102', text: 'Comment 6', authorId: '003'},
+    row: {
+      id: '206',
+      issueId: '102',
+      text: 'Comment 6',
+      authorId: '003',
+      createdAt: 6,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '207', issueId: '103', text: 'Comment 7', authorId: '001'},
+    row: {
+      id: '207',
+      issueId: '103',
+      text: 'Comment 7',
+      authorId: '001',
+      createdAt: 7,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '208', issueId: '103', text: 'Comment 8', authorId: '002'},
+    row: {
+      id: '208',
+      issueId: '103',
+      text: 'Comment 8',
+      authorId: '002',
+      createdAt: 8,
+    },
   });
   host.getSource('comment').push({
     type: 'add',
-    row: {id: '209', issueId: '103', text: 'Comment 9', authorId: '003'},
+    row: {
+      id: '209',
+      issueId: '103',
+      text: 'Comment 9',
+      authorId: '003',
+      createdAt: 9,
+    },
+  });
+  host.getSource('comment').push({
+    type: 'add',
+    row: {
+      id: '210',
+      issueId: '105',
+      text: 'Comment 10',
+      authorId: '001',
+      createdAt: 10,
+    },
+  });
+  host.getSource('comment').push({
+    type: 'add',
+    row: {
+      id: '211',
+      issueId: '105',
+      text: 'Comment 11',
+      authorId: '002',
+      createdAt: 11,
+    },
+  });
+  host.getSource('comment').push({
+    type: 'add',
+    row: {
+      id: '212',
+      issueId: '105',
+      text: 'Comment 12',
+      authorId: '003',
+      createdAt: 12,
+    },
   });
 
   // Add revisions
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '301', commentId: '201', text: 'Revision 1', authorId: '001'},
+    row: {id: '301', commentId: '209', text: 'Revision 1', authorId: '001'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '302', commentId: '201', text: 'Revision 2', authorId: '001'},
+    row: {id: '302', commentId: '209', text: 'Revision 2', authorId: '001'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '303', commentId: '201', text: 'Revision 3', authorId: '001'},
+    row: {id: '303', commentId: '209', text: 'Revision 3', authorId: '001'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '304', commentId: '202', text: 'Revision 1', authorId: '002'},
+    row: {id: '304', commentId: '208', text: 'Revision 1', authorId: '002'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '305', commentId: '202', text: 'Revision 2', authorId: '002'},
+    row: {id: '305', commentId: '208', text: 'Revision 2', authorId: '002'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '306', commentId: '202', text: 'Revision 1', authorId: '002'},
+    row: {id: '306', commentId: '208', text: 'Revision 3', authorId: '002'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '307', commentId: '203', text: 'Revision 1', authorId: '003'},
+    row: {id: '307', commentId: '211', text: 'Revision 1', authorId: '003'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '308', commentId: '203', text: 'Revision 2', authorId: '003'},
+    row: {id: '308', commentId: '211', text: 'Revision 2', authorId: '003'},
   });
   host.getSource('revision').push({
     type: 'add',
-    row: {id: '309', commentId: '203', text: 'Revision 1', authorId: '003'},
+    row: {id: '309', commentId: '211', text: 'Revision 3', authorId: '003'},
   });
 
   // Add labels
@@ -244,7 +338,7 @@ function addData(host: Host) {
   // Add issue labels
   host
     .getSource('issueLabel')
-    .push({type: 'add', row: {issueId: '101', labelId: '401'}});
+    .push({type: 'add', row: {issueId: '103', labelId: '401'}});
   host
     .getSource('issueLabel')
     .push({type: 'add', row: {issueId: '102', labelId: '401'}});
@@ -259,17 +353,19 @@ describe('kitchen sink query', () => {
     addData(host);
 
     const issueQuery = newQuery(host, issueSchema)
-      .where('ownerId', '=', '001')
+      .where('ownerId', 'IN', ['001', '002', '003'])
+      .where('closed', '=', false)
       .related('owner', q => q.select('name'))
       .related('comments', q =>
         q
           .select('text')
-          .related('revisions', r => r.select('text'))
-          .limit(1),
+          .orderBy('createdAt', 'desc')
+          .related('revisions', q => q.orderBy('id', 'desc').limit(1))
+          .limit(2),
       )
       .related('labels', q => q.select('name'))
       .start({id: '101'})
-      .limit(2);
+      .limit(6);
 
     const view = issueQuery.materialize();
     view.hydrate();
@@ -288,6 +384,186 @@ describe('kitchen sink query', () => {
         })),
       }));
     });
-    console.log(rows);
+    expect(rows).toEqual([
+      {
+        closed: false,
+        comments: [
+          {
+            authorId: '003',
+            createdAt: 6,
+            id: '206',
+            issueId: '102',
+            revisions: [],
+            text: 'Comment 6',
+          },
+          {
+            authorId: '002',
+            createdAt: 5,
+            id: '205',
+            issueId: '102',
+            revisions: [],
+            text: 'Comment 5',
+          },
+        ],
+        description: 'Description 2',
+        id: '102',
+        labels: [
+          {
+            issueId: '102',
+            labelId: '401',
+            labels: [
+              {
+                id: '401',
+                name: 'bug',
+              },
+            ],
+          },
+          {
+            issueId: '102',
+            labelId: '402',
+            labels: [
+              {
+                id: '402',
+                name: 'feature',
+              },
+            ],
+          },
+        ],
+        owner: [
+          {
+            id: '001',
+            name: 'Alice',
+          },
+        ],
+        ownerId: '001',
+        title: 'Issue 2',
+      },
+      {
+        closed: false,
+        comments: [
+          {
+            authorId: '003',
+            createdAt: 9,
+            id: '209',
+            issueId: '103',
+            revisions: [
+              {
+                authorId: '001',
+                commentId: '209',
+                id: '303',
+                text: 'Revision 3',
+              },
+            ],
+            text: 'Comment 9',
+          },
+          {
+            authorId: '002',
+            createdAt: 8,
+            id: '208',
+            issueId: '103',
+            revisions: [
+              {
+                authorId: '002',
+                commentId: '208',
+                id: '306',
+                text: 'Revision 3',
+              },
+            ],
+            text: 'Comment 8',
+          },
+        ],
+        description: 'Description 3',
+        id: '103',
+        labels: [
+          {
+            issueId: '103',
+            labelId: '401',
+            labels: [
+              {
+                id: '401',
+                name: 'bug',
+              },
+            ],
+          },
+        ],
+        owner: [
+          {
+            id: '001',
+            name: 'Alice',
+          },
+        ],
+        ownerId: '001',
+        title: 'Issue 3',
+      },
+      {
+        closed: false,
+        comments: [],
+        description: 'Description 4',
+        id: '104',
+        labels: [],
+        owner: [
+          {
+            id: '002',
+            name: 'Bob',
+          },
+        ],
+        ownerId: '002',
+        title: 'Issue 4',
+      },
+      {
+        closed: false,
+        comments: [
+          {
+            authorId: '003',
+            createdAt: 12,
+            id: '212',
+            issueId: '105',
+            revisions: [],
+            text: 'Comment 12',
+          },
+          {
+            authorId: '002',
+            createdAt: 11,
+            id: '211',
+            issueId: '105',
+            revisions: [
+              {
+                authorId: '003',
+                commentId: '211',
+                id: '309',
+                text: 'Revision 3',
+              },
+            ],
+            text: 'Comment 11',
+          },
+        ],
+        description: 'Description 5',
+        id: '105',
+        labels: [],
+        owner: [
+          {
+            id: '002',
+            name: 'Bob',
+          },
+        ],
+        ownerId: '002',
+        title: 'Issue 5',
+      },
+      {
+        closed: false,
+        comments: [],
+        description: 'Description 9',
+        id: '109',
+        labels: [],
+        owner: [
+          {
+            id: '003',
+            name: 'Charlie',
+          },
+        ],
+        ownerId: '003',
+        title: 'Issue 9',
+      },
+    ]);
   });
 });
