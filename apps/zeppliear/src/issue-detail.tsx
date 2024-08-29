@@ -17,11 +17,18 @@ import {
   Status,
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
+import ArrowIcon from './assets/icons/arrow.svg?react';
 import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
 import {timeAgo} from './util/date.js';
 import {Schema} from './schema.js';
-import {getIssueDetailQuery, IssueWithDetails} from './queries.js';
+import {
+  getIssueDetailQuery,
+  getNextIssueQuery,
+  IssueListRow,
+  IssueWithDetails,
+} from './queries.js';
+import {useKeyPressed} from './hooks/use-key-pressed.js';
 
 interface Props {
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
@@ -69,6 +76,7 @@ export default function IssueDetail({
   onUpdateIssues,
   onAddComment,
   isLoading,
+  issuesProps,
 }: Props) {
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
 
@@ -84,6 +92,47 @@ export default function IssueDetail({
   const issue =
     useQuery(getIssueDetailQuery(zero, detailIssueID), [detailIssueID])[0] ??
     null;
+
+  const {query, queryDeps, order} = issuesProps;
+  const nextIssue = useQuery(
+    getNextIssueQuery(query, issue, order, 'fwd'),
+    queryDeps.concat(issue),
+  );
+  const previousIssue = useQuery(
+    getNextIssueQuery(query, issue, order, 'prev'),
+    queryDeps.concat(issue),
+  );
+
+  const handleFwdPrev = useCallback(
+    (direction: 'prev' | 'fwd') => {
+      let gotoIssue: IssueListRow;
+      if (direction === 'fwd') {
+        if (nextIssue.length < 1) {
+          return;
+        }
+        gotoIssue = nextIssue[0];
+      } else {
+        if (previousIssue.length < 1) {
+          return;
+        }
+        gotoIssue = previousIssue[0];
+      }
+      setDetailIssueID(gotoIssue.id);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nextIssue[0], previousIssue[0], setDetailIssueID],
+  );
+
+  const handleFwd = useCallback(() => {
+    handleFwdPrev('fwd');
+  }, [handleFwdPrev]);
+
+  const handlePrev = useCallback(() => {
+    handleFwdPrev('prev');
+  }, [handleFwdPrev]);
+
+  useKeyPressed('j', handleFwd);
+  useKeyPressed('k', handlePrev);
 
   const handleClose = useCallback(() => {
     setDetailIssueID(null);
@@ -176,6 +225,36 @@ export default function IssueDetail({
             >
               <CloseIcon className="w-4" />
             </div>
+            {issue && (
+              <>
+                <div className="flex flex-row flex-initial select-none cursor-pointer">
+                  <button
+                    className="h-6 px-2 rounded border-solid border inline-flex items-center justify-center flex-shrink-0 font-medium m-0 select-none whitespace-no-wrap ml-2  hover:bg-gray-400 disabled:opacity-25"
+                    type="button"
+                    onMouseDown={() => handleFwdPrev('prev')}
+                    disabled={previousIssue.length < 1}
+                  >
+                    <ArrowIcon
+                      style={{transform: 'rotate(180deg)'}}
+                      className=""
+                    />
+                  </button>
+                </div>
+                <div
+                  role="button"
+                  className="flex flex-row flex-initial select-none cursor-pointer"
+                >
+                  <button
+                    className="h-6 px-2 rounded border-solid border inline-flex items-center justify-center flex-shrink-0 font-medium m-0 select-none whitespace-no-wrap ml-2  hover:bg-gray-400 disabled:opacity-50"
+                    type="button"
+                    onMouseDown={() => handleFwdPrev('fwd')}
+                    disabled={nextIssue.length < 1}
+                  >
+                    <ArrowIcon className="" />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
