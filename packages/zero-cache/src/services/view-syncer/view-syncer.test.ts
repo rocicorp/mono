@@ -13,7 +13,11 @@ import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
 import {CVRStore} from './cvr-store.js';
-import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
+import {
+  ClientGroupStorage,
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from './database-storage.js';
 import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
@@ -41,6 +45,7 @@ describe('view-syncer/service', () => {
   const lc = createSilentLogContext();
   let versionNotifications: Subscription<ReplicaVersionReady>;
 
+  let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
   let downstream: Queue<Downstream>;
@@ -100,6 +105,9 @@ describe('view-syncer/service', () => {
     await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
 
     versionNotifications = Subscription.create();
+    operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(
+      serviceID,
+    );
     vs = new ViewSyncerService(
       lc,
       serviceID,
@@ -107,7 +115,7 @@ describe('view-syncer/service', () => {
       new PipelineDriver(
         lc,
         new Snapshotter(lc, replicaDbFile.path),
-        new DatabaseStorage(storageDB).createClientGroupStorage(serviceID),
+        operatorStorage,
       ),
       versionNotifications,
     );
@@ -623,6 +631,17 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
+  });
+
+  test('clean up operator storage on close', async () => {
+    const storage = operatorStorage.createStorage();
+    storage.set('foo', 'bar');
+    expect(storageDB.prepare('SELECT * from storage').all()).toHaveLength(1);
+
+    await vs.stop();
+    await viewSyncerDone;
+
+    expect(storageDB.prepare('SELECT * from storage').all()).toHaveLength(0);
   });
 
   // Does not test the actual timeout logic, but better than nothing.
