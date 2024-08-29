@@ -18,6 +18,7 @@ describe('tables/published', () => {
       expectedResult: {
         publications: [],
         tables: [],
+        indices: [],
       },
     },
     {
@@ -60,6 +61,7 @@ describe('tables/published', () => {
             filterConditions: [],
           },
         ],
+        indices: [],
       },
     },
     {
@@ -144,6 +146,7 @@ describe('tables/published', () => {
             filterConditions: [],
           },
         ],
+        indices: [],
       },
     },
     {
@@ -192,6 +195,7 @@ describe('tables/published', () => {
             filterConditions: ['(org_id = 123)'],
           },
         ],
+        indices: [],
       },
     },
     {
@@ -248,6 +252,7 @@ describe('tables/published', () => {
             filterConditions: ['(org_id = 123)', '(org_id = 456)'],
           },
         ],
+        indices: [],
       },
     },
     {
@@ -304,6 +309,7 @@ describe('tables/published', () => {
             filterConditions: [], // unconditional cancels out conditional
           },
         ],
+        indices: [],
       },
     },
     {
@@ -377,6 +383,7 @@ describe('tables/published', () => {
             filterConditions: [],
           },
         ],
+        indices: [],
       },
     },
     {
@@ -432,6 +439,7 @@ describe('tables/published', () => {
             filterConditions: [],
           },
         ],
+        indices: [],
       },
     },
     {
@@ -543,6 +551,139 @@ describe('tables/published', () => {
             filterConditions: [],
           },
         ],
+        indices: [],
+      },
+    },
+    {
+      name: 'indices',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.issues (
+        issue_id INTEGER PRIMARY KEY,
+        org_id INTEGER,
+        component_id INTEGER
+      );
+      CREATE INDEX issues_org_id ON test.issues (org_id);
+      CREATE INDEX issues_component_id ON test.issues (component_id);
+      CREATE PUBLICATION zero_data FOR TABLE test.issues;
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'issues',
+            columns: {
+              ['issue_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: true,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+              ['component_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+            },
+            primaryKey: ['issue_id'],
+            filterConditions: [],
+          },
+        ],
+        indices: [
+          {
+            schemaName: 'test',
+            tableName: 'issues',
+            name: 'issues_component_id',
+            columns: ['component_id'],
+            unique: false,
+          },
+          {
+            schemaName: 'test',
+            tableName: 'issues',
+            name: 'issues_org_id',
+            columns: ['org_id'],
+            unique: false,
+          },
+        ],
+      },
+    },
+    {
+      name: 'unique indices',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.issues (
+        issue_id INTEGER PRIMARY KEY,
+        org_id INTEGER,
+        component_id INTEGER
+      );
+      CREATE UNIQUE INDEX issues_org_id ON test.issues (org_id);
+      CREATE UNIQUE INDEX issues_component_id ON test.issues (component_id);
+      CREATE PUBLICATION zero_data FOR TABLE test.issues;
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'issues',
+            columns: {
+              ['issue_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: true,
+              },
+              ['org_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+              ['component_id']: {
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+            },
+            primaryKey: ['issue_id'],
+            filterConditions: [],
+          },
+        ],
+        indices: [
+          {
+            schemaName: 'test',
+            tableName: 'issues',
+            name: 'issues_component_id',
+            columns: ['component_id'],
+            unique: true,
+          },
+          {
+            schemaName: 'test',
+            tableName: 'issues',
+            name: 'issues_org_id',
+            columns: ['org_id'],
+            unique: true,
+          },
+        ],
       },
     },
   ];
@@ -564,7 +705,11 @@ describe('tables/published', () => {
         const tables = await getPublicationInfo(db);
         expect(tables).toEqual(c.expectedResult);
       } catch (e) {
-        expect(c.expectedError).toMatch(String(e));
+        if (c.expectedError) {
+          expect(c.expectedError).toMatch(String(e));
+        } else {
+          throw e;
+        }
       }
     });
   }

@@ -172,11 +172,21 @@ export async function getPublicationInfo(
     );
   });
 
-  // now go find all the indices for each table
-  const indexDefinitions = await sql`SELECT
+  const indices: IndexSpec[] = [];
+  if (tables.length === 0) {
+    return {
+      publications,
+      tables,
+      indices,
+    };
+  }
+
+  const indexDefinitionsQuery = sql`SELECT
+      pg_indexes.schemaname,
+      pg_indexes.tablename,
       pg_indexes.indexname,
       pg_attribute.attname as col,
-      pg_constraint.contype as idx_type
+      pg_index.indisunique as isunique
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
     JOIN pg_class ON
@@ -184,11 +194,14 @@ export async function getPublicationInfo(
       AND pg_class.relnamespace = pg_namespace.oid
     JOIN pg_attribute ON pg_attribute.attrelid = pg_class.oid
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pg_class.oid
+    JOIN pg_index ON pg_index.indexrelid = pg_class.oid
     WHERE
-      (pg_indexes.schemaname, pg_indexes.tablename) IN (${tables.map(t => [
-        t.schema,
-        t.name,
-      ])})
+      (pg_indexes.schemaname, pg_indexes.tablename) IN (${sql`${tables.map(
+        (t, i) =>
+          i === tables.length - 1
+            ? sql`(${t.schema}, ${t.name})`
+            : sql`(${t.schema}, ${t.name}),`,
+      )}`})
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
     ORDER BY
@@ -197,7 +210,7 @@ export async function getPublicationInfo(
       pg_indexes.indexname,
       pg_attribute.attnum ASC;`;
 
-  const indices: IndexSpec[] = [];
+  const indexDefinitions = await indexDefinitionsQuery;
   let index: MutableIndexSpec | undefined;
   indexDefinitions.forEach(row => {
     if (
@@ -210,14 +223,17 @@ export async function getPublicationInfo(
       }
       index = {
         schemaName: row.schemaname,
-        tableName: row.schemaname,
+        tableName: row.tablename,
         name: row.indexname,
-        unique: row.idx_type === 'u',
+        unique: row.isunique,
         columns: [],
       };
     }
     index!.columns.push(row.col);
   });
+  if (index) {
+    indices.push(index!);
+  }
 
   return {
     publications,
