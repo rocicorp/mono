@@ -12,6 +12,7 @@ import {
 } from '../services/replicator/replicator.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
+import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
 import {postgresTypeConfig} from '../types/pg.js';
@@ -50,6 +51,8 @@ const upstreamDB = postgres(config.UPSTREAM_URI, {
   ...postgresTypeConfig(),
   max: 5,
 });
+
+await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
 
 const tmpDir = config.STORAGE_DB_TMP_DIR ?? tmpdir();
 const operatorStorage = DatabaseStorage.create(
