@@ -336,7 +336,24 @@ function requestToSQL(
   }
 
   for (const filter of filters) {
-    constraints.push(sql`${filter.field} ${filter.op} ${filter.value}`);
+    const {op} = filter;
+    if (op === 'IN' || op === 'NOT IN') {
+      constraints.push(
+        sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+          filter.op,
+        )} (SELECT value FROM json_each(${JSON.stringify(filter.value)}))`,
+      );
+    } else {
+      constraints.push(
+        sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+          filter.op === 'ILIKE'
+            ? 'LIKE'
+            : filter.op === 'NOT ILIKE'
+            ? 'NOT LIKE'
+            : filter.op,
+        )} ${filter.value}`,
+      );
+    }
   }
 
   if (constraints.length > 0) {
