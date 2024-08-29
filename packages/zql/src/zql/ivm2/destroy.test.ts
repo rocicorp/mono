@@ -61,8 +61,16 @@ test('destroy a pipeline from the view', () => {
   const source1 = new MemorySource('table', {a: 'string', b: 'string'}, ['b']);
   const source2 = new MemorySource('table', {a: 'string', b: 'string'}, ['b']);
 
-  const filter1 = new Filter(source1.connect([['b', 'asc']]), () => true);
-  const filter2 = new Filter(source2.connect([['b', 'asc']]), () => true);
+  const filter1 = new Filter(
+    source1.connect([['b', 'asc']]),
+    'all',
+    () => true,
+  );
+  const filter2 = new Filter(
+    source2.connect([['b', 'asc']]),
+    'all',
+    () => true,
+  );
   const join = new Join(
     filter1,
     filter2,

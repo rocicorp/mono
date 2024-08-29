@@ -1,7 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
 import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering} from 'zql/src/zql/ast2/ast.js';
+import type {Ordering, SimpleCondition} from 'zql/src/zql/ast2/ast.js';
 import {
   Comparator,
   Node,
@@ -21,7 +21,11 @@ import type {
   Output,
 } from 'zql/src/zql/ivm2/operator.js';
 import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
-import type {Source, SourceChange} from 'zql/src/zql/ivm2/source.js';
+import type {
+  Source,
+  SourceChange,
+  SourceInput,
+} from 'zql/src/zql/ivm2/source.js';
 import {Stream} from 'zql/src/zql/ivm2/stream.js';
 import {compile, format, sql} from '../internal/sql.js';
 import {StatementCache} from '../internal/statement-cache.js';
@@ -30,6 +34,7 @@ type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
+  filters: SimpleCondition[];
   compareRows: Comparator;
 };
 
@@ -137,8 +142,8 @@ export class TableSource implements Source {
     };
   }
 
-  connect(sort: Ordering) {
-    const input: Input = {
+  connect(sort: Ordering, optionalFilters?: SimpleCondition[] | undefined) {
+    const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
       cleanup: req => this.#cleanup(req, connection),
@@ -150,12 +155,14 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
+      appliedFilters: true,
     };
 
     const connection: Connection = {
       input,
       output: undefined,
       sort: makeOrderUnique(sort, this.#primaryKey),
+      filters: optionalFilters ?? [],
       compareRows: makeComparator(sort),
     };
 
@@ -201,6 +208,7 @@ export class TableSource implements Source {
               inclusive: req.start.basis === 'at',
             }
           : undefined,
+        connection.filters,
         sort,
       );
       const sqlAndBindings = format(preSql);
@@ -227,6 +235,7 @@ export class TableSource implements Source {
               inclusive: req.start.basis === 'at',
             }
           : undefined,
+        connection.filters,
         sort,
       );
       const sqlAndBindings = format(query);
@@ -312,6 +321,7 @@ function requestToSQL(
   table: string,
   constraint: Constraint | undefined,
   cursor: Cursor | undefined,
+  filters: SimpleCondition[],
   order: Ordering,
 ): SQLQuery {
   let query = sql`SELECT * FROM ${sql.ident(table)}`;
@@ -323,6 +333,10 @@ function requestToSQL(
 
   if (cursor) {
     constraints.push(gatherStartConstraints(cursor, order));
+  }
+
+  for (const filter of filters) {
+    constraints.push(sql`${filter.field} ${filter.op} ${filter.value}`);
   }
 
   if (constraints.length > 0) {

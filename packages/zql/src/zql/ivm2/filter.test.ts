@@ -10,7 +10,7 @@ test('basics', () => {
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
 
   const connector = ms.connect([['a', 'asc']]);
-  const filter = new Filter(connector, row => row.b === 'foo');
+  const filter = new Filter(connector, 'all', row => row.b === 'foo');
   const out = new Catch(filter);
 
   expect(out.fetch()).toEqual([
