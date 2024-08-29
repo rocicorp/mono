@@ -1,5 +1,6 @@
 import BTree from 'btree';
-import type {Output, FetchRequest, Constraint, Input} from './operator.js';
+import {assert} from 'shared/src/asserts.js';
+import type {Ordering, SimpleCondition} from '../ast2/ast.js';
 import {
   Comparator,
   makeComparator,
@@ -7,12 +8,11 @@ import {
   type Node,
   type Row,
 } from './data.js';
-import type {Ordering, SimpleCondition} from '../ast2/ast.js';
-import {assert} from 'shared/src/asserts.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
-import type {Stream} from './stream.js';
-import type {Source, SourceChange, SourceInput} from './source.js';
+import type {Constraint, FetchRequest, Input, Output} from './operator.js';
 import type {Schema, ValueType} from './schema.js';
+import type {Source, SourceChange, SourceInput} from './source.js';
+import type {Stream} from './stream.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -58,7 +58,6 @@ export class MemorySource implements Source {
     this.#columns = columns;
     this.#primaryKeys = primaryKeys;
     this.#primaryIndexSort = primaryKeys.map(k => [k, 'asc']);
-    this.#indexes = new Map();
     const comparator = makeComparator(this.#primaryIndexSort);
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
@@ -276,15 +275,15 @@ export class MemorySource implements Source {
       }
     }
     this.#overlay = undefined;
-    for (const [_, {data}] of this.#indexes) {
+    for (const {data} of this.#indexes.values()) {
       if (change.type === 'add') {
         const added = data.add(change.row, undefined);
-        // must suceed since we checked has() above.
+        // must succeed since we checked has() above.
         assert(added);
       } else {
-        assert(change.type === 'remove');
+        change.type satisfies 'remove';
         const removed = data.delete(change.row);
-        // must suceed since we checked has() above.
+        // must succeed since we checked has() above.
         assert(removed);
       }
     }
