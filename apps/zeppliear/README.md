@@ -2,7 +2,7 @@
 
 A test-bed app for Zero based on Repliear a Replicache based high-performance issue tracker in the style of [Linear](https://linear.app/).
 
-Built with Zero and [Vite](https://vitejs.dev/),).
+Built with Zero and [Vite](https://vitejs.dev/).
 
 Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
 
@@ -21,8 +21,14 @@ LOG_LEVEL = "debug"
 Open two windows one with docker-compose and the other workers:
 
 ```
-cd docker && docker-compose up
+cd docker && docker compose up
 npm run start-zero-cache
+```
+
+## Create the indexes on the Replica
+
+```
+sqlite3 /tmp/sync-replica.db < create-replica-indexes.sql
 ```
 
 # To run web locally
@@ -34,17 +40,10 @@ VITE_PUBLIC_SERVER="http://127.0.0.1:3000" npm run dev
 
 After you have visited the local website and the sync / replica tables have populated.
 
-## Create the indexes on the Replica
-
-```
-./create-indexes.sh
-```
-
 # To reset clear local postgres dbs and docker volumes
 
 ```
 docker-compose down
-docker volume rm -f docker_pgdata_sync
 docker volume rm -f docker_pgdata_upstream
 ```
 
