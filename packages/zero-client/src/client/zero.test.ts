@@ -460,8 +460,9 @@ suite('initConnection', () => {
             {
               ast: {
                 table: 'e',
+                orderBy: [['id', 'asc']],
               } satisfies AST,
-              hash: '2iu01zfto3d8e',
+              hash: '1jnb9n35hhddz',
               op: 'put',
             },
           ],

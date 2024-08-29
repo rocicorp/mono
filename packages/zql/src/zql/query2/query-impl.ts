@@ -81,10 +81,11 @@ class QueryImpl<
   }
 
   materialize(): TypedView<Smash<TReturn>> {
+    const ast = this.#completeAst();
     const view = new HybridQueryView(
       this.#host,
-      this.#ast,
-      new ArrayView(buildPipeline(this.#completeAst(), this.#host)),
+      ast,
+      new ArrayView(buildPipeline(ast, this.#host)),
     );
     return view as unknown as TypedView<Smash<TReturn>>;
   }
