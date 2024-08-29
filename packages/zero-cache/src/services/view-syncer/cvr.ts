@@ -27,10 +27,10 @@ import {
   type QueryRecord,
 } from './schema/types.js';
 
-// From obsolete queries.ts. Will need to be reworked for IVM.
-export type ParsedRow = {
-  record: Omit<RowRecord, 'patchVersion'>;
-  contents: JSONObject;
+export type RowUpdate = {
+  version?: string; // Undefined for an unref.
+  contents?: JSONObject; // Undefined for an unref.
+  refCounts: {[hash: string]: number}; // Counts are negative when a row is unrefed.
 };
 
 /** Internally used mutable CVR type. */
@@ -258,7 +258,7 @@ export type RefCounts = Record<Hash, number>;
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #removedOrExecutedQueryIDs = new Set<string>();
-  readonly #receivedRows = new CustomKeyMap<RowID, RefCounts>(rowIDHash);
+  readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(rowIDHash);
   readonly #newConfigPatches: MetadataPatch[] = [];
   #existingRows: Promise<RowRecord[]> | undefined = undefined;
   #catchupRowPatches: Promise<[RowPatch, CVRVersion][]> | undefined = undefined;
@@ -433,40 +433,38 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    */
   async received(
     _: LogContext,
-    rows: Map<RowID, ParsedRow>,
+    rows: Map<RowID, RowUpdate>,
   ): Promise<PatchToVersion[]> {
-    const puts: PatchToVersion[] = [];
+    const patches: PatchToVersion[] = [];
 
     const existingRows = await this._cvrStore.getMultipleRowEntries(
       rows.keys(),
     );
 
-    for (const parsedRow of rows.values()) {
-      const {
-        contents,
-        record: {id, rowVersion, refCounts},
-      } = parsedRow;
-
-      assert(refCounts !== null); // We never "receive" tombstones.
+    for (const [id, update] of rows.entries()) {
+      const {contents, version, refCounts} = update;
 
       const existing = existingRows.get(id);
 
-      // Accumulate all received columns to determine which columns to prune at the end.
+      // Accumulate all received refCounts to determine which rows to prune.
       const previouslyReceived = this.#receivedRows.get(id);
-      const merged = previouslyReceived
-        ? mergeRefCounts(previouslyReceived, refCounts)
-        : mergeRefCounts(
-            existing?.refCounts,
-            refCounts,
-            this.#removedOrExecutedQueryIDs,
-          );
+      const merged =
+        previouslyReceived !== undefined
+          ? mergeRefCounts(previouslyReceived, refCounts)
+          : mergeRefCounts(
+              existing?.refCounts,
+              refCounts,
+              this.#removedOrExecutedQueryIDs,
+            );
 
       this.#receivedRows.set(id, merged);
 
       const patchVersion =
-        existing?.rowVersion === rowVersion
+        existing && existing?.rowVersion === version
           ? existing.patchVersion
           : this.#assertNewVersion();
+      const rowVersion = version ?? existing?.rowVersion;
+      assert(rowVersion, `Cannot delete a row that is not in the CVR`);
 
       const updated = {
         id,
@@ -476,17 +474,29 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       };
       this._cvrStore.putRowRecord(updated, existing?.patchVersion);
 
-      puts.push({
-        patch: {
-          type: 'row',
-          op: 'put',
-          id,
-          contents,
-        },
-        toVersion: patchVersion,
-      });
+      if (contents) {
+        patches.push({
+          patch: {
+            type: 'row',
+            op: 'put',
+            id,
+            contents,
+          },
+          toVersion: patchVersion,
+        });
+      } else if (merged === null) {
+        // All refCounts have gone to zero.
+        patches.push({
+          patch: {
+            type: 'row',
+            op: 'del',
+            id,
+          },
+          toVersion: patchVersion,
+        });
+      }
     }
-    return puts;
+    return patches;
   }
 
   /**
@@ -580,7 +590,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   #deleteUnreferencedRow(existing: RowRecord): RowID | null {
     const received = this.#receivedRows.get(existing.id);
-    if (received) {
+    if (received !== undefined) {
       const pending = this._cvrStore.getPendingRowRecord(existing.id);
       if (
         pending &&
@@ -598,17 +608,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       undefined,
       this.#removedOrExecutedQueryIDs,
     );
-    const hasRef = Object.values(newRefCounts).some(v => v > 0);
     const rowRecord: RowRecord = {
       ...existing,
       patchVersion: newPatchVersion,
-      refCounts: hasRef ? newRefCounts : null,
+      refCounts: newRefCounts,
     };
 
     this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
 
     // Return the id to delete if no longer referenced.
-    return hasRef ? null : existing.id;
+    return newRefCounts ? null : existing.id;
   }
 }
 
@@ -616,7 +625,7 @@ function mergeRefCounts(
   existing: RefCounts | null | undefined,
   received: RefCounts | null | undefined,
   removeHashes?: Set<string>,
-): RefCounts {
+): RefCounts | null {
   if (!existing) {
     return received ?? {};
   }
@@ -631,10 +640,13 @@ function mergeRefCounts(
         continue; // removeHashes from existing row.
       }
       merged[hash] = (merged[hash] ?? 0) + count;
+      if (merged[hash] === 0) {
+        delete merged[hash];
+      }
     }
 
     return merged;
   });
 
-  return merged;
+  return Object.values(merged).some(v => v > 0) ? merged : null;
 }
