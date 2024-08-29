@@ -1,8 +1,10 @@
-// streams are lazy forward-only iterables.
-// once they reach the end they can't be restarted.
-// they are iterable, not iterator, so that they can be used in for-each,
-// and so that we know when consumer has stopped iterator. this allows us
-// to clean up resources like sql statements.
+/**
+ * streams are lazy forward-only iterables.
+ * Once a stream reaches the end it can't be restarted.
+ * They are iterable, not iterator, so that they can be used in for-each,
+ * and so that we know when consumer has stopped iterating the stream. This allows us
+ * to clean up resources like sql statements.
+ */
 export type Stream<T> = Iterable<T>;
 
 export function* take<T>(stream: Stream<T>, limit: number): Stream<T> {

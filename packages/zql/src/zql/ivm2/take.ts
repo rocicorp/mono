@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import type {Change, RemoveChange} from './change.js';
 import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
   Constraint,
@@ -8,16 +9,22 @@ import type {
   Output,
   Storage,
 } from './operator.js';
-import {take, type Stream} from './stream.js';
-import type {Change} from './change.js';
 import type {Schema} from './schema.js';
+import {take, type Stream} from './stream.js';
 
-const MAX_BOUND_KEY = 'maxBound' as const;
+const MAX_BOUND_KEY = 'maxBound';
 
 type TakeState = {
   size: number;
-  bound: Row;
+  bound: Row | undefined;
 };
+
+interface TakeStorage extends Storage {
+  get(key: typeof MAX_BOUND_KEY): Row | undefined;
+  get(key: string): TakeState | undefined;
+  set(key: typeof MAX_BOUND_KEY, value: Row): void;
+  set(key: string, value: TakeState): void;
+}
 
 /**
  * The Take operator is for implementing limit queries. It takes the first n
@@ -29,7 +36,7 @@ type TakeState = {
  */
 export class Take implements Operator {
   readonly #input: Input;
-  readonly #storage: Storage;
+  readonly #storage: TakeStorage;
   readonly #limit: number;
   readonly #partitionKey: string | undefined;
 
@@ -42,7 +49,7 @@ export class Take implements Operator {
     partitionKey?: string | undefined,
   ) {
     this.#input = input;
-    this.#storage = storage;
+    this.#storage = storage as TakeStorage;
     this.#limit = limit;
     this.#partitionKey = partitionKey;
     assert(limit > 0);
@@ -65,9 +72,7 @@ export class Take implements Operator {
       const partitionValue =
         this.#partitionKey === undefined ? undefined : req.constraint?.value;
       const takeStateKey = getTakeStateKey(partitionValue);
-      const takeState = this.#storage.get(takeStateKey) as
-        | TakeState
-        | undefined;
+      const takeState = this.#storage.get(takeStateKey);
       if (takeState === undefined) {
         yield* this.#initialFetch(req);
         return;
@@ -89,7 +94,7 @@ export class Take implements Operator {
     // e.g. issues include issuelabels include label.  We could remove this
     // case if we added a translation layer (powered by some state) in join.
     // Specifically we need joinKeyValue => parent constraint key
-    const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row | undefined;
+    const maxBound = this.#storage.get(MAX_BOUND_KEY);
     if (maxBound === undefined) {
       return;
     }
@@ -99,11 +104,10 @@ export class Take implements Operator {
       }
       const partitionValue = inputNode.row[this.#partitionKey];
       const takeStateKey = getTakeStateKey(partitionValue);
-      const takeState = this.#storage.get(takeStateKey) as
-        | TakeState
-        | undefined;
+      const takeState = this.#storage.get(takeStateKey);
       if (
         takeState &&
+        takeState.bound !== undefined &&
         this.getSchema().compareRows(takeState.bound, inputNode.row) >= 0
       ) {
         yield inputNode;
@@ -123,10 +127,7 @@ export class Take implements Operator {
       this.#partitionKey === undefined ? undefined : req.constraint?.value;
     const takeStateKey = getTakeStateKey(partitionValue);
     assert(this.#storage.get(takeStateKey) === undefined);
-    if (this.#limit === 0) {
-      this.#storage.set(takeStateKey, {count: 0});
-      return;
-    }
+
     let size = 0;
     let bound: Row | undefined;
     let downstreamEarlyReturn = true;
@@ -145,7 +146,7 @@ export class Take implements Operator {
         takeStateKey,
         size,
         bound,
-        this.#storage.get(MAX_BOUND_KEY) as Row | undefined,
+        this.#storage.get(MAX_BOUND_KEY),
       );
       // If it becomes necessary to support downstream early return, this
       // assert should be removed, and replaced with code that consumes
@@ -169,7 +170,7 @@ export class Take implements Operator {
     const partitionValue =
       this.#partitionKey === undefined ? undefined : req.constraint?.value;
     const takeStateKey = getTakeStateKey(partitionValue);
-    const takeState = this.#storage.get(takeStateKey) as TakeState | undefined;
+    const takeState = this.#storage.get(takeStateKey);
     this.#storage.del(takeStateKey);
     assert(takeState !== undefined);
     for (const inputNode of this.#input.cleanup(req)) {
@@ -194,8 +195,8 @@ export class Take implements Operator {
         ? undefined
         : change.node.row[this.#partitionKey];
     const takeStateKey = getTakeStateKey(partitionValue);
-    const takeState = this.#storage.get(takeStateKey) as TakeState | undefined;
-    const maxBound = this.#storage.get(MAX_BOUND_KEY) as Row | undefined;
+    const takeState = this.#storage.get(takeStateKey);
+    const maxBound = this.#storage.get(MAX_BOUND_KEY);
     const constraint: Constraint | undefined = this.#partitionKey
       ? {
           key: this.#partitionKey,
@@ -259,7 +260,7 @@ export class Take implements Operator {
           ),
         ];
       }
-      const removeChange: Change = {
+      const removeChange: RemoveChange = {
         type: 'remove',
         node: boundNode,
       };
@@ -296,8 +297,8 @@ export class Take implements Operator {
         return;
       }
       // The bound is removed
-      let beforeBoundNode: Node | undefined = undefined;
-      let afterBoundNode: Node | undefined = undefined;
+      let beforeBoundNode: Node | undefined;
+      let afterBoundNode: Node | undefined;
       if (compToBound === 0) {
         [beforeBoundNode, afterBoundNode] = take(
           this.#input.fetch({

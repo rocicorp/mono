@@ -85,7 +85,7 @@ export class Skip implements Operator {
     }
 
     // The skip bound and requested bound are equal. If either is exclusive,
-    // return that bound with ecxlusive. Otherwise, return the skip bound.
+    // return that bound with exclusive. Otherwise, return the skip bound.
     // There is the case where the requested bound is basis: 'before', but
     // that cannot be relevant.
     if (cmp === 0) {

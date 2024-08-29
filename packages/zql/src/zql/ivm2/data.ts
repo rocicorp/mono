@@ -38,7 +38,7 @@ export type Value = undefined | null | boolean | number | string;
 export type Row = Record<string, Value>;
 
 /**
- * A row flowing thorugh the pipeline, plus its relationships.
+ * A row flowing through the pipeline, plus its relationships.
  * Relationships are generated lazily as read.
  */
 export type Node = {
@@ -112,10 +112,11 @@ export type Comparator = (r1: Row, r2: Row) => number;
 
 export function makeComparator(order: Ordering): Comparator {
   return (a, b) => {
-    for (const [field, direction] of order) {
+    for (const ord of order) {
+      const field = ord[0];
       const comp = compareValues(a[field], b[field]);
       if (comp !== 0) {
-        return direction === 'asc' ? comp : -comp;
+        return ord[1] === 'asc' ? comp : -comp;
       }
     }
     return 0;
