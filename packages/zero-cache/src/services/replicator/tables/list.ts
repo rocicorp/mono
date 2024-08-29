@@ -1,6 +1,6 @@
 import type {Database} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
-import {TableSpec} from './specs.js';
+import {IndexSpec, TableSpec} from './specs.js';
 
 type ColumnInfo = {
   table: string;
@@ -67,4 +67,44 @@ export function listTables(db: Database): TableSpec[] {
   });
 
   return tables;
+}
+
+export function listIndices(db: Database): IndexSpec[] {
+  const indices = db
+    .prepare(
+      `SELECT name as indexName, tbl_name as tableName FROM sqlite_master WHERE type = 'index' AND tbl_name NOT LIKE '_zero.%'`,
+    )
+    .all() as {
+    indexName: string;
+    tableName: string;
+  }[];
+  const ret: IndexSpec[] = [];
+  for (const indexDef of indices) {
+    const uniqueAndOrigin = db
+      .prepare(
+        `SELECT "unique", origin FROM pragma_index_list(?) WHERE name = ?`,
+      )
+      .get(indexDef.tableName, indexDef.indexName) as {
+      unique: number;
+      origin: string;
+    };
+    if (uniqueAndOrigin.origin === 'pk') {
+      continue;
+    }
+    const columns = db
+      .prepare(`SELECT name FROM pragma_index_info(?) ORDER BY seqno ASC`)
+      .all(indexDef.indexName) as {
+      name: string;
+    }[];
+
+    ret.push({
+      schemaName: '',
+      tableName: indexDef.tableName,
+      name: indexDef.indexName,
+      columns: columns.map(col => col.name),
+      unique: uniqueAndOrigin.unique !== 0,
+    });
+  }
+
+  return ret;
 }

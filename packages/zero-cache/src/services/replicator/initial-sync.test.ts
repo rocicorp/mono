@@ -10,9 +10,9 @@ import {
   testDBs,
 } from '../../test/db.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
-import {listTables} from './tables/list.js';
+import {listIndices, listTables} from './tables/list.js';
 import {getPublicationInfo} from './tables/published.js';
-import type {FilteredTableSpec, TableSpec} from './tables/specs.js';
+import type {FilteredTableSpec, IndexSpec, TableSpec} from './tables/specs.js';
 
 const REPLICA_ID = 'initial_sync_test_id';
 
@@ -81,6 +81,7 @@ describe('replicator/initial-sync', () => {
     published: Record<string, FilteredTableSpec>;
     upstream?: Record<string, object[]>;
     replicatedSchema: Record<string, TableSpec>;
+    replicatedIndices?: IndexSpec[];
     replicatedData: Record<string, object[]>;
     publications: string[];
   };
@@ -367,6 +368,95 @@ describe('replicator/initial-sync', () => {
       },
       publications: ['zero_meta', 'zero_custom', 'zero_custom2'],
     },
+    {
+      name: 'replicates indices',
+      setupUpstreamQuery: `
+        CREATE TABLE issues(
+          "issueID" INTEGER,
+          "orgID" INTEGER,
+          "other" TEXT,
+          "isAdmin" BOOLEAN,
+          PRIMARY KEY ("orgID", "issueID")
+        );
+        CREATE INDEX ON issues ("orgID", "other");
+      `,
+      published: {
+        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        ['public.issues']: {
+          columns: {
+            issueID: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              notNull: true,
+            },
+            orgID: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              notNull: true,
+            },
+            other: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              notNull: false,
+            },
+            isAdmin: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              notNull: false,
+            },
+          },
+          name: 'issues',
+          primaryKey: ['orgID', 'issueID'],
+          schema: 'public',
+          filterConditions: [],
+        },
+      },
+      replicatedSchema: {
+        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['issues']: {
+          columns: {
+            issueID: {
+              characterMaximumLength: null,
+              dataType: 'INTEGER',
+              notNull: false,
+            },
+            orgID: {
+              characterMaximumLength: null,
+              dataType: 'INTEGER',
+              notNull: false,
+            },
+            isAdmin: {
+              characterMaximumLength: null,
+              dataType: 'BOOL',
+              notNull: false,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: true,
+            },
+          },
+          name: 'issues',
+          primaryKey: ['orgID', 'issueID'],
+          schema: '',
+        },
+      },
+      upstream: {},
+      replicatedData: {
+        ['zero.clients']: [],
+        issues: [],
+      },
+      replicatedIndices: [
+        {
+          columns: ['orgID', 'other'],
+          name: 'issues_orgID_other_idx',
+          schemaName: '',
+          tableName: 'issues',
+          unique: false,
+        },
+      ],
+      publications: ['zero_meta', 'zero_data'],
+    },
   ];
 
   let upstream: PostgresDB;
@@ -408,6 +498,9 @@ describe('replicator/initial-sync', () => {
         .prepare(`SELECT publications as pubs FROM "_zero.ReplicationConfig"`)
         .get();
       expect(new Set(JSON.parse(pubs))).toEqual(new Set(c.publications));
+
+      const syncedIndices = listIndices(replica);
+      expect(syncedIndices).toEqual(c.replicatedIndices ?? []);
 
       expectTables(replica, c.replicatedData);
 
