@@ -104,8 +104,8 @@ export class DatabaseStorage {
     def?: JSONValue,
   ): JSONValue | undefined {
     this.#maybeCheckpoint();
-    const {val} = this.#stmts.get.get(cgID, opID, key);
-    return val ? JSON.parse(val) : def;
+    const row = this.#stmts.get.get(cgID, opID, key);
+    return row ? JSON.parse(row.val) : def;
   }
 
   #set(cgID: string, opID: number, key: string, val: JSONValue) {
