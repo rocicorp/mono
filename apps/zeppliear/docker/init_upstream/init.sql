@@ -73,4 +73,6 @@ CREATE INDEX issue_priority_modified_idx ON issue (priority,modified);
 CREATE INDEX issue_status_modified_idx ON issue (status,modified);
 CREATE INDEX comment_issueid_idx ON "comment" ("issueID");
 
+SELECT * FROM pg_create_logical_replication_slot('zero_slot_r1', 'pgoutput');
+
 VACUUM;
