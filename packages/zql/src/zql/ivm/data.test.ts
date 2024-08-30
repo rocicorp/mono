@@ -8,7 +8,7 @@ import {
 } from './data.js';
 import fc from 'fast-check';
 import {compareUTF8} from 'compare-utf8';
-import type {Ordering} from '../ast2/ast.js';
+import type {Ordering} from '../ast/ast.js';
 
 test('normalizeUndefined', () => {
   fc.assert(

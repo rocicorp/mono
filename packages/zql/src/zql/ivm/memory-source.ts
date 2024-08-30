@@ -1,6 +1,6 @@
 import BTree from 'btree';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering, SimpleCondition} from '../ast2/ast.js';
+import type {Ordering, SimpleCondition} from '../ast/ast.js';
 import {
   Comparator,
   makeComparator,

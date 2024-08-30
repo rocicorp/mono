@@ -1,4 +1,4 @@
-import type {AST} from '../ast2/ast.js';
+import type {AST} from '../ast/ast.js';
 
 export type GotCallback = (got: boolean) => void;
 

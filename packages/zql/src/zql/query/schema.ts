@@ -1,4 +1,4 @@
-import {ValueType} from '../ivm2/schema.js';
+import {ValueType} from '../ivm/schema.js';
 
 /**
  * `related` calls need to know what the available relationships are.

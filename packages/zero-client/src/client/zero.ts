@@ -49,8 +49,8 @@ import type {
 } from 'zero-protocol/src/pull.js';
 import type {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
 import {ZeroContext} from 'zql/src/zql/context/zero-context.js';
-import {Query} from 'zql/src/zql/query2/query.js';
-import {newQuery} from 'zql/src/zql/query2/query-impl.js';
+import {Query} from 'zql/src/zql/query/query.js';
+import {newQuery} from 'zql/src/zql/query/query-impl.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {
@@ -82,7 +82,7 @@ import {
 } from './subscriptions.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
-import {Schema} from 'zql/src/zql/query2/schema.js';
+import {Schema} from 'zql/src/zql/query/schema.js';
 import {Host} from '../../../zql/src/zql/builder/builder.js';
 
 export type SchemaDefs = {

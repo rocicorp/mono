@@ -1,34 +1,34 @@
 import type {SQLQuery} from '@databases/sql';
 import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering, SimpleCondition} from 'zql/src/zql/ast2/ast.js';
+import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
 import {
   Comparator,
   Node,
   Row,
   Value,
   makeComparator,
-} from 'zql/src/zql/ivm2/data.js';
+} from 'zql/src/zql/ivm/data.js';
 import {
   generateWithOverlay,
   generateWithStart,
   type Overlay,
-} from 'zql/src/zql/ivm2/memory-source.js';
+} from 'zql/src/zql/ivm/memory-source.js';
 import type {
   Constraint,
   FetchRequest,
   Input,
   Output,
-} from 'zql/src/zql/ivm2/operator.js';
-import {Schema, ValueType} from 'zql/src/zql/ivm2/schema.js';
+} from 'zql/src/zql/ivm/operator.js';
+import {Schema, ValueType} from 'zql/src/zql/ivm/schema.js';
 import type {
   Source,
   SourceChange,
   SourceInput,
-} from 'zql/src/zql/ivm2/source.js';
-import {Stream} from 'zql/src/zql/ivm2/stream.js';
-import {compile, format, sql} from '../internal/sql.js';
-import {StatementCache} from '../internal/statement-cache.js';
+} from 'zql/src/zql/ivm/source.js';
+import {Stream} from 'zql/src/zql/ivm/stream.js';
+import {compile, format, sql} from './internal/sql.js';
+import {StatementCache} from './internal/statement-cache.js';
 
 type Connection = {
   input: Input;

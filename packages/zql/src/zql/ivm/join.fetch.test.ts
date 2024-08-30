@@ -9,7 +9,7 @@ import {MemoryStorage} from './memory-storage.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
 import type {Row, Node, NormalizedValue} from './data.js';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering} from '../ast2/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
 import type {Schema, ValueType} from './schema.js';
 

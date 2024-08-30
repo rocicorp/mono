@@ -5,7 +5,7 @@ import {MemoryStorage} from './memory-storage.js';
 import {SnitchMessage, Snitch} from './snitch.js';
 import type {NormalizedValue, Row} from './data.js';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering} from '../ast2/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import type {SourceChange} from './source.js';

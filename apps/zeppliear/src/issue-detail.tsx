@@ -7,7 +7,7 @@ import DefaultAvatarIcon from './assets/icons/avatar.svg?react';
 import CloseIcon from './assets/icons/close.svg?react';
 import ConfirmationModal from './confirm-modal.jsx';
 import {useIssueDetailState} from './hooks/query-state-hooks.js';
-import {useQuery} from './hooks/use-query2.js';
+import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import {
   CommentCreationPartial,

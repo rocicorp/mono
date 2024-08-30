@@ -1,5 +1,5 @@
 import {test, expect, suite} from 'vitest';
-import {Ordering} from '../ast2/ast.js';
+import {Ordering} from '../ast/ast.js';
 import {Row, Value} from './data.js';
 import {ValueType} from './schema.js';
 import {Snitch, SnitchMessage} from './snitch.js';

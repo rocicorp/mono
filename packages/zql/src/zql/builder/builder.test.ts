@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
 import {buildPipeline} from './builder.js';
-import {Catch} from '../ivm2/catch.js';
-import {MemorySource} from '../ivm2/memory-source.js';
-import {MemoryStorage} from '../ivm2/memory-storage.js';
+import {Catch} from '../ivm/catch.js';
+import {MemorySource} from '../ivm/memory-source.js';
+import {MemoryStorage} from '../ivm/memory-storage.js';
 
 export function testSources() {
   const users = new MemorySource('table', {id: 'number', name: 'string'}, [

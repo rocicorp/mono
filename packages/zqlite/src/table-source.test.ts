@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
-import {Catch} from 'zql/src/zql/ivm2/catch.js';
-import {makeComparator} from 'zql/src/zql/ivm2/data.js';
-import {ValueType} from 'zql/src/zql/ivm2/schema.js';
-import {runCases} from 'zql/src/zql/ivm2/test/source-cases.js';
-import {compile, sql} from '../internal/sql.js';
+import {Catch} from 'zql/src/zql/ivm/catch.js';
+import {makeComparator} from 'zql/src/zql/ivm/data.js';
+import {ValueType} from 'zql/src/zql/ivm/schema.js';
+import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
+import {compile, sql} from './internal/sql.js';
 import {TableSource} from './table-source.js';
 
 const columns = {

@@ -4,7 +4,7 @@ import {orderQuery, type Issue, type Priority, type Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {assert} from './util/asserts.js';
 import {ResultType} from 'zero-client';
-import {useQueryWithResultType} from './hooks/use-query2.js';
+import {useQueryWithResultType} from './hooks/use-query.js';
 import {IssueListRow} from './queries.js';
 
 export type ListData = {

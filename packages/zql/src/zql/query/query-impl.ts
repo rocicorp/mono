@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {assert} from 'shared/src/asserts.js';
 import {resolver} from '@rocicorp/resolver';
-import {AST} from '../ast2/ast.js';
+import {AST} from '../ast/ast.js';
 import {
   AddSelections,
   AddSubselect,
@@ -22,8 +22,8 @@ import {
   PullSchemaForRelationship,
 } from './schema.js';
 import {buildPipeline, Host} from '../builder/builder.js';
-import {Ordering} from '../ast2/ast.js';
-import {ArrayView} from '../ivm2/array-view.js';
+import {Ordering} from '../ast/ast.js';
+import {ArrayView} from '../ivm/array-view.js';
 import {TypedView} from './typed-view.js';
 import {SubscriptionDelegate} from '../context/context.js';
 import {HybridQueryView} from './hybrid-query-view.js';

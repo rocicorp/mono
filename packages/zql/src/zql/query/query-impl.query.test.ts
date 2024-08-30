@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {newQuery} from './query-impl.js';
-import {MemoryStorage} from '../ivm2/memory-storage.js';
-import {MemorySource} from '../ivm2/memory-source.js';
+import {MemoryStorage} from '../ivm/memory-storage.js';
+import {MemorySource} from '../ivm/memory-source.js';
 import {
   commentSchema,
   issueLabelSchema,

@@ -14,7 +14,7 @@ import {expect, test, vi} from 'vitest';
 import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
 import {toGotQueriesKey} from './keys.js';
 import {QueryManager} from './query-manager.js';
-import {AST} from 'zql/src/zql/ast2/ast.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
 
 function createExperimentalWatchMock() {
   return vi.fn<typeof ReplicacheImpl.prototype.experimentalWatch>();

@@ -3,7 +3,7 @@ import Database, {Database as DB} from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {DbFile} from 'zero-cache/src/test/lite.js';
-import {AST} from 'zql/src/zql/ast2/ast.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {SimpleCondition, SimpleOperator} from '../ast2/ast.js';
+import {SimpleCondition, SimpleOperator} from '../ast/ast.js';
 import fc from 'fast-check';
 import {createPredicate} from './filter.js';
 import {cases} from './like.test.js';

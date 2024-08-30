@@ -10,7 +10,7 @@ import {
   vi,
 } from 'vitest';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
-import {AST} from 'zql/src/zql/ast2/ast.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use

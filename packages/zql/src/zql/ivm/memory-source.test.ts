@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {Ordering} from '../ast2/ast.js';
+import {Ordering} from '../ast/ast.js';
 import {compareRowsTest} from './data.test.js';
 import {MemorySource} from './memory-source.js';
 import {runCases} from './test/source-cases.js';
