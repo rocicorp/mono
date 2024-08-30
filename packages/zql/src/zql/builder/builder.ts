@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {AST} from '../ast2/ast.js';
+import {AST} from '../ast/ast.js';
 import {Filter} from '../ivm/filter.js';
 import {Join} from '../ivm/join.js';
 import {Input, Storage} from '../ivm/operator.js';

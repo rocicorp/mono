@@ -5,7 +5,7 @@ import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
 import {JSONObject} from 'zero-cache/src/types/bigint-json.js';
-import type {AST} from 'zql/src/zql/ast2/ast.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';

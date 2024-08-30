@@ -1,4 +1,4 @@
-import {AST} from '../ast2/ast.js';
+import {AST} from '../ast/ast.js';
 import {SubscriptionDelegate} from '../context/context.js';
 import {ArrayView, EntryList} from '../ivm/array-view.js';
 import {Immutable} from 'shared/src/immutable.js';

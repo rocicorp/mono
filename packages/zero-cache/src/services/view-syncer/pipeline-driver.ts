@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {TableSource} from '@rocicorp/zqlite/src/v2/table-source.js';
 import {assert} from 'shared/src/asserts.js';
 import {mapLiteDataTypeToZqlValueType} from 'zero-cache/src/types/lite.js';
-import {AST} from 'zql/src/zql/ast2/ast.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
 import {Node, Row} from 'zql/src/zql/ivm/data.js';

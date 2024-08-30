@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import {assertBoolean, assertNumber, assertString} from 'shared/src/asserts.js';
-import type {Ordering} from '../ast2/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import type {Stream} from './stream.js';
 
 /**

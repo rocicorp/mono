@@ -11,7 +11,7 @@ import type {
   Downstream,
   InitConnectionMessage,
 } from 'zero-protocol';
-import type {AST} from 'zql/src/zql/ast2/ast.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';

@@ -1,7 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
 import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering, SimpleCondition} from 'zql/src/zql/ast2/ast.js';
+import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
 import {
   Comparator,
   Node,

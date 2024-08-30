@@ -6,7 +6,7 @@ import {
 } from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
 import type {Downstream, EntitiesPatchOp, PokePartBody} from 'zero-protocol';
-import type {AST} from 'zql/src/zql/ast2/ast.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {JSONObject, JSONValue} from '../../types/bigint-json.js';
 import type {Subscription} from '../../types/subscription.js';
 import {

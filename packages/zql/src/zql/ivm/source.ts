@@ -1,4 +1,4 @@
-import {Ordering, SimpleCondition} from '../ast2/ast.js';
+import {Ordering, SimpleCondition} from '../ast/ast.js';
 import {Row} from './data.js';
 import {Input} from './operator.js';
 

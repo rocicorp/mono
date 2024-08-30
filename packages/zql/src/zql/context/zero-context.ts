@@ -7,7 +7,7 @@ import {Row} from '../ivm/data.js';
 import {Schema, toInputArgs} from '../query2/schema.js';
 import {Host} from '../builder/builder.js';
 import {Source} from '../ivm/source.js';
-import {AST} from '../ast2/ast.js';
+import {AST} from '../ast/ast.js';
 import {Storage} from '../ivm/operator.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import {assert} from 'shared/src/asserts.js';

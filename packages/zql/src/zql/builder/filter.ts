@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {SimpleOperator, SimpleCondition} from '../ast2/ast.js';
+import {SimpleOperator, SimpleCondition} from '../ast/ast.js';
 import {Row, Value} from '../ivm/data.js';
 import {getLikePredicate} from './like.js';
 
