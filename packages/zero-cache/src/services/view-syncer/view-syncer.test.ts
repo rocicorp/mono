@@ -34,7 +34,10 @@ const EXPECTED_LMIDS_AST: AST = {
       value: '9876',
     },
   ],
-  orderBy: [['clientID', 'asc']],
+  orderBy: [
+    ['clientGroupID', 'asc'],
+    ['clientID', 'asc'],
+  ],
 };
 
 describe('view-syncer/service', () => {
