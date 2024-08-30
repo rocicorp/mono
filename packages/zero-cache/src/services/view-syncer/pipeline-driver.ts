@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {TableSource} from '@rocicorp/zqlite/src/v2/table-source.js';
+import {TableSource} from '@rocicorp/zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
 import {mapLiteDataTypeToZqlValueType} from 'zero-cache/src/types/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';

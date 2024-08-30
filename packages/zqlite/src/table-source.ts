@@ -27,8 +27,8 @@ import type {
   SourceInput,
 } from 'zql/src/zql/ivm/source.js';
 import {Stream} from 'zql/src/zql/ivm/stream.js';
-import {compile, format, sql} from '../internal/sql.js';
-import {StatementCache} from '../internal/statement-cache.js';
+import {compile, format, sql} from './internal/sql.js';
+import {StatementCache} from './internal/statement-cache.js';
 
 type Connection = {
   input: Input;
