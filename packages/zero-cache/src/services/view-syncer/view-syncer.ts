@@ -574,5 +574,4 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 }
 
-// TODO: Increase this once performance issues are resolved.
 const CURSOR_PAGE_SIZE = 10000;
