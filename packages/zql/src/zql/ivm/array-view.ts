@@ -5,6 +5,7 @@ import {Change} from './change.js';
 import {Comparator, Row, Value} from './data.js';
 import {Input, Output} from './operator.js';
 import {Schema} from './schema.js';
+import { assertOrderingIncludesPK } from '../builder/builder.js';
 
 /**
  * Called when the view changes. The received data should be considered
@@ -40,6 +41,7 @@ export class ArrayView implements Output {
     this.#schema = input.getSchema();
     this.#input.setOutput(this);
     this.#view = [];
+    assertOrderingIncludesPK(this.#schema.sort, this.#schema.primaryKey);
   }
 
   get data() {

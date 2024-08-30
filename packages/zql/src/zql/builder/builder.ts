@@ -8,6 +8,7 @@ import {createPredicate} from './filter.js';
 import {must} from 'shared/src/must.js';
 import {Take} from '../ivm/take.js';
 import {Skip} from '../ivm/skip.js';
+import type {Ordering} from '../ast/ast.js';
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
@@ -107,3 +108,13 @@ function buildPipelineInternal(
 
   return end;
 }
+
+export function assertOrderingIncludesPK(ordering: Ordering, pk: readonly string[]): void {
+  const orderingFields = new Set(ordering.map(([field]) => field));
+  for (const pkField of pk) {
+    if (!orderingFields.has(pkField)) {
+      throw new Error(`Ordering must include all primary key fields. Missing: ${pkField}`);
+    }
+  }
+}
+

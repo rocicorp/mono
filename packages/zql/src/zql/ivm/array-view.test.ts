@@ -338,12 +338,14 @@ test('collapse hidden relationships', () => {
       id: {type: 'number'},
       name: {type: 'string'},
     },
+    sort: [['id', 'asc']],
     isHidden: false,
     compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
     relationships: {
       labels: {
         tableName: 'issueLabel',
         primaryKey: ['id'],
+        sort: [['id', 'asc']],
         columns: {
           id: {type: 'number'},
           issueId: {type: 'number'},
@@ -360,6 +362,7 @@ test('collapse hidden relationships', () => {
               name: {type: 'string'},
             },
             isHidden: false,
+            sort: [['id', 'asc']],
             compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
             relationships: {},
           },

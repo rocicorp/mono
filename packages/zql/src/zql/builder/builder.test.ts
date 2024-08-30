@@ -53,7 +53,7 @@ test('source-only', () => {
     buildPipeline(
       {
         table: 'users',
-        orderBy: [['name', 'asc']],
+        orderBy: [['name', 'asc'],['id','asc']],
       },
       {
         getSource,

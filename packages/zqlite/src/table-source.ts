@@ -34,6 +34,7 @@ import type {
 import {Stream} from 'zql/src/zql/ivm/stream.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
+import { assertOrderingIncludesPK } from 'zql/src/zql/builder/builder.js';
 
 type Connection = {
   input: Input;
@@ -142,6 +143,7 @@ export class TableSource implements Source {
       tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
+      sort: connection.sort,
       relationships: {},
       isHidden: false,
       compareRows: connection.compareRows,
@@ -163,7 +165,7 @@ export class TableSource implements Source {
       },
       appliedFilters: true,
     };
-
+    
     const connection: Connection = {
       input,
       output: undefined,
@@ -171,7 +173,8 @@ export class TableSource implements Source {
       filters: optionalFilters ?? [],
       compareRows: makeComparator(sort),
     };
-
+    assertOrderingIncludesPK(sort, this.#primaryKey);
+ 
     this.#connections.push(connection);
     return input;
   }
