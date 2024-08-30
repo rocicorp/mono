@@ -1,9 +1,9 @@
 import {assert} from 'shared/src/asserts.js';
-import {type Node, normalizeUndefined, type NormalizedValue} from './data.js';
-import type {FetchRequest, Input, Output, Storage} from './operator.js';
-import {take, type Stream} from './stream.js';
 import type {Change} from './change.js';
+import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
+import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {Schema} from './schema.js';
+import {take, type Stream} from './stream.js';
 
 type Args = {
   parent: Input;
@@ -55,14 +55,10 @@ export class Join implements Input {
     this.#hidden = hidden;
 
     this.#parent.setOutput({
-      push: (change: Change) => {
-        this.#push(change, 'parent');
-      },
+      push: (change: Change) => this.#pushParent(change),
     });
     this.#child.setOutput({
-      push: (change: Change) => {
-        this.#push(change, 'child');
-      },
+      push: (change: Change) => this.#pushChild(change),
     });
   }
 
@@ -101,29 +97,26 @@ export class Join implements Input {
     }
   }
 
-  #push(change: Change, from: 'parent' | 'child'): void {
+  #pushParent(change: Change): void {
     assert(this.#output, 'Output not set');
-
-    if (from === 'parent') {
-      if (change.type === 'add') {
-        this.#output.push({
-          type: 'add',
-          node: this.#processParentNode(change.node, 'fetch'),
-        });
-      } else if (change.type === 'remove') {
-        this.#output.push({
-          type: 'remove',
-          node: this.#processParentNode(change.node, 'cleanup'),
-        });
-      } else {
-        change.type satisfies 'child';
-        this.#output.push(change);
-      }
-      return;
+    if (change.type === 'add') {
+      this.#output.push({
+        type: 'add',
+        node: this.#processParentNode(change.node, 'fetch'),
+      });
+    } else if (change.type === 'remove') {
+      this.#output.push({
+        type: 'remove',
+        node: this.#processParentNode(change.node, 'cleanup'),
+      });
+    } else {
+      change.type satisfies 'child';
+      this.#output.push(change);
     }
+  }
 
-    from satisfies 'child';
-
+  #pushChild(change: Change): void {
+    assert(this.#output, 'Output not set');
     const childRow = change.type === 'child' ? change.row : change.node.row;
     const parentNodes = this.#parent.fetch({
       constraint: {
