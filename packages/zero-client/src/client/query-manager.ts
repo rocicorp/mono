@@ -1,59 +1,28 @@
 import type {ClientID} from 'replicache';
-import type {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import {must} from 'shared/src/must.js';
 import xxh from 'xxhashjs';
 import type {ChangeDesiredQueriesMessage, QueriesPatch} from 'zero-protocol';
 import {normalizeAST, type AST} from 'zql/src/zql/ast/ast.js';
-import type {GotCallback} from 'zql/src/zql/context/context.js';
 import type {ReadTransaction} from '../mod.js';
-import {GOT_QUERIES_KEY_PREFIX, desiredQueriesPrefixForClient} from './keys.js';
+import {desiredQueriesPrefixForClient} from './keys.js';
 
-const defaultGotCallback = () => {};
-
+/**
+ * Tracks what queries the client is currently subscribed to on the server.
+ * Sends `changeDesiredQueries` message to server when this changes.
+ * Deduplicates requests so that we only listen to a given unique query once.
+ */
 export class QueryManager {
   readonly #clientID: ClientID;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
-  readonly #queries: Map<
-    string,
-    {normalized: AST; gotCallbacks: GotCallback[]}
-  > = new Map();
-  readonly #gotQueries: Set<string> = new Set();
+  readonly #queries: Map<QueryHash, {normalized: AST; count: number}> =
+    new Map();
 
   constructor(
     clientID: ClientID,
     send: (change: ChangeDesiredQueriesMessage) => void,
-    experimentalWatch: InstanceType<typeof ReplicacheImpl>['experimentalWatch'],
   ) {
     this.#clientID = clientID;
     this.#send = send;
-    experimentalWatch(
-      diff => {
-        for (const diffOp of diff) {
-          const queryHash = diffOp.key.substring(GOT_QUERIES_KEY_PREFIX.length);
-          switch (diffOp.op) {
-            case 'add':
-              this.#gotQueries.add(queryHash);
-              this.#fireGotCallbacks(queryHash, true);
-              break;
-            case 'del':
-              this.#gotQueries.delete(queryHash);
-              this.#fireGotCallbacks(queryHash, false);
-              break;
-          }
-        }
-      },
-      {
-        prefix: GOT_QUERIES_KEY_PREFIX,
-        initialValuesInFirstDiff: true,
-      },
-    );
-  }
-
-  #fireGotCallbacks(queryHash: string, got: boolean) {
-    const gotCallbacks = this.#queries.get(queryHash)?.gotCallbacks ?? [];
-    for (const gotCallback of gotCallbacks) {
-      gotCallback(got);
-    }
   }
 
   async getQueriesPatch(tx: ReadTransaction): Promise<QueriesPatch> {
@@ -76,12 +45,12 @@ export class QueryManager {
     return patch;
   }
 
-  add(ast: AST, gotCallback: GotCallback = defaultGotCallback): () => void {
+  add(ast: AST): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hash(normalized);
     let entry = this.#queries.get(astHash);
     if (!entry) {
-      entry = {normalized, gotCallbacks: [gotCallback]};
+      entry = {normalized, count: 1};
       this.#queries.set(astHash, entry);
       this.#send([
         'changeDesiredQueries',
@@ -90,26 +59,23 @@ export class QueryManager {
         },
       ]);
     } else {
-      entry.gotCallbacks.push(gotCallback);
+      ++entry.count;
     }
 
-    queueMicrotask(() => {
-      gotCallback(this.#gotQueries.has(astHash));
-    });
     let removed = false;
     return () => {
       if (removed) {
         return;
       }
       removed = true;
-      this.#remove(astHash, gotCallback);
+      this.#remove(astHash);
     };
   }
 
-  #remove(astHash: string, gotCallback: GotCallback) {
+  #remove(astHash: string) {
     const entry = must(this.#queries.get(astHash));
-    entry.gotCallbacks.splice(entry.gotCallbacks.indexOf(gotCallback), 1);
-    if (entry.gotCallbacks.length === 0) {
+    --entry.count;
+    if (entry.count === 0) {
       this.#queries.delete(astHash);
       this.#send([
         'changeDesiredQueries',
@@ -122,6 +88,8 @@ export class QueryManager {
   }
 }
 
-function hash(normalized: AST): string {
+type QueryHash = string;
+
+function hash(normalized: AST): QueryHash {
   return xxh.h64(0).update(JSON.stringify(normalized)).digest().toString(36);
 }

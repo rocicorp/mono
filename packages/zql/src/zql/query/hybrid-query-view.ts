@@ -3,11 +3,7 @@ import {SubscriptionDelegate} from '../context/context.js';
 import {ArrayView, EntryList} from '../ivm/array-view.js';
 import {Immutable} from 'shared/src/immutable.js';
 
-export type ResultType = 'complete' | 'partial' | 'none';
-export type Listener = (
-  entries: Immutable<EntryList>,
-  resultType: ResultType,
-) => void;
+export type Listener = (entries: Immutable<EntryList>) => void;
 
 /**
  * Wraps an ArrayView and wires it to the ZeroProtocol
@@ -18,7 +14,6 @@ export class HybridQueryView {
   readonly #view: ArrayView;
   readonly #ast: AST;
   readonly #subscriptionDelegate: SubscriptionDelegate;
-  #resultType: ResultType = 'none';
   #hydrated = false;
 
   constructor(
@@ -38,24 +33,8 @@ export class HybridQueryView {
   addListener(listener: Listener) {
     const subscriptionRemoved = this.#subscriptionDelegate.subscriptionAdded(
       this.#ast,
-      got => {
-        if (got) {
-          this.#resultType = 'complete';
-        }
-        if (this.#hydrated) {
-          // When we get the gotQueries signal, we need to call the callback since
-          // the result might be empty and the view won't trigger a change.
-          listener(this.#view.data, this.#resultType);
-        }
-      },
     );
-
-    const cleanupViewListener = this.#view.addListener(() => {
-      if (this.#resultType === 'none') {
-        this.#resultType = 'partial';
-      }
-      listener(this.#view.data, this.#resultType);
-    });
+    const cleanupViewListener = this.#view.addListener(listener);
     return () => {
       subscriptionRemoved();
       cleanupViewListener();
@@ -67,6 +46,9 @@ export class HybridQueryView {
   }
 
   hydrate() {
+    if (this.#hydrated) {
+      throw new Error('Already hydrated');
+    }
     this.#hydrated = true;
     this.#view.hydrate();
   }

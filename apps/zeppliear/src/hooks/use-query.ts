@@ -3,18 +3,16 @@ import type {Schema} from 'zql/src/zql/query/schema.js';
 import type {Query, QueryResultRow, Smash} from 'zql/src/zql/query/query.js';
 import {TypedView} from 'zql/src/zql/query/typed-view.js';
 import {deepClone} from 'shared/src/deep-clone.js';
-import {ResultType} from 'zero-client';
 
-export function useQueryWithResultType<
+export function useQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow>,
 >(
   q: Query<TSchema, TReturn> | undefined,
   dependencies: readonly unknown[] = [],
   enabled = true,
-): {snapshot: Smash<TReturn>; resultType: ResultType} {
+): Smash<TReturn> {
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>([]);
-  const [resultType, setResultType] = useState<ResultType>('none');
   const [, setView] = useState<TypedView<Smash<TReturn>> | undefined>(
     undefined,
   );
@@ -23,9 +21,8 @@ export function useQueryWithResultType<
     if (enabled && q) {
       const view = q.materialize();
       setView(view);
-      const unsubscribe = view.addListener((snapshot, resultType) => {
+      const unsubscribe = view.addListener(snapshot => {
         setSnapshot(deepClone(snapshot) as Smash<TReturn>);
-        setResultType(resultType);
       });
       view.hydrate();
       return () => {
@@ -39,16 +36,5 @@ export function useQueryWithResultType<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
-  return {snapshot, resultType};
-}
-
-export function useQuery<
-  TSchema extends Schema,
-  TReturn extends Array<QueryResultRow>,
->(
-  q: Query<TSchema, TReturn> | undefined,
-  dependencies: readonly unknown[] = [],
-  enabled = true,
-): Smash<TReturn> {
-  return useQueryWithResultType(q, dependencies, enabled).snapshot;
+  return snapshot;
 }
