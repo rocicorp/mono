@@ -253,7 +253,7 @@ export class CVRStore {
   }
 
   numPendingWrites(): number {
-    return this.#writes.size;
+    return this.#writes.size + this.#pendingRowRecordPuts.size;
   }
 
   markQueryAsDeleted(

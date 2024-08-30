@@ -491,9 +491,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (rows.size % CURSOR_PAGE_SIZE === 0) {
-        const t0 = Date.now();
         await processBatch();
-        console.log('processBatch', Date.now() - t0);
       }
     }
     if (rows.size) {
