@@ -110,8 +110,8 @@ function buildPipelineInternal(
 }
 
 export function assertOrderingIncludesPK(ordering: Ordering, pk: readonly string[]): void {
-  const orderingFields = new Set(ordering.map(([field]) => field));
-  const missingFields = pk.filter(pkField => !orderingFields.has(pkField));
+  const orderingFields = ordering.map(([field]) => field);
+  const missingFields = pk.filter(pkField => !orderingFields.includes(pkField));
   
   if (missingFields.length > 0) {
     throw new Error(`Ordering must include all primary key fields. Missing: ${missingFields.join(', ')}`);
