@@ -528,6 +528,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         continue;
       }
 
+      console.log('1', deletedID);
       patches.push({
         toVersion: this._cvr.version,
         patch: {type: 'row', op: 'del', id: deletedID},
@@ -545,6 +546,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       const {id} = rowPatch;
       if (rowPatch.op === 'del') {
+        console.log('2', id);
         patches.push({patch: {type: 'row', op: 'del', id}, toVersion});
       }
     }

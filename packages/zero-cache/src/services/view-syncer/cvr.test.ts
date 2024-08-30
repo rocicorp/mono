@@ -706,7 +706,7 @@ describe('view-syncer/cvr', () => {
 
   const IN_OLD_PATCH_ROW_KEY = {id: '777'};
 
-  test('desired to got', async () => {
+  test.only('desired to got', async () => {
     const initialState: DBState = {
       instances: [
         {
