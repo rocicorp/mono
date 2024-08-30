@@ -102,16 +102,14 @@ export type NormalizedValue = Exclude<Value, undefined>;
  * of input values, so we just normalize at use when necessary.
  */
 export function normalizeUndefined(v: Value): NormalizedValue {
-  if (v === undefined) {
-    return null;
-  }
-  return v;
+  return v ?? null;
 }
 
 export type Comparator = (r1: Row, r2: Row) => number;
 
 export function makeComparator(order: Ordering): Comparator {
   return (a, b) => {
+    // Skip destructuring here since it is hot code.
     for (const ord of order) {
       const field = ord[0];
       const comp = compareValues(a[field], b[field]);
