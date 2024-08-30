@@ -448,6 +448,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       // Accumulate all received refCounts to determine which rows to prune.
       const previouslyReceived = this.#receivedRows.get(id);
+
       const merged =
         previouslyReceived !== undefined
           ? mergeRefCounts(previouslyReceived, refCounts)
@@ -472,7 +473,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         patchVersion,
         refCounts: merged,
       };
-      this._cvrStore.putRowRecord(updated, existing?.patchVersion);
+
+      this._cvrStore.putRowRecord(updated);
 
       if (contents) {
         patches.push({
@@ -527,27 +529,23 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       if (deletedID === null) {
         continue;
       }
-
-      console.log('1', deletedID);
       patches.push({
         toVersion: this._cvr.version,
         patch: {type: 'row', op: 'del', id: deletedID},
       });
     }
 
-    // Now catch up clients with row patches that haven't been deleted.
+    // Now catch up clients with row patches that haven't been overwritten.
     assert(this.#catchupRowPatches, `trackQueries must first be called`);
     const catchupRowPatches = await this.#catchupRowPatches;
     lc.debug?.(`processing ${catchupRowPatches.length} row patches`);
     for (const [rowPatch, toVersion] of catchupRowPatches) {
-      if (this._cvrStore.isRowVersionPendingDelete(rowPatch.id, toVersion)) {
-        console.log('isRowVersionPendingDelete', rowPatch.id);
+      if (this._cvrStore.getPendingRowRecord(rowPatch.id)) {
         continue;
       }
 
       const {id} = rowPatch;
       if (rowPatch.op === 'del') {
-        console.log('2', id);
         patches.push({patch: {type: 'row', op: 'del', id}, toVersion});
       }
     }
@@ -617,7 +615,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       refCounts: newRefCounts,
     };
 
-    this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
+    this._cvrStore.putRowRecord(rowRecord);
 
     // Return the id to delete if no longer referenced.
     return newRefCounts ? null : existing.id;

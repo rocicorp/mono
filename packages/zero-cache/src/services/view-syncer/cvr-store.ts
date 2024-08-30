@@ -217,10 +217,6 @@ export class CVRStore {
   }
 
   cancelPendingRowRecordWrite(id: RowID): void {
-    const pair = this.#pendingRowRecordPuts.get(id);
-    if (!pair) {
-      return;
-    }
     this.#pendingRowRecordPuts.delete(id);
   }
 
@@ -245,20 +241,7 @@ export class CVRStore {
     return this.#rowCache.getMultipleRowEntries(rowIDs);
   }
 
-  putRowRecord(
-    row: RowRecord,
-    oldRowPatchVersionToDelete: CVRVersion | undefined,
-  ): void {
-    if (oldRowPatchVersionToDelete) {
-      // add pending delete for the old patch version.
-      this.#pendingRowVersionDeletes.add([row.id, oldRowPatchVersionToDelete]);
-
-      // No need to delete the old row because it will be replaced by the new one.
-    }
-
-    // Clear any pending deletes for this row and patchVersion.
-    this.#pendingRowVersionDeletes.delete([row.id, row.patchVersion]);
-
+  putRowRecord(row: RowRecord): void {
     // If we are writing the same again then delete the old write.
     this.cancelPendingRowRecordWrite(row.id);
 
