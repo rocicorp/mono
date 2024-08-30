@@ -327,8 +327,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // We can use something like:
     //   SELECT * FROM cvr.rows WHERE "refCounts" ?| array[...queryHashes...];
 
-    const allRowRecords = await this._cvrStore.allRowRecords();
-
+    const allRowRecords = (await this._cvrStore.getRowRecords()).values();
     let total = 0;
     for (const existing of allRowRecords) {
       total++;
@@ -437,9 +436,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): Promise<PatchToVersion[]> {
     const patches: PatchToVersion[] = [];
 
-    const existingRows = await this._cvrStore.getMultipleRowEntries(
-      rows.keys(),
-    );
+    const existingRows = await this._cvrStore.getRowRecords();
 
     for (const [id, update] of rows.entries()) {
       const {contents, version, refCounts} = update;

@@ -68,14 +68,7 @@ class RowRecordCache {
     return this.#cache;
   }
 
-  async allRowRecords(): Promise<Iterable<RowRecord>> {
-    return (await this.#ensureLoaded()).values();
-  }
-
-  getMultipleRowEntries(
-    _rowIDs: Iterable<RowID>,
-  ): Promise<Map<RowID, RowRecord>> {
-    // Should we filter and return a new map?
+  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
     return this.#ensureLoaded();
   }
 
@@ -235,10 +228,8 @@ export class CVRStore {
     return this.#pendingRowVersionDeletes.has([rowID, version]);
   }
 
-  getMultipleRowEntries(
-    rowIDs: Iterable<RowID>,
-  ): Promise<Map<RowID, RowRecord>> {
-    return this.#rowCache.getMultipleRowEntries(rowIDs);
+  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
+    return this.#rowCache.getRowRecords();
   }
 
   putRowRecord(row: RowRecord): void {
@@ -491,10 +482,6 @@ export class CVRStore {
     }
 
     return rv;
-  }
-
-  allRowRecords(): Promise<Iterable<RowRecord>> {
-    return this.#rowCache.allRowRecords();
   }
 
   async flush(): Promise<void> {
