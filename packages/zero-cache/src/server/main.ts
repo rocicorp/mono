@@ -1,11 +1,12 @@
 import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
+import path from 'node:path';
 import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
 import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {childWorker} from '../types/processes.js';
+import {childWorker, getMessage, Worker} from '../types/processes.js';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
@@ -26,29 +27,33 @@ function logErrorAndExit(err: unknown) {
 let numReady = 0;
 const {promise: allReady, resolve: signalAllReady} = resolver<true>();
 
-function handleReady(name: string, id?: number) {
-  lc.debug?.(
-    `${name}${id ? ' #' + id : ''} ready (${Date.now() - startMs} ms)`,
-  );
-  if (++numReady === numSyncers + 1) {
-    signalAllReady(true);
-  }
+function loadWorker(module: string, id?: number): Worker {
+  const worker = childWorker(module);
+  const name = path.basename(module, '.ts') + (id ? ' #' + id : '');
+
+  const onReady = (data: undefined) => {
+    if (getMessage('ready', data)) {
+      lc.debug?.(`${name} ready (${Date.now() - startMs} ms)`);
+      if (++numReady === numSyncers + 1) {
+        signalAllReady(true);
+      }
+      worker.off('message', onReady); // No need to listen anymore.
+    }
+  };
+
+  return worker.on('message', onReady).on('close', logErrorAndExit);
 }
 
-const replicator = childWorker('./src/server/replicator.ts')
-  .once('message', () => {
-    subscribeTo(replicator);
-    handleReady('replicator');
-  })
-  .on('close', logErrorAndExit);
+const replicator = loadWorker('./src/server/replicator.ts').once(
+  'message',
+  () => subscribeTo(replicator),
+);
 
 const numSyncers = Math.max(1, availableParallelism() - 1); // Reserve 1 for the Replicator
 const notifier = createNotifierFrom(replicator);
 
 const syncers = Array.from({length: numSyncers}, (_, i) => {
-  const syncer = childWorker('./src/server/syncer.ts')
-    .once('message', () => handleReady('syncer', i + 1))
-    .on('close', logErrorAndExit);
+  const syncer = loadWorker('./src/server/syncer.ts', i + 1);
   handleSubscriptionsFrom(syncer, notifier);
   return syncer;
 });
