@@ -11,8 +11,7 @@
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "local": "node --loader ts-node/esm tool/local.ts",
-    "start": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts",
-    "single-thread": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/single-thread.ts"
+    "start": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",

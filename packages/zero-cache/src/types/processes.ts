@@ -1,5 +1,6 @@
 import {fork, ForkOptions, SendHandle, Serializable} from 'child_process';
-import {EventEmitter} from 'stream';
+import EventEmitter from 'events';
+import path from 'path';
 
 /**
  * Central registry of message type names, which are used to identify
@@ -61,7 +62,20 @@ export interface Worker extends Sender, Receiver {}
 // The {@link send} method simply restricts the message type for clarity.
 export const parentWorker: Worker = process as Worker;
 
+const SINGLE_PROCESS = 'SINGLE_PROCESS';
+
+export function singleProcessMode(): boolean {
+  return (process.env[SINGLE_PROCESS] ?? '0') !== '0';
+}
+
 export function childWorker(module: string, options?: ForkOptions): Worker {
+  if (singleProcessMode()) {
+    const [parent, child] = inProcChannel();
+    void import(path.join('../../', module)).then(({default: runWorker}) =>
+      runWorker(parent),
+    );
+    return child;
+  }
   // Note: It is okay to cast a Processor or ChildProcess as a Worker.
   // The {@link send} method simply restricts the message type for clarity.
   return fork(module, {...options, serialization: 'advanced'}) as Worker;
