@@ -13,7 +13,7 @@ import {
   SchemaDefs,
   MakeEntityQueriesFromQueryDefs,
 } from 'zero-client/src/client/zero.js';
-import {Host} from 'zql/src/zql/builder/builder.js';
+import {BuilderDelegate} from 'zql/src/zql/builder/builder.js';
 import {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
 import {Query} from 'zero-client/src/mod.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
@@ -23,7 +23,7 @@ import {Row} from 'zql/src/zql/ivm/data.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
 export class ZQLiteZero<SD extends SchemaDefs> {
-  readonly zqlContext: Host & SubscriptionDelegate;
+  readonly zqlContext: BuilderDelegate & SubscriptionDelegate;
   readonly query: MakeEntityQueriesFromQueryDefs<SD>;
   readonly mutate: MakeCRUDMutate<SD>;
   db: Database;
