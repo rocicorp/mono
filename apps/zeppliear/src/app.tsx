@@ -12,7 +12,7 @@ import {
   useOrderByState,
   useViewState,
 } from './hooks/query-state-hooks.js';
-import {useQuery} from './hooks/use-query2.js';
+import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import IssueBoard from './issue-board.jsx';
 import IssueDetail from './issue-detail.jsx';

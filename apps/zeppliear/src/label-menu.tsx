@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery} from './hooks/use-query2.js';
+import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
 import {getLabelColor} from './issue.js';
 import {LabelTypeahead} from './label-typeahead.jsx';
