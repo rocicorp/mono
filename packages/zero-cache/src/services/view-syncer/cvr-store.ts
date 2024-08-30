@@ -34,7 +34,6 @@ import {
   type RowPatch,
   type RowRecord,
 } from './schema/types.js';
-import fs from 'node:fs';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -53,7 +52,6 @@ export class RowRecordCache {
     if (this.#loaded) {
       return;
     }
-    console.log('LLOOOOOOADDDDDINGGGGG!!!!');
     for await (const rows of this.#db<
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
@@ -523,69 +521,28 @@ export class CVRStore {
   }
 
   async flush(): Promise<void> {
-    const t0 = Date.now();
     await this.#db.begin(async tx => {
       if (this.#pendingRowRecordPuts.size > 0) {
-        const t00 = Date.now();
-        const t01 = Date.now();
-        const rows = [...this.#pendingRowRecordPuts.values()].map(r =>
+        const rowRecordRows = [...this.#pendingRowRecordPuts.values()].map(r =>
           rowRecordToRowsRow(this.#id, r),
         );
-        console.log('rowRecordToRowsRow', Date.now() - t01);
         let i = 0;
-        while (i < rows.length) {
-          const content = `INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts") 
-          VALUES ${rows
-            .slice(i, i + 9_000)
-            .map(
-              r =>
-                `('${r.clientGroupID}', '${r.schema}', '${
-                  r.table.substring(0, r.table.length - 1) + '1'
-                }', '${JSON.stringify(r.rowKey)}'::JSONB, '${r.rowVersion}', '${
-                  r.patchVersion
-                }', '${JSON.stringify(r.refCounts)}'::JSONB)`,
-            )
-            .join(',')} 
+        while (i < rowRecordRows.length) {
+          await tx`INSERT INTO cvr.rows ${tx(
+            rowRecordRows.slice(i, i + ROW_RECORD_WRITE_BATCH_SIZE),
+          )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
             DO UPDATE SET "rowVersion" = excluded."rowVersion",
               "patchVersion" = excluded."patchVersion",
               "refCounts" = excluded."refCounts"`;
-
-          fs.writeFile(
-            `/Users/greg/scratch/insert-${this.#id}-${i}.txt`,
-            content,
-            err => {
-              if (err) {
-                console.error(err);
-              } else {
-                // file written successfully
-              }
-            },
-          );
-          const t02 = Date.now();
-          const t = tx`INSERT INTO cvr.rows ${tx(rows.slice(i, i + 9_000))} 
-            ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-            DO UPDATE SET "rowVersion" = excluded."rowVersion",
-              "patchVersion" = excluded."patchVersion",
-              "refCounts" = excluded."refCounts"`;
-          console.log('tx interp', i, Date.now() - t02);
-          const t03 = Date.now();
-          await t;
-          console.log('flush batch', i, Date.now() - t03);
-          i += 10_000;
+          i += ROW_RECORD_WRITE_BATCH_SIZE;
         }
-
-        console.log('rowRecords flush', Date.now() - t00);
       }
       for (const write of this.#writes) {
         await write(tx);
       }
     });
-    console.log('db flush', this.#pendingRowRecordPuts.size, Date.now() - t0);
-
-    const t1 = Date.now();
     await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
-    console.log('cache flush', Date.now() - t1);
 
     this.#writes.clear();
     this.#pendingRowVersionDeletes.clear();
@@ -593,3 +550,5 @@ export class CVRStore {
     this.#pendingRowRecordPuts.clear();
   }
 }
+
+const ROW_RECORD_WRITE_BATCH_SIZE = 9000;
