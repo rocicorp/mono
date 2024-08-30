@@ -184,7 +184,7 @@ export class PipelineDriver {
     this.#lc.debug?.(`Advanced to ${diff.curr.version}`);
   }
 
-  /** Implements `Host.getSource()` */
+  /** Implements `BuilderDelegate.getSource()` */
   #getSource(tableName: string): Source {
     assert(this.#tableSpecs, 'Pipelines have not be initialized');
     let source = this.#tables.get(tableName);
@@ -216,7 +216,7 @@ export class PipelineDriver {
     return source;
   }
 
-  /** Implements `Host.createStorage()` */
+  /** Implements `BuilderDelegate.createStorage()` */
   #createStorage(): Storage {
     return this.#storage.createStorage();
   }

@@ -83,7 +83,7 @@ import {
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
-import {Host} from '../../../zql/src/zql/builder/builder.js';
+import {BuilderDelegate} from '../../../zql/src/zql/builder/builder.js';
 
 export type SchemaDefs = {
   readonly [table: string]: Schema;
@@ -249,7 +249,7 @@ export class Zero<QD extends SchemaDefs> {
     // intentionally empty
   };
 
-  readonly #zqlContext: Host & SubscriptionDelegate;
+  readonly #zqlContext: BuilderDelegate & SubscriptionDelegate;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.

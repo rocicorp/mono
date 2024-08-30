@@ -21,7 +21,7 @@ import {
   Lazy,
   PullSchemaForRelationship,
 } from './schema.js';
-import {buildPipeline, Host} from '../builder/builder.js';
+import {buildPipeline, BuilderDelegate} from '../builder/builder.js';
 import {Ordering} from '../ast/ast.js';
 import {ArrayView} from '../ivm/array-view.js';
 import {TypedView} from './typed-view.js';
@@ -31,7 +31,10 @@ import {HybridQueryView} from './hybrid-query-view.js';
 export function newQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
->(host: Host & SubscriptionDelegate, schema: TSchema): Query<TSchema, TReturn> {
+>(
+  host: BuilderDelegate & SubscriptionDelegate,
+  schema: TSchema,
+): Query<TSchema, TReturn> {
   return new QueryImpl(host, schema);
 }
 
@@ -42,11 +45,11 @@ class QueryImpl<
 > implements Query<TSchema, TReturn, TAs>
 {
   readonly #ast: AST;
-  readonly #host: Host & SubscriptionDelegate;
+  readonly #host: BuilderDelegate & SubscriptionDelegate;
   readonly #schema: TSchema;
 
   constructor(
-    host: Host & SubscriptionDelegate,
+    host: BuilderDelegate & SubscriptionDelegate,
     schema: TSchema,
     ast?: AST | undefined,
   ) {
@@ -62,7 +65,7 @@ class QueryImpl<
     TReturn extends Array<QueryResultRow>,
     TAs extends string,
   >(
-    host: Host & SubscriptionDelegate,
+    host: BuilderDelegate & SubscriptionDelegate,
     schema: TSchema,
     ast: AST,
   ): Query<TSchema, TReturn, TAs> {
