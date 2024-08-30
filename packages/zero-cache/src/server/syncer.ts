@@ -1,6 +1,6 @@
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {threadId} from 'node:worker_threads';
+import {pid} from 'node:process';
 import postgres from 'postgres';
 import {randInt} from 'shared/src/rand.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
@@ -46,7 +46,7 @@ const dbWarmup = Promise.allSettled([
 const tmpDir = config.STORAGE_DB_TMP_DIR ?? tmpdir();
 const operatorStorage = DatabaseStorage.create(
   lc,
-  path.join(tmpDir, `sync-worker-${threadId}-${randInt(1000000, 9999999)}`),
+  path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
 );
 
 const viewSyncerFactory = (
