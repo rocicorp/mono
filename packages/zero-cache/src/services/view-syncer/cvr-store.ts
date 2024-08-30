@@ -37,53 +37,52 @@ import {
 
 type NotNull<T> = T extends null ? never : T;
 
-export class RowRecordCache {
-  #loaded = false;
-  readonly #cache = new CustomKeyMap<RowID, RowRecord>(rowIDHash);
+class RowRecordCache {
+  #cache: CustomKeyMap<RowID, RowRecord> | undefined;
   readonly #db: PostgresDB;
-  readonly #clientGroupID: string;
+  readonly #cvrID: string;
 
-  constructor(db: PostgresDB, clientGroupID: string) {
+  constructor(db: PostgresDB, cvrID: string) {
     this.#db = db;
-    this.#clientGroupID = clientGroupID;
+    this.#cvrID = cvrID;
   }
 
-  async #ensureLoaded() {
-    if (this.#loaded) {
-      return;
+  async #ensureLoaded(): Promise<CustomKeyMap<RowID, RowRecord>> {
+    if (this.#cache) {
+      return this.#cache;
     }
+    const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
     for await (const rows of this.#db<
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
-      this.#clientGroupID
+      this.#cvrID
     } AND "refCounts" IS NOT NULL`
       // TODO(arv): Arbitrary page size
-      .cursor(1000)) {
+      .cursor(5000)) {
       for (const row of rows) {
         const rowRecord = rowsRowToRowRecord(row);
-        this.#cache.set(rowRecord.id, rowRecord);
+        cache.set(rowRecord.id, rowRecord);
       }
     }
-    this.#loaded = true;
-  }
-
-  async allRowRecords(): Promise<Iterable<RowRecord>> {
-    await this.#ensureLoaded();
-    return this.#cache.values();
-  }
-
-  async getMultipleRowEntries(
-    _rowIDs: Iterable<RowID>,
-  ): Promise<Map<RowID, RowRecord>> {
-    await this.#ensureLoaded();
-    // Should we filter and return a new map?
+    this.#cache = cache;
     return this.#cache;
   }
 
+  async allRowRecords(): Promise<Iterable<RowRecord>> {
+    return (await this.#ensureLoaded()).values();
+  }
+
+  getMultipleRowEntries(
+    _rowIDs: Iterable<RowID>,
+  ): Promise<Map<RowID, RowRecord>> {
+    // Should we filter and return a new map?
+    return this.#ensureLoaded();
+  }
+
   async flush(rowRecords: IterableIterator<RowRecord>) {
-    await this.#ensureLoaded();
+    const cache = await this.#ensureLoaded();
     for (const row of rowRecords) {
-      this.#cache.set(row.id, row);
+      cache.set(row.id, row);
     }
   }
 }
@@ -137,16 +136,11 @@ export class CVRStore {
   );
   readonly #rowCache: RowRecordCache;
 
-  constructor(
-    lc: LogContext,
-    db: PostgresDB,
-    cvrID: string,
-    rowCache: RowRecordCache,
-  ) {
+  constructor(lc: LogContext, db: PostgresDB, cvrID: string) {
     this.#lc = lc;
     this.#db = db;
     this.#id = cvrID;
-    this.#rowCache = rowCache;
+    this.#rowCache = new RowRecordCache(db, cvrID);
   }
 
   async load(): Promise<CVR> {
@@ -529,13 +523,13 @@ export class CVRStore {
         let i = 0;
         while (i < rowRecordRows.length) {
           await tx`INSERT INTO cvr.rows ${tx(
-            rowRecordRows.slice(i, i + ROW_RECORD_WRITE_BATCH_SIZE),
+            rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
           )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
             DO UPDATE SET "rowVersion" = excluded."rowVersion",
               "patchVersion" = excluded."patchVersion",
               "refCounts" = excluded."refCounts"`;
-          i += ROW_RECORD_WRITE_BATCH_SIZE;
+          i += ROW_RECORD_UPSERT_BATCH_SIZE;
         }
       }
       for (const write of this.#writes) {
@@ -551,4 +545,7 @@ export class CVRStore {
   }
 }
 
-const ROW_RECORD_WRITE_BATCH_SIZE = 9000;
+// Max number of parameters for our sqlite build is 65534.
+// Each row record has 7 parameters (1 per column).
+// 65534 / 7 = 9362
+const ROW_RECORD_UPSERT_BATCH_SIZE = 9_360;
