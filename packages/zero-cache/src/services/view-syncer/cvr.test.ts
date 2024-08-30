@@ -433,7 +433,10 @@ describe('view-syncer/cvr', () => {
                 value: 'abc123',
               },
             ],
-            orderBy: [['clientID', 'asc']],
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+            ],
           },
         },
         oneHash: {
@@ -531,7 +534,10 @@ describe('view-syncer/cvr', () => {
                 value: 'abc123',
               },
             ],
-            orderBy: [['clientID', 'asc']],
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+            ],
           },
           clientGroupID: 'abc123',
           deleted: false,

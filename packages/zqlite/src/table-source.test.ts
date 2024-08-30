@@ -22,6 +22,7 @@ describe('fetching from a table source', () => {
     ['a', 'asc'],
     ['b', 'desc'],
     ['c', 'asc'],
+    ['id', 'asc'],
   ] as const;
   const compoundComparator = makeComparator(compoundOrder);
   const db = new Database(':memory:');

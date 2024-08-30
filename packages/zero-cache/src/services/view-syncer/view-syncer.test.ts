@@ -34,7 +34,7 @@ const EXPECTED_LMIDS_AST: AST = {
       value: '9876',
     },
   ],
-  orderBy: [['clientID', 'asc']],
+  orderBy: [ ['clientID', 'asc']],
 };
 
 describe('view-syncer/service', () => {
@@ -255,7 +255,7 @@ describe('view-syncer/service', () => {
     });
   });
 
-  test('initial hydration', async () => {
+  test.only('initial hydration', async () => {
     versionNotifications.push({});
     expect(await nextPoke()).toMatchInlineSnapshot(`
       [

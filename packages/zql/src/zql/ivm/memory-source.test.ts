@@ -29,41 +29,41 @@ test('indexes get cleaned up when not needed', () => {
   );
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 
-  const conn1 = ms.connect([['b', 'asc']]);
+  const conn1 = ms.connect([['a', 'asc'],['b', 'asc']]);
   const c1 = new Catch(conn1);
   c1.fetch();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
-    JSON.stringify([['b', 'asc']]),
+    JSON.stringify([['a', 'asc'],['b', 'asc']]),
   ]);
 
-  const conn2 = ms.connect([['b', 'asc']]);
+  const conn2 = ms.connect([['a', 'asc'], ['b', 'asc']]);
   const c2 = new Catch(conn2);
   c2.fetch();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
-    JSON.stringify([['b', 'asc']]),
+    JSON.stringify([['a', 'asc'],['b', 'asc']]),
   ]);
 
-  const conn3 = ms.connect([['c', 'asc']]);
+  const conn3 = ms.connect([['a', 'asc'], ['c', 'asc']]);
   const c3 = new Catch(conn3);
   c3.fetch();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
-    JSON.stringify([['b', 'asc']]),
-    JSON.stringify([['c', 'asc']]),
+    JSON.stringify([['a', 'asc'],['b', 'asc']]),
+    JSON.stringify([['a', 'asc'],['c', 'asc']]),
   ]);
 
   conn3.destroy();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
-    JSON.stringify([['b', 'asc']]),
+    JSON.stringify([['a', 'asc'],['b', 'asc']]),
   ]);
 
   conn2.destroy();
   expect(ms.getIndexKeys()).toEqual([
     JSON.stringify([['a', 'asc']]),
-    JSON.stringify([['b', 'asc']]),
+    JSON.stringify([['a', 'asc'],['b', 'asc']]),
   ]);
 
   conn1.destroy();

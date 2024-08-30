@@ -34,7 +34,7 @@ import type {
 import {Stream} from 'zql/src/zql/ivm/stream.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
-import { assertOrderingIncludesPK } from 'zql/src/zql/builder/builder.js';
+import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
 
 type Connection = {
   input: Input;
@@ -165,16 +165,16 @@ export class TableSource implements Source {
       },
       appliedFilters: true,
     };
-    
+
     const connection: Connection = {
       input,
       output: undefined,
-      sort: makeOrderUnique(sort, this.#primaryKey),
+      sort,
       filters: optionalFilters ?? [],
       compareRows: makeComparator(sort),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
- 
+
     this.#connections.push(connection);
     return input;
   }
@@ -472,19 +472,6 @@ function assertPrimaryKeysMatch(
   for (const key of primaryKeys) {
     assert(pkColumns.has(key));
   }
-}
-
-function makeOrderUnique(
-  order: Ordering,
-  primaryKeys: readonly string[],
-): Ordering {
-  const uniqueOrder = [...order];
-  for (const key of primaryKeys) {
-    if (!order.some(([k]) => k === key)) {
-      uniqueOrder.push([key, 'asc']);
-    }
-  }
-  return uniqueOrder;
 }
 
 function toSQLiteTypes(

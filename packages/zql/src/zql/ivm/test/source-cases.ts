@@ -859,7 +859,7 @@ const cases = {
 
   'per-output-sorts': (createSource: SourceFactory) => {
     const sort1 = [['a', 'asc']] as const;
-    const sort2 = [['b', 'asc']] as const;
+    const sort2 = [['b', 'asc'], ['a', 'asc']] as const;
     const ms = createSource(
       'table',
       {

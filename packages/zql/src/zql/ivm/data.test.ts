@@ -138,18 +138,6 @@ export function compareRowsTest(
     expected: number | string;
   }[] = [
     {
-      order: [],
-      r1: {a: 1},
-      r2: {a: 1},
-      expected: 0,
-    },
-    {
-      order: [],
-      r1: {a: 1},
-      r2: {a: 2},
-      expected: 0,
-    },
-    {
       order: [['a', 'asc']],
       r1: {a: 1},
       r2: {a: 2},
