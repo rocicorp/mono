@@ -1,19 +1,18 @@
 import {resolver} from '@rocicorp/resolver';
-import {cpus} from 'node:os';
-import {SHARE_ENV, Worker} from 'node:worker_threads';
+import {availableParallelism} from 'node:os';
 import postgres from 'postgres';
 import {sleep} from 'shared/src/sleep.js';
 import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {ReplicatorWorkerData} from '../workers/replicator.js';
-import {SyncerWorkerData} from '../workers/syncer.js';
+import {childWorker, getMessage, Worker} from '../types/processes.js';
+import {createNotifier} from '../workers/replicator.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
 
 const startMs = Date.now();
 const config = configFromEnv();
-const lc = createLogContext(config, {thread: 'main'});
+const lc = createLogContext(config, {worker: 'dispatcher'});
 
 function logErrorAndExit(err: unknown) {
   lc.error?.(err);
@@ -23,46 +22,49 @@ function logErrorAndExit(err: unknown) {
 let numReady = 0;
 const {promise: allReady, resolve: signalAllReady} = resolver<true>();
 
-function onReady(name: string, id?: number) {
-  lc.debug?.(`${name}${id ? ' ' + id : ''} ready (${Date.now() - startMs} ms)`);
-  if (++numReady === numSyncers + 1) {
-    signalAllReady(true);
-  }
+function handleReady(worker: Worker, name: string, id?: number): Worker {
+  const handler = (data: unknown) => {
+    if (getMessage('ready', data)) {
+      // Similar to once('message') but only after receiving the 'ready' signal.
+      worker.off('message', handler);
+      lc.debug?.(
+        `${name}${id ? ' #' + id : ''} ready (${Date.now() - startMs} ms)`,
+      );
+      if (++numReady === numSyncers + 1) {
+        signalAllReady(true);
+      }
+    }
+  };
+  return worker.on('message', handler);
 }
 
-const numSyncers = Math.max(1, cpus().length - 1 /* one for replicator */);
-const syncerReplicatorChannels = Array.from(
-  {length: numSyncers},
-  () => new MessageChannel(),
-);
+const replicator = childWorker('./src/server/replicator.ts');
+handleReady(replicator, 'replicator').on('close', logErrorAndExit);
 
-const subscriberPorts = syncerReplicatorChannels.map(c => c.port1);
+const numSyncers = Math.max(1, availableParallelism() - 1); // Reserve 1 for the Replicator
 
-const replicator = new Worker('./src/server/replicator.ts', {
-  env: SHARE_ENV,
-  workerData: {subscriberPorts} satisfies ReplicatorWorkerData,
-  transferList: [...subscriberPorts],
-})
-  .once('message', () => onReady('replicator'))
-  .on('error', logErrorAndExit);
+// Create a Notifier from a subscription to the Replicator,
+// and relay notifications to all subscriptions from syncers.
+const notifier = createNotifier(replicator);
 
-const syncers = syncerReplicatorChannels.map((c, i) =>
-  new Worker('./src/server/syncer.ts', {
-    env: SHARE_ENV,
-    workerData: {replicatorPort: c.port2} satisfies SyncerWorkerData,
-    transferList: [c.port2],
-  })
-    .once('message', () => onReady('syncer', i + 1))
-    .on('error', logErrorAndExit),
-);
-
-const workers: Workers = {replicator, syncers};
+const syncers = Array.from({length: numSyncers}, (_, i) => {
+  const syncer = childWorker('./src/server/syncer.ts');
+  handleReady(syncer, 'syncer', i + 1)
+    .on('message', async data => {
+      if (getMessage('subscribe', data)) {
+        const subscription = notifier.addSubscription();
+        for await (const msg of subscription) {
+          syncer.send(['notify', msg]);
+        }
+      }
+    })
+    .on('close', logErrorAndExit);
+  return syncer;
+});
 
 // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
-// but it is done here in the main thread because:
-// * it is wasteful to have all of the Syncers attempt the migration in parallel
-// * we want to delay accepting requests (and eventually advertising health)
-//   until initialization logic is complete.
+// but it is done here in the main thread because it is wasteful to have all of
+// the Syncers attempt the migration in parallel.
 const cvrDB = postgres(config.CVR_DB_URI, {
   ...postgresTypeConfig(),
   onnotice: () => {},
@@ -76,6 +78,8 @@ if (await Promise.race([allReady, sleep(30_000)])) {
 } else {
   lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
 }
+
+const workers: Workers = {replicator, syncers};
 
 const dispatcher = new Dispatcher(lc, () => workers);
 try {

@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import {MessageChannel} from 'node:worker_threads';
 import {tmpdir} from 'os';
 import path from 'path';
 import postgres from 'postgres';
@@ -16,18 +15,19 @@ import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
 import {postgresTypeConfig} from '../types/pg.js';
+import {fakeIPC} from '../types/processes-test-utils.js';
+import {getMessage} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
-import {ReplicatorWorkerData, runAsWorker} from '../workers/replicator.js';
-import {Syncer, SyncerWorkerData} from '../workers/syncer.js';
+import {createNotifier, runAsWorker} from '../workers/replicator.js';
+import {Syncer} from '../workers/syncer.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
 
 const config = configFromEnv();
-const lc = createLogContext(config, {thread: 'main'});
+const lc = createLogContext(config, {worker: 'single-thread'});
 
-const parentToReplicator = new MessageChannel();
-const replicatorToSyncer = new MessageChannel();
-const parentToSyncer = new MessageChannel();
+const [replicatorParent, replicatorChannel] = fakeIPC();
+const [syncerParent, syncerChannel] = fakeIPC();
 
 // Adapted from replicator.ts
 const replicator = new ReplicatorService(
@@ -37,9 +37,7 @@ const replicator = new ReplicatorService(
   config.REPLICA_DB_FILE,
 );
 
-void runAsWorker(replicator, parentToReplicator.port2, {
-  subscriberPorts: [replicatorToSyncer.port1],
-} satisfies ReplicatorWorkerData);
+void runAsWorker(replicator, replicatorParent);
 
 // Adapted from syncer.ts
 const cvrDB = postgres(config.CVR_DB_URI, {
@@ -78,14 +76,23 @@ const viewSyncerFactory = (
 
 const mutagenFactory = (id: string) => new MutagenService(lc, id, upstreamDB);
 
+// Create a Notifier from a subscription to the Replicator,
+// and relay notifications to all subscriptions from syncers.
+const notifier = createNotifier(replicatorChannel);
+syncerChannel.on('message', async data => {
+  if (getMessage('subscribe', data)) {
+    const subscription = notifier.addSubscription();
+    for await (const msg of subscription) {
+      syncerChannel.send(['notify', msg]);
+    }
+  }
+});
+
 const syncer = new Syncer(
   lc.withContext('component', 'syncer'),
   viewSyncerFactory,
   mutagenFactory,
-  parentToSyncer.port2,
-  {
-    replicatorPort: replicatorToSyncer.port2,
-  } satisfies SyncerWorkerData,
+  syncerParent,
 );
 syncer.run();
 

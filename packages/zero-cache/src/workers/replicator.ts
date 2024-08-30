@@ -1,72 +1,65 @@
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.js';
-import {MessagePort, Worker} from 'worker_threads';
 import {Replicator} from 'zero-cache/src/services/replicator/replicator.js';
 import {Service} from 'zero-cache/src/services/service.js';
 import {Notifier} from '../services/replicator/notifier.js';
-
-export type ReplicatorWorkerData = {
-  subscriberPorts: MessagePort[];
-};
-
-function validate(workerData: unknown): ReplicatorWorkerData {
-  // Sanity check that the WorkerThread is initialized with the expected data.
-  const data = workerData as ReplicatorWorkerData;
-  const {subscriberPorts} = data;
-  assert(Array.isArray(subscriberPorts));
-  subscriberPorts.forEach(port => assert(port instanceof MessagePort));
-  return data;
-}
+import {getMessage, Worker} from '../types/processes.js';
 
 export function runAsWorker(
   replicator: Replicator & Service,
-  parentPort: MessagePort | null,
-  workerData: ReplicatorWorkerData,
+  parent: Worker,
 ): Promise<void> {
-  const {subscriberPorts} = validate(workerData);
-
-  // Respond to status requests from the parent (main) thread.
-  const statusPort = parentPort;
-  assert(statusPort);
-  statusPort.on('message', async () => {
-    const status = await replicator.status();
-    statusPort.postMessage(status);
+  // Respond to status requests from the parent process.
+  parent.on('message', async data => {
+    const msg = getMessage('status', data);
+    if (msg) {
+      const status = await replicator.status();
+      parent.send(['status', status]);
+    }
   });
 
-  // Start a subscription for the MessageChannel of every Syncer thread.
-  // A Syncer thread relays this subscription to its ViewSyncers with a
-  // Notifier created by the createNotifier() function below.
-  for (const subscriber of subscriberPorts) {
-    const subscription = replicator.subscribe();
-    subscriber.once('close', () => subscription.cancel());
-
-    void (async () => {
+  // Respond to subscribe requests from the parent process.
+  parent.on('message', async data => {
+    const msg = getMessage('subscribe', data);
+    if (msg) {
+      const subscription = replicator.subscribe();
       for await (const msg of subscription) {
-        subscriber.postMessage(msg);
+        parent.send(['notify', msg]);
       }
-      subscriber.close();
-    })();
-  }
+    }
+  });
 
   return replicator.run();
 }
 
-export function getStatusFromWorker(
-  replicator: Worker | MessagePort, // MessagePort used in tests.
-): Promise<unknown> {
+export function getStatusFromWorker(replicator: Worker): Promise<unknown> {
   const {promise, resolve} = resolver<unknown>();
-  replicator.postMessage({});
-  replicator.once('message', resolve);
+  const received = (data: unknown) => {
+    const msg = getMessage('status', data);
+    if (msg) {
+      // Simulates 'once', but keeps listening until we get a ['status', ...] message.
+      replicator.off('message', received);
+      resolve(msg);
+    }
+  };
+  replicator.on('message', received);
+
+  replicator.send(['status', {}]);
   return promise;
 }
 
 /**
- * Creates a Notifier to listen to the Subscription from the other
- * side of the `subscriberPorts` passed into the Replicator thread
- * (i.e. from the Syncer thread).
+ * Creates a Notifier to listen to the Subscription from the Replicator
+ * running in a different process. This is only meant to be done once
+ * by the parent process.
  */
-export function createNotifier(replicatorPort: MessagePort): Notifier {
+export function createNotifier(replicator: Worker): Notifier {
   const notifier = new Notifier();
-  replicatorPort.on('message', () => notifier.notifySubscribers());
+  replicator.on('message', data => {
+    const msg = getMessage('notify', data);
+    if (msg) {
+      notifier.notifySubscribers(msg);
+    }
+  });
+  replicator.send(['subscribe', {}]);
   return notifier;
 }

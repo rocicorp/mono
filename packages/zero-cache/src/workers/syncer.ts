@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
 import {IncomingMessage} from 'http';
-import {assert} from 'shared/src/asserts.js';
 import {Duplex} from 'stream';
 import {MessagePort} from 'worker_threads';
 import WebSocket from 'ws';
@@ -14,6 +13,7 @@ import {ReplicaVersionReady} from '../services/replicator/replicator.js';
 import {ServiceRunner} from '../services/runner.js';
 import {ActivityBasedService, Service} from '../services/service.js';
 import {ViewSyncer} from '../services/view-syncer/view-syncer.js';
+import {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
 import {createNotifier} from './replicator.js';
@@ -34,7 +34,7 @@ export class Syncer {
   readonly #viewSyncers: ServiceRunner<ViewSyncer & ActivityBasedService>;
   readonly #mutagens: ServiceRunner<Mutagen & Service>;
   readonly #connections = new Map<string, Connection>();
-  readonly #parentPort: MessagePort;
+  readonly #parent: Worker;
   readonly #wss: WebSocket.Server;
 
   constructor(
@@ -44,15 +44,11 @@ export class Syncer {
       sub: Subscription<ReplicaVersionReady>,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: (id: string) => Mutagen & Service,
-    parentPort: MessagePort,
-    workerData: SyncerWorkerData,
+    parent: Worker,
   ) {
-    const {replicatorPort} = workerData;
-    assert(replicatorPort instanceof MessagePort);
-
-    // Relays notifications from the Replicator thread subscription
+    // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
-    const notifier = createNotifier(replicatorPort);
+    const notifier = createNotifier(parent);
 
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
@@ -61,7 +57,7 @@ export class Syncer {
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);
-    this.#parentPort = parentPort;
+    this.#parent = parent;
     this.#wss = new WebSocket.Server({noServer: true});
   }
 
@@ -89,8 +85,8 @@ export class Syncer {
   run() {
     installWebSocketReceiver<ConnectParams>(
       this.#wss,
-      this.#parentPort,
       (ws, params) => this.#createConnection(ws, params),
+      this.#parent,
     );
   }
 

@@ -1,4 +1,3 @@
-import {Queue} from 'shared/src/queue.js';
 import {describe, expect, test, vi} from 'vitest';
 import {
   Replicator,
@@ -6,56 +5,58 @@ import {
 } from 'zero-cache/src/services/replicator/replicator.js';
 import {Service} from 'zero-cache/src/services/service.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {getStatusFromWorker, runAsWorker} from './replicator.js';
+import {fakeIPC} from '../types/processes-test-utils.js';
+import {
+  createNotifier,
+  getStatusFromWorker,
+  runAsWorker,
+} from './replicator.js';
 
 describe('workers/replicator', () => {
-  test('status', async () => {
+  test('replicator status', async () => {
     const replicator = {
       status: vi.fn().mockResolvedValue({status: 'yo'}),
       subscribe: vi.fn(),
       run: vi.fn(),
     };
 
-    const {port1: parentPort, port2: childPort} = new MessageChannel();
+    const [parent, child] = fakeIPC();
 
-    void runAsWorker(
-      replicator as unknown as Replicator & Service,
-      parentPort,
-      {subscriberPorts: []},
-    );
+    void runAsWorker(replicator as unknown as Replicator & Service, parent);
     expect(replicator.run).toHaveBeenCalledOnce;
 
     // Simulate a status request from the parent.
-    const status = await getStatusFromWorker(childPort);
+    const status = await getStatusFromWorker(child);
     expect(status).toEqual({status: 'yo'});
   });
 });
 
-test('subscription', async () => {
-  const subscription = Subscription.create<ReplicaVersionReady>();
+test('replicator subscription', async () => {
+  const originalSub = Subscription.create<ReplicaVersionReady>();
 
   const replicator = {
     status: vi.fn(),
-    subscribe: () => subscription,
+    subscribe: () => originalSub,
     run: vi.fn(),
   };
 
-  const statusChannel = new MessageChannel();
-  const {port1: notificationPort, port2: syncerPort} = new MessageChannel();
+  const [parent, child] = fakeIPC();
 
-  void runAsWorker(
-    replicator as unknown as Replicator & Service,
-    statusChannel.port1,
-    {subscriberPorts: [syncerPort]},
-  );
+  void runAsWorker(replicator as unknown as Replicator & Service, parent);
   expect(replicator.run).toHaveBeenCalledOnce;
 
-  const notifications = new Queue<unknown>();
-  notificationPort.on('message', msg => notifications.enqueue(msg));
-  notificationPort.postMessage({});
+  originalSub.push({foo: 'bar'});
+  originalSub.push({foo: 'baz'});
 
-  subscription.push({foo: 'bar'});
-  subscription.push({foo: 'baz'});
-  expect(await notifications.dequeue()).toEqual({foo: 'bar'});
-  expect(await notifications.dequeue()).toEqual({foo: 'baz'});
+  const notifier = createNotifier(child);
+  const notifications = [];
+
+  for await (const msg of notifier.addSubscription()) {
+    notifications.push(msg);
+    if (notifications.length === 2) {
+      break;
+    }
+  }
+
+  expect(notifications).toEqual([{foo: 'bar'}, {foo: 'baz'}]);
 });
