@@ -11,14 +11,7 @@ import {initSyncSchema} from './schema/sync-schema.js';
 // on the replica.
 export type ReplicaVersionReady = NonNullable<unknown>;
 
-export interface Replicator {
-  /**
-   * Returns an opaque message for human-readable consumption. This is
-   * purely for ensuring that the Replicator has started at least once to
-   * bootstrap a new replica.
-   */
-  status(): Promise<ReadonlyJSONObject>;
-
+export interface ReplicaVersionNotifier {
   /**
    * Creates a cancelable subscription of notifications when the replica is ready to be
    * read for new data. The first message is sent when the replica is ready (e.g. initialized),
@@ -29,6 +22,15 @@ export interface Replicator {
    * the SQLite replica for the latest replicated changes.
    */
   subscribe(): CancelableAsyncIterable<ReplicaVersionReady>;
+}
+
+export interface Replicator extends ReplicaVersionNotifier {
+  /**
+   * Returns an opaque message for human-readable consumption. This is
+   * purely for ensuring that the Replicator has started at least once to
+   * bootstrap a new replica.
+   */
+  status(): Promise<ReadonlyJSONObject>;
 }
 
 export class ReplicatorService implements Replicator, Service {

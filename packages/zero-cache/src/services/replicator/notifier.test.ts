@@ -22,14 +22,14 @@ describe('replicator/notifier', () => {
 
   test('notify immediately if first notification received', async () => {
     notifier.notifySubscribers();
-    const sub = notifier.addSubscription();
+    const sub = notifier.subscribe();
     await expectSingleMessage(sub, {});
   });
 
   test('coalesce', async () => {
     const notifier = new Notifier();
-    const sub1 = notifier.addSubscription();
-    const sub2 = notifier.addSubscription();
+    const sub1 = notifier.subscribe();
+    const sub2 = notifier.subscribe();
 
     notifier.notifySubscribers({foo: 1});
     await expectSingleMessage(sub1, {foo: 1});
