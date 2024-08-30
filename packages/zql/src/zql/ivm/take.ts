@@ -52,7 +52,7 @@ export class Take implements Operator {
     this.#storage = storage as TakeStorage;
     this.#limit = limit;
     this.#partitionKey = partitionKey;
-    assert(limit > 0);
+    assert(limit >= 0);
     this.#input.setOutput(this);
   }
 
@@ -123,6 +123,10 @@ export class Take implements Operator {
           req.constraint.key === this.#partitionKey),
     );
 
+    if (this.#limit === 0) {
+      return;
+    }
+
     const partitionValue =
       this.#partitionKey === undefined ? undefined : req.constraint?.value;
     const takeStateKey = getTakeStateKey(partitionValue);
@@ -166,6 +170,10 @@ export class Take implements Operator {
         (req.constraint !== undefined &&
           req.constraint.key === this.#partitionKey),
     );
+
+    if (this.#limit === 0) {
+      return;
+    }
 
     const partitionValue =
       this.#partitionKey === undefined ? undefined : req.constraint?.value;

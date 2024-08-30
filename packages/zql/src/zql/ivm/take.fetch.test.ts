@@ -1,25 +1,44 @@
-import {test, expect, suite} from 'vitest';
+import {assert} from 'shared/src/asserts.js';
+import {JSONValue} from 'shared/src/json.js';
+import {expect, suite, test} from 'vitest';
 import {Ordering} from '../ast/ast.js';
+import {Catch} from './catch.js';
 import {Node, Row} from './data.js';
+import {MemorySource} from './memory-source.js';
+import {MemoryStorage} from './memory-storage.js';
 import {ValueType} from './schema.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
 import {Take} from './take.js';
-import {MemorySource} from './memory-source.js';
-import {MemoryStorage} from './memory-storage.js';
-import {Catch} from './catch.js';
-import {JSONValue} from 'shared/src/json.js';
-import {assert} from 'shared/src/asserts.js';
 
 suite('take with no partition', () => {
   const base = {
-    columns: {id: 'string' as const, created: 'number' as const},
+    columns: {id: 'string', created: 'number'},
     primaryKeys: ['id'],
     sort: [
       ['created', 'asc'],
       ['id', 'asc'],
-    ] as const,
+    ],
     partitionKey: undefined,
-  };
+  } as const;
+
+  takeTest({
+    ...base,
+    name: 'limit 0',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 0,
+    partitions: [
+      {
+        partitionValue: undefined,
+        expectedMessages: [[], [], []],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+    ],
+  });
 
   takeTest({
     ...base,
@@ -221,6 +240,37 @@ suite('take with partition', () => {
     ] as const,
     partitionKey: 'issueID',
   };
+
+  takeTest({
+    ...base,
+    name: 'limit 0',
+    sourceRows: [
+      {id: 'c1', issueID: 'i1', created: 100},
+      {id: 'c2', issueID: 'i1', created: 200},
+      {id: 'c3', issueID: 'i1', created: 300},
+    ],
+    limit: 0,
+    partitions: [
+      {
+        partitionValue: 'i0',
+        expectedMessages: [[], [], []],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+      {
+        partitionValue: 'i1',
+        expectedMessages: [[], [], []],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+      {
+        partitionValue: 'i2',
+        expectedMessages: [[], [], []],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+    ],
+  });
 
   takeTest({
     ...base,
