@@ -33,7 +33,7 @@ suite('take with no partition', () => {
     partitions: [
       {
         partitionValue: undefined,
-        expectedMessages: [[], [], []],
+        expectedMessages: [[], [], [['takeSnitch', 'cleanup', {}]]],
         expectedStorage: {},
         expectedHydrate: [],
       },
@@ -252,20 +252,44 @@ suite('take with partition', () => {
     limit: 0,
     partitions: [
       {
-        partitionValue: 'i0',
-        expectedMessages: [[], [], []],
-        expectedStorage: {},
-        expectedHydrate: [],
-      },
-      {
         partitionValue: 'i1',
-        expectedMessages: [[], [], []],
+        expectedMessages: [
+          [],
+          [],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  key: 'issueID',
+                  value: 'i1',
+                },
+              },
+            ],
+          ],
+        ],
         expectedStorage: {},
         expectedHydrate: [],
       },
       {
         partitionValue: 'i2',
-        expectedMessages: [[], [], []],
+        expectedMessages: [
+          [],
+          [],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  key: 'issueID',
+                  value: 'i2',
+                },
+              },
+            ],
+          ],
+        ],
         expectedStorage: {},
         expectedHydrate: [],
       },

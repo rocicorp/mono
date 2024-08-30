@@ -171,19 +171,17 @@ export class Take implements Operator {
           req.constraint.key === this.#partitionKey),
     );
 
-    if (this.#limit === 0) {
-      return;
+    let takeState: TakeState | undefined;
+    if (this.#limit > 0) {
+      const partitionValue =
+        this.#partitionKey === undefined ? undefined : req.constraint?.value;
+      const takeStateKey = getTakeStateKey(partitionValue);
+      takeState = this.#storage.get(takeStateKey);
+      this.#storage.del(takeStateKey);
     }
-
-    const partitionValue =
-      this.#partitionKey === undefined ? undefined : req.constraint?.value;
-    const takeStateKey = getTakeStateKey(partitionValue);
-    const takeState = this.#storage.get(takeStateKey);
-    this.#storage.del(takeStateKey);
-    assert(takeState !== undefined);
     for (const inputNode of this.#input.cleanup(req)) {
       if (
-        takeState.bound === undefined ||
+        takeState?.bound === undefined ||
         this.getSchema().compareRows(takeState.bound, inputNode.row) < 0
       ) {
         return;
