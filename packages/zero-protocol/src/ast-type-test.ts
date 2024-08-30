@@ -13,6 +13,7 @@ import type {
   astSchema,
   conditionSchema,
   correlatedSubquerySchema,
+  correlatedSubquerySchemaOmitSubquery,
   equalityOpsSchema,
   likeOpsSchema,
   orderOpsSchema,
