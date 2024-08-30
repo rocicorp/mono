@@ -165,7 +165,10 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
             value: this._cvr.id,
           },
         ],
-        orderBy: [['clientGroupID','asc'],['clientID', 'asc']],
+        orderBy: [
+          ['clientGroupID', 'asc'],
+          ['clientID', 'asc'],
+        ],
       },
       internal: true,
     };
