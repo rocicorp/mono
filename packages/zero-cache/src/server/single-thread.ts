@@ -15,8 +15,7 @@ import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {fakeIPC} from '../types/processes-test-utils.js';
-import {getMessage} from '../types/processes.js';
+import {getMessage, inProcChannel} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {createNotifier, runAsWorker} from '../workers/replicator.js';
 import {Syncer} from '../workers/syncer.js';
@@ -26,8 +25,8 @@ import {createLogContext} from './logging.js';
 const config = configFromEnv();
 const lc = createLogContext(config, {worker: 'single-thread'});
 
-const [replicatorParent, replicatorChannel] = fakeIPC();
-const [syncerParent, syncerChannel] = fakeIPC();
+const [replicatorParent, replicatorChannel] = inProcChannel();
+const [syncerParent, syncerChannel] = inProcChannel();
 
 // Adapted from replicator.ts
 const replicator = new ReplicatorService(

@@ -1,4 +1,4 @@
-import {fork, ForkOptions, SendHandle} from 'child_process';
+import {fork, ForkOptions, SendHandle, Serializable} from 'child_process';
 import {EventEmitter} from 'stream';
 
 /**
@@ -65,4 +65,37 @@ export function childWorker(module: string, options?: ForkOptions): Worker {
   // Note: It is okay to cast a Processor or ChildProcess as a Worker.
   // The {@link send} method simply restricts the message type for clarity.
   return fork(module, {...options, serialization: 'advanced'}) as Worker;
+}
+
+/**
+ * Creates two connected `Worker` instances such that messages sent to one
+ * via the {@link Worker.send()} method are received by the other's
+ * `on('message', ...)` handler.
+ *
+ * This is analogous to the two `MessagePort`s of a `MessageChannel`, and
+ * is useful for executing code written for inter-process communication
+ * in a single process.
+ */
+export function inProcChannel(): [Worker, Worker] {
+  const worker1 = new EventEmitter();
+  const worker2 = new EventEmitter();
+
+  const sendTo =
+    (dest: EventEmitter) =>
+    (
+      message: Serializable,
+      sendHandle?: SendHandle,
+      callback?: (error: Error | null) => void,
+    ) => {
+      dest.emit('message', message, sendHandle);
+      if (callback) {
+        callback(null);
+      }
+      return true;
+    };
+
+  Object.assign(worker1, {send: sendTo(worker2)});
+  Object.assign(worker2, {send: sendTo(worker1)});
+
+  return [worker1 as Worker, worker2 as Worker];
 }
