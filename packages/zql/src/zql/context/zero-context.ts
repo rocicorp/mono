@@ -5,7 +5,7 @@ import {MemorySource} from '../ivm/memory-source.js';
 import {ValueType} from '../ivm/schema.js';
 import {Row} from '../ivm/data.js';
 import {Schema, toInputArgs} from '../query/schema.js';
-import {Host} from '../builder/builder.js';
+import {BuilderDelegate} from '../builder/builder.js';
 import {Source} from '../ivm/source.js';
 import {AST} from '../ast/ast.js';
 import {Storage} from '../ivm/operator.js';
@@ -16,7 +16,7 @@ export type AddWatch = (name: string, cb: WatchCallback) => void;
 
 export type WatchCallback = (changes: ExperimentalNoIndexDiff) => void;
 
-export class ZeroContext implements Host {
+export class ZeroContext implements BuilderDelegate {
   readonly #sourceStore: ZeroSourceStore;
   readonly #subscriptionDelegate: SubscriptionDelegate;
   readonly #schemas: Record<string, Schema>;

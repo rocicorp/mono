@@ -12,7 +12,7 @@ import {
 } from './test/testSchemas.js';
 import {toInputArgs} from './schema.js';
 import {must} from 'shared/src/must.js';
-import {Host} from '../builder/builder.js';
+import {BuilderDelegate} from '../builder/builder.js';
 import {SubscriptionDelegate} from '../context/context.js';
 
 /**
@@ -59,7 +59,7 @@ function makeSources() {
   };
 }
 
-function addData(host: Host) {
+function addData(host: BuilderDelegate) {
   host.getSource('user').push({
     type: 'add',
     row: {
@@ -139,7 +139,7 @@ function addData(host: Host) {
   });
 }
 
-function makeHost(): Host & SubscriptionDelegate {
+function makeHost(): BuilderDelegate & SubscriptionDelegate {
   const sources = makeSources();
   return {
     getSource(tableName: string) {
