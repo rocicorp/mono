@@ -59,7 +59,7 @@ export class Syncer {
     installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
   }
 
-  #createConnection = (ws: WebSocket, params: ConnectParams) => {
+  readonly #createConnection = (ws: WebSocket, params: ConnectParams) => {
     const {clientID, clientGroupID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
