@@ -2,6 +2,7 @@ import type * as v from 'shared/src/valita.js';
 import type {
   AST,
   Condition,
+  CorrelatedSubQuery,
   EqualityOps,
   LikeOps,
   OrderOps,
@@ -11,6 +12,7 @@ import type {
 import type {
   astSchema,
   conditionSchema,
+  correlatedSubquerySchema,
   equalityOpsSchema,
   likeOpsSchema,
   orderOpsSchema,
@@ -26,6 +28,14 @@ import type {
 (t: AST, inferredT: v.Infer<typeof astSchema>) => {
   t satisfies v.Infer<typeof astSchema>;
   inferredT satisfies AST;
+};
+
+(
+  t: CorrelatedSubQuery,
+  inferredT: v.Infer<typeof correlatedSubquerySchema>,
+) => {
+  t satisfies v.Infer<typeof correlatedSubquerySchema>;
+  inferredT satisfies CorrelatedSubQuery;
 };
 
 (t: EqualityOps, inferredT: v.Infer<typeof equalityOpsSchema>) => {
