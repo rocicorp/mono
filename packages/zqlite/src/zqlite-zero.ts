@@ -18,7 +18,7 @@ import {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
 import {Query} from 'zero-client/src/mod.js';
 import {Schema} from 'zql/src/zql/query2/schema.js';
 import {newQuery} from 'zql/src/zql/query2/query-impl.js';
-import {Row} from 'zql/src/zql/ivm2/data.js';
+import {Row} from 'zql/src/zql/ivm/data.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;

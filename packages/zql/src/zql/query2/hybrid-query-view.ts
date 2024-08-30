@@ -1,6 +1,6 @@
 import {AST} from '../ast2/ast.js';
 import {SubscriptionDelegate} from '../context/context.js';
-import {ArrayView, EntryList} from '../ivm2/array-view.js';
+import {ArrayView, EntryList} from '../ivm/array-view.js';
 import {Immutable} from 'shared/src/immutable.js';
 
 export type ResultType = 'complete' | 'partial' | 'none';

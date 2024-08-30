@@ -1,15 +1,15 @@
 import type {ExperimentalNoIndexDiff} from 'replicache';
 
 import type {GotCallback, SubscriptionDelegate} from './context.js';
-import {MemorySource} from '../ivm2/memory-source.js';
-import {ValueType} from '../ivm2/schema.js';
-import {Row} from '../ivm2/data.js';
+import {MemorySource} from '../ivm/memory-source.js';
+import {ValueType} from '../ivm/schema.js';
+import {Row} from '../ivm/data.js';
 import {Schema, toInputArgs} from '../query2/schema.js';
 import {Host} from '../builder/builder.js';
-import {Source} from '../ivm2/source.js';
+import {Source} from '../ivm/source.js';
 import {AST} from '../ast2/ast.js';
-import {Storage} from '../ivm2/operator.js';
-import {MemoryStorage} from '../ivm2/memory-storage.js';
+import {Storage} from '../ivm/operator.js';
+import {MemoryStorage} from '../ivm/memory-storage.js';
 import {assert} from 'shared/src/asserts.js';
 
 export type AddWatch = (name: string, cb: WatchCallback) => void;

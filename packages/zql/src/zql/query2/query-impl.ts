@@ -23,7 +23,7 @@ import {
 } from './schema.js';
 import {buildPipeline, Host} from '../builder/builder.js';
 import {Ordering} from '../ast2/ast.js';
-import {ArrayView} from '../ivm2/array-view.js';
+import {ArrayView} from '../ivm/array-view.js';
 import {TypedView} from './typed-view.js';
 import {SubscriptionDelegate} from '../context/context.js';
 import {HybridQueryView} from './hybrid-query-view.js';

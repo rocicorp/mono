@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import Database from 'better-sqlite3';
 import {JSONValue} from 'shared/src/json.js';
-import {Storage} from 'zql/src/zql/ivm2/operator.js';
-import {Stream} from 'zql/src/zql/ivm2/stream.js';
+import {Storage} from 'zql/src/zql/ivm/operator.js';
+import {Stream} from 'zql/src/zql/ivm/stream.js';
 
 export interface ClientGroupStorage {
   /** Creates a {@link Storage} instance for a single operator. */

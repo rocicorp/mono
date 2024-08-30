@@ -1,4 +1,4 @@
-import {Bound} from '../ivm2/skip.js';
+import {Bound} from '../ivm/skip.js';
 
 /**
  * As in SQL you can have multiple orderings. We don't currently

@@ -1,13 +1,13 @@
 import {assert} from 'shared/src/asserts.js';
 import {AST} from '../ast2/ast.js';
-import {Filter} from '../ivm2/filter.js';
-import {Join} from '../ivm2/join.js';
-import {Input, Storage} from '../ivm2/operator.js';
-import {Source} from '../ivm2/source.js';
+import {Filter} from '../ivm/filter.js';
+import {Join} from '../ivm/join.js';
+import {Input, Storage} from '../ivm/operator.js';
+import {Source} from '../ivm/source.js';
 import {createPredicate} from './filter.js';
 import {must} from 'shared/src/must.js';
-import {Take} from '../ivm2/take.js';
-import {Skip} from '../ivm2/skip.js';
+import {Take} from '../ivm/take.js';
+import {Skip} from '../ivm/skip.js';
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed

@@ -1,6 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
 import {SimpleOperator, SimpleCondition} from '../ast2/ast.js';
-import {Row, Value} from '../ivm2/data.js';
+import {Row, Value} from '../ivm/data.js';
 import {getLikePredicate} from './like.js';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
