@@ -16,7 +16,7 @@ import {toEntitiesKey} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {SchemaDefs} from './zero.js';
 import {Row} from 'zql/src/zql/ivm/data.js';
-import {SchemaToRow} from 'zql/src/zql/query2/query.js';
+import {SchemaToRow} from 'zql/src/zql/query/query.js';
 
 export type Parse<E extends Row> = (v: ReadonlyJSONObject) => E;
 

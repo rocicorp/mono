@@ -1,7 +1,7 @@
 import {useLayoutEffect, useState} from 'react';
-import type {Schema} from 'zql/src/zql/query2/schema.js';
-import type {Query, QueryResultRow, Smash} from 'zql/src/zql/query2/query.js';
-import {TypedView} from 'zql/src/zql/query2/typed-view.js';
+import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {Query, QueryResultRow, Smash} from 'zql/src/zql/query/query.js';
+import {TypedView} from 'zql/src/zql/query/typed-view.js';
 import {deepClone} from 'shared/src/deep-clone.js';
 import {ResultType} from 'zero-client';
 

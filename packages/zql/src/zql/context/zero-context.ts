@@ -4,7 +4,7 @@ import type {GotCallback, SubscriptionDelegate} from './context.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {ValueType} from '../ivm/schema.js';
 import {Row} from '../ivm/data.js';
-import {Schema, toInputArgs} from '../query2/schema.js';
+import {Schema, toInputArgs} from '../query/schema.js';
 import {Host} from '../builder/builder.js';
 import {Source} from '../ivm/source.js';
 import {AST} from '../ast/ast.js';
