@@ -541,6 +541,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     lc.debug?.(`processing ${catchupRowPatches.length} row patches`);
     for (const [rowPatch, toVersion] of catchupRowPatches) {
       if (this._cvrStore.isRowVersionPendingDelete(rowPatch.id, toVersion)) {
+        console.log('isRowVersionPendingDelete', rowPatch.id);
         continue;
       }
 
