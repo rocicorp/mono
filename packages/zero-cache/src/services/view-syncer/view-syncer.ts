@@ -19,7 +19,7 @@ import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {ActivityBasedService} from '../service.js';
 import {ClientHandler, PokeHandler} from './client-handler.js';
-import {CVRStore} from './cvr-store.js';
+import {CVRStore, RowRecordCache} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
@@ -67,6 +67,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
   #cvr: CVRSnapshot | undefined;
+  readonly #rowCache: RowRecordCache;
 
   constructor(
     lc: LogContext,
@@ -84,12 +85,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#pipelines = pipelineDriver;
     this.#versionChanges = versionChanges;
     this.#keepaliveMs = keepaliveMs;
+    this.#rowCache = new RowRecordCache(db, clientGroupID);
   }
 
   async run(): Promise<void> {
     try {
       await this.#lock.withLock(async () => {
-        const cvrStore = new CVRStore(this.#lc, this.#db, this.id);
+        const cvrStore = new CVRStore(
+          this.#lc,
+          this.#db,
+          this.id,
+          this.#rowCache,
+        );
         this.#cvr = await cvrStore.load();
       });
 
@@ -277,7 +284,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Apply patches requested in the initConnectionMessage.
     const {clientID} = client;
-    const cvrStore = new CVRStore(this.#lc, this.#db, this.#cvr.id);
+    const cvrStore = new CVRStore(
+      this.#lc,
+      this.#db,
+      this.#cvr.id,
+      this.#rowCache,
+    );
     const updater = new CVRConfigDrivenUpdater(cvrStore, this.#cvr);
 
     const added: {id: string; ast: AST}[] = [];
@@ -396,7 +408,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc.info?.(`hydrating ${addQueries.length} queries`);
 
     const updater = new CVRQueryDrivenUpdater(
-      new CVRStore(this.#lc, this.#db, cvr.id),
+      new CVRStore(this.#lc, this.#db, cvr.id, this.#rowCache),
       cvr,
       stateVersion,
     );
@@ -518,7 +530,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Probably need a new updater type. CVRAdvancementUpdater?
     const updater = new CVRQueryDrivenUpdater(
-      new CVRStore(this.#lc, this.#db, cvr.id),
+      new CVRStore(this.#lc, this.#db, cvr.id, this.#rowCache),
       cvr,
       version,
     );

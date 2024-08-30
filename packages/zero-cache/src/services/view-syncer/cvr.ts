@@ -327,10 +327,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // We can use something like:
     //   SELECT * FROM cvr.rows WHERE "refCounts" ?| array[...queryHashes...];
 
-    const allRowRecords = this._cvrStore.allRowRecords();
+    const allRowRecords = await this._cvrStore.allRowRecords();
 
     let total = 0;
-    for await (const existing of allRowRecords) {
+    for (const existing of allRowRecords) {
       total++;
       assert(existing.refCounts !== null); // allRowRecords does not include null.
       for (const id of Object.keys(existing.refCounts)) {

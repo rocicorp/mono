@@ -1,9 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import pg from 'pg';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {CustomKeySet} from 'shared/src/custom-key-set.js';
-import {lookupRowsWithKeys} from '../../db/queries.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
@@ -36,10 +34,60 @@ import {
   type RowPatch,
   type RowRecord,
 } from './schema/types.js';
-
-const {builtins} = pg.types;
+import {_} from 'vitest/dist/reporters-BECoY4-b.js';
 
 type NotNull<T> = T extends null ? never : T;
+
+export class RowRecordCache {
+  #loaded = false;
+  readonly #cache = new CustomKeyMap<RowID, RowRecord>(rowIDHash);
+  readonly #db: PostgresDB;
+  readonly #clientGroupID: string;
+
+  constructor(db: PostgresDB, clientGroupID: string) {
+    this.#db = db;
+    this.#clientGroupID = clientGroupID;
+  }
+
+  async #ensureLoaded() {
+    if (this.#loaded) {
+      return;
+    }
+    for await (const rows of this.#db<
+      RowsRow[]
+    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
+      this.#clientGroupID
+    } AND "refCounts" IS NOT NULL`
+      // TODO(arv): Arbitrary page size
+      .cursor(1000)) {
+      for (const row of rows) {
+        const rowRecord = rowsRowToRowRecord(row);
+        this.#cache.set(rowRecord.id, rowRecord);
+      }
+    }
+    this.#loaded = true;
+  }
+
+  async allRowRecords(): Promise<Iterable<RowRecord>> {
+    await this.#ensureLoaded();
+    return this.#cache.values();
+  }
+
+  async getMultipleRowEntries(
+    _rowIDs: Iterable<RowID>,
+  ): Promise<Map<RowID, RowRecord>> {
+    await this.#ensureLoaded();
+    // Should we filter and return a new map?
+    return this.#cache;
+  }
+
+  async flush(rowRecords: IterableIterator<[RowRecord, unknown]>) {
+    await this.#ensureLoaded();
+    for (const [row] of rowRecords) {
+      this.#cache.set(row.id, row);
+    }
+  }
+}
 
 type QueryRow = {
   queryHash: string;
@@ -89,11 +137,18 @@ export class CVRStore {
   readonly #pendingRowVersionDeletes = new CustomKeySet<[RowID, CVRVersion]>(
     ([id, version]) => rowIDHash(id) + '-' + versionString(version),
   );
+  readonly #rowCache: RowRecordCache;
 
-  constructor(lc: LogContext, db: PostgresDB, cvrID: string) {
+  constructor(
+    lc: LogContext,
+    db: PostgresDB,
+    cvrID: string,
+    rowCache: RowRecordCache,
+  ) {
     this.#lc = lc;
     this.#db = db;
     this.#id = cvrID;
+    this.#rowCache = rowCache;
   }
 
   async load(): Promise<CVR> {
@@ -198,25 +253,10 @@ export class CVRStore {
     return this.#pendingRowVersionDeletes.has([rowID, version]);
   }
 
-  async getMultipleRowEntries(
+  getMultipleRowEntries(
     rowIDs: Iterable<RowID>,
   ): Promise<Map<RowID, RowRecord>> {
-    const rows = await lookupRowsWithKeys(
-      this.#db,
-      'cvr',
-      'rows',
-      {
-        schema: {typeOid: builtins.TEXT},
-        table: {typeOid: builtins.TEXT},
-        rowKey: {typeOid: builtins.JSONB},
-      },
-      rowIDs,
-    );
-    const rv = new CustomKeyMap<RowID, RowRecord>(rowIDHash);
-    for (const row of rows) {
-      rv.set(row as RowID, rowsRowToRowRecord(row as RowsRow));
-    }
-    return rv;
+    return this.#rowCache.getMultipleRowEntries(rowIDs);
   }
 
   putRowRecord(
@@ -490,18 +530,8 @@ export class CVRStore {
     return rv;
   }
 
-  async *allRowRecords(): AsyncIterable<RowRecord> {
-    for await (const rows of this.#db<
-      RowsRow[]
-    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
-      this.#id
-    } AND "refCounts" IS NOT NULL`
-      // TODO(arv): Arbitrary page size
-      .cursor(1000)) {
-      for (const row of rows) {
-        yield rowsRowToRowRecord(row);
-      }
-    }
+  allRowRecords(): Promise<Iterable<RowRecord>> {
+    return this.#rowCache.allRowRecords();
   }
 
   async flush(): Promise<void> {
@@ -510,6 +540,8 @@ export class CVRStore {
         await write(tx);
       }
     });
+
+    await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
 
     this.#writes.clear();
     this.#pendingRowVersionDeletes.clear();
