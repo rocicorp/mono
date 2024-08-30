@@ -425,10 +425,8 @@ export class Zero<QD extends SchemaDefs> {
 
     this.mutate = makeCRUDMutate<QD>(schemas, rep.mutate);
 
-    this.#queryManager = new QueryManager(
-      rep.clientID,
-      msg => this.#sendChangeDesiredQueries(msg),
-      rep.experimentalWatch.bind(rep),
+    this.#queryManager = new QueryManager(rep.clientID, msg =>
+      this.#sendChangeDesiredQueries(msg),
     );
 
     this.#zqlContext = new ZeroContext(
@@ -441,8 +439,7 @@ export class Zero<QD extends SchemaDefs> {
           ),
         ),
       {
-        subscriptionAdded: (ast, gotCallback) =>
-          this.#queryManager.add(ast, gotCallback),
+        subscriptionAdded: ast => this.#queryManager.add(ast),
       },
     );
 

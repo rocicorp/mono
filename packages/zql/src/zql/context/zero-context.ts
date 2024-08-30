@@ -1,6 +1,6 @@
 import type {ExperimentalNoIndexDiff} from 'replicache';
 
-import type {GotCallback, SubscriptionDelegate} from './context.js';
+import type {SubscriptionDelegate} from './context.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {ValueType} from '../ivm/schema.js';
 import {Row} from '../ivm/data.js';
@@ -41,8 +41,8 @@ export class ZeroContext implements BuilderDelegate {
     );
   }
 
-  subscriptionAdded(ast: AST, gotCallback: GotCallback): () => void {
-    return this.#subscriptionDelegate.subscriptionAdded(ast, gotCallback);
+  subscriptionAdded(ast: AST): () => void {
+    return this.#subscriptionDelegate.subscriptionAdded(ast);
   }
 
   createStorage(): Storage {

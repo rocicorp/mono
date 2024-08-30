@@ -5,7 +5,7 @@ import {assert} from 'shared/src/asserts.js';
 import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {ErrorKind, initConnectionMessageSchema} from 'zero-protocol';
 import {
   Mutation,
@@ -880,80 +880,53 @@ test('smokeTest', async () => {
       },
     });
 
-    const spy = vi.fn();
+    const calls: Array<Array<unknown>> = [];
     const view = r.query.issues.select('id', 'value').materialize();
+    const unsubscribe = view.addListener(c => {
+      calls.push([...c]);
+    });
     view.hydrate();
-    const unsubscribe = view.addListener(spy);
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
     // once for initial data
     // once for each mutation
-    // once for gotQueries
-    // once we have batch mutations this can go back to 3
-    expect(spy).toHaveBeenCalledTimes(4);
-    // TODO: why is it called 4 times with the same data??
-    expect(spy.mock.calls[0]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
-    ]);
-    // TODO(arv): Skip this repeated call
-    expect(spy.mock.calls[1]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
-    ]);
-    expect(spy.mock.calls[2]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
-    ]);
-    expect(spy.mock.calls[3]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
+    expect(calls.length).eq(3);
+    expect(calls[0]).toEqual([]);
+    expect(calls[1]).toEqual([{id: 'a', value: 1}]);
+    expect(calls[2]).toEqual([
+      {id: 'a', value: 1},
+      {id: 'b', value: 2},
     ]);
 
-    spy.mockReset();
+    calls.length = 0;
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
-    expect(spy).toHaveBeenCalledTimes(0);
+    expect(calls.length).eq(0);
 
     await r.mutate.issues.set({id: 'a', value: 11});
 
     // TODO: this is called twice because the transient remove is seen during an update.
     // We need to hold off sending the remove until all events in the current transaction are processed
-    expect(spy).toHaveBeenCalledTimes(2);
-    expect(spy.mock.lastCall).toEqual([
-      [
-        {id: 'a', value: 11},
-        {id: 'b', value: 2},
-      ],
-      'partial',
+    expect(calls.length).eq(2);
+    expect(calls[1]).toEqual([
+      {id: 'a', value: 11},
+      {id: 'b', value: 2},
     ]);
 
-    spy.mockReset();
+    calls.length = 0;
     await r.mutate.issues.delete({id: 'b'});
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.lastCall?.[0]).toEqual([{id: 'a', value: 11}]);
+    expect(calls.length).eq(1);
+    expect(calls[0]).toEqual([{id: 'a', value: 11}]);
 
     unsubscribe();
 
-    spy.mockReset();
+    calls.length = 0;
     await r.mutate.issues.create({id: 'c', value: 6});
-    expect(spy).toHaveBeenCalledTimes(0);
+    expect(calls.length).eq(0);
   }
 });
 

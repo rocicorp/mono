@@ -57,36 +57,24 @@ async function testBasics(userID: string) {
   await r.triggerConnected();
 
   await sleep(1);
-  assert(deepEqual(log, [[], []]));
+  assert(deepEqual(log, [[]]));
 
   await r.mutate.e.set({id: 'foo', value: 1});
-  assert(deepEqual(log, [[], [], [{id: 'foo', value: 1}]]));
+  assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
   await r.mutate.e.set({id: 'foo', value: 2});
   // TODO: Called with an empty value because
   // we have no concept of a transaction and the intermediate removal
   // is seen
   assert(
-    deepEqual(log, [
-      [],
-      [],
-      [{id: 'foo', value: 1}],
-      [],
-      [{id: 'foo', value: 2}],
-    ]),
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
   await r.mutate.e.set({id: 'foo', value: 3});
   assert(
-    deepEqual(log, [
-      [],
-      [],
-      [{id: 'foo', value: 1}],
-      [],
-      [{id: 'foo', value: 2}],
-    ]),
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [], [{id: 'foo', value: 2}]]),
   );
 
   const view2 = q.materialize();

@@ -100,11 +100,6 @@ class QueryImpl<
     const {resolve, promise: preloaded} = resolver<boolean>();
     const subscriptionRemoved = this.#host.subscriptionAdded(
       this.#completeAst(),
-      got => {
-        if (got) {
-          resolve(true);
-        }
-      },
     );
     const cleanup = () => {
       subscriptionRemoved();
