@@ -5,7 +5,7 @@ import {
 } from 'zero-cache/src/services/replicator/replicator.js';
 import {Service} from 'zero-cache/src/services/service.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {fakeIPC} from '../types/processes-test-utils.js';
+import {inProcChannel} from '../types/processes.js';
 import {
   createNotifier,
   getStatusFromWorker,
@@ -20,7 +20,7 @@ describe('workers/replicator', () => {
       run: vi.fn(),
     };
 
-    const [parent, child] = fakeIPC();
+    const [parent, child] = inProcChannel();
 
     void runAsWorker(replicator as unknown as Replicator & Service, parent);
     expect(replicator.run).toHaveBeenCalledOnce;
@@ -40,7 +40,7 @@ test('replicator subscription', async () => {
     run: vi.fn(),
   };
 
-  const [parent, child] = fakeIPC();
+  const [parent, child] = inProcChannel();
 
   void runAsWorker(replicator as unknown as Replicator & Service, parent);
   expect(replicator.run).toHaveBeenCalledOnce;

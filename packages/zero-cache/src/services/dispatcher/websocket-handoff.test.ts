@@ -3,7 +3,7 @@ import {Server} from 'node:http';
 import {randInt} from 'shared/src/rand.js';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
-import {fakeIPC} from 'zero-cache/src/types/processes-test-utils.js';
+import {inProcChannel} from 'zero-cache/src/types/processes.js';
 import {
   installWebSocketHandoff,
   installWebSocketReceiver,
@@ -31,7 +31,7 @@ describe('dispatcher/websocket-handoff', () => {
   });
 
   test('handoff', async () => {
-    const [parent, child] = fakeIPC();
+    const [parent, child] = inProcChannel();
 
     installWebSocketHandoff(server, () => ({
       payload: {foo: 'boo'},
