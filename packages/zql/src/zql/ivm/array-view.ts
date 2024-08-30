@@ -13,6 +13,10 @@ import {Immutable} from 'shared/src/immutable.js';
  */
 export type Listener = (entries: Immutable<EntryList>) => void;
 
+export interface ViewDelegate {
+  onDestroyed(): void;
+}
+
 /**
  * Implements a materialized view of the output of an operator.
  *
@@ -29,14 +33,16 @@ export class ArrayView implements Output {
   readonly #view: EntryList;
   readonly #listeners = new Set<Listener>();
   readonly #schema: Schema;
+  readonly #delegate: ViewDelegate | undefined;
 
   #hydrated = false;
 
-  constructor(input: Input) {
+  constructor(input: Input, delegate?: ViewDelegate | undefined) {
     this.#input = input;
     this.#schema = input.getSchema();
     this.#input.setOutput(this);
     this.#view = [];
+    this.#delegate = delegate;
   }
 
   get data() {
@@ -63,6 +69,7 @@ export class ArrayView implements Output {
 
   destroy() {
     this.#input.destroy();
+    this.#delegate?.onDestroyed();
   }
 
   hydrate() {
