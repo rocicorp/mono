@@ -1,8 +1,7 @@
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parentPort, threadId, workerData} from 'node:worker_threads';
+import {threadId} from 'node:worker_threads';
 import postgres from 'postgres';
-import {assert} from 'shared/src/asserts.js';
 import {randInt} from 'shared/src/rand.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
 import {ReplicaVersionReady} from '../services/replicator/replicator.js';
@@ -11,20 +10,19 @@ import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
 import {postgresTypeConfig} from '../types/pg.js';
+import {parentWorker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
 import {configFromEnv} from './config.js';
-import {ReadySignal} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 const config = configFromEnv();
-assert(parentPort);
 
 // Consider parameterizing these (in main) based on total number of workers.
 const MAX_CVR_CONNECTIONS = 5;
 const MAX_MUTAGEN_CONNECTIONS = 5;
 
-const lc = createLogContext(config, {thread: 'syncer'});
+const lc = createLogContext(config, {worker: 'syncer'});
 
 const cvrDB = postgres(config.CVR_DB_URI, {
   ...postgresTypeConfig(),
@@ -69,8 +67,6 @@ const viewSyncerFactory = (
 
 const mutagenFactory = (id: string) => new MutagenService(lc, id, upstreamDB);
 
-new Syncer(lc, viewSyncerFactory, mutagenFactory, parentPort, workerData).run();
+new Syncer(lc, viewSyncerFactory, mutagenFactory, parentWorker).run();
 
-void dbWarmup.then(
-  () => parentPort?.postMessage({ready: true} satisfies ReadySignal),
-);
+void dbWarmup.then(() => parentWorker.send(['ready', {ready: true}]));

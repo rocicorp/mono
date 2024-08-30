@@ -1,12 +1,16 @@
-import {FileHandle} from 'node:fs/promises';
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
-import {MessagePort, Worker} from 'node:worker_threads';
 import WebSocket from 'ws';
+import {
+  getMessage,
+  MESSAGE_TYPES,
+  Receiver,
+  Sender,
+} from '../../types/processes.js';
 
 export type WebSocketHandoff<P> = (message: IncomingMessage) => {
   payload: P;
-  receiver: Worker | MessagePort;
+  receiver: Receiver;
 };
 
 export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
@@ -19,18 +23,19 @@ export function installWebSocketHandoff<P>(
     try {
       const {payload, receiver} = handoff(req);
       const {headers, method = 'GET'} = req;
-      const {
-        _handle: {fd},
-      } = socket as unknown as SocketWithFileHandle;
 
-      const data = {
-        message: {headers, method},
-        fd,
-        head,
-        payload,
-      } satisfies UpgradeRequest<P>;
+      const data = [
+        'handoff',
+        {
+          message: {headers, method},
+          head,
+          payload,
+        },
+      ] satisfies Handoff<P>;
 
-      receiver.postMessage(data);
+      // "This event is guaranteed to be passed an instance of the <net.Socket> class"
+      // https://nodejs.org/api/http.html#event-upgrade
+      receiver.send(data, socket as Socket);
     } catch (error) {
       socket.write(`HTTP/1.1 400 Bad Request\r\n${String(error)}`);
       return;
@@ -40,32 +45,22 @@ export function installWebSocketHandoff<P>(
 
 export function installWebSocketReceiver<P>(
   server: WebSocket.Server,
-  receiver: MessagePort,
   receive: WebSocketReceiver<P>,
+  sender: Sender = process,
 ) {
-  receiver.on('message', msg => {
-    const {message, fd, head, payload} = msg as UpgradeRequest<P>;
-    const socket = new Socket({
-      fd,
-      readable: true,
-      writable: true,
-      allowHalfOpen: true,
-    });
-
-    server.handleUpgrade(
-      message as IncomingMessage,
-      socket,
-      Buffer.from(head),
-      ws => receive(ws, payload),
-    );
+  sender.on('message', (data, socket) => {
+    const msg = getMessage<Handoff<P>>('handoff', data);
+    if (msg) {
+      const {message, head, payload} = msg;
+      server.handleUpgrade(
+        message as IncomingMessage,
+        socket as Socket,
+        Buffer.from(head),
+        ws => receive(ws, payload),
+      );
+    }
   });
 }
-
-// https://github.com/nodejs/help/issues/1312#issuecomment-394138355
-type SocketWithFileHandle = {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  _handle: FileHandle;
-};
 
 // Contains the subset of http.IncomingRequest passed from the main thread
 // to the syncer thread to hand off the upgrade of the request to a WebSocket.
@@ -79,9 +74,11 @@ type IncomingMessageSubset = {
   method: string;
 };
 
-type UpgradeRequest<P> = {
-  message: IncomingMessageSubset;
-  fd: number;
-  head: ArrayBuffer;
-  payload: P;
-};
+type Handoff<P> = [
+  typeof MESSAGE_TYPES.handoff,
+  {
+    message: IncomingMessageSubset;
+    head: ArrayBuffer;
+    payload: P;
+  },
+];

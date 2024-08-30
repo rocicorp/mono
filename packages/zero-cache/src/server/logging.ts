@@ -1,6 +1,6 @@
 import {LogContext, TeeLogSink, consoleLogSink} from '@rocicorp/logger';
 import {DatadogLogSink} from 'datadog/src/datadog-log-sink.js';
-import {threadId} from 'node:worker_threads';
+import {pid} from 'node:process';
 import {Config} from './config.js';
 
 const DEFAULT_LOG_LEVEL = 'info';
@@ -31,8 +31,8 @@ export function createLogContext(
     Config,
     'DATADOG_LOGS_API_KEY' | 'DATADOG_SERVICE_LABEL' | 'LOG_LEVEL'
   >,
-  context: {thread: string},
+  context: {worker: string},
 ): LogContext {
-  const ctx = {...context, threadID: threadId};
+  const ctx = {...context, pid};
   return new LogContext(getLogLevel(env), ctx, createLogSink(env));
 }
