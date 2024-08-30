@@ -16,7 +16,7 @@
     "worker-logs-sandbox": "npm run wrangler-sandbox -- tail",
     "worker-logs-prod": "npm run wrangler-prod -- tail",
     "start-zero-cache": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zeppliear/.env",
-    "start-zero-cache-single-thread": "cd ../../packages/zero-cache && npm run single-thread -- dotenv_config_path=../../apps/zeppliear/.env"
+    "start-zero-cache-single-thread": "SINGLE_PROCESS=1 npm run start-zero-cache"
   },
   "dependencies": {
     "@emotion/react": "^11.8.2",
