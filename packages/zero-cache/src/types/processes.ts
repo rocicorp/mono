@@ -71,9 +71,9 @@ export function singleProcessMode(): boolean {
 export function childWorker(module: string, options?: ForkOptions): Worker {
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
-    void import(path.join('../../', module)).then(({default: runWorker}) =>
-      runWorker(parent),
-    );
+    void import(path.join('../../', module))
+      .then(({default: runWorker}) => runWorker(parent))
+      .catch(err => child.emit('error', err));
     return child;
   }
   // Note: It is okay to cast a Processor or ChildProcess as a Worker.
