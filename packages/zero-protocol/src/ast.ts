@@ -70,6 +70,7 @@ export const correlatedSubquerySchema: v.Type<{
     childField: string;
     op: '=';
   };
+  hidden?: boolean | undefined;
   subquery: AST;
 }> = v.object({
   correlation: v.object({
@@ -77,6 +78,7 @@ export const correlatedSubquerySchema: v.Type<{
     childField: v.string(),
     op: v.literal('='),
   }),
+  hidden: v.boolean().optional(),
   subquery: v.lazy(() => astSchema),
 });
 
