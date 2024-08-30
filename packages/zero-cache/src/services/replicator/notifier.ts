@@ -1,10 +1,10 @@
 import {EventEmitter} from 'eventemitter3';
 import {Subscription} from '../../types/subscription.js';
-import {ReplicaVersionReady} from './replicator.js';
+import {ReplicaVersionNotifier, ReplicaVersionReady} from './replicator.js';
 
 /**
- * Handles the semantics of {@link Replicator.subscribe()} notifications,
- * namely:
+ * Handles the semantics of {@link ReplicatorVersionNotifier.subscribe()}
+ * notifications, namely:
  *
  * * New subscribers are notified immediately if the Replicator has already
  *   sent one notification (indicating that the Replica is ready to be read).
@@ -24,7 +24,7 @@ import {ReplicaVersionReady} from './replicator.js';
  * subscribe and unsubscribe traffic from View Syncers remains within each
  * Syncer Thread.
  */
-export class Notifier {
+export class Notifier implements ReplicaVersionNotifier {
   readonly #eventEmitter = new EventEmitter();
   #firstNotificationReceived = false;
 
@@ -37,7 +37,7 @@ export class Notifier {
     return {notify, subscription};
   }
 
-  addSubscription(): Subscription<ReplicaVersionReady> {
+  subscribe(): Subscription<ReplicaVersionReady> {
     const {notify, subscription} = this.#newSubscription();
     this.#eventEmitter.on('version', notify);
     if (this.#firstNotificationReceived) {

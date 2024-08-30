@@ -16,7 +16,7 @@ import {ViewSyncer} from '../services/view-syncer/view-syncer.js';
 import {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
-import {createNotifier} from './replicator.js';
+import {createNotifierFrom, subscribeTo} from './replicator.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -48,12 +48,13 @@ export class Syncer {
   ) {
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
-    const notifier = createNotifier(parent);
+    const notifier = createNotifierFrom(parent);
+    subscribeTo(parent);
 
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
       lc,
-      id => viewSyncerFactory(id, notifier.addSubscription()),
+      id => viewSyncerFactory(id, notifier.subscribe()),
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);

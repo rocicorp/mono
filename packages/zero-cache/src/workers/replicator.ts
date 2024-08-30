@@ -1,5 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
-import {Replicator} from 'zero-cache/src/services/replicator/replicator.js';
+import {
+  Replicator,
+  ReplicaVersionNotifier,
+} from 'zero-cache/src/services/replicator/replicator.js';
 import {Service} from 'zero-cache/src/services/service.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import {getMessage, Worker} from '../types/processes.js';
@@ -17,18 +20,24 @@ export function runAsWorker(
     }
   });
 
-  // Respond to subscribe requests from the parent process.
-  parent.on('message', async data => {
+  handleSubscriptionsFrom(parent, replicator);
+
+  return replicator.run();
+}
+
+export function handleSubscriptionsFrom(
+  subscriber: Worker,
+  notifier: ReplicaVersionNotifier,
+) {
+  subscriber.on('message', async data => {
     const msg = getMessage('subscribe', data);
     if (msg) {
-      const subscription = replicator.subscribe();
+      const subscription = notifier.subscribe();
       for await (const msg of subscription) {
-        parent.send(['notify', msg]);
+        subscriber.send(['notify', msg]);
       }
     }
   });
-
-  return replicator.run();
 }
 
 export function getStatusFromWorker(replicator: Worker): Promise<unknown> {
@@ -48,18 +57,21 @@ export function getStatusFromWorker(replicator: Worker): Promise<unknown> {
 }
 
 /**
- * Creates a Notifier to listen to the Subscription from the Replicator
- * running in a different process. This is only meant to be done once
- * by the parent process.
+ * Creates a Notifier to relay notifications the notifier of another Worker.
+ * This does not send the initial subscription message. Use {@link subscribeTo}
+ * to initiate the subscription.
  */
-export function createNotifier(replicator: Worker): Notifier {
+export function createNotifierFrom(source: Worker): Notifier {
   const notifier = new Notifier();
-  replicator.on('message', data => {
+  source.on('message', data => {
     const msg = getMessage('notify', data);
     if (msg) {
       notifier.notifySubscribers(msg);
     }
   });
-  replicator.send(['subscribe', {}]);
   return notifier;
+}
+
+export function subscribeTo(source: Worker) {
+  source.send(['subscribe', {}]);
 }

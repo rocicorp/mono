@@ -5,8 +5,12 @@ import {sleep} from 'shared/src/sleep.js';
 import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {childWorker, getMessage, Worker} from '../types/processes.js';
-import {createNotifier} from '../workers/replicator.js';
+import {childWorker} from '../types/processes.js';
+import {
+  createNotifierFrom,
+  handleSubscriptionsFrom,
+  subscribeTo,
+} from '../workers/replicator.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
 
@@ -22,43 +26,30 @@ function logErrorAndExit(err: unknown) {
 let numReady = 0;
 const {promise: allReady, resolve: signalAllReady} = resolver<true>();
 
-function handleReady(worker: Worker, name: string, id?: number): Worker {
-  const handler = (data: unknown) => {
-    if (getMessage('ready', data)) {
-      // Similar to once('message') but only after receiving the 'ready' signal.
-      worker.off('message', handler);
-      lc.debug?.(
-        `${name}${id ? ' #' + id : ''} ready (${Date.now() - startMs} ms)`,
-      );
-      if (++numReady === numSyncers + 1) {
-        signalAllReady(true);
-      }
-    }
-  };
-  return worker.on('message', handler);
+function handleReady(name: string, id?: number) {
+  lc.debug?.(
+    `${name}${id ? ' #' + id : ''} ready (${Date.now() - startMs} ms)`,
+  );
+  if (++numReady === numSyncers + 1) {
+    signalAllReady(true);
+  }
 }
 
-const replicator = childWorker('./src/server/replicator.ts');
-handleReady(replicator, 'replicator').on('close', logErrorAndExit);
+const replicator = childWorker('./src/server/replicator.ts')
+  .once('message', () => {
+    subscribeTo(replicator);
+    handleReady('replicator');
+  })
+  .on('close', logErrorAndExit);
 
 const numSyncers = Math.max(1, availableParallelism() - 1); // Reserve 1 for the Replicator
-
-// Create a Notifier from a subscription to the Replicator,
-// and relay notifications to all subscriptions from syncers.
-const notifier = createNotifier(replicator);
+const notifier = createNotifierFrom(replicator);
 
 const syncers = Array.from({length: numSyncers}, (_, i) => {
-  const syncer = childWorker('./src/server/syncer.ts');
-  handleReady(syncer, 'syncer', i + 1)
-    .on('message', async data => {
-      if (getMessage('subscribe', data)) {
-        const subscription = notifier.addSubscription();
-        for await (const msg of subscription) {
-          syncer.send(['notify', msg]);
-        }
-      }
-    })
+  const syncer = childWorker('./src/server/syncer.ts')
+    .once('message', () => handleReady('syncer', i + 1))
     .on('close', logErrorAndExit);
+  handleSubscriptionsFrom(syncer, notifier);
   return syncer;
 });
 

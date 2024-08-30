@@ -17,7 +17,7 @@ import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
 import {postgresTypeConfig} from '../types/pg.js';
 import {getMessage, inProcChannel} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
-import {createNotifier, runAsWorker} from '../workers/replicator.js';
+import {createNotifierFrom, runAsWorker} from '../workers/replicator.js';
 import {Syncer} from '../workers/syncer.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
@@ -77,10 +77,10 @@ const mutagenFactory = (id: string) => new MutagenService(lc, id, upstreamDB);
 
 // Create a Notifier from a subscription to the Replicator,
 // and relay notifications to all subscriptions from syncers.
-const notifier = createNotifier(replicatorChannel);
+const notifier = createNotifierFrom(replicatorChannel);
 syncerChannel.on('message', async data => {
   if (getMessage('subscribe', data)) {
-    const subscription = notifier.addSubscription();
+    const subscription = notifier.subscribe();
     for await (const msg of subscription) {
       syncerChannel.send(['notify', msg]);
     }

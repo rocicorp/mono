@@ -122,7 +122,7 @@ export class IncrementalSyncer {
   }
 
   subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
-    return this.#notifier.addSubscription();
+    return this.#notifier.subscribe();
   }
 
   async stop(lc: LogContext, err?: unknown) {
