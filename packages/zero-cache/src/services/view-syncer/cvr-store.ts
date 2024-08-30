@@ -34,7 +34,7 @@ import {
   type RowPatch,
   type RowRecord,
 } from './schema/types.js';
-import {_} from 'vitest/dist/reporters-BECoY4-b.js';
+import fs from 'node:fs';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -53,6 +53,7 @@ export class RowRecordCache {
     if (this.#loaded) {
       return;
     }
+    console.log('LLOOOOOOADDDDDINGGGGG!!!!');
     for await (const rows of this.#db<
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
@@ -81,9 +82,9 @@ export class RowRecordCache {
     return this.#cache;
   }
 
-  async flush(rowRecords: IterableIterator<[RowRecord, unknown]>) {
+  async flush(rowRecords: IterableIterator<RowRecord>) {
     await this.#ensureLoaded();
-    for (const [row] of rowRecords) {
+    for (const row of rowRecords) {
       this.#cache.set(row.id, row);
     }
   }
@@ -130,10 +131,9 @@ export class CVRStore {
   readonly #pendingQueryVersionDeletes = new CustomKeySet<
     [{id: string}, CVRVersion]
   >(([patchRecord, version]) => patchRecord.id + '-' + versionString(version));
-  readonly #pendingRowRecordPuts = new CustomKeyMap<
-    RowID,
-    [RowRecord, (tx: PostgresTransaction) => Promise<unknown>]
-  >(rowIDHash);
+  readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
+    rowIDHash,
+  );
   readonly #pendingRowVersionDeletes = new CustomKeySet<[RowID, CVRVersion]>(
     ([id, version]) => rowIDHash(id) + '-' + versionString(version),
   );
@@ -230,16 +230,10 @@ export class CVRStore {
       return;
     }
     this.#pendingRowRecordPuts.delete(id);
-    const w = pair[1];
-    this.#writes.delete(w);
   }
 
   getPendingRowRecord(id: RowID): RowRecord | undefined {
-    const pair = this.#pendingRowRecordPuts.get(id);
-    if (!pair) {
-      return undefined;
-    }
-    return pair[0];
+    return this.#pendingRowRecordPuts.get(id);
   }
 
   isQueryVersionPendingDelete(
@@ -276,13 +270,7 @@ export class CVRStore {
     // If we are writing the same again then delete the old write.
     this.cancelPendingRowRecordWrite(row.id);
 
-    const change = rowRecordToRowsRow(this.#id, row);
-    const w = (tx: PostgresTransaction) => tx`INSERT INTO cvr.rows ${tx(change)}
-    ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-    DO UPDATE SET ${tx(change)}`;
-    this.#writes.add(w);
-
-    this.#pendingRowRecordPuts.set(row.id, [row, w]);
+    this.#pendingRowRecordPuts.set(row.id, row);
   }
 
   putInstance(version: CVRVersion, lastActive: {epochMillis: number}): void {
@@ -535,13 +523,69 @@ export class CVRStore {
   }
 
   async flush(): Promise<void> {
+    const t0 = Date.now();
     await this.#db.begin(async tx => {
+      if (this.#pendingRowRecordPuts.size > 0) {
+        const t00 = Date.now();
+        const t01 = Date.now();
+        const rows = [...this.#pendingRowRecordPuts.values()].map(r =>
+          rowRecordToRowsRow(this.#id, r),
+        );
+        console.log('rowRecordToRowsRow', Date.now() - t01);
+        let i = 0;
+        while (i < rows.length) {
+          const content = `INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts") 
+          VALUES ${rows
+            .slice(i, i + 9_000)
+            .map(
+              r =>
+                `('${r.clientGroupID}', '${r.schema}', '${
+                  r.table.substring(0, r.table.length - 1) + '1'
+                }', '${JSON.stringify(r.rowKey)}'::JSONB, '${r.rowVersion}', '${
+                  r.patchVersion
+                }', '${JSON.stringify(r.refCounts)}'::JSONB)`,
+            )
+            .join(',')} 
+            ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
+            DO UPDATE SET "rowVersion" = excluded."rowVersion",
+              "patchVersion" = excluded."patchVersion",
+              "refCounts" = excluded."refCounts"`;
+
+          fs.writeFile(
+            `/Users/greg/scratch/insert-${this.#id}-${i}.txt`,
+            content,
+            err => {
+              if (err) {
+                console.error(err);
+              } else {
+                // file written successfully
+              }
+            },
+          );
+          const t02 = Date.now();
+          const t = tx`INSERT INTO cvr.rows ${tx(rows.slice(i, i + 9_000))} 
+            ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
+            DO UPDATE SET "rowVersion" = excluded."rowVersion",
+              "patchVersion" = excluded."patchVersion",
+              "refCounts" = excluded."refCounts"`;
+          console.log('tx interp', i, Date.now() - t02);
+          const t03 = Date.now();
+          await t;
+          console.log('flush batch', i, Date.now() - t03);
+          i += 10_000;
+        }
+
+        console.log('rowRecords flush', Date.now() - t00);
+      }
       for (const write of this.#writes) {
         await write(tx);
       }
     });
+    console.log('db flush', this.#pendingRowRecordPuts.size, Date.now() - t0);
 
+    const t1 = Date.now();
     await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
+    console.log('cache flush', Date.now() - t1);
 
     this.#writes.clear();
     this.#pendingRowVersionDeletes.clear();

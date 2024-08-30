@@ -34,13 +34,7 @@ function init() {
     zero: Zero<Schema>;
     undoManager: UndoManager;
   }) {
-    return (
-      <div className="repliear">
-        <ZeroProvider zero={zero}>
-          <App undoManager={undoManager}></App>
-        </ZeroProvider>
-      </div>
-    );
+    return <div className="repliear"></div>;
   }
 
   const root = must(document.getElementById('root'));

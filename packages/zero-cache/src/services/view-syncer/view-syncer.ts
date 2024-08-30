@@ -478,8 +478,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const elapsed = Date.now() - start;
       total += rows.size;
       lc.debug?.(`processing ${rows.size} (of ${total}) rows (${elapsed} ms)`);
+      const t0 = Date.now();
       const patches = await updater.received(this.#lc, rows);
+      console.log('updater.received', Date.now() - t0);
+      const t1 = Date.now();
       patches.forEach(patch => pokers.forEach(poker => poker.addPatch(patch)));
+      console.log('patches poked', Date.now() - t1);
       rows.clear();
     };
 
@@ -505,7 +509,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (rows.size % CURSOR_PAGE_SIZE === 0) {
+        const t0 = Date.now();
         await processBatch();
+        console.log('processBatch', Date.now() - t0);
       }
     }
     if (rows.size) {
@@ -569,4 +575,4 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 }
 
 // TODO: Increase this once performance issues are resolved.
-const CURSOR_PAGE_SIZE = 10;
+const CURSOR_PAGE_SIZE = 10000;
