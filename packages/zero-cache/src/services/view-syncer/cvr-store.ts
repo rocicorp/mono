@@ -75,7 +75,11 @@ class RowRecordCache {
   async flush(rowRecords: IterableIterator<RowRecord>) {
     const cache = await this.#ensureLoaded();
     for (const row of rowRecords) {
-      cache.set(row.id, row);
+      if (row.refCounts === null) {
+        cache.delete(row.id);
+      } else {
+        cache.set(row.id, row);
+      }
     }
   }
 }
