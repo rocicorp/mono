@@ -1,9 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import pg from 'pg';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {CustomKeySet} from 'shared/src/custom-key-set.js';
-import {lookupRowsWithKeys} from '../../db/queries.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
@@ -37,9 +35,50 @@ import {
   type RowRecord,
 } from './schema/types.js';
 
-const {builtins} = pg.types;
-
 type NotNull<T> = T extends null ? never : T;
+
+class RowRecordCache {
+  #cache: CustomKeyMap<RowID, RowRecord> | undefined;
+  readonly #db: PostgresDB;
+  readonly #cvrID: string;
+
+  constructor(db: PostgresDB, cvrID: string) {
+    this.#db = db;
+    this.#cvrID = cvrID;
+  }
+
+  async #ensureLoaded(): Promise<CustomKeyMap<RowID, RowRecord>> {
+    if (this.#cache) {
+      return this.#cache;
+    }
+    const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
+    for await (const rows of this.#db<
+      RowsRow[]
+    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
+      this.#cvrID
+    } AND "refCounts" IS NOT NULL`
+      // TODO(arv): Arbitrary page size
+      .cursor(5000)) {
+      for (const row of rows) {
+        const rowRecord = rowsRowToRowRecord(row);
+        cache.set(rowRecord.id, rowRecord);
+      }
+    }
+    this.#cache = cache;
+    return this.#cache;
+  }
+
+  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
+    return this.#ensureLoaded();
+  }
+
+  async flush(rowRecords: IterableIterator<RowRecord>) {
+    const cache = await this.#ensureLoaded();
+    for (const row of rowRecords) {
+      cache.set(row.id, row);
+    }
+  }
+}
 
 type QueryRow = {
   queryHash: string;
@@ -82,18 +121,16 @@ export class CVRStore {
   readonly #pendingQueryVersionDeletes = new CustomKeySet<
     [{id: string}, CVRVersion]
   >(([patchRecord, version]) => patchRecord.id + '-' + versionString(version));
-  readonly #pendingRowRecordPuts = new CustomKeyMap<
-    RowID,
-    [RowRecord, (tx: PostgresTransaction) => Promise<unknown>]
-  >(rowIDHash);
-  readonly #pendingRowVersionDeletes = new CustomKeySet<[RowID, CVRVersion]>(
-    ([id, version]) => rowIDHash(id) + '-' + versionString(version),
+  readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
+    rowIDHash,
   );
+  readonly #rowCache: RowRecordCache;
 
   constructor(lc: LogContext, db: PostgresDB, cvrID: string) {
     this.#lc = lc;
     this.#db = db;
     this.#id = cvrID;
+    this.#rowCache = new RowRecordCache(db, cvrID);
   }
 
   async load(): Promise<CVR> {
@@ -170,21 +207,11 @@ export class CVRStore {
   }
 
   cancelPendingRowRecordWrite(id: RowID): void {
-    const pair = this.#pendingRowRecordPuts.get(id);
-    if (!pair) {
-      return;
-    }
     this.#pendingRowRecordPuts.delete(id);
-    const w = pair[1];
-    this.#writes.delete(w);
   }
 
   getPendingRowRecord(id: RowID): RowRecord | undefined {
-    const pair = this.#pendingRowRecordPuts.get(id);
-    if (!pair) {
-      return undefined;
-    }
-    return pair[0];
+    return this.#pendingRowRecordPuts.get(id);
   }
 
   isQueryVersionPendingDelete(
@@ -194,55 +221,15 @@ export class CVRStore {
     return this.#pendingQueryVersionDeletes.has([patchRecord, version]);
   }
 
-  isRowVersionPendingDelete(rowID: RowID, version: CVRVersion): boolean {
-    return this.#pendingRowVersionDeletes.has([rowID, version]);
+  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
+    return this.#rowCache.getRowRecords();
   }
 
-  async getMultipleRowEntries(
-    rowIDs: Iterable<RowID>,
-  ): Promise<Map<RowID, RowRecord>> {
-    const rows = await lookupRowsWithKeys(
-      this.#db,
-      'cvr',
-      'rows',
-      {
-        schema: {typeOid: builtins.TEXT},
-        table: {typeOid: builtins.TEXT},
-        rowKey: {typeOid: builtins.JSONB},
-      },
-      rowIDs,
-    );
-    const rv = new CustomKeyMap<RowID, RowRecord>(rowIDHash);
-    for (const row of rows) {
-      rv.set(row as RowID, rowsRowToRowRecord(row as RowsRow));
-    }
-    return rv;
-  }
-
-  putRowRecord(
-    row: RowRecord,
-    oldRowPatchVersionToDelete: CVRVersion | undefined,
-  ): void {
-    if (oldRowPatchVersionToDelete) {
-      // add pending delete for the old patch version.
-      this.#pendingRowVersionDeletes.add([row.id, oldRowPatchVersionToDelete]);
-
-      // No need to delete the old row because it will be replaced by the new one.
-    }
-
-    // Clear any pending deletes for this row and patchVersion.
-    this.#pendingRowVersionDeletes.delete([row.id, row.patchVersion]);
-
+  putRowRecord(row: RowRecord): void {
     // If we are writing the same again then delete the old write.
     this.cancelPendingRowRecordWrite(row.id);
 
-    const change = rowRecordToRowsRow(this.#id, row);
-    const w = (tx: PostgresTransaction) => tx`INSERT INTO cvr.rows ${tx(change)}
-    ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-    DO UPDATE SET ${tx(change)}`;
-    this.#writes.add(w);
-
-    this.#pendingRowRecordPuts.set(row.id, [row, w]);
+    this.#pendingRowRecordPuts.set(row.id, row);
   }
 
   putInstance(version: CVRVersion, lastActive: {epochMillis: number}): void {
@@ -259,7 +246,7 @@ export class CVRStore {
   }
 
   numPendingWrites(): number {
-    return this.#writes.size;
+    return this.#writes.size + this.#pendingRowRecordPuts.size;
   }
 
   markQueryAsDeleted(
@@ -490,30 +477,37 @@ export class CVRStore {
     return rv;
   }
 
-  async *allRowRecords(): AsyncIterable<RowRecord> {
-    for await (const rows of this.#db<
-      RowsRow[]
-    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
-      this.#id
-    } AND "refCounts" IS NOT NULL`
-      // TODO(arv): Arbitrary page size
-      .cursor(1000)) {
-      for (const row of rows) {
-        yield rowsRowToRowRecord(row);
-      }
-    }
-  }
-
   async flush(): Promise<void> {
     await this.#db.begin(async tx => {
+      if (this.#pendingRowRecordPuts.size > 0) {
+        const rowRecordRows = [...this.#pendingRowRecordPuts.values()].map(r =>
+          rowRecordToRowsRow(this.#id, r),
+        );
+        let i = 0;
+        while (i < rowRecordRows.length) {
+          await tx`INSERT INTO cvr.rows ${tx(
+            rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
+          )} 
+            ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
+            DO UPDATE SET "rowVersion" = excluded."rowVersion",
+              "patchVersion" = excluded."patchVersion",
+              "refCounts" = excluded."refCounts"`;
+          i += ROW_RECORD_UPSERT_BATCH_SIZE;
+        }
+      }
       for (const write of this.#writes) {
         await write(tx);
       }
     });
+    await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
 
     this.#writes.clear();
-    this.#pendingRowVersionDeletes.clear();
     this.#pendingQueryVersionDeletes.clear();
     this.#pendingRowRecordPuts.clear();
   }
 }
+
+// Max number of parameters for our sqlite build is 65534.
+// Each row record has 7 parameters (1 per column).
+// 65534 / 7 = 9362
+const ROW_RECORD_UPSERT_BATCH_SIZE = 9_360;
