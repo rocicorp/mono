@@ -124,9 +124,6 @@ export class CVRStore {
   readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
     rowIDHash,
   );
-  readonly #pendingRowVersionDeletes = new CustomKeySet<[RowID, CVRVersion]>(
-    ([id, version]) => rowIDHash(id) + '-' + versionString(version),
-  );
   readonly #rowCache: RowRecordCache;
 
   constructor(lc: LogContext, db: PostgresDB, cvrID: string) {
@@ -222,10 +219,6 @@ export class CVRStore {
     version: CVRVersion,
   ): boolean {
     return this.#pendingQueryVersionDeletes.has([patchRecord, version]);
-  }
-
-  isRowVersionPendingDelete(rowID: RowID, version: CVRVersion): boolean {
-    return this.#pendingRowVersionDeletes.has([rowID, version]);
   }
 
   getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
@@ -509,7 +502,6 @@ export class CVRStore {
     await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
 
     this.#writes.clear();
-    this.#pendingRowVersionDeletes.clear();
     this.#pendingQueryVersionDeletes.clear();
     this.#pendingRowRecordPuts.clear();
   }
