@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {newQuery} from './query-impl.js';
+import {newQuery, QueryDelegate} from './query-impl.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {
@@ -12,8 +12,6 @@ import {
 } from './test/testSchemas.js';
 import {toInputArgs} from './schema.js';
 import {must} from 'shared/src/must.js';
-import {BuilderDelegate} from '../builder/builder.js';
-import {SubscriptionDelegate} from '../context/context.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -59,22 +57,22 @@ function makeSources() {
   };
 }
 
-function addData(host: BuilderDelegate) {
-  host.getSource('user').push({
+function addData(queryDelegate: QueryDelegate) {
+  queryDelegate.getSource('user').push({
     type: 'add',
     row: {
       id: '0001',
       name: 'Alice',
     },
   });
-  host.getSource('user').push({
+  queryDelegate.getSource('user').push({
     type: 'add',
     row: {
       id: '0002',
       name: 'Bob',
     },
   });
-  host.getSource('issue').push({
+  queryDelegate.getSource('issue').push({
     type: 'add',
     row: {
       id: '0001',
@@ -84,7 +82,7 @@ function addData(host: BuilderDelegate) {
       ownerId: '0001',
     },
   });
-  host.getSource('issue').push({
+  queryDelegate.getSource('issue').push({
     type: 'add',
     row: {
       id: '0002',
@@ -95,7 +93,7 @@ function addData(host: BuilderDelegate) {
     },
   });
 
-  host.getSource('comment').push({
+  queryDelegate.getSource('comment').push({
     type: 'add',
     row: {
       id: '0001',
@@ -104,7 +102,7 @@ function addData(host: BuilderDelegate) {
       body: 'comment 1',
     },
   });
-  host.getSource('comment').push({
+  queryDelegate.getSource('comment').push({
     type: 'add',
     row: {
       id: '0002',
@@ -113,7 +111,7 @@ function addData(host: BuilderDelegate) {
       body: 'comment 2',
     },
   });
-  host.getSource('revision').push({
+  queryDelegate.getSource('revision').push({
     type: 'add',
     row: {
       id: '0001',
@@ -123,14 +121,14 @@ function addData(host: BuilderDelegate) {
     },
   });
 
-  host.getSource('label').push({
+  queryDelegate.getSource('label').push({
     type: 'add',
     row: {
       id: '0001',
       name: 'label 1',
     },
   });
-  host.getSource('issueLabel').push({
+  queryDelegate.getSource('issueLabel').push({
     type: 'add',
     row: {
       issueId: '0001',
@@ -139,7 +137,7 @@ function addData(host: BuilderDelegate) {
   });
 }
 
-function makeHost(): BuilderDelegate & SubscriptionDelegate {
+function makeQueryDelegate(): QueryDelegate {
   const sources = makeSources();
   return {
     getSource(tableName: string) {
@@ -148,7 +146,7 @@ function makeHost(): BuilderDelegate & SubscriptionDelegate {
     createStorage() {
       return new MemoryStorage();
     },
-    subscriptionAdded() {
+    addServerQuery() {
       return () => {};
     },
   };
@@ -156,8 +154,8 @@ function makeHost(): BuilderDelegate & SubscriptionDelegate {
 
 describe('bare select', () => {
   test('empty source', () => {
-    const host = makeHost();
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const queryDelegate = makeQueryDelegate();
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
@@ -179,8 +177,8 @@ describe('bare select', () => {
   });
 
   test('empty source followed by changes', () => {
-    const host = makeHost();
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const queryDelegate = makeQueryDelegate();
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
@@ -191,7 +189,7 @@ describe('bare select', () => {
 
     expect(rows).toEqual([]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -212,7 +210,7 @@ describe('bare select', () => {
       },
     ]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0001',
@@ -223,8 +221,8 @@ describe('bare select', () => {
   });
 
   test('source with initial data', () => {
-    const host = makeHost();
-    host.getSource('issue').push({
+    const queryDelegate = makeQueryDelegate();
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -235,7 +233,7 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
@@ -256,9 +254,9 @@ describe('bare select', () => {
   });
 
   test('source with initial data followed by changes', () => {
-    const host = makeHost();
+    const queryDelegate = makeQueryDelegate();
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -269,7 +267,7 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
@@ -288,7 +286,7 @@ describe('bare select', () => {
       },
     ]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0002',
@@ -320,10 +318,10 @@ describe('bare select', () => {
 
 describe('joins and filters', () => {
   test('filter', () => {
-    const host = makeHost();
-    addData(host);
+    const queryDelegate = makeQueryDelegate();
+    addData(queryDelegate);
 
-    const issueQuery = newQuery(host, issueSchema)
+    const issueQuery = newQuery(queryDelegate, issueSchema)
       .select('id')
       .where('title', '=', 'issue 1');
 
@@ -355,7 +353,7 @@ describe('joins and filters', () => {
     expect(doubleFilterRows.map(r => r.id)).toEqual(['0001']);
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0001',
@@ -370,7 +368,7 @@ describe('joins and filters', () => {
     expect(doubleFilterRows).toEqual([]);
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -388,10 +386,10 @@ describe('joins and filters', () => {
   });
 
   test('join', () => {
-    const host = makeHost();
-    addData(host);
+    const queryDelegate = makeQueryDelegate();
+    addData(queryDelegate);
 
-    const issueQuery = newQuery(host, issueSchema)
+    const issueQuery = newQuery(queryDelegate, issueSchema)
       .related('labels', q => q.select('name'))
       .related('owner', q => q.select('name'))
       .related('comments', q => q.select('text'))
@@ -461,7 +459,7 @@ describe('joins and filters', () => {
       },
     ]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0001',
@@ -471,7 +469,7 @@ describe('joins and filters', () => {
         ownerId: '0001',
       },
     });
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0002',

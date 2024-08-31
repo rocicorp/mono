@@ -1,5 +1,113 @@
-import type {AST} from '../ast/ast.js';
+import {ExperimentalNoIndexDiff} from 'replicache';
+import {MemorySource} from '../ivm/memory-source.js';
+import {ValueType} from '../ivm/schema.js';
+import {Row} from '../ivm/data.js';
+import {Schema, toInputArgs} from '../query/schema.js';
+import {Source} from '../ivm/source.js';
+import {AST} from '../ast/ast.js';
+import {Storage} from '../ivm/operator.js';
+import {MemoryStorage} from '../ivm/memory-storage.js';
+import {assert} from 'shared/src/asserts.js';
+import {QueryDelegate} from '../query/query-impl.js';
 
-export type SubscriptionDelegate = {
-  subscriptionAdded(ast: AST): () => void;
-};
+export type AddWatch = (name: string, cb: WatchCallback) => void;
+export type WatchCallback = (changes: ExperimentalNoIndexDiff) => void;
+export type AddQuery = (ast: AST) => () => void;
+
+export class ZeroContext implements QueryDelegate {
+  readonly #sourceStore: ZeroSourceStore;
+  readonly #schemas: Record<string, Schema>;
+  readonly #addQuery: AddQuery;
+
+  constructor(
+    schemas: Record<string, Schema>,
+    addWatch: AddWatch,
+    addQuery: AddQuery,
+  ) {
+    this.#schemas = schemas;
+    this.#sourceStore = new ZeroSourceStore(addWatch);
+    this.#addQuery = addQuery;
+  }
+
+  getSource(name: string): Source {
+    const schema = this.#schemas[name];
+    const sourceArgs = toInputArgs(schema);
+    return this.#sourceStore.getSource(
+      name,
+      sourceArgs.columns,
+      sourceArgs.primaryKey,
+    );
+  }
+
+  addServerQuery(ast: AST) {
+    return this.#addQuery(ast);
+  }
+
+  createStorage(): Storage {
+    return new MemoryStorage();
+  }
+}
+
+/**
+ * Forwards Replicache changes to ZQL sources so they can be fed into any
+ * queries that may exist.
+ */
+class ZeroSourceStore {
+  readonly #sources = new Map<string, ZeroSource>();
+  readonly #addWatch: AddWatch;
+
+  constructor(addWatch: AddWatch) {
+    this.#addWatch = addWatch;
+  }
+
+  getSource(
+    name: string,
+    columns: Record<string, ValueType>,
+    primaryKeys: readonly string[],
+  ) {
+    let source = this.#sources.get(name);
+    if (source === undefined) {
+      source = new ZeroSource(name, columns, primaryKeys, this.#addWatch);
+      this.#sources.set(name, source);
+    }
+
+    return source.get();
+  }
+}
+
+class ZeroSource {
+  readonly #source: MemorySource;
+
+  constructor(
+    name: string,
+    columns: Record<string, ValueType>,
+    primaryKeys: readonly string[],
+    addWatch: AddWatch,
+  ) {
+    this.#source = new MemorySource(name, columns, primaryKeys);
+    addWatch(name, this.#handleDiff);
+  }
+
+  #handleDiff = (changes: ExperimentalNoIndexDiff) => {
+    for (const diff of changes) {
+      if (diff.op === 'del' || diff.op === 'change') {
+        assert(typeof diff.oldValue === 'object');
+        this.#source.push({
+          type: 'remove',
+          row: diff.oldValue as Row,
+        });
+      }
+      if (diff.op === 'add' || diff.op === 'change') {
+        assert(typeof diff.newValue === 'object');
+        this.#source.push({
+          type: 'add',
+          row: diff.newValue as Row,
+        });
+      }
+    }
+  };
+
+  get() {
+    return this.#source;
+  }
+}

@@ -13,8 +13,7 @@ import {
   SchemaDefs,
   MakeEntityQueriesFromQueryDefs,
 } from 'zero-client/src/client/zero.js';
-import {BuilderDelegate} from 'zql/src/zql/builder/builder.js';
-import {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
+import {ZeroContext} from 'zql/src/zql/context/context.js';
 import {Query} from 'zero-client/src/mod.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
@@ -23,7 +22,7 @@ import {Row} from 'zql/src/zql/ivm/data.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
 export class ZQLiteZero<SD extends SchemaDefs> {
-  readonly zqlContext: BuilderDelegate & SubscriptionDelegate;
+  readonly zeroContext: ZeroContext;
   readonly query: MakeEntityQueriesFromQueryDefs<SD>;
   readonly mutate: MakeCRUDMutate<SD>;
   db: Database;
@@ -31,14 +30,14 @@ export class ZQLiteZero<SD extends SchemaDefs> {
   constructor(options: ZQLiteZeroOptions<SD>) {
     const {schemas = {} as SD, db} = options;
     this.db = db;
-    this.zqlContext = {} as TODO;
+    this.zeroContext = {} as TODO;
     this.query = this.#registerQueries(schemas);
     this.mutate = this.#makeCRUDMutate<SD>(schemas, db);
   }
 
   #registerQueries(schemas: SD): MakeEntityQueriesFromQueryDefs<SD> {
     const rv = {} as Record<string, Query<Schema>>;
-    const context = this.zqlContext;
+    const context = this.zeroContext;
     // Not using parse yet
     for (const [name, schema] of Object.entries(schemas)) {
       rv[name] = newQuery(context, schema);
@@ -102,14 +101,14 @@ export class ZQLiteZero<SD extends SchemaDefs> {
           .get(value.id);
         if (existingEntity) return;
         //console.log('Adding', value);
-        await this.zqlContext.getSource(entityType).push({
+        await this.zeroContext.getSource(entityType).push({
           type: 'add',
           row: value,
         });
       },
       set: async (value: E) => {
         assertNotInBatch(entityType, 'set');
-        await this.zqlContext.getSource(entityType).push({
+        await this.zeroContext.getSource(entityType).push({
           type: 'add',
           row: value,
         });
@@ -122,10 +121,10 @@ export class ZQLiteZero<SD extends SchemaDefs> {
         if (!existingEntity)
           throw new Error(`Entity with id ${value.id} not found`);
         const mergedValue = {...existingEntity, ...value};
-        await this.zqlContext
+        await this.zeroContext
           .getSource(entityType)
           .push({type: 'remove', row: existingEntity});
-        await this.zqlContext
+        await this.zeroContext
           .getSource(entityType)
           .push({type: 'add', row: mergedValue});
       },
@@ -135,7 +134,7 @@ export class ZQLiteZero<SD extends SchemaDefs> {
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
           .get(id);
         if (!existingEntity) throw new Error(`Entity with id ${id} not found`);
-        await this.zqlContext
+        await this.zeroContext
           .getSource(entityType)
           .push({type: 'remove', row: existingEntity});
       },

@@ -47,8 +47,7 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from 'zero-protocol/src/pull.js';
-import type {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
-import {ZeroContext} from 'zql/src/zql/context/zero-context.js';
+import {ZeroContext} from 'zql/src/zql/context/context.js';
 import {Query} from 'zql/src/zql/query/query.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
 import {nanoid} from '../util/nanoid.js';
@@ -83,7 +82,6 @@ import {
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
-import {BuilderDelegate} from '../../../zql/src/zql/builder/builder.js';
 
 export type SchemaDefs = {
   readonly [table: string]: Schema;
@@ -249,7 +247,7 @@ export class Zero<QD extends SchemaDefs> {
     // intentionally empty
   };
 
-  readonly #zqlContext: BuilderDelegate & SubscriptionDelegate;
+  readonly #zeroContext: ZeroContext;
 
   /**
    * `onUpdateNeeded` is called when a code update is needed.
@@ -429,7 +427,7 @@ export class Zero<QD extends SchemaDefs> {
       this.#sendChangeDesiredQueries(msg),
     );
 
-    this.#zqlContext = new ZeroContext(
+    this.#zeroContext = new ZeroContext(
       schemas,
       (name, cb) =>
         rep.subscriptions.add(
@@ -438,9 +436,7 @@ export class Zero<QD extends SchemaDefs> {
             cb as WatchCallback,
           ),
         ),
-      {
-        subscriptionAdded: ast => this.#queryManager.add(ast),
-      },
+      ast => this.#queryManager.add(ast),
     );
 
     this.query = this.#registerQueries(schemas);
@@ -1466,7 +1462,7 @@ export class Zero<QD extends SchemaDefs> {
 
   #registerQueries(queryDefs: QD): MakeEntityQueriesFromQueryDefs<QD> {
     const rv = {} as Record<string, Query<Schema>>;
-    const context = this.#zqlContext;
+    const context = this.#zeroContext;
     // Not using parse yet
     for (const [name, schema] of Object.entries(queryDefs)) {
       rv[name] = newQuery(context, schema);

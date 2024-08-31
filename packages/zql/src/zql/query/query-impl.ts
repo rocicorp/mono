@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {assert} from 'shared/src/asserts.js';
-import {resolver} from '@rocicorp/resolver';
 import {AST} from '../ast/ast.js';
 import {
   AddSelections,
@@ -23,19 +22,18 @@ import {
 } from './schema.js';
 import {buildPipeline, BuilderDelegate} from '../builder/builder.js';
 import {Ordering} from '../ast/ast.js';
-import {ArrayView} from '../ivm/array-view.js';
+import {ArrayView, ViewDelegate} from '../ivm/array-view.js';
 import {TypedView} from './typed-view.js';
-import {SubscriptionDelegate} from '../context/context.js';
-import {HybridQueryView} from './hybrid-query-view.js';
 
 export function newQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
->(
-  host: BuilderDelegate & SubscriptionDelegate,
-  schema: TSchema,
-): Query<TSchema, TReturn> {
-  return new QueryImpl(host, schema);
+>(delegate: QueryDelegate, schema: TSchema): Query<TSchema, TReturn> {
+  return new QueryImpl(delegate, schema);
+}
+
+export interface QueryDelegate extends BuilderDelegate {
+  addServerQuery(ast: AST): () => void;
 }
 
 class QueryImpl<
@@ -45,18 +43,14 @@ class QueryImpl<
 > implements Query<TSchema, TReturn, TAs>
 {
   readonly #ast: AST;
-  readonly #host: BuilderDelegate & SubscriptionDelegate;
+  readonly #delegate: QueryDelegate;
   readonly #schema: TSchema;
 
-  constructor(
-    host: BuilderDelegate & SubscriptionDelegate,
-    schema: TSchema,
-    ast?: AST | undefined,
-  ) {
+  constructor(delegate: QueryDelegate, schema: TSchema, ast?: AST | undefined) {
     this.#ast = ast ?? {
       table: schema.table,
     };
-    this.#host = host;
+    this.#delegate = delegate;
     this.#schema = schema;
   }
 
@@ -65,11 +59,11 @@ class QueryImpl<
     TReturn extends Array<QueryResultRow>,
     TAs extends string,
   >(
-    host: BuilderDelegate & SubscriptionDelegate,
+    delegate: QueryDelegate,
     schema: TSchema,
     ast: AST,
   ): Query<TSchema, TReturn, TAs> {
-    return new QueryImpl(host, schema, ast);
+    return new QueryImpl(delegate, schema, ast);
   }
 
   get ast() {
@@ -80,34 +74,31 @@ class QueryImpl<
     ..._fields: TFields
   ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
-    return this.#create(this.#host, this.#schema, this.#ast);
+    return this.#create(this.#delegate, this.#schema, this.#ast);
   }
 
   materialize(): TypedView<Smash<TReturn>> {
     const ast = this.#completeAst();
-    const view = new HybridQueryView(
-      this.#host,
-      ast,
-      new ArrayView(buildPipeline(ast, this.#host)),
+    const unsub = this.#delegate.addServerQuery(ast);
+    const viewDelegateImpl: ViewDelegate = {
+      onDestroyed: () => {
+        unsub();
+      },
+    };
+    const view = new ArrayView(
+      buildPipeline(ast, this.#delegate),
+      viewDelegateImpl,
     );
     return view as unknown as TypedView<Smash<TReturn>>;
   }
 
   preload(): {
     cleanup: () => void;
-    preloaded: Promise<boolean>;
   } {
-    const {resolve, promise: preloaded} = resolver<boolean>();
-    const subscriptionRemoved = this.#host.subscriptionAdded(
-      this.#completeAst(),
-    );
-    const cleanup = () => {
-      subscriptionRemoved();
-      resolve(false);
-    };
+    const ast = this.#completeAst();
+    const unsub = this.#delegate.addServerQuery(ast);
     return {
-      cleanup,
-      preloaded,
+      cleanup: unsub,
     };
   }
 
@@ -162,7 +153,7 @@ class QueryImpl<
     const related2 = related;
     if (isFieldRelationship(related1)) {
       const destSchema = resolveSchema(related1.dest.schema);
-      return this.#create(this.#host, this.#schema, {
+      return this.#create(this.#delegate, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -175,7 +166,7 @@ class QueryImpl<
             subquery: addPrimaryKeysToAst(
               destSchema,
               cb(
-                this.#create(this.#host, destSchema, {
+                this.#create(this.#delegate, destSchema, {
                   table: destSchema.table,
                   alias: relationship as string,
                 }),
@@ -189,7 +180,7 @@ class QueryImpl<
     if (isJunctionRelationship(related2)) {
       const destSchema = resolveSchema(related2.dest.schema);
       const junctionSchema = resolveSchema(related2.junction.schema);
-      return this.#create(this.#host, this.#schema, {
+      return this.#create(this.#delegate, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -214,7 +205,7 @@ class QueryImpl<
                   subquery: addPrimaryKeysToAst(
                     destSchema,
                     cb(
-                      this.#create(this.#host, destSchema, {
+                      this.#create(this.#delegate, destSchema, {
                         table: destSchema.table,
                         alias: relationship as string,
                       }),
@@ -235,7 +226,7 @@ class QueryImpl<
     op: Operator,
     value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#host, this.#schema, {
+    return this.#create(this.#delegate, this.#schema, {
       ...this.#ast,
       where: [
         ...(this.#ast.where ?? []),
@@ -250,7 +241,7 @@ class QueryImpl<
   }
 
   as<TAs2 extends string>(alias: TAs2): Query<TSchema, TReturn, TAs2> {
-    return this.#create(this.#host, this.#schema, {
+    return this.#create(this.#delegate, this.#schema, {
       ...this.#ast,
       alias,
     });
@@ -260,7 +251,7 @@ class QueryImpl<
     row: Partial<SchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#host, this.#schema, {
+    return this.#create(this.#delegate, this.#schema, {
       ...this.#ast,
       start: {
         row,
@@ -270,7 +261,7 @@ class QueryImpl<
   }
 
   limit(limit: number): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#host, this.#schema, {
+    return this.#create(this.#delegate, this.#schema, {
       ...this.#ast,
       limit,
     });
@@ -280,7 +271,7 @@ class QueryImpl<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#host, this.#schema, {
+    return this.#create(this.#delegate, this.#schema, {
       ...this.#ast,
       orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
     });
