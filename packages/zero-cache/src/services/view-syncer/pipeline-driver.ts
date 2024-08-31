@@ -1,11 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
 import {TableSource} from '@rocicorp/zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
+import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {mapLiteDataTypeToZqlValueType} from 'zero-cache/src/types/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
-import {Node, Row} from 'zql/src/zql/ivm/data.js';
+import {Node, Row, Value} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
 import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
@@ -30,6 +32,27 @@ export type RowRemove = {
 
 export type RowChange = RowAdd | RowRemove;
 
+/** Normalized TableSpec information for faster processing. */
+type NormalizedTableSpec = TableSpec & {
+  readonly boolColumns: Set<string>;
+};
+
+function normalize(tableSpec: TableSpec): NormalizedTableSpec {
+  const {primaryKey, columns} = tableSpec;
+  return {
+    ...tableSpec,
+    // Primary keys are normalized here so that downstream
+    // normalization does not need to create new objects.
+    // See row-key.ts: normalizedKeyOrder()
+    primaryKey: [...primaryKey].sort(),
+    boolColumns: new Set(
+      Object.entries(columns)
+        .filter(([_, spec]) => spec.dataType === 'BOOL')
+        .map(([col]) => col),
+    ),
+  };
+}
+
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
@@ -40,7 +63,7 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
-  #tableSpecs: Map<string, TableSpec> | null = null;
+  #tableSpecs: Map<string, NormalizedTableSpec> | null = null;
   #streamer: Streamer | null = null;
 
   constructor(
@@ -64,7 +87,7 @@ export class PipelineDriver {
 
     const {db} = this.#snapshotter.init().current();
     this.#tableSpecs = new Map(
-      listTables(db.db).map(spec => [spec.name, spec]),
+      listTables(db.db).map(spec => [spec.name, normalize(spec)]),
     );
   }
 
@@ -167,21 +190,37 @@ export class PipelineDriver {
     };
   }
 
+  #convertTypes(table: string, row: Record<string, JSONValue>): Row {
+    assert(this.#tableSpecs);
+    const spec = must(this.#tableSpecs.get(table));
+    for (const col of spec.boolColumns) {
+      row[col] = !!row[col];
+    }
+    return row as Row;
+  }
+
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+        yield* this.#push(table, {
+          type: 'remove',
+          row: this.#convertTypes(table, prevValue),
+        });
       }
       if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        yield* this.#push(table, {
+          type: 'add',
+          row: this.#convertTypes(table, nextValue),
+        });
       }
     }
 
     // Set the new snapshot on all TableSources.
+    const {curr} = diff;
     for (const table of this.#tables.values()) {
-      table.setDB(this.#snapshotter.current().db.db);
+      table.setDB(curr.db.db);
     }
-    this.#lc.debug?.(`Advanced to ${diff.curr.version}`);
+    this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
   /** Implements `BuilderDelegate.getSource()` */
@@ -243,6 +282,10 @@ export class PipelineDriver {
   }
 }
 
+// safeIntegers are used when reading rows from the replica.
+// https://github.com/WiseLibs/better-sqlite3/blob/master/docs/integer.md#getting-bigints-from-the-database
+type SafeIntegerRow = Record<string, Value | bigint>;
+
 class Streamer {
   readonly #changes: [
     hash: string,
@@ -291,7 +334,16 @@ class Streamer {
     const {tableName: table, primaryKey} = schema;
 
     for (const node of nodes) {
-      const {row, relationships} = node;
+      const {relationships} = node;
+      const safeRow = node.row as SafeIntegerRow;
+
+      for (const col in safeRow) {
+        const val = safeRow[col];
+        if (typeof val === 'bigint') {
+          safeRow[col] = clampOrFail(col, val);
+        }
+      }
+      const row = safeRow as Row; // bigints have been converted to number in place.
       const rowKey = Object.fromEntries(primaryKey.map(col => [col, row[col]]));
 
       yield {queryHash, table, rowKey, row: op === 'add' ? row : undefined};
@@ -309,5 +361,20 @@ class Streamer {
 function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
   for (const node of nodes) {
     yield {type: 'add', node};
+  }
+}
+
+function clampOrFail(col: string, val: bigint): number {
+  if (val > Number.MAX_SAFE_INTEGER || val < Number.MIN_SAFE_INTEGER) {
+    throw new UnsupportedValueError(
+      `value in column ${col} exceeds the maximum safe value ${val}`,
+    );
+  }
+  return Number(val);
+}
+
+export class UnsupportedValueError extends Error {
+  constructor(msg: string) {
+    super(msg);
   }
 }
