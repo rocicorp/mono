@@ -56,7 +56,6 @@ const DEFAULT_KEEPALIVE_MS = 30_000;
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #db: PostgresDB;
   readonly #pipelines: PipelineDriver;
   readonly #versionChanges: Subscription<ReplicaVersionReady>;
   readonly #keepaliveMs: number;
@@ -66,6 +65,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // (2) updating member variables.
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
+  readonly #cvrStore: CVRStore;
   #cvr: CVRSnapshot | undefined;
 
   constructor(
@@ -80,17 +80,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc = lc
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
-    this.#db = db;
     this.#pipelines = pipelineDriver;
     this.#versionChanges = versionChanges;
     this.#keepaliveMs = keepaliveMs;
+    this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
 
   async run(): Promise<void> {
     try {
       await this.#lock.withLock(async () => {
-        const cvrStore = new CVRStore(this.#lc, this.#db, this.id);
-        this.#cvr = await cvrStore.load();
+        this.#cvr = await this.#cvrStore.load();
       });
 
       this.#lc.info?.('view-syncer started', this.#cvr?.version);
@@ -277,8 +276,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Apply patches requested in the initConnectionMessage.
     const {clientID} = client;
-    const cvrStore = new CVRStore(this.#lc, this.#db, this.#cvr.id);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, this.#cvr);
+    const updater = new CVRConfigDrivenUpdater(this.#cvrStore, this.#cvr);
 
     const added: {id: string; ast: AST}[] = [];
     for (const patch of desiredQueriesPatch) {
@@ -396,7 +394,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc.info?.(`hydrating ${addQueries.length} queries`);
 
     const updater = new CVRQueryDrivenUpdater(
-      new CVRStore(this.#lc, this.#db, cvr.id),
+      this.#cvrStore,
       cvr,
       stateVersion,
     );
@@ -517,11 +515,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const cvr = this.#cvr;
 
     // Probably need a new updater type. CVRAdvancementUpdater?
-    const updater = new CVRQueryDrivenUpdater(
-      new CVRStore(this.#lc, this.#db, cvr.id),
-      cvr,
-      version,
-    );
+    const updater = new CVRQueryDrivenUpdater(this.#cvrStore, cvr, version);
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(updater.updatedVersion()),
     );
@@ -556,5 +550,4 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 }
 
-// TODO: Increase this once performance issues are resolved.
-const CURSOR_PAGE_SIZE = 10;
+const CURSOR_PAGE_SIZE = 10000;
