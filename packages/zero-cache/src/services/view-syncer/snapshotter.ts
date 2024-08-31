@@ -241,14 +241,20 @@ class Snapshot {
   getRow(table: string, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${ident(c)}=?`);
-    return this.db.get(
+    const cached = this.db.statementCache.get(
       `SELECT * FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
-      Object.values(key),
     );
+    cached.statement.safeIntegers(true);
+    try {
+      return cached.statement.get(Object.values(key));
+    } finally {
+      this.db.statementCache.return(cached);
+    }
   }
 
   getRows(table: string) {
     const cached = this.db.statementCache.get(`SELECT * FROM ${ident(table)}`);
+    cached.statement.safeIntegers(true);
     return {
       rows: cached.statement.iterate(),
       cleanup: () => this.db.statementCache.return(cached),
