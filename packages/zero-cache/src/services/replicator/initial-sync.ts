@@ -38,63 +38,6 @@ export function replicationSlot(replicaID: string): string {
 
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
 
-// Exported for testing
-// TODO: Delete
-export async function setupUpstream(
-  lc: LogContext,
-  upstreamDB: postgres.Sql,
-  slotName: string,
-): Promise<PublicationInfo> {
-  const [_, published] = await Promise.all([
-    // Ensure that the replication slot exists. This must be done in its own
-    // transaction, or else Postgres will complain with:
-    //
-    // PostgresError: cannot create logical replication slot in transaction that has performed writes
-    ensureReplicationSlot(lc, upstreamDB, slotName),
-
-    // In parallel, ensure that the schema and publications are setup.
-    // Note that both transactions must succeed for the migration to continue.
-    ensurePublishedTables(lc, upstreamDB, false),
-  ]);
-  return published;
-}
-
-/**
- * Ensures that the replication slot is created on upstream.
- *
- * Note that this performed in its own transaction because:
- *
- * * pg_create_logical_replication_slot() cannot be called in a transaction with other
- *   writes. This is presumably because it modifies a top-level table of the Postgres instance.
- *
- * * Creating the slot explicitly on upstream, rather than implicitly from the `CREATE SUBSCRIPTION`
- *   command on the replica, allows the latter to be performed transactionally with the rest of
- *   the replica setup. Postgres will otherwise fail with the error:
- *   ```
- *   PostgresError: CREATE SUBSCRIPTION ... WITH (create_slot = true) cannot run inside a transaction block
- *   ```
- */
-// TODO: Delete
-function ensureReplicationSlot(
-  lc: LogContext,
-  upstreamDB: postgres.Sql,
-  slotName: string,
-) {
-  return upstreamDB.begin(async tx => {
-    const slots = await tx`
-    SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${slotName}`;
-
-    if (slots.count > 0) {
-      lc.info?.(`Replication slot "${slotName}" already exists`);
-      return;
-    }
-
-    lc.info?.(`Creating replication slot "${slotName}"`);
-    await tx`
-    SELECT * FROM pg_create_logical_replication_slot(${slotName}, 'pgoutput');`;
-  });
-}
-
 export async function initialSync(
   lc: LogContext,
   replicaID: string,
