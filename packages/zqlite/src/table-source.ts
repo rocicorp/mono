@@ -511,7 +511,7 @@ function fromSQLiteTypes(valueTypes: Record<string, ValueType>, row: Row) {
 function fromSQLiteType(valueType: ValueType, v: Value): Value {
   switch (valueType) {
     case 'boolean':
-      return v === 0 ? false : v === 1 ? true : v;
+      return !!v;
     default:
       return v;
   }
