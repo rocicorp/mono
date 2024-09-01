@@ -97,6 +97,10 @@ export interface Sender extends EventEmitter {
 
 export interface Worker extends Sender, Receiver {}
 
+/**
+ * Adds the {@link Sender.onMessageType()} and {@link Sender.onceMessageType()}
+ * methods to convert the given `EventEmitter` to a `Sender`.
+ */
 function wrap<P extends EventEmitter>(proc: P): P & Sender {
   return new Proxy(proc, {
     get(target: P, prop: string | symbol, receiver: unknown) {
