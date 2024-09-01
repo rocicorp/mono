@@ -1,8 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {TableSource} from '@rocicorp/zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
-import {must} from 'shared/src/must.js';
-import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {mapLiteDataTypeToZqlValueType} from 'zero-cache/src/types/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
@@ -190,28 +188,13 @@ export class PipelineDriver {
     };
   }
 
-  #convertTypes(table: string, row: Record<string, JSONValue>): Row {
-    assert(this.#tableSpecs);
-    const spec = must(this.#tableSpecs.get(table));
-    for (const col of spec.boolColumns) {
-      row[col] = !!row[col];
-    }
-    return row as Row;
-  }
-
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
-        yield* this.#push(table, {
-          type: 'remove',
-          row: this.#convertTypes(table, prevValue),
-        });
+        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
       }
       if (nextValue) {
-        yield* this.#push(table, {
-          type: 'add',
-          row: this.#convertTypes(table, nextValue),
-        });
+        yield* this.#push(table, {type: 'add', row: nextValue as Row});
       }
     }
 

@@ -288,6 +288,8 @@ export class TableSource implements Source {
       assert(exists, 'Row not found');
     }
 
+    // Outputs should see converted types (e.g. boolean).
+    fromSQLiteTypes(this.#columns, change.row);
     for (const [outputIndex, {output}] of this.#connections.entries()) {
       this.#overlay = {outputIndex, change};
       if (output) {
