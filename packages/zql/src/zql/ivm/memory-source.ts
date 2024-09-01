@@ -66,6 +66,15 @@ export class MemorySource implements Source {
     });
   }
 
+  // Mainly for tests.
+  getSchemaInfo() {
+    return {
+      tableName: this.#tableName,
+      columns: this.#columns,
+      primaryKey: this.#primaryKeys,
+    };
+  }
+
   #getSchema(connection: Connection): Schema {
     return {
       tableName: this.#tableName,

@@ -1,6 +1,6 @@
 import {LogContext, LogLevel} from '@rocicorp/logger';
 import {Resolver, resolver} from '@rocicorp/resolver';
-import type {MutatorDefs} from 'replicache';
+import type {ExperimentalNoIndexDiff, MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
@@ -9,7 +9,6 @@ import {
   ReplicacheImplOptions,
 } from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import type {WatchCallback} from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
@@ -47,7 +46,7 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from 'zero-protocol/src/pull.js';
-import {ZeroContext} from 'zql/src/zql/context/context.js';
+import {ZeroContext} from './context.js';
 import {Query} from 'zql/src/zql/query/query.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
 import {nanoid} from '../util/nanoid.js';
@@ -75,13 +74,10 @@ import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
-import {
-  ZQLSubscriptionsManager,
-  ZQLWatchSubscription,
-} from './subscriptions.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
+import {SubscriptionsManagerImpl} from 'replicache/src/subscriptions.js';
 
 export type SchemaDefs = {
   readonly [table: string]: Schema;
@@ -399,7 +395,7 @@ export class Zero<QD extends SchemaDefs> {
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableLicensing: false,
       makeSubscriptionsManager: (queryInternal, lc) =>
-        new ZQLSubscriptionsManager(queryInternal, lc),
+        new SubscriptionsManagerImpl(queryInternal, lc),
       enableClientGroupForking: false,
     };
 
@@ -427,16 +423,16 @@ export class Zero<QD extends SchemaDefs> {
       this.#sendChangeDesiredQueries(msg),
     );
 
-    this.#zeroContext = new ZeroContext(
-      schemas,
-      (name, cb) =>
-        rep.subscriptions.add(
-          new ZQLWatchSubscription(
-            `${ENTITIES_KEY_PREFIX}${name}`,
-            cb as WatchCallback,
-          ),
-        ),
-      ast => this.#queryManager.add(ast),
+    this.#zeroContext = new ZeroContext(schemas, ast =>
+      this.#queryManager.add(ast),
+    );
+
+    rep.experimentalWatch(
+      diff => this.#zeroContext.processChanges(diff as ExperimentalNoIndexDiff),
+      {
+        prefix: ENTITIES_KEY_PREFIX,
+        initialValuesInFirstDiff: true,
+      },
     );
 
     this.query = this.#registerQueries(schemas);

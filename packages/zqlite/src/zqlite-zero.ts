@@ -13,7 +13,7 @@ import {
   SchemaDefs,
   MakeEntityQueriesFromQueryDefs,
 } from 'zero-client/src/client/zero.js';
-import {ZeroContext} from 'zql/src/zql/context/context.js';
+import {ZeroContext} from 'zero-client/src/client/context.js';
 import {Query} from 'zero-client/src/mod.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';

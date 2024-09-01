@@ -890,12 +890,12 @@ test('smokeTest', async () => {
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
-    // once for initial data
-    // once for each mutation
-    expect(calls.length).eq(3);
-    expect(calls[0]).toEqual([]);
-    expect(calls[1]).toEqual([{id: 'a', value: 1}]);
-    expect(calls[2]).toEqual([
+    // we don't get called for initial hydration because there's no data.
+    // once for the each transaction
+    // we test multiple changes in a transactions below
+    expect(calls.length).eq(2);
+    expect(calls[0]).toEqual([{id: 'a', value: 1}]);
+    expect(calls[1]).toEqual([
       {id: 'a', value: 1},
       {id: 'b', value: 2},
     ]);
@@ -909,10 +909,10 @@ test('smokeTest', async () => {
 
     await r.mutate.issues.set({id: 'a', value: 11});
 
-    // TODO: this is called twice because the transient remove is seen during an update.
-    // We need to hold off sending the remove until all events in the current transaction are processed
-    expect(calls.length).eq(2);
-    expect(calls[1]).toEqual([
+    // Althoug the set() results in a remove and add flowing through the pipeline,
+    // they are in same tx, so we only get one call coming out.
+    expect(calls.length).eq(1);
+    expect(calls[0]).toEqual([
       {id: 'a', value: 11},
       {id: 'b', value: 2},
     ]);

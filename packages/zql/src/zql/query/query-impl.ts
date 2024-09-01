@@ -22,7 +22,7 @@ import {
 } from './schema.js';
 import {buildPipeline, BuilderDelegate} from '../builder/builder.js';
 import {Ordering} from '../ast/ast.js';
-import {ArrayView, ViewDelegate} from '../ivm/array-view.js';
+import {ArrayView} from '../ivm/array-view.js';
 import {TypedView} from './typed-view.js';
 
 export function newQuery<
@@ -32,8 +32,10 @@ export function newQuery<
   return new QueryImpl(delegate, schema);
 }
 
+export type CommitListener = () => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(ast: AST): () => void;
+  onTransactionCommit(cb: CommitListener): () => void;
 }
 
 class QueryImpl<
@@ -79,16 +81,15 @@ class QueryImpl<
 
   materialize(): TypedView<Smash<TReturn>> {
     const ast = this.#completeAst();
-    const unsub = this.#delegate.addServerQuery(ast);
-    const viewDelegateImpl: ViewDelegate = {
-      onDestroyed: () => {
-        unsub();
-      },
+    const removeServerQuery = this.#delegate.addServerQuery(ast);
+    const view = new ArrayView(buildPipeline(ast, this.#delegate));
+    const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
+      view.flush();
+    });
+    view.onDestroy = () => {
+      removeCommitObserver();
+      removeServerQuery();
     };
-    const view = new ArrayView(
-      buildPipeline(ast, this.#delegate),
-      viewDelegateImpl,
-    );
     return view as unknown as TypedView<Smash<TReturn>>;
   }
 

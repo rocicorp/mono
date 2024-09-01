@@ -63,21 +63,22 @@ async function testBasics(userID: string) {
   assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
   await r.mutate.e.set({id: 'foo', value: 2});
-  // TODO: Called with an empty value because
-  // we have no concept of a transaction and the intermediate removal
-  // is seen
   assert(
-    deepEqual(log, [[], [{id: 'foo', value: 1}], [], [{id: 'foo', value: 2}]]),
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
   await r.mutate.e.set({id: 'foo', value: 3});
   assert(
-    deepEqual(log, [[], [{id: 'foo', value: 1}], [], [{id: 'foo', value: 2}]]),
+    deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   const view2 = q.materialize();
   view2.hydrate();
-  assert(deepEqual([...view2.data], [{id: 'foo', value: 3}]));
+  let data: E[] = [];
+  view2.addListener(rows => {
+    data = [...rows];
+  });
+  assert(deepEqual(data, [{id: 'foo', value: 3}]));
 }

@@ -13,10 +13,6 @@ import {Immutable} from 'shared/src/immutable.js';
  */
 export type Listener = (entries: Immutable<EntryList>) => void;
 
-export interface ViewDelegate {
-  onDestroyed(): void;
-}
-
 /**
  * Implements a materialized view of the output of an operator.
  *
@@ -33,16 +29,17 @@ export class ArrayView implements Output {
   readonly #view: EntryList;
   readonly #listeners = new Set<Listener>();
   readonly #schema: Schema;
-  readonly #delegate: ViewDelegate | undefined;
+
+  onDestroy: (() => void) | undefined;
 
   #hydrated = false;
+  #dirty = false;
 
-  constructor(input: Input, delegate?: ViewDelegate | undefined) {
+  constructor(input: Input) {
     this.#input = input;
     this.#schema = input.getSchema();
     this.#input.setOutput(this);
     this.#view = [];
-    this.#delegate = delegate;
   }
 
   get data() {
@@ -69,7 +66,7 @@ export class ArrayView implements Output {
 
   destroy() {
     this.#input.destroy();
-    this.#delegate?.onDestroyed();
+    this.onDestroy?.();
   }
 
   hydrate() {
@@ -78,13 +75,22 @@ export class ArrayView implements Output {
     }
     this.#hydrated = true;
     for (const node of this.#input.fetch({})) {
+      this.#dirty = true;
       applyChange(this.#view, {type: 'add', node}, this.#schema);
     }
-    this.#fireListeners();
+    this.flush();
   }
 
   push(change: Change): void {
+    this.#dirty = true;
     applyChange(this.#view, change, this.#schema);
+  }
+
+  flush() {
+    if (!this.#dirty) {
+      return;
+    }
+    this.#dirty = false;
     this.#fireListeners();
   }
 }
