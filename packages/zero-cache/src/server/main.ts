@@ -6,7 +6,7 @@ import {sleep} from 'shared/src/sleep.js';
 import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {childWorker, getMessage, Worker} from '../types/processes.js';
+import {childWorker, Worker} from '../types/processes.js';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
@@ -31,17 +31,14 @@ function loadWorker(module: string, id?: number): Worker {
   const worker = childWorker(module);
   const name = path.basename(module, '.ts') + (id ? ' #' + id : '');
 
-  const onReady = (data: undefined) => {
-    if (getMessage('ready', data)) {
+  return worker
+    .onceMessageType('ready', () => {
       lc.debug?.(`${name} ready (${Date.now() - startMs} ms)`);
       if (++numReady === numSyncers + 1) {
         signalAllReady(true);
       }
-      worker.off('message', onReady); // No need to listen anymore.
-    }
-  };
-
-  return worker.on('message', onReady).on('close', logErrorAndExit);
+    })
+    .on('close', logErrorAndExit);
 }
 
 const replicator = loadWorker('./src/server/replicator.ts').once(

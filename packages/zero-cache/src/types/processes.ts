@@ -1,4 +1,10 @@
-import {fork, ForkOptions, SendHandle, Serializable} from 'child_process';
+import {
+  ChildProcess,
+  fork,
+  ForkOptions,
+  SendHandle,
+  Serializable,
+} from 'child_process';
 import EventEmitter from 'events';
 import path from 'path';
 
@@ -21,21 +27,7 @@ export const MESSAGE_TYPES = {
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];
 
-/**
- * Example:
- *
- * ```ts
- * type MyMessageType = [typeof MESSAGE_TYPES.handoff, { ... msg type ... }];
- *
- * worker.on('message', data => {
- *   const msg = getMessage<MyMessageType>('handoff');
- *   if (msg) {
- *     // Handle the 'handoff' message.
- *   }
- * });
- * ```
- */
-export function getMessage<M extends Message<unknown>>(
+function getMessage<M extends Message<unknown>>(
   type: M[0],
   data: unknown,
 ): M[1] | null {
@@ -45,22 +37,105 @@ export function getMessage<M extends Message<unknown>>(
   return null;
 }
 
+function onMessageType<M extends Message<unknown>>(
+  e: EventEmitter,
+  type: M[0],
+  handler: (msg: M[1], sendHandle?: SendHandle) => void,
+) {
+  return e.on('message', (data, sendHandle) => {
+    const msg = getMessage(type, data);
+    if (msg) {
+      handler(msg, sendHandle);
+    }
+  });
+}
+
+function onceMessageType<M extends Message<unknown>>(
+  e: EventEmitter,
+  type: M[0],
+  handler: (msg: M[1], sendHandle?: SendHandle) => void,
+) {
+  const listener = (data: unknown, sendHandle: SendHandle) => {
+    const msg = getMessage(type, data);
+    if (msg) {
+      e.off('message', listener);
+      handler(msg, sendHandle);
+    }
+  };
+  return e.on('message', listener);
+}
+
 export interface Receiver {
-  send<Payload>(
-    message: Message<Payload>,
+  send<M extends Message<unknown>>(
+    message: M,
     sendHandle?: SendHandle,
     callback?: (error: Error | null) => void,
   ): boolean;
 }
 
-// Sub-interface of Process and ChildProcess
-export interface Sender extends EventEmitter {}
+export interface Sender extends EventEmitter {
+  /**
+   * The receiving side of {@link Receiver.send()} that is a wrapper around
+   * {@link on}('message', ...) that invokes the `handler` for messages of
+   * the specified `type`.
+   */
+  onMessageType<M extends Message<unknown>>(
+    type: M[0],
+    handler: (msg: M[1], sendHandle?: SendHandle) => void,
+  ): this;
+
+  /**
+   * The receiving side of {@link Receiver.send()} that behaves like
+   * {@link once}('message', ...) that invokes the `handler` for the next
+   * message of the specified `type` and then unsubscribes.
+   */
+  onceMessageType<M extends Message<unknown>>(
+    type: M[0],
+    handler: (msg: M[1], sendHandle?: SendHandle) => void,
+  ): this;
+}
 
 export interface Worker extends Sender, Receiver {}
 
-// Note: It is okay to cast a Processor or ChildProcess as a Worker.
-// The {@link send} method simply restricts the message type for clarity.
-export const parentWorker: Worker = process as Worker;
+/**
+ * Adds the {@link Sender.onMessageType()} and {@link Sender.onceMessageType()}
+ * methods to convert the given `EventEmitter` to a `Sender`.
+ */
+function wrap<P extends EventEmitter>(proc: P): P & Sender {
+  return new Proxy(proc, {
+    get(target: P, prop: string | symbol, receiver: unknown) {
+      switch (prop) {
+        case 'onMessageType':
+          return (
+            type: keyof typeof MESSAGE_TYPES,
+            handler: (msg: unknown, sendHandle?: SendHandle) => void,
+          ) => {
+            onMessageType(target, type, handler);
+            return receiver; // this
+          };
+        case 'onceMessageType':
+          return (
+            type: keyof typeof MESSAGE_TYPES,
+            handler: (msg: unknown, sendHandle?: SendHandle) => void,
+          ) => {
+            onceMessageType(target, type, handler);
+            return receiver; // this
+          };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as P & Sender;
+}
+
+type Proc = Pick<ChildProcess, 'send'> & EventEmitter;
+
+/**
+ * The parentWorker for forked processes, or `null` if the process was not forked.
+ * (Analogous to the `parentPort: MessagePort | null` of the `"workers"` library).
+ */
+export const parentWorker: Worker | null = process.send
+  ? wrap(process as Proc)
+  : null;
 
 const SINGLE_PROCESS = 'SINGLE_PROCESS';
 
@@ -78,7 +153,7 @@ export function childWorker(module: string, options?: ForkOptions): Worker {
   }
   // Note: It is okay to cast a Processor or ChildProcess as a Worker.
   // The {@link send} method simply restricts the message type for clarity.
-  return fork(module, {...options, serialization: 'advanced'}) as Worker;
+  return wrap(fork(module, {...options, serialization: 'advanced'}));
 }
 
 /**
@@ -108,8 +183,8 @@ export function inProcChannel(): [Worker, Worker] {
       return true;
     };
 
-  Object.assign(worker1, {send: sendTo(worker2)});
-  Object.assign(worker2, {send: sendTo(worker1)});
-
-  return [worker1 as Worker, worker2 as Worker];
+  return [
+    wrap(Object.assign(worker1, {send: sendTo(worker2)})),
+    wrap(Object.assign(worker2, {send: sendTo(worker1)})),
+  ];
 }
