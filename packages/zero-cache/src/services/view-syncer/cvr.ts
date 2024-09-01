@@ -123,9 +123,13 @@ export class CVRUpdater {
 
     this.#setLastActive(lastActive);
     const numEntries = this._cvrStore.numPendingWrites();
-    await this._cvrStore.flush();
+    const statements = await this._cvrStore.flush();
 
-    lc.debug?.(`flushed ${numEntries} CVR entries (${Date.now() - start} ms)`);
+    lc.debug?.(
+      `flushed ${numEntries} CVR entries with ${statements} statements (${
+        Date.now() - start
+      } ms)`,
+    );
     return this._cvr;
   }
 }

@@ -1,12 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
+import {MaybeRow, PendingQuery} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {CustomKeySet} from 'shared/src/custom-key-set.js';
+import {astSchema} from 'zero-protocol';
 import type {JSONValue} from '../../types/bigint-json.js';
+import {versionToLexi} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
-import {astSchema} from 'zero-protocol';
-import {versionToLexi} from '../../types/lexi-version.js';
 import type {CVR} from './cvr.js';
 import {
   rowRecordToRowsRow,
@@ -120,7 +121,7 @@ export class CVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
   readonly #db: PostgresDB;
-  readonly #writes: Set<(tx: PostgresTransaction) => Promise<unknown>> =
+  readonly #writes: Set<(tx: PostgresTransaction) => PendingQuery<MaybeRow[]>> =
     new Set();
   readonly #pendingQueryVersionDeletes = new CustomKeySet<
     [{id: string}, CVRVersion]
@@ -242,11 +243,12 @@ export class CVRStore {
       version: versionString(version),
       lastActive: new Date(lastActive.epochMillis),
     };
-    this.#writes.add(async tx => {
-      await tx`INSERT INTO cvr.instances ${tx(
-        change,
-      )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
-    });
+    this.#writes.add(
+      tx =>
+        tx`INSERT INTO cvr.instances ${tx(
+          change,
+        )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`,
+    );
   }
 
   numPendingWrites(): number {
@@ -481,33 +483,38 @@ export class CVRStore {
     return rv;
   }
 
-  async flush(): Promise<void> {
-    await this.#db.begin(async tx => {
+  async flush(): Promise<number> {
+    const statements = await this.#db.begin(tx => {
+      let statements = 0;
       if (this.#pendingRowRecordPuts.size > 0) {
         const rowRecordRows = [...this.#pendingRowRecordPuts.values()].map(r =>
           rowRecordToRowsRow(this.#id, r),
         );
         let i = 0;
         while (i < rowRecordRows.length) {
-          await tx`INSERT INTO cvr.rows ${tx(
+          void tx`INSERT INTO cvr.rows ${tx(
             rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
           )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
             DO UPDATE SET "rowVersion" = excluded."rowVersion",
               "patchVersion" = excluded."patchVersion",
-              "refCounts" = excluded."refCounts"`;
+              "refCounts" = excluded."refCounts"`.execute();
           i += ROW_RECORD_UPSERT_BATCH_SIZE;
+          statements++;
         }
       }
       for (const write of this.#writes) {
-        await write(tx);
+        void write(tx).execute();
+        statements++;
       }
+      return statements;
     });
     await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
 
     this.#writes.clear();
     this.#pendingQueryVersionDeletes.clear();
     this.#pendingRowRecordPuts.clear();
+    return statements;
   }
 }
 

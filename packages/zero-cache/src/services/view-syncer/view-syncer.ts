@@ -27,7 +27,7 @@ import {
   type CVRSnapshot,
 } from './cvr.js';
 import {PipelineDriver, RowChange} from './pipeline-driver.js';
-import {cmpVersions, RowID} from './schema/types.js';
+import {cmpVersions, RowID, versionToCookie} from './schema/types.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -325,7 +325,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const cvrVersion = this.#cvr.version;
 
     if (cvrVersion.stateVersion !== dbVersion) {
-      this.#lc.info?.(`CVR (${cvrVersion}) is behind db ${dbVersion}`);
+      this.#lc.info?.(
+        `CVR (${versionToCookie(cvrVersion)}) is behind db ${dbVersion}`,
+      );
       return; // hydration needs to be run with the CVR updater.
     }
 
