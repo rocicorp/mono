@@ -483,15 +483,16 @@ export class CVRStore {
     return rv;
   }
 
-  async flush(): Promise<void> {
-    await this.#db.begin(async tx => {
+  async flush(): Promise<number> {
+    const statements = await this.#db.begin(tx => {
+      let statements = 0;
       if (this.#pendingRowRecordPuts.size > 0) {
         const rowRecordRows = [...this.#pendingRowRecordPuts.values()].map(r =>
           rowRecordToRowsRow(this.#id, r),
         );
         let i = 0;
         while (i < rowRecordRows.length) {
-          tx`INSERT INTO cvr.rows ${tx(
+          void tx`INSERT INTO cvr.rows ${tx(
             rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
           )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
@@ -499,17 +500,21 @@ export class CVRStore {
               "patchVersion" = excluded."patchVersion",
               "refCounts" = excluded."refCounts"`.execute();
           i += ROW_RECORD_UPSERT_BATCH_SIZE;
+          statements++;
         }
       }
       for (const write of this.#writes) {
-        write(tx).execute();
+        void write(tx).execute();
+        statements++;
       }
+      return statements;
     });
     await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
 
     this.#writes.clear();
     this.#pendingQueryVersionDeletes.clear();
     this.#pendingRowRecordPuts.clear();
+    return statements;
   }
 }
 
