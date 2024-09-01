@@ -2,6 +2,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
 import postgres from 'postgres';
+import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
 import {ReplicaVersionReady} from '../services/replicator/replicator.js';
@@ -76,5 +77,5 @@ export default async function runWorker(parent: Worker) {
 
 // fork()
 if (!singleProcessMode()) {
-  void runWorker(parentWorker);
+  void runWorker(must(parentWorker));
 }

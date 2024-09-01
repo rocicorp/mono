@@ -1,3 +1,4 @@
+import {must} from 'shared/src/must.js';
 import {ReplicatorService} from '../services/replicator/replicator.js';
 import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
 import {runAsWorker} from '../workers/replicator.js';
@@ -25,5 +26,5 @@ export default async function runWorker(parent: Worker) {
 
 // fork()
 if (!singleProcessMode()) {
-  void runWorker(parentWorker);
+  void runWorker(must(parentWorker));
 }
