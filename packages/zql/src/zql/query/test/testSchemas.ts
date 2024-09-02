@@ -76,6 +76,7 @@ export const commentSchema = {
     authorId: {type: 'string'},
     issueId: {type: 'string'},
     text: {type: 'string'},
+    createdAt: {type: 'number'},
   },
   primaryKey: ['id'],
   relationships: {
