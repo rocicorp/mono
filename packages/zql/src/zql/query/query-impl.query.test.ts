@@ -503,3 +503,17 @@ describe('joins and filters', () => {
     expect(rows).toEqual([]);
   });
 });
+
+test('limit -1', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  expect(() => {
+    newQuery(queryDelegate, issueSchema).limit(-1);
+  }).toThrow('Limit must be non-negative');
+});
+
+test('non int limit', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  expect(() => {
+    newQuery(queryDelegate, issueSchema).limit(1.5);
+  }).toThrow('Limit must be an integer');
+});
