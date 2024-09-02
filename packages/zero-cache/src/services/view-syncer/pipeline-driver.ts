@@ -14,6 +14,7 @@ import {listTables} from '../replicator/tables/list.js';
 import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
+import {RowValue} from 'zero-cache/src/types/row-key.js';
 
 export type RowAdd = {
   readonly queryHash: string;
@@ -191,10 +192,10 @@ export class PipelineDriver {
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+        yield* this.#push(table, {type: 'remove', row: toRow(prevValue)});
       }
       if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        yield* this.#push(table, {type: 'add', row: toRow(nextValue)});
       }
     }
 
@@ -345,6 +346,30 @@ function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
   for (const node of nodes) {
     yield {type: 'add', node};
   }
+}
+
+export function toRow(rowValue: RowValue): Row {
+  const r: Row = {};
+  for (const [k, v] of Object.entries(rowValue)) {
+    if (typeof v === 'bigint') {
+      r[k] = clampOrFail(k, v);
+    } else if (
+      v === null ||
+      v === undefined ||
+      typeof v === 'string' ||
+      typeof v === 'number' ||
+      typeof v === 'boolean'
+    ) {
+      r[k] = v;
+    } else {
+      throw new UnsupportedValueError(
+        `value in column ${k} is of an unsupported type. ${JSON.stringify(
+          v,
+        )} ${typeof v}`,
+      );
+    }
+  }
+  return r;
 }
 
 function clampOrFail(col: string, val: bigint): number {
