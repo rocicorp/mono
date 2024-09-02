@@ -24,7 +24,6 @@ type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;
 };
 
-// AST
 (
   t: AST,
   inferredT: v.Infer<typeof astSchema>,
@@ -38,7 +37,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof astSchema>>;
 };
 
-// Condition
 (
   t: Condition,
   inferredT: v.Infer<typeof conditionSchema>,
@@ -52,7 +50,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof conditionSchema>>;
 };
 
-// CorrelatedSubQuery
 (
   t: CorrelatedSubQuery,
   inferredT: v.Infer<typeof correlatedSubquerySchema>,
@@ -66,7 +63,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof correlatedSubquerySchema>>;
 };
 
-// EqualityOps
 (
   t: EqualityOps,
   inferredT: v.Infer<typeof equalityOpsSchema>,
@@ -80,7 +76,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof equalityOpsSchema>>;
 };
 
-// LikeOps
 (
   t: LikeOps,
   inferredT: v.Infer<typeof likeOpsSchema>,
@@ -94,7 +89,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof likeOpsSchema>>;
 };
 
-// OrderOps
 (
   t: OrderOps,
   inferredT: v.Infer<typeof orderOpsSchema>,
@@ -108,7 +102,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof orderOpsSchema>>;
 };
 
-// Ordering
 (
   t: Ordering,
   inferredT: v.Infer<typeof orderingSchema>,
@@ -122,7 +115,6 @@ type MakeAllFieldsRequired<T> = {
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof orderingSchema>>;
 };
 
-// SimpleOperator
 (
   t: SimpleOperator,
   inferredT: v.Infer<typeof simpleOperatorSchema>,
