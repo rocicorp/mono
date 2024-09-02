@@ -177,6 +177,7 @@ export class Take implements Operator {
         this.#partitionKey === undefined ? undefined : req.constraint?.value;
       const takeStateKey = getTakeStateKey(partitionValue);
       takeState = this.#storage.get(takeStateKey);
+      assert(takeState !== undefined);
       this.#storage.del(takeStateKey);
     }
     for (const inputNode of this.#input.cleanup(req)) {
