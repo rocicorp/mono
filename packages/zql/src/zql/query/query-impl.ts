@@ -103,6 +103,22 @@ class QueryImpl<
   }
 
   #completeAst(): AST {
+    const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
+    if (this.#ast.start) {
+      const {row} = this.#ast.start;
+      const narrowedRow: {[key: string]: any} = {};
+      for (const [field] of finalOrderBy) {
+        narrowedRow[field] = row[field];
+      }
+      return {
+        ...this.#ast,
+        start: {
+          ...this.#ast.start,
+          row: narrowedRow,
+        },
+        orderBy: finalOrderBy,
+      };
+    }
     return {
       ...this.#ast,
       orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
