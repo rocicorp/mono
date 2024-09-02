@@ -1,13 +1,13 @@
 import {expect, test} from 'vitest';
+import {Catch, expandNode} from '../catch.js';
 import {Node, Row, Value} from '../data.js';
 import {FetchRequest, Input, Output, Start} from '../operator.js';
-import {Catch, expandNode} from '../catch.js';
+import {SchemaValue} from '../schema.js';
 import {Source, SourceChange} from '../source.js';
-import {ValueType} from '../schema.js';
 
 type SourceFactory = (
   name: string,
-  columns: Record<string, ValueType>,
+  columns: Record<string, SchemaValue>,
   primaryKey: readonly [string, ...string[]],
 ) => Source;
 
@@ -51,7 +51,7 @@ class OverlaySpy implements Output {
 const cases = {
   'simple-fetch': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
-    const ms = createSource('table', {a: 'number'}, ['a']);
+    const ms = createSource('table', {a: {type: 'number'}}, ['a']);
     const out = new Catch(ms.connect(sort));
     expect(out.fetch()).toEqual([]);
 
@@ -75,10 +75,10 @@ const cases = {
     const ms = createSource(
       'table',
       {
-        a: 'number',
-        b: 'boolean',
-        c: 'number',
-        d: 'string',
+        a: {type: 'number'},
+        b: {type: 'boolean'},
+        c: {type: 'number'},
+        d: {type: 'string'},
       },
       ['a'],
     );
@@ -129,7 +129,7 @@ const cases = {
     const ms = createSource(
       'table',
       {
-        a: 'number',
+        a: {type: 'number'},
       },
       ['a'],
     );
@@ -248,8 +248,8 @@ const cases = {
       const ms = createSource(
         'table',
         {
-          a: 'number',
-          b: 'boolean',
+          a: {type: 'number'},
+          b: {type: 'boolean'},
         },
         ['a'],
       );
@@ -266,7 +266,7 @@ const cases = {
 
   'push': (createSource: SourceFactory) => {
     const sort = [['a', 'asc']] as const;
-    const ms = createSource('table', {a: 'number'}, ['a']);
+    const ms = createSource('table', {a: {type: 'number'}}, ['a']);
     const out = new Catch(ms.connect(sort));
 
     expect(out.pushes).toEqual([]);
@@ -319,7 +319,7 @@ const cases = {
     // only shows up in the cases it is supposed to.
 
     const sort = [['a', 'asc']] as const;
-    const ms = createSource('table', {a: 'number'}, ['a']);
+    const ms = createSource('table', {a: {type: 'number'}}, ['a']);
     const o1 = new OverlaySpy(ms.connect(sort));
     const o2 = new OverlaySpy(ms.connect(sort));
     const o3 = new OverlaySpy(ms.connect(sort));
@@ -625,7 +625,7 @@ const cases = {
 
     for (const c of cases) {
       const sort = [['a', 'asc']] as const;
-      const ms = createSource('table', {a: 'number'}, ['a']);
+      const ms = createSource('table', {a: {type: 'number'}}, ['a']);
       for (const row of c.startData) {
         ms.push({type: 'add', row});
       }
@@ -678,8 +678,8 @@ const cases = {
       const ms = createSource(
         'table',
         {
-          a: 'number',
-          b: 'boolean',
+          a: {type: 'number'},
+          b: {type: 'boolean'},
         },
         ['a'],
       );
@@ -834,8 +834,8 @@ const cases = {
       const ms = createSource(
         'table',
         {
-          a: 'number',
-          b: 'boolean',
+          a: {type: 'number'},
+          b: {type: 'boolean'},
         },
         ['a'],
       );
@@ -863,8 +863,8 @@ const cases = {
     const ms = createSource(
       'table',
       {
-        a: 'number',
-        b: 'number',
+        a: {type: 'number'},
+        b: {type: 'number'},
       },
       ['a'],
     );
@@ -896,7 +896,7 @@ const cases = {
     // the server, they are backed by cursors over streaming SQL queries which
     // can't be rewound or branched. This test ensures that streams from all
     // sources behave this way for consistency.
-    const source = createSource('table', {a: 'number'}, ['a']);
+    const source = createSource('table', {a: {type: 'number'}}, ['a']);
     source.push({type: 'add', row: {a: 1}});
     source.push({type: 'add', row: {a: 2}});
     source.push({type: 'add', row: {a: 3}});

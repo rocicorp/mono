@@ -1,29 +1,29 @@
-import {expect, test} from 'vitest';
-import {AddQuery, ZeroContext} from './context.js';
-import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
-import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {Catch} from '../../../zql/src/zql/ivm/catch.js';
-import {Join} from 'zql/src/zql/ivm/join.js';
-import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
 import {ExperimentalNoIndexDiff} from 'replicache';
+import {expect, test} from 'vitest';
+import {Join} from 'zql/src/zql/ivm/join.js';
+import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
+import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
+import {Catch} from '../../../zql/src/zql/ivm/catch.js';
+import {AddQuery, ZeroContext} from './context.js';
+import {ENTITIES_KEY_PREFIX} from './keys.js';
 
 test('getSource', () => {
   const schemas = {
     users: {
-      fields: {
+      tableName: 'users',
+      columns: {
         id: {type: 'string'},
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      table: 'users',
     },
     userStates: {
-      fields: {
+      tableName: 'userStates',
+      columns: {
         userID: {type: 'string'},
         stateCode: {type: 'string'},
       },
       primaryKey: ['userID', 'stateCode'],
-      table: 'userStates',
     },
   } as const;
 
@@ -34,8 +34,8 @@ test('getSource', () => {
   expect((source as MemorySource).getSchemaInfo()).toEqual({
     tableName: 'users',
     columns: {
-      id: 'string',
-      name: 'string',
+      id: {type: 'string'},
+      name: {type: 'string'},
     },
     primaryKey: ['id'],
   });
@@ -52,8 +52,8 @@ test('getSource', () => {
   expect((source2 as MemorySource).getSchemaInfo()).toEqual({
     tableName: 'userStates',
     columns: {
-      userID: 'string',
-      stateCode: 'string',
+      userID: {type: 'string'},
+      stateCode: {type: 'string'},
     },
     primaryKey: ['userID', 'stateCode'],
   });
@@ -62,12 +62,12 @@ test('getSource', () => {
 test('processChanges', () => {
   const schemas = {
     t1: {
-      fields: {
+      tableName: 't1',
+      columns: {
         id: {type: 'string'},
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      table: 't1',
     },
   } as const;
 
@@ -109,20 +109,20 @@ test('processChanges', () => {
 test('transactions', () => {
   const schemas = {
     server: {
-      fields: {
+      tableName: 'server',
+      columns: {
         id: {type: 'string'},
       },
       primaryKey: ['id'],
-      table: 'server',
     },
     flair: {
-      fields: {
+      tableName: 'flair',
+      columns: {
         id: {type: 'string'},
         serverID: {type: 'string'},
         description: {type: 'string'},
       },
       primaryKey: ['id'],
-      table: 'flair',
     },
   } as const;
 

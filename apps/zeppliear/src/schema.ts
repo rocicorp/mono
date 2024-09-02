@@ -1,6 +1,6 @@
 const memberSchema = {
-  table: 'member',
-  fields: {
+  tableName: 'member',
+  columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
@@ -8,8 +8,8 @@ const memberSchema = {
 } as const;
 
 const issueSchema = {
-  table: 'issue',
-  fields: {
+  tableName: 'issue',
+  columns: {
     id: {type: 'string'},
     title: {type: 'string'},
     // TODO: support enum types?
@@ -54,8 +54,8 @@ const issueSchema = {
 } as const;
 
 const commentSchema = {
-  table: 'comment',
-  fields: {
+  tableName: 'comment',
+  columns: {
     id: {type: 'string'},
     issueID: {type: 'string'},
     created: {type: 'number'},
@@ -75,8 +75,8 @@ const commentSchema = {
 } as const;
 
 const labelSchema = {
-  table: 'label',
-  fields: {
+  tableName: 'label',
+  columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
@@ -84,8 +84,8 @@ const labelSchema = {
 } as const;
 
 const issueLabelSchema = {
-  table: 'issueLabel',
-  fields: {
+  tableName: 'issueLabel',
+  columns: {
     id: {type: 'string'},
     issueID: {type: 'string'},
     labelID: {type: 'string'},

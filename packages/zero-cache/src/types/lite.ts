@@ -1,4 +1,4 @@
-import {ValueType} from 'zql/src/zql/ivm/schema.js';
+import {SchemaValue, ValueType} from 'zql/src/zql/ivm/schema.js';
 import {RowValue} from './row-key.js';
 
 export const INTEGER = 'INTEGER';
@@ -61,7 +61,13 @@ export function liteValues(row: RowValue) {
   return Object.values(row).map(v => (typeof v !== 'boolean' ? v : v ? 1 : 0));
 }
 
-export function mapLiteDataTypeToZqlValueType(liteDataType: string): ValueType {
+export function mapLiteDataTypeToZqlSchemaValue(
+  liteDataType: string,
+): SchemaValue {
+  return {type: mapLiteDataTypeToZqlValueType(liteDataType)};
+}
+
+function mapLiteDataTypeToZqlValueType(liteDataType: string): ValueType {
   switch (liteDataType) {
     case INTEGER:
       return 'number';

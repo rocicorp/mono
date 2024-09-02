@@ -1,17 +1,17 @@
-import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
-import {Row} from '../../../zql/src/zql/ivm/data.js';
-import {Schema, toInputArgs} from '../../../zql/src/zql/query/schema.js';
-import {Source} from '../../../zql/src/zql/ivm/source.js';
-import {AST} from '../../../zql/src/zql/ast/ast.js';
-import {Storage} from '../../../zql/src/zql/ivm/operator.js';
-import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
+import {ExperimentalNoIndexDiff} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
+import {AST} from '../../../zql/src/zql/ast/ast.js';
+import {Row} from '../../../zql/src/zql/ivm/data.js';
+import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
+import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
+import {Storage} from '../../../zql/src/zql/ivm/operator.js';
+import {Source} from '../../../zql/src/zql/ivm/source.js';
 import {
   CommitListener,
   QueryDelegate,
 } from '../../../zql/src/zql/query/query-impl.js';
+import {Schema} from '../../../zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {ExperimentalNoIndexDiff} from 'replicache';
 
 export type AddQuery = (ast: AST) => () => void;
 
@@ -44,8 +44,7 @@ export class ZeroContext implements QueryDelegate {
     if (!schema) {
       throw new Error(`No schema found for table ${name}`);
     }
-    const {columns, primaryKey} = toInputArgs(schema);
-    source = new MemorySource(name, columns, primaryKey);
+    source = new MemorySource(name, schema.columns, schema.primaryKey);
     this.#sources.set(name, source);
     return source;
   }

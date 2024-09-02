@@ -3,9 +3,9 @@
 import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
+import sinon from 'sinon';
 import {MockSocket, zeroForTest} from './test-utils.js';
 import {version} from './version.js';
-import sinon from 'sinon';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
@@ -36,12 +36,12 @@ async function testBasics(userID: string) {
     userID,
     schemas: {
       e: {
-        fields: {
+        tableName: 'e',
+        columns: {
           id: {type: 'string'},
           value: {type: 'number'},
         },
         primaryKey: ['id'],
-        table: 'e',
       },
     },
   });

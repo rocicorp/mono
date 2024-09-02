@@ -49,7 +49,7 @@ class QueryImpl<
 
   constructor(delegate: QueryDelegate, schema: TSchema, ast?: AST | undefined) {
     this.#ast = ast ?? {
-      table: schema.table,
+      table: schema.tableName,
     };
     this.#delegate = delegate;
     this.#schema = schema;
@@ -167,7 +167,7 @@ class QueryImpl<
               destSchema,
               cb(
                 this.#create(this.#delegate, destSchema, {
-                  table: destSchema.table,
+                  table: destSchema.tableName,
                   alias: relationship as string,
                 }),
               ).ast,
@@ -191,7 +191,7 @@ class QueryImpl<
               op: '=',
             },
             subquery: {
-              table: junctionSchema.table,
+              table: junctionSchema.tableName,
               alias: relationship as string,
               orderBy: addPrimaryKeys(junctionSchema, undefined),
               related: [
@@ -206,7 +206,7 @@ class QueryImpl<
                     destSchema,
                     cb(
                       this.#create(this.#delegate, destSchema, {
-                        table: destSchema.table,
+                        table: destSchema.tableName,
                         alias: relationship as string,
                       }),
                     ).ast,
@@ -267,7 +267,7 @@ class QueryImpl<
     });
   }
 
-  orderBy<TSelector extends keyof TSchema['fields']>(
+  orderBy<TSelector extends keyof TSchema['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs> {
