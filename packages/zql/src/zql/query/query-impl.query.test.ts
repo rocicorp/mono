@@ -14,7 +14,7 @@ import {
   userSchema,
 } from './test/testSchemas.js';
 
-class QueryDelegateImpl implements QueryDelegate {
+export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();
   #commitListeners: Set<CommitListener> = new Set();
 
