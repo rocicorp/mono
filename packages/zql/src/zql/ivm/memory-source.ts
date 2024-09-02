@@ -1,19 +1,21 @@
 import BTree from 'btree';
 import {assert} from 'shared/src/asserts.js';
-import type {Ordering, SimpleCondition} from '../ast/ast.js';
+import {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
+import {assertOrderingIncludesPK} from '../builder/builder.js';
 import {
   Comparator,
+  compareValues,
   makeComparator,
+  Value,
   valuesEqual,
-  type Node,
-  type Row,
+  Node,
+  Row,
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
-import type {Constraint, FetchRequest, Input, Output} from './operator.js';
-import type {PrimaryKeys, Schema, SchemaValue} from './schema.js';
-import type {Source, SourceChange, SourceInput} from './source.js';
-import type {Stream} from './stream.js';
-import {assertOrderingIncludesPK} from '../builder/builder.js';
+import {Constraint, FetchRequest, Input, Output} from './operator.js';
+import {PrimaryKeys, Schema, SchemaValue} from './schema.js';
+import {Source, SourceChange, SourceInput} from './source.js';
+import {Stream} from './stream.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -59,7 +61,7 @@ export class MemorySource implements Source {
     this.#columns = columns;
     this.#primaryKeys = primaryKeys;
     this.#primaryIndexSort = primaryKeys.map(k => [k, 'asc']);
-    const comparator = makeComparator(this.#primaryIndexSort);
+    const comparator = makeBoundComparator(this.#primaryIndexSort);
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
       data: new BTree<Row, undefined>([], comparator),
@@ -152,7 +154,7 @@ export class MemorySource implements Source {
       return index;
     }
 
-    const comparator = makeComparator(sort);
+    const comparator = makeBoundComparator(sort);
 
     // When creating these synchronously becomes a problem, a few options:
     // 1. Allow users to specify needed indexes up front
@@ -185,9 +187,25 @@ export class MemorySource implements Source {
     const callingConnectionNum = this.#connections.indexOf(from);
     assert(callingConnectionNum !== -1, 'Output not found');
     const reg = this.#connections[callingConnectionNum];
-    const {sort} = reg;
+    const {sort: requestedSort} = reg;
 
-    const index = this.#getOrCreateIndex(sort, from);
+    // If there is a constraint, we need an index sorted by it first.
+    const indexSort: OrderPart[] = [];
+    if (req.constraint) {
+      indexSort.push([req.constraint.key, 'asc']);
+    }
+
+    // For the special case of constraining by PK, we don't need to worry about
+    // any requested sort since there can only be one result. Otherwise we also
+    // need the index sorted by the requested sort.
+    if (
+      this.#primaryKeys.length > 1 ||
+      req.constraint?.key !== this.#primaryKeys[0]
+    ) {
+      indexSort.push(...requestedSort);
+    }
+
+    const index = this.#getOrCreateIndex(indexSort, from);
     const {data, comparator} = index;
 
     // When we receive a push, we send it to each output one at a time. Once the
@@ -225,40 +243,63 @@ export class MemorySource implements Source {
       return row;
     };
 
-    const startAt =
-      req.start?.basis === 'before'
-        ? nextLowerKey(req.start.row)
-        : req.start?.row;
-    yield* generateWithStart(
-      generateWithOverlay(
-        startAt,
-        this.#pullWithConstraint(data, startAt, req.constraint),
-        req.constraint,
-        overlay,
+    let startAt = req.start?.row;
+    if (startAt) {
+      if (req.constraint) {
+        // There's no problem supporting startAt outside of constraints, but I
+        // don't think we have a use case for this – if we see it, it's probably
+        // a bug.
+        if (!matchesConstraint(startAt)) {
+          assert(false, 'Start row must match constraint');
+        }
+      }
+      if (req.start!.basis === 'before') {
+        startAt = nextLowerKey(startAt);
+      }
+    }
+
+    // If there is a constraint, we want to start our scan at the first row that
+    // matches the constraint. But because the next OrderPart can be `desc`,
+    // it's not true that {[constraintKey]: constraintValue} is the first
+    // matching row. Because in that case, the other fields will all be
+    // `undefined`, and in Zero `undefined` is always less than any other value.
+    // So if the second OrderPart is descending then `undefined` values will
+    // actually be the *last* row. We need a way to stay "start at the first row
+    // with this constraint value". RowBound with the corresponding compareBound
+    // comparator accomplishes this. The right thing is probably to teach the
+    // btree library to support this concept.
+    let scanStart: RowBound | undefined;
+    if (req.constraint) {
+      scanStart = {};
+      for (const [key, dir] of indexSort) {
+        if (key === req.constraint.key) {
+          scanStart[key] = req.constraint.value;
+        } else {
+          scanStart[key] = dir === 'asc' ? minValue : maxValue;
+        }
+      }
+    }
+
+    yield* generateWithConstraint(
+      generateWithStart(
+        generateWithOverlay(
+          startAt,
+          // 😬 - btree library doesn't support ideas like start "before" this
+          // key.
+          data.keys(scanStart as Row),
+          req.constraint,
+          overlay,
+          comparator,
+        ),
+        req,
         comparator,
       ),
-      req,
-      comparator,
+      req.constraint,
     );
   }
 
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
     return this.#fetch(req, connection);
-  }
-
-  *#pullWithConstraint(
-    data: BTree<Row, undefined>,
-    startAt: Row | undefined,
-    constraint: Constraint | undefined,
-  ): IterableIterator<Row> {
-    const it = data.keys(startAt);
-
-    // Process all items in the iterator, applying overlay as needed.
-    for (const row of it) {
-      if (!constraint || valuesEqual(row[constraint.key], constraint.value)) {
-        yield row;
-      }
-    }
   }
 
   push(change: SourceChange) {
@@ -300,6 +341,21 @@ export class MemorySource implements Source {
         assert(removed);
       }
     }
+  }
+}
+
+function* generateWithConstraint(
+  it: Stream<Node>,
+  constraint: Constraint | undefined,
+) {
+  for (const node of it) {
+    if (
+      constraint &&
+      !valuesEqual(node.row[constraint.key], constraint.value)
+    ) {
+      break;
+    }
+    yield node;
   }
 }
 
@@ -401,4 +457,44 @@ export function* generateWithOverlay(
   if (overlay && overlay.change.type === 'add') {
     yield {row: overlay.change.row, relationships: {}};
   }
+}
+
+/**
+ * A location to begin scanning an index from. Can either be a specific value
+ * or the min or max possible value for the type. This is used to start a scan
+ * at the beginning of the rows matching a constraint.
+ */
+type Bound = Value | MinValue | MaxValue;
+type RowBound = Record<string, Bound>;
+const minValue = Symbol('min-value');
+type MinValue = typeof minValue;
+const maxValue = Symbol('max-value');
+type MaxValue = typeof maxValue;
+
+function makeBoundComparator(sort: Ordering) {
+  return (a: RowBound, b: RowBound) => {
+    for (const [key, dir] of sort) {
+      const cmp = compareBounds(a[key], b[key]);
+      if (cmp !== 0) {
+        return dir === 'asc' ? cmp : -cmp;
+      }
+    }
+    return 0;
+  };
+}
+
+function compareBounds(a: Bound, b: Bound): number {
+  if (a === minValue) {
+    return -1;
+  }
+  if (b === minValue) {
+    return 1;
+  }
+  if (a === maxValue) {
+    return 1;
+  }
+  if (b === maxValue) {
+    return -1;
+  }
+  return compareValues(a, b);
 }
