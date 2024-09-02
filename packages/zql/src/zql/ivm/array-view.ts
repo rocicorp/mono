@@ -1,10 +1,10 @@
-import {Change} from './change.js';
-import {Row, Comparator, Value} from './data.js';
-import {Input, Output} from './operator.js';
 import {assert} from 'shared/src/asserts.js';
-import {Schema} from './schema.js';
-import {must} from 'shared/src/must.js';
 import {Immutable} from 'shared/src/immutable.js';
+import {must} from 'shared/src/must.js';
+import {Change} from './change.js';
+import {Comparator, Row, Value} from './data.js';
+import {Input, Output} from './operator.js';
+import {Schema} from './schema.js';
 
 /**
  * Called when the view changes. The received data should be considered
@@ -106,7 +106,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         for (const [relationship, children] of Object.entries(
           change.node.relationships,
         )) {
-          const childSchema = must(schema.relationships[relationship]);
+          const childSchema = must(schema.relationships?.[relationship]);
           for (const node of children) {
             applyChange(view, {type: change.type, node}, childSchema);
           }
@@ -115,7 +115,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
       }
       case 'child': {
         const childSchema = must(
-          schema.relationships[change.child.relationshipName],
+          schema.relationships?.[change.child.relationshipName],
         );
         applyChange(view, change.child.change, childSchema);
         return;
@@ -137,7 +137,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
       change.node.relationships,
     )) {
       // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
-      const childSchema = must(schema.relationships[relationship]);
+      const childSchema = must(schema.relationships?.[relationship]);
       const newView: EntryList = [];
       newEntry[relationship] = newView;
       for (const node of children) {
@@ -159,7 +159,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
 
     const existing = view[pos];
     const childSchema = must(
-      schema.relationships[change.child.relationshipName],
+      schema.relationships?.[change.child.relationshipName],
     );
     const existingList = existing[change.child.relationshipName];
     assert(Array.isArray(existingList));

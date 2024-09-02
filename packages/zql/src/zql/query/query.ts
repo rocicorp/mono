@@ -2,7 +2,7 @@
 import {AST} from '../ast/ast.js';
 import {Row} from '../ivm/data.js';
 import {Source} from '../ivm/source.js';
-import {Schema, PullSchemaForRelationship, SchemaValue} from './schema.js';
+import {PullSchemaForRelationship, Schema, SchemaValue} from './schema.js';
 import {TypedView} from './typed-view.js';
 
 /**
@@ -16,7 +16,7 @@ export type Context = {
   createStorage: () => Storage;
 };
 
-export type Smash<T extends Array<QueryResultRow>> = {} & Array<
+export type Smash<T extends Array<QueryResultRow>> = Array<
   T extends Array<infer TRow extends QueryResultRow>
     ? Collapse<
         TRow['row'] & {

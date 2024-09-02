@@ -18,5 +18,5 @@ export type Schema = {
    */
   compareRows: (r1: Row, r2: Row) => number;
 
-  relationships: Record<string, Schema>;
+  relationships?: Record<string, Schema>;
 };
