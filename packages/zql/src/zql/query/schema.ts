@@ -1,28 +1,13 @@
-import type {PrimaryKeys, SchemaValue, ValueType} from '../ivm/schema.js';
+import type {SchemaBase} from '../ivm/schema.js';
 
-export type Schema = {
-  readonly tableName: string;
-  readonly primaryKey: PrimaryKeys;
-  readonly columns: Record<string, SchemaValue>;
-  readonly relationships?: {
-    [key: string]:
-      | FieldRelationship<Schema, Schema>
-      | JunctionRelationship<Schema, Schema, Schema>;
-  };
+export type Schema = SchemaBase & {
+  readonly relationships?: Record<string, Relationship>;
 };
-
-export function columnTypes(schema: Schema): Record<string, ValueType> {
-  const columns: Record<string, ValueType> = {};
-  for (const [key, value] of Object.entries(schema.columns)) {
-    columns[key] = value.type;
-  }
-  return columns;
-}
 
 /**
  * A schema might have a relationship to itself.
  * Given we cannot reference a variable in the same statement we initialize
- * the variable, we use a lazy function to get around this.
+ * the variable, we use a function to get around this.
  */
 export type Lazy<T> = () => T;
 

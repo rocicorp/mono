@@ -80,9 +80,9 @@ export class MemorySource implements Source {
       tableName: this.#tableName,
       columns: this.#columns,
       primaryKey: this.#primaryKeys,
-      compareRows: connection.compareRows,
       relationships: {},
       isHidden: false,
+      compareRows: connection.compareRows,
     };
   }
 
