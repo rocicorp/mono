@@ -23,6 +23,25 @@ suite('take with no partition', () => {
 
   takeTest({
     ...base,
+    name: 'limit 0',
+    sourceRows: [
+      {id: 'i1', created: 100},
+      {id: 'i2', created: 200},
+      {id: 'i3', created: 300},
+    ],
+    limit: 0,
+    partitions: [
+      {
+        partitionValue: undefined,
+        expectedMessages: [[], [], [['takeSnitch', 'cleanup', {}]]],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+    ],
+  });
+
+  takeTest({
+    ...base,
     name: 'no data',
     sourceRows: [],
     limit: 5,
@@ -221,6 +240,61 @@ suite('take with partition', () => {
     ],
     partitionKey: 'issueID',
   } as const;
+
+  takeTest({
+    ...base,
+    name: 'limit 0',
+    sourceRows: [
+      {id: 'c1', issueID: 'i1', created: 100},
+      {id: 'c2', issueID: 'i1', created: 200},
+      {id: 'c3', issueID: 'i1', created: 300},
+    ],
+    limit: 0,
+    partitions: [
+      {
+        partitionValue: 'i1',
+        expectedMessages: [
+          [],
+          [],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  key: 'issueID',
+                  value: 'i1',
+                },
+              },
+            ],
+          ],
+        ],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+      {
+        partitionValue: 'i2',
+        expectedMessages: [
+          [],
+          [],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  key: 'issueID',
+                  value: 'i2',
+                },
+              },
+            ],
+          ],
+        ],
+        expectedStorage: {},
+        expectedHydrate: [],
+      },
+    ],
+  });
 
   takeTest({
     ...base,

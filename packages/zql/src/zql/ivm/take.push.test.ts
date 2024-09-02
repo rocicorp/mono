@@ -28,6 +28,23 @@ suite('take with no partition', () => {
   suite('add', () => {
     takeTest({
       ...base,
+      name: 'limit 0',
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+      ],
+      limit: 0,
+      pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+      expectedMessages: [
+        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
+    takeTest({
+      ...base,
       name: 'less than limit add row at start',
       sourceRows: [
         {id: 'i1', created: 100},
@@ -202,6 +219,23 @@ suite('take with no partition', () => {
   });
 
   suite('remove', () => {
+    takeTest({
+      ...base,
+      name: 'limit 0',
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+      ],
+      limit: 0,
+      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      expectedMessages: [
+        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
     takeTest({
       ...base,
       name: 'less than limit remove row at start',
@@ -515,6 +549,31 @@ suite('take with partition', () => {
         key: 'issueID',
         values: ['i1', 'i2'],
       },
+      name: 'limit 0',
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i1', created: 300},
+      ],
+      limit: 0,
+      pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}},
+        ],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
+    takeTest({
+      ...base,
+      partition: {
+        key: 'issueID',
+        values: ['i1', 'i2'],
+      },
       name: 'less than limit add row at start',
       sourceRows: [
         {id: 'c1', issueID: 'i1', created: 100},
@@ -663,6 +722,31 @@ suite('take with partition', () => {
   });
 
   suite('remove', () => {
+    takeTest({
+      ...base,
+      partition: {
+        key: 'issueID',
+        values: ['i1', 'i2'],
+      },
+      name: 'limit 0',
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i1', created: 300},
+      ],
+      limit: 0,
+      pushes: [{type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}}],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
+        ],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
     takeTest({
       ...base,
       partition: {
