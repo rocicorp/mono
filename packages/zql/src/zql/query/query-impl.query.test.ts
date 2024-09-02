@@ -1,7 +1,10 @@
+import {deepClone} from 'shared/src/deep-clone.js';
 import {describe, expect, test} from 'vitest';
-import {newQuery} from './query-impl.js';
-import {MemoryStorage} from '../ivm/memory-storage.js';
 import {MemorySource} from '../ivm/memory-source.js';
+import {MemoryStorage} from '../ivm/memory-storage.js';
+import {Storage} from '../ivm/operator.js';
+import {Source} from '../ivm/source.js';
+import {CommitListener, newQuery, QueryDelegate} from './query-impl.js';
 import {
   commentSchema,
   issueLabelSchema,
@@ -10,10 +13,34 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
-import {toInputArgs} from './schema.js';
-import {must} from 'shared/src/must.js';
-import {Host} from '../builder/builder.js';
-import {SubscriptionDelegate} from '../context/context.js';
+
+class QueryDelegateImpl implements QueryDelegate {
+  #sources: Record<string, Source> = makeSources();
+  #commitListeners: Set<CommitListener> = new Set();
+
+  onTransactionCommit(listener: CommitListener): () => void {
+    this.#commitListeners.add(listener);
+    return () => {
+      this.#commitListeners.delete(listener);
+    };
+  }
+
+  commit() {
+    for (const listener of this.#commitListeners) {
+      listener();
+    }
+  }
+
+  addServerQuery(): () => void {
+    return () => {};
+  }
+  getSource(name: string): Source {
+    return this.#sources[name];
+  }
+  createStorage(): Storage {
+    return new MemoryStorage();
+  }
+}
 
 /**
  * Some basic manual tests to get us started.
@@ -31,12 +58,12 @@ import {SubscriptionDelegate} from '../context/context.js';
  */
 
 function makeSources() {
-  const userArgs = toInputArgs(userSchema);
-  const issueArgs = toInputArgs(issueSchema);
-  const commentArgs = toInputArgs(commentSchema);
-  const revisionArgs = toInputArgs(revisionSchema);
-  const labelArgs = toInputArgs(labelSchema);
-  const issueLabelArgs = toInputArgs(issueLabelSchema);
+  const userArgs = userSchema;
+  const issueArgs = issueSchema;
+  const commentArgs = commentSchema;
+  const revisionArgs = revisionSchema;
+  const labelArgs = labelSchema;
+  const issueLabelArgs = issueLabelSchema;
   return {
     user: new MemorySource('user', userArgs.columns, userArgs.primaryKey),
     issue: new MemorySource('issue', issueArgs.columns, issueArgs.primaryKey),
@@ -59,22 +86,22 @@ function makeSources() {
   };
 }
 
-function addData(host: Host) {
-  host.getSource('user').push({
+function addData(queryDelegate: QueryDelegate) {
+  queryDelegate.getSource('user').push({
     type: 'add',
     row: {
       id: '0001',
       name: 'Alice',
     },
   });
-  host.getSource('user').push({
+  queryDelegate.getSource('user').push({
     type: 'add',
     row: {
       id: '0002',
       name: 'Bob',
     },
   });
-  host.getSource('issue').push({
+  queryDelegate.getSource('issue').push({
     type: 'add',
     row: {
       id: '0001',
@@ -84,7 +111,7 @@ function addData(host: Host) {
       ownerId: '0001',
     },
   });
-  host.getSource('issue').push({
+  queryDelegate.getSource('issue').push({
     type: 'add',
     row: {
       id: '0002',
@@ -95,7 +122,7 @@ function addData(host: Host) {
     },
   });
 
-  host.getSource('comment').push({
+  queryDelegate.getSource('comment').push({
     type: 'add',
     row: {
       id: '0001',
@@ -104,7 +131,7 @@ function addData(host: Host) {
       body: 'comment 1',
     },
   });
-  host.getSource('comment').push({
+  queryDelegate.getSource('comment').push({
     type: 'add',
     row: {
       id: '0002',
@@ -113,7 +140,7 @@ function addData(host: Host) {
       body: 'comment 2',
     },
   });
-  host.getSource('revision').push({
+  queryDelegate.getSource('revision').push({
     type: 'add',
     row: {
       id: '0001',
@@ -123,14 +150,14 @@ function addData(host: Host) {
     },
   });
 
-  host.getSource('label').push({
+  queryDelegate.getSource('label').push({
     type: 'add',
     row: {
       id: '0001',
       name: 'label 1',
     },
   });
-  host.getSource('issueLabel').push({
+  queryDelegate.getSource('issueLabel').push({
     type: 'add',
     row: {
       issueId: '0001',
@@ -139,33 +166,18 @@ function addData(host: Host) {
   });
 }
 
-function makeHost(): Host & SubscriptionDelegate {
-  const sources = makeSources();
-  return {
-    getSource(tableName: string) {
-      return must(sources[tableName as keyof typeof sources]);
-    },
-    createStorage() {
-      return new MemoryStorage();
-    },
-    subscriptionAdded() {
-      return () => {};
-    },
-  };
-}
-
 describe('bare select', () => {
   test('empty source', () => {
-    const host = makeHost();
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const queryDelegate = new QueryDelegateImpl();
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
-    let rows: readonly {id: string}[] = [];
+    let rows: readonly unknown[] = [];
     let called = false;
     m.addListener(data => {
       called = true;
-      rows = data;
+      rows = deepClone(data) as unknown[];
     });
 
     expect(called).toBe(true);
@@ -179,19 +191,19 @@ describe('bare select', () => {
   });
 
   test('empty source followed by changes', () => {
-    const host = makeHost();
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const queryDelegate = new QueryDelegateImpl();
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
-    let rows: {id: string}[] = [];
+    let rows: unknown[] = [];
     m.addListener(data => {
-      rows = [...data];
+      rows = deepClone(data) as unknown[];
     });
 
     expect(rows).toEqual([]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -201,6 +213,7 @@ describe('bare select', () => {
         ownerId: '0001',
       },
     });
+    queryDelegate.commit();
 
     expect(rows).toEqual([
       {
@@ -212,19 +225,20 @@ describe('bare select', () => {
       },
     ]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0001',
       },
     });
+    queryDelegate.commit();
 
     expect(rows).toEqual([]);
   });
 
   test('source with initial data', () => {
-    const host = makeHost();
-    host.getSource('issue').push({
+    const queryDelegate = new QueryDelegateImpl();
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -235,13 +249,13 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
-    let rows: {id: string}[] = [];
+    let rows: unknown[] = [];
     m.addListener(data => {
-      rows = [...data];
+      rows = deepClone(data) as unknown[];
     });
 
     expect(rows).toEqual([
@@ -256,9 +270,9 @@ describe('bare select', () => {
   });
 
   test('source with initial data followed by changes', () => {
-    const host = makeHost();
+    const queryDelegate = new QueryDelegateImpl();
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -269,13 +283,13 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(host, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
     m.hydrate();
 
-    let rows: {id: string}[] = [];
+    let rows: unknown[] = [];
     m.addListener(data => {
-      rows = [...data];
+      rows = deepClone(data) as unknown[];
     });
 
     expect(rows).toEqual([
@@ -288,7 +302,7 @@ describe('bare select', () => {
       },
     ]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0002',
@@ -298,6 +312,7 @@ describe('bare select', () => {
         ownerId: '0002',
       },
     });
+    queryDelegate.commit();
 
     expect(rows).toEqual([
       {
@@ -320,10 +335,10 @@ describe('bare select', () => {
 
 describe('joins and filters', () => {
   test('filter', () => {
-    const host = makeHost();
-    addData(host);
+    const queryDelegate = new QueryDelegateImpl();
+    addData(queryDelegate);
 
-    const issueQuery = newQuery(host, issueSchema)
+    const issueQuery = newQuery(queryDelegate, issueSchema)
       .select('id')
       .where('title', '=', 'issue 1');
 
@@ -342,20 +357,20 @@ describe('joins and filters', () => {
     doubleFilterViewWithNoResults.hydrate();
 
     singleFilterView.addListener(data => {
-      singleFilterRows = [...data];
+      singleFilterRows = deepClone(data) as {id: string}[];
     });
     doubleFilterView.addListener(data => {
-      doubleFilterRows = [...data];
+      doubleFilterRows = deepClone(data) as {id: string}[];
     });
     doubleFilterViewWithNoResults.addListener(data => {
-      doubleFilterWithNoResultsRows = [...data];
+      doubleFilterWithNoResultsRows = deepClone(data) as {id: string}[];
     });
 
     expect(singleFilterRows.map(r => r.id)).toEqual(['0001']);
     expect(doubleFilterRows.map(r => r.id)).toEqual(['0001']);
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0001',
@@ -365,12 +380,13 @@ describe('joins and filters', () => {
         ownerId: '0001',
       },
     });
+    queryDelegate.commit();
 
     expect(singleFilterRows).toEqual([]);
     expect(doubleFilterRows).toEqual([]);
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'add',
       row: {
         id: '0001',
@@ -381,6 +397,13 @@ describe('joins and filters', () => {
       },
     });
 
+    // no commit
+    expect(singleFilterRows).toEqual([]);
+    expect(doubleFilterRows).toEqual([]);
+    expect(doubleFilterWithNoResultsRows).toEqual([]);
+
+    queryDelegate.commit();
+
     expect(singleFilterRows.map(r => r.id)).toEqual(['0001']);
     expect(doubleFilterRows).toEqual([]);
     // has results since we changed closed to true in the mutation
@@ -388,10 +411,10 @@ describe('joins and filters', () => {
   });
 
   test('join', () => {
-    const host = makeHost();
-    addData(host);
+    const queryDelegate = new QueryDelegateImpl();
+    addData(queryDelegate);
 
-    const issueQuery = newQuery(host, issueSchema)
+    const issueQuery = newQuery(queryDelegate, issueSchema)
       .related('labels', q => q.select('name'))
       .related('owner', q => q.select('name'))
       .related('comments', q => q.select('text'))
@@ -399,15 +422,9 @@ describe('joins and filters', () => {
     const view = issueQuery.materialize();
     view.hydrate();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let rows: any[] = [];
+    let rows: unknown[] = [];
     view.addListener(data => {
-      rows = [...data].map(row => ({
-        ...row,
-        owner: [...row.owner],
-        labels: [...row.labels],
-        comments: [...row.comments],
-      }));
+      rows = deepClone(data) as unknown[];
     });
 
     expect(rows).toEqual([
@@ -461,7 +478,7 @@ describe('joins and filters', () => {
       },
     ]);
 
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0001',
@@ -471,7 +488,7 @@ describe('joins and filters', () => {
         ownerId: '0001',
       },
     });
-    host.getSource('issue').push({
+    queryDelegate.getSource('issue').push({
       type: 'remove',
       row: {
         id: '0002',
@@ -481,6 +498,7 @@ describe('joins and filters', () => {
         ownerId: '0002',
       },
     });
+    queryDelegate.commit();
 
     expect(rows).toEqual([]);
   });

@@ -1,12 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {IncomingMessage} from 'http';
-import {Duplex} from 'stream';
 import {MessagePort} from 'worker_threads';
 import WebSocket from 'ws';
-import {
-  ConnectParams,
-  getConnectParams,
-} from '../services/dispatcher/connect-params.js';
+import {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
 import {Mutagen} from '../services/mutagen/mutagen.js';
 import {ReplicaVersionReady} from '../services/replicator/replicator.js';
@@ -16,7 +11,7 @@ import {ViewSyncer} from '../services/view-syncer/view-syncer.js';
 import {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
-import {createNotifier} from './replicator.js';
+import {createNotifierFrom, subscribeTo} from './replicator.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -48,20 +43,23 @@ export class Syncer {
   ) {
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
-    const notifier = createNotifier(parent);
+    const notifier = createNotifierFrom(parent);
+    subscribeTo(parent);
 
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
       lc,
-      id => viewSyncerFactory(id, notifier.addSubscription()),
+      id => viewSyncerFactory(id, notifier.subscribe()),
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);
     this.#parent = parent;
     this.#wss = new WebSocket.Server({noServer: true});
+
+    installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
   }
 
-  #createConnection(ws: WebSocket, params: ConnectParams) {
+  readonly #createConnection = (ws: WebSocket, params: ConnectParams) => {
     const {clientID, clientGroupID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
@@ -80,33 +78,9 @@ export class Syncer {
       },
     );
     this.#connections.set(clientID, connection);
-  }
+  };
 
-  run() {
-    installWebSocketReceiver<ConnectParams>(
-      this.#wss,
-      (ws, params) => this.#createConnection(ws, params),
-      this.#parent,
-    );
-  }
-
-  /**
-   * Creates a new WebSocket connection from an in-thread handoff.
-   * This is used for debugging in the single-thread configuration.
-   */
-  handleUpgrade(message: IncomingMessage, socket: Duplex, head: Buffer) {
-    const {url} = message;
-    const {params, error} = getConnectParams(
-      new URL(url ?? '', 'http://unused/'),
-    );
-    if (error !== null) {
-      socket.write(`HTTP/1.1 400 Bad Request\r\n${String(error)}`);
-      return;
-    }
-    this.#wss.handleUpgrade(message, socket, head, ws =>
-      this.#createConnection(ws, params),
-    );
-  }
+  run() {}
 
   stop() {
     this.#wss.close();

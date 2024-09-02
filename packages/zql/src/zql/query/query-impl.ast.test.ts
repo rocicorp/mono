@@ -1,21 +1,19 @@
 import {describe, expect, test} from 'vitest';
-import {newQuery} from './query-impl.js';
-import {Host} from '../builder/builder.js';
+import {newQuery, QueryDelegate} from './query-impl.js';
 import {issueSchema} from './test/testSchemas.js';
-import {SubscriptionDelegate} from '../context/context.js';
 
-const mockHost = {} as Host & SubscriptionDelegate;
+const mockDelegate = {} as QueryDelegate;
 
 describe('building the AST', () => {
   test('creates a new query', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     expect(issueQuery.ast).toEqual({
       table: 'issue',
     });
   });
 
   test('selecting fields does nothing to the ast', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const selected = issueQuery.select('id', 'title');
     expect(selected.ast).toEqual({
       table: 'issue',
@@ -23,7 +21,7 @@ describe('building the AST', () => {
   });
 
   test('as sets an alias', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const aliased = issueQuery.as('i');
     expect(aliased.ast).toEqual({
       table: 'issue',
@@ -32,7 +30,7 @@ describe('building the AST', () => {
   });
 
   test('where inserts a condition', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const where = issueQuery.where('id', '=', '1');
     expect(where.ast).toEqual({
       table: 'issue',
@@ -50,7 +48,7 @@ describe('building the AST', () => {
   });
 
   test('start adds a start field', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const start = issueQuery.start({id: '1'});
     expect(start.ast).toEqual({
       table: 'issue',
@@ -70,7 +68,7 @@ describe('building the AST', () => {
   });
 
   test('related: field edges', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('owner', q => q);
     expect(related.ast).toEqual({
       related: [
@@ -92,7 +90,7 @@ describe('building the AST', () => {
   });
 
   test('related: junction edges', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('labels', q => q);
     expect(related.ast).toEqual({
       related: [
@@ -132,7 +130,7 @@ describe('building the AST', () => {
   });
 
   test('related: many stacked edges', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('owner', oq =>
       oq.related('issues', iq => iq.related('labels', lq => lq)),
     );
@@ -202,7 +200,7 @@ describe('building the AST', () => {
   });
 
   test('related: many siblings', () => {
-    const issueQuery = newQuery(mockHost, issueSchema);
+    const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery
       .related('owner', oq => oq)
       .related('comments', cq => cq)

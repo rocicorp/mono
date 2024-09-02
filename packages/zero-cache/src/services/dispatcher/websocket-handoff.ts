@@ -1,12 +1,7 @@
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
 import WebSocket from 'ws';
-import {
-  getMessage,
-  MESSAGE_TYPES,
-  Receiver,
-  Sender,
-} from '../../types/processes.js';
+import {MESSAGE_TYPES, Receiver, Sender} from '../../types/processes.js';
 
 export type WebSocketHandoff<P> = (message: IncomingMessage) => {
   payload: P;
@@ -46,19 +41,16 @@ export function installWebSocketHandoff<P>(
 export function installWebSocketReceiver<P>(
   server: WebSocket.Server,
   receive: WebSocketReceiver<P>,
-  sender: Sender = process,
+  sender: Sender,
 ) {
-  sender.on('message', (data, socket) => {
-    const msg = getMessage<Handoff<P>>('handoff', data);
-    if (msg) {
-      const {message, head, payload} = msg;
-      server.handleUpgrade(
-        message as IncomingMessage,
-        socket as Socket,
-        Buffer.from(head),
-        ws => receive(ws, payload),
-      );
-    }
+  sender.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+    const {message, head, payload} = msg;
+    server.handleUpgrade(
+      message as IncomingMessage,
+      socket as Socket,
+      Buffer.from(head),
+      ws => receive(ws, payload),
+    );
   });
 }
 

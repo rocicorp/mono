@@ -5,7 +5,7 @@ import {assert} from 'shared/src/asserts.js';
 import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, suite, test, vi} from 'vitest';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {ErrorKind, initConnectionMessageSchema} from 'zero-protocol';
 import {
   Mutation,
@@ -13,6 +13,7 @@ import {
   pushMessageSchema,
 } from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
@@ -32,12 +33,11 @@ import {
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
-  SchemaDefs,
   RUN_LOOP_INTERVAL_MS,
+  SchemaDefs,
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
-import {AST} from 'zql/src/zql/ast/ast.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -72,12 +72,12 @@ test('onOnlineChange callback', async () => {
     logLevel: 'debug',
     schemas: {
       foo: {
-        fields: {
+        tableName: 'foo',
+        columns: {
           id: {type: 'string'},
           val: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'foo',
       },
     },
     onOnlineChange: online => {
@@ -439,12 +439,12 @@ suite('initConnection', () => {
     const r = zeroForTest({
       schemas: {
         e: {
-          fields: {
+          tableName: 'e',
+          columns: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          table: 'e',
         },
       },
     });
@@ -870,90 +870,63 @@ test('smokeTest', async () => {
       ...serverOptions,
       schemas: {
         issues: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          table: 'issues',
+          tableName: 'issues',
         },
       },
     });
 
-    const spy = vi.fn();
+    const calls: Array<Array<unknown>> = [];
     const view = r.query.issues.select('id', 'value').materialize();
+    const unsubscribe = view.addListener(c => {
+      calls.push([...c]);
+    });
     view.hydrate();
-    const unsubscribe = view.addListener(spy);
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
-    // once for initial data
-    // once for each mutation
-    // once for gotQueries
-    // once we have batch mutations this can go back to 3
-    expect(spy).toHaveBeenCalledTimes(4);
-    // TODO: why is it called 4 times with the same data??
-    expect(spy.mock.calls[0]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
-    ]);
-    // TODO(arv): Skip this repeated call
-    expect(spy.mock.calls[1]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
-    ]);
-    expect(spy.mock.calls[2]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
-    ]);
-    expect(spy.mock.calls[3]).toEqual([
-      [
-        {id: 'a', value: 1},
-        {id: 'b', value: 2},
-      ],
-      'partial',
+    // we don't get called for initial hydration because there's no data.
+    // once for the each transaction
+    // we test multiple changes in a transactions below
+    expect(calls.length).eq(2);
+    expect(calls[0]).toEqual([{id: 'a', value: 1}]);
+    expect(calls[1]).toEqual([
+      {id: 'a', value: 1},
+      {id: 'b', value: 2},
     ]);
 
-    spy.mockReset();
+    calls.length = 0;
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
-    expect(spy).toHaveBeenCalledTimes(0);
+    expect(calls.length).eq(0);
 
     await r.mutate.issues.set({id: 'a', value: 11});
 
-    // TODO: this is called twice because the transient remove is seen during an update.
-    // We need to hold off sending the remove until all events in the current transaction are processed
-    expect(spy).toHaveBeenCalledTimes(2);
-    expect(spy.mock.lastCall).toEqual([
-      [
-        {id: 'a', value: 11},
-        {id: 'b', value: 2},
-      ],
-      'partial',
+    // Althoug the set() results in a remove and add flowing through the pipeline,
+    // they are in same tx, so we only get one call coming out.
+    expect(calls.length).eq(1);
+    expect(calls[0]).toEqual([
+      {id: 'a', value: 11},
+      {id: 'b', value: 2},
     ]);
 
-    spy.mockReset();
+    calls.length = 0;
     await r.mutate.issues.delete({id: 'b'});
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.lastCall?.[0]).toEqual([{id: 'a', value: 11}]);
+    expect(calls.length).eq(1);
+    expect(calls[0]).toEqual([{id: 'a', value: 11}]);
 
     unsubscribe();
 
-    spy.mockReset();
+    calls.length = 0;
     await r.mutate.issues.create({id: 'c', value: 6});
-    expect(spy).toHaveBeenCalledTimes(0);
+    expect(calls.length).eq(0);
   }
 });
 
@@ -1722,12 +1695,12 @@ test('kvStore option', async () => {
       kvStore,
       schemas: {
         e: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          table: 'e',
+          tableName: 'e',
         },
       },
     });
@@ -1822,21 +1795,21 @@ test('ensure we get the same query object back', () => {
   const z = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });
@@ -1855,21 +1828,21 @@ test('the type of collection should be inferred from options with parse', () => 
   const r = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });
@@ -1897,21 +1870,21 @@ suite('CRUD', () => {
     zeroForTest({
       schemas: {
         issue: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             title: {type: 'string'},
           },
           primaryKey: ['id'],
-          table: 'issue',
+          tableName: 'issue',
         },
         comment: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             issueID: {type: 'string'},
             text: {type: 'string'},
           },
           primaryKey: ['id'],
-          table: 'comment',
+          tableName: 'comment',
         },
       },
     });
@@ -1978,12 +1951,12 @@ suite('CRUD', () => {
     const z = zeroForTest({
       schemas: {
         issue: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             title: {type: 'string'},
           },
           primaryKey: ['id'],
-          table: 'issue',
+          tableName: 'issue',
         },
       },
     });
@@ -1998,21 +1971,21 @@ test('mutate is a function for batching', async () => {
   const z = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });
@@ -2056,21 +2029,21 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   const z = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });

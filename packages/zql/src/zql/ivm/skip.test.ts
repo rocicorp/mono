@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
-import {MemorySource} from './memory-source.js';
-import {Bound, Skip} from './skip.js';
-import {Start} from './operator.js';
 import {Catch} from './catch.js';
 import {Row} from './data.js';
+import {MemorySource} from './memory-source.js';
+import {Start} from './operator.js';
+import {Bound, Skip} from './skip.js';
 import {SourceChange} from './source.js';
 
 test('fetch', () => {
@@ -184,9 +184,9 @@ test('fetch', () => {
     const ms = new MemorySource(
       'users',
       {
-        id: 'number',
-        name: 'string',
-        startDate: 'string',
+        id: {type: 'number'},
+        name: {type: 'string'},
+        startDate: {type: 'string'},
       },
       ['id'],
     );
@@ -306,8 +306,8 @@ test('push', () => {
     const ms = new MemorySource(
       'users',
       {
-        id: 'number',
-        date: 'string',
+        id: {type: 'number'},
+        date: {type: 'string'},
       },
       ['id'],
     );

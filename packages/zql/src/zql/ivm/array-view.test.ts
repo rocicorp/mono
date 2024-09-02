@@ -1,24 +1,29 @@
-import {MemorySource} from './memory-source.js';
-import {expect, test} from 'vitest';
-import {Join} from './join.js';
-import {MemoryStorage} from './memory-storage.js';
-import {EntryList, ArrayView} from './array-view.js';
+import {deepClone} from 'shared/src/deep-clone.js';
 import {Immutable} from 'shared/src/immutable.js';
-import {Schema} from './schema.js';
+import {expect, test} from 'vitest';
+import {ArrayView, EntryList} from './array-view.js';
 import {Change} from './change.js';
+import {Join} from './join.js';
+import {MemorySource} from './memory-source.js';
+import {MemoryStorage} from './memory-storage.js';
+import {Schema} from './schema.js';
 
 test('basics', () => {
-  const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
   const view = new ArrayView(ms.connect([['b', 'asc']]));
 
   let callCount = 0;
-  let data: Immutable<EntryList> = [];
+  let data: unknown[] = [];
   const listener = (d: Immutable<EntryList>) => {
     ++callCount;
-    data = d;
+    data = deepClone(d) as unknown[];
   };
   const unlisten = view.addListener(listener);
 
@@ -32,6 +37,11 @@ test('basics', () => {
   expect(() => view.hydrate()).toThrow("Can't hydrate twice");
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+
+  // We don't get called until flush.
+  expect(callCount).toBe(1);
+
+  view.flush();
   expect(callCount).toBe(2);
   expect(data).toEqual([
     {a: 1, b: 'a'},
@@ -40,24 +50,29 @@ test('basics', () => {
   ]);
 
   ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
+  expect(callCount).toBe(2);
+  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  expect(callCount).toBe(2);
+
+  view.flush();
   expect(callCount).toBe(3);
-  expect(data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 3, b: 'c'},
-  ]);
+  expect(data).toEqual([{a: 3, b: 'c'}]);
 
   unlisten();
-  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
   expect(callCount).toBe(3);
 
-  view.addListener(listener);
-  ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
-  expect(callCount).toBe(5);
-  expect(data).toEqual([]);
+  view.flush();
+  expect(callCount).toBe(3);
+  expect(data).toEqual([{a: 3, b: 'c'}]);
 });
 
 test('tree', () => {
-  const ms = new MemorySource('table', {id: 'number', name: 'string'}, ['id']);
+  const ms = new MemorySource(
+    'table',
+    {id: {type: 'number'}, name: {type: 'string'}},
+    ['id'],
+  );
   ms.push({
     type: 'add',
     row: {id: 1, name: 'foo', childID: 2},
@@ -86,9 +101,9 @@ test('tree', () => {
   });
 
   const view = new ArrayView(join);
-  let data: Immutable<EntryList> = [];
+  let data: unknown[] = [];
   const listener = (d: Immutable<EntryList>) => {
-    data = d;
+    data = deepClone(d) as unknown[];
   };
   view.addListener(listener);
 
@@ -134,6 +149,7 @@ test('tree', () => {
 
   // add parent with child
   ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}});
+  view.flush();
   expect(data).toEqual([
     {
       id: 5,
@@ -187,6 +203,7 @@ test('tree', () => {
 
   // remove parent with child
   ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}});
+  view.flush();
   expect(data).toEqual([
     {
       id: 1,
@@ -235,6 +252,7 @@ test('tree', () => {
       childID: null,
     },
   });
+  view.flush();
   expect(data).toEqual([
     {
       id: 1,
@@ -271,6 +289,7 @@ test('tree', () => {
       childID: null,
     },
   });
+  view.flush();
   expect(data).toEqual([
     {
       id: 1,
@@ -312,15 +331,12 @@ test('tree', () => {
 });
 
 test('collapse hidden relationships', () => {
-  // add
-  // remove
-  // child change
   const schema: Schema = {
     tableName: 'issue',
     primaryKey: ['id'],
     columns: {
-      id: 'number',
-      name: 'string',
+      id: {type: 'number'},
+      name: {type: 'string'},
     },
     isHidden: false,
     compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
@@ -329,9 +345,9 @@ test('collapse hidden relationships', () => {
         tableName: 'issueLabel',
         primaryKey: ['id'],
         columns: {
-          id: 'number',
-          issueId: 'number',
-          labelId: 'number',
+          id: {type: 'number'},
+          issueId: {type: 'number'},
+          labelId: {type: 'number'},
         },
         isHidden: true,
         compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
@@ -340,8 +356,8 @@ test('collapse hidden relationships', () => {
             tableName: 'label',
             primaryKey: ['id'],
             columns: {
-              id: 'number',
-              name: 'string',
+              id: {type: 'number'},
+              name: {type: 'string'},
             },
             isHidden: false,
             compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
@@ -370,6 +386,11 @@ test('collapse hidden relationships', () => {
   };
 
   const view = new ArrayView(input);
+  let data: unknown[] = [];
+  view.addListener(d => {
+    data = deepClone(d) as unknown[];
+  });
+
   const changeSansType = {
     node: {
       row: {
@@ -404,8 +425,9 @@ test('collapse hidden relationships', () => {
     type: 'add',
     ...changeSansType,
   });
+  view.flush();
 
-  expect(view.data).toEqual([
+  expect(data).toEqual([
     {
       id: 1,
       labels: [
@@ -422,13 +444,17 @@ test('collapse hidden relationships', () => {
     type: 'remove',
     ...changeSansType,
   });
+  view.flush();
 
-  expect(view.data).toEqual([]);
+  expect(data).toEqual([]);
 
   view.push({
     type: 'add',
     ...changeSansType,
   });
+  // no commit
+  expect(data).toEqual([]);
+
   view.push({
     type: 'child',
     row: {
@@ -460,8 +486,9 @@ test('collapse hidden relationships', () => {
       },
     },
   });
+  view.flush();
 
-  expect(view.data).toEqual([
+  expect(data).toEqual([
     {
       id: 1,
       labels: [

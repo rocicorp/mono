@@ -7,9 +7,10 @@ import {Service} from 'zero-cache/src/services/service.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
 import {
-  createNotifier,
+  createNotifierFrom,
   getStatusFromWorker,
   runAsWorker,
+  subscribeTo,
 } from './replicator.js';
 
 describe('workers/replicator', () => {
@@ -29,34 +30,35 @@ describe('workers/replicator', () => {
     const status = await getStatusFromWorker(child);
     expect(status).toEqual({status: 'yo'});
   });
-});
 
-test('replicator subscription', async () => {
-  const originalSub = Subscription.create<ReplicaVersionReady>();
+  test('replicator subscription', async () => {
+    const originalSub = Subscription.create<ReplicaVersionReady>();
 
-  const replicator = {
-    status: vi.fn(),
-    subscribe: () => originalSub,
-    run: vi.fn(),
-  };
+    const replicator = {
+      status: vi.fn(),
+      subscribe: () => originalSub,
+      run: vi.fn(),
+    };
 
-  const [parent, child] = inProcChannel();
+    const [parent, child] = inProcChannel();
 
-  void runAsWorker(replicator as unknown as Replicator & Service, parent);
-  expect(replicator.run).toHaveBeenCalledOnce;
+    void runAsWorker(replicator as unknown as Replicator & Service, parent);
+    expect(replicator.run).toHaveBeenCalledOnce;
 
-  originalSub.push({foo: 'bar'});
-  originalSub.push({foo: 'baz'});
+    originalSub.push({foo: 'bar'});
+    originalSub.push({foo: 'baz'});
 
-  const notifier = createNotifier(child);
-  const notifications = [];
+    const notifications = [];
+    const notifier = createNotifierFrom(child);
+    subscribeTo(child);
 
-  for await (const msg of notifier.addSubscription()) {
-    notifications.push(msg);
-    if (notifications.length === 2) {
-      break;
+    for await (const msg of notifier.subscribe()) {
+      notifications.push(msg);
+      if (notifications.length === 2) {
+        break;
+      }
     }
-  }
 
-  expect(notifications).toEqual([{foo: 'bar'}, {foo: 'baz'}]);
+    expect(notifications).toEqual([{foo: 'bar'}, {foo: 'baz'}]);
+  });
 });

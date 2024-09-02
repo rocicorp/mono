@@ -1,13 +1,15 @@
 import {expect, test} from 'vitest';
-import {buildPipeline} from './builder.js';
 import {Catch} from '../ivm/catch.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
+import {buildPipeline} from './builder.js';
 
 export function testSources() {
-  const users = new MemorySource('table', {id: 'number', name: 'string'}, [
-    'id',
-  ]);
+  const users = new MemorySource(
+    'table',
+    {id: {type: 'number'}, name: {type: 'string'}},
+    ['id'],
+  );
   users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}});
   users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}});
   users.push({type: 'add', row: {id: 3, name: 'greg', recruiterID: 1}});
@@ -16,7 +18,7 @@ export function testSources() {
   users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}});
   users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}});
 
-  const states = new MemorySource('table', {code: 'string'}, ['code']);
+  const states = new MemorySource('table', {code: {type: 'string'}}, ['code']);
   states.push({type: 'add', row: {code: 'CA'}});
   states.push({type: 'add', row: {code: 'HI'}});
   states.push({type: 'add', row: {code: 'AZ'}});
@@ -25,7 +27,7 @@ export function testSources() {
 
   const userStates = new MemorySource(
     'table',
-    {userID: 'number', stateCode: 'string'},
+    {userID: {type: 'number'}, stateCode: {type: 'string'}},
     ['userID', 'stateCode'],
   );
   userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}});

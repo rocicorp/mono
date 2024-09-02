@@ -2,9 +2,7 @@ import {useCallback, useMemo, useState} from 'react';
 import type {ListOnItemsRenderedProps} from 'react-window';
 import {orderQuery, type Issue, type Priority, type Status} from './issue.js';
 import type {IssuesProps} from './issues-props.js';
-import {assert} from './util/asserts.js';
-import {ResultType} from 'zero-client';
-import {useQueryWithResultType} from './hooks/use-query.js';
+import {useQuery} from './hooks/use-query.js';
 import {IssueListRow} from './queries.js';
 
 export type ListData = {
@@ -18,7 +16,6 @@ export type ListData = {
   readonly onChangeStatus: (issue: Issue, status: Status) => void;
   readonly onOpenDetail: (issue: Issue) => void;
   readonly count: number;
-  readonly resultType: ResultType;
 };
 
 export function useListData({
@@ -36,7 +33,7 @@ export function useListData({
   const {query, queryDeps, order} = issuesProps;
   const issueQueryOrdered = orderQuery(query, order, false);
   const [limit, setLimit] = useState(pageSize);
-  const {snapshot: issues, resultType} = useQueryWithResultType(
+  const issues = useQuery(
     issueQueryOrdered.limit(limit),
     queryDeps.concat(limit),
   );
@@ -57,16 +54,8 @@ export function useListData({
         onChangeStatus,
         onOpenDetail,
         onItemsRendered,
-        resultType,
       ),
-    [
-      issues,
-      onChangePriority,
-      onChangeStatus,
-      onItemsRendered,
-      onOpenDetail,
-      resultType,
-    ],
+    [issues, onChangePriority, onChangeStatus, onItemsRendered, onOpenDetail],
   );
 }
 
@@ -77,7 +66,6 @@ class ListDataImpl implements ListData {
   readonly onOpenDetail: (issue: Issue) => void;
   readonly count: number;
   readonly onItemsRendered: (props: ListOnItemsRenderedProps) => void;
-  readonly resultType: ResultType;
 
   constructor(
     issues: IssueListRow[],
@@ -85,15 +73,13 @@ class ListDataImpl implements ListData {
     onChangeStatus: (issue: Issue, status: Status) => void,
     onOpenDetail: (issue: Issue) => void,
     onItemsRendered: (props: ListOnItemsRenderedProps) => void,
-    resultType: ResultType,
   ) {
     this.#issues = issues;
     this.onChangePriority = onChangePriority;
     this.onChangeStatus = onChangeStatus;
     this.onOpenDetail = onOpenDetail;
-    this.count = issues.length + (resultType === 'complete' ? 0 : 1);
+    this.count = issues.length;
     this.onItemsRendered = onItemsRendered;
-    this.resultType = resultType;
   }
 
   getIssue(index: number): IssueListRow | undefined {
@@ -109,7 +95,6 @@ class ListDataImpl implements ListData {
 
   isLoadingIndicator(index: number): boolean {
     if (index === this.#issues.length) {
-      assert(this.resultType !== 'complete');
       return true;
     }
     return false;

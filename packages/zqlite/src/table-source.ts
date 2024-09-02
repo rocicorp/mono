@@ -20,7 +20,12 @@ import type {
   Input,
   Output,
 } from 'zql/src/zql/ivm/operator.js';
-import {Schema, ValueType} from 'zql/src/zql/ivm/schema.js';
+import {
+  PrimaryKeys,
+  Schema,
+  SchemaValue,
+  ValueType,
+} from 'zql/src/zql/ivm/schema.js';
 import type {
   Source,
   SourceChange,
@@ -65,15 +70,15 @@ export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
   readonly #table: string;
-  readonly #columns: Record<string, ValueType>;
-  readonly #primaryKey: readonly string[];
+  readonly #columns: Record<string, SchemaValue>;
+  readonly #primaryKey: PrimaryKeys;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
   constructor(
     db: Database,
     tableName: string,
-    columns: Record<string, ValueType>,
+    columns: Record<string, SchemaValue>,
     primaryKey: readonly [string, ...string[]],
   ) {
     this.#table = tableName;
@@ -137,9 +142,9 @@ export class TableSource implements Source {
       tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      compareRows: connection.compareRows,
       relationships: {},
       isHidden: false,
+      compareRows: connection.compareRows,
     };
   }
 
@@ -288,6 +293,8 @@ export class TableSource implements Source {
       assert(exists, 'Row not found');
     }
 
+    // Outputs should see converted types (e.g. boolean).
+    fromSQLiteTypes(this.#columns, change.row);
     for (const [outputIndex, {output}] of this.#connections.entries()) {
       this.#overlay = {outputIndex, change};
       if (output) {
@@ -493,7 +500,7 @@ function toSQLiteType(v: unknown): unknown {
 }
 
 function* mapFromSQLiteTypes(
-  valueTypes: Record<string, ValueType>,
+  valueTypes: Record<string, SchemaValue>,
   rowIterator: IterableIterator<Row>,
 ): IterableIterator<Row> {
   for (const row of rowIterator) {
@@ -502,16 +509,16 @@ function* mapFromSQLiteTypes(
   }
 }
 
-function fromSQLiteTypes(valueTypes: Record<string, ValueType>, row: Row) {
+function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
   for (const key in row) {
-    row[key] = fromSQLiteType(valueTypes[key], row[key]);
+    row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
   }
 }
 
 function fromSQLiteType(valueType: ValueType, v: Value): Value {
   switch (valueType) {
     case 'boolean':
-      return v === 0 ? false : v === 1 ? true : v;
+      return !!v;
     default:
       return v;
   }

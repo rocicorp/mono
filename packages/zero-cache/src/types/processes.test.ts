@@ -1,4 +1,5 @@
-import {describe, expect, test} from 'vitest';
+import {SendHandle} from 'child_process';
+import {describe, expect, test, vi} from 'vitest';
 import {inProcChannel} from './processes.js';
 
 describe('types/processes', () => {
@@ -25,6 +26,49 @@ describe('types/processes', () => {
     expect(messages1).toEqual([
       ['subscribe', 'foo'],
       ['notify', 'bar'],
+    ]);
+  });
+
+  type NotifyMessage = ['notify', {uuid: string}];
+  type SubscribeMessage = ['subscribe', {foo: string}];
+
+  test('onMessageType, onceMessageType', () => {
+    const [port1, port2] = inProcChannel();
+
+    const handler1 = vi.fn();
+    const handler2 = vi.fn();
+    const handler3 = vi.fn();
+
+    port2
+      .onMessageType<NotifyMessage>('notify', handler1)
+      .onceMessageType<NotifyMessage>('notify', handler2)
+      .onMessageType<SubscribeMessage>('subscribe', handler3);
+
+    port1.send<SubscribeMessage>(
+      ['subscribe', {foo: 'bar'}],
+      'sendHandle' as unknown as SendHandle,
+    );
+    port1.send<NotifyMessage>(['notify', {uuid: 'one'}]);
+    port1.send<SubscribeMessage>(['subscribe', {foo: 'baz'}]);
+    port1.send<NotifyMessage>(
+      ['notify', {uuid: 'two'}],
+      123 as unknown as SendHandle,
+    );
+    port1.send<NotifyMessage>(['notify', {uuid: 'three'}]);
+
+    expect(handler1).toHaveBeenCalledTimes(3);
+    expect(handler2).toHaveBeenCalledTimes(1);
+    expect(handler3).toHaveBeenCalledTimes(2);
+
+    expect(handler1.mock.calls).toEqual([
+      [{uuid: 'one'}, undefined],
+      [{uuid: 'two'}, 123],
+      [{uuid: 'three'}, undefined],
+    ]);
+    expect(handler2.mock.calls).toEqual([[{uuid: 'one'}, undefined]]);
+    expect(handler3.mock.calls).toEqual([
+      [{foo: 'bar'}, 'sendHandle'],
+      [{foo: 'baz'}, undefined],
     ]);
   });
 });

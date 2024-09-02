@@ -1,4 +1,8 @@
+import {assert} from 'shared/src/asserts.js';
 import {expect, suite, test} from 'vitest';
+import type {Ordering} from '../ast/ast.js';
+import {Catch} from './catch.js';
+import type {Node, NormalizedValue, Row} from './data.js';
 import {
   Join,
   createPrimaryKeySetStorageKey,
@@ -6,18 +10,14 @@ import {
 } from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
+import type {PrimaryKeys, Schema, SchemaValue} from './schema.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
-import type {Row, Node, NormalizedValue} from './data.js';
-import {assert} from 'shared/src/asserts.js';
-import type {Ordering} from '../ast/ast.js';
-import {Catch} from './catch.js';
-import type {Schema, ValueType} from './schema.js';
 
 suite('fetch one:many', () => {
   const base = {
     columns: [
-      {id: 'string' as const},
-      {id: 'string' as const, issueID: 'string' as const},
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id']],
     joins: [
@@ -27,7 +27,7 @@ suite('fetch one:many', () => {
         relationshipName: 'comments',
       },
     ],
-  };
+  } as const;
 
   fetchTest({
     ...base,
@@ -165,8 +165,8 @@ suite('fetch one:many', () => {
 suite('fetch many:one', () => {
   const base = {
     columns: [
-      {id: 'string' as const, ownerID: 'string' as const},
-      {id: 'string' as const},
+      {id: {type: 'string'}, ownerID: {type: 'string'}},
+      {id: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id']],
     joins: [
@@ -176,7 +176,7 @@ suite('fetch many:one', () => {
         relationshipName: 'owner',
       },
     ],
-  };
+  } as const;
 
   fetchTest({
     ...base,
@@ -307,9 +307,9 @@ suite('fetch many:one', () => {
 suite('fetch one:many:many', () => {
   const base = {
     columns: [
-      {id: 'string' as const},
-      {id: 'string' as const, issueID: 'string' as const},
-      {id: 'string' as const, commentID: 'string' as const},
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
+      {id: {type: 'string'}, commentID: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
@@ -324,7 +324,7 @@ suite('fetch one:many:many', () => {
         relationshipName: 'revisions',
       },
     ],
-  };
+  } as const;
 
   fetchTest({
     ...base,
@@ -501,9 +501,9 @@ suite('fetch one:many:many', () => {
 suite('fetch one:many:one', () => {
   const base = {
     columns: [
-      {id: 'string' as const},
-      {issueID: 'string' as const, labelID: 'string' as const},
-      {id: 'string' as const},
+      {id: {type: 'string'}},
+      {issueID: {type: 'string'}, labelID: {type: 'string'}},
+      {id: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
     joins: [
@@ -518,7 +518,7 @@ suite('fetch one:many:one', () => {
         relationshipName: 'labels',
       },
     ],
-  };
+  } as const;
 
   const sorts = [
     undefined,
@@ -856,11 +856,11 @@ function fetchTest(t: FetchTest) {
 
 type FetchTest = {
   name: string;
-  columns: Record<string, ValueType>[];
-  primaryKeys: readonly string[][];
+  columns: readonly Record<string, SchemaValue>[];
+  primaryKeys: readonly PrimaryKeys[];
   sources: Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
-  joins: {
+  joins: readonly {
     parentKey: string;
     childKey: string;
     relationshipName: string;

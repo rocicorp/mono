@@ -1,41 +1,13 @@
-import {ValueType} from '../ivm/schema.js';
+import type {SchemaBase} from '../ivm/schema.js';
 
-/**
- * `related` calls need to know what the available relationships are.
- * The `schema` type encodes this information.
- */
-export type SchemaValue = {
-  type: ValueType;
-  optional?: boolean;
+export type Schema = SchemaBase & {
+  readonly relationships?: Record<string, Relationship>;
 };
-
-export type Schema = {
-  readonly table: string;
-  primaryKey: readonly [keyof Schema['fields'], ...(keyof Schema['fields'])[]];
-  readonly fields: Record<string, SchemaValue>;
-  readonly relationships?: {
-    [key: string]:
-      | FieldRelationship<Schema, Schema>
-      | JunctionRelationship<Schema, Schema, Schema>;
-  };
-};
-
-export function toInputArgs(schema: Schema) {
-  const columns: Record<string, ValueType> = {};
-  for (const [key, value] of Object.entries(schema.fields)) {
-    columns[key] = value.type;
-  }
-  return {
-    primaryKey: schema.primaryKey,
-    columns,
-    table: schema.table,
-  };
-}
 
 /**
  * A schema might have a relationship to itself.
  * Given we cannot reference a variable in the same statement we initialize
- * the variable, we use a lazy function to get around this.
+ * the variable, we use a function to get around this.
  */
 export type Lazy<T> = () => T;
 
@@ -51,9 +23,9 @@ type FieldRelationship<
   TSourceSchema extends Schema,
   TDestSchema extends Schema,
 > = {
-  source: keyof TSourceSchema['fields'];
+  source: keyof TSourceSchema['columns'];
   dest: {
-    field: keyof TDestSchema['fields'];
+    field: keyof TDestSchema['columns'];
     schema: TDestSchema | Lazy<TDestSchema>;
   };
 };
@@ -67,14 +39,14 @@ type JunctionRelationship<
   TJunctionSchema extends Schema,
   TDestSchema extends Schema,
 > = {
-  source: keyof TSourceSchema['fields'];
+  source: keyof TSourceSchema['columns'];
   junction: {
-    sourceField: keyof TJunctionSchema['fields'];
-    destField: keyof TJunctionSchema['fields'];
+    sourceField: keyof TJunctionSchema['columns'];
+    destField: keyof TJunctionSchema['columns'];
     schema: TDestSchema | Lazy<TJunctionSchema>;
   };
   dest: {
-    field: keyof TDestSchema['fields'];
+    field: keyof TDestSchema['columns'];
     schema: TDestSchema | Lazy<TJunctionSchema>;
   };
 };

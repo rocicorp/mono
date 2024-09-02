@@ -11,9 +11,9 @@ import {Skip} from '../ivm/skip.js';
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
- * pipeline to host environment to provide sources and storage.
+ * pipeline to delegate environment to provide sources and storage.
  */
-export interface Host {
+export interface BuilderDelegate {
   /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
@@ -29,7 +29,7 @@ export interface Host {
 }
 
 /**
- * Builds a pipeline from an AST. Caller must provide a Host to create source
+ * Builds a pipeline from an AST. Caller must provide a delegate to create source
  * and storage interfaces as necessary.
  *
  * Usage:
@@ -49,20 +49,20 @@ export interface Host {
  *   }
  * }
  *
- * const input = buildPipeline(ast, myHost);
+ * const input = buildPipeline(ast, myDelegate);
  * const sink = new MySink(input);
  * ```
  */
-export function buildPipeline(ast: AST, host: Host): Input {
-  return buildPipelineInternal(ast, host);
+export function buildPipeline(ast: AST, delegate: BuilderDelegate): Input {
+  return buildPipelineInternal(ast, delegate);
 }
 
 function buildPipelineInternal(
   ast: AST,
-  host: Host,
+  delegate: BuilderDelegate,
   partitionKey?: string | undefined,
 ): Input {
-  const source = host.getSource(ast.table);
+  const source = delegate.getSource(ast.table);
   const conn = source.connect(must(ast.orderBy), ast.where ?? []);
   let end: Input = conn;
   const {appliedFilters} = conn;
@@ -82,7 +82,7 @@ function buildPipelineInternal(
   }
 
   if (ast.limit) {
-    end = new Take(end, host.createStorage(), ast.limit, partitionKey);
+    end = new Take(end, delegate.createStorage(), ast.limit, partitionKey);
   }
 
   if (ast.related) {
@@ -90,13 +90,13 @@ function buildPipelineInternal(
       assert(sq.subquery.alias, 'Subquery must have an alias');
       const child = buildPipelineInternal(
         sq.subquery,
-        host,
+        delegate,
         sq.correlation.childField,
       );
       end = new Join({
         parent: end,
         child,
-        storage: host.createStorage(),
+        storage: delegate.createStorage(),
         parentKey: sq.correlation.parentField,
         childKey: sq.correlation.childField,
         relationshipName: sq.subquery.alias,

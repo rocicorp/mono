@@ -1,17 +1,18 @@
 import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
+import {Change} from 'zql/src/zql/ivm/change.js';
 import {makeComparator} from 'zql/src/zql/ivm/data.js';
-import {ValueType} from 'zql/src/zql/ivm/schema.js';
+import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
 import {compile, sql} from './internal/sql.js';
 import {TableSource} from './table-source.js';
 
 const columns = {
-  id: 'string',
-  a: 'number',
-  b: 'number',
-  c: 'number',
+  id: {type: 'string'},
+  a: {type: 'number'},
+  b: {type: 'number'},
+  c: {type: 'number'},
 } as const;
 
 describe('fetching from a table source', () => {
@@ -196,7 +197,7 @@ describe('fetching from a table source', () => {
   });
 });
 
-test('pushing values does the correct writes', () => {
+test('pushing values does the correct writes and outputs', () => {
   const db1 = new Database(':memory:');
   const db2 = new Database(':memory:');
   db1.exec(/* sql */ `CREATE TABLE foo (a, b, c, PRIMARY KEY (a, b));`);
@@ -204,9 +205,18 @@ test('pushing values does the correct writes', () => {
   const source = new TableSource(
     db1,
     'foo',
-    {a: 'number', b: 'number', c: 'number'},
+    {a: {type: 'number'}, b: {type: 'number'}, c: {type: 'boolean'}},
     ['a', 'b'],
   );
+  const outputted: Change[] = [];
+  source
+    .connect([
+      ['a', 'asc'],
+      ['b', 'asc'],
+    ])
+    .setOutput({
+      push: change => outputted.push(change),
+    });
 
   for (const db of [db1, db2]) {
     const read = db.prepare('SELECT * FROM foo');
@@ -221,16 +231,37 @@ test('pushing values does the correct writes', () => {
      */
     source.push({
       type: 'add',
-      row: {a: 1, b: 2, c: 3},
+      row: {a: 1, b: 2, c: 0},
     });
 
-    expect(read.all()).toEqual([{a: 1, b: 2, c: 3}]);
+    expect(outputted.shift()).toEqual({
+      type: 'add',
+      node: {
+        relationships: {},
+        row: {
+          a: 1,
+          b: 2,
+          c: false,
+        },
+      },
+    });
+    expect(read.all()).toEqual([{a: 1, b: 2, c: 0}]);
 
     source.push({
       type: 'remove',
       row: {a: 1, b: 2},
     });
 
+    expect(outputted.shift()).toEqual({
+      type: 'remove',
+      node: {
+        relationships: {},
+        row: {
+          a: 1,
+          b: 2,
+        },
+      },
+    });
     expect(read.all()).toEqual([]);
 
     expect(() => {
@@ -240,10 +271,25 @@ test('pushing values does the correct writes', () => {
       });
     }).toThrow();
 
+    expect(read.all()).toEqual([]);
+
     source.push({
       type: 'add',
-      row: {a: 1, b: 2, c: 3},
+      row: {a: 1, b: 2, c: 1},
     });
+
+    expect(outputted.shift()).toEqual({
+      type: 'add',
+      node: {
+        relationships: {},
+        row: {
+          a: 1,
+          b: 2,
+          c: true,
+        },
+      },
+    });
+    expect(read.all()).toEqual([{a: 1, b: 2, c: 1}]);
 
     expect(() => {
       source.push({
@@ -258,7 +304,7 @@ describe('shared test cases', () => {
   runCases(
     (
       name: string,
-      columns: Record<string, ValueType>,
+      columns: Record<string, SchemaValue>,
       primaryKey: readonly [string, ...string[]],
     ) => {
       const db = new Database(':memory:');

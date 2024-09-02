@@ -123,9 +123,13 @@ export class CVRUpdater {
 
     this.#setLastActive(lastActive);
     const numEntries = this._cvrStore.numPendingWrites();
-    await this._cvrStore.flush();
+    const statements = await this._cvrStore.flush();
 
-    lc.debug?.(`flushed ${numEntries} CVR entries (${Date.now() - start} ms)`);
+    lc.debug?.(
+      `flushed ${numEntries} CVR entries with ${statements} statements (${
+        Date.now() - start
+      } ms)`,
+    );
     return this._cvr;
   }
 }
@@ -327,10 +331,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // We can use something like:
     //   SELECT * FROM cvr.rows WHERE "refCounts" ?| array[...queryHashes...];
 
-    const allRowRecords = this._cvrStore.allRowRecords();
-
+    const allRowRecords = (await this._cvrStore.getRowRecords()).values();
     let total = 0;
-    for await (const existing of allRowRecords) {
+    for (const existing of allRowRecords) {
       total++;
       assert(existing.refCounts !== null); // allRowRecords does not include null.
       for (const id of Object.keys(existing.refCounts)) {
@@ -437,9 +440,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): Promise<PatchToVersion[]> {
     const patches: PatchToVersion[] = [];
 
-    const existingRows = await this._cvrStore.getMultipleRowEntries(
-      rows.keys(),
-    );
+    const existingRows = await this._cvrStore.getRowRecords();
 
     for (const [id, update] of rows.entries()) {
       const {contents, version, refCounts} = update;
@@ -448,6 +449,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       // Accumulate all received refCounts to determine which rows to prune.
       const previouslyReceived = this.#receivedRows.get(id);
+
       const merged =
         previouslyReceived !== undefined
           ? mergeRefCounts(previouslyReceived, refCounts)
@@ -472,7 +474,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         patchVersion,
         refCounts: merged,
       };
-      this._cvrStore.putRowRecord(updated, existing?.patchVersion);
+
+      this._cvrStore.putRowRecord(updated);
 
       if (contents) {
         patches.push({
@@ -527,19 +530,18 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       if (deletedID === null) {
         continue;
       }
-
       patches.push({
         toVersion: this._cvr.version,
         patch: {type: 'row', op: 'del', id: deletedID},
       });
     }
 
-    // Now catch up clients with row patches that haven't been deleted.
+    // Now catch up clients with row patches that haven't been overwritten.
     assert(this.#catchupRowPatches, `trackQueries must first be called`);
     const catchupRowPatches = await this.#catchupRowPatches;
     lc.debug?.(`processing ${catchupRowPatches.length} row patches`);
     for (const [rowPatch, toVersion] of catchupRowPatches) {
-      if (this._cvrStore.isRowVersionPendingDelete(rowPatch.id, toVersion)) {
+      if (this._cvrStore.getPendingRowRecord(rowPatch.id)) {
         continue;
       }
 
@@ -614,7 +616,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       refCounts: newRefCounts,
     };
 
-    this._cvrStore.putRowRecord(rowRecord, existing.patchVersion);
+    this._cvrStore.putRowRecord(rowRecord);
 
     // Return the id to delete if no longer referenced.
     return newRefCounts ? null : existing.id;
