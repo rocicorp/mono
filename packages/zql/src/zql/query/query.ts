@@ -10,7 +10,7 @@ import {TypedView} from './typed-view.js';
  * The type that can be passed into `select()`. A selector
  * references a field on an row.
  */
-export type Selector<E extends Schema> = keyof E['fields'];
+export type Selector<E extends Schema> = keyof E['columns'];
 
 export type Context = {
   getSource: (name: string) => Source;
@@ -51,14 +51,17 @@ type SchemaValueToTSType<T extends SchemaValue> =
 
 export type GetFieldTypeNoNullOrUndefined<
   TSchema extends Schema,
-  TField extends keyof TSchema['fields'],
+  TColumn extends keyof TSchema['columns'],
   TOperator extends Operator,
 > = TOperator extends 'IN' | 'NOT IN'
-  ? Exclude<SchemaValueToTSType<TSchema['fields'][TField]>, null | undefined>[]
-  : Exclude<SchemaValueToTSType<TSchema['fields'][TField]>, null | undefined>;
+  ? Exclude<
+      SchemaValueToTSType<TSchema['columns'][TColumn]>,
+      null | undefined
+    >[]
+  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null | undefined>;
 
 export type SchemaToRow<T extends Schema> = {
-  [K in keyof T['fields']]: SchemaValueToTSType<T['fields'][K]>;
+  [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
 };
 
 export type QueryReturnType<T extends Query<Schema>> = T extends Query<
@@ -92,7 +95,7 @@ export type AddSelections<
   TReturn extends Array<QueryResultRow>,
 > = {
   row: {
-    [K in TSelections[number]]: SchemaValueToTSType<TSchema['fields'][K]>;
+    [K in TSelections[number]]: SchemaValueToTSType<TSchema['columns'][K]>;
   };
   related: TReturn extends Array<infer TRow extends QueryResultRow>
     ? TRow['related']
@@ -160,7 +163,7 @@ export type Operator =
 
 export type DefaultQueryResultRow<TSchema extends Schema> = {
   row: {
-    [K in keyof TSchema['fields']]: SchemaValueToTSType<TSchema['fields'][K]>;
+    [K in keyof TSchema['columns']]: SchemaValueToTSType<TSchema['columns'][K]>;
   };
   related: {};
 };

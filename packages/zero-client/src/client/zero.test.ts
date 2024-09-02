@@ -73,7 +73,7 @@ test('onOnlineChange callback', async () => {
     schemas: {
       foo: {
         tableName: 'foo',
-        fields: {
+        columns: {
           id: {type: 'string'},
           val: {type: 'string'},
         },
@@ -440,7 +440,7 @@ suite('initConnection', () => {
       schemas: {
         e: {
           tableName: 'e',
-          fields: {
+          columns: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
@@ -870,7 +870,7 @@ test('smokeTest', async () => {
       ...serverOptions,
       schemas: {
         issues: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
@@ -1695,7 +1695,7 @@ test('kvStore option', async () => {
       kvStore,
       schemas: {
         e: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
@@ -1795,7 +1795,7 @@ test('ensure we get the same query object back', () => {
   const z = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
@@ -1803,7 +1803,7 @@ test('ensure we get the same query object back', () => {
         tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
@@ -1828,7 +1828,7 @@ test('the type of collection should be inferred from options with parse', () => 
   const r = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
@@ -1836,7 +1836,7 @@ test('the type of collection should be inferred from options with parse', () => 
         tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
@@ -1870,7 +1870,7 @@ suite('CRUD', () => {
     zeroForTest({
       schemas: {
         issue: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             title: {type: 'string'},
           },
@@ -1878,7 +1878,7 @@ suite('CRUD', () => {
           tableName: 'issue',
         },
         comment: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             issueID: {type: 'string'},
             text: {type: 'string'},
@@ -1951,7 +1951,7 @@ suite('CRUD', () => {
     const z = zeroForTest({
       schemas: {
         issue: {
-          fields: {
+          columns: {
             id: {type: 'string'},
             title: {type: 'string'},
           },
@@ -1971,7 +1971,7 @@ test('mutate is a function for batching', async () => {
   const z = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
@@ -1979,7 +1979,7 @@ test('mutate is a function for batching', async () => {
         tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
@@ -2029,7 +2029,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   const z = zeroForTest({
     schemas: {
       issue: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           title: {type: 'string'},
         },
@@ -2037,7 +2037,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
         tableName: 'issue',
       },
       comment: {
-        fields: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},

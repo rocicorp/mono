@@ -65,22 +65,22 @@ function makeSources() {
   const labelArgs = labelSchema;
   const issueLabelArgs = issueLabelSchema;
   return {
-    user: new MemorySource('user', userArgs.fields, userArgs.primaryKey),
-    issue: new MemorySource('issue', issueArgs.fields, issueArgs.primaryKey),
+    user: new MemorySource('user', userArgs.columns, userArgs.primaryKey),
+    issue: new MemorySource('issue', issueArgs.columns, issueArgs.primaryKey),
     comment: new MemorySource(
       'comment',
-      commentArgs.fields,
+      commentArgs.columns,
       commentArgs.primaryKey,
     ),
     revision: new MemorySource(
       'revision',
-      revisionArgs.fields,
+      revisionArgs.columns,
       revisionArgs.primaryKey,
     ),
-    label: new MemorySource('label', labelArgs.fields, labelArgs.primaryKey),
+    label: new MemorySource('label', labelArgs.columns, labelArgs.primaryKey),
     issueLabel: new MemorySource(
       'issueLabel',
-      issueLabelArgs.fields,
+      issueLabelArgs.columns,
       issueLabelArgs.primaryKey,
     ),
   };

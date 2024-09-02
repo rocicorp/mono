@@ -267,7 +267,7 @@ class QueryImpl<
     });
   }
 
-  orderBy<TSelector extends keyof TSchema['fields']>(
+  orderBy<TSelector extends keyof TSchema['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs> {

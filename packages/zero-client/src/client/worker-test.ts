@@ -37,7 +37,7 @@ async function testBasics(userID: string) {
     schemas: {
       e: {
         tableName: 'e',
-        fields: {
+        columns: {
           id: {type: 'string'},
           value: {type: 'number'},
         },

@@ -3,7 +3,7 @@ import type {PrimaryKeys, SchemaValue, ValueType} from '../ivm/schema.js';
 export type Schema = {
   readonly tableName: string;
   readonly primaryKey: PrimaryKeys;
-  readonly fields: Record<string, SchemaValue>;
+  readonly columns: Record<string, SchemaValue>;
   readonly relationships?: {
     [key: string]:
       | FieldRelationship<Schema, Schema>
@@ -13,7 +13,7 @@ export type Schema = {
 
 export function columnTypes(schema: Schema): Record<string, ValueType> {
   const columns: Record<string, ValueType> = {};
-  for (const [key, value] of Object.entries(schema.fields)) {
+  for (const [key, value] of Object.entries(schema.columns)) {
     columns[key] = value.type;
   }
   return columns;
@@ -38,9 +38,9 @@ type FieldRelationship<
   TSourceSchema extends Schema,
   TDestSchema extends Schema,
 > = {
-  source: keyof TSourceSchema['fields'];
+  source: keyof TSourceSchema['columns'];
   dest: {
-    field: keyof TDestSchema['fields'];
+    field: keyof TDestSchema['columns'];
     schema: TDestSchema | Lazy<TDestSchema>;
   };
 };
@@ -54,14 +54,14 @@ type JunctionRelationship<
   TJunctionSchema extends Schema,
   TDestSchema extends Schema,
 > = {
-  source: keyof TSourceSchema['fields'];
+  source: keyof TSourceSchema['columns'];
   junction: {
-    sourceField: keyof TJunctionSchema['fields'];
-    destField: keyof TJunctionSchema['fields'];
+    sourceField: keyof TJunctionSchema['columns'];
+    destField: keyof TJunctionSchema['columns'];
     schema: TDestSchema | Lazy<TJunctionSchema>;
   };
   dest: {
-    field: keyof TDestSchema['fields'];
+    field: keyof TDestSchema['columns'];
     schema: TDestSchema | Lazy<TJunctionSchema>;
   };
 };

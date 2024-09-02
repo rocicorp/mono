@@ -1,6 +1,6 @@
 const memberSchema = {
   tableName: 'member',
-  fields: {
+  columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
@@ -9,7 +9,7 @@ const memberSchema = {
 
 const issueSchema = {
   tableName: 'issue',
-  fields: {
+  columns: {
     id: {type: 'string'},
     title: {type: 'string'},
     // TODO: support enum types?
@@ -55,7 +55,7 @@ const issueSchema = {
 
 const commentSchema = {
   tableName: 'comment',
-  fields: {
+  columns: {
     id: {type: 'string'},
     issueID: {type: 'string'},
     created: {type: 'number'},
@@ -76,7 +76,7 @@ const commentSchema = {
 
 const labelSchema = {
   tableName: 'label',
-  fields: {
+  columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
@@ -85,7 +85,7 @@ const labelSchema = {
 
 const issueLabelSchema = {
   tableName: 'issueLabel',
-  fields: {
+  columns: {
     id: {type: 'string'},
     issueID: {type: 'string'},
     labelID: {type: 'string'},

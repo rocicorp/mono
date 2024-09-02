@@ -11,7 +11,7 @@ test('getSource', () => {
   const schemas = {
     users: {
       tableName: 'users',
-      fields: {
+      columns: {
         id: {type: 'string'},
         name: {type: 'string'},
       },
@@ -19,7 +19,7 @@ test('getSource', () => {
     },
     userStates: {
       tableName: 'userStates',
-      fields: {
+      columns: {
         userID: {type: 'string'},
         stateCode: {type: 'string'},
       },
@@ -63,7 +63,7 @@ test('processChanges', () => {
   const schemas = {
     t1: {
       tableName: 't1',
-      fields: {
+      columns: {
         id: {type: 'string'},
         name: {type: 'string'},
       },
@@ -110,14 +110,14 @@ test('transactions', () => {
   const schemas = {
     server: {
       tableName: 'server',
-      fields: {
+      columns: {
         id: {type: 'string'},
       },
       primaryKey: ['id'],
     },
     flair: {
       tableName: 'flair',
-      fields: {
+      columns: {
         id: {type: 'string'},
         serverID: {type: 'string'},
         description: {type: 'string'},

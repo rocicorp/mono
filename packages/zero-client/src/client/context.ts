@@ -44,7 +44,7 @@ export class ZeroContext implements QueryDelegate {
     if (!schema) {
       throw new Error(`No schema found for table ${name}`);
     }
-    source = new MemorySource(name, schema.fields, schema.primaryKey);
+    source = new MemorySource(name, schema.columns, schema.primaryKey);
     this.#sources.set(name, source);
     return source;
   }
