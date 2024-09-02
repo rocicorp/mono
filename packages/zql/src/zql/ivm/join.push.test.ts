@@ -7,13 +7,16 @@ import type {NormalizedValue, Row} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKeys, ValueType} from './schema.js';
+import type {PrimaryKeys, SchemaValue} from './schema.js';
 import {Snitch, SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 
 suite('push one:many', () => {
   const base = {
-    columns: [{id: 'string'}, {id: 'string', issueID: 'string'}],
+    columns: [
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
+    ],
     primaryKeys: [['id'], ['id']],
     joins: [
       {
@@ -361,7 +364,10 @@ suite('push one:many', () => {
 
 suite('push many:one', () => {
   const base = {
-    columns: [{id: 'string', ownerID: 'string'}, {id: 'string'}],
+    columns: [
+      {id: {type: 'string'}, ownerID: {type: 'string'}},
+      {id: {type: 'string'}},
+    ],
     primaryKeys: [['id'], ['id']],
     joins: [
       {
@@ -524,9 +530,9 @@ suite('push many:one', () => {
 suite('push one:many:many', () => {
   const base = {
     columns: [
-      {id: 'string'},
-      {id: 'string', issueID: 'string'},
-      {id: 'string', labelID: 'string'},
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
+      {id: {type: 'string'}, labelID: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
@@ -703,9 +709,9 @@ suite('push one:many:many', () => {
 suite('push one:many:one', () => {
   const base = {
     columns: [
-      {id: 'string'},
-      {issueID: 'string', labelID: 'string'},
-      {id: 'string'},
+      {id: {type: 'string'}},
+      {issueID: {type: 'string'}, labelID: {type: 'string'}},
+      {id: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
     joins: [
@@ -974,7 +980,7 @@ function pushTest(t: PushTest) {
 
 type PushTest = {
   name: string;
-  columns: readonly Record<string, ValueType>[];
+  columns: readonly Record<string, SchemaValue>[];
   primaryKeys: readonly PrimaryKeys[];
   sources: Row[][];
   sorts?: Record<number, Ordering> | undefined;

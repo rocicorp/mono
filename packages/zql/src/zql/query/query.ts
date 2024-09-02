@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {AST} from '../ast/ast.js';
 import {Row} from '../ivm/data.js';
+import {SchemaValue} from '../ivm/schema.js';
 import {Source} from '../ivm/source.js';
-import {PullSchemaForRelationship, Schema, SchemaValue} from './schema.js';
+import {PullSchemaForRelationship, Schema} from './schema.js';
 import {TypedView} from './typed-view.js';
 
 /**

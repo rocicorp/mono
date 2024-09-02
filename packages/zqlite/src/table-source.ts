@@ -20,7 +20,12 @@ import type {
   Input,
   Output,
 } from 'zql/src/zql/ivm/operator.js';
-import {PrimaryKeys, Schema, ValueType} from 'zql/src/zql/ivm/schema.js';
+import {
+  PrimaryKeys,
+  Schema,
+  SchemaValue,
+  ValueType,
+} from 'zql/src/zql/ivm/schema.js';
 import type {
   Source,
   SourceChange,
@@ -65,7 +70,7 @@ export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
   readonly #table: string;
-  readonly #columns: Record<string, ValueType>;
+  readonly #columns: Record<string, SchemaValue>;
   readonly #primaryKey: PrimaryKeys;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
@@ -73,7 +78,7 @@ export class TableSource implements Source {
   constructor(
     db: Database,
     tableName: string,
-    columns: Record<string, ValueType>,
+    columns: Record<string, SchemaValue>,
     primaryKey: readonly [string, ...string[]],
   ) {
     this.#table = tableName;
@@ -495,7 +500,7 @@ function toSQLiteType(v: unknown): unknown {
 }
 
 function* mapFromSQLiteTypes(
-  valueTypes: Record<string, ValueType>,
+  valueTypes: Record<string, SchemaValue>,
   rowIterator: IterableIterator<Row>,
 ): IterableIterator<Row> {
   for (const row of rowIterator) {
@@ -504,9 +509,9 @@ function* mapFromSQLiteTypes(
   }
 }
 
-function fromSQLiteTypes(valueTypes: Record<string, ValueType>, row: Row) {
+function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
   for (const key in row) {
-    row[key] = fromSQLiteType(valueTypes[key], row[key]);
+    row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
   }
 }
 

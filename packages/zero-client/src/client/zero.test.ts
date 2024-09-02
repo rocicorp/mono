@@ -13,6 +13,7 @@ import {
   pushMessageSchema,
 } from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
@@ -32,12 +33,11 @@ import {
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
-  SchemaDefs,
   RUN_LOOP_INTERVAL_MS,
+  SchemaDefs,
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';
-import {AST} from 'zql/src/zql/ast/ast.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -72,12 +72,12 @@ test('onOnlineChange callback', async () => {
     logLevel: 'debug',
     schemas: {
       foo: {
+        tableName: 'foo',
         fields: {
           id: {type: 'string'},
           val: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'foo',
       },
     },
     onOnlineChange: online => {
@@ -439,12 +439,12 @@ suite('initConnection', () => {
     const r = zeroForTest({
       schemas: {
         e: {
+          tableName: 'e',
           fields: {
             id: {type: 'string'},
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          table: 'e',
         },
       },
     });
@@ -875,7 +875,7 @@ test('smokeTest', async () => {
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          table: 'issues',
+          tableName: 'issues',
         },
       },
     });
@@ -1700,7 +1700,7 @@ test('kvStore option', async () => {
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          table: 'e',
+          tableName: 'e',
         },
       },
     });
@@ -1800,7 +1800,7 @@ test('ensure we get the same query object back', () => {
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
         fields: {
@@ -1809,7 +1809,7 @@ test('ensure we get the same query object back', () => {
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });
@@ -1833,7 +1833,7 @@ test('the type of collection should be inferred from options with parse', () => 
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
         fields: {
@@ -1842,7 +1842,7 @@ test('the type of collection should be inferred from options with parse', () => 
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });
@@ -1875,7 +1875,7 @@ suite('CRUD', () => {
             title: {type: 'string'},
           },
           primaryKey: ['id'],
-          table: 'issue',
+          tableName: 'issue',
         },
         comment: {
           fields: {
@@ -1884,7 +1884,7 @@ suite('CRUD', () => {
             text: {type: 'string'},
           },
           primaryKey: ['id'],
-          table: 'comment',
+          tableName: 'comment',
         },
       },
     });
@@ -1956,7 +1956,7 @@ suite('CRUD', () => {
             title: {type: 'string'},
           },
           primaryKey: ['id'],
-          table: 'issue',
+          tableName: 'issue',
         },
       },
     });
@@ -1976,7 +1976,7 @@ test('mutate is a function for batching', async () => {
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
         fields: {
@@ -1985,7 +1985,7 @@ test('mutate is a function for batching', async () => {
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });
@@ -2034,7 +2034,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
           title: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'issue',
+        tableName: 'issue',
       },
       comment: {
         fields: {
@@ -2043,7 +2043,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
           text: {type: 'string'},
         },
         primaryKey: ['id'],
-        table: 'comment',
+        tableName: 'comment',
       },
     },
   });

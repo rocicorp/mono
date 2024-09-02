@@ -1,5 +1,5 @@
 export const issueSchema = {
-  table: 'issue',
+  tableName: 'issue',
   fields: {
     id: {type: 'string'},
     title: {type: 'string'},
@@ -39,7 +39,7 @@ export const issueSchema = {
 } as const;
 
 export const issueLabelSchema = {
-  table: 'issueLabel',
+  tableName: 'issueLabel',
   fields: {
     issueId: {type: 'string'},
     labelId: {type: 'string'},
@@ -48,7 +48,7 @@ export const issueLabelSchema = {
 } as const;
 
 export const labelSchema = {
-  table: 'label',
+  tableName: 'label',
   fields: {
     id: {type: 'string'},
     name: {type: 'string'},
@@ -70,7 +70,7 @@ export const labelSchema = {
 } as const;
 
 export const commentSchema = {
-  table: 'comment',
+  tableName: 'comment',
   fields: {
     id: {type: 'string'},
     authorId: {type: 'string'},
@@ -104,7 +104,7 @@ export const commentSchema = {
 } as const;
 
 export const revisionSchema = {
-  table: 'revision',
+  tableName: 'revision',
   fields: {
     id: {type: 'string'},
     authorId: {type: 'string'},
@@ -131,7 +131,7 @@ export const revisionSchema = {
 } as const;
 
 export const userSchema = {
-  table: 'user',
+  tableName: 'user',
   fields: {
     id: {type: 'string'},
     name: {type: 'string'},

@@ -1,15 +1,19 @@
-import {expect, test} from 'vitest';
-import {MemorySource} from './memory-source.js';
-import {Snitch} from './snitch.js';
-import {Join} from './join.js';
-import {Filter} from './filter.js';
-import {MemoryStorage} from './memory-storage.js';
-import {ArrayView, EntryList} from './array-view.js';
-import {Immutable} from 'shared/src/immutable.js';
 import {deepClone} from 'shared/src/deep-clone.js';
+import {Immutable} from 'shared/src/immutable.js';
+import {expect, test} from 'vitest';
+import {ArrayView, EntryList} from './array-view.js';
+import {Filter} from './filter.js';
+import {Join} from './join.js';
+import {MemorySource} from './memory-source.js';
+import {MemoryStorage} from './memory-storage.js';
+import {Snitch} from './snitch.js';
 
 test('destroy source connections', () => {
-  const ms = new MemorySource('table', {a: 'string', b: 'string'}, ['a']);
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'string'}, b: {type: 'string'}},
+    ['a'],
+  );
   const connection1 = ms.connect([['a', 'asc']]);
   const connection2 = ms.connect([['a', 'asc']]);
 
@@ -59,8 +63,16 @@ test('destroy a pipeline from the view', () => {
   // two sources
   // filtered
   // joined
-  const source1 = new MemorySource('table', {a: 'string', b: 'string'}, ['b']);
-  const source2 = new MemorySource('table', {a: 'string', b: 'string'}, ['b']);
+  const source1 = new MemorySource(
+    'table',
+    {a: {type: 'string'}, b: {type: 'string'}},
+    ['b'],
+  );
+  const source2 = new MemorySource(
+    'table',
+    {a: {type: 'string'}, b: {type: 'string'}},
+    ['b'],
+  );
 
   const filter1 = new Filter(
     source1.connect([['b', 'asc']]),

@@ -1,15 +1,19 @@
-import {MemorySource} from './memory-source.js';
-import {expect, test} from 'vitest';
-import {Join} from './join.js';
-import {MemoryStorage} from './memory-storage.js';
-import {EntryList, ArrayView} from './array-view.js';
-import {Immutable} from 'shared/src/immutable.js';
-import {Schema} from './schema.js';
-import {Change} from './change.js';
 import {deepClone} from 'shared/src/deep-clone.js';
+import {Immutable} from 'shared/src/immutable.js';
+import {expect, test} from 'vitest';
+import {ArrayView, EntryList} from './array-view.js';
+import {Change} from './change.js';
+import {Join} from './join.js';
+import {MemorySource} from './memory-source.js';
+import {MemoryStorage} from './memory-storage.js';
+import {Schema} from './schema.js';
 
 test('basics', () => {
-  const ms = new MemorySource('table', {a: 'number', b: 'string'}, ['a']);
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -64,7 +68,11 @@ test('basics', () => {
 });
 
 test('tree', () => {
-  const ms = new MemorySource('table', {id: 'number', name: 'string'}, ['id']);
+  const ms = new MemorySource(
+    'table',
+    {id: {type: 'number'}, name: {type: 'string'}},
+    ['id'],
+  );
   ms.push({
     type: 'add',
     row: {id: 1, name: 'foo', childID: 2},
@@ -327,8 +335,8 @@ test('collapse hidden relationships', () => {
     tableName: 'issue',
     primaryKey: ['id'],
     columns: {
-      id: 'number',
-      name: 'string',
+      id: {type: 'number'},
+      name: {type: 'string'},
     },
     isHidden: false,
     compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
@@ -337,9 +345,9 @@ test('collapse hidden relationships', () => {
         tableName: 'issueLabel',
         primaryKey: ['id'],
         columns: {
-          id: 'number',
-          issueId: 'number',
-          labelId: 'number',
+          id: {type: 'number'},
+          issueId: {type: 'number'},
+          labelId: {type: 'number'},
         },
         isHidden: true,
         compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
@@ -348,8 +356,8 @@ test('collapse hidden relationships', () => {
             tableName: 'label',
             primaryKey: ['id'],
             columns: {
-              id: 'number',
-              name: 'string',
+              id: {type: 'number'},
+              name: {type: 'string'},
             },
             isHidden: false,
             compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),

@@ -10,12 +10,15 @@ import {
 } from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKeys, Schema, ValueType} from './schema.js';
+import type {PrimaryKeys, Schema, SchemaValue} from './schema.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
 
 suite('fetch one:many', () => {
   const base = {
-    columns: [{id: 'string'}, {id: 'string', issueID: 'string'}],
+    columns: [
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
+    ],
     primaryKeys: [['id'], ['id']],
     joins: [
       {
@@ -161,7 +164,10 @@ suite('fetch one:many', () => {
 
 suite('fetch many:one', () => {
   const base = {
-    columns: [{id: 'string', ownerID: 'string'}, {id: 'string'}],
+    columns: [
+      {id: {type: 'string'}, ownerID: {type: 'string'}},
+      {id: {type: 'string'}},
+    ],
     primaryKeys: [['id'], ['id']],
     joins: [
       {
@@ -301,9 +307,9 @@ suite('fetch many:one', () => {
 suite('fetch one:many:many', () => {
   const base = {
     columns: [
-      {id: 'string'},
-      {id: 'string', issueID: 'string'},
-      {id: 'string', commentID: 'string'},
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
+      {id: {type: 'string'}, commentID: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
@@ -495,9 +501,9 @@ suite('fetch one:many:many', () => {
 suite('fetch one:many:one', () => {
   const base = {
     columns: [
-      {id: 'string'},
-      {issueID: 'string', labelID: 'string'},
-      {id: 'string'},
+      {id: {type: 'string'}},
+      {issueID: {type: 'string'}, labelID: {type: 'string'}},
+      {id: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
     joins: [
@@ -850,7 +856,7 @@ function fetchTest(t: FetchTest) {
 
 type FetchTest = {
   name: string;
-  columns: readonly Record<string, ValueType>[];
+  columns: readonly Record<string, SchemaValue>[];
   primaryKeys: readonly PrimaryKeys[];
   sources: Row[][];
   sorts?: (Ordering | undefined)[] | undefined;

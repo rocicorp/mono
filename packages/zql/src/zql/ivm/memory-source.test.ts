@@ -3,20 +3,20 @@ import {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
 import {compareRowsTest} from './data.test.js';
 import {MemorySource} from './memory-source.js';
-import {PrimaryKeys, ValueType} from './schema.js';
+import type {PrimaryKeys, SchemaValue} from './schema.js';
 import {runCases} from './test/source-cases.js';
 
 runCases(
   (
     name: string,
-    columns: Record<string, ValueType>,
+    columns: Record<string, SchemaValue>,
     primaryKeys: PrimaryKeys,
   ) => new MemorySource(name, columns, primaryKeys),
 );
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
-    const ms = new MemorySource('table', {a: 'string'}, ['a']);
+    const ms = new MemorySource('table', {a: {type: 'string'}}, ['a']);
     return ms.connect(order).getSchema().compareRows;
   });
 });
@@ -24,7 +24,7 @@ test('schema', () => {
 test('indexes get cleaned up when not needed', () => {
   const ms = new MemorySource(
     'table',
-    {a: 'string', b: 'string', c: 'string'},
+    {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],
   );
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);

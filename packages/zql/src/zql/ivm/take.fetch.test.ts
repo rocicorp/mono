@@ -6,13 +6,13 @@ import {Catch} from './catch.js';
 import {Node, Row} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import {PrimaryKeys, ValueType} from './schema.js';
+import {PrimaryKeys, SchemaValue} from './schema.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
 import {Take} from './take.js';
 
 suite('take with no partition', () => {
   const base = {
-    columns: {id: 'string', created: 'number'},
+    columns: {id: {type: 'string'}, created: {type: 'number'}},
     primaryKeys: ['id'],
     sort: [
       ['created', 'asc'],
@@ -210,9 +210,9 @@ suite('take with no partition', () => {
 suite('take with partition', () => {
   const base = {
     columns: {
-      id: 'string',
-      issueID: 'string',
-      created: 'number',
+      id: {type: 'string'},
+      issueID: {type: 'string'},
+      created: {type: 'number'},
     },
     primaryKeys: ['id'],
     sort: [
@@ -793,7 +793,7 @@ function takeTest(t: TakeTest) {
 
 type TakeTest = {
   name: string;
-  columns: Record<string, ValueType>;
+  columns: Record<string, SchemaValue>;
   primaryKeys: PrimaryKeys;
   sourceRows: Row[];
   sort?: Ordering | undefined;

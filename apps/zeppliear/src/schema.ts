@@ -1,5 +1,5 @@
 const memberSchema = {
-  table: 'member',
+  tableName: 'member',
   fields: {
     id: {type: 'string'},
     name: {type: 'string'},
@@ -8,7 +8,7 @@ const memberSchema = {
 } as const;
 
 const issueSchema = {
-  table: 'issue',
+  tableName: 'issue',
   fields: {
     id: {type: 'string'},
     title: {type: 'string'},
@@ -54,7 +54,7 @@ const issueSchema = {
 } as const;
 
 const commentSchema = {
-  table: 'comment',
+  tableName: 'comment',
   fields: {
     id: {type: 'string'},
     issueID: {type: 'string'},
@@ -75,7 +75,7 @@ const commentSchema = {
 } as const;
 
 const labelSchema = {
-  table: 'label',
+  tableName: 'label',
   fields: {
     id: {type: 'string'},
     name: {type: 'string'},
@@ -84,7 +84,7 @@ const labelSchema = {
 } as const;
 
 const issueLabelSchema = {
-  table: 'issueLabel',
+  tableName: 'issueLabel',
   fields: {
     id: {type: 'string'},
     issueID: {type: 'string'},

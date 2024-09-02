@@ -29,7 +29,7 @@ const mockQuery = {
 };
 
 type TestSchema = {
-  table: 'test';
+  tableName: 'test';
   fields: {
     s: {type: 'string'};
     b: {type: 'boolean'};
@@ -39,7 +39,7 @@ type TestSchema = {
 };
 
 type TestSchemaWithRelationships = {
-  table: 'testWithRelationships';
+  tableName: 'testWithRelationships';
   fields: {
     s: {type: 'string'};
     a: {type: 'string'};
@@ -58,7 +58,7 @@ type TestSchemaWithRelationships = {
 };
 
 type TestSchemaWithMoreRelationships = {
-  table: 'testWithMoreRelationships';
+  tableName: 'testWithMoreRelationships';
   fields: {
     s: {type: 'string'};
     a: {type: 'string'};
@@ -222,7 +222,7 @@ describe('types', () => {
 describe('schema structure', () => {
   test('dag', () => {
     const commentSchema = {
-      table: 'comment',
+      tableName: 'comment',
       fields: {
         id: {type: 'string'},
         issueId: {type: 'string'},
@@ -232,7 +232,7 @@ describe('schema structure', () => {
     } as const;
 
     const issueSchema = {
-      table: 'issue',
+      tableName: 'issue',
       fields: {
         id: {type: 'string'},
         title: {type: 'string'},
@@ -254,7 +254,7 @@ describe('schema structure', () => {
 
   test('cycle', () => {
     const commentSchema = {
-      table: 'comment',
+      tableName: 'comment',
       primaryKey: ['id'],
       fields: {
         id: {type: 'string'},
@@ -273,7 +273,7 @@ describe('schema structure', () => {
     } as const;
 
     const issueSchema = {
-      table: 'issue',
+      tableName: 'issue',
       primaryKey: ['id'],
       fields: {
         id: {type: 'string'},

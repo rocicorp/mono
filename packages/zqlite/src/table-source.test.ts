@@ -3,16 +3,16 @@ import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
 import {makeComparator} from 'zql/src/zql/ivm/data.js';
-import {ValueType} from 'zql/src/zql/ivm/schema.js';
+import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
 import {compile, sql} from './internal/sql.js';
 import {TableSource} from './table-source.js';
 
 const columns = {
-  id: 'string',
-  a: 'number',
-  b: 'number',
-  c: 'number',
+  id: {type: 'string'},
+  a: {type: 'number'},
+  b: {type: 'number'},
+  c: {type: 'number'},
 } as const;
 
 describe('fetching from a table source', () => {
@@ -205,7 +205,7 @@ test('pushing values does the correct writes and outputs', () => {
   const source = new TableSource(
     db1,
     'foo',
-    {a: 'number', b: 'number', c: 'boolean'},
+    {a: {type: 'number'}, b: {type: 'number'}, c: {type: 'boolean'}},
     ['a', 'b'],
   );
   const outputted: Change[] = [];
@@ -304,7 +304,7 @@ describe('shared test cases', () => {
   runCases(
     (
       name: string,
-      columns: Record<string, ValueType>,
+      columns: Record<string, SchemaValue>,
       primaryKey: readonly [string, ...string[]],
     ) => {
       const db = new Database(':memory:');

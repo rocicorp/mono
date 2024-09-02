@@ -8,16 +8,16 @@ import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Input} from './operator.js';
-import type {PrimaryKeys, ValueType} from './schema.js';
+import type {PrimaryKeys, SchemaValue} from './schema.js';
 import {Snitch, SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 
 suite('sibling relationships tests with issues, comments, and owners', () => {
   const base = {
     columns: [
-      {id: 'string', ownerId: 'string'},
-      {id: 'string', issueId: 'string'},
-      {id: 'string'},
+      {id: {type: 'string'}, ownerId: {type: 'string'}},
+      {id: {type: 'string'}, issueId: {type: 'string'}},
+      {id: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
@@ -370,7 +370,7 @@ function pushSiblingTest(t: PushTestSibling) {
 
 type PushTestSibling = {
   name: string;
-  columns: readonly Record<string, ValueType>[];
+  columns: readonly Record<string, SchemaValue>[];
   primaryKeys: readonly PrimaryKeys[];
   sources: Row[][];
   sorts?: Record<number, Ordering> | undefined;

@@ -1,7 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import {TableSource} from '@rocicorp/zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
-import {mapLiteDataTypeToZqlValueType} from 'zero-cache/src/types/lite.js';
+import {must} from 'shared/src/must.js';
+import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
@@ -228,7 +229,7 @@ export class PipelineDriver {
       Object.fromEntries(
         Object.entries(columns).map(([name, {dataType}]) => [
           name,
-          mapLiteDataTypeToZqlValueType(dataType),
+          mapLiteDataTypeToZqlSchemaValue(dataType),
         ]),
       ),
       [primaryKey[0], ...primaryKey.slice(1)],
@@ -296,8 +297,9 @@ class Streamer {
       const {type} = change;
       if (type === 'child') {
         const {child} = change;
-        const childSchema = schema.relationships[child.relationshipName];
-        assert(childSchema);
+        const childSchema = must(
+          schema.relationships?.[child.relationshipName],
+        );
 
         yield* this.#streamChanges(queryHash, childSchema, [child.change]);
       } else {
@@ -332,8 +334,7 @@ class Streamer {
       yield {queryHash, table, rowKey, row: op === 'add' ? row : undefined};
 
       for (const [relationship, children] of Object.entries(relationships)) {
-        const childSchema = schema.relationships[relationship];
-        assert(childSchema);
+        const childSchema = must(schema.relationships?.[relationship]);
 
         yield* this.#streamNodes(queryHash, childSchema, op, children);
       }
