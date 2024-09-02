@@ -13,6 +13,7 @@ import type {Constraint, FetchRequest, Input, Output} from './operator.js';
 import type {PrimaryKeys, Schema, SchemaValue} from './schema.js';
 import type {Source, SourceChange, SourceInput} from './source.js';
 import type {Stream} from './stream.js';
+import {assertOrderingIncludesPK} from '../builder/builder.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -64,6 +65,7 @@ export class MemorySource implements Source {
       data: new BTree<Row, undefined>([], comparator),
       usedBy: new Set(),
     });
+    assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKeys);
   }
 
   // Mainly for tests.
@@ -80,6 +82,7 @@ export class MemorySource implements Source {
       tableName: this.#tableName,
       columns: this.#columns,
       primaryKey: this.#primaryKeys,
+      sort: connection.sort,
       relationships: {},
       isHidden: false,
       compareRows: connection.compareRows,
@@ -109,7 +112,7 @@ export class MemorySource implements Source {
       sort,
       compareRows: makeComparator(sort),
     };
-
+    assertOrderingIncludesPK(sort, this.#primaryKeys);
     this.#connections.push(connection);
     return input;
   }

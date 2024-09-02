@@ -72,7 +72,12 @@ test('processChanges', () => {
   } as const;
 
   const context = new ZeroContext(schemas, null as unknown as AddQuery);
-  const out = new Catch(context.getSource('t1').connect([['name', 'desc']]));
+  const out = new Catch(
+    context.getSource('t1').connect([
+      ['name', 'desc'],
+      ['id', 'desc'],
+    ]),
+  );
 
   context.processChanges([
     {
