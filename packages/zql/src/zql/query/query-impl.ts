@@ -31,6 +31,18 @@ export function newQuery<
   return new QueryImpl(delegate, schema);
 }
 
+function newQueryWithAST<
+  TSchema extends Schema,
+  TReturn extends Array<QueryResultRow>,
+  TAs extends string,
+>(
+  delegate: QueryDelegate,
+  schema: TSchema,
+  ast: AST,
+): Query<TSchema, TReturn, TAs> {
+  return new QueryImpl(delegate, schema, ast);
+}
+
 export type CommitListener = () => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(ast: AST): () => void;
@@ -55,18 +67,6 @@ class QueryImpl<
     this.#schema = schema;
   }
 
-  #create<
-    TSchema extends Schema,
-    TReturn extends Array<QueryResultRow>,
-    TAs extends string,
-  >(
-    delegate: QueryDelegate,
-    schema: TSchema,
-    ast: AST,
-  ): Query<TSchema, TReturn, TAs> {
-    return new QueryImpl(delegate, schema, ast);
-  }
-
   get ast() {
     return this.#ast;
   }
@@ -75,7 +75,7 @@ class QueryImpl<
     ..._fields: TFields
   ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
-    return this.#create(this.#delegate, this.#schema, this.#ast);
+    return newQueryWithAST(this.#delegate, this.#schema, this.#ast);
   }
 
   materialize(): TypedView<Smash<TReturn>> {
@@ -153,7 +153,7 @@ class QueryImpl<
     const related2 = related;
     if (isFieldRelationship(related1)) {
       const destSchema = resolveSchema(related1.dest.schema);
-      return this.#create(this.#delegate, this.#schema, {
+      return newQueryWithAST(this.#delegate, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -166,7 +166,7 @@ class QueryImpl<
             subquery: addPrimaryKeysToAst(
               destSchema,
               cb(
-                this.#create(this.#delegate, destSchema, {
+                newQueryWithAST(this.#delegate, destSchema, {
                   table: destSchema.tableName,
                   alias: relationship as string,
                 }),
@@ -180,7 +180,7 @@ class QueryImpl<
     if (isJunctionRelationship(related2)) {
       const destSchema = resolveSchema(related2.dest.schema);
       const junctionSchema = resolveSchema(related2.junction.schema);
-      return this.#create(this.#delegate, this.#schema, {
+      return newQueryWithAST(this.#delegate, this.#schema, {
         ...this.#ast,
         related: [
           ...(this.#ast.related ?? []),
@@ -205,7 +205,7 @@ class QueryImpl<
                   subquery: addPrimaryKeysToAst(
                     destSchema,
                     cb(
-                      this.#create(this.#delegate, destSchema, {
+                      newQueryWithAST(this.#delegate, destSchema, {
                         table: destSchema.tableName,
                         alias: relationship as string,
                       }),
@@ -226,7 +226,7 @@ class QueryImpl<
     op: Operator,
     value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#delegate, this.#schema, {
+    return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       where: [
         ...(this.#ast.where ?? []),
@@ -241,7 +241,7 @@ class QueryImpl<
   }
 
   as<TAs2 extends string>(alias: TAs2): Query<TSchema, TReturn, TAs2> {
-    return this.#create(this.#delegate, this.#schema, {
+    return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       alias,
     });
@@ -251,7 +251,7 @@ class QueryImpl<
     row: Partial<SchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#delegate, this.#schema, {
+    return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       start: {
         row,
@@ -261,7 +261,14 @@ class QueryImpl<
   }
 
   limit(limit: number): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#delegate, this.#schema, {
+    if (limit < 0) {
+      throw new Error('Limit must be non-negative');
+    }
+    if ((limit | 0) !== limit) {
+      throw new Error('Limit must be an integer');
+    }
+
+    return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       limit,
     });
@@ -271,7 +278,7 @@ class QueryImpl<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn, TAs> {
-    return this.#create(this.#delegate, this.#schema, {
+    return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
     });
