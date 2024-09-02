@@ -13,19 +13,17 @@ export type SchemaValue = {
 
 export type PrimaryKeys = readonly [string, ...string[]];
 
+export type SchemaBase = {
+  readonly tableName: string;
+  readonly primaryKey: PrimaryKeys;
+  readonly columns: Record<string, SchemaValue>;
+};
+
 /**
  * Information about the nodes output by an operator.
  */
-export type Schema = {
-  tableName: string;
-  primaryKey: PrimaryKeys;
-  columns: Record<string, SchemaValue>;
-  isHidden: boolean;
-
-  /**
-   * Compares two rows in the output of an operator.
-   */
-  compareRows: (r1: Row, r2: Row) => number;
-
-  relationships?: Record<string, Schema>;
+export type Schema = SchemaBase & {
+  readonly relationships?: {[key: string]: Schema};
+  readonly isHidden: boolean;
+  readonly compareRows: (r1: Row, r2: Row) => number;
 };

@@ -142,9 +142,9 @@ export class TableSource implements Source {
       tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      compareRows: connection.compareRows,
       relationships: {},
       isHidden: false,
+      compareRows: connection.compareRows,
     };
   }
 
