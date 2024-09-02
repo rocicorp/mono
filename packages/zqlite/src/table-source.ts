@@ -20,7 +20,7 @@ import type {
   Input,
   Output,
 } from 'zql/src/zql/ivm/operator.js';
-import {Schema, ValueType} from 'zql/src/zql/ivm/schema.js';
+import {PrimaryKeys, Schema, ValueType} from 'zql/src/zql/ivm/schema.js';
 import type {
   Source,
   SourceChange,
@@ -66,7 +66,7 @@ export class TableSource implements Source {
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, ValueType>;
-  readonly #primaryKey: readonly string[];
+  readonly #primaryKey: PrimaryKeys;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 

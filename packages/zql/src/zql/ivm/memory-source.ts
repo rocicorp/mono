@@ -10,7 +10,7 @@ import {
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Constraint, FetchRequest, Input, Output} from './operator.js';
-import type {Schema, ValueType} from './schema.js';
+import type {PrimaryKeys, Schema, ValueType} from './schema.js';
 import type {Source, SourceChange, SourceInput} from './source.js';
 import type {Stream} from './stream.js';
 
@@ -42,7 +42,7 @@ type Connection = {
 export class MemorySource implements Source {
   readonly #tableName: string;
   readonly #columns: Record<string, ValueType>;
-  readonly #primaryKeys: readonly string[];
+  readonly #primaryKeys: PrimaryKeys;
   readonly #primaryIndexSort: Ordering;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
@@ -52,7 +52,7 @@ export class MemorySource implements Source {
   constructor(
     tableName: string,
     columns: Record<string, ValueType>,
-    primaryKeys: readonly string[],
+    primaryKeys: PrimaryKeys,
   ) {
     this.#tableName = tableName;
     this.#columns = columns;

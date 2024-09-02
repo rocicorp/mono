@@ -1,28 +1,27 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {assert} from 'shared/src/asserts.js';
-import {AST} from '../ast/ast.js';
+import {AST, Ordering} from '../ast/ast.js';
+import {BuilderDelegate, buildPipeline} from '../builder/builder.js';
+import {ArrayView} from '../ivm/array-view.js';
 import {
   AddSelections,
   AddSubselect,
-  Query,
-  Operator,
-  QueryResultRow,
-  Selector,
   DefaultQueryResultRow,
-  Smash,
   GetFieldTypeNoNullOrUndefined,
+  Operator,
+  Query,
+  QueryResultRow,
   SchemaToRow,
+  Selector,
+  Smash,
 } from './query.js';
 import {
-  Schema,
   isFieldRelationship,
   isJunctionRelationship,
   Lazy,
   PullSchemaForRelationship,
+  Schema,
 } from './schema.js';
-import {buildPipeline, BuilderDelegate} from '../builder/builder.js';
-import {Ordering} from '../ast/ast.js';
-import {ArrayView} from '../ivm/array-view.js';
 import {TypedView} from './typed-view.js';
 
 export function newQuery<

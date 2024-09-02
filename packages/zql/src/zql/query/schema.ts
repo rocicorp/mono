@@ -11,7 +11,10 @@ export type SchemaValue = {
 
 export type Schema = {
   readonly table: string;
-  primaryKey: readonly [keyof Schema['fields'], ...(keyof Schema['fields'])[]];
+  readonly primaryKey: readonly [
+    keyof Schema['fields'],
+    ...(keyof Schema['fields'])[],
+  ];
   readonly fields: Record<string, SchemaValue>;
   readonly relationships?: {
     [key: string]:
