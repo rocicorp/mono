@@ -174,7 +174,8 @@ export class Join implements Input {
 
     if (mode === 'fetch') {
       this.#storage.set(storageKey, true);
-    } else if (mode === 'cleanup') {
+    } else {
+      mode satisfies 'cleanup';
       this.#storage.del(storageKey);
     }
 
