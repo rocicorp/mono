@@ -1,4 +1,4 @@
-import {ValueType} from '../ivm/schema.js';
+import type {PrimaryKeys, ValueType} from '../ivm/schema.js';
 
 /**
  * `related` calls need to know what the available relationships are.
@@ -11,10 +11,7 @@ export type SchemaValue = {
 
 export type Schema = {
   readonly table: string;
-  readonly primaryKey: readonly [
-    keyof Schema['fields'],
-    ...(keyof Schema['fields'])[],
-  ];
+  readonly primaryKey: PrimaryKeys;
   readonly fields: Record<string, SchemaValue>;
   readonly relationships?: {
     [key: string]:
