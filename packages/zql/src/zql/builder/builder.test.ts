@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {Catch} from '../ivm/catch.js';
+import {ChangeType} from '../ivm/change.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import {buildPipeline} from './builder.js';
@@ -10,33 +11,54 @@ export function testSources() {
     {id: {type: 'number'}, name: {type: 'string'}},
     ['id'],
   );
-  users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}});
-  users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}});
-  users.push({type: 'add', row: {id: 3, name: 'greg', recruiterID: 1}});
-  users.push({type: 'add', row: {id: 4, name: 'matt', recruiterID: 1}});
-  users.push({type: 'add', row: {id: 5, name: 'cesar', recruiterID: 3}});
-  users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}});
-  users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}});
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 1, name: 'aaron', recruiterID: null},
+  });
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 2, name: 'erik', recruiterID: 1},
+  });
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 3, name: 'greg', recruiterID: 1},
+  });
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 4, name: 'matt', recruiterID: 1},
+  });
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 5, name: 'cesar', recruiterID: 3},
+  });
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 6, name: 'darick', recruiterID: 3},
+  });
+  users.push({
+    type: ChangeType.Add,
+    row: {id: 7, name: 'alex', recruiterID: 1},
+  });
 
   const states = new MemorySource('table', {code: {type: 'string'}}, ['code']);
-  states.push({type: 'add', row: {code: 'CA'}});
-  states.push({type: 'add', row: {code: 'HI'}});
-  states.push({type: 'add', row: {code: 'AZ'}});
-  states.push({type: 'add', row: {code: 'MD'}});
-  states.push({type: 'add', row: {code: 'GA'}});
+  states.push({type: ChangeType.Add, row: {code: 'CA'}});
+  states.push({type: ChangeType.Add, row: {code: 'HI'}});
+  states.push({type: ChangeType.Add, row: {code: 'AZ'}});
+  states.push({type: ChangeType.Add, row: {code: 'MD'}});
+  states.push({type: ChangeType.Add, row: {code: 'GA'}});
 
   const userStates = new MemorySource(
     'table',
     {userID: {type: 'number'}, stateCode: {type: 'string'}},
     ['userID', 'stateCode'],
   );
-  userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}});
-  userStates.push({type: 'add', row: {userID: 3, stateCode: 'AZ'}});
-  userStates.push({type: 'add', row: {userID: 3, stateCode: 'CA'}});
-  userStates.push({type: 'add', row: {userID: 4, stateCode: 'MD'}});
-  userStates.push({type: 'add', row: {userID: 5, stateCode: 'AZ'}});
-  userStates.push({type: 'add', row: {userID: 6, stateCode: 'CA'}});
-  userStates.push({type: 'add', row: {userID: 7, stateCode: 'GA'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 1, stateCode: 'HI'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 3, stateCode: 'AZ'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 3, stateCode: 'CA'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 4, stateCode: 'MD'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 5, stateCode: 'AZ'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 6, stateCode: 'CA'}});
+  userStates.push({type: ChangeType.Add, row: {userID: 7, stateCode: 'GA'}});
 
   const sources = {users, userStates, states};
 
@@ -53,7 +75,10 @@ test('source-only', () => {
     buildPipeline(
       {
         table: 'users',
-        orderBy: [['name', 'asc'],['id','asc']],
+        orderBy: [
+          ['name', 'asc'],
+          ['id', 'asc'],
+        ],
       },
       {
         getSource,
@@ -72,10 +97,10 @@ test('source-only', () => {
     {row: {id: 4, name: 'matt', recruiterID: 1}, relationships: {}},
   ]);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  sources.users.push({type: ChangeType.Add, row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toEqual([
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {row: {id: 8, name: 'sam'}, relationships: {}},
     },
   ]);
@@ -112,16 +137,16 @@ test('filter', () => {
     {row: {id: 2, name: 'erik', recruiterID: 1}, relationships: {}},
   ]);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
-  sources.users.push({type: 'add', row: {id: 9, name: 'abby'}});
-  sources.users.push({type: 'remove', row: {id: 8, name: 'sam'}});
+  sources.users.push({type: ChangeType.Add, row: {id: 8, name: 'sam'}});
+  sources.users.push({type: ChangeType.Add, row: {id: 9, name: 'abby'}});
+  sources.users.push({type: ChangeType.Remove, row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toEqual([
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {row: {id: 8, name: 'sam'}, relationships: {}},
     },
     {
-      type: 'remove',
+      type: ChangeType.Remove,
       node: {row: {id: 8, name: 'sam'}, relationships: {}},
     },
   ]);
@@ -213,17 +238,26 @@ test('self-join', () => {
     },
   ]);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam', recruiterID: 2}});
-  sources.users.push({type: 'add', row: {id: 9, name: 'abby', recruiterID: 8}});
   sources.users.push({
-    type: 'remove',
+    type: ChangeType.Add,
     row: {id: 8, name: 'sam', recruiterID: 2},
   });
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam', recruiterID: 3}});
+  sources.users.push({
+    type: ChangeType.Add,
+    row: {id: 9, name: 'abby', recruiterID: 8},
+  });
+  sources.users.push({
+    type: ChangeType.Remove,
+    row: {id: 8, name: 'sam', recruiterID: 2},
+  });
+  sources.users.push({
+    type: ChangeType.Add,
+    row: {id: 8, name: 'sam', recruiterID: 3},
+  });
 
   expect(sink.pushes).toEqual([
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {
         row: {id: 8, name: 'sam', recruiterID: 2},
         relationships: {
@@ -234,7 +268,7 @@ test('self-join', () => {
       },
     },
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {
         row: {id: 9, name: 'abby', recruiterID: 8},
         relationships: {
@@ -245,7 +279,7 @@ test('self-join', () => {
       },
     },
     {
-      type: 'remove',
+      type: ChangeType.Remove,
       node: {
         row: {id: 8, name: 'sam', recruiterID: 2},
         relationships: {
@@ -261,13 +295,13 @@ test('self-join', () => {
       child: {
         relationshipName: 'recruiter',
         change: {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 8, name: 'sam', recruiterID: 2}, relationships: {}},
         },
       },
     },
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {
         row: {id: 8, name: 'sam', recruiterID: 3},
         relationships: {
@@ -283,7 +317,7 @@ test('self-join', () => {
       child: {
         relationshipName: 'recruiter',
         change: {
-          type: 'add',
+          type: ChangeType.Add,
           node: {row: {id: 8, name: 'sam', recruiterID: 3}, relationships: {}},
         },
       },
@@ -386,7 +420,10 @@ test('multi-join', () => {
     },
   ]);
 
-  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+  sources.userStates.push({
+    type: ChangeType.Add,
+    row: {userID: 2, stateCode: 'HI'},
+  });
 
   expect(sink.pushes).toEqual([
     {
@@ -395,7 +432,7 @@ test('multi-join', () => {
       child: {
         relationshipName: 'userStates',
         change: {
-          type: 'add',
+          type: ChangeType.Add,
           node: {
             row: {userID: 2, stateCode: 'HI'},
             relationships: {
@@ -491,7 +528,10 @@ test('join with limit', () => {
     },
   ]);
 
-  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+  sources.userStates.push({
+    type: ChangeType.Add,
+    row: {userID: 2, stateCode: 'HI'},
+  });
 
   expect(sink.pushes).toEqual([
     {
@@ -500,7 +540,7 @@ test('join with limit', () => {
       child: {
         relationshipName: 'userStates',
         change: {
-          type: 'add',
+          type: ChangeType.Add,
           node: {
             row: {userID: 2, stateCode: 'HI'},
             relationships: {
@@ -536,10 +576,10 @@ test('skip', () => {
     {row: {id: 7, name: 'alex', recruiterID: 1}, relationships: {}},
   ]);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  sources.users.push({type: ChangeType.Add, row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toEqual([
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {row: {id: 8, name: 'sam'}, relationships: {}},
     },
   ]);

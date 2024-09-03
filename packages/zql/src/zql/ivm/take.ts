@@ -1,5 +1,6 @@
 import {assert} from 'shared/src/asserts.js';
-import type {Change, RemoveChange} from './change.js';
+import {assertOrderingIncludesPK} from '../builder/builder.js';
+import {ChangeType, type Change, type RemoveChange} from './change.js';
 import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
   Constraint,
@@ -11,7 +12,6 @@ import type {
 } from './operator.js';
 import type {Schema} from './schema.js';
 import {take, type Stream} from './stream.js';
-import { assertOrderingIncludesPK } from '../builder/builder.js';
 
 const MAX_BOUND_KEY = 'maxBound';
 
@@ -54,7 +54,10 @@ export class Take implements Operator {
     this.#limit = limit;
     this.#partitionKey = partitionKey;
     assert(limit >= 0);
-    assertOrderingIncludesPK(this.#input.getSchema().sort, this.#input.getSchema().primaryKey);
+    assertOrderingIncludesPK(
+      this.#input.getSchema().sort,
+      this.#input.getSchema().primaryKey,
+    );
     this.#input.setOutput(this);
   }
 
@@ -270,7 +273,7 @@ export class Take implements Operator {
         ];
       }
       const removeChange: RemoveChange = {
-        type: 'remove',
+        type: ChangeType.Remove,
         node: boundNode,
       };
       this.#setTakeState(
@@ -341,7 +344,7 @@ export class Take implements Operator {
         );
         this.#output.push(change);
         this.#output.push({
-          type: 'add',
+          type: ChangeType.Add,
           node: afterBoundNode,
         });
         return;

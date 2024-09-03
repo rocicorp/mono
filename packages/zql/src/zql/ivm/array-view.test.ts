@@ -2,7 +2,7 @@ import {deepClone} from 'shared/src/deep-clone.js';
 import {Immutable} from 'shared/src/immutable.js';
 import {expect, test} from 'vitest';
 import {ArrayView, EntryList} from './array-view.js';
-import {Change} from './change.js';
+import {Change, ChangeType} from './change.js';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
@@ -14,10 +14,15 @@ test('basics', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  ms.push({row: {a: 1, b: 'a'}, type: ChangeType.Add});
+  ms.push({row: {a: 2, b: 'b'}, type: ChangeType.Add});
 
-  const view = new ArrayView(ms.connect([['b', 'asc'], ['a', 'asc']]));
+  const view = new ArrayView(
+    ms.connect([
+      ['b', 'asc'],
+      ['a', 'asc'],
+    ]),
+  );
 
   let callCount = 0;
   let data: unknown[] = [];
@@ -36,7 +41,7 @@ test('basics', () => {
   expect(callCount).toBe(1);
   expect(() => view.hydrate()).toThrow("Can't hydrate twice");
 
-  ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+  ms.push({row: {a: 3, b: 'c'}, type: ChangeType.Add});
 
   // We don't get called until flush.
   expect(callCount).toBe(1);
@@ -49,9 +54,9 @@ test('basics', () => {
     {a: 3, b: 'c'},
   ]);
 
-  ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
+  ms.push({row: {a: 2, b: 'b'}, type: ChangeType.Remove});
   expect(callCount).toBe(2);
-  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  ms.push({row: {a: 1, b: 'a'}, type: ChangeType.Remove});
   expect(callCount).toBe(2);
 
   view.flush();
@@ -59,7 +64,7 @@ test('basics', () => {
   expect(data).toEqual([{a: 3, b: 'c'}]);
 
   unlisten();
-  ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
+  ms.push({row: {a: 3, b: 'c'}, type: ChangeType.Remove});
   expect(callCount).toBe(3);
 
   view.flush();
@@ -74,25 +79,31 @@ test('tree', () => {
     ['id'],
   );
   ms.push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {id: 1, name: 'foo', childID: 2},
   });
   ms.push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {id: 2, name: 'foobar', childID: null},
   });
   ms.push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {id: 3, name: 'mon', childID: 4},
   });
   ms.push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {id: 4, name: 'monkey', childID: null},
   });
 
   const join = new Join({
-    parent: ms.connect([['name', 'asc'], ['id', 'asc']]),
-    child: ms.connect([['name', 'desc'], ['id', 'desc']]),
+    parent: ms.connect([
+      ['name', 'asc'],
+      ['id', 'asc'],
+    ]),
+    child: ms.connect([
+      ['name', 'desc'],
+      ['id', 'desc'],
+    ]),
     storage: new MemoryStorage(),
     parentKey: 'childID',
     childKey: 'id',
@@ -148,7 +159,7 @@ test('tree', () => {
   ]);
 
   // add parent with child
-  ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}});
+  ms.push({type: ChangeType.Add, row: {id: 5, name: 'chocolate', childID: 2}});
   view.flush();
   expect(data).toEqual([
     {
@@ -202,7 +213,10 @@ test('tree', () => {
   ]);
 
   // remove parent with child
-  ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}});
+  ms.push({
+    type: ChangeType.Remove,
+    row: {id: 5, name: 'chocolate', childID: 2},
+  });
   view.flush();
   expect(data).toEqual([
     {
@@ -245,7 +259,7 @@ test('tree', () => {
 
   // remove just child
   ms.push({
-    type: 'remove',
+    type: ChangeType.Remove,
     row: {
       id: 2,
       name: 'foobar',
@@ -282,7 +296,7 @@ test('tree', () => {
 
   // add child
   ms.push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: 2,
       name: 'foobaz',
@@ -425,7 +439,7 @@ test('collapse hidden relationships', () => {
     },
   } as const;
   view.push({
-    type: 'add',
+    type: ChangeType.Add,
     ...changeSansType,
   });
   view.flush();
@@ -444,7 +458,7 @@ test('collapse hidden relationships', () => {
   ]);
 
   view.push({
-    type: 'remove',
+    type: ChangeType.Remove,
     ...changeSansType,
   });
   view.flush();
@@ -452,14 +466,14 @@ test('collapse hidden relationships', () => {
   expect(data).toEqual([]);
 
   view.push({
-    type: 'add',
+    type: ChangeType.Add,
     ...changeSansType,
   });
   // no commit
   expect(data).toEqual([]);
 
   view.push({
-    type: 'child',
+    type: ChangeType.Child,
     row: {
       id: 1,
       name: 'issue',
@@ -467,7 +481,7 @@ test('collapse hidden relationships', () => {
     child: {
       relationshipName: 'labels',
       change: {
-        type: 'add',
+        type: ChangeType.Add,
         node: {
           row: {
             id: 2,

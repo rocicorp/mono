@@ -1,5 +1,6 @@
 import {deepClone} from 'shared/src/deep-clone.js';
 import {describe, expect, test} from 'vitest';
+import {ChangeType} from '../ivm/change.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import {Storage} from '../ivm/operator.js';
@@ -88,21 +89,21 @@ function makeSources() {
 
 function addData(queryDelegate: QueryDelegate) {
   queryDelegate.getSource('user').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0001',
       name: 'Alice',
     },
   });
   queryDelegate.getSource('user').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0002',
       name: 'Bob',
     },
   });
   queryDelegate.getSource('issue').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0001',
       title: 'issue 1',
@@ -112,7 +113,7 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
   queryDelegate.getSource('issue').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0002',
       title: 'issue 2',
@@ -123,7 +124,7 @@ function addData(queryDelegate: QueryDelegate) {
   });
 
   queryDelegate.getSource('comment').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0001',
       authorId: '0001',
@@ -132,7 +133,7 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
   queryDelegate.getSource('comment').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0002',
       authorId: '0002',
@@ -141,7 +142,7 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
   queryDelegate.getSource('revision').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0001',
       authorId: '0001',
@@ -151,14 +152,14 @@ function addData(queryDelegate: QueryDelegate) {
   });
 
   queryDelegate.getSource('label').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       id: '0001',
       name: 'label 1',
     },
   });
   queryDelegate.getSource('issueLabel').push({
-    type: 'add',
+    type: ChangeType.Add,
     row: {
       issueId: '0001',
       labelId: '0001',
@@ -204,7 +205,7 @@ describe('bare select', () => {
     expect(rows).toEqual([]);
 
     queryDelegate.getSource('issue').push({
-      type: 'add',
+      type: ChangeType.Add,
       row: {
         id: '0001',
         title: 'title',
@@ -226,7 +227,7 @@ describe('bare select', () => {
     ]);
 
     queryDelegate.getSource('issue').push({
-      type: 'remove',
+      type: ChangeType.Remove,
       row: {
         id: '0001',
       },
@@ -239,7 +240,7 @@ describe('bare select', () => {
   test('source with initial data', () => {
     const queryDelegate = new QueryDelegateImpl();
     queryDelegate.getSource('issue').push({
-      type: 'add',
+      type: ChangeType.Add,
       row: {
         id: '0001',
         title: 'title',
@@ -273,7 +274,7 @@ describe('bare select', () => {
     const queryDelegate = new QueryDelegateImpl();
 
     queryDelegate.getSource('issue').push({
-      type: 'add',
+      type: ChangeType.Add,
       row: {
         id: '0001',
         title: 'title',
@@ -303,7 +304,7 @@ describe('bare select', () => {
     ]);
 
     queryDelegate.getSource('issue').push({
-      type: 'add',
+      type: ChangeType.Add,
       row: {
         id: '0002',
         title: 'title2',
@@ -371,7 +372,7 @@ describe('joins and filters', () => {
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
     queryDelegate.getSource('issue').push({
-      type: 'remove',
+      type: ChangeType.Remove,
       row: {
         id: '0001',
         title: 'issue 1',
@@ -387,7 +388,7 @@ describe('joins and filters', () => {
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
     queryDelegate.getSource('issue').push({
-      type: 'add',
+      type: ChangeType.Add,
       row: {
         id: '0001',
         title: 'issue 1',
@@ -479,7 +480,7 @@ describe('joins and filters', () => {
     ]);
 
     queryDelegate.getSource('issue').push({
-      type: 'remove',
+      type: ChangeType.Remove,
       row: {
         id: '0001',
         title: 'issue 1',
@@ -489,7 +490,7 @@ describe('joins and filters', () => {
       },
     });
     queryDelegate.getSource('issue').push({
-      type: 'remove',
+      type: ChangeType.Remove,
       row: {
         id: '0002',
         title: 'issue 2',

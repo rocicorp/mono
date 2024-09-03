@@ -2,7 +2,7 @@ import {JSONValue} from 'shared/src/json.js';
 import {expect, suite, test} from 'vitest';
 import {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
-import {Change} from './change.js';
+import {Change, ChangeType} from './change.js';
 import {Row, Value} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
@@ -35,9 +35,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 0,
-      pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+      pushes: [{type: ChangeType.Add, row: {id: 'i4', created: 50}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Add, row: {id: 'i4', created: 50}},
+        ],
       ],
       expectedStorage: {},
       expectedOutput: [],
@@ -52,9 +56,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 5,
-      pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+      pushes: [{type: ChangeType.Add, row: {id: 'i4', created: 50}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Add, row: {id: 'i4', created: 50}},
+        ],
       ],
       expectedStorage: {
         '["take",null]': {
@@ -70,7 +78,10 @@ suite('take with no partition', () => {
         },
       },
       expectedOutput: [
-        {type: 'add', node: {row: {id: 'i4', created: 50}, relationships: {}}},
+        {
+          type: ChangeType.Add,
+          node: {row: {id: 'i4', created: 50}, relationships: {}},
+        },
       ],
     });
 
@@ -83,9 +94,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 5,
-      pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
+      pushes: [{type: ChangeType.Add, row: {id: 'i4', created: 350}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 350}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Add, row: {id: 'i4', created: 350}},
+        ],
       ],
       expectedStorage: {
         '["take",null]': {
@@ -101,7 +116,10 @@ suite('take with no partition', () => {
         },
       },
       expectedOutput: [
-        {type: 'add', node: {row: {id: 'i4', created: 350}, relationships: {}}},
+        {
+          type: ChangeType.Add,
+          node: {row: {id: 'i4', created: 350}, relationships: {}},
+        },
       ],
     });
 
@@ -115,9 +133,13 @@ suite('take with no partition', () => {
         {id: 'i4', created: 400},
       ],
       limit: 3,
-      pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
+      pushes: [{type: ChangeType.Add, row: {id: 'i5', created: 350}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 350}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Add, row: {id: 'i5', created: 350}},
+        ],
       ],
       expectedStorage: {
         '["take",null]': {
@@ -145,9 +167,13 @@ suite('take with no partition', () => {
         {id: 'i4', created: 400},
       ],
       limit: 3,
-      pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
+      pushes: [{type: ChangeType.Add, row: {id: 'i5', created: 50}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 50}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Add, row: {id: 'i5', created: 50}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -169,10 +195,13 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i3', created: 300}, relationships: {}},
         },
-        {type: 'add', node: {row: {id: 'i5', created: 50}, relationships: {}}},
+        {
+          type: ChangeType.Add,
+          node: {row: {id: 'i5', created: 50}, relationships: {}},
+        },
       ],
     });
 
@@ -186,9 +215,13 @@ suite('take with no partition', () => {
         {id: 'i4', created: 400},
       ],
       limit: 3,
-      pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
+      pushes: [{type: ChangeType.Add, row: {id: 'i5', created: 250}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 250}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Add, row: {id: 'i5', created: 250}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -210,10 +243,13 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i3', created: 300}, relationships: {}},
         },
-        {type: 'add', node: {row: {id: 'i5', created: 250}, relationships: {}}},
+        {
+          type: ChangeType.Add,
+          node: {row: {id: 'i5', created: 250}, relationships: {}},
+        },
       ],
     });
   });
@@ -228,9 +264,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 0,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i1', created: 100}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i1', created: 100}},
+        ],
       ],
       expectedStorage: {},
       expectedOutput: [],
@@ -245,9 +285,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 5,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i1', created: 100}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i1', created: 100}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -277,7 +321,7 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i1', created: 100}, relationships: {}},
         },
       ],
@@ -292,9 +336,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 5,
-      pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i3', created: 300}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i3', created: 300}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -324,7 +372,7 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i3', created: 300}, relationships: {}},
         },
       ],
@@ -340,9 +388,13 @@ suite('take with no partition', () => {
         {id: 'i4', created: 400},
       ],
       limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i4', created: 400}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i4', created: 400}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i4', created: 400}},
+        ],
       ],
       expectedStorage: {
         '["take",null]': {
@@ -370,9 +422,13 @@ suite('take with no partition', () => {
         {id: 'i4', created: 400},
       ],
       limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i1', created: 100}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i1', created: 100}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -394,11 +450,11 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i1', created: 100}, relationships: {}},
         },
         {
-          type: 'add',
+          type: ChangeType.Add,
           node: {row: {id: 'i4', created: 400}, relationships: {}},
         },
       ],
@@ -413,9 +469,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i1', created: 100}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i1', created: 100}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -437,7 +497,7 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i1', created: 100}, relationships: {}},
         },
       ],
@@ -453,9 +513,13 @@ suite('take with no partition', () => {
         {id: 'i4', created: 400},
       ],
       limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i3', created: 300}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i3', created: 300}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -477,11 +541,11 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i3', created: 300}, relationships: {}},
         },
         {
-          type: 'add',
+          type: ChangeType.Add,
           node: {row: {id: 'i4', created: 400}, relationships: {}},
         },
       ],
@@ -496,9 +560,13 @@ suite('take with no partition', () => {
         {id: 'i3', created: 300},
       ],
       limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+      pushes: [{type: ChangeType.Remove, row: {id: 'i3', created: 300}}],
       expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
+        [
+          'takeSnitch',
+          'push',
+          {type: ChangeType.Remove, row: {id: 'i3', created: 300}},
+        ],
         [
           'takeSnitch',
           'fetch',
@@ -520,7 +588,7 @@ suite('take with no partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {row: {id: 'i3', created: 300}, relationships: {}},
         },
       ],
@@ -556,12 +624,14 @@ suite('take with partition', () => {
         {id: 'c3', issueID: 'i1', created: 300},
       ],
       limit: 0,
-      pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+      pushes: [
+        {type: ChangeType.Add, row: {id: 'c6', issueID: 'i2', created: 150}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}},
+          {type: ChangeType.Add, row: {id: 'c6', issueID: 'i2', created: 150}},
         ],
       ],
       expectedStorage: {},
@@ -583,12 +653,14 @@ suite('take with partition', () => {
         {id: 'c5', issueID: 'i2', created: 500},
       ],
       limit: 5,
-      pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+      pushes: [
+        {type: ChangeType.Add, row: {id: 'c6', issueID: 'i2', created: 150}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}},
+          {type: ChangeType.Add, row: {id: 'c6', issueID: 'i2', created: 150}},
         ],
       ],
       expectedStorage: {
@@ -604,7 +676,7 @@ suite('take with partition', () => {
       },
       expectedOutput: [
         {
-          type: 'add',
+          type: ChangeType.Add,
           node: {
             row: {id: 'c6', issueID: 'i2', created: 150},
             relationships: {},
@@ -632,12 +704,14 @@ suite('take with partition', () => {
         {id: 'c7', issueID: 'i2', created: 700},
       ],
       limit: 3,
-      pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
+      pushes: [
+        {type: ChangeType.Add, row: {id: 'c8', issueID: 'i2', created: 550}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}},
+          {type: ChangeType.Add, row: {id: 'c8', issueID: 'i2', created: 550}},
         ],
         [
           'takeSnitch',
@@ -667,14 +741,14 @@ suite('take with partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {
             row: {id: 'c6', issueID: 'i2', created: 600},
             relationships: {},
           },
         },
         {
-          type: 'add',
+          type: ChangeType.Add,
           node: {
             row: {id: 'c8', issueID: 'i2', created: 550},
             relationships: {},
@@ -698,12 +772,14 @@ suite('take with partition', () => {
         {id: 'c5', issueID: 'i2', created: 500},
       ],
       limit: 3,
-      pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
+      pushes: [
+        {type: ChangeType.Add, row: {id: 'c6', issueID: '3', created: 550}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'add', row: {id: 'c6', issueID: '3', created: 550}},
+          {type: ChangeType.Add, row: {id: 'c6', issueID: '3', created: 550}},
         ],
       ],
       expectedStorage: {
@@ -735,12 +811,17 @@ suite('take with partition', () => {
         {id: 'c3', issueID: 'i1', created: 300},
       ],
       limit: 0,
-      pushes: [{type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}}],
+      pushes: [
+        {type: ChangeType.Remove, row: {id: 'c1', issueID: 'i1', created: 100}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
+          {
+            type: ChangeType.Remove,
+            row: {id: 'c1', issueID: 'i1', created: 100},
+          },
         ],
       ],
       expectedStorage: {},
@@ -762,12 +843,17 @@ suite('take with partition', () => {
         {id: 'c5', issueID: 'i2', created: 500},
       ],
       limit: 5,
-      pushes: [{type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}}],
+      pushes: [
+        {type: ChangeType.Remove, row: {id: 'c1', issueID: 'i1', created: 100}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
+          {
+            type: ChangeType.Remove,
+            row: {id: 'c1', issueID: 'i1', created: 100},
+          },
         ],
         [
           'takeSnitch',
@@ -797,7 +883,7 @@ suite('take with partition', () => {
       },
       expectedOutput: [
         {
-          type: 'remove',
+          type: ChangeType.Remove,
           node: {
             row: {id: 'c1', issueID: 'i1', created: 100},
             relationships: {},
@@ -822,12 +908,17 @@ suite('take with partition', () => {
         {id: 'c6', issueID: 'i3', created: 600},
       ],
       limit: 5,
-      pushes: [{type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}}],
+      pushes: [
+        {type: ChangeType.Remove, row: {id: 'c6', issueID: 'i3', created: 600}},
+      ],
       expectedMessages: [
         [
           'takeSnitch',
           'push',
-          {type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}},
+          {
+            type: ChangeType.Remove,
+            row: {id: 'c6', issueID: 'i3', created: 600},
+          },
         ],
       ],
       expectedStorage: {
@@ -851,7 +942,7 @@ function takeTest(t: TakeTest) {
     const log: SnitchMessage[] = [];
     const source = new MemorySource('table', t.columns, t.primaryKey);
     for (const row of t.sourceRows) {
-      source.push({type: 'add', row});
+      source.push({type: ChangeType.Add, row});
     }
     const snitch = new Snitch(
       source.connect(t.sort || [['id', 'asc']]),

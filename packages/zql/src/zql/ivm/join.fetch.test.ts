@@ -2,6 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import {expect, suite, test} from 'vitest';
 import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
+import {ChangeType} from './change.js';
 import type {Node, NormalizedValue, Row} from './data.js';
 import {
   Join,
@@ -746,7 +747,7 @@ function fetchTest(t: FetchTest) {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
       const source = new MemorySource(`t${i}`, t.columns[i], t.primaryKeys[i]);
       for (const row of rows) {
-        source.push({type: 'add', row});
+        source.push({type: ChangeType.Add, row});
       }
       const snitch = new Snitch(source.connect(ordering), String(i), log);
       return {

@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {Catch} from './catch.js';
+import {ChangeType} from './change.js';
 import {Filter} from './filter.js';
 import {MemorySource} from './memory-source.js';
 
@@ -9,9 +10,9 @@ test('basics', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({type: 'add', row: {a: 3, b: 'foo'}});
-  ms.push({type: 'add', row: {a: 2, b: 'bar'}});
-  ms.push({type: 'add', row: {a: 1, b: 'foo'}});
+  ms.push({type: ChangeType.Add, row: {a: 3, b: 'foo'}});
+  ms.push({type: ChangeType.Add, row: {a: 2, b: 'bar'}});
+  ms.push({type: ChangeType.Add, row: {a: 1, b: 'foo'}});
 
   const connector = ms.connect([['a', 'asc']]);
   const filter = new Filter(connector, 'all', row => row.b === 'foo');
@@ -22,18 +23,18 @@ test('basics', () => {
     {row: {a: 3, b: 'foo'}, relationships: {}},
   ]);
 
-  ms.push({type: 'add', row: {a: 4, b: 'bar'}});
-  ms.push({type: 'add', row: {a: 5, b: 'foo'}});
-  ms.push({type: 'remove', row: {a: 3, b: 'foo'}});
-  ms.push({type: 'remove', row: {a: 2, b: 'bar'}});
+  ms.push({type: ChangeType.Add, row: {a: 4, b: 'bar'}});
+  ms.push({type: ChangeType.Add, row: {a: 5, b: 'foo'}});
+  ms.push({type: ChangeType.Remove, row: {a: 3, b: 'foo'}});
+  ms.push({type: ChangeType.Remove, row: {a: 2, b: 'bar'}});
 
   expect(out.pushes).toEqual([
     {
-      type: 'add',
+      type: ChangeType.Add,
       node: {row: {a: 5, b: 'foo'}, relationships: {}},
     },
     {
-      type: 'remove',
+      type: ChangeType.Remove,
       node: {row: {a: 3, b: 'foo'}, relationships: {}},
     },
   ]);
