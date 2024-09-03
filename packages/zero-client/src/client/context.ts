@@ -1,5 +1,6 @@
 import {ExperimentalNoIndexDiff} from 'replicache';
 import {assert} from 'shared/src/asserts.js';
+import {ChangeType} from 'zql/src/zql/ivm/change.js';
 import {AST} from '../../../zql/src/zql/ast/ast.js';
 import {Row} from '../../../zql/src/zql/ivm/data.js';
 import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
@@ -76,14 +77,14 @@ export class ZeroContext implements QueryDelegate {
         if (diff.op === 'del' || diff.op === 'change') {
           assert(typeof diff.oldValue === 'object');
           source.push({
-            type: 'remove',
+            type: ChangeType.Remove,
             row: diff.oldValue as Row,
           });
         }
         if (diff.op === 'add' || diff.op === 'change') {
           assert(typeof diff.newValue === 'object');
           source.push({
-            type: 'add',
+            type: ChangeType.Add,
             row: diff.newValue as Row,
           });
         }

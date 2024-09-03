@@ -2,9 +2,9 @@ import type {Node, Row} from './data.js';
 
 export type Change = AddChange | RemoveChange | ChildChange;
 export const enum ChangeType {
-  Add = 'add',
-  Remove = 'remove',
-  Child = 'child',
+  Add = 1,
+  Remove = 2,
+  Child = 3,
 }
 
 /**

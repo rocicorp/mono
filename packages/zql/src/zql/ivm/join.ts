@@ -99,7 +99,7 @@ export class Join implements Input {
 
   #pushParent(change: Change): void {
     assert(this.#output, 'Output not set');
-    if (change.type === 'add') {
+    if (change.type === ChangeType.Add) {
       this.#output.push({
         type: ChangeType.Add,
         node: this.#processParentNode(change.node, 'fetch'),
@@ -110,14 +110,15 @@ export class Join implements Input {
         node: this.#processParentNode(change.node, 'cleanup'),
       });
     } else {
-      change.type satisfies 'child';
+      change.type satisfies ChangeType.Child;
       this.#output.push(change);
     }
   }
 
   #pushChild(change: Change): void {
     assert(this.#output, 'Output not set');
-    const childRow = change.type === 'child' ? change.row : change.node.row;
+    const childRow =
+      change.type === ChangeType.Child ? change.row : change.node.row;
     const parentNodes = this.#parent.fetch({
       constraint: {
         key: this.#parentKey,

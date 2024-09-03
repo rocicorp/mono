@@ -201,7 +201,7 @@ export class Take implements Operator {
     // When take below join is supported, this assert should be removed
     // and a 'child' change should be pushed to output if its row
     // is <= bound.
-    assert(change.type !== 'child', 'child changes are not supported');
+    assert(change.type !== ChangeType.Child, 'child changes are not supported');
     const partitionValue =
       this.#partitionKey === undefined
         ? undefined
@@ -221,7 +221,7 @@ export class Take implements Operator {
       return;
     }
 
-    if (change.type === 'add') {
+    if (change.type === ChangeType.Add) {
       if (takeState.size < this.#limit) {
         this.#setTakeState(
           takeStateKey,
@@ -287,7 +287,7 @@ export class Take implements Operator {
       );
       this.#output.push(removeChange);
       this.#output.push(change);
-    } else if (change.type === 'remove') {
+    } else if (change.type === ChangeType.Remove) {
       if (takeState.bound === undefined) {
         // change is after bound
         return;

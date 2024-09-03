@@ -127,7 +127,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
     }
   }
 
-  if (change.type === 'add') {
+  if (change.type === ChangeType.Add) {
     const newEntry: Entry = {
       ...change.node.row,
     };
@@ -146,7 +146,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         applyChange(newView, {type: ChangeType.Add, node}, childSchema);
       }
     }
-  } else if (change.type === 'remove') {
+  } else if (change.type === ChangeType.Remove) {
     const {pos, found} = binarySearch(
       view,
       change.node.row,
@@ -155,7 +155,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
     assert(found, 'node does not exist');
     view.splice(pos, 1);
   } else {
-    change.type satisfies 'child';
+    change.type satisfies ChangeType.Child;
     const {pos, found} = binarySearch(view, change.row, schema.compareRows);
     assert(found, 'node does not exist');
 

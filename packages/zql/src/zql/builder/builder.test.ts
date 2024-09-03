@@ -290,7 +290,7 @@ test('self-join', () => {
       },
     },
     {
-      type: 'child',
+      type: ChangeType.Child,
       row: {id: 9, name: 'abby', recruiterID: 8},
       child: {
         relationshipName: 'recruiter',
@@ -312,7 +312,7 @@ test('self-join', () => {
       },
     },
     {
-      type: 'child',
+      type: ChangeType.Child,
       row: {id: 9, name: 'abby', recruiterID: 8},
       child: {
         relationshipName: 'recruiter',
@@ -427,7 +427,7 @@ test('multi-join', () => {
 
   expect(sink.pushes).toEqual([
     {
-      type: 'child',
+      type: ChangeType.Child,
       row: {id: 2, name: 'erik', recruiterID: 1},
       child: {
         relationshipName: 'userStates',
@@ -535,7 +535,7 @@ test('join with limit', () => {
 
   expect(sink.pushes).toEqual([
     {
-      type: 'child',
+      type: ChangeType.Child,
       row: {id: 2, name: 'erik', recruiterID: 1},
       child: {
         relationshipName: 'userStates',

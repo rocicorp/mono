@@ -1,4 +1,5 @@
-import type {ZQLiteZeroOptions} from './options.js';
+import type {Database} from 'better-sqlite3';
+import {ZeroContext} from 'zero-client/src/client/context.js';
 import {
   BaseCRUDMutate,
   EntityCRUDMutate,
@@ -6,18 +7,18 @@ import {
   MakeCRUDMutate,
   Update,
 } from 'zero-client/src/client/crud.js';
-import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
-import type {Database} from 'better-sqlite3';
-import type {EntityID} from 'zero-protocol/src/entity.js';
 import {
-  SchemaDefs,
   MakeEntityQueriesFromQueryDefs,
+  SchemaDefs,
 } from 'zero-client/src/client/zero.js';
-import {ZeroContext} from 'zero-client/src/client/context.js';
 import {Query} from 'zero-client/src/mod.js';
-import {Schema} from 'zql/src/zql/query/schema.js';
-import {newQuery} from 'zql/src/zql/query/query-impl.js';
+import type {EntityID} from 'zero-protocol/src/entity.js';
+import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
+import {ChangeType} from 'zql/src/zql/ivm/change.js';
 import {Row} from 'zql/src/zql/ivm/data.js';
+import {newQuery} from 'zql/src/zql/query/query-impl.js';
+import {Schema} from 'zql/src/zql/query/schema.js';
+import type {ZQLiteZeroOptions} from './options.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
@@ -102,14 +103,14 @@ export class ZQLiteZero<SD extends SchemaDefs> {
         if (existingEntity) return;
         //console.log('Adding', value);
         await this.zeroContext.getSource(entityType).push({
-          type: 'add',
+          type: ChangeType.Add,
           row: value,
         });
       },
       set: async (value: E) => {
         assertNotInBatch(entityType, 'set');
         await this.zeroContext.getSource(entityType).push({
-          type: 'add',
+          type: ChangeType.Add,
           row: value,
         });
       },
@@ -123,10 +124,10 @@ export class ZQLiteZero<SD extends SchemaDefs> {
         const mergedValue = {...existingEntity, ...value};
         await this.zeroContext
           .getSource(entityType)
-          .push({type: 'remove', row: existingEntity});
+          .push({type: ChangeType.Remove, row: existingEntity});
         await this.zeroContext
           .getSource(entityType)
-          .push({type: 'add', row: mergedValue});
+          .push({type: ChangeType.Add, row: mergedValue});
       },
       delete: async (id: EntityID) => {
         assertNotInBatch(entityType, 'delete');
@@ -136,7 +137,7 @@ export class ZQLiteZero<SD extends SchemaDefs> {
         if (!existingEntity) throw new Error(`Entity with id ${id} not found`);
         await this.zeroContext
           .getSource(entityType)
-          .push({type: 'remove', row: existingEntity});
+          .push({type: ChangeType.Remove, row: existingEntity});
       },
     };
   }

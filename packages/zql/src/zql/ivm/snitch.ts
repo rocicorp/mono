@@ -1,7 +1,7 @@
-import type {FetchRequest, Input, Operator, Output} from './operator.js';
-import type {Change} from './change.js';
-import type {Node, Row} from './data.js';
 import {assert} from 'shared/src/asserts.js';
+import {ChangeType, type Change} from './change.js';
+import type {Node, Row} from './data.js';
+import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {Schema} from './schema.js';
 import {Stream} from './stream.js';
 
@@ -80,14 +80,15 @@ export class Snitch implements Operator {
 }
 
 function toChangeRecord(change: Change): ChangeRecord {
-  if (change.type === 'add') {
-    return {type: 'add', row: change.node.row};
+  if (change.type === ChangeType.Add) {
+    return {type: ChangeType.Add, row: change.node.row};
   }
-  if (change.type === 'remove') {
-    return {type: 'remove', row: change.node.row};
+  if (change.type === ChangeType.Remove) {
+    return {type: ChangeType.Remove, row: change.node.row};
   }
+  change.type satisfies ChangeType.Child;
   return {
-    type: 'child',
+    type: ChangeType.Child,
     row: change.row,
     child: toChangeRecord(change.child.change),
   };
@@ -110,19 +111,19 @@ export type ChangeRecord =
   | ChildChangeRecord;
 
 export type AddChangeRecord = {
-  type: 'add';
+  type: ChangeType.Add;
   row: Row;
   // We don't currently capture the relationships. If we did, we'd need a
   // stream that cloned them lazily.
 };
 
 export type RemoveChangeRecord = {
-  type: 'remove';
+  type: ChangeType.Remove;
   row: Row;
 };
 
 export type ChildChangeRecord = {
-  type: 'child';
+  type: ChangeType.Child;
   row: Row;
   child: ChangeRecord;
 };
