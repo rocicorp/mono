@@ -1,4 +1,4 @@
-import { Ordering } from '../ast/ast.js';
+import {Ordering} from '../ast/ast.js';
 import type {Row} from './data.js';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null';
@@ -12,11 +12,11 @@ export type SchemaValue = {
   optional?: boolean;
 };
 
-export type PrimaryKeys = readonly [string, ...string[]];
+export type PrimaryKey = readonly [string, ...string[]];
 
 export type SchemaBase = {
   readonly tableName: string;
-  readonly primaryKey: PrimaryKeys;
+  readonly primaryKey: PrimaryKey;
   readonly columns: Record<string, SchemaValue>;
 };
 /**

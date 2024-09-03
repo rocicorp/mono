@@ -6,14 +6,14 @@ import {
   Comparator,
   compareValues,
   makeComparator,
-  Value,
-  valuesEqual,
   Node,
   Row,
+  Value,
+  valuesEqual,
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import {Constraint, FetchRequest, Input, Output} from './operator.js';
-import {PrimaryKeys, Schema, SchemaValue} from './schema.js';
+import {PrimaryKey, Schema, SchemaValue} from './schema.js';
 import {Source, SourceChange, SourceInput} from './source.js';
 import {Stream} from './stream.js';
 
@@ -45,7 +45,7 @@ type Connection = {
 export class MemorySource implements Source {
   readonly #tableName: string;
   readonly #columns: Record<string, SchemaValue>;
-  readonly #primaryKeys: PrimaryKeys;
+  readonly #primaryKey: PrimaryKey;
   readonly #primaryIndexSort: Ordering;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
@@ -55,19 +55,19 @@ export class MemorySource implements Source {
   constructor(
     tableName: string,
     columns: Record<string, SchemaValue>,
-    primaryKeys: PrimaryKeys,
+    primaryKey: PrimaryKey,
   ) {
     this.#tableName = tableName;
     this.#columns = columns;
-    this.#primaryKeys = primaryKeys;
-    this.#primaryIndexSort = primaryKeys.map(k => [k, 'asc']);
+    this.#primaryKey = primaryKey;
+    this.#primaryIndexSort = primaryKey.map(k => [k, 'asc']);
     const comparator = makeBoundComparator(this.#primaryIndexSort);
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
       data: new BTree<Row, undefined>([], comparator),
       usedBy: new Set(),
     });
-    assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKeys);
+    assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKey);
   }
 
   // Mainly for tests.
@@ -75,7 +75,7 @@ export class MemorySource implements Source {
     return {
       tableName: this.#tableName,
       columns: this.#columns,
-      primaryKey: this.#primaryKeys,
+      primaryKey: this.#primaryKey,
     };
   }
 
@@ -83,7 +83,7 @@ export class MemorySource implements Source {
     return {
       tableName: this.#tableName,
       columns: this.#columns,
-      primaryKey: this.#primaryKeys,
+      primaryKey: this.#primaryKey,
       sort: connection.sort,
       relationships: {},
       isHidden: false,
@@ -114,7 +114,7 @@ export class MemorySource implements Source {
       sort,
       compareRows: makeComparator(sort),
     };
-    assertOrderingIncludesPK(sort, this.#primaryKeys);
+    assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
     return input;
   }
@@ -199,8 +199,8 @@ export class MemorySource implements Source {
     // any requested sort since there can only be one result. Otherwise we also
     // need the index sorted by the requested sort.
     if (
-      this.#primaryKeys.length > 1 ||
-      req.constraint?.key !== this.#primaryKeys[0]
+      this.#primaryKey.length > 1 ||
+      req.constraint?.key !== this.#primaryKey[0]
     ) {
       indexSort.push(...requestedSort);
     }

@@ -298,8 +298,8 @@ function addPrimaryKeys(
   orderBy: Ordering | undefined,
 ): Ordering {
   orderBy = orderBy ?? [];
-  const primaryKeys = schema.primaryKey;
-  const primaryKeysToAdd = new Set(primaryKeys);
+  const {primaryKey} = schema;
+  const primaryKeysToAdd = new Set(primaryKey);
 
   for (const [field] of orderBy) {
     primaryKeysToAdd.delete(field);
