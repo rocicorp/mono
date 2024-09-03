@@ -406,7 +406,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Note: This kicks of background PG queries for CVR data associated with the
     // executed and removed queries.
-    const cvrVersion = updater.trackQueries(
+    const {cvrVersion, queryPatches} = updater.trackQueries(
       lc,
       addQueries.map(hash => ({id: hash, transformationHash: hash})),
       removeQueries,
@@ -415,6 +415,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(cvrVersion),
     );
+    for (const patch of queryPatches) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
 
     // Removing queries is easy. The pipelines are dropped, and the CVR
     // updater handles the updates and pokes.
