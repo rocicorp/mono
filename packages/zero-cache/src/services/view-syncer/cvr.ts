@@ -15,7 +15,6 @@ import {
   InternalQueryRecord,
   MetadataPatch,
   NullableCVRVersion,
-  QueryPatch,
   RowID,
   RowPatch,
   RowRecord,
@@ -299,7 +298,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): {cvrVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
-    const queryPatches: QueryPatch[] = [
+    const queryPatches: Patch[] = [
       executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
       removed.map(id => this.#trackRemoved(id)),
     ].flat(2);
@@ -318,8 +317,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     }
     return {
       cvrVersion: this._cvr.version,
-      queryPatches: queryPatches.map(p => ({
-        patch: this.#convertConfigPatch(p),
+      queryPatches: queryPatches.map(patch => ({
+        patch,
         toVersion: this._cvr.version,
       })),
     };
@@ -370,11 +369,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *
    * This must be called for all executed queries.
    */
-  #trackExecuted(queryID: string, transformationHash: string): QueryPatch[] {
+  #trackExecuted(queryID: string, transformationHash: string): Patch[] {
     assert(!this.#removedOrExecutedQueryIDs.has(queryID));
     this.#removedOrExecutedQueryIDs.add(queryID);
 
-    let gotQueryPatch: QueryPatch | undefined;
+    let gotQueryPatch: Patch | undefined;
     const query = this._cvr.queries[queryID];
     if (query.transformationHash !== transformationHash) {
       const transformationVersion = this._ensureNewVersion();
@@ -382,7 +381,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       if (!query.internal && query.patchVersion === undefined) {
         // client query: desired -> gotten
         query.patchVersion = transformationVersion;
-        gotQueryPatch = {type: 'query', op: 'put', id: query.id};
+        gotQueryPatch = {
+          type: 'query',
+          op: 'put',
+          id: query.id,
+          ast: query.ast,
+        };
       }
 
       query.transformationHash = transformationHash;
@@ -402,7 +406,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *
    * This must only be called on queries that are not "desired" by any client.
    */
-  #trackRemoved(queryID: string): QueryPatch[] {
+  #trackRemoved(queryID: string): Patch[] {
     const query = this._cvr.queries[queryID];
     assertNotInternal(query);
 
@@ -413,7 +417,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const newVersion = this._ensureNewVersion();
     this._cvrStore.delQuery(queryID);
     const oldQueryPatchVersion = query.patchVersion;
-    const queryPatch: QueryPatch = {type: 'query', op: 'del', id: queryID};
+    const queryPatch = {type: 'query', op: 'del', id: queryID} as const;
     this._cvrStore.markQueryAsDeleted(
       newVersion,
       queryPatch,
@@ -565,22 +569,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return patches;
   }
 
-  #convertConfigPatch(patchRecord: MetadataPatch): Patch {
-    switch (patchRecord.type) {
-      case 'client':
-        return patchRecord;
-      case 'query': {
-        const {id, op} = patchRecord;
-        if (op === 'put') {
-          return {...patchRecord, op, ast: this._cvr.queries[id].ast};
-        }
-        return {...patchRecord, op};
-      }
-      default:
-        unreachable();
-    }
-  }
-
   async generateConfigPatches(lc: LogContext) {
     const patches: PatchToVersion[] = [];
 
@@ -588,12 +576,28 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const catchupConfigPatches = await this.#catchupConfigPatches;
     lc.debug?.(`processing ${catchupConfigPatches.length} config patches`);
 
+    const convert = (patchRecord: MetadataPatch): Patch => {
+      switch (patchRecord.type) {
+        case 'client':
+          return patchRecord;
+        case 'query': {
+          const {id, op} = patchRecord;
+          if (op === 'put') {
+            return {...patchRecord, op, ast: this._cvr.queries[id].ast};
+          }
+          return {...patchRecord, op};
+        }
+        default:
+          unreachable();
+      }
+    };
+
     for (const [patchRecord, toVersion] of catchupConfigPatches) {
       if (this._cvrStore.isQueryVersionPendingDelete(patchRecord, toVersion)) {
         continue; // config patch has been replaced.
       }
 
-      patches.push({patch: this.#convertConfigPatch(patchRecord), toVersion});
+      patches.push({patch: convert(patchRecord), toVersion});
     }
     return patches;
   }
