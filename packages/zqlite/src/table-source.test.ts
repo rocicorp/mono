@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
-import {makeComparator, Row} from 'zql/src/zql/ivm/data.js';
+import {makeComparator, Row, Value} from 'zql/src/zql/ivm/data.js';
 import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
 import {compile, sql} from './internal/sql.js';
@@ -421,6 +421,79 @@ test('pushing values does the correct writes and outputs', () => {
       {a: 9007199254740991, b: 3.456, c: 1},
     ]);
   }
+});
+
+test('getByKey', () => {
+  const db = new Database(':memory:');
+  db.exec(
+    /* sql */ `CREATE TABLE foo (id TEXT, a INTEGER, b, c, PRIMARY KEY(id, a));`,
+  );
+  const stmt = db.prepare(
+    /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
+  );
+  stmt.run('1', 2, 3.123, 0);
+  stmt.run('2', 3n, 4.567, 1);
+  stmt.run(
+    '3',
+    BigInt(Number.MAX_SAFE_INTEGER),
+    BigInt(Number.MIN_SAFE_INTEGER),
+    1,
+  );
+  stmt.run(
+    '4',
+    BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+    BigInt(Number.MIN_SAFE_INTEGER),
+    1,
+  );
+
+  const source = new TableSource(
+    db,
+    'foo',
+    {
+      id: {type: 'string'},
+      a: {type: 'number'},
+      b: {type: 'number'},
+      c: {type: 'boolean'},
+    },
+    ['id', 'a'],
+  );
+
+  expect(source.getByKey({id: '1', a: 2})).toEqual({
+    id: '1',
+    a: 2,
+    b: 3.123,
+    c: false,
+  });
+
+  expect(source.getByKey({id: '2', a: 3})).toEqual({
+    id: '2',
+    a: 3,
+    b: 4.567,
+    c: true,
+  });
+
+  expect(source.getByKey({id: '3', a: Number.MAX_SAFE_INTEGER})).toEqual({
+    id: '3',
+    a: Number.MAX_SAFE_INTEGER,
+    b: Number.MIN_SAFE_INTEGER,
+    c: true,
+  });
+
+  // Exists but contains an out-of-bounds value.
+  expect(() =>
+    source.getByKey({
+      id: '4',
+      a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
+    }),
+  ).toThrow(UnsupportedValueError);
+
+  // Does not exist.
+  expect(
+    source.getByKey({
+      id: '5',
+      a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
+    }),
+  ).toBeUndefined;
 });
 
 describe('shared test cases', () => {

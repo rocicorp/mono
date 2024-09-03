@@ -3,6 +3,7 @@ import {TableSource} from '@rocicorp/zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
+import {RowKey} from 'zero-cache/src/types/row-key.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
@@ -162,6 +163,16 @@ export class PipelineDriver {
       this.#pipelines.delete(hash);
       input.destroy();
     }
+  }
+
+  /**
+   * Returns the value of the row with the given row `key`, or `undefined`
+   * if there is no such row. The pipeline must have been initialized.
+   */
+  getRowByKey(table: string, key: RowKey): Row | undefined {
+    assert(this.initialized(), 'Not yet initialized');
+    const source = must(this.#tables.get(table));
+    return source.getByKey(key as Row);
   }
 
   /**

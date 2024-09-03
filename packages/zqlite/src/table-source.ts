@@ -49,6 +49,7 @@ type Statements = {
   readonly insert: Statement;
   readonly delete: Statement;
   readonly checkExists: Statement;
+  readonly getByKey: Statement;
 };
 
 /**
@@ -133,6 +134,16 @@ export class TableSource implements Source {
           )} LIMIT 1`,
         ),
       ),
+      getByKey: db
+        .prepare(
+          compile(
+            sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
+              this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+              sql` AND`,
+            )}`,
+          ),
+        )
+        .safeIntegers(true),
     };
     this.#dbCache.set(db, stmts);
     return stmts;
@@ -320,6 +331,22 @@ export class TableSource implements Source {
       change.type satisfies 'remove';
       this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
     }
+  }
+
+  /**
+   * Retrieves a row from the backing DB by row key, or `undefined` if such a
+   * row does not exist. This is not used in the IVM pipeline but is useful
+   * for retrieving data that is consistent with the state (and type
+   * semantics) of the pipeline.
+   */
+  getByKey(rowKey: Row): Row | undefined {
+    const row = this.#stmts.getByKey.get(
+      this.#primaryKey.map(key => rowKey[key]),
+    );
+    if (row) {
+      fromSQLiteTypes(this.#columns, row);
+    }
+    return row;
   }
 }
 

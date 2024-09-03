@@ -307,6 +307,41 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('getRowByKey', () => {
+    pipelines.init();
+
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+
+    // Post-hydration
+    expect(pipelines.getRowByKey('issues', {id: '1'})).toEqual({
+      id: '1',
+      closed: false,
+      ['_0_version']: '00',
+    });
+
+    expect(pipelines.getRowByKey('comments', {id: '22'})).toEqual({
+      id: '22',
+      issueID: '2',
+      upvotes: 20000,
+      ['_0_version']: '00',
+    });
+
+    const replicator = fakeReplicator(lc, db);
+    replicator.processTransaction(
+      '0/234',
+      messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
+    );
+    [...pipelines.advance().changes];
+
+    // Post-advancement
+    expect(pipelines.getRowByKey('comments', {id: '22'})).toEqual({
+      id: '22',
+      issueID: '3',
+      upvotes: 20000,
+      ['_0_version']: '183',
+    });
+  });
+
   test('multiple advancements', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
@@ -405,7 +440,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(pipelines.currentVersion()).toBe('183');
   });
 
-  test('fail on out of bounds numbers', () => {
+  test('push fails on out of bounds numbers', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
