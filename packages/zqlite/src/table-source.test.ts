@@ -2,11 +2,11 @@ import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
-import {makeComparator} from 'zql/src/zql/ivm/data.js';
+import {makeComparator, Row} from 'zql/src/zql/ivm/data.js';
 import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
 import {compile, sql} from './internal/sql.js';
-import {TableSource} from './table-source.js';
+import {TableSource, UnsupportedValueError} from './table-source.js';
 
 const columns = {
   id: {type: 'string'},
@@ -198,6 +198,72 @@ describe('fetching from a table source', () => {
   });
 });
 
+describe('fetched value types', () => {
+  type Foo = {id: string; a: number; b: number; c: boolean};
+  const columns = {
+    id: {type: 'string'},
+    a: {type: 'number'},
+    b: {type: 'number'},
+    c: {type: 'boolean'},
+  } as const;
+
+  type Case = {
+    name: string;
+    input: unknown[];
+    output?: Foo;
+  };
+
+  const cases: Case[] = [
+    {
+      name: 'number, float and false boolean',
+      input: ['1', 1, 2.123, 0],
+      output: {id: '1', a: 1, b: 2.123, c: false},
+    },
+    {
+      name: 'bigint, float, and true boolean',
+      input: ['2', 2n, 3.456, 1n],
+      output: {id: '2', a: 2, b: 3.456, c: true},
+    },
+    {
+      name: 'safe integer boundaries',
+      input: [
+        '3',
+        BigInt(Number.MAX_SAFE_INTEGER),
+        BigInt(Number.MIN_SAFE_INTEGER),
+        1n,
+      ],
+      output: {id: '3', a: 9007199254740991, b: -9007199254740991, c: true},
+    },
+    {
+      name: 'bigint too big',
+      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1n],
+    },
+    {
+      name: 'bigint too small',
+      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1n],
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name, () => {
+      const db = new Database(':memory:');
+      db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c);`);
+      const stmt = db.prepare(
+        /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
+      );
+      stmt.run(c.input);
+      const source = new TableSource(db, 'foo', columns, ['id']);
+      const input = source.connect([['id', 'asc']]);
+
+      if (c.output) {
+        expect([...input.fetch({})].map(node => node.row)).toEqual([c.output]);
+      } else {
+        expect(() => [...input.fetch({})]).toThrow(UnsupportedValueError);
+      }
+    });
+  }
+});
+
 test('pushing values does the correct writes and outputs', () => {
   const db1 = new Database(':memory:');
   const db2 = new Database(':memory:');
@@ -232,7 +298,7 @@ test('pushing values does the correct writes and outputs', () => {
      */
     source.push({
       type: 'add',
-      row: {a: 1, b: 2, c: 0},
+      row: {a: 1, b: 2.123, c: 0},
     });
 
     expect(outputted.shift()).toEqual({
@@ -241,16 +307,16 @@ test('pushing values does the correct writes and outputs', () => {
         relationships: {},
         row: {
           a: 1,
-          b: 2,
+          b: 2.123,
           c: false,
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2, c: 0}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0}]);
 
     source.push({
       type: 'remove',
-      row: {a: 1, b: 2},
+      row: {a: 1, b: 2.123},
     });
 
     expect(outputted.shift()).toEqual({
@@ -259,7 +325,7 @@ test('pushing values does the correct writes and outputs', () => {
         relationships: {},
         row: {
           a: 1,
-          b: 2,
+          b: 2.123,
         },
       },
     });
@@ -268,7 +334,7 @@ test('pushing values does the correct writes and outputs', () => {
     expect(() => {
       source.push({
         type: 'remove',
-        row: {a: 1, b: 2},
+        row: {a: 1, b: 2.123},
       });
     }).toThrow();
 
@@ -276,7 +342,7 @@ test('pushing values does the correct writes and outputs', () => {
 
     source.push({
       type: 'add',
-      row: {a: 1, b: 2, c: 1},
+      row: {a: 1, b: 2.123, c: 1},
     });
 
     expect(outputted.shift()).toEqual({
@@ -285,19 +351,75 @@ test('pushing values does the correct writes and outputs', () => {
         relationships: {},
         row: {
           a: 1,
-          b: 2,
+          b: 2.123,
           c: true,
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2, c: 1}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1}]);
 
     expect(() => {
       source.push({
         type: 'add',
-        row: {a: 1, b: 2, c: 3},
+        row: {a: 1, b: 2.123, c: 3},
       });
     }).toThrow();
+
+    // bigint rows
+    source.push({
+      type: 'add',
+      row: {
+        a: BigInt(Number.MAX_SAFE_INTEGER),
+        b: 3.456,
+        c: 1,
+      } as unknown as Row,
+    });
+
+    expect(outputted.shift()).toEqual({
+      type: 'add',
+      node: {
+        relationships: {},
+        row: {
+          a: 9007199254740991,
+          b: 3.456,
+          c: true,
+        },
+      },
+    });
+
+    expect(read.all()).toEqual([
+      {a: 1, b: 2.123, c: 1},
+      {a: 9007199254740991, b: 3.456, c: 1},
+    ]);
+
+    // out of bounds
+    expect(() => {
+      source.push({
+        type: 'add',
+        row: {
+          a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+          b: 0,
+          c: 1,
+        } as unknown as Row,
+      });
+    }).toThrow(UnsupportedValueError);
+
+    // out of bounds
+    expect(() => {
+      source.push({
+        type: 'add',
+        row: {
+          a: 0,
+          b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+          c: 1,
+        } as unknown as Row,
+      });
+    }).toThrow(UnsupportedValueError);
+
+    expect(read.all()).toEqual([
+      {a: 1, b: 2.123, c: 1},
+      {a: 9007199254740991, b: 3.456, c: 1},
+    ]);
   }
 });
 

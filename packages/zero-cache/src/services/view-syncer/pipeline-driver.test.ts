@@ -8,10 +8,8 @@ import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
-import {PipelineDriver, toRow} from './pipeline-driver.js';
+import {PipelineDriver} from './pipeline-driver.js';
 import {Snapshotter} from './snapshotter.js';
-import {RowValue} from 'zero-cache/src/types/row-key.js';
-import {Row} from 'zql/src/zql/ivm/data.js';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -422,96 +420,5 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(() => [...pipelines.advance().changes]).toThrowError();
-  });
-});
-
-describe('toRow', () => {
-  function t({
-    name,
-    rowValue,
-    expectedError,
-    expectedRow,
-  }: {
-    name: string;
-    rowValue: RowValue;
-    expectedError?: string | undefined;
-    expectedRow?: Row | undefined;
-  }) {
-    test(name, () => {
-      try {
-        expect(toRow(rowValue)).toEqual(expectedRow);
-        expect(expectedError).toEqual(undefined);
-      } catch (e) {
-        expect(String(e)).toEqual(expectedError);
-      }
-    });
-  }
-
-  t({
-    name: 'all supported no conversion types',
-    rowValue: {
-      strK: 'bar',
-      numK: 1,
-      boolK: true,
-      nullK: null,
-    },
-    expectedRow: {
-      strK: 'bar',
-      numK: 1,
-      boolK: true,
-      nullK: null,
-    },
-  });
-
-  t({
-    name: 'successful bigint clamp',
-    rowValue: {
-      strK: 'bar',
-      bigintK: 1n,
-    },
-    expectedRow: {
-      strK: 'bar',
-      bigintK: 1,
-    },
-  });
-
-  t({
-    name: 'bigint clamp failed',
-    rowValue: {
-      strK: 'bar',
-      bigintK: 9007199254740992n,
-    },
-    expectedError:
-      'Error: value in column bigintK exceeds the maximum safe value 9007199254740992',
-  });
-
-  t({
-    name: 'unsupported object',
-    rowValue: {
-      strK: 'bar',
-      objK: {},
-    },
-    expectedError:
-      'Error: value in column objK is of an unsupported type. {} object',
-  });
-
-  t({
-    name: 'unsupported array',
-    rowValue: {
-      strK: 'bar',
-      dateK: new Date(1000),
-    },
-    expectedError:
-      'Error: value in column dateK is of an unsupported type. "1970-01-01T00:00:01.000Z" object',
-  });
-
-  t({
-    name: 'unsupported date',
-    rowValue: {
-      strK: 'bar',
-      arrayK: [],
-    },
-    expectedError:
-      'Error: value in column arrayK is of an unsupported type. [] object',
   });
 });
