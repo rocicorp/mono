@@ -484,6 +484,9 @@ function makeBoundComparator(sort: Ordering) {
 }
 
 function compareBounds(a: Bound, b: Bound): number {
+  if (a === b) {
+    return 0;
+  }
   if (a === minValue) {
     return -1;
   }
