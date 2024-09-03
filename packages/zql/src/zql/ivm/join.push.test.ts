@@ -7,7 +7,7 @@ import type {NormalizedValue, Row} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKeys, SchemaValue} from './schema.js';
+import type {PrimaryKey, SchemaValue} from './schema.js';
 import {Snitch, SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 
@@ -981,7 +981,7 @@ function pushTest(t: PushTest) {
 type PushTest = {
   name: string;
   columns: readonly Record<string, SchemaValue>[];
-  primaryKeys: readonly PrimaryKeys[];
+  primaryKeys: readonly PrimaryKey[];
   sources: Row[][];
   sorts?: Record<number, Ordering> | undefined;
   joins: readonly {

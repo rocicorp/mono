@@ -2,6 +2,7 @@ import type {SQLQuery} from '@databases/sql';
 import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
+import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
 import {
   Comparator,
   Node,
@@ -21,7 +22,7 @@ import type {
   Output,
 } from 'zql/src/zql/ivm/operator.js';
 import {
-  PrimaryKeys,
+  PrimaryKey,
   Schema,
   SchemaValue,
   ValueType,
@@ -34,7 +35,6 @@ import type {
 import {Stream} from 'zql/src/zql/ivm/stream.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
-import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
 
 type Connection = {
   input: Input;
@@ -72,7 +72,7 @@ export class TableSource implements Source {
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
-  readonly #primaryKey: PrimaryKeys;
+  readonly #primaryKey: PrimaryKey;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
@@ -101,7 +101,7 @@ export class TableSource implements Source {
     if (cached) {
       return cached;
     }
-    assertPrimaryKeysMatch(db, this.#table, this.#primaryKey);
+    assertPrimaryKeyMatch(db, this.#table, this.#primaryKey);
 
     const stmts = {
       cache: new StatementCache(db),
@@ -454,10 +454,10 @@ function gatherStartConstraints(cursor: Cursor, order: Ordering): SQLQuery {
   return sql`(${sql.join(constraints, sql` OR `)})`;
 }
 
-function assertPrimaryKeysMatch(
+function assertPrimaryKeyMatch(
   db: Database,
   tableName: string,
-  primaryKeys: readonly string[],
+  primaryKey: PrimaryKey,
 ) {
   const sqlAndBindings = format(
     sql`SELECT name FROM pragma_table_info(${tableName}) WHERE pk > 0`,
@@ -467,9 +467,9 @@ function assertPrimaryKeysMatch(
     stmt.all(...sqlAndBindings.values).map(row => row.name),
   );
 
-  assert(pkColumns.size === primaryKeys.length);
+  assert(pkColumns.size === primaryKey.length);
 
-  for (const key of primaryKeys) {
+  for (const key of primaryKey) {
     assert(pkColumns.has(key));
   }
 }

@@ -10,7 +10,7 @@ import {
 } from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKeys, Schema, SchemaValue} from './schema.js';
+import type {PrimaryKey, Schema, SchemaValue} from './schema.js';
 import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
 
 suite('fetch one:many', () => {
@@ -857,7 +857,7 @@ function fetchTest(t: FetchTest) {
 type FetchTest = {
   name: string;
   columns: readonly Record<string, SchemaValue>[];
-  primaryKeys: readonly PrimaryKeys[];
+  primaryKeys: readonly PrimaryKey[];
   sources: Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
   joins: readonly {
