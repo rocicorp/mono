@@ -1,6 +1,5 @@
 import {expect, test} from 'vitest';
 import {Catch, expandNode} from '../catch.js';
-import {ChangeType} from '../change.js';
 import {Node, Row, Value} from '../data.js';
 import {FetchRequest, Input, Output, Start} from '../operator.js';
 import {SchemaValue} from '../schema.js';
@@ -56,18 +55,18 @@ const cases = {
     const out = new Catch(ms.connect(sort));
     expect(out.fetch()).toEqual([]);
 
-    ms.push({type: ChangeType.Add, row: {a: 3}});
+    ms.push({type: 'add', row: {a: 3}});
     expect(out.fetch()).toEqual(asNodes([{a: 3}]));
 
-    ms.push({type: ChangeType.Add, row: {a: 1}});
-    ms.push({type: ChangeType.Add, row: {a: 2}});
+    ms.push({type: 'add', row: {a: 1}});
+    ms.push({type: 'add', row: {a: 2}});
     expect(out.fetch()).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
 
-    ms.push({type: ChangeType.Remove, row: {a: 1}});
+    ms.push({type: 'remove', row: {a: 1}});
     expect(out.fetch()).toEqual(asNodes([{a: 2}, {a: 3}]));
 
-    ms.push({type: ChangeType.Remove, row: {a: 2}});
-    ms.push({type: ChangeType.Remove, row: {a: 3}});
+    ms.push({type: 'remove', row: {a: 2}});
+    ms.push({type: 'remove', row: {a: 3}});
     expect(out.fetch()).toEqual([]);
   },
 
@@ -84,9 +83,9 @@ const cases = {
       ['a'],
     );
     const out = new Catch(ms.connect(sort));
-    ms.push({type: ChangeType.Add, row: {a: 3, b: true, c: 1, d: null}});
-    ms.push({type: ChangeType.Add, row: {a: 1, b: true, c: 2, d: null}});
-    ms.push({type: ChangeType.Add, row: {a: 2, b: false, c: null, d: null}});
+    ms.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
+    ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
+    ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
 
     expect(out.fetch({constraint: {key: 'b', value: true}})).toEqual(
       asNodes([
@@ -144,8 +143,8 @@ const cases = {
       asNodes([]),
     );
 
-    ms.push({type: ChangeType.Add, row: {a: 2}});
-    ms.push({type: ChangeType.Add, row: {a: 3}});
+    ms.push({type: 'add', row: {a: 2}});
+    ms.push({type: 'add', row: {a: 3}});
     expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
       asNodes([{a: 2}, {a: 3}]),
     );
@@ -166,7 +165,7 @@ const cases = {
       asNodes([]),
     );
 
-    ms.push({type: ChangeType.Remove, row: {a: 3}});
+    ms.push({type: 'remove', row: {a: 3}});
     expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
       asNodes([{a: 2}]),
     );
@@ -255,7 +254,7 @@ const cases = {
         ['a'],
       );
       for (const row of c.startData) {
-        ms.push({type: ChangeType.Add, row});
+        ms.push({type: 'add', row});
       }
       const out = new Catch(ms.connect(sort));
       expect(
@@ -272,48 +271,42 @@ const cases = {
 
     expect(out.pushes).toEqual([]);
 
-    ms.push({type: ChangeType.Add, row: {a: 2}});
-    expect(out.pushes).toEqual(
-      asChanges([{type: ChangeType.Add, row: {a: 2}}]),
-    );
+    ms.push({type: 'add', row: {a: 2}});
+    expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 2}}]));
 
-    ms.push({type: ChangeType.Add, row: {a: 1}});
+    ms.push({type: 'add', row: {a: 1}});
     expect(out.pushes).toEqual(
       asChanges([
-        {type: ChangeType.Add, row: {a: 2}},
-        {type: ChangeType.Add, row: {a: 1}},
+        {type: 'add', row: {a: 2}},
+        {type: 'add', row: {a: 1}},
       ]),
     );
 
-    ms.push({type: ChangeType.Remove, row: {a: 1}});
-    ms.push({type: ChangeType.Remove, row: {a: 2}});
+    ms.push({type: 'remove', row: {a: 1}});
+    ms.push({type: 'remove', row: {a: 2}});
     expect(out.pushes).toEqual(
       asChanges([
-        {type: ChangeType.Add, row: {a: 2}},
-        {type: ChangeType.Add, row: {a: 1}},
-        {type: ChangeType.Remove, row: {a: 1}},
-        {type: ChangeType.Remove, row: {a: 2}},
+        {type: 'add', row: {a: 2}},
+        {type: 'add', row: {a: 1}},
+        {type: 'remove', row: {a: 1}},
+        {type: 'remove', row: {a: 2}},
       ]),
     );
 
     // Remove row that isn't there
     out.reset();
-    expect(() => ms.push({type: ChangeType.Remove, row: {a: 1}})).toThrow(
+    expect(() => ms.push({type: 'remove', row: {a: 1}})).toThrow(
       'Row not found',
     );
     expect(out.pushes).toEqual(asChanges([]));
 
     // Add row twice
-    ms.push({type: ChangeType.Add, row: {a: 1}});
-    expect(out.pushes).toEqual(
-      asChanges([{type: ChangeType.Add, row: {a: 1}}]),
-    );
-    expect(() => ms.push({type: ChangeType.Add, row: {a: 1}})).toThrow(
+    ms.push({type: 'add', row: {a: 1}});
+    expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
+    expect(() => ms.push({type: 'add', row: {a: 1}})).toThrow(
       'Row already exists',
     );
-    expect(out.pushes).toEqual(
-      asChanges([{type: ChangeType.Add, row: {a: 1}}]),
-    );
+    expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
   },
 
   'overlay-source-isolation': (createSource: SourceFactory) => {
@@ -341,7 +334,7 @@ const cases = {
     o2.onPush = fetchAll;
     o3.onPush = fetchAll;
 
-    ms.push({type: ChangeType.Add, row: {a: 2}});
+    ms.push({type: 'add', row: {a: 2}});
     expect(o1.fetches).toEqual([
       asNodes([{a: 2}]),
       asNodes([{a: 2}]),
@@ -364,7 +357,7 @@ const cases = {
           row: {a: 1},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 1}},
+        change: {type: 'add', row: {a: 1}},
         expected: [{a: 1}, {a: 2}, {a: 4}],
       },
       {
@@ -373,7 +366,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 1}},
+        change: {type: 'add', row: {a: 1}},
         expected: [{a: 1}, {a: 2}, {a: 4}],
       },
       {
@@ -382,7 +375,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 2}},
+        change: {type: 'add', row: {a: 2}},
         expected: 'Row already exists',
       },
       {
@@ -391,7 +384,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 3}},
+        change: {type: 'add', row: {a: 3}},
         expected: [{a: 2}, {a: 3}, {a: 4}],
       },
       {
@@ -400,7 +393,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 5}},
+        change: {type: 'add', row: {a: 5}},
         expected: [{a: 2}, {a: 4}, {a: 5}],
       },
       {
@@ -409,7 +402,7 @@ const cases = {
           row: {a: 4},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 0}},
+        change: {type: 'add', row: {a: 0}},
         expected: [{a: 2}, {a: 4}],
       },
       {
@@ -418,7 +411,7 @@ const cases = {
           row: {a: 4},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 3}},
+        change: {type: 'add', row: {a: 3}},
         expected: [{a: 3}, {a: 4}],
       },
       {
@@ -427,7 +420,7 @@ const cases = {
           row: {a: 4},
           basis: 'before',
         },
-        change: {type: ChangeType.Add, row: {a: 5}},
+        change: {type: 'add', row: {a: 5}},
         expected: [{a: 2}, {a: 4}, {a: 5}],
       },
       {
@@ -436,7 +429,7 @@ const cases = {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: ChangeType.Add, row: {a: 1}},
+        change: {type: 'add', row: {a: 1}},
         expected: [{a: 2}, {a: 4}],
       },
       {
@@ -445,7 +438,7 @@ const cases = {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: ChangeType.Add, row: {a: 3}},
+        change: {type: 'add', row: {a: 3}},
         expected: [{a: 2}, {a: 3}, {a: 4}],
       },
       {
@@ -454,7 +447,7 @@ const cases = {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: ChangeType.Add, row: {a: 5}},
+        change: {type: 'add', row: {a: 5}},
         expected: [{a: 2}, {a: 4}, {a: 5}],
       },
       {
@@ -463,7 +456,7 @@ const cases = {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: ChangeType.Add, row: {a: 1}},
+        change: {type: 'add', row: {a: 1}},
         expected: [{a: 4}],
       },
       {
@@ -472,7 +465,7 @@ const cases = {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: ChangeType.Add, row: {a: 3}},
+        change: {type: 'add', row: {a: 3}},
         expected: [{a: 3}, {a: 4}],
       },
       {
@@ -481,7 +474,7 @@ const cases = {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: ChangeType.Add, row: {a: 5}},
+        change: {type: 'add', row: {a: 5}},
         expected: [{a: 4}, {a: 5}],
       },
       {
@@ -490,7 +483,7 @@ const cases = {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: ChangeType.Add, row: {a: 3}},
+        change: {type: 'add', row: {a: 3}},
         expected: [],
       },
       {
@@ -499,7 +492,7 @@ const cases = {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: ChangeType.Add, row: {a: 5}},
+        change: {type: 'add', row: {a: 5}},
         expected: [{a: 5}],
       },
       {
@@ -508,7 +501,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Remove, row: {a: 1}},
+        change: {type: 'remove', row: {a: 1}},
         expected: 'Row not found',
       },
       {
@@ -517,7 +510,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [],
       },
       {
@@ -526,7 +519,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [{a: 4}],
       },
       {
@@ -535,7 +528,7 @@ const cases = {
           row: {a: 2},
           basis: 'before',
         },
-        change: {type: ChangeType.Remove, row: {a: 4}},
+        change: {type: 'remove', row: {a: 4}},
         expected: [{a: 2}],
       },
       {
@@ -544,7 +537,7 @@ const cases = {
           row: {a: 4},
           basis: 'before',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [{a: 4}],
       },
       {
@@ -553,7 +546,7 @@ const cases = {
           row: {a: 4},
           basis: 'before',
         },
-        change: {type: ChangeType.Remove, row: {a: 4}},
+        change: {type: 'remove', row: {a: 4}},
         expected: [{a: 2}],
       },
       {
@@ -562,7 +555,7 @@ const cases = {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [{a: 4}],
       },
       {
@@ -571,7 +564,7 @@ const cases = {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: ChangeType.Remove, row: {a: 4}},
+        change: {type: 'remove', row: {a: 4}},
         expected: [{a: 2}],
       },
       {
@@ -580,7 +573,7 @@ const cases = {
           row: {a: 4},
           basis: 'at',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [{a: 4}],
       },
       {
@@ -589,7 +582,7 @@ const cases = {
           row: {a: 4},
           basis: 'at',
         },
-        change: {type: ChangeType.Remove, row: {a: 4}},
+        change: {type: 'remove', row: {a: 4}},
         expected: [],
       },
       {
@@ -598,7 +591,7 @@ const cases = {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [{a: 4}],
       },
       {
@@ -607,7 +600,7 @@ const cases = {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: ChangeType.Remove, row: {a: 4}},
+        change: {type: 'remove', row: {a: 4}},
         expected: [],
       },
       {
@@ -616,7 +609,7 @@ const cases = {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: ChangeType.Remove, row: {a: 2}},
+        change: {type: 'remove', row: {a: 2}},
         expected: [],
       },
       {
@@ -625,7 +618,7 @@ const cases = {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: ChangeType.Remove, row: {a: 4}},
+        change: {type: 'remove', row: {a: 4}},
         expected: [],
       },
     ];
@@ -634,7 +627,7 @@ const cases = {
       const sort = [['a', 'asc']] as const;
       const ms = createSource('table', {a: {type: 'number'}}, ['a']);
       for (const row of c.startData) {
-        ms.push({type: ChangeType.Add, row});
+        ms.push({type: 'add', row});
       }
       const out = new OverlaySpy(ms.connect(sort));
       out.onPush = () =>
@@ -663,7 +656,7 @@ const cases = {
           {a: 4, b: true},
         ],
         constraint: {key: 'b', value: true},
-        change: {type: ChangeType.Add, row: {a: 1, b: true}},
+        change: {type: 'add', row: {a: 1, b: true}},
         expected: [
           {a: 1, b: true},
           {a: 4, b: true},
@@ -675,7 +668,7 @@ const cases = {
           {a: 4, b: true},
         ],
         constraint: {key: 'b', value: true},
-        change: {type: ChangeType.Add, row: {a: 1, b: false}},
+        change: {type: 'add', row: {a: 1, b: false}},
         expected: [{a: 4, b: true}],
       },
     ];
@@ -691,7 +684,7 @@ const cases = {
         ['a'],
       );
       for (const row of c.startData) {
-        ms.push({type: ChangeType.Add, row});
+        ms.push({type: 'add', row});
       }
       const out = new OverlaySpy(ms.connect(sort));
       out.onPush = () =>
@@ -728,7 +721,7 @@ const cases = {
           basis: 'before',
         },
         constraint: {key: 'b', value: false},
-        change: {type: ChangeType.Add, row: {a: 4, b: false}},
+        change: {type: 'add', row: {a: 4, b: false}},
         expected: [
           {a: 4, b: false},
           {a: 6, b: false},
@@ -748,7 +741,7 @@ const cases = {
           basis: 'before',
         },
         constraint: {key: 'b', value: false},
-        change: {type: ChangeType.Add, row: {a: 2.5, b: false}},
+        change: {type: 'add', row: {a: 2.5, b: false}},
         expected: [
           {a: 3, b: false},
           {a: 6, b: false},
@@ -768,7 +761,7 @@ const cases = {
           basis: 'at',
         },
         constraint: {key: 'b', value: false},
-        change: {type: ChangeType.Add, row: {a: 5.75, b: false}},
+        change: {type: 'add', row: {a: 5.75, b: false}},
         expected: [
           {a: 5.75, b: false},
           {a: 6, b: false},
@@ -788,7 +781,7 @@ const cases = {
           basis: 'at',
         },
         constraint: {key: 'b', value: false},
-        change: {type: ChangeType.Add, row: {a: 4, b: false}},
+        change: {type: 'add', row: {a: 4, b: false}},
         expected: [
           {a: 6, b: false},
           {a: 7, b: false},
@@ -807,7 +800,7 @@ const cases = {
           basis: 'at',
         },
         constraint: {key: 'b', value: false},
-        change: {type: ChangeType.Add, row: {a: 8, b: false}},
+        change: {type: 'add', row: {a: 8, b: false}},
         expected: [
           {a: 6, b: false},
           {a: 7, b: false},
@@ -827,7 +820,7 @@ const cases = {
           basis: 'after',
         },
         constraint: {key: 'b', value: false},
-        change: {type: ChangeType.Add, row: {a: 6.5, b: false}},
+        change: {type: 'add', row: {a: 6.5, b: false}},
         expected: [
           {a: 6, b: false},
           {a: 6.5, b: false},
@@ -847,7 +840,7 @@ const cases = {
         ['a'],
       );
       for (const row of c.startData) {
-        ms.push({type: ChangeType.Add, row});
+        ms.push({type: 'add', row});
       }
       const out = new OverlaySpy(ms.connect(sort));
       out.onPush = () =>
@@ -866,10 +859,7 @@ const cases = {
 
   'per-output-sorts': (createSource: SourceFactory) => {
     const sort1 = [['a', 'asc']] as const;
-    const sort2 = [
-      ['b', 'asc'],
-      ['a', 'asc'],
-    ] as const;
+    const sort2 = [['b', 'asc'], ['a', 'asc']] as const;
     const ms = createSource(
       'table',
       {
@@ -881,9 +871,9 @@ const cases = {
     const out1 = new Catch(ms.connect(sort1));
     const out2 = new Catch(ms.connect(sort2));
 
-    ms.push({type: ChangeType.Add, row: {a: 2, b: 3}});
-    ms.push({type: ChangeType.Add, row: {a: 1, b: 2}});
-    ms.push({type: ChangeType.Add, row: {a: 3, b: 1}});
+    ms.push({type: 'add', row: {a: 2, b: 3}});
+    ms.push({type: 'add', row: {a: 1, b: 2}});
+    ms.push({type: 'add', row: {a: 3, b: 1}});
 
     expect(out1.fetch({})).toEqual(
       asNodes([
@@ -907,9 +897,9 @@ const cases = {
     // can't be rewound or branched. This test ensures that streams from all
     // sources behave this way for consistency.
     const source = createSource('table', {a: {type: 'number'}}, ['a']);
-    source.push({type: ChangeType.Add, row: {a: 1}});
-    source.push({type: ChangeType.Add, row: {a: 2}});
-    source.push({type: ChangeType.Add, row: {a: 3}});
+    source.push({type: 'add', row: {a: 1}});
+    source.push({type: 'add', row: {a: 2}});
+    source.push({type: 'add', row: {a: 3}});
 
     const conn = source.connect([['a', 'asc']]);
     const stream = conn.fetch({});

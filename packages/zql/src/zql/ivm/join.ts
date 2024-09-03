@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {ChangeType, type Change} from './change.js';
+import type {Change} from './change.js';
 import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {Schema} from './schema.js';
@@ -99,26 +99,25 @@ export class Join implements Input {
 
   #pushParent(change: Change): void {
     assert(this.#output, 'Output not set');
-    if (change.type === ChangeType.Add) {
+    if (change.type === 'add') {
       this.#output.push({
-        type: ChangeType.Add,
+        type: 'add',
         node: this.#processParentNode(change.node, 'fetch'),
       });
-    } else if (change.type === ChangeType.Remove) {
+    } else if (change.type === 'remove') {
       this.#output.push({
-        type: ChangeType.Remove,
+        type: 'remove',
         node: this.#processParentNode(change.node, 'cleanup'),
       });
     } else {
-      change.type satisfies ChangeType.Child;
+      change.type satisfies 'child';
       this.#output.push(change);
     }
   }
 
   #pushChild(change: Change): void {
     assert(this.#output, 'Output not set');
-    const childRow =
-      change.type === ChangeType.Child ? change.row : change.node.row;
+    const childRow = change.type === 'child' ? change.row : change.node.row;
     const parentNodes = this.#parent.fetch({
       constraint: {
         key: this.#parentKey,
@@ -128,7 +127,7 @@ export class Join implements Input {
 
     for (const parentNode of parentNodes) {
       const result: Change = {
-        type: ChangeType.Child,
+        type: 'child',
         row: parentNode.row,
         child: {
           relationshipName: this.#relationshipName,

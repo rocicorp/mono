@@ -1,6 +1,5 @@
 import {ExperimentalNoIndexDiff} from 'replicache';
 import {expect, test} from 'vitest';
-import {ChangeType} from 'zql/src/zql/ivm/change.js';
 import {Join} from 'zql/src/zql/ivm/join.js';
 import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
@@ -100,22 +99,10 @@ test('processChanges', () => {
   ]);
 
   expect(out.pushes).toEqual([
-    {
-      type: ChangeType.Add,
-      node: {row: {id: 'e1', name: 'name1'}, relationships: {}},
-    },
-    {
-      type: ChangeType.Add,
-      node: {row: {id: 'e2', name: 'name2'}, relationships: {}},
-    },
-    {
-      type: ChangeType.Remove,
-      node: {row: {id: 'e1', name: 'name1'}, relationships: {}},
-    },
-    {
-      type: ChangeType.Add,
-      node: {row: {id: 'e1', name: 'name1.1'}, relationships: {}},
-    },
+    {type: 'add', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
+    {type: 'add', node: {row: {id: 'e2', name: 'name2'}, relationships: {}}},
+    {type: 'remove', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
+    {type: 'add', node: {row: {id: 'e1', name: 'name1.1'}, relationships: {}}},
   ]);
 
   expect(out.fetch({})).toEqual([

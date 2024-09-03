@@ -2,7 +2,6 @@ import BTree from 'btree';
 import {assert} from 'shared/src/asserts.js';
 import {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
-import {ChangeType} from './change.js';
 import {
   Comparator,
   compareValues,
@@ -306,12 +305,12 @@ export class MemorySource implements Source {
   push(change: SourceChange) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
-    if (change.type === ChangeType.Add) {
+    if (change.type === 'add') {
       if (data.has(change.row)) {
         throw new Error(`Row already exists: ` + JSON.stringify(change));
       }
     } else {
-      change.type satisfies ChangeType.Remove;
+      change.type satisfies 'remove';
       if (!data.has(change.row)) {
         throw new Error(`Row not found: ` + JSON.stringify(change));
       }
@@ -331,12 +330,12 @@ export class MemorySource implements Source {
     }
     this.#overlay = undefined;
     for (const {data} of this.#indexes.values()) {
-      if (change.type === ChangeType.Add) {
+      if (change.type === 'add') {
         const added = data.add(change.row, undefined);
         // must succeed since we checked has() above.
         assert(added);
       } else {
-        change.type satisfies ChangeType.Remove;
+        change.type satisfies 'remove';
         const removed = data.delete(change.row);
         // must succeed since we checked has() above.
         assert(removed);
@@ -438,12 +437,12 @@ export function* generateWithOverlay(
   for (const row of rowIterator) {
     if (overlay) {
       const cmp = compare(overlay.change.row, row);
-      if (overlay.change.type === ChangeType.Add) {
+      if (overlay.change.type === 'add') {
         if (cmp < 0) {
           yield {row: overlay.change.row, relationships: {}};
           overlay = undefined;
         }
-      } else if (overlay.change.type === ChangeType.Remove) {
+      } else if (overlay.change.type === 'remove') {
         if (cmp < 0) {
           overlay = undefined;
         } else if (cmp === 0) {
@@ -455,7 +454,7 @@ export function* generateWithOverlay(
     yield {row, relationships: {}};
   }
 
-  if (overlay && overlay.change.type === ChangeType.Add) {
+  if (overlay && overlay.change.type === 'add') {
     yield {row: overlay.change.row, relationships: {}};
   }
 }
