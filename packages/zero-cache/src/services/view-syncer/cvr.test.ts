@@ -825,12 +825,32 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa');
 
-    updater.trackQueries(
+    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
       lc,
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
       {stateVersion: '189'},
     );
+    expect(newVersion).toEqual({stateVersion: '1aa', minorVersion: 1});
+    expect(queryPatches).toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+      ]
+    `);
+
     // Simulate receiving different views rows at different time times.
     expect(
       await updater.received(
@@ -937,20 +957,10 @@ describe('view-syncer/cvr', () => {
     // deleteRows: [[{stateVersion: '1aa'}, DELETED_ROW_ID]],
     // });
 
-    const newVersion = {stateVersion: '1aa', minorVersion: 1};
     expect(await updater.generateConfigPatches(lc)).toEqual([
       {
         patch: {type: 'query', op: 'del', id: 'catchup-delete'},
         toVersion: {stateVersion: '19z'},
-      },
-      {
-        patch: {
-          type: 'query',
-          op: 'put',
-          id: 'oneHash',
-          ast: {table: 'issues'},
-        },
-        toVersion: newVersion,
       },
     ]);
 
@@ -1215,12 +1225,15 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    updater.trackQueries(
+    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
       {stateVersion: '189'},
     );
+    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
+    expect(queryPatches).toHaveLength(0);
+
     expect(
       await updater.received(
         lc,
@@ -1278,8 +1291,6 @@ describe('view-syncer/cvr', () => {
         },
       },
     ]);
-
-    const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
       {
@@ -1569,7 +1580,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    updater.trackQueries(
+    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
       lc,
       [
         {id: 'oneHash', transformationHash: 'updatedServerOneHash'},
@@ -1578,6 +1589,9 @@ describe('view-syncer/cvr', () => {
       [],
       {stateVersion: '189'},
     );
+    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
+    expect(queryPatches).toHaveLength(0);
+
     expect(
       await updater.received(
         lc,
@@ -1659,8 +1673,6 @@ describe('view-syncer/cvr', () => {
         ],
       ]),
     );
-
-    const newVersion = {stateVersion: '1ba', minorVersion: 1};
 
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
       {
@@ -1942,9 +1954,29 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    updater.trackQueries(lc, [], ['oneHash'], {stateVersion: '189'});
+    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
+      lc,
+      [],
+      ['oneHash'],
+      {stateVersion: '189'},
+    );
+    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
+    expect(queryPatches).toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "id": "oneHash",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1ba",
+          },
+        },
+      ]
+    `);
 
-    const newVersion = {stateVersion: '1ba', minorVersion: 1};
     expect(await updater.deleteUnreferencedRows(lc)).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
@@ -1960,10 +1992,6 @@ describe('view-syncer/cvr', () => {
       {
         patch: {type: 'query', op: 'del', id: 'catchup-delete'},
         toVersion: {stateVersion: '19z'},
-      },
-      {
-        patch: {type: 'query', op: 'del', id: 'oneHash'},
-        toVersion: newVersion,
       },
     ] satisfies PatchToVersion[]);
 
@@ -2272,7 +2300,7 @@ describe('view-syncer/cvr', () => {
     `);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    updater.trackQueries(
+    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
       lc,
       [
         {id: 'oneHash', transformationHash: 'serverOneHash'},
@@ -2281,6 +2309,9 @@ describe('view-syncer/cvr', () => {
       [],
       {stateVersion: '189'},
     );
+    expect(newVersion).toEqual({stateVersion: '1ba'});
+    expect(queryPatches).toHaveLength(0);
+
     expect(
       await updater.received(
         lc,
