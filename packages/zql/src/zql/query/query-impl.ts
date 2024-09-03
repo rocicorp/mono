@@ -23,6 +23,7 @@ import {
   Schema,
 } from './schema.js';
 import {TypedView} from './typed-view.js';
+import { Value } from '../ivm/data.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -106,7 +107,7 @@ class QueryImpl<
     const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
     if (this.#ast.start) {
       const {row} = this.#ast.start;
-      const narrowedRow: {[key: string]: any} = {};
+      const narrowedRow: Record<string, Value> = {};
       for (const [field] of finalOrderBy) {
         narrowedRow[field] = row[field];
       }
