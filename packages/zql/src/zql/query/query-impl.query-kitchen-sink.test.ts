@@ -311,11 +311,126 @@ describe('kitchen sink query', () => {
           .limit(2),
       )
       .related('labels', q => q.select('name'))
-      .start({id: '101'})
+      .start({
+        id: '101',
+        title: 'Issue 1',
+        description: 'Description 1',
+        closed: false,
+        ownerId: '001',
+      })
+      .orderBy('title', 'asc')
       .limit(6);
 
     const view = issueQuery.materialize();
     view.hydrate();
+
+    expect(queryDelegate.addedServerQueries).toEqual([
+      {
+        limit: 6,
+        orderBy: [
+          ['title', 'asc'],
+          ['id', 'asc'],
+        ],
+        related: [
+          {
+            correlation: {
+              childField: 'id',
+              op: '=',
+              parentField: 'ownerId',
+            },
+            subquery: {
+              alias: 'owner',
+              orderBy: [['id', 'asc']],
+              table: 'user',
+            },
+          },
+          {
+            correlation: {
+              childField: 'issueId',
+              op: '=',
+              parentField: 'id',
+            },
+            subquery: {
+              alias: 'comments',
+              limit: 2,
+              orderBy: [
+                ['createdAt', 'desc'],
+                ['id', 'asc'],
+              ],
+              related: [
+                {
+                  correlation: {
+                    childField: 'commentId',
+                    op: '=',
+                    parentField: 'id',
+                  },
+                  subquery: {
+                    alias: 'revisions',
+                    limit: 1,
+                    orderBy: [['id', 'desc']],
+                    table: 'revision',
+                  },
+                },
+              ],
+              table: 'comment',
+            },
+          },
+          {
+            correlation: {
+              childField: 'issueId',
+              op: '=',
+              parentField: 'id',
+            },
+            subquery: {
+              alias: 'labels',
+              orderBy: [
+                ['issueId', 'asc'],
+                ['labelId', 'asc'],
+              ],
+              related: [
+                {
+                  correlation: {
+                    childField: 'id',
+                    op: '=',
+                    parentField: 'labelId',
+                  },
+                  hidden: true,
+                  subquery: {
+                    alias: 'labels',
+                    orderBy: [['id', 'asc']],
+                    table: 'label',
+                  },
+                },
+              ],
+              table: 'issueLabel',
+            },
+          },
+        ],
+        start: {
+          exclusive: true,
+          row: {
+            id: '101',
+            title: 'Issue 1',
+          },
+        },
+        table: 'issue',
+        where: [
+          {
+            field: 'ownerId',
+            op: 'IN',
+            type: 'simple',
+            value: ['001', '002', '003'],
+          },
+          {
+            field: 'closed',
+            op: '=',
+            type: 'simple',
+            value: false,
+          },
+        ],
+      },
+    ]);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: unknown[] = [];
     view.addListener(data => {

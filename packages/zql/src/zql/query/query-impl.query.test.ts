@@ -13,11 +13,13 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
+import { AST } from '../ast/ast.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();
   #commitListeners: Set<CommitListener> = new Set();
 
+  addedServerQueries: AST[] = [];
   onTransactionCommit(listener: CommitListener): () => void {
     this.#commitListeners.add(listener);
     return () => {
@@ -30,9 +32,9 @@ export class QueryDelegateImpl implements QueryDelegate {
       listener();
     }
   }
-
-  addServerQuery(): () => void {
-    return () => {};
+  addServerQuery(ast: AST): () => void {
+      this.addedServerQueries.push(ast);
+      return () => {};
   }
   getSource(name: string): Source {
     return this.#sources[name];
