@@ -1,3 +1,5 @@
+import {compareUTF8} from 'compare-utf8';
+import {must} from 'shared/src/must.js';
 import {Bound} from '../ivm/skip.js';
 
 /**
@@ -6,8 +8,6 @@ import {Bound} from '../ivm/skip.js';
  */
 export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
 export type Ordering = readonly OrderPart[];
-import {compareUTF8} from 'compare-utf8';
-import {must} from 'shared/src/must.js';
 
 export type SimpleOperator = EqualityOps | OrderOps | LikeOps | InOps;
 export type EqualityOps = '=' | '!=';

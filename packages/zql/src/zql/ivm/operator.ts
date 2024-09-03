@@ -12,8 +12,7 @@ export interface Input {
   getSchema(): Schema;
 
   /**
-   * Fetch data.
-   * Does not modify current state.
+   * Fetch data. May modify the data in place.
    * Returns nodes sorted in order of {@linkcode Schema.compareRows}.
    */
   fetch(req: FetchRequest): Stream<Node>;
