@@ -2,7 +2,6 @@ import {deepClone} from 'shared/src/deep-clone.js';
 import {Immutable} from 'shared/src/immutable.js';
 import {expect, test} from 'vitest';
 import {ArrayView, EntryList} from './array-view.js';
-import {ChangeType} from './change.js';
 import {Filter} from './filter.js';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
@@ -22,7 +21,7 @@ test('destroy source connections', () => {
   const snitch2 = new Snitch(connection2, 'snitch2');
 
   const msg1 = {
-    type: ChangeType.Add,
+    type: 'add',
     row: {a: 3},
   } as const;
   ms.push(msg1);
@@ -33,7 +32,7 @@ test('destroy source connections', () => {
   snitch1.destroy();
 
   const msg2 = {
-    type: ChangeType.Add,
+    type: 'add',
     row: {a: 2},
   } as const;
   ms.push(msg2);
@@ -50,7 +49,7 @@ test('destroy source connections', () => {
 
   snitch2.destroy();
   const msg3 = {
-    type: ChangeType.Add,
+    type: 'add',
     row: {a: 1},
   } as const;
   ms.push(msg3);
@@ -104,14 +103,14 @@ test('destroy a pipeline from the view', () => {
   view.hydrate();
 
   source1.push({
-    type: ChangeType.Add,
+    type: 'add',
     row: {
       a: 'a',
       b: 'b-source-1',
     },
   });
   source2.push({
-    type: ChangeType.Add,
+    type: 'add',
     row: {
       a: 'a',
       b: 'b-source-2',
@@ -136,7 +135,7 @@ test('destroy a pipeline from the view', () => {
   view.destroy();
 
   source2.push({
-    type: ChangeType.Remove,
+    type: 'remove',
     row: {
       a: 'a',
       b: 'b-source-2',

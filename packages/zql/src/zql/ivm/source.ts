@@ -1,10 +1,9 @@
 import {Ordering, SimpleCondition} from '../ast/ast.js';
-import {ChangeType} from './change.js';
 import {Row} from './data.js';
 import {Input} from './operator.js';
 
 export type SourceChange = {
-  type: ChangeType.Add | ChangeType.Remove;
+  type: 'add' | 'remove';
   row: Row;
 };
 

@@ -1,6 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {assertOrderingIncludesPK} from '../builder/builder.js';
-import {ChangeType, type Change, type RemoveChange} from './change.js';
+import type {Change, RemoveChange} from './change.js';
 import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
   Constraint,
@@ -12,6 +11,7 @@ import type {
 } from './operator.js';
 import type {Schema} from './schema.js';
 import {take, type Stream} from './stream.js';
+import { assertOrderingIncludesPK } from '../builder/builder.js';
 
 const MAX_BOUND_KEY = 'maxBound';
 
@@ -54,10 +54,7 @@ export class Take implements Operator {
     this.#limit = limit;
     this.#partitionKey = partitionKey;
     assert(limit >= 0);
-    assertOrderingIncludesPK(
-      this.#input.getSchema().sort,
-      this.#input.getSchema().primaryKey,
-    );
+    assertOrderingIncludesPK(this.#input.getSchema().sort, this.#input.getSchema().primaryKey);
     this.#input.setOutput(this);
   }
 
@@ -201,7 +198,7 @@ export class Take implements Operator {
     // When take below join is supported, this assert should be removed
     // and a 'child' change should be pushed to output if its row
     // is <= bound.
-    assert(change.type !== ChangeType.Child, 'child changes are not supported');
+    assert(change.type !== 'child', 'child changes are not supported');
     const partitionValue =
       this.#partitionKey === undefined
         ? undefined
@@ -221,7 +218,7 @@ export class Take implements Operator {
       return;
     }
 
-    if (change.type === ChangeType.Add) {
+    if (change.type === 'add') {
       if (takeState.size < this.#limit) {
         this.#setTakeState(
           takeStateKey,
@@ -273,7 +270,7 @@ export class Take implements Operator {
         ];
       }
       const removeChange: RemoveChange = {
-        type: ChangeType.Remove,
+        type: 'remove',
         node: boundNode,
       };
       this.#setTakeState(
@@ -287,7 +284,7 @@ export class Take implements Operator {
       );
       this.#output.push(removeChange);
       this.#output.push(change);
-    } else if (change.type === ChangeType.Remove) {
+    } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
         // change is after bound
         return;
@@ -344,7 +341,7 @@ export class Take implements Operator {
         );
         this.#output.push(change);
         this.#output.push({
-          type: ChangeType.Add,
+          type: 'add',
           node: afterBoundNode,
         });
         return;

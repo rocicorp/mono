@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
-import {Change, ChangeType} from 'zql/src/zql/ivm/change.js';
+import {Change} from 'zql/src/zql/ivm/change.js';
 import {makeComparator} from 'zql/src/zql/ivm/data.js';
 import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
@@ -231,12 +231,12 @@ test('pushing values does the correct writes and outputs', () => {
      * 4. add a row that already exists throws
      */
     source.push({
-      type: ChangeType.Add,
+      type: 'add',
       row: {a: 1, b: 2, c: 0},
     });
 
     expect(outputted.shift()).toEqual({
-      type: ChangeType.Add,
+      type: 'add',
       node: {
         relationships: {},
         row: {
@@ -249,12 +249,12 @@ test('pushing values does the correct writes and outputs', () => {
     expect(read.all()).toEqual([{a: 1, b: 2, c: 0}]);
 
     source.push({
-      type: ChangeType.Remove,
+      type: 'remove',
       row: {a: 1, b: 2},
     });
 
     expect(outputted.shift()).toEqual({
-      type: ChangeType.Remove,
+      type: 'remove',
       node: {
         relationships: {},
         row: {
@@ -267,7 +267,7 @@ test('pushing values does the correct writes and outputs', () => {
 
     expect(() => {
       source.push({
-        type: ChangeType.Remove,
+        type: 'remove',
         row: {a: 1, b: 2},
       });
     }).toThrow();
@@ -275,12 +275,12 @@ test('pushing values does the correct writes and outputs', () => {
     expect(read.all()).toEqual([]);
 
     source.push({
-      type: ChangeType.Add,
+      type: 'add',
       row: {a: 1, b: 2, c: 1},
     });
 
     expect(outputted.shift()).toEqual({
-      type: ChangeType.Add,
+      type: 'add',
       node: {
         relationships: {},
         row: {
@@ -294,7 +294,7 @@ test('pushing values does the correct writes and outputs', () => {
 
     expect(() => {
       source.push({
-        type: ChangeType.Add,
+        type: 'add',
         row: {a: 1, b: 2, c: 3},
       });
     }).toThrow();

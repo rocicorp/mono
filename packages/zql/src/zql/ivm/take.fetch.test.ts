@@ -3,7 +3,6 @@ import {JSONValue} from 'shared/src/json.js';
 import {expect, suite, test} from 'vitest';
 import {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
-import {ChangeType} from './change.js';
 import {Node, Row} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
@@ -789,7 +788,7 @@ function takeTest(t: TakeTest) {
     const log: SnitchMessage[] = [];
     const source = new MemorySource('table', t.columns, t.primaryKey);
     for (const row of t.sourceRows) {
-      source.push({type: ChangeType.Add, row});
+      source.push({type: 'add', row});
     }
     const snitch = new Snitch(
       source.connect(t.sort || [['id', 'asc']]),

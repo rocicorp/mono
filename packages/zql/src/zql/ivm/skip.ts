@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {Change, ChangeType} from './change.js';
+import {Change} from './change.js';
 import {Comparator, Node, Row} from './data.js';
 import {FetchRequest, Input, Operator, Output, Start} from './operator.js';
 import {Schema} from './schema.js';
@@ -53,8 +53,7 @@ export class Skip implements Operator {
       return;
     }
 
-    const changeRow =
-      change.type === ChangeType.Child ? change.row : change.node.row;
+    const changeRow = change.type === 'child' ? change.row : change.node.row;
     const cmp = this.#comparator(this.#bound.row, changeRow);
     if (cmp > 0) {
       return;

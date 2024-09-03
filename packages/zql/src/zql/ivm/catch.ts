@@ -1,6 +1,6 @@
-import {ChangeType, type Change} from './change.js';
-import type {Node} from './data.js';
+import type {Change} from './change.js';
 import type {FetchRequest, Input, Output} from './operator.js';
+import type {Node} from './data.js';
 
 /**
  * Catch is an Output that collects all incoming stream data into arrays. Mainly
@@ -33,7 +33,7 @@ export class Catch implements Output {
 }
 
 export function expandChange(change: Change): Change {
-  if (change.type === ChangeType.Child) {
+  if (change.type === 'child') {
     return {
       ...change,
       child: {

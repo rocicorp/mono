@@ -2,7 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import {expect, suite, test} from 'vitest';
 import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
-import {ChangeType, type Change} from './change.js';
+import type {Change} from './change.js';
 import type {NormalizedValue, Row} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
@@ -31,15 +31,15 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one parent, remove parent',
     sources: [[{id: 'i1'}], []],
-    pushes: [[0, {type: ChangeType.Remove, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Remove, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
       {
-        type: ChangeType.Remove,
+        type: 'remove',
         node: {
           row: {
             id: 'i1',
@@ -56,9 +56,9 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one child, remove child',
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[1, {type: ChangeType.Remove, row: {id: 'c1', issueID: 'i1'}}]],
+    pushes: [[1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
-      ['1', 'push', {type: ChangeType.Remove, row: {id: 'c1', issueID: 'i1'}}],
+      ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
@@ -69,15 +69,15 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one child, add parent',
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[0, {type: ChangeType.Add, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i1',
@@ -100,15 +100,15 @@ suite('push one:many', () => {
         {id: 'c2', issueID: 'i1'},
       ],
     ],
-    pushes: [[0, {type: ChangeType.Add, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i1',
@@ -128,15 +128,15 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one child, add wrong parent',
     sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[0, {type: ChangeType.Add, row: {id: 'i2'}}]],
+    pushes: [[0, {type: 'add', row: {id: 'i2'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i2'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i2'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i2', 'i2']]],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i2',
@@ -153,22 +153,22 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one parent, add child',
     sources: [[{id: 'i1'}], []],
-    pushes: [[1, {type: ChangeType.Add, row: {id: 'c1', issueID: 'i1'}}]],
+    pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'c1', issueID: 'i1'}}],
+      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'comments',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'c1',
@@ -186,9 +186,9 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one parent, add wrong child',
     sources: [[{id: 'i1'}], []],
-    pushes: [[1, {type: ChangeType.Add, row: {id: 'c1', issueID: 'i2'}}]],
+    pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
     expectedLog: [
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'c1', issueID: 'i2'}}],
+      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i2'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
@@ -199,15 +199,15 @@ suite('push one:many', () => {
     ...base,
     name: 'fetch one parent, one child, remove parent',
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[0, {type: ChangeType.Remove, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Remove, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
       {
-        type: ChangeType.Remove,
+        type: 'remove',
         node: {
           row: {
             id: 'i1',
@@ -230,15 +230,15 @@ suite('push one:many', () => {
         {id: 'c2', issueID: 'i1'},
       ],
     ],
-    pushes: [[0, {type: ChangeType.Remove, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Remove, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
       {
-        type: ChangeType.Remove,
+        type: 'remove',
         node: {
           row: {
             id: 'i1',
@@ -259,28 +259,28 @@ suite('push one:many', () => {
     name: 'no fetch, add parent, add child, add child, remove child, remove parent',
     sources: [[], []],
     pushes: [
-      [0, {type: ChangeType.Add, row: {id: 'i1'}}],
-      [1, {type: ChangeType.Add, row: {id: 'c1', issueID: 'i1'}}],
-      [1, {type: ChangeType.Add, row: {id: 'c2', issueID: 'i1'}}],
-      [1, {type: ChangeType.Remove, row: {id: 'c1', issueID: 'i1'}}],
-      [0, {type: ChangeType.Remove, row: {id: 'i1'}}],
+      [0, {type: 'add', row: {id: 'i1'}}],
+      [1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
+      [1, {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
+      [1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
+      [0, {type: 'remove', row: {id: 'i1'}}],
     ],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'c1', issueID: 'i1'}}],
+      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'c2', issueID: 'i1'}}],
+      ['1', 'push', {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
-      ['1', 'push', {type: ChangeType.Remove, row: {id: 'c1', issueID: 'i1'}}],
+      ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
-      ['0', 'push', {type: ChangeType.Remove, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[], []],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i1',
@@ -291,14 +291,14 @@ suite('push one:many', () => {
         },
       },
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'comments',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'c1',
@@ -310,14 +310,14 @@ suite('push one:many', () => {
         },
       },
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'comments',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'c2',
@@ -329,14 +329,14 @@ suite('push one:many', () => {
         },
       },
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'comments',
           change: {
-            type: ChangeType.Remove,
+            type: 'remove',
             node: {
               row: {
                 id: 'c1',
@@ -348,7 +348,7 @@ suite('push one:many', () => {
         },
       },
       {
-        type: ChangeType.Remove,
+        type: 'remove',
         node: {
           row: {
             id: 'i1',
@@ -382,15 +382,15 @@ suite('push many:one', () => {
     ...base,
     name: 'fetch one child, add parent',
     sources: [[], [{id: 'u1'}]],
-    pushes: [[0, {type: ChangeType.Add, row: {id: 'i1', ownerID: 'u1'}}]],
+    pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i1', ownerID: 'u1'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i1',
@@ -408,15 +408,15 @@ suite('push many:one', () => {
     ...base,
     name: 'fetch one child, add wrong parent',
     sources: [[], [{id: 'u1'}]],
-    pushes: [[0, {type: ChangeType.Add, row: {id: 'i1', ownerID: 'u2'}}]],
+    pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i1', ownerID: 'u2'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u2', 'i1']]],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i1',
@@ -434,15 +434,15 @@ suite('push many:one', () => {
     ...base,
     name: 'fetch one parent, add child',
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
-    pushes: [[1, {type: ChangeType.Add, row: {id: 'u1'}}]],
+    pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
     expectedLog: [
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'u1'}}],
+      ['1', 'push', {type: 'add', row: {id: 'u1'}}],
       ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
           ownerID: 'u1',
@@ -450,7 +450,7 @@ suite('push many:one', () => {
         child: {
           relationshipName: 'owner',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'u1',
@@ -473,9 +473,9 @@ suite('push many:one', () => {
       ],
       [],
     ],
-    pushes: [[1, {type: ChangeType.Add, row: {id: 'u1'}}]],
+    pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
     expectedLog: [
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'u1'}}],
+      ['1', 'push', {type: 'add', row: {id: 'u1'}}],
       ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
@@ -486,7 +486,7 @@ suite('push many:one', () => {
     ],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
           ownerID: 'u1',
@@ -494,7 +494,7 @@ suite('push many:one', () => {
         child: {
           relationshipName: 'owner',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'u1',
@@ -505,7 +505,7 @@ suite('push many:one', () => {
         },
       },
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i2',
           ownerID: 'u1',
@@ -513,7 +513,7 @@ suite('push many:one', () => {
         child: {
           relationshipName: 'owner',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'u1',
@@ -553,23 +553,23 @@ suite('push one:many:many', () => {
     ...base,
     name: 'fetch one parent, one child, add grandchild',
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}], []],
-    pushes: [[2, {type: ChangeType.Add, row: {id: 'r1', commentID: 'c1'}}]],
+    pushes: [[2, {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
     expectedLog: [
-      ['2', 'push', {type: ChangeType.Add, row: {id: 'r1', commentID: 'c1'}}],
+      ['2', 'push', {type: 'add', row: {id: 'r1', commentID: 'c1'}}],
       ['1', 'fetch', {constraint: {key: 'id', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'comments',
           change: {
-            type: ChangeType.Child,
+            type: 'child',
             row: {
               id: 'c1',
               issueID: 'i1',
@@ -577,7 +577,7 @@ suite('push one:many:many', () => {
             child: {
               relationshipName: 'revisions',
               change: {
-                type: ChangeType.Add,
+                type: 'add',
                 node: {
                   row: {
                     id: 'r1',
@@ -597,23 +597,23 @@ suite('push one:many:many', () => {
     ...base,
     name: 'fetch one parent, one grandchild, add child',
     sources: [[{id: 'i1'}], [], [{id: 'r1', commentID: 'c1'}]],
-    pushes: [[1, {type: ChangeType.Add, row: {id: 'c1', issueID: 'i1'}}]],
+    pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
-      ['1', 'push', {type: ChangeType.Add, row: {id: 'c1', issueID: 'i1'}}],
+      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'comments',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 id: 'c1',
@@ -635,16 +635,16 @@ suite('push one:many:many', () => {
     ...base,
     name: 'fetch one child, one grandchild, add parent',
     sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
-    pushes: [[0, {type: ChangeType.Add, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Add, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
       ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
       ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
       {
-        type: ChangeType.Add,
+        type: 'add',
         node: {
           row: {
             id: 'i1',
@@ -674,16 +674,16 @@ suite('push one:many:many', () => {
       [{id: 'c1', issueID: 'i1'}],
       [{id: 'r1', commentID: 'c1'}],
     ],
-    pushes: [[0, {type: ChangeType.Remove, row: {id: 'i1'}}]],
+    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
-      ['0', 'push', {type: ChangeType.Remove, row: {id: 'i1'}}],
+      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
       ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
       ['2', 'cleanup', {constraint: {key: 'commentID', value: 'c1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[], []],
     expectedOutput: [
       {
-        type: ChangeType.Remove,
+        type: 'remove',
         node: {
           row: {
             id: 'i1',
@@ -740,23 +740,23 @@ suite('push one:many:one', () => {
     name: 'fetch one parent, one child, add grandchild',
     sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
     sorts,
-    pushes: [[2, {type: ChangeType.Add, row: {id: 'l1'}}]],
+    pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
     expectedLog: [
-      ['2', 'push', {type: ChangeType.Add, row: {id: 'l1'}}],
+      ['2', 'push', {type: 'add', row: {id: 'l1'}}],
       ['1', 'fetch', {constraint: {key: 'labelID', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'issuelabels',
           change: {
-            type: ChangeType.Child,
+            type: 'child',
             row: {
               issueID: 'i1',
               labelID: 'l1',
@@ -764,7 +764,7 @@ suite('push one:many:one', () => {
             child: {
               relationshipName: 'labels',
               change: {
-                type: ChangeType.Add,
+                type: 'add',
                 node: {
                   row: {
                     id: 'l1',
@@ -784,27 +784,23 @@ suite('push one:many:one', () => {
     name: 'fetch one parent, one grandchild, add child',
     sources: [[{id: 'i1'}], [], [{id: 'l1'}]],
     sorts,
-    pushes: [[1, {type: ChangeType.Add, row: {issueID: 'i1', labelID: 'l1'}}]],
+    pushes: [[1, {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}]],
     expectedLog: [
-      [
-        '1',
-        'push',
-        {type: ChangeType.Add, row: {issueID: 'i1', labelID: 'l1'}},
-      ],
+      ['1', 'push', {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}],
       ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'issuelabels',
           change: {
-            type: ChangeType.Add,
+            type: 'add',
             node: {
               row: {
                 issueID: 'i1',
@@ -832,9 +828,9 @@ suite('push one:many:one', () => {
       [],
     ],
     sorts,
-    pushes: [[2, {type: ChangeType.Add, row: {id: 'l1'}}]],
+    pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
     expectedLog: [
-      ['2', 'push', {type: ChangeType.Add, row: {id: 'l1'}}],
+      ['2', 'push', {type: 'add', row: {id: 'l1'}}],
       ['1', 'fetch', {constraint: {key: 'labelID', value: 'l1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
       ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
@@ -851,14 +847,14 @@ suite('push one:many:one', () => {
     ],
     expectedOutput: [
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i1',
         },
         child: {
           relationshipName: 'issuelabels',
           change: {
-            type: ChangeType.Child,
+            type: 'child',
             row: {
               issueID: 'i1',
               labelID: 'l1',
@@ -866,7 +862,7 @@ suite('push one:many:one', () => {
             child: {
               relationshipName: 'labels',
               change: {
-                type: ChangeType.Add,
+                type: 'add',
                 node: {
                   row: {
                     id: 'l1',
@@ -879,14 +875,14 @@ suite('push one:many:one', () => {
         },
       },
       {
-        type: ChangeType.Child,
+        type: 'child',
         row: {
           id: 'i2',
         },
         child: {
           relationshipName: 'issuelabels',
           change: {
-            type: ChangeType.Child,
+            type: 'child',
             row: {
               issueID: 'i2',
               labelID: 'l1',
@@ -894,7 +890,7 @@ suite('push one:many:one', () => {
             child: {
               relationshipName: 'labels',
               change: {
-                type: ChangeType.Add,
+                type: 'add',
                 node: {
                   row: {
                     id: 'l1',
@@ -921,7 +917,7 @@ function pushTest(t: PushTest) {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
       const source = new MemorySource('test', t.columns[i], t.primaryKeys[i]);
       for (const row of fetch) {
-        source.push({type: ChangeType.Add, row});
+        source.push({type: 'add', row});
       }
       const snitch = new Snitch(source.connect(ordering), String(i), log);
       return {
