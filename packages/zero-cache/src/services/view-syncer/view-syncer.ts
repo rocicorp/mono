@@ -406,14 +406,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Note: This kicks of background PG queries for CVR data associated with the
     // executed and removed queries.
-    const {cvrVersion, queryPatches} = updater.trackQueries(
+    const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       addQueries.map(hash => ({id: hash, transformationHash: hash})),
       removeQueries,
       minClientVersion,
     );
     const pokers = [...this.#clients.values()].map(c =>
-      c.startPoke(cvrVersion),
+      c.startPoke(newVersion),
     );
     for (const patch of queryPatches) {
       pokers.forEach(poker => poker.addPatch(patch));

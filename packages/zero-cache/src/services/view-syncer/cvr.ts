@@ -295,7 +295,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     executed: {id: string; transformationHash: string}[],
     removed: string[],
     catchupFrom: NullableCVRVersion,
-  ): {cvrVersion: CVRVersion; queryPatches: PatchToVersion[]} {
+  ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
     const queryPatches: Patch[] = [
@@ -316,7 +316,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         this._cvrStore.catchupConfigPatches(startingVersion);
     }
     return {
-      cvrVersion: this._cvr.version,
+      newVersion: this._cvr.version,
       queryPatches: queryPatches.map(patch => ({
         patch,
         toVersion: this._cvr.version,

@@ -825,7 +825,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa');
 
-    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
+    const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
@@ -1225,7 +1225,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
+    const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
@@ -1580,7 +1580,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
+    const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [
         {id: 'oneHash', transformationHash: 'updatedServerOneHash'},
@@ -1954,7 +1954,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
+    const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [],
       ['oneHash'],
@@ -2300,7 +2300,7 @@ describe('view-syncer/cvr', () => {
     `);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
 
-    const {cvrVersion: newVersion, queryPatches} = updater.trackQueries(
+    const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [
         {id: 'oneHash', transformationHash: 'serverOneHash'},
