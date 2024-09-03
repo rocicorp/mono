@@ -19,7 +19,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       {id: {type: 'string'}, issueId: {type: 'string'}},
       {id: {type: 'string'}},
     ],
-    primaryKey: [['id'], ['id'], ['id']],
+    primaryKeys: [['id'], ['id'], ['id']],
     joins: [
       {
         parentKey: 'id',
@@ -298,7 +298,7 @@ function pushSiblingTest(t: PushTestSibling) {
 
     const sources = t.sources.map((rows, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = new MemorySource('test', t.columns[i], t.primaryKey[i]);
+      const source = new MemorySource('test', t.columns[i], t.primaryKeys[i]);
       for (const row of rows) {
         source.push({type: 'add', row});
       }
@@ -371,7 +371,7 @@ function pushSiblingTest(t: PushTestSibling) {
 type PushTestSibling = {
   name: string;
   columns: readonly Record<string, SchemaValue>[];
-  primaryKey: readonly PrimaryKey[];
+  primaryKeys: readonly PrimaryKey[];
   sources: Row[][];
   sorts?: Record<number, Ordering> | undefined;
   joins: readonly {
