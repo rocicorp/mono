@@ -251,6 +251,7 @@ export class TableSource implements Source {
 
       const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
       try {
+        cachedStatement.statement.safeIntegers(true);
         const rowIterator = cachedStatement.statement.iterate(
           ...sqlAndBindings.values.map(v => toSQLiteType(v)),
         );
@@ -510,6 +511,20 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
     case 'boolean':
       return !!v;
     default:
+      if (typeof v === 'bigint') {
+        if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
+          throw new UnsupportedValueError(
+            `value ${v} is outside of supported bounds`,
+          );
+        }
+        return Number(v);
+      }
       return v;
+  }
+}
+
+export class UnsupportedValueError extends Error {
+  constructor(msg: string) {
+    super(msg);
   }
 }

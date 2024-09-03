@@ -6,7 +6,7 @@ import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
-import {Node, Row, Value} from 'zql/src/zql/ivm/data.js';
+import {Node, Row} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
 import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
@@ -14,7 +14,6 @@ import {listTables} from '../replicator/tables/list.js';
 import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
-import {RowValue} from 'zero-cache/src/types/row-key.js';
 
 export type RowAdd = {
   readonly queryHash: string;
@@ -192,10 +191,10 @@ export class PipelineDriver {
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: toRow(prevValue)});
+        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
       }
       if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: toRow(nextValue)});
+        yield* this.#push(table, {type: 'add', row: nextValue as Row});
       }
     }
 
@@ -266,10 +265,6 @@ export class PipelineDriver {
   }
 }
 
-// safeIntegers are used when reading rows from the replica.
-// https://github.com/WiseLibs/better-sqlite3/blob/master/docs/integer.md#getting-bigints-from-the-database
-type SafeIntegerRow = Record<string, Value | bigint>;
-
 class Streamer {
   readonly #changes: [
     hash: string,
@@ -319,16 +314,7 @@ class Streamer {
     const {tableName: table, primaryKey} = schema;
 
     for (const node of nodes) {
-      const {relationships} = node;
-      const safeRow = node.row as SafeIntegerRow;
-
-      for (const col in safeRow) {
-        const val = safeRow[col];
-        if (typeof val === 'bigint') {
-          safeRow[col] = clampOrFail(col, val);
-        }
-      }
-      const row = safeRow as Row; // bigints have been converted to number in place.
+      const {relationships, row} = node;
       const rowKey = Object.fromEntries(primaryKey.map(col => [col, row[col]]));
 
       yield {queryHash, table, rowKey, row: op === 'add' ? row : undefined};
@@ -345,44 +331,5 @@ class Streamer {
 function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
   for (const node of nodes) {
     yield {type: 'add', node};
-  }
-}
-
-export function toRow(rowValue: RowValue): Row {
-  const r: Row = {};
-  for (const [k, v] of Object.entries(rowValue)) {
-    if (typeof v === 'bigint') {
-      r[k] = clampOrFail(k, v);
-    } else if (
-      v === null ||
-      v === undefined ||
-      typeof v === 'string' ||
-      typeof v === 'number' ||
-      typeof v === 'boolean'
-    ) {
-      r[k] = v;
-    } else {
-      throw new UnsupportedValueError(
-        `value in column ${k} is of an unsupported type. ${JSON.stringify(
-          v,
-        )} ${typeof v}`,
-      );
-    }
-  }
-  return r;
-}
-
-function clampOrFail(col: string, val: bigint): number {
-  if (val > Number.MAX_SAFE_INTEGER || val < Number.MIN_SAFE_INTEGER) {
-    throw new UnsupportedValueError(
-      `value in column ${col} exceeds the maximum safe value ${val}`,
-    );
-  }
-  return Number(val);
-}
-
-export class UnsupportedValueError extends Error {
-  constructor(msg: string) {
-    super(msg);
   }
 }
