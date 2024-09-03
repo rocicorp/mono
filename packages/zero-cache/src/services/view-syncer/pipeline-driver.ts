@@ -3,9 +3,10 @@ import {TableSource} from '@rocicorp/zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
+import {RowValue} from 'zero-cache/src/types/row-key.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
-import {Change} from 'zql/src/zql/ivm/change.js';
+import {Change, ChangeType} from 'zql/src/zql/ivm/change.js';
 import {Node, Row, Value} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
@@ -14,7 +15,6 @@ import {listTables} from '../replicator/tables/list.js';
 import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
-import {RowValue} from 'zero-cache/src/types/row-key.js';
 
 export type RowAdd = {
   readonly queryHash: string;
@@ -192,10 +192,13 @@ export class PipelineDriver {
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: toRow(prevValue)});
+        yield* this.#push(table, {
+          type: ChangeType.Remove,
+          row: toRow(prevValue),
+        });
       }
       if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: toRow(nextValue)});
+        yield* this.#push(table, {type: ChangeType.Add, row: toRow(nextValue)});
       }
     }
 
@@ -295,7 +298,7 @@ class Streamer {
   ): Iterable<RowChange> {
     for (const change of changes) {
       const {type} = change;
-      if (type === 'child') {
+      if (type === ChangeType.Child) {
         const {child} = change;
         const childSchema = must(
           schema.relationships?.[child.relationshipName],
@@ -313,7 +316,7 @@ class Streamer {
   *#streamNodes(
     queryHash: string,
     schema: Schema,
-    op: 'add' | 'remove',
+    changeType: ChangeType.Add | ChangeType.Remove,
     nodes: Iterable<Node>,
   ): Iterable<RowChange> {
     const {tableName: table, primaryKey} = schema;
@@ -331,12 +334,17 @@ class Streamer {
       const row = safeRow as Row; // bigints have been converted to number in place.
       const rowKey = Object.fromEntries(primaryKey.map(col => [col, row[col]]));
 
-      yield {queryHash, table, rowKey, row: op === 'add' ? row : undefined};
+      yield {
+        queryHash,
+        table,
+        rowKey,
+        row: changeType === ChangeType.Add ? row : undefined,
+      };
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships?.[relationship]);
 
-        yield* this.#streamNodes(queryHash, childSchema, op, children);
+        yield* this.#streamNodes(queryHash, childSchema, changeType, children);
       }
     }
   }
@@ -344,7 +352,7 @@ class Streamer {
 
 function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
   for (const node of nodes) {
-    yield {type: 'add', node};
+    yield {type: ChangeType.Add, node};
   }
 }
 

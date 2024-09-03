@@ -3,6 +3,7 @@ import {Database, Statement} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
 import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
+import {ChangeType} from 'zql/src/zql/ivm/change.js';
 import {
   Comparator,
   Node,
@@ -290,9 +291,10 @@ export class TableSource implements Source {
     const exists =
       this.#stmts.checkExists.get(...pickColumns(this.#primaryKey, change.row))
         ?.exists === 1;
-    if (change.type === 'add') {
+    if (change.type === ChangeType.Add) {
       assert(!exists, 'Row already exists');
     } else {
+      change.type satisfies ChangeType.Remove;
       assert(exists, 'Row not found');
     }
 
@@ -311,12 +313,12 @@ export class TableSource implements Source {
       }
     }
     this.#overlay = undefined;
-    if (change.type === 'add') {
+    if (change.type === ChangeType.Add) {
       this.#stmts.insert.run(
         ...toSQLiteTypes(Object.keys(this.#columns), change.row),
       );
     } else {
-      change.type satisfies 'remove';
+      change.type satisfies ChangeType.Remove;
       this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
     }
   }

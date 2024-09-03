@@ -1,5 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
-import {Change} from './change.js';
+import {Change, ChangeType} from './change.js';
 import {Node, Row} from './data.js';
 import {FetchRequest, Input, Operator, Output} from './operator.js';
 import {Stream} from './stream.js';
@@ -58,7 +58,7 @@ export class Filter implements Operator {
     assert(this.#output, 'Output not set');
 
     const row =
-      change.type === 'add' || change.type === 'remove'
+      change.type === ChangeType.Add || change.type === ChangeType.Remove
         ? change.node.row
         : change.row;
     if (this.#predicate(row)) {

@@ -1,13 +1,17 @@
 import type {Node, Row} from './data.js';
 
 export type Change = AddChange | RemoveChange | ChildChange;
-export type ChangeType = Change['type'];
+export const enum ChangeType {
+  Add = 1,
+  Remove = 2,
+  Child = 3,
+}
 
 /**
  * Represents a node (and all its children) getting added to the result.
  */
 export type AddChange = {
-  type: 'add';
+  type: ChangeType.Add;
   node: Node;
 };
 
@@ -15,7 +19,7 @@ export type AddChange = {
  * Represents a node (and all its children) getting removed from the result.
  */
 export type RemoveChange = {
-  type: 'remove';
+  type: ChangeType.Remove;
   node: Node;
 };
 
@@ -23,7 +27,7 @@ export type RemoveChange = {
  * The node itself is unchanged, but one of its descendants has changed.
  */
 export type ChildChange = {
-  type: 'child';
+  type: ChangeType.Child;
   row: Row;
   child: {
     relationshipName: string;

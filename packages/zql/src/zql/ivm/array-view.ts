@@ -1,11 +1,11 @@
 import {assert} from 'shared/src/asserts.js';
 import {Immutable} from 'shared/src/immutable.js';
 import {must} from 'shared/src/must.js';
-import {Change} from './change.js';
+import {assertOrderingIncludesPK} from '../builder/builder.js';
+import {Change, ChangeType} from './change.js';
 import {Comparator, Row, Value} from './data.js';
 import {Input, Output} from './operator.js';
 import {Schema} from './schema.js';
-import { assertOrderingIncludesPK } from '../builder/builder.js';
 
 /**
  * Called when the view changes. The received data should be considered
@@ -78,7 +78,7 @@ export class ArrayView implements Output {
     this.#hydrated = true;
     for (const node of this.#input.fetch({})) {
       this.#dirty = true;
-      applyChange(this.#view, {type: 'add', node}, this.#schema);
+      applyChange(this.#view, {type: ChangeType.Add, node}, this.#schema);
     }
     this.flush();
   }
@@ -103,8 +103,8 @@ export type Entry = Record<string, Value | EntryList>;
 function applyChange(view: EntryList, change: Change, schema: Schema) {
   if (schema.isHidden) {
     switch (change.type) {
-      case 'add':
-      case 'remove': {
+      case ChangeType.Add:
+      case ChangeType.Remove: {
         for (const [relationship, children] of Object.entries(
           change.node.relationships,
         )) {
@@ -115,7 +115,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         }
         return;
       }
-      case 'child': {
+      case ChangeType.Child: {
         const childSchema = must(
           schema.relationships?.[change.child.relationshipName],
         );
@@ -127,7 +127,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
     }
   }
 
-  if (change.type === 'add') {
+  if (change.type === ChangeType.Add) {
     const newEntry: Entry = {
       ...change.node.row,
     };
@@ -143,10 +143,10 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
       const newView: EntryList = [];
       newEntry[relationship] = newView;
       for (const node of children) {
-        applyChange(newView, {type: 'add', node}, childSchema);
+        applyChange(newView, {type: ChangeType.Add, node}, childSchema);
       }
     }
-  } else if (change.type === 'remove') {
+  } else if (change.type === ChangeType.Remove) {
     const {pos, found} = binarySearch(
       view,
       change.node.row,
@@ -155,7 +155,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
     assert(found, 'node does not exist');
     view.splice(pos, 1);
   } else {
-    change.type satisfies 'child';
+    change.type satisfies ChangeType.Child;
     const {pos, found} = binarySearch(view, change.row, schema.compareRows);
     assert(found, 'node does not exist');
 
