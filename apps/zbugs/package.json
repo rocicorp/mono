@@ -10,12 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "babel-plugin-react-compiler": "^0.0.0-experimental-4e0eccf-20240830",
+    "eslint-plugin-react-compiler": "^0.0.0-experimental-b8a7b48-20240830",
+    "react": "^19.0.0-rc-4f604941-20240830",
+    "react-dom": "^19.0.0-rc-4f604941-20240830"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
-    "@types/react": "^18.3.3",
+    "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
