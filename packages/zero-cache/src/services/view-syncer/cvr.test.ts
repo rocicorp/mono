@@ -20,7 +20,7 @@ import {
   RowsRow,
   setupCVRTables,
 } from './schema/cvr.js';
-import type {RowID} from './schema/types.js';
+import type {CVRVersion, RowID} from './schema/types.js';
 
 describe('view-syncer/cvr', () => {
   type DBState = {
@@ -79,6 +79,24 @@ describe('view-syncer/cvr', () => {
   afterEach(async () => {
     await testDBs.drop(db);
   });
+
+  async function catchupRows(
+    cvrStore: CVRStore,
+    afterVersion: CVRVersion,
+    upToCVR: CVRSnapshot,
+    excludeQueries: string[] = [],
+  ) {
+    const rows: RowsRow[] = [];
+    for await (const batch of cvrStore.catchupRowPatches(
+      lc,
+      afterVersion,
+      upToCVR,
+      excludeQueries,
+    )) {
+      rows.push(...batch);
+    }
+    return rows;
+  }
 
   test('load first time cvr', async () => {
     const pgStore = new CVRStore(lc, db, 'abc123');
@@ -704,11 +722,6 @@ describe('view-syncer/cvr', () => {
   };
 
   const DELETE_ROW_KEY = {id: '456'};
-  const DELETED_ROW_ID: RowID = {
-    schema: 'public',
-    table: 'issues',
-    rowKey: DELETE_ROW_KEY,
-  };
 
   const IN_OLD_PATCH_ROW_KEY = {id: '777'};
 
@@ -829,7 +842,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1aa', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -945,12 +957,7 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '1aa'},
-      },
-    ] satisfies PatchToVersion[]);
+    expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
     // expect(updater.numPendingWrites()).toBe(11);
 
@@ -995,6 +1002,23 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, ['oneHash']))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1aa",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -1260,7 +1284,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toHaveLength(0);
@@ -1323,14 +1346,10 @@ describe('view-syncer/cvr', () => {
       },
     ]);
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+    expect(await updater.deleteUnreferencedRows()).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
-      },
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '1ba'},
       },
     ] satisfies PatchToVersion[]);
 
@@ -1391,6 +1410,23 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, ['oneHash']))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -1668,7 +1704,6 @@ describe('view-syncer/cvr', () => {
         {id: 'twoHash', transformationHash: 'updatedServerTwoHash'},
       ],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toHaveLength(0);
@@ -1755,14 +1790,10 @@ describe('view-syncer/cvr', () => {
       ]),
     );
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+    expect(await updater.deleteUnreferencedRows()).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
-      },
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '1ba'},
       },
     ] satisfies PatchToVersion[]);
 
@@ -1850,6 +1881,27 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, [
+        'oneHash',
+        'twoHash',
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -2119,7 +2171,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [],
       ['oneHash'],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -2138,14 +2189,10 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+    expect(await updater.deleteUnreferencedRows()).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
-      },
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '19z'},
       },
     ] satisfies PatchToVersion[]);
 
@@ -2167,6 +2214,49 @@ describe('view-syncer/cvr', () => {
           "toVersion": {
             "stateVersion": "19z",
           },
+        },
+      ]
+    `);
+
+    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, []))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "19z",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": {
+            "twoHash": 1,
+          },
+          "rowKey": {
+            "id": "321",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1aa:01",
+          "refCounts": {
+            "twoHash": 1,
+          },
+          "rowKey": {
+            "id": "123",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -2263,7 +2353,7 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientGroupID: 'abc123',
-          patchVersion: '1ba:01',
+          patchVersion: '1aa:01',
           refCounts: {
             twoHash: 1,
           },
@@ -2491,7 +2581,6 @@ describe('view-syncer/cvr', () => {
         {id: 'twoHash', transformationHash: 'serverTwoHash'},
       ],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba'});
     expect(queryPatches).toHaveLength(0);
@@ -2577,14 +2666,7 @@ describe('view-syncer/cvr', () => {
       ]),
     );
 
-    expect(new Set(await updater.deleteUnreferencedRows(lc))).toEqual(
-      new Set([
-        {
-          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-          toVersion: {stateVersion: '1ba'},
-        },
-      ] satisfies PatchToVersion[]),
-    );
+    expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
     // No writes!
     expect(updater.numPendingWrites()).toBe(0);
@@ -2673,6 +2755,27 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, [
+        'oneHash',
+        'twoHash',
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
