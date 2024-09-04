@@ -312,20 +312,6 @@ describe('view-syncer/service', () => {
             "entitiesPatch": [
               {
                 "entityID": {
-                  "clientGroupID": "9876",
-                  "clientID": "foo",
-                },
-                "entityType": "zero.clients",
-                "op": "put",
-                "value": {
-                  "clientGroupID": "9876",
-                  "clientID": "foo",
-                  "lastMutationID": 42,
-                  "userID": null,
-                },
-              },
-              {
-                "entityID": {
                   "id": "1",
                 },
                 "entityType": "issues",
@@ -409,6 +395,9 @@ describe('view-syncer/service', () => {
                 "op": "put",
               },
             ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
             "pokeID": "00:02",
           },
         ],

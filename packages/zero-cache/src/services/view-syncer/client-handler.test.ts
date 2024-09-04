@@ -64,8 +64,8 @@ describe('view-syncer/client-handler', () => {
           type: 'row',
           op: 'put',
           id: {
-            schema: 'zero',
-            table: 'clients',
+            schema: '',
+            table: 'zero.clients',
             rowKey: {clientID: 'bar'},
           },
           contents: {
@@ -104,8 +104,8 @@ describe('view-syncer/client-handler', () => {
           type: 'row',
           op: 'put',
           id: {
-            schema: 'zero',
-            table: 'clients',
+            schema: '',
+            table: 'zero.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -138,8 +138,8 @@ describe('view-syncer/client-handler', () => {
           type: 'row',
           op: 'put',
           id: {
-            schema: 'zero',
-            table: 'clients',
+            schema: '',
+            table: 'zero.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -288,7 +288,7 @@ describe('view-syncer/client-handler', () => {
       {
         type: 'row',
         op: 'put',
-        id: {schema: 'zero', table: 'clients', rowKey: {clientID: 'boo'}},
+        id: {schema: '', table: 'zero.clients', rowKey: {clientID: 'boo'}},
         contents: {
           clientGroupID: 'g1',
           clientID: 'boo',
