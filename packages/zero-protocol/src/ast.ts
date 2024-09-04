@@ -7,6 +7,7 @@
  */
 
 import * as v from 'shared/src/valita.js';
+import {CorrelatedSubQuery} from '../../zql/src/zql/ast/ast.js';
 
 function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
   return t as v.Type<Readonly<T>>;
@@ -64,23 +65,25 @@ export const conditionSchema = v.object({
   ),
 });
 
-export const correlatedSubquerySchema: v.Type<{
-  correlation: {
-    parentField: string;
-    childField: string;
-    op: '=';
-  };
-  hidden?: boolean | undefined;
-  subquery: AST;
-}> = v.object({
+// Split out so that its inferred type can be checked against
+// Omit<CorrelatedSubQuery, 'correlation'> in ast-type-test.ts.
+// The mutually-recursive reference of the 'other' field to astSchema
+// is the only thing added in v.lazy.  The v.lazy is necessary due to the
+// mutually-recursive types, but v.lazy prevents inference of the resulting
+// type.
+export const correlatedSubquerySchemaOmitSubquery = v.object({
   correlation: v.object({
     parentField: v.string(),
     childField: v.string(),
     op: v.literal('='),
   }),
   hidden: v.boolean().optional(),
-  subquery: v.lazy(() => astSchema),
 });
+
+export const correlatedSubquerySchema: v.Type<CorrelatedSubQuery> =
+  correlatedSubquerySchemaOmitSubquery.extend({
+    subquery: v.lazy(() => astSchema),
+  });
 
 export const astSchema = v.object({
   schema: v.string().optional(),
@@ -99,5 +102,3 @@ export const astSchema = v.object({
     })
     .optional(),
 });
-
-type AST = v.Infer<typeof astSchema>;
