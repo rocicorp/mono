@@ -2592,9 +2592,8 @@ describe('view-syncer/cvr', () => {
     // Only the last active time should change.
     const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
 
-    expect(
-      await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr),
-    ).toMatchInlineSnapshot(`
+    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
+      .toMatchInlineSnapshot(`
       [
         {
           "patch": {
