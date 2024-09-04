@@ -951,23 +951,54 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1aa'},
       },
     ] satisfies PatchToVersion[]);
-    //  {
-    // Catchup from v: "189" needs constrain / delete patches in ("189", "1aa"].
-    // patchRows: [[{stateVersion: '1a0'}, ROW_ID2, ['id']]],
-    // deleteRows: [[{stateVersion: '1aa'}, DELETED_ROW_ID]],
-    // });
-
-    expect(await updater.generateConfigPatches(lc)).toEqual([
-      {
-        patch: {type: 'query', op: 'del', id: 'catchup-delete'},
-        toVersion: {stateVersion: '19z'},
-      },
-    ]);
 
     // expect(updater.numPendingWrites()).toBe(11);
 
     // Same last active day (no index change), but different hour.
     const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+
+    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "id": "catchup-delete",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "stateVersion": "19z",
+          },
+        },
+        {
+          "patch": {
+            "id": "fooClient",
+            "op": "put",
+            "type": "client",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+      ]
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       version: newVersion,
@@ -1303,17 +1334,67 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    expect(await updater.generateConfigPatches(lc)).toEqual([
-      {
-        patch: {type: 'query', op: 'del', id: 'catchup-delete'},
-        toVersion: {stateVersion: '19z'},
-      },
-    ] satisfies PatchToVersion[]);
-
     // expect(updater.numPendingWrites()).toBe(11);
 
     // Same last active day (no index change), but different hour.
     const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+
+    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "id": "catchup-delete",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "stateVersion": "19z",
+          },
+        },
+        {
+          "patch": {
+            "id": "fooClient",
+            "op": "put",
+            "type": "client",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+      ]
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       version: newVersion,
@@ -1684,15 +1765,95 @@ describe('view-syncer/cvr', () => {
         toVersion: {stateVersion: '1ba'},
       },
     ] satisfies PatchToVersion[]);
-    expect(await updater.generateConfigPatches(lc)).toEqual([
-      {
-        patch: {type: 'query', op: 'del', id: 'catchup-delete'},
-        toVersion: {stateVersion: '19z'},
-      },
-    ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
     const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+
+    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "id": "twoHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "id": "catchup-delete",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "stateVersion": "19z",
+          },
+        },
+        {
+          "patch": {
+            "id": "fooClient",
+            "op": "put",
+            "type": "client",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "twoHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+      ]
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       version: newVersion,
@@ -1988,17 +2149,28 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    expect(await updater.generateConfigPatches(lc)).toEqual([
-      {
-        patch: {type: 'query', op: 'del', id: 'catchup-delete'},
-        toVersion: {stateVersion: '19z'},
-      },
-    ] satisfies PatchToVersion[]);
-
     // expect(updater.numPendingWrites()).toBe(10);
 
     // Same last active day (no index change), but different hour.
+    // Note: Must flush before generating config patches.
     const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+
+    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "id": "catchup-delete",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "stateVersion": "19z",
+          },
+        },
+      ]
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       version: newVersion,
@@ -2042,6 +2214,18 @@ describe('view-syncer/cvr', () => {
           internal: null,
           patchVersion: '19z',
           queryHash: 'catchup-delete',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'issues',
+          },
+          clientGroupID: 'abc123',
+          deleted: true,
+          internal: null,
+          patchVersion: '1ba:01',
+          queryHash: 'oneHash',
           transformationHash: null,
           transformationVersion: null,
         },
@@ -2401,65 +2585,99 @@ describe('view-syncer/cvr', () => {
         },
       ] satisfies PatchToVersion[]),
     );
-    expect(await updater.generateConfigPatches(lc)).toEqual([
-      // {
-      //   patch: {
-      //     ast: {
-      //       table: 'issues',
-      //     },
-      //     id: 'oneHash',
-      //     op: 'put',
-      //     type: 'query',
-      //   },
-      //   toVersion: {
-      //     minorVersion: 1,
-      //     stateVersion: '1aa',
-      //   },
-      // },
-      // {
-      //   patch: {
-      //     ast: {
-      //       table: 'issues',
-      //     },
-      //     id: 'twoHash',
-      //     op: 'put',
-      //     type: 'query',
-      //   },
-      //   toVersion: {
-      //     minorVersion: 1,
-      //     stateVersion: '1aa',
-      //   },
-      // },
-      {
-        patch: {type: 'query', op: 'del', id: 'catchup-delete'},
-        toVersion: {stateVersion: '19z'},
-      },
-      {
-        patch: {type: 'client', op: 'put', id: 'fooClient'},
-        toVersion: {stateVersion: '1a9', minorVersion: 1},
-      },
-      // {
-      //   patch: {
-      //     ast: {
-      //       table: 'issues',
-      //     },
-      //     clientID: 'fooClient',
-      //     id: 'oneHash',
-      //     op: 'put',
-      //     type: 'query',
-      //   },
-      //   toVersion: {
-      //     minorVersion: 1,
-      //     stateVersion: '1a9',
-      //   },
-      // },
-    ] satisfies PatchToVersion[]);
 
     // No writes!
     expect(updater.numPendingWrites()).toBe(0);
 
     // Only the last active time should change.
     const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+
+    expect(
+      await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "id": "twoHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "id": "catchup-delete",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "stateVersion": "19z",
+          },
+        },
+        {
+          "patch": {
+            "id": "fooClient",
+            "op": "put",
+            "type": "client",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "twoHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1a9",
+          },
+        },
+      ]
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       lastActive: {epochMillis: 1713834000000},
