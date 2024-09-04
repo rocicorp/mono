@@ -148,29 +148,30 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     this._cvrStore.insertClient(client);
 
-    const lmidsQuery: InternalQueryRecord = {
-      id: CLIENT_LMID_QUERY_ID,
-      ast: {
-        schema: '',
-        table: 'zero.clients',
-        where: [
-          {
-            type: 'simple',
-            field: 'clientGroupID',
-            op: '=',
-            value: this._cvr.id,
-          },
-        ],
-        orderBy: [
-          ['clientGroupID', 'asc'],
-          ['clientID', 'asc'],
-        ],
-      },
-      internal: true,
-    };
-    this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
-    this._cvrStore.putQuery(lmidsQuery);
-
+    if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
+      const lmidsQuery: InternalQueryRecord = {
+        id: CLIENT_LMID_QUERY_ID,
+        ast: {
+          schema: '',
+          table: 'zero.clients',
+          where: [
+            {
+              type: 'simple',
+              field: 'clientGroupID',
+              op: '=',
+              value: this._cvr.id,
+            },
+          ],
+          orderBy: [
+            ['clientGroupID', 'asc'],
+            ['clientID', 'asc'],
+          ],
+        },
+        internal: true,
+      };
+      this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
+      this._cvrStore.putQuery(lmidsQuery);
+    }
     return client;
   }
 
