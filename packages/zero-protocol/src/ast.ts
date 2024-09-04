@@ -90,6 +90,14 @@ export const astSchema = v.object({
   related: readonly(v.array(correlatedSubquerySchema)).optional(),
   limit: v.number().optional(),
   orderBy: orderingSchema.optional(),
+  start: v
+    .object({
+      row: v.record(
+        v.union(v.string(), v.number(), v.boolean(), v.null(), v.undefined()),
+      ),
+      exclusive: v.boolean(),
+    })
+    .optional(),
 });
 
 type AST = v.Infer<typeof astSchema>;
