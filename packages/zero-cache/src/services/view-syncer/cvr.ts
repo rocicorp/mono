@@ -549,7 +549,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       this.#removedOrExecutedQueryIDs,
     );
     // If a row is still referenced, we update the refCounts but not the
-    // patchVersion (as the existence and contents of the row has not
+    // patchVersion (as the existence and contents of the row have not
     // changed from the clients' perspective). If the row is deleted, it
     // gets a new patchVersion (and corresponding poke).
     const patchVersion = newRefCounts
