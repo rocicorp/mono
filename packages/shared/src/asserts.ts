@@ -74,7 +74,9 @@ export function assertUint8Array(v: unknown): asserts v is Uint8Array {
   assertInstanceof(v, Uint8Array);
 }
 
-export function unreachable(): never {
+export function unreachable(): never;
+export function unreachable(v: never): never;
+export function unreachable(_?: never): never {
   throw new Error('Unreachable');
 }
 

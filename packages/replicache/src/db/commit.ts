@@ -129,7 +129,7 @@ export async function getMutationID(
     }
 
     default:
-      unreachable();
+      unreachable(meta);
   }
 }
 
@@ -729,7 +729,7 @@ export function getRefs(data: CommitData<Meta>): Refs {
       // Snapshot has weak basisHash
       break;
     default:
-      unreachable();
+      unreachable(meta);
   }
 
   for (const index of data.indexes) {

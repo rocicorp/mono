@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {unreachable} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
 import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import WebSocket from 'ws';
@@ -156,7 +157,7 @@ export class Connection {
           break;
         }
         default:
-          msgType satisfies never;
+          unreachable(msgType);
       }
     } catch (e) {
       this.#closeWithThrown(e);

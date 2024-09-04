@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {ErrorKind} from 'zero-protocol';
 import {
   MutationType,
@@ -165,7 +165,7 @@ async function processMutationWithTx(
           queryPromises.push(getDeleteSQL(tx, op).execute());
           break;
         default:
-          op satisfies never;
+          unreachable(op);
       }
     }
   }
