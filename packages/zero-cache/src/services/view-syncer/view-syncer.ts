@@ -390,9 +390,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     assert(addQueries.length > 0 || removeQueries.length > 0);
     const start = Date.now();
+    const oldVersion = cvr.version;
 
     const stateVersion = this.#pipelines.currentVersion();
-    const lc = this.#lc.withContext('newVersion', stateVersion);
+    const lc = this.#lc
+      .withContext('cvrVersion', versionToCookie(oldVersion))
+      .withContext('stateVersion', stateVersion);
     lc.info?.(`hydrating ${addQueries.length} queries`);
 
     const updater = new CVRQueryDrivenUpdater(
@@ -440,14 +443,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const patch of await updater.deleteUnreferencedRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
-    lc.debug?.(`generating config patches`);
-    for (const patch of await updater.generateConfigPatches(lc)) {
-      pokers.forEach(poker => poker.addPatch(patch));
-    }
 
     // Commit the changes and update the CVR snapshot.
     this.#cvr = await updater.flush(lc);
 
+    // Before ending the poke, catch up clients that were behind the old CVR.
+    for (const patch of await this.#cvrStore.catchupConfigPatches(
+      lc,
+      minClientVersion,
+      cvr,
+    )) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
 

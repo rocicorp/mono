@@ -2,13 +2,14 @@ import type {LogContext} from '@rocicorp/logger';
 import {MaybeRow, PendingQuery} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
-import {CustomKeySet} from 'shared/src/custom-key-set.js';
+import {must} from 'shared/src/must.js';
 import {astSchema} from 'zero-protocol';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {versionToLexi} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
-import type {CVR} from './cvr.js';
+import {Patch, PatchToVersion} from './client-handler.js';
+import type {CVR, CVRSnapshot} from './cvr.js';
 import {
   rowRecordToRowsRow,
   RowsRow,
@@ -19,12 +20,12 @@ import {
   type QueriesRow,
 } from './schema/cvr.js';
 import {
-  ClientPatch,
   ClientQueryRecord,
   ClientRecord,
+  cmpVersions,
   DelRowPatch,
   InternalQueryRecord,
-  MetadataPatch,
+  NullableCVRVersion,
   PutRowPatch,
   QueryPatch,
   versionFromString,
@@ -123,9 +124,6 @@ export class CVRStore {
   readonly #db: PostgresDB;
   readonly #writes: Set<(tx: PostgresTransaction) => PendingQuery<MaybeRow[]>> =
     new Set();
-  readonly #pendingQueryVersionDeletes = new CustomKeySet<
-    [{id: string}, CVRVersion]
-  >(([patchRecord, version]) => patchRecord.id + '-' + versionString(version));
   readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
     rowIDHash,
   );
@@ -219,13 +217,6 @@ export class CVRStore {
     return this.#pendingRowRecordPuts.get(id);
   }
 
-  isQueryVersionPendingDelete(
-    patchRecord: {id: string},
-    version: CVRVersion,
-  ): boolean {
-    return this.#pendingQueryVersionDeletes.has([patchRecord, version]);
-  }
-
   getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
     return this.#rowCache.getRowRecords();
   }
@@ -255,24 +246,13 @@ export class CVRStore {
     return this.#writes.size + this.#pendingRowRecordPuts.size;
   }
 
-  markQueryAsDeleted(
-    version: CVRVersion,
-    queryPatch: QueryPatch,
-    oldQueryPatchVersionToDelete: CVRVersion | undefined,
-  ): void {
-    this.#pendingQueryVersionDeletes.delete([queryPatch, version]);
-
-    if (oldQueryPatchVersionToDelete) {
-      this.#pendingQueryVersionDeletes.add([
-        queryPatch,
-        oldQueryPatchVersionToDelete,
-      ]);
-    }
-
+  markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
     this.#writes.add(
       tx => tx`UPDATE cvr.queries SET ${tx({
         patchVersion: versionString(version),
         deleted: true,
+        transformationHash: null,
+        transformationVersion: null,
       })}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
     );
@@ -335,15 +315,6 @@ export class CVRStore {
     this.#writes.add(
       tx => tx`UPDATE cvr.queries SET ${tx(change)}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${query.id}`,
-    );
-  }
-
-  delQuery(queryHash: string): void {
-    this.#writes.add(
-      tx =>
-        tx`DELETE FROM cvr.queries WHERE "clientGroupID" = ${
-          this.#id
-        } AND "queryHash" = ${queryHash}`,
     );
   }
 
@@ -431,56 +402,67 @@ export class CVRStore {
   }
 
   async catchupConfigPatches(
-    startingVersion: CVRVersion,
-  ): Promise<[MetadataPatch, CVRVersion][]> {
+    lc: LogContext,
+    afterVersion: NullableCVRVersion,
+    upToCVR: CVRSnapshot,
+  ): Promise<PatchToVersion[]> {
+    if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
+      lc.debug?.('all clients up to date. no config catchup.');
+      return [];
+    }
+
+    const startMs = Date.now();
     const sql = this.#db;
-    const version = versionString(startingVersion);
+    const start = afterVersion ? versionString(afterVersion) : '';
+    const end = versionString(upToCVR.version);
 
     const [allDesires, clientRows, queryRows] = await Promise.all([
-      sql<DesiresRow[]>`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${
-        this.#id
-      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`,
-      sql<ClientsRow[]>`SELECT * FROM cvr.clients WHERE "clientGroupID" = ${
-        this.#id
-      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`,
+      sql<DesiresRow[]>`SELECT * FROM cvr.desires
+       WHERE "clientGroupID" = ${this.#id}
+        AND "patchVersion" > ${start}
+        AND "patchVersion" <= ${end}`,
+      sql<ClientsRow[]>`SELECT * FROM cvr.clients
+       WHERE "clientGroupID" = ${this.#id}
+        AND "patchVersion" > ${start}
+        AND "patchVersion" <= ${end}`,
       sql<
         Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
       >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
-      WHERE "clientGroupID" = ${
-        this.#id
-      } AND "patchVersion" >= ${version} AND "deleted" IS NOT NULL`,
+      WHERE "clientGroupID" = ${this.#id}
+        AND "patchVersion" > ${start}
+        AND "patchVersion" <= ${end}`,
     ]);
 
-    const rv: [MetadataPatch, CVRVersion][] = [];
+    const ast = (id: string) => must(upToCVR.queries[id]).ast;
+
+    const patches: PatchToVersion[] = [];
     for (const row of queryRows) {
-      const queryPatch: QueryPatch = {
-        type: 'query',
-        op: row.deleted ? 'del' : 'put',
-        id: row.queryHash,
-      };
+      const {queryHash: id} = row;
+      const patch: Patch = row.deleted
+        ? {type: 'query', op: 'del', id}
+        : {type: 'query', op: 'put', id, ast: ast(id)};
       const v = row.patchVersion;
       assert(v);
-      rv.push([queryPatch, versionFromString(v)]);
+      patches.push({patch, toVersion: versionFromString(v)});
     }
     for (const row of clientRows) {
-      const clientPatch: ClientPatch = {
+      const patch: Patch = {
         type: 'client',
         op: row.deleted ? 'del' : 'put',
         id: row.clientID,
       };
-      rv.push([clientPatch, versionFromString(row.patchVersion)]);
+      patches.push({patch, toVersion: versionFromString(row.patchVersion)});
     }
     for (const row of allDesires) {
-      const queryPatch: QueryPatch = {
-        type: 'query',
-        op: row.deleted ? 'del' : 'put',
-        id: row.queryHash,
-        clientID: row.clientID,
-      };
-      rv.push([queryPatch, versionFromString(row.patchVersion)]);
+      const {clientID, queryHash: id} = row;
+      const patch: Patch = row.deleted
+        ? {type: 'query', op: 'del', id, clientID}
+        : {type: 'query', op: 'put', id, clientID, ast: ast(id)};
+      patches.push({patch, toVersion: versionFromString(row.patchVersion)});
     }
 
-    return rv;
+    lc.debug?.(`${patches.length} config patches (${Date.now() - startMs} ms)`);
+    return patches;
   }
 
   async flush(): Promise<number> {
@@ -512,7 +494,6 @@ export class CVRStore {
     await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
 
     this.#writes.clear();
-    this.#pendingQueryVersionDeletes.clear();
     this.#pendingRowRecordPuts.clear();
     return statements;
   }

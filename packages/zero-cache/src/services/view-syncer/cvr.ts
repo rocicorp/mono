@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
-import {assert, unreachable} from 'shared/src/asserts.js';
+import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
@@ -13,7 +13,6 @@ import type {CVRStore} from './cvr-store.js';
 import {
   ClientQueryRecord,
   InternalQueryRecord,
-  MetadataPatch,
   NullableCVRVersion,
   RowID,
   RowPatch,
@@ -267,8 +266,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(rowIDHash);
   #existingRows: Promise<RowRecord[]> | undefined = undefined;
   #catchupRowPatches: Promise<[RowPatch, CVRVersion][]> | undefined = undefined;
-  #catchupConfigPatches: Promise<[MetadataPatch, CVRVersion][]> | undefined =
-    undefined;
 
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
@@ -307,13 +304,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     if (cmpVersions(catchupFrom, this._orig.version) >= 0) {
       this.#catchupRowPatches = Promise.resolve([]);
-      this.#catchupConfigPatches = Promise.resolve([]);
     } else {
       const startingVersion = oneAfter(catchupFrom);
       this.#catchupRowPatches =
         this._cvrStore.catchupRowPatches(startingVersion);
-      this.#catchupConfigPatches =
-        this._cvrStore.catchupConfigPatches(startingVersion);
     }
     return {
       newVersion: this._cvr.version,
@@ -415,14 +409,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     delete this._cvr.queries[queryID];
 
     const newVersion = this._ensureNewVersion();
-    this._cvrStore.delQuery(queryID);
-    const oldQueryPatchVersion = query.patchVersion;
     const queryPatch = {type: 'query', op: 'del', id: queryID} as const;
-    this._cvrStore.markQueryAsDeleted(
-      newVersion,
-      queryPatch,
-      oldQueryPatchVersion,
-    );
+    this._cvrStore.markQueryAsDeleted(newVersion, queryPatch);
     return [queryPatch];
   }
 
@@ -566,39 +554,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       }
     }
 
-    return patches;
-  }
-
-  async generateConfigPatches(lc: LogContext) {
-    const patches: PatchToVersion[] = [];
-
-    assert(this.#catchupConfigPatches, `trackQueries must first be called`);
-    const catchupConfigPatches = await this.#catchupConfigPatches;
-    lc.debug?.(`processing ${catchupConfigPatches.length} config patches`);
-
-    const convert = (patchRecord: MetadataPatch): Patch => {
-      switch (patchRecord.type) {
-        case 'client':
-          return patchRecord;
-        case 'query': {
-          const {id, op} = patchRecord;
-          if (op === 'put') {
-            return {...patchRecord, op, ast: this._cvr.queries[id].ast};
-          }
-          return {...patchRecord, op};
-        }
-        default:
-          unreachable();
-      }
-    };
-
-    for (const [patchRecord, toVersion] of catchupConfigPatches) {
-      if (this._cvrStore.isQueryVersionPendingDelete(patchRecord, toVersion)) {
-        continue; // config patch has been replaced.
-      }
-
-      patches.push({patch: convert(patchRecord), toVersion});
-    }
     return patches;
   }
 
