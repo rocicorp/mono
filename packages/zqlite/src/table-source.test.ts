@@ -458,21 +458,21 @@ test('getByKey', () => {
     ['id', 'a'],
   );
 
-  expect(source.getByKey({id: '1', a: 2})).toEqual({
+  expect(source.getRow({id: '1', a: 2})).toEqual({
     id: '1',
     a: 2,
     b: 3.123,
     c: false,
   });
 
-  expect(source.getByKey({id: '2', a: 3})).toEqual({
+  expect(source.getRow({id: '2', a: 3})).toEqual({
     id: '2',
     a: 3,
     b: 4.567,
     c: true,
   });
 
-  expect(source.getByKey({id: '3', a: Number.MAX_SAFE_INTEGER})).toEqual({
+  expect(source.getRow({id: '3', a: Number.MAX_SAFE_INTEGER})).toEqual({
     id: '3',
     a: Number.MAX_SAFE_INTEGER,
     b: Number.MIN_SAFE_INTEGER,
@@ -481,7 +481,7 @@ test('getByKey', () => {
 
   // Exists but contains an out-of-bounds value.
   expect(() =>
-    source.getByKey({
+    source.getRow({
       id: '4',
       a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
     }),
@@ -489,7 +489,7 @@ test('getByKey', () => {
 
   // Does not exist.
   expect(
-    source.getByKey({
+    source.getRow({
       id: '5',
       a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
     }),

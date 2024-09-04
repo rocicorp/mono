@@ -307,19 +307,19 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
-  test('getRowByKey', () => {
+  test('getRow', () => {
     pipelines.init();
 
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     // Post-hydration
-    expect(pipelines.getRowByKey('issues', {id: '1'})).toEqual({
+    expect(pipelines.getRow('issues', {id: '1'})).toEqual({
       id: '1',
       closed: false,
       ['_0_version']: '00',
     });
 
-    expect(pipelines.getRowByKey('comments', {id: '22'})).toEqual({
+    expect(pipelines.getRow('comments', {id: '22'})).toEqual({
       id: '22',
       issueID: '2',
       upvotes: 20000,
@@ -334,7 +334,7 @@ describe('view-syncer/pipeline-driver', () => {
     [...pipelines.advance().changes];
 
     // Post-advancement
-    expect(pipelines.getRowByKey('comments', {id: '22'})).toEqual({
+    expect(pipelines.getRow('comments', {id: '22'})).toEqual({
       id: '22',
       issueID: '3',
       upvotes: 20000,

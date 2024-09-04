@@ -49,7 +49,7 @@ type Statements = {
   readonly insert: Statement;
   readonly delete: Statement;
   readonly checkExists: Statement;
-  readonly getByKey: Statement;
+  readonly getRow: Statement;
 };
 
 /**
@@ -134,7 +134,7 @@ export class TableSource implements Source {
           )} LIMIT 1`,
         ),
       ),
-      getByKey: db
+      getRow: db
         .prepare(
           compile(
             sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
@@ -334,15 +334,13 @@ export class TableSource implements Source {
   }
 
   /**
-   * Retrieves a row from the backing DB by row key, or `undefined` if such a
+   * Retrieves a row from the backing DB by its primary key, or `undefined` if such a
    * row does not exist. This is not used in the IVM pipeline but is useful
    * for retrieving data that is consistent with the state (and type
    * semantics) of the pipeline.
    */
-  getByKey(rowKey: Row): Row | undefined {
-    const row = this.#stmts.getByKey.get(
-      this.#primaryKey.map(key => rowKey[key]),
-    );
+  getRow(pk: Row): Row | undefined {
+    const row = this.#stmts.getRow.get(this.#primaryKey.map(key => pk[key]));
     if (row) {
       fromSQLiteTypes(this.#columns, row);
     }
