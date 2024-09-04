@@ -159,7 +159,7 @@ export class ClientHandler {
           }
           break;
         default:
-          patch satisfies never;
+          unreachable(patch);
       }
 
       if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
@@ -231,8 +231,7 @@ function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
     case 'del':
       return {...entity, op};
     default:
-      patch satisfies never;
-      unreachable();
+      unreachable(op);
   }
 }
 

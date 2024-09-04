@@ -6,7 +6,7 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {liteValues} from 'zero-cache/src/types/lite.js';
@@ -276,7 +276,7 @@ export class MessageProcessor {
         throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
 
       default:
-        msg satisfies never;
+        unreachable(msg);
     }
   }
 
