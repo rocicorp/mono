@@ -7,13 +7,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start-zero-cache": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zbugs/.env",
+    "start-zero-cache-single-thread": "SINGLE_PROCESS=1 npm run start-zero-cache"
   },
   "dependencies": {
     "babel-plugin-react-compiler": "^0.0.0-experimental-4e0eccf-20240830",
     "eslint-plugin-react-compiler": "^0.0.0-experimental-b8a7b48-20240830",
     "react": "^19.0.0-rc-4f604941-20240830",
-    "react-dom": "^19.0.0-rc-4f604941-20240830"
+    "react-dom": "^19.0.0-rc-4f604941-20240830",
+    "zero-client": "0.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
@@ -29,6 +32,7 @@
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^5.4.1"
+    "vite": "^5.4.1",
+    "vite-tsconfig-paths": "^5.0.1"
   }
 }
