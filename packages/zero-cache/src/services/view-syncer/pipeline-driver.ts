@@ -166,13 +166,14 @@ export class PipelineDriver {
   }
 
   /**
-   * Returns the value of the row with the given row `key`, or `undefined`
-   * if there is no such row. The pipeline must have been initialized.
+   * Returns the value of the row with the given primary key `pk`,
+   * or `undefined` if there is no such row. The pipeline must have been
+   * initialized.
    */
-  getRowByKey(table: string, key: RowKey): Row | undefined {
+  getRow(table: string, pk: RowKey): Row | undefined {
     assert(this.initialized(), 'Not yet initialized');
     const source = must(this.#tables.get(table));
-    return source.getByKey(key as Row);
+    return source.getRow(pk as Row);
   }
 
   /**
