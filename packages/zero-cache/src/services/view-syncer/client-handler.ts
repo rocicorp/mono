@@ -152,7 +152,7 @@ export class ClientHandler {
           break;
         }
         case 'row':
-          if (patch.id.schema === 'zero' && patch.id.table === 'clients') {
+          if (patch.id.table === 'zero.clients') {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else {
             (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
@@ -211,7 +211,7 @@ const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
-  userID: v.string().optional(),
+  userID: v.string().nullable().optional(),
 });
 
 function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
