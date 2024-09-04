@@ -530,18 +530,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientAST: {
-            table: 'comments',
-          },
-          clientGroupID: 'abc123',
-          deleted: false,
-          internal: null,
-          patchVersion: null,
-          queryHash: 'threeHash',
-          transformationHash: null,
-          transformationVersion: null,
-        },
-        {
-          clientAST: {
             schema: '',
             table: 'zero.clients',
             where: [
@@ -562,6 +550,18 @@ describe('view-syncer/cvr', () => {
           internal: true,
           patchVersion: null,
           queryHash: 'lmids',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'comments',
+          },
+          clientGroupID: 'abc123',
+          deleted: false,
+          internal: null,
+          patchVersion: null,
+          queryHash: 'threeHash',
           transformationHash: null,
           transformationVersion: null,
         },
