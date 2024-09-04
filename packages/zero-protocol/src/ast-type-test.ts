@@ -26,6 +26,25 @@ type MakeAllFieldsRequired<T> = {
 };
 
 (
+  t: Omit<CorrelatedSubQuery, 'subquery'>,
+  inferredT: v.Infer<typeof correlatedSubquerySchemaOmitSubquery>,
+  tR: MakeAllFieldsRequired<Omit<CorrelatedSubQuery, 'subquery'>>,
+  inferredTR: MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubquerySchemaOmitSubquery>
+  >,
+) => {
+  t satisfies v.Infer<typeof correlatedSubquerySchemaOmitSubquery>;
+  inferredT satisfies Omit<CorrelatedSubQuery, 'subquery'>;
+
+  inferredTR satisfies MakeAllFieldsRequired<
+    Omit<CorrelatedSubQuery, 'subquery'>
+  >;
+  tR satisfies MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubquerySchemaOmitSubquery>
+  >;
+};
+
+(
   t: AST,
   inferredT: v.Infer<typeof astSchema>,
   tR: MakeAllFieldsRequired<AST>,
