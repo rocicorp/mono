@@ -2,6 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
+import {must} from 'shared/src/must.js';
 import {difference} from 'shared/src/set-utils.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {rowIDHash, RowKey} from 'zero-cache/src/types/row-key.js';
@@ -18,7 +19,7 @@ import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {ActivityBasedService} from '../service.js';
-import {ClientHandler, PokeHandler} from './client-handler.js';
+import {ClientHandler, PokeHandler, RowPatch} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
@@ -27,7 +28,12 @@ import {
   type CVRSnapshot,
 } from './cvr.js';
 import {PipelineDriver, RowChange} from './pipeline-driver.js';
-import {cmpVersions, RowID, versionToCookie} from './schema/types.js';
+import {
+  cmpVersions,
+  cookieToVersion,
+  RowID,
+  versionToCookie,
+} from './schema/types.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -403,9 +409,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr,
       stateVersion,
     );
-    const minClientVersion = [...this.#clients.values()]
-      .map(c => c.version())
-      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b), {stateVersion});
 
     // Note: This kicks of background PG queries for CVR data associated with the
     // executed and removed queries.
@@ -413,7 +416,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc,
       addQueries.map(hash => ({id: hash, transformationHash: hash})),
       removeQueries,
-      minClientVersion,
     );
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(newVersion),
@@ -440,21 +442,58 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     lc.debug?.(`generating delete patches`);
-    for (const patch of await updater.deleteUnreferencedRows(lc)) {
+    for (const patch of await updater.deleteUnreferencedRows()) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
 
     // Commit the changes and update the CVR snapshot.
     this.#cvr = await updater.flush(lc);
 
+    const catchupFrom = [...this.#clients.values()]
+      .map(c => c.version())
+      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b), cvr.version);
+
     // Before ending the poke, catch up clients that were behind the old CVR.
-    for (const patch of await this.#cvrStore.catchupConfigPatches(
+    const rowPatches = this.#cvrStore.catchupRowPatches(
       lc,
-      minClientVersion,
+      catchupFrom,
       cvr,
-    )) {
+      addQueries, // exclude rows from added queries; they were already sent in pokes.
+    );
+    const configPatches = this.#cvrStore.catchupConfigPatches(
+      lc,
+      catchupFrom,
+      cvr,
+    );
+
+    for (const patch of await configPatches) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
+
+    let rowPatchCount = 0;
+    for await (const rows of rowPatches) {
+      for (const row of rows) {
+        const {schema, table} = row;
+        const rowKey = row.rowKey as RowKey;
+        const toVersion = must(cookieToVersion(row.patchVersion));
+
+        const id: RowID = {schema, table, rowKey};
+        let patch: RowPatch;
+        if (!row.refCounts) {
+          patch = {type: 'row', op: 'del', id};
+        } else {
+          const contents = this.#pipelines.getRow(table, rowKey);
+          assert(contents, `Missing row ${table}: ${stringify(rowKey)}`);
+
+          patch = {type: 'row', op: 'put', id, contents};
+        }
+        const patchToVersion = {patch, toVersion};
+        pokers.forEach(poker => poker.addPatch(patchToVersion));
+        rowPatchCount++;
+      }
+    }
+    lc.debug?.(`sent ${rowPatchCount} row patches`);
+
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
 

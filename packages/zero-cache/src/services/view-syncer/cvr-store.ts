@@ -23,17 +23,14 @@ import {
   ClientQueryRecord,
   ClientRecord,
   cmpVersions,
-  DelRowPatch,
   InternalQueryRecord,
   NullableCVRVersion,
-  PutRowPatch,
   QueryPatch,
   versionFromString,
   versionString,
   type CVRVersion,
   type QueryRecord,
   type RowID,
-  type RowPatch,
   type RowRecord,
 } from './schema/types.js';
 
@@ -368,37 +365,39 @@ export class CVRStore {
     );
   }
 
-  async catchupRowPatches(
-    startingVersion: CVRVersion,
-  ): Promise<[RowPatch, CVRVersion][]> {
+  async *catchupRowPatches(
+    lc: LogContext,
+    afterVersion: NullableCVRVersion,
+    upToCVR: CVRSnapshot,
+    excludeQueryHashes: string[] = [],
+  ): AsyncGenerator<RowsRow[], void, undefined> {
+    if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
+      lc.debug?.('all clients up to date. no config catchup.');
+      return;
+    }
+
+    const startMs = Date.now();
     const sql = this.#db;
-    const version = versionString(startingVersion);
-    const rows = await sql<
-      RowsRow[]
-    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
-      this.#id
-    } AND "patchVersion" >= ${version}`;
-    return rows.map(row => {
-      const id = {
-        schema: row.schema,
-        table: row.table,
-        rowKey: row.rowKey as Record<string, JSONValue>,
-      } as const;
-      const rowPatch: RowPatch = row.refCounts
-        ? ({
-            type: 'row',
-            op: 'put',
-            id,
-            rowVersion: row.rowVersion,
-          } satisfies PutRowPatch)
-        : ({
-            type: 'row',
-            op: 'del',
-            id,
-          } satisfies DelRowPatch);
-      const version: CVRVersion = versionFromString(row.patchVersion);
-      return [rowPatch, version];
-    });
+    const start = afterVersion ? versionString(afterVersion) : '';
+    const end = versionString(upToCVR.version);
+    lc.debug?.(`catching up clients from ${start}.`);
+
+    const query =
+      excludeQueryHashes.length === 0
+        ? sql<RowsRow[]>`SELECT * FROM cvr.rows
+        WHERE "clientGroupID" = ${this.#id}
+          AND "patchVersion" > ${start}
+          AND "patchVersion" <= ${end}`
+        : // Exclude rows that were already sent as part of query hydration.
+          sql<RowsRow[]>`SELECT * FROM cvr.rows
+        WHERE "clientGroupID" = ${this.#id}
+          AND "patchVersion" > ${start}
+          AND "patchVersion" <= ${end}
+          AND ("refCounts" IS NULL OR NOT "refCounts" ?| ${excludeQueryHashes})`;
+
+    yield* query.cursor(10000);
+
+    lc.debug?.(`finished row catchup ${Date.now() - startMs} ms)`);
   }
 
   async catchupConfigPatches(
