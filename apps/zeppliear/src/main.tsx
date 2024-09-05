@@ -1,4 +1,3 @@
-import {UndoManager} from '@rocicorp/undo';
 import {createRoot} from 'react-dom/client';
 import {must} from 'shared/src/must.js';
 import {Zero} from 'zero-client';
@@ -15,7 +14,6 @@ function init() {
     userID: 'anon',
     schemas: schema,
   });
-  const undoManager = new UndoManager();
 
   const sorts = ['modified', 'created', 'priority', 'status'] as const;
   for (const sort of sorts) {
@@ -27,24 +25,18 @@ function init() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).z = z;
 
-  function Home({
-    zero,
-    undoManager,
-  }: {
-    zero: Zero<Schema>;
-    undoManager: UndoManager;
-  }) {
+  function Home({zero}: {zero: Zero<Schema>}) {
     return (
       <div className="repliear">
         <ZeroProvider zero={zero}>
-          <App undoManager={undoManager}></App>
+          <App />
         </ZeroProvider>
       </div>
     );
   }
 
   const root = must(document.getElementById('root'));
-  createRoot(root).render(<Home zero={z} undoManager={undoManager} />);
+  createRoot(root).render(<Home zero={z} />);
 }
 
 init();
