@@ -25,12 +25,6 @@ cd docker && docker compose up
 npm run start-zero-cache
 ```
 
-## Create the indexes on the Replica
-
-```
-sqlite3 /tmp/sync-replica.db < create-replica-indexes.sql
-```
-
 # To run web locally
 
 ```
@@ -43,7 +37,7 @@ After you have visited the local website and the sync / replica tables have popu
 # To reset clear local postgres dbs and docker volumes
 
 ```
-docker-compose down
+docker compose down
 docker volume rm -f docker_pgdata_upstream
 ```
 
