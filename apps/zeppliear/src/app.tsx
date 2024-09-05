@@ -1,8 +1,5 @@
-import type {UndoManager} from '@rocicorp/undo';
 import classnames from 'classnames';
-import {pickBy} from 'lodash';
 import {memo, useCallback, useEffect, useState} from 'react';
-import {HotKeys} from 'react-hotkeys';
 import type {Zero} from 'zero-client';
 import {getIssueOrder, getViewStatuses} from './filters.js';
 import {
@@ -23,7 +20,6 @@ import {
   IssueUpdate,
   createIssue,
   createIssueComment,
-  deleteIssueComment,
   updateIssues,
 } from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
@@ -38,14 +34,10 @@ import {
   IssueListQuery,
 } from './queries.js';
 
-type AppProps = {
-  undoManager: UndoManager;
-};
-
 const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-const App = ({undoManager}: AppProps) => {
+const App = () => {
   const [view] = useViewState();
   const filters = useFilters();
   const [orderBy] = useOrderByState();
@@ -78,42 +70,24 @@ const App = ({undoManager}: AppProps) => {
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
-      // TODO: UndoManager? - audit every other place we're doing mutations,
-      // or remove undo for now.
       await createIssue(zero, issue, userID);
     },
     [zero, userID],
   );
   const handleCreateComment = useCallback(
     async (comment: CommentCreationPartial) => {
-      await undoManager.add({
-        execute: () => createIssueComment(zero, comment, userID),
-        undo: () => deleteIssueComment(zero, comment.id, comment.issueID),
-      });
+      createIssueComment(zero, comment, userID);
     },
-    [zero, undoManager, userID],
+    [zero, userID],
   );
 
   const handleUpdateIssues = useCallback(
     async (issueUpdates: Array<{issue: Issue; update: IssueUpdate}>) => {
-      const uChanges: Array<IssueUpdate> = issueUpdates.map<IssueUpdate>(
-        ({issue, update}) => {
-          const undoChanges = pickBy(issue, (_, key) => key in update);
-          return {
-            id: issue.id,
-            issueChanges: undoChanges,
-          };
-        },
-      );
-      await undoManager.add({
-        execute: () =>
-          updateIssues(zero, {
-            issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
-          }),
-        undo: () => updateIssues(zero, {issueUpdates: uChanges}),
+      updateIssues(zero, {
+        issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
       });
     },
-    [zero, undoManager],
+    [zero],
   );
 
   const handleOpenDetail = useCallback(
@@ -129,43 +103,26 @@ const App = ({undoManager}: AppProps) => {
     [setMenuVisible, menuVisible],
   );
 
-  const handlers = {
-    undo: () => undoManager.undo(),
-    redo: () => undoManager.redo(),
-  };
-
   return (
-    <HotKeys
-      {...{
-        keyMap,
-        handlers,
-      }}
-    >
-      <Layout
-        menuVisible={menuVisible}
-        view={view!}
-        detailIssueID={detailIssueID}
-        // TODO: base on whether initial sync is done
-        isLoading={false}
-        viewIssueCount={viewIssueCount}
-        issuesProps={issuesProps}
-        hasNonViewFilters={filters.hasNonViewFilters}
-        zero={zero}
-        userID={userID}
-        onCloseMenu={handleCloseMenu}
-        onToggleMenu={handleToggleMenu}
-        onUpdateIssues={handleUpdateIssues}
-        onCreateIssue={handleCreateIssue}
-        onCreateComment={handleCreateComment}
-        onOpenDetail={handleOpenDetail}
-      ></Layout>
-    </HotKeys>
+    <Layout
+      menuVisible={menuVisible}
+      view={view!}
+      detailIssueID={detailIssueID}
+      // TODO: base on whether initial sync is done
+      isLoading={false}
+      viewIssueCount={viewIssueCount}
+      issuesProps={issuesProps}
+      hasNonViewFilters={filters.hasNonViewFilters}
+      zero={zero}
+      userID={userID}
+      onCloseMenu={handleCloseMenu}
+      onToggleMenu={handleToggleMenu}
+      onUpdateIssues={handleUpdateIssues}
+      onCreateIssue={handleCreateIssue}
+      onCreateComment={handleCreateComment}
+      onOpenDetail={handleOpenDetail}
+    ></Layout>
   );
-};
-
-const keyMap = {
-  undo: ['ctrl+z', 'command+z'],
-  redo: ['ctrl+y', 'command+shift+z', 'ctrl+shift+z'],
 };
 
 interface LayoutProps {
