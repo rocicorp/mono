@@ -18,7 +18,6 @@ interface Props {
   onToggleMenu?: (() => void) | undefined;
   filteredIssuesCount?: number | undefined;
   issuesCount: number;
-  showSortOrderMenu: boolean;
 }
 
 interface FilterStatusProps<Enum extends number | string> {
@@ -81,14 +80,12 @@ function getTitle(view: string | null) {
       return 'Active issues';
     case 'backlog':
       return 'Backlog issues';
-    case 'board':
-      return 'Board';
     default:
       return 'All issues';
   }
 }
 
-function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
+function TopFilter({view, onToggleMenu = noop}: Props) {
   const [orderBy, setOrderByParam] = useOrderByState();
   const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
   const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();
@@ -146,12 +143,10 @@ function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
 
         {/* right section */}
         <div className="flex items-center">
-          {showSortOrderMenu && (
-            <SortOrderMenu
-              onSelect={orderBy => setOrderByParam(orderBy)}
-              order={orderBy ?? Order.Created}
-            />
-          )}
+          <SortOrderMenu
+            onSelect={orderBy => setOrderByParam(orderBy)}
+            order={orderBy ?? Order.Created}
+          />
         </div>
       </div>
       {statusFilters || priorityFilters || labelFilters ? (

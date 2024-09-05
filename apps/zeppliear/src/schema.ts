@@ -19,7 +19,6 @@ const issueSchema = {
     modified: {type: 'number'},
     created: {type: 'number'},
     creatorID: {type: 'string'},
-    kanbanOrder: {type: 'string'},
     description: {type: 'string'},
   },
   primaryKey: ['id'],
