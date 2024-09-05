@@ -380,7 +380,7 @@ export class CVRStore {
     const sql = this.#db;
     const start = afterVersion ? versionString(afterVersion) : '';
     const end = versionString(upToCVR.version);
-    lc.debug?.(`catching up clients from ${start}.`);
+    lc.debug?.(`catching up clients from ${start}`);
 
     const query =
       excludeQueryHashes.length === 0
@@ -397,7 +397,7 @@ export class CVRStore {
 
     yield* query.cursor(10000);
 
-    lc.debug?.(`finished row catchup ${Date.now() - startMs} ms)`);
+    lc.debug?.(`finished row catchup (${Date.now() - startMs} ms)`);
   }
 
   async catchupConfigPatches(

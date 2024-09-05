@@ -9,7 +9,7 @@ export class DbFile {
   readonly path;
 
   constructor(testName: string) {
-    this.path = `${tmpdir()}/${testName}-${randInt(10000, 99999)}.db`;
+    this.path = `${tmpdir()}/${testName}-${randInt(1000000, 9999999)}.db`;
   }
 
   connect(): Database.Database {
