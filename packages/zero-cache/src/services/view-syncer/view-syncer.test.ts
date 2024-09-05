@@ -689,7 +689,8 @@ describe('view-syncer/service', () => {
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
 
-    // Response should catch client2 up with the entity from the advancement.
+    // Response should catch client2 up with the entitiesPatch from
+    // the advancement.
     const response2 = await nextPoke(client2);
     expect(response2[1][1]).toMatchObject({
       ...advancement,
@@ -780,7 +781,7 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    // client1 should be poked up with the new client2 config,
+    // client1 should be poked to get the new client2 config,
     // but no new entities.
     expect(await nextPoke(client1)).toMatchInlineSnapshot(`
       [
