@@ -14,7 +14,6 @@ import {
 } from './hooks/query-state-hooks.js';
 import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
-import IssueBoard from './issue-board.jsx';
 import IssueDetail from './issue-detail.jsx';
 import IssueList from './issue-list.jsx';
 import {
@@ -71,7 +70,7 @@ const App = ({undoManager}: AppProps) => {
   const issueListQuery = getIssueListQuery(zero);
   const filteredQuery = filterQuery(issueListQuery, view, filters);
 
-  const issueOrder = getIssueOrder(view, orderBy);
+  const issueOrder = getIssueOrder(orderBy);
   const issueQueryDeps = [view, filters, issueOrder] as const;
   const viewIssueCount = 0;
 
@@ -226,7 +225,6 @@ function RawLayout({
                 hasNonViewFilters ? 123456 : undefined
               }
               issuesCount={viewIssueCount}
-              showSortOrderMenu={view !== 'board'}
             />
           </div>
           <div className="relative flex flex-1 min-h-0">
@@ -246,20 +244,12 @@ function RawLayout({
                 'pointer-events-none': detailIssueID,
               })}
             >
-              {view === 'board' ? (
-                <IssueBoard
-                  issuesProps={issuesProps}
-                  onUpdateIssues={onUpdateIssues}
-                  onOpenDetail={onOpenDetail}
-                />
-              ) : (
-                <IssueList
-                  onUpdateIssues={onUpdateIssues}
-                  onOpenDetail={onOpenDetail}
-                  view={view}
-                  issuesProps={issuesProps}
-                />
-              )}
+              <IssueList
+                onUpdateIssues={onUpdateIssues}
+                onOpenDetail={onOpenDetail}
+                view={view}
+                issuesProps={issuesProps}
+              />
             </div>
           </div>
         </div>

@@ -146,7 +146,6 @@ export enum Order {
   Modified = 'MODIFIED',
   Status = 'STATUS',
   Priority = 'PRIORITY',
-  Kanban = 'KANBAN',
 }
 
 export const orderEnumSchema = z.nativeEnum(Order);
@@ -212,7 +211,7 @@ export async function deleteIssueComment(
 
 export type IssueCreationPartial = Omit<
   Issue,
-  'kanbanOrder' | 'created' | 'modified' | 'creatorID'
+  'created' | 'modified' | 'creatorID'
 >;
 
 export async function createIssue(
@@ -220,19 +219,12 @@ export async function createIssue(
   i: IssueCreationPartial,
   creatorID: string,
 ) {
-  // TODO(arv): Use zql min
-  // const minKanbanOrderIssue = minBy(allIssues, issue => issue.kanbanOrder);
-  // const minKanbanOrder = minKanbanOrderIssue
-  //   ? minKanbanOrderIssue.kanbanOrder
-  //   : null;
   const modified = getModifiedDate();
   await zero.mutate.issue.create({
     ...i,
     creatorID,
     created: modified,
     modified,
-    //  TODO: fix kanban
-    kanbanOrder: '0', //generateKeyBetween(null, minKanbanOrder),
   });
 }
 
@@ -295,7 +287,5 @@ export function orderQuery(
       return issueQuery
         .orderBy('priority', dir('desc'))
         .orderBy('modified', dir('desc'));
-    case Order.Kanban:
-      return issueQuery.orderBy('kanbanOrder', dir('asc'));
   }
 }

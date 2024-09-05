@@ -114,15 +114,6 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
             >
               <span>Backlog</span>
             </div>
-            <div
-              className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
-              onMouseDown={async () => {
-                await Promise.all([setView('board'), setIss(null)]);
-                onCloseMenu && onCloseMenu();
-              }}
-            >
-              <span>Board</span>
-            </div>
           </ItemGroup>
 
           {/* extra space */}

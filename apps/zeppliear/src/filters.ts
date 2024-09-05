@@ -31,13 +31,7 @@ export function getViewStatuses(view: string | null): Set<Status> {
   }
 }
 
-export function getIssueOrder(
-  view: string | null,
-  orderBy: string | null,
-): Order {
-  if (view === 'board') {
-    return Order.Kanban;
-  }
+export function getIssueOrder(orderBy: string | null): Order {
   const parseResult = orderEnumSchema.safeParse(orderBy);
   return parseResult.success ? parseResult.data : Order.Modified;
 }
