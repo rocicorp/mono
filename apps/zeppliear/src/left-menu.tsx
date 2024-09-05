@@ -8,12 +8,11 @@ import MenuIcon from './assets/icons/menu.svg?react';
 import {
   useIssueDetailState,
   useStatusFilterState,
-  useViewState,
 } from './hooks/query-state-hooks.js';
 import {useClickOutside} from './hooks/use-click-outside.js';
 import useQueryState, {identityProcessor} from './hooks/useQueryState.js';
 import IssueModal from './issue-modal.jsx';
-import type {IssueCreationPartial} from './issue.js';
+import {Status, type IssueCreationPartial} from './issue.js';
 import ItemGroup from './item-group.js';
 
 interface Props {
@@ -24,7 +23,6 @@ interface Props {
 }
 
 function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
-  const [, setView] = useViewState();
   const [, setIss] = useIssueDetailState();
 
   const [disableAbout] = useQueryState('disableAbout', identityProcessor);
@@ -75,13 +73,10 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
           <ItemGroup title="Views">
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
-              onMouseDown={async () => {
-                await Promise.all([
-                  setView('all'),
-                  setStatusFilter(null),
-                  setIss(null),
-                ]);
-                onCloseMenu && onCloseMenu();
+              onMouseDown={() => {
+                setStatusFilter(null);
+                setIss(null);
+                onCloseMenu();
               }}
             >
               <span>All</span>
@@ -89,13 +84,10 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
 
             <div
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
-              onMouseDown={async () => {
-                await Promise.all([
-                  setView('active'),
-                  setStatusFilter(null),
-                  setIss(null),
-                ]);
-                onCloseMenu && onCloseMenu();
+              onMouseDown={() => {
+                setStatusFilter(new Set([Status.InProgress, Status.Todo]));
+                setIss(null);
+                onCloseMenu();
               }}
             >
               <span>Active</span>
@@ -105,8 +97,7 @@ function LeftMenu({menuVisible, onCloseMenu = noop, onCreateIssue}: Props) {
               className="flex items-center pl-9 rounded cursor-pointer group h-8 hover:bg-gray-900"
               onMouseDown={async () => {
                 await Promise.all([
-                  setView('backlog'),
-                  setStatusFilter(null),
+                  setStatusFilter(new Set([Status.Backlog])),
                   setIss(null),
                 ]);
                 onCloseMenu && onCloseMenu();

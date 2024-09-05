@@ -1,13 +1,12 @@
 import classnames from 'classnames';
 import {memo, useCallback, useEffect, useState} from 'react';
 import type {Zero} from 'zero-client';
-import {getIssueOrder, getViewStatuses} from './filters.js';
+import {getIssueOrder} from './filters.js';
 import {
   FiltersState,
   useFilters,
   useIssueDetailState,
   useOrderByState,
-  useViewState,
 } from './hooks/query-state-hooks.js';
 import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
@@ -38,7 +37,6 @@ const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const App = () => {
-  const [view] = useViewState();
   const filters = useFilters();
   const [orderBy] = useOrderByState();
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
@@ -60,11 +58,10 @@ const App = () => {
   }, [userID]);
 
   const issueListQuery = getIssueListQuery(zero);
-  const filteredQuery = filterQuery(issueListQuery, view, filters);
+  const filteredQuery = filterQuery(issueListQuery, filters);
 
   const issueOrder = getIssueOrder(orderBy);
-  const issueQueryDeps = [view, filters, issueOrder] as const;
-  const viewIssueCount = 0;
+  const issueQueryDeps = [filters, issueOrder] as const;
 
   const issuesProps = useIssuesProps(filteredQuery, issueQueryDeps, issueOrder);
 
@@ -106,13 +103,10 @@ const App = () => {
   return (
     <Layout
       menuVisible={menuVisible}
-      view={view!}
       detailIssueID={detailIssueID}
       // TODO: base on whether initial sync is done
       isLoading={false}
-      viewIssueCount={viewIssueCount}
       issuesProps={issuesProps}
-      hasNonViewFilters={filters.hasNonViewFilters}
       zero={zero}
       userID={userID}
       onCloseMenu={handleCloseMenu}
@@ -127,12 +121,9 @@ const App = () => {
 
 interface LayoutProps {
   menuVisible: boolean;
-  view: string;
   detailIssueID: string | null;
   isLoading: boolean;
-  viewIssueCount: number;
   issuesProps: IssuesProps;
-  hasNonViewFilters: boolean;
   zero: Zero<Schema>;
   userID: string;
   onCloseMenu: () => void;
@@ -145,12 +136,9 @@ interface LayoutProps {
 
 function RawLayout({
   menuVisible,
-  view,
   detailIssueID,
   isLoading,
-  viewIssueCount,
   issuesProps,
-  hasNonViewFilters,
   userID,
   onCloseMenu,
   onToggleMenu,
@@ -173,16 +161,7 @@ function RawLayout({
               hidden: detailIssueID,
             })}
           >
-            <TopFilter
-              onToggleMenu={onToggleMenu}
-              view={view}
-              filteredIssuesCount={
-                // TODO(arv): This is wrong. We need to know the count of the filtered issues
-                // hasNonViewFilters ? filteredIssues.length : undefined
-                hasNonViewFilters ? 123456 : undefined
-              }
-              issuesCount={viewIssueCount}
-            />
+            <TopFilter onToggleMenu={onToggleMenu} />
           </div>
           <div className="relative flex flex-1 min-h-0">
             {detailIssueID && (
@@ -204,7 +183,6 @@ function RawLayout({
               <IssueList
                 onUpdateIssues={onUpdateIssues}
                 onOpenDetail={onOpenDetail}
-                view={view}
                 issuesProps={issuesProps}
               />
             </div>
@@ -218,18 +196,7 @@ function RawLayout({
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const Layout = memo(RawLayout);
 
-function filterQuery(
-  q: IssueListQuery,
-  view: string | null,
-  filters: FiltersState,
-) {
-  const viewStatuses = getViewStatuses(view);
-
-  // Apply view filter
-  if (viewStatuses && viewStatuses.size > 0) {
-    q = q.where('status', 'IN', [...viewStatuses]);
-  }
-
+function filterQuery(q: IssueListQuery, filters: FiltersState) {
   if (filters.statusFilter) {
     q = q.where('status', 'IN', [...filters.statusFilter]);
   }

@@ -14,10 +14,7 @@ import {Order, Priority, Status} from './issue.js';
 import SortOrderMenu from './sort-order-menu.jsx';
 
 interface Props {
-  view: string;
   onToggleMenu?: (() => void) | undefined;
-  filteredIssuesCount?: number | undefined;
-  issuesCount: number;
 }
 
 interface FilterStatusProps<Enum extends number | string> {
@@ -74,28 +71,19 @@ function FilterStatus<Enum extends number | string>({
   );
 }
 
-function getTitle(view: string | null) {
-  switch (view?.toLowerCase()) {
-    case 'active':
-      return 'Active issues';
-    case 'backlog':
-      return 'Backlog issues';
-    default:
-      return 'All issues';
-  }
-}
-
-function TopFilter({view, onToggleMenu = noop}: Props) {
+function TopFilter({onToggleMenu = noop}: Props) {
   const [orderBy, setOrderByParam] = useOrderByState();
   const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
   const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();
   const [labelFilters, setLabelFilterByParam] = useLabelFilterState();
   const [textSearch, setTextSearch] = useTextSearchState();
-  const title = getTitle(view);
 
   return (
     <>
-      <div className="flex justify-between flex-shrink-0 pl-2 lg:pl-9 pr-2 lg:pr-6 border-b border-gray-850 h-14 border-b-color-gray-50">
+      <div
+        className="flex justify-between flex-shrink-0 border-b border-gray-850 h-14 border-b-color-gray-50"
+        style={{paddingLeft: '1.3rem', paddingRight: '1.3rem'}}
+      >
         {/* left section */}
         <div className="flex items-center">
           <button
@@ -104,18 +92,7 @@ function TopFilter({view, onToggleMenu = noop}: Props) {
           >
             <MenuIcon className="w-3.5 text-white hover:text-gray-50" />
           </button>
-          <div className="p-1 font-semibold cursor-default">{title}</div>
-          {/*
-          {filteredIssuesCount ? (
-            <span>
-              {filteredIssuesCount} / {issuesCount}
-            </span>
-          ) : (
-            <span>{issuesCount}</span>
-          )}
-          */}
           <FilterMenu
-            view={view}
             onSelectPriority={createToggleFilterHandler(
               priorityFilters,
               setPriorityFilterByParam,
