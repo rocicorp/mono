@@ -3,7 +3,12 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {DbFile} from 'zero-cache/src/test/lite.js';
-import type {Downstream} from 'zero-protocol';
+import type {
+  Downstream,
+  PokePartBody,
+  PokeStartBody,
+  QueriesPatch,
+} from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -21,7 +26,7 @@ import {
 import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
-import {ViewSyncerService} from './view-syncer.js';
+import {SyncContext, ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
@@ -51,7 +56,7 @@ describe('view-syncer/service', () => {
   let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
-  let downstream: Queue<Downstream>;
+  let client1: Queue<Downstream>;
 
   const SYNC_CONTEXT = {clientID: 'foo', wsID: 'ws1', baseCookie: null};
 
@@ -123,17 +128,20 @@ describe('view-syncer/service', () => {
       versionNotifications,
     );
     viewSyncerDone = vs.run();
-    downstream = new Queue();
-    const stream = await vs.initConnection(SYNC_CONTEXT, [
-      'initConnection',
-      {
-        desiredQueriesPatch: [
-          {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-        ],
-      },
+    client1 = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
-    void pipeToQueue(stream, downstream);
   });
+
+  async function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
+    const stream = await vs.initConnection(ctx, [
+      'initConnection',
+      {desiredQueriesPatch},
+    ]);
+    const downstream = new Queue<Downstream>();
+    void pipeToQueue(stream, downstream);
+    return downstream;
+  }
 
   async function pipeToQueue(
     stream: AsyncIterable<Downstream>,
@@ -148,10 +156,12 @@ describe('view-syncer/service', () => {
     }
   }
 
-  async function nextPoke(): Promise<Downstream[]> {
+  async function nextPoke(
+    client: Queue<Downstream> = client1,
+  ): Promise<Downstream[]> {
     const received: Downstream[] = [];
     for (;;) {
-      const msg = await downstream.dequeue();
+      const msg = await client.dequeue();
       received.push(msg);
       if (msg[0] === 'pokeEnd') {
         break;
@@ -621,6 +631,216 @@ describe('view-syncer/service', () => {
           "schema": "",
           "table": "issues",
         },
+      ]
+    `);
+  });
+
+  test('catch up client', async () => {
+    versionNotifications.push({});
+    const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
+    expect(preAdvancement).toEqual({
+      baseCookie: null,
+      cookie: '00:02',
+      pokeID: '00:02',
+    });
+
+    const replicator = fakeReplicator(lc, replica);
+    replicator.processTransaction(
+      '0/123',
+      messages.update('issues', {
+        id: '1',
+        title: 'new title',
+        owner: 100,
+        parent: null,
+        big: 9007199254740991n,
+      }),
+      messages.delete('issues', {id: '2'}),
+    );
+
+    versionNotifications.push({});
+    const advancement = (await nextPoke(client1))[1][1] as PokePartBody;
+    expect(advancement).toEqual({
+      entitiesPatch: [
+        {
+          entityID: {id: '1'},
+          entityType: 'issues',
+          op: 'put',
+          value: {
+            big: 9007199254740991,
+            id: '1',
+            owner: '100.0',
+            parent: null,
+            title: 'new title',
+          },
+        },
+        {
+          entityID: {id: '2'},
+          entityType: 'issues',
+          op: 'del',
+        },
+      ],
+      pokeID: '01',
+    });
+
+    // Connect with another client (i.e. tab) at older version '00:02'
+    // (i.e. pre-advancement).
+    const client2 = await connect(
+      {clientID: 'bar', wsID: '9382', baseCookie: preAdvancement.cookie},
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+    );
+
+    // Response should catch client2 up with the entitiesPatch from
+    // the advancement.
+    const response2 = await nextPoke(client2);
+    expect(response2[1][1]).toMatchObject({
+      ...advancement,
+      pokeID: '01:01',
+    });
+    expect(response2).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:02",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "id": "1",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "_0_version": "01",
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "2",
+                },
+                "entityType": "issues",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+
+    // client1 should be poked to get the new client2 config,
+    // but no new entities.
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
       ]
     `);
   });

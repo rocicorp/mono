@@ -13,6 +13,7 @@ import type {
   astSchema,
   conditionSchema,
   correlatedSubquerySchema,
+  correlatedSubquerySchemaOmitSubquery,
   equalityOpsSchema,
   likeOpsSchema,
   orderOpsSchema,
@@ -22,6 +23,25 @@ import type {
 
 type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;
+};
+
+(
+  t: Omit<CorrelatedSubQuery, 'subquery'>,
+  inferredT: v.Infer<typeof correlatedSubquerySchemaOmitSubquery>,
+  tR: MakeAllFieldsRequired<Omit<CorrelatedSubQuery, 'subquery'>>,
+  inferredTR: MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubquerySchemaOmitSubquery>
+  >,
+) => {
+  t satisfies v.Infer<typeof correlatedSubquerySchemaOmitSubquery>;
+  inferredT satisfies Omit<CorrelatedSubQuery, 'subquery'>;
+
+  inferredTR satisfies MakeAllFieldsRequired<
+    Omit<CorrelatedSubQuery, 'subquery'>
+  >;
+  tR satisfies MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubquerySchemaOmitSubquery>
+  >;
 };
 
 (
