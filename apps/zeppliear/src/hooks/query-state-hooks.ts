@@ -2,10 +2,6 @@ import {useThrottle} from '@uidotdev/usehooks';
 import {useMemo} from 'react';
 import type {SafeParseReturnType} from 'zod';
 import {
-  hasNonViewFilters as doesHaveNonViewFilters,
-  getViewStatuses,
-} from '../filters.js';
-import {
   Priority,
   Status,
   priorityEnumSchema,
@@ -77,10 +73,6 @@ export function useLabelFilterState() {
   return useQueryState('labelFilter', stringSetProcessor);
 }
 
-export function useViewState() {
-  return useQueryState('view', identityProcessor);
-}
-
 export function useIssueDetailState() {
   return useQueryState('iss', identityProcessor);
 }
@@ -94,7 +86,6 @@ export type FiltersState = {
   priorityFilter: Set<Priority> | null;
   labelFilter: Set<string> | null;
   textFilter: string | null;
-  hasNonViewFilters: boolean;
 };
 
 export function useFilters(): FiltersState {
@@ -102,21 +93,14 @@ export function useFilters(): FiltersState {
   const [priorityFilter] = usePriorityFilterState();
   const [labelFilter] = useLabelFilterState();
   const [textFilterSync] = useTextSearchState();
-  const [view] = useViewState();
   const textFilter = useThrottle(textFilterSync, 250);
 
   return useMemo(() => {
-    const viewStatuses = getViewStatuses(view);
-    const hasNonViewFilters = !!doesHaveNonViewFilters(
-      viewStatuses,
-      statusFilter,
-    );
     return {
       statusFilter,
       priorityFilter,
       labelFilter,
       textFilter,
-      hasNonViewFilters,
     };
-  }, [statusFilter, priorityFilter, labelFilter, textFilter, view]);
+  }, [statusFilter, priorityFilter, labelFilter, textFilter]);
 }

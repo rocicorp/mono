@@ -11,12 +11,12 @@ import {
 } from './issue.js';
 import type {IssuesProps} from './issues-props.js';
 import {ListData, useListData} from './list-data.js';
+import {useFilters, useStatusFilterState} from './hooks/query-state-hooks.js';
 
 interface Props {
   issuesProps: IssuesProps;
   onUpdateIssues: (issueUpdates: {issue: Issue; update: IssueUpdate}[]) => void;
   onOpenDetail: (issue: Issue) => void;
-  view: string | null;
 }
 
 const loadingIndicatorKey = 'loading-indicator-key';
@@ -58,11 +58,13 @@ function RawRow({
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const Row = memo(RawRow);
 
-function IssueList({issuesProps, onUpdateIssues, onOpenDetail, view}: Props) {
+function IssueList({issuesProps, onUpdateIssues, onOpenDetail}: Props) {
   const fixedSizeListRef = useRef<FixedSizeList>(null);
+  const filters = useFilters();
+  const statuses = useStatusFilterState();
   useEffect(() => {
     fixedSizeListRef.current?.scrollTo(0);
-  }, [view]);
+  }, [filters, statuses]);
 
   const handleChangePriority = useCallback(
     (issue: Issue, priority: Priority) => {

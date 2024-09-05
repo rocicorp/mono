@@ -15,7 +15,7 @@ interface Props {
   priority: Priority;
 }
 
-export const statusOpts = [
+export const priorities = [
   [NoPriorityIcon, 'No priority', Priority.None],
   [UrgentPriorityIcon, 'Urgent', Priority.Urgent],
   [HighPriorityIcon, 'High', Priority.High],
@@ -59,7 +59,7 @@ function PriorityMenu({
       setPriorityDropDownVisible(false);
     }
   });
-  const options = statusOpts.map(([Icon, label, priority], idx) => (
+  const options = priorities.map(([Icon, label, priority], idx) => (
     <div
       key={idx}
       className="flex items-center h-8 px-3 text-gray focus:outline-none hover:text-gray-800 hover:bg-gray-300"

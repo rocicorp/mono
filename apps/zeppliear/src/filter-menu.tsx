@@ -6,23 +6,16 @@ import SignalStrongIcon from './assets/icons/signal-strong.svg?react';
 import {useClickOutside} from './hooks/use-click-outside.js';
 import {Filter, Priority, Status} from './issue.js';
 import {LabelMenu} from './label-menu.jsx';
-import {statusOpts} from './priority-menu.jsx';
-import {getViewStatuses} from './filters.js';
+import {priorities} from './priority-menu.jsx';
 import {statuses} from './status-menu.js';
 
 interface Props {
-  view: string;
   onSelectStatus: (filter: Status) => void;
   onSelectPriority: (filter: Priority) => void;
   onSelectLabel: (filter: string) => void;
 }
 
-function FilterMenu({
-  view,
-  onSelectStatus,
-  onSelectPriority,
-  onSelectLabel,
-}: Props) {
+function FilterMenu({onSelectStatus, onSelectPriority, onSelectLabel}: Props) {
   const [filterRef, setFilterRef] = useState<HTMLButtonElement | null>(null);
   const [popperRef, setPopperRef] = useState<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
@@ -50,7 +43,7 @@ function FilterMenu({
   return (
     <div ref={ref}>
       <button
-        className="px-1 py-0.5 ml-3 border border-gray-600 border-dashed rounded text-white hover:text-gray-50 focus:outline-none"
+        className="px-1 py-0.5 border border-gray-600 border-dashed rounded text-white hover:text-gray-50 focus:outline-none"
         ref={setFilterRef}
         onMouseDown={handleDropdownClick}
       >
@@ -67,7 +60,6 @@ function FilterMenu({
       >
         <div style={styles.offset}>
           <Options
-            view={view}
             filter={filter}
             onSelectPriority={onSelectPriority}
             onSelectStatus={onSelectStatus}
@@ -88,7 +80,6 @@ const filterBys = [
 ] as const;
 
 function Options({
-  view,
   filter,
   onSelectStatus,
   onSelectPriority,
@@ -100,16 +91,11 @@ function Options({
   setFilter: (filter: Filter | null) => void;
   setFilterDropDownVisible: (visible: boolean) => void;
 } & Props) {
-  const availStatuses = [...getViewStatuses(view)].map(
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    s => statuses.find(([, status]) => status === s)!,
-  );
-
   switch (filter) {
     case Filter.Priority:
       return (
         <>
-          {statusOpts.map(
+          {priorities.map(
             (
               [
                 // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -139,7 +125,7 @@ function Options({
     case Filter.Status:
       return (
         <>
-          {availStatuses.map(
+          {statuses.map(
             (
               [
                 // eslint-disable-next-line @typescript-eslint/naming-convention
