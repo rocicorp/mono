@@ -1,5 +1,5 @@
 import type {SchemaDefs} from 'zero-client/src/client/zero.js';
-import type {Database} from 'better-sqlite3';
+import type {Database} from 'zqlite/src/db.js';
 
 /**
  * Configuration for [[ZqlLiteZero]].

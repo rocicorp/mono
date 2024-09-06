@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Database as Db} from 'better-sqlite3';
-import Database from 'better-sqlite3';
+import type {Database as Db} from 'zqlite/src/db.js';
+import {Database} from 'zqlite/src/db.js';
 import {assert} from 'shared/src/asserts.js';
 import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
@@ -42,7 +42,7 @@ export async function runSchemaMigrations(
     'initSchema',
     randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
   );
-  const db = new Database(dbPath);
+  const db = new Database(log, dbPath);
   db.pragma('foreign_keys = OFF');
   db.pragma('journal_mode = WAL');
 

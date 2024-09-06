@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
@@ -51,13 +51,13 @@ const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
 describe('replicator/incremental-sync', {retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
-  let replica: Database.Database;
+  let replica: Database;
   let syncer: IncrementalSyncer;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
     upstream = await testDBs.create('incremental_sync_test_upstream');
-    replica = new Database(':memory:');
+    replica = new Database(lc, ':memory:');
     syncer = new IncrementalSyncer(
       getConnectionURI(upstream),
       REPLICA_ID,

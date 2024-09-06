@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
@@ -14,11 +14,11 @@ import {createMessageProcessor, ReplicationMessages} from './test-utils.js';
 
 describe('replicator/message-processor', () => {
   let lc: LogContext;
-  let replica: Database.Database;
+  let replica: Database;
 
   beforeEach(() => {
     lc = createSilentLogContext();
-    replica = new Database(':memory:');
+    replica = new Database(lc, ':memory:');
 
     replica.exec(`
     CREATE TABLE "foo" (

@@ -29,18 +29,18 @@ test('slow queries are logged', () => {
   expect(sink.messages).toEqual([
     [
       'error',
-      {component: 'Database', path: ':memory:', method: 'exec'},
+      {class: 'Database', path: ':memory:', method: 'exec'},
       ['Slow query', 0],
     ],
     [
       'error',
-      {component: 'Database', path: ':memory:', method: 'exec'},
+      {class: 'Database', path: ':memory:', method: 'exec'},
       ['Slow query', 0],
     ],
     [
       'error',
       {
-        component: 'Statement',
+        class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo WHERE name = ?',
         method: 'run',
@@ -50,7 +50,7 @@ test('slow queries are logged', () => {
     [
       'error',
       {
-        component: 'Statement',
+        class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo WHERE name = ?',
         method: 'get',
@@ -60,7 +60,7 @@ test('slow queries are logged', () => {
     [
       'error',
       {
-        component: 'Statement',
+        class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo WHERE name = ?',
         method: 'all',
@@ -70,7 +70,7 @@ test('slow queries are logged', () => {
     [
       'error',
       {
-        component: 'Statement',
+        class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo',
         method: 'iterate',
@@ -81,7 +81,7 @@ test('slow queries are logged', () => {
     [
       'error',
       {
-        component: 'Statement',
+        class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo',
         method: 'iterate',

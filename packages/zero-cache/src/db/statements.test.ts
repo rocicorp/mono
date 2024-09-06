@@ -1,13 +1,14 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {expectTables} from '../test/lite.js';
 import {StatementRunner} from './statements.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 describe('db/statements', () => {
   let db: StatementRunner;
 
   beforeEach(() => {
-    const conn = new Database(':memory:');
+    const conn = new Database(createSilentLogContext(), ':memory:');
     conn.exec('CREATE TABLE foo(id INT PRIMARY KEY)');
     db = new StatementRunner(conn);
   });

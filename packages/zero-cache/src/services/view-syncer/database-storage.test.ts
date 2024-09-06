@@ -1,14 +1,15 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {afterEach} from 'node:test';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 describe('view-syncer/database-storage', () => {
-  let db: Database.Database;
+  let db: Database;
   let storage: DatabaseStorage;
 
   beforeEach(() => {
-    db = new Database(':memory:');
+    db = new Database(createSilentLogContext(), ':memory:');
     db.prepare(CREATE_STORAGE_TABLE).run();
     storage = new DatabaseStorage(db);
   });
