@@ -4,6 +4,7 @@ import PriorityMenu from './priority-menu.jsx';
 import StatusMenu from './status-menu.jsx';
 import {formatDate} from './util/date.js';
 import {IssueListRow} from './queries.js';
+import issueItem from './issue-item.js';
 
 interface Props {
   row: IssueListRow;
@@ -40,6 +41,7 @@ function IssueRow({
         <StatusMenu onSelect={handleChangeStatus} status={issue.status} />
       </div>
       <div className="flex-wrap flex-shrink-1 flex-grow ml-2 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
+        {issue.id + '   -   '}
         {issue.title.slice(0, 3000) || ''}
       </div>
       <div className="flex-shrink-0 ml-2 font-normal sm:block">

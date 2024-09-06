@@ -11,7 +11,7 @@ import type {
 } from './operator.js';
 import type {Schema} from './schema.js';
 import {take, type Stream} from './stream.js';
-import { assertOrderingIncludesPK } from '../builder/builder.js';
+import {assertOrderingIncludesPK} from '../builder/builder.js';
 
 const MAX_BOUND_KEY = 'maxBound';
 
@@ -54,7 +54,10 @@ export class Take implements Operator {
     this.#limit = limit;
     this.#partitionKey = partitionKey;
     assert(limit >= 0);
-    assertOrderingIncludesPK(this.#input.getSchema().sort, this.#input.getSchema().primaryKey);
+    assertOrderingIncludesPK(
+      this.#input.getSchema().sort,
+      this.#input.getSchema().primaryKey,
+    );
     this.#input.setOutput(this);
   }
 
@@ -297,7 +300,7 @@ export class Take implements Operator {
         // change is after bound
         return;
       }
-      if (this.#limit === 1) {
+      if (takeState.size === 1) {
         this.#storage.set(takeStateKey, {
           size: 0,
           bound: undefined,

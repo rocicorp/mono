@@ -228,26 +228,35 @@ export class MemorySource implements Source {
       return valuesEqual(row[key], value);
     };
 
+    const matchesConstraintAndFilters = (row: Row) =>
+      matchesConstraint(row) && conn.optionalFilters.every(f => f(row));
     // If there is an overlay for this output, does it match the requested
-    // constraints?
+    // constraints and filters?
     if (overlay) {
-      if (!matchesConstraint(overlay.change.row)) {
+      if (!matchesConstraintAndFilters(overlay.change.row)) {
         overlay = undefined;
       }
     }
-
     const nextLowerKey = (row: Row | undefined) => {
+      if (!row) {
+        return undefined;
+      }
+      let o = overlay;
+      if (o) {
+        if (comparator(o.change.row, row) >= 0) {
+          o = undefined;
+        }
+      }
       while (row !== undefined) {
         row = data.nextLowerKey(row);
-        if (
-          row &&
-          matchesConstraint(row) &&
-          conn.optionalFilters.every(f => f(row!))
-        ) {
+        if (row && matchesConstraintAndFilters(row)) {
+          if (o && comparator(o.change.row, row) >= 0) {
+            return o.change.row;
+          }
           return row;
         }
       }
-      return row;
+      return o?.change.row;
     };
 
     let startAt = req.start?.row;
@@ -286,19 +295,22 @@ export class MemorySource implements Source {
         }
       }
     } else {
-      scanStart = req.start?.row;
+      scanStart = startAt;
     }
 
     yield* generateWithConstraint(
       generateWithStart(
-        generateWithOverlay(
-          startAt,
-          // 😬 - btree library doesn't support ideas like start "before" this
-          // key.
-          data.keys(scanStart as Row),
-          req.constraint,
-          overlay,
-          comparator,
+        generateWithFilter(
+          generateWithOverlay(
+            startAt,
+            // 😬 - btree library doesn't support ideas like start "before" this
+            // key.
+            data.keys(scanStart as Row),
+            req.constraint,
+            overlay,
+            comparator,
+          ),
+          matchesConstraintAndFilters,
         ),
         req,
         comparator,
@@ -365,6 +377,14 @@ function* generateWithConstraint(
       break;
     }
     yield node;
+  }
+}
+
+function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
+  for (const node of it) {
+    if (filter(node.row)) {
+      yield node;
+    }
   }
 }
 
