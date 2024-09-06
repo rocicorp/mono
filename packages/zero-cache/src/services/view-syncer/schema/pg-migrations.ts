@@ -4,12 +4,10 @@ import {
   runSchemaMigrations,
   type VersionMigrationMap,
 } from '../../../db/migration.js';
-import {setupCVRTables} from './cvr.js';
+import {PG_SCHEMA, setupCVRTables} from './cvr.js';
 
 export async function initViewSyncerSchema(
   log: LogContext,
-  debugName: string,
-  schemaName: string,
   db: postgres.Sql,
 ): Promise<void> {
   const schemaVersionMigrationMap: VersionMigrationMap = {
@@ -21,8 +19,8 @@ export async function initViewSyncerSchema(
 
   await runSchemaMigrations(
     log,
-    debugName,
-    schemaName,
+    'view-syncer',
+    PG_SCHEMA,
     db,
     schemaVersionMigrationMap,
   );
