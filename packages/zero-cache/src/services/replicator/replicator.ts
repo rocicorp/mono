@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {CancelableAsyncIterable} from '../../types/streams.js';
 import type {Service} from '../service.js';
@@ -53,7 +53,7 @@ export class ReplicatorService implements Replicator, Service {
     this.#upstreamUri = upstreamUri;
     this.#syncReplicaDbFile = syncReplicaDbFile;
 
-    const replica = new Database(syncReplicaDbFile);
+    const replica = new Database(this.#lc, syncReplicaDbFile);
     replica.pragma('journal_mode = WAL');
     // TODO: Any other replica setup required here?
 

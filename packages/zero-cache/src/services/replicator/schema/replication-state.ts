@@ -5,7 +5,7 @@
  * after the logical replication handoff when initial data synchronization has completed.
  */
 
-import {Database} from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import * as v from 'shared/src/valita.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {toLexiVersion} from 'zero-cache/src/types/lsn.js';

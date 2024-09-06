@@ -1,9 +1,10 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {unlink} from 'fs/promises';
 import {tmpdir} from 'os';
 import {ident} from 'pg-format';
 import {randInt} from 'shared/src/rand.js';
 import {expect} from 'vitest';
+import {LogContext} from '@rocicorp/logger';
 
 export class DbFile {
   readonly path;
@@ -12,8 +13,8 @@ export class DbFile {
     this.path = `${tmpdir()}/${testName}-${randInt(1000000, 9999999)}.db`;
   }
 
-  connect(): Database.Database {
-    return new Database(this.path);
+  connect(lc: LogContext): Database {
+    return new Database(lc, this.path);
   }
 
   async unlink() {
@@ -22,7 +23,7 @@ export class DbFile {
 }
 
 export function initDB(
-  db: Database.Database,
+  db: Database,
   statements?: string,
   tables?: Record<string, object[]>,
 ) {
@@ -45,7 +46,7 @@ export function initDB(
 }
 
 export function expectTables(
-  db: Database.Database,
+  db: Database,
   tables?: Record<string, unknown[]>,
   numberType: 'number' | 'bigint' = 'number',
 ) {

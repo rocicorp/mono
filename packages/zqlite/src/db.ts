@@ -1,22 +1,23 @@
 import type {LogContext} from '@rocicorp/logger';
-import SQLite3Database, {Statement as SQLite3Statement} from 'better-sqlite3';
+import SQLite3Database, {
+  RunResult,
+  Statement as SQLite3Statement,
+} from 'better-sqlite3';
 
 export class Database {
   readonly #db: SQLite3Database.Database;
   readonly #lc: LogContext;
   readonly #threshold: number;
 
-  constructor(lc: LogContext, path: string, slowQueryThreshold = 1000) {
-    this.#lc = lc
-      .withContext('component', 'Database')
-      .withContext('path', path);
+  constructor(lc: LogContext, path: string, slowQueryThreshold = 300) {
+    this.#lc = lc.withContext('class', 'Database').withContext('path', path);
     this.#db = new SQLite3Database(path);
     this.#threshold = slowQueryThreshold;
   }
 
   prepare(sql: string): Statement {
     return new Statement(
-      this.#lc.withContext('component', 'Statement').withContext('sql', sql),
+      this.#lc.withContext('class', 'Statement').withContext('sql', sql),
       this.#db.prepare(sql),
       this.#threshold,
     );
@@ -31,9 +32,25 @@ export class Database {
       this.#threshold,
     );
   }
+
+  pragma(sql: string): void {
+    this.#db.pragma(sql);
+  }
+
+  close(): void {
+    this.#db.close();
+  }
+
+  transaction<T>(fn: () => T): T {
+    return this.#db.transaction(fn)();
+  }
+
+  get name() {
+    return this.#db.name;
+  }
 }
 
-class Statement {
+export class Statement {
   readonly #stmt: SQLite3Statement;
   readonly #lc: LogContext;
   readonly #threshold: number;
@@ -44,14 +61,20 @@ class Statement {
     this.#threshold = threshold;
   }
 
-  run(...params: unknown[]): void {
+  safeIntegers(useBigInt: boolean): this {
+    this.#stmt.safeIntegers(useBigInt);
+    return this;
+  }
+
+  run(...params: unknown[]): RunResult {
     const start = performance.now();
-    this.#stmt.run(...params);
+    const ret = this.#stmt.run(...params);
     logIfSlow(
       performance.now() - start,
       this.#lc.withContext('method', 'run'),
       this.#threshold,
     );
+    return ret;
   }
 
   get<T>(...params: unknown[]): T {

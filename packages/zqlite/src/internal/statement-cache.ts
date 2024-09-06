@@ -1,4 +1,4 @@
-import type {Database, Statement} from 'better-sqlite3';
+import type {Database, Statement} from '../db.js';
 import {assert} from 'shared/src/asserts.js';
 
 export type CachedStatementMap = Map<string, Statement[]>;

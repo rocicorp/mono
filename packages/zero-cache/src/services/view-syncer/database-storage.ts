@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
+import {Database, Statement} from 'zqlite/src/db.js';
 import {JSONValue} from 'shared/src/json.js';
 import {Storage} from 'zql/src/zql/ivm/operator.js';
 import {Stream} from 'zql/src/zql/ivm/stream.js';
@@ -13,13 +13,13 @@ export interface ClientGroupStorage {
 }
 
 type Statements = {
-  get: Database.Statement;
-  set: Database.Statement;
-  del: Database.Statement;
-  scan: Database.Statement;
-  clear: Database.Statement;
-  commit: Database.Statement;
-  begin: Database.Statement;
+  get: Statement;
+  set: Statement;
+  del: Statement;
+  scan: Statement;
+  clear: Statement;
+  commit: Statement;
+  begin: Statement;
 };
 
 // Exported for testing.
@@ -48,7 +48,7 @@ export class DatabaseStorage {
     // database (file) and acts as the single reader/writer of the DB, so
     // `locking_mode` is set to `EXCLUSIVE` for performance. Similarly, since
     // durability is not important, `synchronous` is set to `OFF` for performance.
-    const db = new Database(path);
+    const db = new Database(lc, path);
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = OFF');
     db.pragma('locking_mode = EXCLUSIVE');
@@ -60,10 +60,10 @@ export class DatabaseStorage {
 
   readonly #stmts: Statements;
   readonly #options: typeof defaultOptions;
-  readonly #db: Database.Database;
+  readonly #db: Database;
   #numWrites = 0;
 
-  constructor(db: Database.Database, options = defaultOptions) {
+  constructor(db: Database, options = defaultOptions) {
     this.#stmts = {
       get: db.prepare(`
         SELECT val FROM storage WHERE
@@ -107,7 +107,7 @@ export class DatabaseStorage {
     def?: JSONValue,
   ): JSONValue | undefined {
     this.#maybeCheckpoint();
-    const row = this.#stmts.get.get(cgID, opID, key);
+    const row = this.#stmts.get.get<{val: string}>(cgID, opID, key);
     return row ? JSON.parse(row.val) : def;
   }
 
@@ -145,7 +145,10 @@ export class DatabaseStorage {
     opts: {prefix: string} = {prefix: ''},
   ): Stream<[string, JSONValue]> {
     const {prefix} = opts;
-    for (const {key, val} of this.#stmts.scan.iterate(cgID, opID, prefix)) {
+    for (const {key, val} of this.#stmts.scan.iterate<{
+      key: string;
+      val: string;
+    }>(cgID, opID, prefix)) {
       if (!key.startsWith(prefix)) {
         return;
       }

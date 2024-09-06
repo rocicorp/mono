@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {randInt} from 'shared/src/rand.js';
