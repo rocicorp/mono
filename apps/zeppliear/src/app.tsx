@@ -26,14 +26,11 @@ import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
 import {escapeLike} from './util/escape-like.js';
 import {Schema} from './schema.js';
-import {
-  crewNames,
-  getCrewQuery,
-  getIssueListQuery,
-  IssueListQuery,
-} from './queries.js';
+import {getIssueListQuery, IssueListQuery} from './queries.js';
 
-const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
+const crewUserNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
+const activeUserName =
+  crewUserNames[Math.floor(Math.random() * crewUserNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const App = () => {
@@ -41,23 +38,22 @@ const App = () => {
   const [orderBy] = useOrderByState();
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
   const [menuVisible, setMenuVisible] = useState(false);
-  const zero = useZero<Schema>();
 
-  // Sync the user rows for the entire crew so that when we pick a random
-  // crew member below to be the current active user, we already have it
-  // synced.
-  useQuery(getCrewQuery(zero));
+  // Sorry zod – times change.
+  const z = useZero<Schema>();
 
+  // TODO: zql needs .one() to make this return string|undefined.
+  // TODO: Should be able to say .where('name', activeUserName) (implying '=')
   const userID =
-    useQuery(
-      zero.query.member.select('id').where('name', '=', activeUserName),
-    ).at(0)?.id ?? '';
+    useQuery(z.query.member.select('id').where('name', '=', activeUserName)).at(
+      0,
+    )?.id ?? '';
 
   useEffect(() => {
     console.debug({activeUserName, userID});
   }, [userID]);
 
-  const issueListQuery = getIssueListQuery(zero);
+  const issueListQuery = getIssueListQuery(z);
   const filteredQuery = filterQuery(issueListQuery, filters);
 
   const issueOrder = getIssueOrder(orderBy);
@@ -67,24 +63,24 @@ const App = () => {
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
-      await createIssue(zero, issue, userID);
+      await createIssue(z, issue, userID);
     },
-    [zero, userID],
+    [z, userID],
   );
   const handleCreateComment = useCallback(
     async (comment: CommentCreationPartial) => {
-      createIssueComment(zero, comment, userID);
+      createIssueComment(z, comment, userID);
     },
-    [zero, userID],
+    [z, userID],
   );
 
   const handleUpdateIssues = useCallback(
     async (issueUpdates: Array<{issue: Issue; update: IssueUpdate}>) => {
-      updateIssues(zero, {
+      updateIssues(z, {
         issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
       });
     },
-    [zero],
+    [z],
   );
 
   const handleOpenDetail = useCallback(
@@ -107,7 +103,7 @@ const App = () => {
       // TODO: base on whether initial sync is done
       isLoading={false}
       issuesProps={issuesProps}
-      zero={zero}
+      zero={z}
       userID={userID}
       onCloseMenu={handleCloseMenu}
       onToggleMenu={handleToggleMenu}
