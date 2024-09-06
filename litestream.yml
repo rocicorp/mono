@@ -1,0 +1,5 @@
+exec: node --require 'dotenv/config' --no-warnings --loader ts-node/esm .packages/zero-cache/src/server/main.ts
+dbs:
+  - path: /data/db
+    replicas:
+      - url: ${REPLICA_URL}

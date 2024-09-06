@@ -1,4 +1,5 @@
 FROM --platform=linux/amd64 node:18.20.4-alpine3.20
+RUN apk add g++ make py3-pip
 ARG NPM_TOKEN
 RUN mkdir -p /opt/app
 RUN mkdir -p /data/db
