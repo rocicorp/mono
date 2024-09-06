@@ -228,8 +228,11 @@ export class MemorySource implements Source {
       return valuesEqual(row[key], value);
     };
 
+    const matchesFilters = (row: Row) =>
+      conn.optionalFilters.every(f => f(row));
+
     const matchesConstraintAndFilters = (row: Row) =>
-      matchesConstraint(row) && conn.optionalFilters.every(f => f(row));
+      matchesConstraint(row) && matchesFilters(row);
     // If there is an overlay for this output, does it match the requested
     // constraints and filters?
     if (overlay) {
@@ -298,23 +301,22 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
+    const withOverlay = generateWithOverlay(
+      startAt,
+      // 😬 - btree library doesn't support ideas like start "before" this
+      // key.
+      data.keys(scanStart as Row),
+      req.constraint,
+      overlay,
+      comparator,
+    );
+
+    const withFilters = conn.optionalFilters.length
+      ? generateWithFilter(withOverlay, matchesFilters)
+      : withOverlay;
+
     yield* generateWithConstraint(
-      generateWithStart(
-        generateWithFilter(
-          generateWithOverlay(
-            startAt,
-            // 😬 - btree library doesn't support ideas like start "before" this
-            // key.
-            data.keys(scanStart as Row),
-            req.constraint,
-            overlay,
-            comparator,
-          ),
-          matchesConstraintAndFilters,
-        ),
-        req,
-        comparator,
-      ),
+      generateWithStart(withFilters, req, comparator),
       req.constraint,
     );
   }
