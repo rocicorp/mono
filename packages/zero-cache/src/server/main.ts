@@ -62,7 +62,7 @@ const cvrDB = postgres(config.CVR_DB_URI, {
   ...postgresTypeConfig(),
   onnotice: () => {},
 });
-await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
+await initViewSyncerSchema(lc, cvrDB);
 void cvrDB.end();
 
 lc.info?.('waiting for workers to be ready ...');

@@ -8,6 +8,8 @@ import {
   type RowRecord,
 } from './types.js';
 
+export const PG_SCHEMA = 'cvr';
+
 const CREATE_CVR_SCHEMA = `CREATE SCHEMA IF NOT EXISTS cvr;`;
 
 export type InstancesRow = {
