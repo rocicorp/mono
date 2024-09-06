@@ -29,7 +29,7 @@ export function useListData({
   onChangeStatus: (issue: Issue, status: Status) => void;
   onOpenDetail: (issue: Issue) => void;
 }): ListData {
-  const pageSize = 20;
+  const pageSize = 500;
   const {query, queryDeps, order} = issuesProps;
   const issueQueryOrdered = orderQuery(query, order, false);
   const [limit, setLimit] = useState(pageSize);
