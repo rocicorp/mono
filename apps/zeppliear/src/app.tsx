@@ -1,5 +1,5 @@
 import classnames from 'classnames';
-import {memo, useCallback, useEffect, useState} from 'react';
+import {memo, useCallback, useState} from 'react';
 import type {Zero} from 'zero-client';
 import {getIssueOrder} from './filters.js';
 import {
@@ -48,10 +48,6 @@ const App = () => {
     useQuery(z.query.member.select('id').where('name', '=', activeUserName)).at(
       0,
     )?.id ?? '';
-
-  useEffect(() => {
-    console.debug({activeUserName, userID});
-  }, [userID]);
 
   const issueListQuery = getIssueListQuery(z);
   const filteredQuery = filterQuery(issueListQuery, filters);
