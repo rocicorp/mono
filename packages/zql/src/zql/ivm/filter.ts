@@ -2,6 +2,7 @@ import {assert} from 'shared/src/asserts.js';
 import {Change} from './change.js';
 import {Node, Row} from './data.js';
 import {FetchRequest, Input, Operator, Output} from './operator.js';
+import {Schema} from './schema.js';
 import {Stream} from './stream.js';
 
 /**
@@ -38,7 +39,7 @@ export class Filter implements Operator {
     this.#input.destroy();
   }
 
-  getSchema() {
+  getSchema(): Schema {
     return this.#input.getSchema();
   }
 
