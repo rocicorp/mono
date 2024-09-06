@@ -13,10 +13,17 @@ import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
 const CREATE_REPLICATION_STATE_SCHEMA =
+  // replicaVersion   : A value identifying the version at which the initial sync happened, i.e.
+  //                    at which all rows were copied and initialized with `_0_version: "00"`. This
+  //                    value is used to distinguish data from other replicas (e.g. if a replica is
+  //                    reset or if there are ever multiple replicas). Data from replicas with
+  //                    different versions are incompatible, as their "00" version will correspond
+  //                    to different snapshots of the upstream database.
   // publications     : JSON stringified array of publication names
   // lock             : Auto-magic column for enforcing single-row semantics.
   `
   CREATE TABLE "_zero.ReplicationConfig" (
+    replicaVersion TEXT NOT NULL,
     publications TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
@@ -38,7 +45,11 @@ const CREATE_REPLICATION_STATE_SCHEMA =
 const stringArray = v.array(v.string());
 
 const subscriptionStateSchema = v
-  .object({publications: v.string(), watermark: v.string()})
+  .object({
+    replicaVersion: v.string(),
+    publications: v.string(),
+    watermark: v.string(),
+  })
   .map(s => ({
     ...s,
     publications: v.parse(JSON.parse(s.publications), stringArray),
@@ -56,22 +67,26 @@ export function initReplicationState(
   publications: string[],
   lsn: string,
 ) {
+  const version = toLexiVersion(lsn);
   db.exec(CREATE_REPLICATION_STATE_SCHEMA);
   db.prepare(
-    `INSERT INTO "_zero.ReplicationConfig" (publications) VALUES (?)`,
-  ).run(JSON.stringify(publications));
+    `
+    INSERT INTO "_zero.ReplicationConfig" 
+       (replicaVersion, publications) VALUES (?, ?)
+    `,
+  ).run(version, JSON.stringify(publications));
   db.prepare(
     `
-      INSERT INTO "_zero.ReplicationState" 
-        (watermark, stateVersion, nextStateVersion) VALUES (?,'00',?)
+    INSERT INTO "_zero.ReplicationState" 
+       (watermark, stateVersion, nextStateVersion) VALUES (?,'00',?)
     `,
-  ).run(lsn, toLexiVersion(lsn));
+  ).run(lsn, version);
 }
 
 export function getSubscriptionState(db: StatementRunner) {
   const result = db.get(
     `
-      SELECT c.publications, s.watermark 
+      SELECT c.replicaVersion, c.publications, s.watermark 
         FROM "_zero.ReplicationConfig" as c
         JOIN "_zero.ReplicationState" as s
         ON c.lock = s.lock
