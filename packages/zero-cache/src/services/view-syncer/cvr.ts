@@ -459,32 +459,37 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       const rowVersion = version ?? existing?.rowVersion;
       assert(rowVersion, `Cannot delete a row that is not in the CVR`);
 
-      const updated = {
-        id,
-        rowVersion,
-        patchVersion,
-        refCounts: merged,
-      };
+      if (merged === null && !existing) {
+        this._cvrStore.cancelPendingRowRecordWrite(id);
+      } else {
+        this._cvrStore.putRowRecord({
+          id,
+          rowVersion,
+          patchVersion,
+          refCounts: merged,
+        });
+      }
 
-      this._cvrStore.putRowRecord(updated);
-
-      if (contents) {
+      if (merged === null) {
+        // All refCounts have gone to zero, if row was previously synced
+        // delete it.
+        if (existing || previouslyReceived) {
+          patches.push({
+            patch: {
+              type: 'row',
+              op: 'del',
+              id,
+            },
+            toVersion: patchVersion,
+          });
+        }
+      } else if (contents) {
         patches.push({
           patch: {
             type: 'row',
             op: 'put',
             id,
             contents,
-          },
-          toVersion: patchVersion,
-        });
-      } else if (merged === null) {
-        // All refCounts have gone to zero.
-        patches.push({
-          patch: {
-            type: 'row',
-            op: 'del',
-            id,
           },
           toVersion: patchVersion,
         });
@@ -574,27 +579,27 @@ function mergeRefCounts(
   received: RefCounts | null | undefined,
   removeHashes?: Set<string>,
 ): RefCounts | null {
+  let merged: RefCounts = {};
   if (!existing) {
-    return received ?? {};
+    merged = received ?? {};
+  } else {
+    [existing, received].forEach((refCounts, i) => {
+      if (!refCounts) {
+        return;
+      }
+      for (const [hash, count] of Object.entries(refCounts)) {
+        if (i === 0 /* existing */ && removeHashes?.has(hash)) {
+          continue; // removeHashes from existing row.
+        }
+        merged[hash] = (merged[hash] ?? 0) + count;
+        if (merged[hash] === 0) {
+          delete merged[hash];
+        }
+      }
+
+      return merged;
+    });
   }
-  const merged: RefCounts = {};
-
-  [existing, received].forEach((refCounts, i) => {
-    if (!refCounts) {
-      return;
-    }
-    for (const [hash, count] of Object.entries(refCounts)) {
-      if (i === 0 /* existing */ && removeHashes?.has(hash)) {
-        continue; // removeHashes from existing row.
-      }
-      merged[hash] = (merged[hash] ?? 0) + count;
-      if (merged[hash] === 0) {
-        delete merged[hash];
-      }
-    }
-
-    return merged;
-  });
 
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
