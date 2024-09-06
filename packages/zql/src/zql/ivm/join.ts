@@ -31,7 +31,7 @@ export class Join implements Input {
   readonly #parentKey: string;
   readonly #childKey: string;
   readonly #relationshipName: string;
-  readonly #hidden: boolean;
+  readonly #schema: Schema;
 
   #output: Output | null = null;
 
@@ -52,12 +52,22 @@ export class Join implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
-    this.#hidden = hidden;
 
-    this.#parent.setOutput({
+    const parentSchema = parent.getSchema();
+    const childSchema = child.getSchema();
+    this.#schema = {
+      ...parentSchema,
+      isHidden: hidden,
+      relationships: {
+        ...parentSchema.relationships,
+        [relationshipName]: childSchema,
+      },
+    };
+
+    parent.setOutput({
       push: (change: Change) => this.#pushParent(change),
     });
-    this.#child.setOutput({
+    child.setOutput({
       push: (change: Change) => this.#pushChild(change),
     });
   }
@@ -72,17 +82,7 @@ export class Join implements Input {
   }
 
   getSchema(): Schema {
-    const parentSchema = this.#parent.getSchema();
-    const childSchema = this.#child.getSchema();
-    const ret = {
-      ...parentSchema,
-      isHidden: this.#hidden,
-      relationships: {
-        ...parentSchema.relationships,
-        [this.#relationshipName]: childSchema,
-      },
-    };
-    return ret;
+    return this.#schema;
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
