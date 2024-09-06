@@ -16,6 +16,7 @@ import {Constraint, FetchRequest, Input, Output} from './operator.js';
 import {PrimaryKey, Schema, SchemaValue} from './schema.js';
 import {Source, SourceChange, SourceInput} from './source.js';
 import {Stream} from './stream.js';
+import {createPredicate} from '../builder/filter.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -33,6 +34,7 @@ type Connection = {
   output: Output | undefined;
   sort: Ordering;
   compareRows: Comparator;
+  optionalFilters: ((row: Row) => boolean)[];
 };
 
 /**
@@ -93,7 +95,7 @@ export class MemorySource implements Source {
 
   connect(
     sort: Ordering,
-    _optionalFilters?: SimpleCondition[] | undefined,
+    optionalFilters?: SimpleCondition[] | undefined,
   ): SourceInput {
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
@@ -113,6 +115,7 @@ export class MemorySource implements Source {
       output: undefined,
       sort,
       compareRows: makeComparator(sort),
+      optionalFilters: (optionalFilters ?? []).map(f => createPredicate(f)),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
@@ -186,8 +189,8 @@ export class MemorySource implements Source {
 
     const callingConnectionNum = this.#connections.indexOf(from);
     assert(callingConnectionNum !== -1, 'Output not found');
-    const reg = this.#connections[callingConnectionNum];
-    const {sort: requestedSort} = reg;
+    const conn = this.#connections[callingConnectionNum];
+    const {sort: requestedSort} = conn;
 
     // If there is a constraint, we need an index sorted by it first.
     const indexSort: OrderPart[] = [];
@@ -236,7 +239,11 @@ export class MemorySource implements Source {
     const nextLowerKey = (row: Row | undefined) => {
       while (row !== undefined) {
         row = data.nextLowerKey(row);
-        if (row && matchesConstraint(row)) {
+        if (
+          row &&
+          matchesConstraint(row) &&
+          conn.optionalFilters.every(f => f(row!))
+        ) {
           return row;
         }
       }
@@ -278,6 +285,8 @@ export class MemorySource implements Source {
           scanStart[key] = dir === 'asc' ? minValue : maxValue;
         }
       }
+    } else {
+      scanStart = req.start?.row;
     }
 
     yield* generateWithConstraint(
