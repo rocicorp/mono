@@ -15,11 +15,11 @@ function init() {
     schemas: schema,
   });
 
-  // const sorts = ['modified', 'created', 'priority', 'status'] as const;
-  // for (const sort of sorts) {
-  //   const query = getIssuePreloadQuery(z, sort);
-  //   query.preload();
-  // }
+  const sorts = ['modified', 'created', 'priority', 'status'] as const;
+  for (const sort of sorts) {
+    const query = getIssuePreloadQuery(z, sort);
+    query.preload();
+  }
 
   // Exposed so we can mess around in the terminal and add/remove issues
   (window as {z?: Zero<Schema>}).z = z;
