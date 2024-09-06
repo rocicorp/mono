@@ -14,7 +14,7 @@ export function getIssuePreloadQuery(
   zero: Zero<Schema>,
   sort: 'modified' | 'created' | 'priority' | 'status',
 ) {
-  return zero.query.issue.related('labels').orderBy(sort, 'desc').limit(10_000);
+  return zero.query.issue.related('labels').orderBy(sort, 'desc').limit(1_000);
 }
 
 export const crewNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
