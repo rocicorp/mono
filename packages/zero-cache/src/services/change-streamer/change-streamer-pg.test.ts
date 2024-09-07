@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
@@ -12,6 +11,7 @@ import {
 } from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
+import {Database} from 'zqlite/src/db.js';
 import {initialSync, replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import {initializeStreamer} from './change-streamer-pg.js';
@@ -24,14 +24,14 @@ describe('change-streamer/service', {retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let changeDB: PostgresDB;
-  let replica: Database.Database;
+  let replica: Database;
   let streamer: ChangeStreamerService;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
     upstream = await testDBs.create('change_streamer_test_upstream');
     changeDB = await testDBs.create('change_streamer_test_change_db');
-    replica = new Database(':memory:');
+    replica = new Database(lc, ':memory:');
 
     const upstreamURI = getConnectionURI(upstream);
     await upstream`CREATE TABLE foo(id TEXT PRIMARY KEY)`;

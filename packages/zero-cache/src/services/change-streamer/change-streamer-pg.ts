@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'better-sqlite3';
 import {
   LogicalReplicationService,
   Pgoutput,
@@ -15,6 +14,7 @@ import {
 } from 'zero-cache/src/types/pg.js';
 import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
+import {Database} from 'zqlite/src/db.js';
 import {replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import {

@@ -1,8 +1,8 @@
-import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, test} from 'vitest';
 import {expectTables, testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {Database} from 'zqlite/src/db.js';
 import {initReplicationState} from '../../replicator/schema/replication-state.js';
 import {ensureReplicationConfig, setupCDCTables} from './tables.js';
 
@@ -20,7 +20,7 @@ describe('change-streamer/schema/tables', () => {
   });
 
   test('ensureReplicationConfig', async () => {
-    const replica1 = new Database(':memory:');
+    const replica1 = new Database(lc, ':memory:');
     initReplicationState(replica1, ['zero_data', 'zero_metadata'], '0/123');
 
     await ensureReplicationConfig(lc, db, {
