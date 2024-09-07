@@ -1,4 +1,5 @@
 import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
+import {Service} from '../service.js';
 import {Change} from './schema/change.js';
 
 /**
@@ -33,7 +34,7 @@ import {Change} from './schema/change.js';
  * the watermark corresponds to an "initial" watermark derived from the
  * replica at task startup.
  *
- * The ChangeStreamer thus uses a combination of this signal with ACK
+ * The ChangeStreamer uses a combination of this signal with ACK
  * responses from connected subscribers to determine the watermark up
  * to which it is safe to purge old change log entries.
  */
@@ -101,3 +102,5 @@ export type SubscriptionError = {
 };
 
 export type Downstream = ['change', ChangeEntry] | ['error', SubscriptionError];
+
+export interface ChangeStreamerService extends ChangeStreamer, Service {}

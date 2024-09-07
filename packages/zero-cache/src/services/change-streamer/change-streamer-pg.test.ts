@@ -14,8 +14,8 @@ import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
 import {initialSync, replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
-import {PostgresChangeStreamer} from './change-streamer-pg.js';
-import {Downstream} from './change-streamer.js';
+import {initializeStreamer} from './change-streamer-pg.js';
+import {ChangeStreamerService, Downstream} from './change-streamer.js';
 import {ChangeLogEntry} from './schema/tables.js';
 
 const REPLICA_ID = 'change_streamer_test_id';
@@ -25,7 +25,7 @@ describe('change-streamer/service', {retry: 3}, () => {
   let upstream: PostgresDB;
   let changeDB: PostgresDB;
   let replica: Database.Database;
-  let streamer: PostgresChangeStreamer;
+  let streamer: ChangeStreamerService;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
@@ -38,7 +38,7 @@ describe('change-streamer/service', {retry: 3}, () => {
 
     await initialSync(lc, REPLICA_ID, replica, upstreamURI);
 
-    streamer = await PostgresChangeStreamer.initialize(
+    streamer = await initializeStreamer(
       lc,
       changeDB,
       upstreamURI,

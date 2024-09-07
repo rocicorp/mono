@@ -17,9 +17,8 @@ import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
-import {Service} from '../service.js';
 import {
-  ChangeStreamer,
+  ChangeStreamerService,
   Downstream,
   ErrorType,
   SubscriberContext,
@@ -36,6 +35,34 @@ registerPostgresTypeParsers();
 
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
+
+/**
+ * Performs initialization and schema migrations and creates a
+ * PostgresChangeStreamer instance.
+ */
+export async function initializeStreamer(
+  lc: LogContext,
+  changeDB: PostgresDB,
+  upstreamUri: string,
+  replicaID: string,
+  replica: Database,
+): Promise<ChangeStreamerService> {
+  const {watermark: _, ...replicationConfig} = getSubscriptionState(
+    new StatementRunner(replica),
+  );
+
+  // Make sure the ChangeLog DB is setup.
+  await initChangeStreamerSchema(lc, changeDB);
+  await ensureReplicationConfig(lc, changeDB, replicationConfig);
+
+  return new PostgresChangeStreamer(
+    lc,
+    changeDB,
+    upstreamUri,
+    replicaID,
+    replicationConfig,
+  );
+}
 
 /**
  * The PostgresChangeStreamer implementation connects to a logical
@@ -94,35 +121,7 @@ const MAX_RETRY_DELAY_MS = 10000;
  * set. However, the Subscriber still buffers any forwarded messages until
  * its catchup is complete.
  */
-export class PostgresChangeStreamer implements ChangeStreamer, Service {
-  /**
-   * Performs initialization and schema migrations and creates a
-   * PostgresChangeStreamer instance.
-   */
-  static async initialize(
-    lc: LogContext,
-    changeDB: PostgresDB,
-    upstreamUri: string,
-    replicaID: string,
-    replica: Database,
-  ): Promise<PostgresChangeStreamer> {
-    const {watermark: _, ...replicationConfig} = getSubscriptionState(
-      new StatementRunner(replica),
-    );
-
-    // Make sure the ChangeLog DB is setup.
-    await initChangeStreamerSchema(lc, changeDB);
-    await ensureReplicationConfig(lc, changeDB, replicationConfig);
-
-    return new PostgresChangeStreamer(
-      lc,
-      changeDB,
-      upstreamUri,
-      replicaID,
-      replicationConfig,
-    );
-  }
-
+class PostgresChangeStreamer implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
