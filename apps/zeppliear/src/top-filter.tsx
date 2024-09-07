@@ -126,28 +126,31 @@ function TopFilter({onToggleMenu = noop}: Props) {
           />
         </div>
       </div>
-      {statusFilters || priorityFilters || labelFilters ? (
-        <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
-          <FilterStatus
-            filter={statusFilters}
-            displayStrings={statusDisplayStrings}
-            onDelete={() => setStatusFilterByParam(null)}
-            label="Status"
-          />
-          <FilterStatus
-            filter={priorityFilters}
-            displayStrings={priorityDisplayStrings}
-            onDelete={() => setPriorityFilterByParam(null)}
-            label="Priority"
-          />
-          <FilterStatus
-            filter={labelFilters}
-            onDelete={() => setLabelFilterByParam(null)}
-            label="Label"
-            operator="is any of"
-          />
-        </div>
-      ) : null}
+
+      <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
+        {statusFilters || priorityFilters || labelFilters ? (
+          <>
+            <FilterStatus
+              filter={statusFilters}
+              displayStrings={statusDisplayStrings}
+              onDelete={() => setStatusFilterByParam(null)}
+              label="Status"
+            />
+            <FilterStatus
+              filter={priorityFilters}
+              displayStrings={priorityDisplayStrings}
+              onDelete={() => setPriorityFilterByParam(null)}
+              label="Priority"
+            />
+            <FilterStatus
+              filter={labelFilters}
+              onDelete={() => setLabelFilterByParam(null)}
+              label="Label"
+              operator="is any of"
+            />
+          </>
+        ) : null}
+      </div>
     </>
   );
 }
