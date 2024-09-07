@@ -195,8 +195,6 @@ class PostgresChangeStreamer implements ChangeStreamerService {
   }
 
   readonly #processMessage = (lsn: string, msg: Pgoutput.Message) => {
-    this.#lc.debug?.(`processing message ${stringify(msg)}`);
-
     const change = msg as Change;
     switch (change.tag) {
       case 'begin':
