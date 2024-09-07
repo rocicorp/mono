@@ -51,7 +51,7 @@ export async function initializeStreamer(
     new StatementRunner(replica),
   );
 
-  // Make sure the ChangeLog DB is setup.
+  // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB);
   await ensureReplicationConfig(lc, changeDB, replicationConfig);
 
@@ -258,7 +258,7 @@ class PostgresChangeStreamer implements ChangeStreamerService {
       cleanup: () => this.#forwarder.remove(id, subscriber),
     });
     const subscriber = new Subscriber(id, watermark, downstream);
-    if (ctx.replicaVersion !== this.#replicationConfig?.replicaVersion) {
+    if (ctx.replicaVersion !== this.#replicationConfig.replicaVersion) {
       subscriber.close(ErrorType.WrongReplicaVersion);
     } else {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
