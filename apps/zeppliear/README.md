@@ -82,14 +82,9 @@ docker compose down
 docker volume rm -f docker_pgdata_upstream
 ```
 
-## Tour
-
-https://www.youtube.com/watch?v=nFZ5Fz6bj_8
-
-Please don't share.
-
 ## Known Issues
 
-- Choosing any kind of filter (priority, status, text) often kills sync. You'll see errors in the console. You can recover by either refreshing, or if that doesnt' work clearing browser state.
+- Sync seems solid-ish, but we've only been running it for a week. If you see it fail, you can recover by clearing your local browser state and refreshing.
 - Filter by label doesn't work at all.
-- Mutation propagation is slow if there are many priority or status filters selected.
+- Mutation propagation is slow if there are priority or status filters selected.
+- All tables synced with Zero require a `id` primary key, even junction tables. This is not a requirement of our query engine it's just left over goop we haven't fixed yet.
