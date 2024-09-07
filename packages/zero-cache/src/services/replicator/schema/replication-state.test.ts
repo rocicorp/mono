@@ -22,6 +22,7 @@ describe('replicator/schema/replication-state', () => {
       ['_zero.ReplicationConfig']: [
         {
           lock: 1,
+          replicaVersion: '0a',
           publications: '["zero_data","zero_metadata"]',
         },
       ],
@@ -38,6 +39,7 @@ describe('replicator/schema/replication-state', () => {
 
   test('subscription state', () => {
     expect(getSubscriptionState(db)).toEqual({
+      replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
       watermark: '0/0a',
     });
@@ -67,6 +69,7 @@ describe('replicator/schema/replication-state', () => {
       nextStateVersion: '0f',
     });
     expect(getSubscriptionState(db)).toEqual({
+      replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
       watermark: '0/0f',
     });
@@ -87,6 +90,7 @@ describe('replicator/schema/replication-state', () => {
       nextStateVersion: '0r',
     });
     expect(getSubscriptionState(db)).toEqual({
+      replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
       watermark: '0/1b',
     });

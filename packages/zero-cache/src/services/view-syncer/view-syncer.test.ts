@@ -110,7 +110,7 @@ describe('view-syncer/service', () => {
     `);
 
     cvrDB = await testDBs.create('view_syncer_service_test');
-    await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
+    await initViewSyncerSchema(lc, cvrDB);
 
     versionNotifications = Subscription.create();
     operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(

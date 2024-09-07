@@ -2797,4 +2797,179 @@ describe('view-syncer/cvr', () => {
     //   } satisfies LastActive,
     // });
   });
+
+  test('advance with delete that cancels out add', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          lastActive: new Date(Date.UTC(2024, 3, 23)),
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(lc, db, 'abc123');
+    const cvr = await cvrStore.load();
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
+
+    const newVerison = updater.updatedVersion();
+    expect(newVerison).toEqual({
+      stateVersion: '1ba',
+    });
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {oneHash: 0},
+              contents: {id: 'should-show-up-in-patch'},
+            },
+          ],
+          [
+            ROW_ID3,
+            {
+              version: '01',
+              refCounts: {oneHash: 0},
+              contents: {id: 'should-not-show-up-in-patch'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          contents: {id: 'should-show-up-in-patch'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    expect(updater.numPendingWrites()).toBe(2);
+
+    // Same last active day (no index change), but different hour.
+    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+
+    // Verify round tripping.
+    const cvrStore2 = new CVRStore(lc, db, 'abc123');
+    const reloaded = await cvrStore2.load();
+    expect(reloaded).toEqual(updated);
+
+    await expectState(db, {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1ba',
+          lastActive: new Date(Date.UTC(2024, 3, 23, 1)),
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '04',
+          refCounts: {oneHash: 1},
+          patchVersion: '1ba',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    });
+  });
 });
