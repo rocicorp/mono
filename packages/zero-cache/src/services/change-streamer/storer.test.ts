@@ -5,20 +5,20 @@ import {testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
-import {Archiver} from './archiver.js';
 import {Downstream} from './change-streamer.js';
 import {setupCDCTables} from './schema/tables.js';
+import {Storer} from './storer.js';
 import {createSubscriber} from './test-utils.js';
 
-describe('change-streamer/archiver', () => {
+describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
-  let archiver: Archiver;
+  let storer: Storer;
   let done: Promise<void>;
   let commits: Queue<unknown>;
 
   beforeEach(async () => {
-    db = await testDBs.create('change_streamer_archiver');
+    db = await testDBs.create('change_streamer_storer');
     await db.begin(async tx => {
       await setupCDCTables(lc, tx);
       await Promise.all(
@@ -33,15 +33,15 @@ describe('change-streamer/archiver', () => {
       );
     });
     commits = new Queue();
-    archiver = new Archiver(lc, db, ({commitEndLsn}) =>
+    storer = new Storer(lc, db, ({commitEndLsn}) =>
       commits.enqueue(commitEndLsn),
     );
-    done = archiver.run();
+    done = storer.run();
   });
 
   afterEach(async () => {
     await testDBs.drop(db);
-    void archiver.stop();
+    void storer.stop();
     await done;
   });
 
@@ -65,7 +65,7 @@ describe('change-streamer/archiver', () => {
     sub.send({watermark: '05', change: messages.begin('123')});
 
     // Catchup should start immediately since there are no txes in progress.
-    archiver.catchup(sub);
+    storer.catchup(sub);
 
     expect(await drainUntil('05', stream)).toMatchInlineSnapshot(`
       [
@@ -148,12 +148,12 @@ describe('change-streamer/archiver', () => {
     sub2.send({watermark: '07', change: messages.begin('456')});
 
     // Start a transaction before enqueuing catchup.
-    archiver.archive({watermark: '05', change: messages.begin('123')});
+    storer.store({watermark: '05', change: messages.begin('123')});
     // Enqueue catchup before transaction completes.
-    archiver.catchup(sub1);
-    archiver.catchup(sub2);
+    storer.catchup(sub1);
+    storer.catchup(sub2);
     // Finish the transaction.
-    archiver.archive({watermark: '06', change: messages.commit('312')});
+    storer.store({watermark: '06', change: messages.commit('312')});
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '02'.
@@ -278,17 +278,17 @@ describe('change-streamer/archiver', () => {
     sub.send({watermark: '09', change: messages.begin('789')});
 
     // Start a transaction before enqueuing catchup.
-    archiver.archive({watermark: '05', change: messages.begin('123')});
+    storer.store({watermark: '05', change: messages.begin('123')});
     // Enqueue catchup before transaction completes.
-    archiver.catchup(sub);
+    storer.catchup(sub);
     // Finish the transaction.
-    archiver.archive({watermark: '06', change: messages.commit('312')});
+    storer.store({watermark: '06', change: messages.commit('312')});
 
     // And finish another the transaction. In reality, these would be
     // sent by the forwarder, but we skip it in the test to confirm that
     // catchup doesn't include the next transaction.
-    archiver.archive({watermark: '07', change: messages.begin('456')});
-    archiver.archive({watermark: '08', change: messages.commit('654')});
+    storer.store({watermark: '07', change: messages.begin('456')});
+    storer.store({watermark: '08', change: messages.commit('654')});
 
     // Messages should catchup from after '04' and include '05' and '06'
     // from the pending transaction. '07' and '08' should not be included
@@ -337,23 +337,23 @@ describe('change-streamer/archiver', () => {
     `);
   });
 
-  test('archive positioning and replay detection', async () => {
-    archiver.archive({watermark: '05', change: messages.begin('123')});
-    archiver.archive({watermark: '05', change: messages.truncate('issues')});
-    archiver.archive({watermark: '06', change: messages.commit('321')});
+  test('change positioning and replay detection', async () => {
+    storer.store({watermark: '05', change: messages.begin('123')});
+    storer.store({watermark: '05', change: messages.truncate('issues')});
+    storer.store({watermark: '06', change: messages.commit('321')});
     expect(await commits.dequeue()).toBe('321');
 
     // Simulate a replay.
-    archiver.archive({watermark: '05', change: messages.begin('123')});
-    archiver.archive({watermark: '05', change: messages.truncate('issues')});
-    archiver.archive({watermark: '06', change: messages.commit('321')});
+    storer.store({watermark: '05', change: messages.begin('123')});
+    storer.store({watermark: '05', change: messages.truncate('issues')});
+    storer.store({watermark: '06', change: messages.commit('321')});
     // ACK should be resent.
     expect(await commits.dequeue()).toBe('321');
 
     // Continue to the next transaction.
-    archiver.archive({watermark: '07', change: messages.begin('456')});
-    archiver.archive({watermark: '07', change: messages.truncate('issues')});
-    archiver.archive({watermark: '08', change: messages.commit('654')});
+    storer.store({watermark: '07', change: messages.begin('456')});
+    storer.store({watermark: '07', change: messages.truncate('issues')});
+    storer.store({watermark: '08', change: messages.commit('654')});
     expect(await commits.dequeue()).toBe('654');
 
     expect(await db`SELECT * FROM cdc."ChangeLog" WHERE watermark >= '05'`)

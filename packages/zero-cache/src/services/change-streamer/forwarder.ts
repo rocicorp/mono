@@ -7,7 +7,7 @@ export class Forwarder {
   #inTransaction = false;
 
   /**
-   * `add()` is called in lock step with `Archiver.catchup()` so that the
+   * `add()` is called in lock step with `Storer.catchup()` so that the
    * two components have an equivalent interpretation of whether a Transaction is
    * currently being streamed.
    */
@@ -30,7 +30,7 @@ export class Forwarder {
   }
 
   /**
-   * `forward()` is called in lock step with `Archiver.archive()` so that the
+   * `forward()` is called in lockstep with `Storer.store()` so that the
    * two components have an equivalent interpretation of whether a Transaction is
    * currently being streamed.
    */
@@ -43,15 +43,14 @@ export class Forwarder {
       case 'begin':
         // While in a Transaction, all added subscribers are "queued" so that no
         // messages are forwarded to them. This state corresponds to being queued
-        // for catching in the Archiver, which will be retrieved change entries from
-        // the archive (and call catchup() on them) once the current transaction is
-        // committed.
+        // for catchup in the Storer, which will retrieve historic changes
+        // and call catchup() once the current transaction is committed.
         this.#inTransaction = true;
         break;
       case 'commit':
         // Upon commit, all queued subscribers are transferred to the active set.
         // This means that they can receive messages starting from the next transaction.
-        // Note that if catchup is still in progress (in the Archiver), these messages
+        // Note that if catchup is still in progress (in the Storer), these messages
         // will be buffered in the backlog until catchup completes.
         this.#inTransaction = false;
         for (const sub of this.#queued.values()) {

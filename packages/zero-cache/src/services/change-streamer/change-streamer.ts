@@ -2,41 +2,40 @@ import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
 import {Change} from './schema/change.js';
 
 /**
- * The ChangeStreamer is the interface between replicators ("subscribers")
+ * The ChangeStreamer is the component between replicators ("subscribers")
  * and a canonical upstream source of changes (e.g. a Postgres logical
- * replication slot).
- *
- * It facilitates multiple subscribers without incurring the associated
- * upstream expense (e.g. PG replication slots are resource intensive)
- * by employing a "forward-store-ack" algorithm.
+ * replication slot). It facilitates multiple subscribers without incurring
+ * the associated upstream expense (e.g. PG replication slots are resource
+ * intensive) with a "forward-store-ack" procedure.
  *
  * * Changes from the upstream source are immediately **forwarded** to
  *   connected subscribers to minimize latency.
  *
- * * They are then **stored** in a separate archive to facilitate catchup
+ * * They are then **stored** in a separate DB to facilitate catchup
  *   of connecting subscribers that are behind.
  *
  * * **Acknowledgements** are sent upstream after they are successfully
- *   archived.
+ *   stored.
  *
- * **Cleanup**
+ * **Cleanup** (Not yet implemented)
  *
- * Old changes in the archive must be periodically purged to avoid
- * unbounded growth. Postgres replication uses an ACK protocol to track,
- * per replication slot, the latest LSN that the subscriber confirmed,
- * allowing older log entries to be cleaned up.
+ * Unlike Postgres replication slots, in which the progress of a static
+ * subscriber is tracked in the replication slot, the ChangeStreamer
+ * supports a dynamic set of subscribers (i.e.. zero-caches) that can
+ * can continually change.
  *
- * The ChangeStreamer has a more flexible protocol and supports a
- * dynamic set of subscribers. Rather than using an ACK protocol to
- * track the progress of each subscriber, the protocol is simplified
- * based on the fact that all subscribers (i.e. tasks) are initialized
- * with a global backup of the replica that is continually updated.
- * A tasks, when connecting to the ChangeStreamer, indicates when its
- * watermark comes from the replica (i.e. its `initial` subscription),
- * which the ChangeStreamer uses as a signal for how up to date the
- * backup is. The ChangeStreamer can thus safely purge changes up to
- * the backup's watermark, or that of its most behind connected client,
- * whichever is earlier.
+ * However, it is not the case that the ChangeStreamer needs to support
+ * arbitrarily old subscribers. Because the replica is continually
+ * backed up to a global location and used to initialize new subscriber
+ * tasks, an initial subscription request from a subscriber constitutes
+ * a signal for how "behind" a new subscriber task can be. This is
+ * reflected in the {@link SubscriberContext}, which indicates whether
+ * the watermark corresponds to an "initial" watermark derived from the
+ * replica at task startup.
+ *
+ * The ChangeStreamer thus uses a combination of this signal with ACK
+ * responses from connected subscribers to determine the watermark up
+ * to which it is safe to purge old change log entries.
  */
 export interface ChangeStreamer {
   /**
@@ -44,6 +43,7 @@ export interface ChangeStreamer {
    * which indicates the watermark at which the subscriber is up to
    * date.
    */
+  // TODO: Also take a CancelableAsyncIterable<Upstream> for receiving ACKs.
   subscribe(ctx: SubscriberContext): CancelableAsyncIterable<Downstream>;
 }
 
@@ -73,7 +73,7 @@ export type SubscriberContext = {
    * Whether this is the first subscription request made by the task,
    * i.e. indicating that the watermark comes from a restored replica
    * backup. The ChangeStreamer uses this to determine which changes
-   * are safe to purge from the archive.
+   * are safe to purge from the Storer.
    */
   initial: boolean;
 };

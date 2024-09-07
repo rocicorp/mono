@@ -18,7 +18,6 @@ import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import {Service} from '../service.js';
-import {Archiver} from './archiver.js';
 import {
   ChangeStreamer,
   Downstream,
@@ -29,6 +28,7 @@ import {Forwarder} from './forwarder.js';
 import {Change} from './schema/change.js';
 import {initChangeStreamerSchema} from './schema/init.js';
 import {ensureReplicationConfig, ReplicationConfig} from './schema/tables.js';
+import {Storer} from './storer.js';
 import {Subscriber} from './subscriber.js';
 
 // BigInt support from LogicalReplicationService.
@@ -37,54 +37,122 @@ registerPostgresTypeParsers();
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
 
+/**
+ * The PostgresChangeStreamer implementation connects to a logical
+ * replication slot on the upstream Postgres and dispatches messages
+ * in the replication stream to a {@link Forwarder} and {@link Storer}
+ * to execute the forward-store-ack procedure described in
+ * {@link ChangeStreamer}.
+ *
+ * Connecting clients first need to be "caught up" to the current watermark
+ * (from stored change log entries) before new entries are forwarded to
+ * them. This is non-trivial because the replication stream may be in the
+ * middle of a pending streamed Transaction for which some entries have
+ * already been forwarded but are not yet committed to the store.
+ *
+ *
+ * ```
+ * ------------------------------- - - - - - - - - - - - - - - - - - - -
+ * | Historic changes in storage |  Pending (streamed) tx  |   Next tx
+ * ------------------------------- - - - - - - - - - - - - - - - - - - -
+ *                                           Replication stream
+ *                                           >  >  >  >  >  >  >  >  >
+ *           ^  ---> required catchup --->   ^
+ * Subscriber watermark               Subscription begins
+ * ```
+ *
+ * Preemptively buffering the changes of every pending transaction
+ * would be wasteful and consume too much memory for large transactions.
+ *
+ * Instead, the streamer synchronously dispatches changes and subscriptions
+ * to the {@link Forwarder} and the {@link Storer} such that the two
+ * components are aligned as to where in the stream the subscription started.
+ * The two components then coordinate catchup and handoff via the
+ * {@link Subscriber} object with the following algorithm:
+ *
+ * * If the streamer is in the middle of a pending Transaction, the
+ *   Subscriber is "queued" on both the Forwarder and the Storer. In this
+ *   state, new changes are *not* forwarded to the Subscriber, and catchup
+ *   is not yet executed.
+ * * Once the commit message for the pending Transaction is processed
+ *   by the Storer, it begins catchup on the Subscriber (with a READONLY
+ *   snapshot so that it does not block subsequent storage operations).
+ *   This catchup is thus guaranteed to load the change log entries of
+ *   that last Transaction.
+ * * When the Forwarder processes that same commit message, it moves the
+ *   Subscriber from the "queued" to the "active" set of clients such that
+ *   the Subscriber begins receiving new changes, starting from the next
+ *   Transaction.
+ * * The Subscriber does not forward those changes, however, if its catchup
+ *   is not complete. Until then, it buffers the changes in memory.
+ * * Once catchup is complete, the buffered changes are immediately sent
+ *   and the Subscriber henceforth forwards changes as they are received.
+ *
+ * In the (common) case where the streamer is not in the middle of a pending
+ * transaction when a subscription begins, the Storer begins catchup
+ * immediately and the Forwarder directly adds the Subscriber to its active
+ * set. However, the Subscriber still buffers any forwarded messages until
+ * its catchup is complete.
+ */
 export class PostgresChangeStreamer implements ChangeStreamer, Service {
+  /**
+   * Performs initialization and schema migrations and creates a
+   * PostgresChangeStreamer instance.
+   */
+  static async initialize(
+    lc: LogContext,
+    changeDB: PostgresDB,
+    upstreamUri: string,
+    replicaID: string,
+    replica: Database,
+  ): Promise<PostgresChangeStreamer> {
+    const {watermark: _, ...replicationConfig} = getSubscriptionState(
+      new StatementRunner(replica),
+    );
+
+    // Make sure the ChangeLog DB is setup.
+    await initChangeStreamerSchema(lc, changeDB);
+    await ensureReplicationConfig(lc, changeDB, replicationConfig);
+
+    return new PostgresChangeStreamer(
+      lc,
+      changeDB,
+      upstreamUri,
+      replicaID,
+      replicationConfig,
+    );
+  }
+
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
   readonly #replicaID: string;
-  readonly #replica: StatementRunner;
-  readonly #changeDB: PostgresDB;
-  readonly #archiver: Archiver;
+  readonly #replicationConfig: ReplicationConfig;
+  readonly #storer: Storer;
   readonly #forwarder: Forwarder;
 
-  #stopped = false;
   #service: LogicalReplicationService | undefined;
-  #replicationConfig: ReplicationConfig | undefined;
   #lastLSN = '0/0';
+  #stopped = false;
 
   constructor(
     lc: LogContext,
     changeDB: PostgresDB,
     upstreamUri: string,
     replicaID: string,
-    replica: Database,
+    replicationConfig: ReplicationConfig,
   ) {
     this.id = `change-streamer:${replicaID}`;
     this.#lc = lc.withContext('component', 'change-streamer');
-    this.#changeDB = changeDB;
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
-    this.#replica = new StatementRunner(replica);
-    this.#archiver = new Archiver(lc, changeDB, this.#ack);
+    this.#replicationConfig = replicationConfig;
+    this.#storer = new Storer(lc, changeDB, this.#ack);
     this.#forwarder = new Forwarder();
   }
 
   async run() {
-    // Set the #replicationConfig as soon as run() is called so that
-    // subscribe() requests can succeed immediately.
-    const {watermark: _, ...replicationConfig} = getSubscriptionState(
-      this.#replica,
-    );
-    this.#replicationConfig = replicationConfig;
-
-    // Make sure the ChangeLog DB is setup.
-    await initChangeStreamerSchema(this.#lc, this.#changeDB);
-    await ensureReplicationConfig(
-      this.#lc,
-      this.#changeDB,
-      this.#replicationConfig,
-    );
-    void this.#archiver.run();
+    void this.#storer.run();
 
     let retryDelay = INITIAL_RETRY_DELAY_MS;
 
@@ -140,7 +208,7 @@ export class PostgresChangeStreamer implements ChangeStreamer, Service {
       case 'commit': {
         const watermark = toLexiVersion(lsn);
         const changeEntry = {watermark, change};
-        this.#archiver.archive(changeEntry);
+        this.#storer.store(changeEntry);
         this.#forwarder.forward(changeEntry);
         return;
       }
@@ -196,7 +264,7 @@ export class PostgresChangeStreamer implements ChangeStreamer, Service {
     } else {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
       this.#forwarder.add(subscriber);
-      this.#archiver.catchup(subscriber);
+      this.#storer.catchup(subscriber);
     }
     return downstream;
   }
@@ -205,6 +273,6 @@ export class PostgresChangeStreamer implements ChangeStreamer, Service {
     this.#lc.info?.('Stopping ChangeStreamer');
     this.#stopped = true;
     await this.#service?.stop();
-    await this.#archiver.stop();
+    await this.#storer.stop();
   }
 }

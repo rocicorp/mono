@@ -38,7 +38,7 @@ describe('change-streamer/service', {retry: 3}, () => {
 
     await initialSync(lc, REPLICA_ID, replica, upstreamURI);
 
-    streamer = new PostgresChangeStreamer(
+    streamer = await PostgresChangeStreamer.initialize(
       lc,
       changeDB,
       upstreamURI,
@@ -72,7 +72,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     return down[1].change;
   }
 
-  test('immediate forwarding, transaction archiving', async () => {
+  test('immediate forwarding, transaction storage', async () => {
     const {replicaVersion, watermark} = getSubscriptionState(
       new StatementRunner(replica),
     );
@@ -153,7 +153,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
 
-    // and archived to the DB.
+    // and stored to the DB.
     const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM cdc."ChangeLog"`;

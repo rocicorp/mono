@@ -1,14 +1,13 @@
 import {assert} from 'shared/src/asserts.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {ChangeEntry, Downstream, ErrorType} from './change-streamer.js';
-import {ChangeLogEntry} from './schema/tables.js';
 
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
  * "catchup" phase in which changes are buffered in a backlog while the
- * archive is queried to send any changes that were committed since the
- * subscriber's watermark. Once the catchup is complete, calls to {@link send()}
- * result in immediately sending the change.
+ * storer is queried to send any changes that were committed since the
+ * subscriber's watermark. Once the catchup is complete, calls to
+ * {@link send()} result in immediately sending the change.
  */
 export class Subscriber {
   readonly id: string;
@@ -38,8 +37,8 @@ export class Subscriber {
     }
   }
 
-  /** catchup() is called on ChangeEntries loaded from the archive. */
-  catchup(change: ChangeLogEntry) {
+  /** catchup() is called on ChangeEntries loaded from the store. */
+  catchup(change: ChangeEntry) {
     this.#send(change);
   }
 
@@ -55,10 +54,10 @@ export class Subscriber {
     this.#backlog = null;
   }
 
-  #send(entry: ChangeEntry | ChangeLogEntry) {
-    const {watermark, change} = entry;
+  #send(change: ChangeEntry) {
+    const {watermark} = change;
     if (watermark > this.watermark) {
-      this.#downstream.push(['change', {watermark, change}]);
+      this.#downstream.push(['change', change]);
     }
   }
 

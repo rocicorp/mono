@@ -8,17 +8,16 @@ import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Service} from '../service.js';
 import {ChangeEntry} from './change-streamer.js';
-import {ChangeLogEntry} from './schema/tables.js';
 import {Subscriber} from './subscriber.js';
 
 type QueueEntry = ['change', ChangeEntry] | ['subscriber', Subscriber];
 
 /**
- * Handles the archival of changes and the catchup of subscribers
+ * Handles the storage of changes and the catchup of subscribers
  * that are behind.
  */
-export class Archiver implements Service {
-  readonly id = 'archiver';
+export class Storer implements Service {
+  readonly id = 'storer';
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
   readonly #onCommit: (c: Pgoutput.MessageCommit) => void;
@@ -35,7 +34,7 @@ export class Archiver implements Service {
     this.#onCommit = onCommit;
   }
 
-  archive(entry: ChangeEntry) {
+  store(entry: ChangeEntry) {
     void this.#queue.enqueue(['change', entry]);
   }
 
@@ -98,7 +97,7 @@ export class Archiver implements Service {
       }
     }
 
-    this.#lc.info?.('archiver stopped');
+    this.#lc.info?.('storer stopped');
   }
 
   #processCatchup(...subs: Subscriber[]) {
@@ -124,10 +123,9 @@ export class Archiver implements Service {
       await reader.processReadTask(async tx => {
         const start = Date.now();
         let count = 0;
-        for await (const entries of tx<ChangeLogEntry[]>`
-          SELECT * FROM cdc."ChangeLog" WHERE watermark > ${sub.watermark}`.cursor(
-          10000,
-        )) {
+        for await (const entries of tx<ChangeEntry[]>`
+          SELECT watermark, change FROM cdc."ChangeLog"
+           WHERE watermark > ${sub.watermark}`.cursor(10000)) {
           for (const entry of entries) {
             sub.catchup(entry);
             count++;

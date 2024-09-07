@@ -13,8 +13,8 @@ describe('change-streamer/subscriber', () => {
     sub.send({watermark: '12', change: messages.commit('124')});
 
     // Send catchup messages.
-    sub.catchup({watermark: '01', pos: 0, change: messages.begin('012')});
-    sub.catchup({watermark: '02', pos: 0, change: messages.commit('013')});
+    sub.catchup({watermark: '01', change: messages.begin('012')});
+    sub.catchup({watermark: '02', change: messages.commit('013')});
 
     sub.setCaughtUp();
 
@@ -111,8 +111,8 @@ describe('change-streamer/subscriber', () => {
     // Technically, catchup should never send any messages if the subscriber
     // is ahead, since the watermark query would return no results. But pretend it
     // does just to ensure that catchup messages are subject to the filter.
-    sub.catchup({watermark: '01', pos: 0, change: messages.begin('01')});
-    sub.catchup({watermark: '02', pos: 0, change: messages.begin('02')});
+    sub.catchup({watermark: '01', change: messages.begin('01')});
+    sub.catchup({watermark: '02', change: messages.begin('02')});
     sub.setCaughtUp();
 
     // Still lower than the watermark ...
