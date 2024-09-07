@@ -1,48 +1,95 @@
-# Zeppliear
+# Welcome
 
-A test-bed app for Zero based on Repliear a Replicache based high-performance issue tracker in the style of [Linear](https://linear.app/).
+If you are seeing this, you are one of the very first people to see Zero outside of Rocicorp. That must mean we think a lot of you!
 
-Built with Zero and [Vite](https://vitejs.dev/).
+## ⚠️ Warning
 
-Running at [zeppliear.vercel.app](https://zeppliear.vercel.app/).
+This is still early. There are still **many** bugs. Basically you can run this dogfood app, get a feel for what Zero will be like, and tinker with some queries. You won't be able to write your own app. But we still think it's pretty encouraging in its fledgling form.
 
-# To run fastify replicator and sync-runner locally
+## Setup
 
-add .env file:
+We do not yet have any npm packages – Zero is under rapid development and we're building it side-by-side with this demo app. The best way to play with Zero is to just play with the demo app.
 
+From root of monorepo:
+
+```bash
+npm install
 ```
+
+### Run the "upstream" Postgres database
+
+```bash
+cd apps/zeppliear/docker
+docker compose up
+```
+
+This will take some time to populate the database with test data the first time.
+
+### Run the zero-cache server
+
+Create a `.env` file in the `zeppliear` directory:
+
+```ini
+# The "upstream" authoritative postgres database
+# In the future we will support other types of upstreams besides PG
 UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6432/postgres"
+
+# A separate postgres database we use to store CVRs. CVRs (client view records)
+# keep track of which clients have which data. This is how we know what diff to
+# send on reconnect. It can be same database as above, but it makes most sense
+# for it to be a separate "database" in the same postgres "cluster".
 CVR_DB_URI = "postgresql://user:password@127.0.0.1:6433/postgres"
+
+# Uniquely identifies a single instance of the zero-cache service.
 REPLICA_ID = "r1"
+
+# Place to store the SQLite data zero-cache maintains. This can be lost, but if
+# it is, zero-cache will have to re-replicate next time it starts up.
 REPLICA_DB_FILE = "/tmp/sync-replica.db"
+
+# Logging level for zero-cache service.
 LOG_LEVEL = "debug"
 ```
 
-Open two windows one with docker-compose and the other workers:
+Then start the server:
 
-```
-cd docker && docker compose up
+```bash
 npm run start-zero-cache
 ```
 
-# To run web locally
+This will take some time to populate the replica.
 
-```
-npm install
+### Run the web app
+
+In still another tab:
+
+```bash
 VITE_PUBLIC_SERVER="http://127.0.0.1:3000" npm run dev
 ```
 
 After you have visited the local website and the sync / replica tables have populated.
 
-# To reset clear local postgres dbs and docker volumes
+### To clear the SQLite replica db:
 
+```bash
+rm -rf /tmp/sync-replica.db
 ```
+
+### To clear the upstream postgres database
+
+```bash
 docker compose down
 docker volume rm -f docker_pgdata_upstream
 ```
 
-###
+## Tour
 
-## Credits
+https://www.youtube.com/watch?v=nFZ5Fz6bj_8
 
-We started this project by forking [linear_clone](https://github.com/tuan3w/linearapp_clone). This enabled us to get the visual styling right much faster than we otherwise could have.
+Please don't share.
+
+## Known Issues
+
+- Choosing any kind of filter (priority, status, text) often kills sync. You'll see errors in the console. You can recover by either refreshing, or if that doesnt' work clearing browser state.
+- Filter by label doesn't work at all.
+- Mutation propagation is slow if there are many priority or status filters selected.

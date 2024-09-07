@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Database} from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {ident} from 'pg-format';
 import postgres from 'postgres';
 import {

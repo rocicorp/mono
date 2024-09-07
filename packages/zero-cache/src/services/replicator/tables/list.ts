@@ -1,4 +1,4 @@
-import type {Database} from 'better-sqlite3';
+import type {Database} from 'zqlite/src/db.js';
 import {assert} from 'shared/src/asserts.js';
 import {IndexSpec, TableSpec} from './specs.js';
 

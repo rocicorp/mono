@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
@@ -9,11 +9,11 @@ const REPLICA_ID = 'initial_sync_validation_test_id';
 
 describe('replicator/initial-sync-validation', () => {
   let upstream: PostgresDB;
-  let replica: Database.Database;
+  let replica: Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_validation_upstream');
-    replica = new Database(':memory:');
+    replica = new Database(createSilentLogContext(), ':memory:');
   });
 
   afterEach(async () => {

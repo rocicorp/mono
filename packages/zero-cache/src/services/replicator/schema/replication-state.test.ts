@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
@@ -8,12 +8,15 @@ import {
   initReplicationState,
   updateReplicationWatermark,
 } from './replication-state.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 describe('replicator/schema/replication-state', () => {
   let db: StatementRunner;
 
   beforeEach(() => {
-    db = new StatementRunner(new Database(':memory:'));
+    db = new StatementRunner(
+      new Database(createSilentLogContext(), ':memory:'),
+    );
     initReplicationState(db.db, ['zero_data', 'zero_metadata'], '0/0a');
   });
 

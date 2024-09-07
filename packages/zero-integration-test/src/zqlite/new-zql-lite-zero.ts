@@ -1,12 +1,14 @@
 import {QueryDefs} from 'zero-client';
 import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
+import {LogContext} from '@rocicorp/logger';
 
 export function newSqliteZero<QD extends QueryDefs>(
+  lc: LogContext,
   schemas: QD,
 ): ZQLiteZero<QD> {
   {
-    const db = new Database(':memory:');
+    const db = new Database(lc, ':memory:');
     const z = new ZQLiteZero({
       schemas,
       db,

@@ -90,12 +90,13 @@ describe('replicator/schema/sync-schema', () => {
     await testDBs.drop(upstream);
     await replicaFile.unlink();
   }, 10000);
+  const lc = createSilentLogContext();
 
   for (const c of cases) {
     test(
       c.name,
       async () => {
-        const replica = replicaFile.connect();
+        const replica = replicaFile.connect(lc);
         await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
         initLiteDB(replica, c.replicaSetup, c.replicaPreState);
 
