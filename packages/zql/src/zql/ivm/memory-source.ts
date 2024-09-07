@@ -16,6 +16,7 @@ import {Constraint, FetchRequest, Input, Output} from './operator.js';
 import {PrimaryKey, Schema, SchemaValue} from './schema.js';
 import {Source, SourceChange, SourceInput} from './source.js';
 import {Stream} from './stream.js';
+import {createPredicate} from '../builder/filter.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -33,6 +34,7 @@ type Connection = {
   output: Output | undefined;
   sort: Ordering;
   compareRows: Comparator;
+  optionalFilters: ((row: Row) => boolean)[];
 };
 
 /**
@@ -93,7 +95,7 @@ export class MemorySource implements Source {
 
   connect(
     sort: Ordering,
-    _optionalFilters?: SimpleCondition[] | undefined,
+    optionalFilters?: SimpleCondition[] | undefined,
   ): SourceInput {
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
@@ -113,6 +115,7 @@ export class MemorySource implements Source {
       output: undefined,
       sort,
       compareRows: makeComparator(sort),
+      optionalFilters: (optionalFilters ?? []).map(f => createPredicate(f)),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
@@ -186,8 +189,8 @@ export class MemorySource implements Source {
 
     const callingConnectionNum = this.#connections.indexOf(from);
     assert(callingConnectionNum !== -1, 'Output not found');
-    const reg = this.#connections[callingConnectionNum];
-    const {sort: requestedSort} = reg;
+    const conn = this.#connections[callingConnectionNum];
+    const {sort: requestedSort} = conn;
 
     // If there is a constraint, we need an index sorted by it first.
     const indexSort: OrderPart[] = [];
@@ -225,22 +228,38 @@ export class MemorySource implements Source {
       return valuesEqual(row[key], value);
     };
 
+    const matchesFilters = (row: Row) =>
+      conn.optionalFilters.every(f => f(row));
+
+    const matchesConstraintAndFilters = (row: Row) =>
+      matchesConstraint(row) && matchesFilters(row);
     // If there is an overlay for this output, does it match the requested
-    // constraints?
+    // constraints and filters?
     if (overlay) {
-      if (!matchesConstraint(overlay.change.row)) {
+      if (!matchesConstraintAndFilters(overlay.change.row)) {
         overlay = undefined;
       }
     }
-
     const nextLowerKey = (row: Row | undefined) => {
+      if (!row) {
+        return undefined;
+      }
+      let o = overlay;
+      if (o) {
+        if (comparator(o.change.row, row) >= 0) {
+          o = undefined;
+        }
+      }
       while (row !== undefined) {
         row = data.nextLowerKey(row);
-        if (row && matchesConstraint(row)) {
+        if (row && matchesConstraintAndFilters(row)) {
+          if (o && comparator(o.change.row, row) >= 0) {
+            return o.change.row;
+          }
           return row;
         }
       }
-      return row;
+      return o?.change.row;
     };
 
     let startAt = req.start?.row;
@@ -278,22 +297,26 @@ export class MemorySource implements Source {
           scanStart[key] = dir === 'asc' ? minValue : maxValue;
         }
       }
+    } else {
+      scanStart = startAt;
     }
 
+    const withOverlay = generateWithOverlay(
+      startAt,
+      // 😬 - btree library doesn't support ideas like start "before" this
+      // key.
+      data.keys(scanStart as Row),
+      req.constraint,
+      overlay,
+      comparator,
+    );
+
+    const withFilters = conn.optionalFilters.length
+      ? generateWithFilter(withOverlay, matchesFilters)
+      : withOverlay;
+
     yield* generateWithConstraint(
-      generateWithStart(
-        generateWithOverlay(
-          startAt,
-          // 😬 - btree library doesn't support ideas like start "before" this
-          // key.
-          data.keys(scanStart as Row),
-          req.constraint,
-          overlay,
-          comparator,
-        ),
-        req,
-        comparator,
-      ),
+      generateWithStart(withFilters, req, comparator),
       req.constraint,
     );
   }
@@ -356,6 +379,14 @@ function* generateWithConstraint(
       break;
     }
     yield node;
+  }
+}
+
+function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
+  for (const node of it) {
+    if (filter(node.row)) {
+      yield node;
+    }
   }
 }
 
