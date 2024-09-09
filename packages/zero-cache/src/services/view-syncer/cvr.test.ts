@@ -14,6 +14,11 @@ import {
 } from './cvr.js';
 import {
   ClientsRow,
+  compareClientsRow,
+  compareDesiresRows,
+  compareInstancesRows,
+  compareQueriesRows,
+  compareRowsRows,
   DesiresRow,
   InstancesRow,
   QueriesRow,
@@ -21,6 +26,7 @@ import {
   setupCVRTables,
 } from './schema/cvr.js';
 import type {CVRVersion, RowID} from './schema/types.js';
+import {unreachable} from 'shared/src/asserts.js';
 
 describe('view-syncer/cvr', () => {
   type DBState = {
@@ -46,8 +52,39 @@ describe('view-syncer/cvr', () => {
 
   async function expectState(db: PostgresDB, state: Partial<DBState>) {
     for (const table of Object.keys(state)) {
-      const res = await db`SELECT * FROM ${db('cvr.' + table)}`;
-      expect(res).toEqual(state[table as keyof DBState]);
+      const res = [...(await db`SELECT * FROM ${db('cvr.' + table)}`)];
+      const tableState = [...(state[table as keyof DBState] || [])];
+      switch (table) {
+        case 'instances': {
+          (res as InstancesRow[]).sort(compareInstancesRows);
+          (tableState as InstancesRow[]).sort(compareInstancesRows);
+          break;
+        }
+        case 'clients': {
+          (res as ClientsRow[]).sort(compareClientsRow);
+          (tableState as ClientsRow[]).sort(compareClientsRow);
+          break;
+        }
+        case 'queries': {
+          (res as QueriesRow[]).sort(compareQueriesRows);
+          (tableState as QueriesRow[]).sort(compareQueriesRows);
+          break;
+        }
+        case 'desires': {
+          (res as DesiresRow[]).sort(compareDesiresRows);
+          (tableState as DesiresRow[]).sort(compareDesiresRows);
+          break;
+        }
+        case 'rows': {
+          (res as RowsRow[]).sort(compareRowsRows);
+          (tableState as RowsRow[]).sort(compareRowsRows);
+          break;
+        }
+        default: {
+          unreachable();
+        }
+      }
+      expect(res).toEqual(tableState);
     }
   }
 
