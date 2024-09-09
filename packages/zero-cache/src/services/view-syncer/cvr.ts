@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
-import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {difference, intersection, union} from 'shared/src/set-utils.js';
 import {JSONObject} from 'zero-cache/src/types/bigint-json.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
@@ -459,16 +458,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       const rowVersion = version ?? existing?.rowVersion;
       assert(rowVersion, `Cannot delete a row that is not in the CVR`);
 
-      if (merged === null && !existing) {
-        this._cvrStore.cancelPendingRowRecordWrite(id);
-      } else {
-        this._cvrStore.putRowRecord({
-          id,
-          rowVersion,
-          patchVersion,
-          refCounts: merged,
-        });
-      }
+      this._cvrStore.putRowRecord({
+        id,
+        rowVersion,
+        patchVersion,
+        refCounts: merged,
+      });
 
       if (merged === null) {
         // All refCounts have gone to zero, if row was previously synced
@@ -538,14 +533,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   #deleteUnreferencedRow(existing: RowRecord): RowID | null {
     const received = this.#receivedRows.get(existing.id);
     if (received !== undefined) {
-      const pending = this._cvrStore.getPendingRowRecord(existing.id);
-      if (
-        pending &&
-        deepEqual(pending as ReadonlyJSONValue, existing as ReadonlyJSONValue)
-      ) {
-        // Remove no-op writes from the WriteCache.
-        this._cvrStore.cancelPendingRowRecordWrite(existing.id);
-      }
       return null;
     }
 

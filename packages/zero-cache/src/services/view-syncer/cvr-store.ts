@@ -33,6 +33,7 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.js';
+import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -46,10 +47,8 @@ class RowRecordCache {
     this.#cvrID = cvrID;
   }
 
-  async #ensureLoaded(): Promise<CustomKeyMap<RowID, RowRecord>> {
-    if (this.#cache) {
-      return this.#cache;
-    }
+  async load(): Promise<CustomKeyMap<RowID, RowRecord>> {
+    assert(!this.#cache);
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
     for await (const rows of this.#db<
       RowsRow[]
@@ -67,12 +66,14 @@ class RowRecordCache {
     return this.#cache;
   }
 
-  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
-    return this.#ensureLoaded();
+  getRowRecords(): ReadonlyMap<RowID, RowRecord> {
+    assert(this.#cache);
+    return this.#cache;
   }
 
-  async flush(rowRecords: IterableIterator<RowRecord>) {
-    const cache = await this.#ensureLoaded();
+  flush(rowRecords: Iterable<RowRecord>) {
+    const cache = this.#cache;
+    assert(cache);
     for (const row of rowRecords) {
       if (row.refCounts === null) {
         cache.delete(row.id);
@@ -201,27 +202,32 @@ export class CVRStore {
       }
     }
 
+    await this.#rowCache.load();
     this.#lc.debug?.(`loaded CVR (${Date.now() - start} ms)`);
 
     return cvr;
   }
 
-  cancelPendingRowRecordWrite(id: RowID): void {
-    this.#pendingRowRecordPuts.delete(id);
+  getRowRecords(): ReadonlyMap<RowID, RowRecord> {
+    return this.#rowCache.getRowRecords();
   }
 
   getPendingRowRecord(id: RowID): RowRecord | undefined {
     return this.#pendingRowRecordPuts.get(id);
   }
 
-  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
-    return this.#rowCache.getRowRecords();
-  }
-
   putRowRecord(row: RowRecord): void {
-    // If we are writing the same again then delete the old write.
-    this.cancelPendingRowRecordWrite(row.id);
-
+    const existing = this.getRowRecords().get(row.id);
+    if (
+      deepEqual(
+        row as ReadonlyJSONValue,
+        existing as ReadonlyJSONValue | undefined,
+      ) ||
+      (existing === undefined && row.refCounts === null)
+    ) {
+      this.#pendingRowRecordPuts.delete(row.id);
+      return;
+    }
     this.#pendingRowRecordPuts.set(row.id, row);
   }
 

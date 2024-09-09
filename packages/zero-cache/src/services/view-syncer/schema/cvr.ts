@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import type {JSONValue} from '../../../types/bigint-json.js';
+import type {JSONValue, JSONObject} from '../../../types/bigint-json.js';
 import {
   RowID,
   versionFromString,
@@ -26,6 +26,10 @@ CREATE TABLE cvr.instances (
 );
 `;
 
+export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
+  return a.clientGroupID.localeCompare(b.clientGroupID);
+}
+
 export type ClientsRow = {
   clientGroupID: string;
   clientID: string;
@@ -50,6 +54,14 @@ CREATE TABLE cvr.clients (
 -- For catchup patches.
 CREATE INDEX client_patch_version ON cvr.clients ("patchVersion");
 `;
+
+export function compareClientsRow(a: ClientsRow, b: ClientsRow) {
+  const clientGroupIDComp = a.clientGroupID.localeCompare(b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  return a.clientID.localeCompare(b.clientID);
+}
 
 export type QueriesRow = {
   clientGroupID: string;
@@ -84,6 +96,14 @@ CREATE TABLE cvr.queries (
 CREATE INDEX queries_patch_version ON cvr.queries ("patchVersion" NULLS FIRST);
 `;
 
+export function compareQueriesRows(a: QueriesRow, b: QueriesRow) {
+  const clientGroupIDComp = a.clientGroupID.localeCompare(b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  return a.queryHash.localeCompare(b.queryHash);
+}
+
 export type DesiresRow = {
   clientGroupID: string;
   clientID: string;
@@ -116,11 +136,23 @@ CREATE TABLE cvr.desires (
 CREATE INDEX desires_patch_version ON cvr.desires ("patchVersion");
 `;
 
+export function compareDesiresRows(a: DesiresRow, b: DesiresRow) {
+  const clientGroupIDComp = a.clientGroupID.localeCompare(b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  const clientIDComp = a.clientID.localeCompare(b.clientID);
+  if (clientIDComp !== 0) {
+    return clientIDComp;
+  }
+  return a.queryHash.localeCompare(b.queryHash);
+}
+
 export type RowsRow = {
   clientGroupID: string;
   schema: string;
   table: string;
-  rowKey: JSONValue;
+  rowKey: JSONObject;
   rowVersion: string;
   patchVersion: string;
   refCounts: {[queryHash: string]: number} | null;
@@ -156,6 +188,22 @@ export function rowRecordToRowsRow(
     patchVersion: versionString(rowRecord.patchVersion),
     refCounts: rowRecord.refCounts,
   };
+}
+
+export function compareRowsRows(a: RowsRow, b: RowsRow) {
+  const clientGroupIDComp = a.clientGroupID.localeCompare(b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  const schemaComp = a.schema.localeCompare(b.schema);
+  if (schemaComp !== 0) {
+    return schemaComp;
+  }
+  const tableComp = b.table.localeCompare(b.table);
+  if (tableComp !== 0) {
+    return tableComp;
+  }
+  return stringifySorted(a.rowKey).localeCompare(stringifySorted(b.rowKey));
 }
 
 const CREATE_CVR_ROWS_TABLE = `
@@ -197,4 +245,8 @@ export async function setupCVRTables(
 ) {
   lc.info?.(`Setting up CVR tables`);
   await db.unsafe(CREATE_CVR_TABLES);
+}
+
+function stringifySorted(o: JSONObject) {
+  return JSON.stringify(o, Object.keys(o).sort());
 }
