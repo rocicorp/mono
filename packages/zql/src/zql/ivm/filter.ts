@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {Change} from './change.js';
 import {Node, Row} from './data.js';
 import {FetchRequest, Input, Operator, Output} from './operator.js';
@@ -58,12 +58,29 @@ export class Filter implements Operator {
   push(change: Change) {
     assert(this.#output, 'Output not set');
 
-    const row =
-      change.type === 'add' || change.type === 'remove'
-        ? change.node.row
-        : change.row;
-    if (this.#predicate(row)) {
-      this.#output.push(change);
+    switch (change.type) {
+      case 'add':
+      case 'remove':
+        if (this.#predicate(change.node.row)) {
+          this.#output.push(change);
+        }
+        break;
+      case 'child':
+        if (this.#predicate(change.row)) {
+          this.#output.push(change);
+        }
+        break;
+      case 'edit': {
+        // The only case we do not need to propagate the change is when the old
+        // row was not passing the predicate and the new row is not passing the
+        // predicate either.
+        if (this.#predicate(change.oldRow) || this.#predicate(change.row)) {
+          this.#output.push(change);
+        }
+        break;
+      }
+      default:
+        unreachable(change);
     }
   }
 }
