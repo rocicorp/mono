@@ -34,7 +34,14 @@ describe('change-streamer/service', {retry: 3}, () => {
     replica = new Database(lc, ':memory:');
 
     const upstreamURI = getConnectionURI(upstream);
-    await upstream`CREATE TABLE foo(id TEXT PRIMARY KEY)`;
+    await upstream`
+    CREATE TABLE foo(
+      id TEXT PRIMARY KEY,
+      int INT4,
+      big BIGINT,
+      flt FLOAT8,
+      bool BOOLEAN
+    )`;
 
     await initialSync(lc, REPLICA_ID, replica, upstreamURI);
 
@@ -166,5 +173,76 @@ describe('change-streamer/service', {retry: 3}, () => {
       [1n, 'delete'],
       [2n, 'commit'],
     ]);
+  });
+
+  test('data types (forwarded and catchup)', async () => {
+    const {replicaVersion, watermark} = getSubscriptionState(
+      new StatementRunner(replica),
+    );
+    const sub = streamer.subscribe({
+      id: 'myid',
+      watermark,
+      replicaVersion,
+      initial: true,
+    });
+    const downstream = drainToQueue(sub);
+
+    await upstream.begin(async tx => {
+      await tx`
+      INSERT INTO foo(id, int, big, flt, bool) 
+        VALUES('hello', 123456789, 987654321987654321, 123.456, true)`;
+    });
+
+    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {
+        id: 'hello',
+        int: 123456789,
+        big: 987654321987654321n,
+        flt: 123.456,
+        bool: true,
+      },
+    });
+    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+
+    const logEntries = await changeDB<
+      ChangeLogEntry[]
+    >`SELECT * FROM cdc."ChangeLog"`;
+    expect(logEntries.map(e => [e.pos, e.change.tag])).toEqual([
+      [0n, 'begin'],
+      [1n, 'insert'],
+      [2n, 'commit'],
+    ]);
+    const insert = logEntries[1].change;
+    assert(insert.tag === 'insert');
+    expect(insert.new).toEqual({
+      id: 'hello',
+      int: 123456789,
+      big: 987654321987654321n,
+      flt: 123.456,
+      bool: true,
+    });
+
+    // Also verify when loading from the Store as opposed to direct forwarding.
+    const catchupSub = streamer.subscribe({
+      id: 'myid2',
+      watermark,
+      replicaVersion,
+      initial: true,
+    });
+    const catchup = drainToQueue(catchupSub);
+    expect(await nextChange(catchup)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(catchup)).toMatchObject({
+      tag: 'insert',
+      new: {
+        id: 'hello',
+        int: 123456789,
+        big: 987654321987654321n,
+        flt: 123.456,
+        bool: true,
+      },
+    });
+    expect(await nextChange(catchup)).toMatchObject({tag: 'commit'});
   });
 });
