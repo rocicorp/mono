@@ -8,7 +8,7 @@ import {randInt} from 'shared/src/rand.js';
 import * as v from 'shared/src/valita.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
-import {CancelableAsyncIterable, streamIn, streamOut} from './streams.js';
+import {Source, streamIn, streamOut} from './streams.js';
 import {Subscription} from './subscription.js';
 
 const messageSchema = v.object({
@@ -28,7 +28,7 @@ describe('streams', () => {
   let cleanup: Promise<Message[]>;
 
   let ws: WebSocket;
-  let consumer: CancelableAsyncIterable<Message>;
+  let consumer: Source<Message>;
 
   beforeEach(async () => {
     lc = createSilentLogContext();

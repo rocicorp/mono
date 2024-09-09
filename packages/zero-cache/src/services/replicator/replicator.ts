@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
+import {Database} from 'zqlite/src/db.js';
+import type {Source} from '../../types/streams.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {initSyncSchema} from './schema/sync-schema.js';
@@ -21,7 +21,7 @@ export interface ReplicaVersionNotifier {
    * the next message. The messages themselves contain no information; the subscriber queries
    * the SQLite replica for the latest replicated changes.
    */
-  subscribe(): CancelableAsyncIterable<ReplicaVersionReady>;
+  subscribe(): Source<ReplicaVersionReady>;
 }
 
 export interface Replicator extends ReplicaVersionNotifier {
@@ -80,7 +80,7 @@ export class ReplicatorService implements Replicator, Service {
     await this.#incrementalSyncer.run(this.#lc);
   }
 
-  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
+  subscribe(): Source<ReplicaVersionReady> {
     return this.#incrementalSyncer.subscribe();
   }
 

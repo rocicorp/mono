@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import {ident} from 'pg-format';
 import {
   LogicalReplicationService,
@@ -10,11 +9,12 @@ import {assert, unreachable} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {liteValues} from 'zero-cache/src/types/lite.js';
+import {Database} from 'zqlite/src/db.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
+import type {Source} from '../../types/streams.js';
 import {replicationSlot} from './initial-sync.js';
 import {Notifier} from './notifier.js';
 import {ReplicaVersionReady} from './replicator.js';
@@ -121,7 +121,7 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
+  subscribe(): Source<ReplicaVersionReady> {
     return this.#notifier.subscribe();
   }
 

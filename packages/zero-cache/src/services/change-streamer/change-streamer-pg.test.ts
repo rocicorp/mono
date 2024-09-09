@@ -10,7 +10,7 @@ import {
   testDBs,
 } from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
+import {Source} from 'zero-cache/src/types/streams.js';
 import {Database} from 'zqlite/src/db.js';
 import {initialSync, replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
@@ -61,9 +61,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     await testDBs.drop(upstream, changeDB);
   });
 
-  function drainToQueue(
-    sub: CancelableAsyncIterable<Downstream>,
-  ): Queue<Downstream> {
+  function drainToQueue(sub: Source<Downstream>): Queue<Downstream> {
     const queue = new Queue<Downstream>();
     void (async () => {
       for await (const msg of sub) {

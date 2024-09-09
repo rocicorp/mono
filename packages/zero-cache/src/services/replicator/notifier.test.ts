@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
+import {Source} from 'zero-cache/src/types/streams.js';
 import {Notifier} from './notifier.js';
 import {ReplicaVersionReady} from './replicator.js';
 
@@ -11,7 +11,7 @@ describe('replicator/notifier', () => {
   });
 
   async function expectSingleMessage(
-    sub: CancelableAsyncIterable<ReplicaVersionReady>,
+    sub: Source<ReplicaVersionReady>,
     payload: ReplicaVersionReady,
   ) {
     for await (const msg of sub) {

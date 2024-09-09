@@ -18,7 +18,7 @@ import type {
   ViewSyncer,
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
-import type {CancelableAsyncIterable} from '../types/streams.js';
+import type {Source} from '../types/streams.js';
 
 /**
  * Represents a connection between the client and server.
@@ -38,7 +38,7 @@ export class Connection {
   readonly #viewSyncer: ViewSyncer;
   readonly #mutagen: Mutagen;
 
-  #outboundStream: CancelableAsyncIterable<Downstream> | undefined;
+  #outboundStream: Source<Downstream> | undefined;
   #closed = false;
 
   constructor(
@@ -174,7 +174,7 @@ export class Connection {
     this.#lc.error?.('WebSocket error event', e.message, e.error);
   };
 
-  async #proxyOutbound(outboundStream: CancelableAsyncIterable<Downstream>) {
+  async #proxyOutbound(outboundStream: Source<Downstream>) {
     try {
       for await (const outMsg of outboundStream) {
         this.send(outMsg);
