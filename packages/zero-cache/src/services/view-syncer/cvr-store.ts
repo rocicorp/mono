@@ -174,6 +174,7 @@ export class CVRStore {
         version: versionString(cvr.version),
         lastActive: new Date(0),
       };
+      console.log('177');
       this.#writes.add(tx => tx`INSERT INTO cvr.instances ${tx(change)}`);
     }
 
@@ -224,6 +225,7 @@ export class CVRStore {
       version: versionString(version),
       lastActive: new Date(lastActive.epochMillis),
     };
+    console.log('228');
     this.#writes.add(
       tx =>
         tx`INSERT INTO cvr.instances ${tx(
@@ -233,6 +235,7 @@ export class CVRStore {
   }
 
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
+    console.log('238');
     this.#writes.add(
       tx => tx`UPDATE cvr.queries SET ${tx({
         patchVersion: versionString(version),
@@ -273,6 +276,7 @@ export class CVRStore {
           internal: null,
           deleted: false, // put vs del "got" query
         };
+    console.log('279');
     this.#writes.add(
       tx => tx`INSERT INTO cvr.queries ${tx(change)}
       ON CONFLICT ("clientGroupID", "queryHash")
@@ -298,6 +302,8 @@ export class CVRStore {
       transformationVersion: maybeVersionString(query.transformationVersion),
       deleted: false,
     };
+
+    console.log('306');
     this.#writes.add(
       tx => tx`UPDATE cvr.queries SET ${tx(change)}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${query.id}`,
@@ -305,6 +311,7 @@ export class CVRStore {
   }
 
   updateClientPatchVersion(clientID: string, patchVersion: CVRVersion): void {
+    console.log('314');
     this.#writes.add(
       tx => tx`UPDATE cvr.clients
       SET "patchVersion" = ${versionString(patchVersion)}
@@ -320,6 +327,8 @@ export class CVRStore {
       // TODO(arv): deleted is never set to true
       deleted: false,
     };
+
+    console.log('331');
     this.#writes.add(tx => tx`INSERT INTO cvr.clients ${tx(change)}`);
   }
 
@@ -336,6 +345,7 @@ export class CVRStore {
       patchVersion: versionString(newVersion),
       deleted,
     };
+    console.log('348');
     this.#writes.add(tx => tx`INSERT INTO cvr.desires ${tx(change)}`);
   }
 
@@ -344,6 +354,7 @@ export class CVRStore {
     query: {id: string},
     client: {id: string},
   ): void {
+    console.log('357');
     this.#writes.add(
       tx =>
         tx`DELETE FROM cvr.desires WHERE "clientGroupID" = ${
@@ -458,6 +469,7 @@ export class CVRStore {
     const rowRecordsToFlush = [...this.#pendingRowRecordPuts.values()].filter(
       row => {
         const existing = existingRowRecords.get(row.id);
+        console.log('existing\n', existing, '\nrow\n', row);
         return (
           !deepEqual(
             row as ReadonlyJSONValue,
@@ -467,6 +479,8 @@ export class CVRStore {
         );
       },
     );
+    console.log(rowRecordsToFlush);
+    console.log(this.#writes);
     const entries = rowRecordsToFlush.length + this.#writes.size;
     const statements = await this.#db.begin(tx => {
       let statements = 0;

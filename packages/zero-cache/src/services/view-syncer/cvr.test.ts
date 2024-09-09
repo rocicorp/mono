@@ -2436,7 +2436,7 @@ describe('view-syncer/cvr', () => {
     });
   });
 
-  test('unchanged queries', async () => {
+  test.only('unchanged queries', async () => {
     const initialState: DBState = {
       instances: [
         {
