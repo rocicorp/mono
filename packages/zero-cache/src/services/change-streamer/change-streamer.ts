@@ -1,4 +1,4 @@
-import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
+import {Source} from 'zero-cache/src/types/streams.js';
 import {Service} from '../service.js';
 import {Change} from './schema/change.js';
 
@@ -44,8 +44,8 @@ export interface ChangeStreamer {
    * which indicates the watermark at which the subscriber is up to
    * date.
    */
-  // TODO: Also take a CancelableAsyncIterable<Upstream> for receiving ACKs.
-  subscribe(ctx: SubscriberContext): CancelableAsyncIterable<Downstream>;
+  // TODO: Also take a Source<Upstream> for receiving ACKs.
+  subscribe(ctx: SubscriberContext): Source<Downstream>;
 }
 
 export type SubscriberContext = {

@@ -14,7 +14,7 @@ import type {
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {PostgresDB} from '../../types/pg.js';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
+import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
@@ -46,7 +46,7 @@ export interface ViewSyncer {
   initConnection(
     ctx: SyncContext,
     msg: InitConnectionMessage,
-  ): Promise<CancelableAsyncIterable<Downstream>>;
+  ): Promise<Source<Downstream>>;
 
   changeDesiredQueries(
     ctx: SyncContext,
@@ -186,7 +186,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async initConnection(
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
-  ): Promise<CancelableAsyncIterable<Downstream>> {
+  ): Promise<Source<Downstream>> {
     const {clientID, wsID, baseCookie} = ctx;
     const lc = this.#lc
       .withContext('clientID', clientID)

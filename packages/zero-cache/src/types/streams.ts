@@ -6,13 +6,17 @@ import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import {BigIntJSON, type JSONObject} from './bigint-json.js';
 import {Subscription} from './subscription.js';
 
-export type CancelableAsyncIterable<T> = AsyncIterable<T> & {
+export type Source<T> = AsyncIterable<T> & {
   /**
    * Immediately terminates all current iterations (i.e. {@link AsyncIterator.next next()})
    * will return `{value: undefined, done: true}`), and prevents any subsequent iterations
    * from yielding any values.
    */
   cancel: () => void;
+};
+
+export type Sink<T> = {
+  push(message: T): void;
 };
 
 const ackSchema = v.object({consumedID: v.number()});
@@ -24,7 +28,7 @@ type Streamed<T> = T & {_streamID: number};
 
 export async function streamOut<T extends JSONObject>(
   lc: LogContext,
-  source: CancelableAsyncIterable<T>,
+  source: Source<T>,
   sink: WebSocket,
 ): Promise<void> {
   const closer = new WebSocketCloser(lc, sink, source);
@@ -68,7 +72,7 @@ export function streamIn<T extends JSONObject>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
-): CancelableAsyncIterable<T> {
+): Source<T> {
   const sink: Subscription<T, Streamed<T>> = new Subscription<T, Streamed<T>>(
     {
       consumed: msg => {
@@ -114,7 +118,7 @@ export function streamIn<T extends JSONObject>(
 class WebSocketCloser<T> {
   readonly #lc: LogContext;
   readonly #ws: WebSocket;
-  readonly #stream: CancelableAsyncIterable<T>;
+  readonly #stream: Source<T>;
   readonly #closeHandler: (e: CloseEvent) => void;
   readonly #errorHandler: (e: ErrorEvent) => void;
   readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
@@ -123,7 +127,7 @@ class WebSocketCloser<T> {
   constructor(
     lc: LogContext,
     ws: WebSocket,
-    stream: CancelableAsyncIterable<T>,
+    stream: Source<T>,
     messageHandler?: (e: MessageEvent) => void | undefined,
   ) {
     this.#lc = lc;

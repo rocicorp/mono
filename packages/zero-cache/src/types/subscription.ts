@@ -1,5 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import type {CancelableAsyncIterable} from './streams.js';
+import type {Sink, Source} from './streams.js';
 
 /**
  * A Subscription abstracts a continuous, logically infinite stream of messages intended
@@ -60,7 +60,7 @@ import type {CancelableAsyncIterable} from './streams.js';
  *          and {@link Options.cleanup}). This is often the same as the external type
  *          T, but may be diverged to facilitate internal bookkeeping.
  */
-export class Subscription<T, M = T> implements CancelableAsyncIterable<T> {
+export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   /**
    * Convenience factory method for creating a {@link Subscription} with internal message type
    * `M` as a subtype of `T`, defaulting to the same type. The default `publish` method publishes
