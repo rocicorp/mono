@@ -44,7 +44,7 @@ const CREATE_REPLICATION_CONFIG_TABLE = `
   CREATE TABLE cdc."ReplicationConfig" (
     "replicaVersion" TEXT NOT NULL,
     "publications" TEXT[] NOT NULL,
-    lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+    "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
 `;
 
@@ -62,8 +62,12 @@ export async function setupCDCTables(
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
-  replicaConfig: ReplicationConfig,
+  config: ReplicationConfig,
 ) {
+  // Restrict the fields of the supplied `config`.
+  const {publications, replicaVersion} = config;
+  const replicaConfig = {publications, replicaVersion};
+
   await db.begin(async tx => {
     const results = await tx<
       {
