@@ -287,6 +287,221 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       },
     ],
   });
+
+  const normalBase = base;
+
+  suite('edit', () => {
+    const base = {
+      ...normalBase,
+      columns: [
+        {
+          id: {type: 'string'},
+          ownerId: {type: 'string'},
+          text: {type: 'string'},
+        },
+        {
+          id: {type: 'string'},
+          issueId: {type: 'string'},
+          text: {type: 'string'},
+        },
+        {id: {type: 'string'}, text: {type: 'string'}},
+      ],
+      sources: [
+        [
+          {id: 'i1', ownerId: 'o1', text: 'issue 1'},
+          {id: 'i2', ownerId: 'o2', text: 'issue 2'},
+        ],
+        [
+          {id: 'c1', issueId: 'i1', text: 'comment 1'},
+          {id: 'c2', issueId: 'i1', text: 'comment 2'},
+          {id: 'c3', issueId: 'i2', text: 'comment 3'},
+          {id: 'c4', issueId: 'i2', text: 'comment 4'},
+        ],
+        [
+          {id: 'o1', text: 'owner 1'},
+          {id: 'o2', text: 'owner 2'},
+        ],
+      ],
+    } as const;
+
+    pushSiblingTest({
+      ...base,
+      name: 'edit issue',
+      pushes: [
+        [
+          0,
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', ownerId: 'o1', text: 'issue 1'},
+            row: {id: 'i1', ownerId: 'o1', text: 'issue 1 changed'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '0',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', ownerId: 'o1', text: 'issue 1'},
+            row: {id: 'i1', ownerId: 'o1', text: 'issue 1 changed'},
+          },
+        ],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['i1', 'i1'],
+          ['i2', 'i2'],
+        ],
+        [
+          ['o1', 'i1'],
+          ['o2', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'edit',
+          oldRow: {
+            id: 'i1',
+            ownerId: 'o1',
+            text: 'issue 1',
+          },
+          row: {
+            id: 'i1',
+            ownerId: 'o1',
+            text: 'issue 1 changed',
+          },
+        },
+      ],
+    });
+
+    pushSiblingTest({
+      ...base,
+      name: 'edit comment',
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            oldRow: {id: 'c4', issueId: 'i2', text: 'comment 4'},
+            row: {id: 'c4', issueId: 'i2', text: 'comment 4 changed'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'c4', issueId: 'i2', text: 'comment 4'},
+            row: {id: 'c4', issueId: 'i2', text: 'comment 4 changed'},
+          },
+        ],
+        ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
+        ['0', 'fetchCount', {constraint: {key: 'id', value: 'i2'}}, 1],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['i1', 'i1'],
+          ['i2', 'i2'],
+        ],
+        [
+          ['o1', 'i1'],
+          ['o2', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'i2',
+            ownerId: 'o2',
+            text: 'issue 2',
+          },
+          child: {
+            change: {
+              type: 'edit',
+              row: {
+                id: 'c4',
+                issueId: 'i2',
+                text: 'comment 4 changed',
+              },
+              oldRow: {
+                id: 'c4',
+                issueId: 'i2',
+                text: 'comment 4',
+              },
+            },
+            relationshipName: 'comments',
+          },
+        },
+      ],
+    });
+
+    pushSiblingTest({
+      ...base,
+      name: 'edit owner',
+      pushes: [
+        [
+          2,
+          {
+            type: 'edit',
+            oldRow: {id: 'o2', text: 'owner 2'},
+            row: {id: 'o2', text: 'owner 2 changed'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '2',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'o2', text: 'owner 2'},
+            row: {id: 'o2', text: 'owner 2 changed'},
+          },
+        ],
+        ['0', 'fetch', {constraint: {key: 'ownerId', value: 'o2'}}],
+        ['1', 'fetch', {constraint: {key: 'issueId', value: 'i2'}}],
+        ['0', 'fetchCount', {constraint: {key: 'ownerId', value: 'o2'}}, 1],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['i1', 'i1'],
+          ['i2', 'i2'],
+        ],
+        [
+          ['o1', 'i1'],
+          ['o2', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'i2',
+            ownerId: 'o2',
+            text: 'issue 2',
+          },
+          child: {
+            change: {
+              type: 'edit',
+              oldRow: {
+                id: 'o2',
+                text: 'owner 2',
+              },
+              row: {
+                id: 'o2',
+                text: 'owner 2 changed',
+              },
+            },
+            relationshipName: 'owners',
+          },
+        },
+      ],
+    });
+  });
 });
 
 function pushSiblingTest(t: PushTestSibling) {
@@ -372,7 +587,7 @@ type PushTestSibling = {
   name: string;
   columns: readonly Record<string, SchemaValue>[];
   primaryKeys: readonly PrimaryKey[];
-  sources: Row[][];
+  sources: readonly (readonly Row[])[];
   sorts?: Record<number, Ordering> | undefined;
   joins: readonly {
     parentKey: string;

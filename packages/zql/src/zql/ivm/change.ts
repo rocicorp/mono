@@ -1,6 +1,6 @@
 import type {Node, Row} from './data.js';
 
-export type Change = AddChange | RemoveChange | ChildChange;
+export type Change = AddChange | RemoveChange | ChildChange | EditChange;
 export type ChangeType = Change['type'];
 
 /**
@@ -29,4 +29,14 @@ export type ChildChange = {
     relationshipName: string;
     change: Change;
   };
+};
+
+/**
+ * Represents a node changing. Depending on the change in the node, the
+ * children may be removed, added, or changed.
+ */
+export type EditChange = {
+  type: 'edit';
+  row: Row;
+  oldRow: Row;
 };

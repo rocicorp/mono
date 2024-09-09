@@ -101,8 +101,11 @@ test('processChanges', () => {
   expect(out.pushes).toEqual([
     {type: 'add', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
     {type: 'add', node: {row: {id: 'e2', name: 'name2'}, relationships: {}}},
-    {type: 'remove', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
-    {type: 'add', node: {row: {id: 'e1', name: 'name1.1'}, relationships: {}}},
+    {
+      type: 'edit',
+      oldRow: {id: 'e1', name: 'name1'},
+      row: {id: 'e1', name: 'name1.1'},
+    },
   ]);
 
   expect(out.fetch({})).toEqual([

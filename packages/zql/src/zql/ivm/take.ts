@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import {assertOrderingIncludesPK} from '../builder/builder.js';
 import type {Change, RemoveChange} from './change.js';
 import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
@@ -11,7 +12,6 @@ import type {
 } from './operator.js';
 import type {Schema} from './schema.js';
 import {take, type Stream} from './stream.js';
-import {assertOrderingIncludesPK} from '../builder/builder.js';
 
 const MAX_BOUND_KEY = 'maxBound';
 
@@ -197,6 +197,8 @@ export class Take implements Operator {
   }
 
   push(change: Change): void {
+    assert(change.type !== 'edit', 'Edit changes are not yet implemented');
+
     assert(this.#output, 'Output not set');
     // When take below join is supported, this assert should be removed
     // and a 'child' change should be pushed to output if its row

@@ -2,10 +2,26 @@ import {Ordering, SimpleCondition} from '../ast/ast.js';
 import {Row} from './data.js';
 import {Input} from './operator.js';
 
-export type SourceChange = {
-  type: 'add' | 'remove';
+export type SourceChangeAdd = {
+  type: 'add';
   row: Row;
 };
+
+export type SourceChangeRemove = {
+  type: 'remove';
+  row: Row;
+};
+
+export type SourceChangeEdit = {
+  type: 'edit';
+  row: Row;
+  oldRow: Row;
+};
+
+export type SourceChange =
+  | SourceChangeAdd
+  | SourceChangeRemove
+  | SourceChangeEdit;
 
 /**
  * A source is an input that serves as the root data source of the pipeline.

@@ -1,5 +1,4 @@
 import type {SQLQuery} from '@databases/sql';
-import {Database, Statement} from 'zqlite/src/db.js';
 import {assert} from 'shared/src/asserts.js';
 import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
 import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
@@ -33,6 +32,7 @@ import type {
   SourceInput,
 } from 'zql/src/zql/ivm/source.js';
 import {Stream} from 'zql/src/zql/ivm/stream.js';
+import {Database, Statement} from 'zqlite/src/db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
 
@@ -297,6 +297,8 @@ export class TableSource implements Source {
   }
 
   push(change: SourceChange) {
+    assert(change.type !== 'edit', 'Edit changes are not supported here');
+
     // need to check for the existence of the row before modifying
     // the db so we don't push it to outputs if it does/doest not exist.
     const exists =

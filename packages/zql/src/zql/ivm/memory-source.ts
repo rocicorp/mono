@@ -1,7 +1,9 @@
 import BTree from 'btree';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
+import {createPredicate} from '../builder/filter.js';
+import {Change} from './change.js';
 import {
   Comparator,
   compareValues,
@@ -16,7 +18,6 @@ import {Constraint, FetchRequest, Input, Output} from './operator.js';
 import {PrimaryKey, Schema, SchemaValue} from './schema.js';
 import {Source, SourceChange, SourceInput} from './source.js';
 import {Stream} from './stream.js';
-import {createPredicate} from '../builder/filter.js';
 
 export type Overlay = {
   outputIndex: number;
@@ -325,43 +326,72 @@ export class MemorySource implements Source {
     return this.#fetch(req, connection);
   }
 
-  push(change: SourceChange) {
+  push(change: SourceChange): void {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
-    if (change.type === 'add') {
-      if (data.has(change.row)) {
-        throw new Error(`Row already exists: ` + JSON.stringify(change));
-      }
-    } else {
-      change.type satisfies 'remove';
-      if (!data.has(change.row)) {
-        throw new Error(`Row not found: ` + JSON.stringify(change));
-      }
+
+    switch (change.type) {
+      case 'add':
+        if (data.has(change.row)) {
+          throw new Error(`Row already exists: ` + JSON.stringify(change));
+        }
+        break;
+      case 'remove':
+        if (!data.has(change.row)) {
+          throw new Error(`Row not found: ` + JSON.stringify(change));
+        }
+        break;
+      case 'edit':
+        if (!data.has(change.oldRow)) {
+          throw new Error(`Row not found: ` + JSON.stringify(change));
+        }
+        break;
+      default:
+        unreachable(change);
     }
 
+    const outputChange: Change =
+      change.type === 'edit'
+        ? change
+        : {
+            type: change.type,
+            node: {
+              row: change.row,
+              relationships: {},
+            },
+          };
     for (const [outputIndex, {output}] of this.#connections.entries()) {
       if (output) {
         this.#overlay = {outputIndex, change};
-        output.push({
-          type: change.type,
-          node: {
-            row: change.row,
-            relationships: {},
-          },
-        });
+        output.push(outputChange);
       }
     }
     this.#overlay = undefined;
     for (const {data} of this.#indexes.values()) {
-      if (change.type === 'add') {
-        const added = data.add(change.row, undefined);
-        // must succeed since we checked has() above.
-        assert(added);
-      } else {
-        change.type satisfies 'remove';
-        const removed = data.delete(change.row);
-        // must succeed since we checked has() above.
-        assert(removed);
+      switch (change.type) {
+        case 'add': {
+          const added = data.add(change.row, undefined);
+          // must succeed since we checked has() above.
+          assert(added);
+          break;
+        }
+        case 'remove': {
+          const removed = data.delete(change.row);
+          // must succeed since we checked has() above.
+          assert(removed);
+          break;
+        }
+        case 'edit': {
+          // We cannot just do `set` with the new value since the `oldRow` might
+          // not map to the same entry as the new `row` in the index btree.
+          const removed = data.delete(change.oldRow);
+          // must succeed since we checked has() above.
+          assert(removed);
+          data.add(change.row, undefined);
+          break;
+        }
+        default:
+          unreachable(change);
       }
     }
   }
@@ -504,10 +534,12 @@ type MaxValue = typeof maxValue;
 
 function makeBoundComparator(sort: Ordering) {
   return (a: RowBound, b: RowBound) => {
-    for (const [key, dir] of sort) {
+    // Hot! Do not use destructuring
+    for (const entry of sort) {
+      const key = entry[0];
       const cmp = compareBounds(a[key], b[key]);
       if (cmp !== 0) {
-        return dir === 'asc' ? cmp : -cmp;
+        return entry[1] === 'asc' ? cmp : -cmp;
       }
     }
     return 0;

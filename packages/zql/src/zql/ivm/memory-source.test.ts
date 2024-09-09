@@ -96,3 +96,40 @@ test('indexes get cleaned up when not needed', () => {
   conn1.destroy();
   expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
 });
+
+test('push edit change', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
+    ['a'],
+  );
+
+  ms.push({
+    type: 'add',
+    row: {a: 'a', b: 'b', c: 'c'},
+  });
+
+  const conn = ms.connect([['a', 'asc']]);
+  const c = new Catch(conn);
+
+  ms.push({
+    type: 'edit',
+    oldRow: {a: 'a', b: 'b', c: 'c'},
+    row: {a: 'a', b: 'b2', c: 'c2'},
+  });
+  expect(c.pushes).toEqual([
+    {
+      type: 'edit',
+      row: {a: 'a', b: 'b2', c: 'c2'},
+      oldRow: {a: 'a', b: 'b', c: 'c'},
+    },
+  ]);
+  expect(c.fetch()).toEqual([
+    {
+      row: {a: 'a', b: 'b2', c: 'c2'},
+      relationships: {},
+    },
+  ]);
+
+  conn.destroy();
+});

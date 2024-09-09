@@ -17,7 +17,12 @@ test('basics', () => {
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
-  const view = new ArrayView(ms.connect([['b', 'asc'], ['a', 'asc']]));
+  const view = new ArrayView(
+    ms.connect([
+      ['b', 'asc'],
+      ['a', 'asc'],
+    ]),
+  );
 
   let callCount = 0;
   let data: unknown[] = [];
@@ -91,8 +96,14 @@ test('tree', () => {
   });
 
   const join = new Join({
-    parent: ms.connect([['name', 'asc'], ['id', 'asc']]),
-    child: ms.connect([['name', 'desc'], ['id', 'desc']]),
+    parent: ms.connect([
+      ['name', 'asc'],
+      ['id', 'asc'],
+    ]),
+    child: ms.connect([
+      ['name', 'desc'],
+      ['id', 'desc'],
+    ]),
     storage: new MemoryStorage(),
     parentKey: 'childID',
     childKey: 'id',
@@ -505,6 +516,194 @@ test('collapse hidden relationships', () => {
         },
       ],
       name: 'issue',
+    },
+  ]);
+});
+
+test('basic with edit pushes', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+
+  const view = new ArrayView(ms.connect([['a', 'asc']]));
+
+  let callCount = 0;
+  let data: unknown[] = [];
+  const listener = (d: Immutable<EntryList>) => {
+    ++callCount;
+    data = deepClone(d) as unknown[];
+  };
+  const unlisten = view.addListener(listener);
+
+  view.hydrate();
+  expect(data).toEqual([
+    {a: 1, b: 'a'},
+    {a: 2, b: 'b'},
+  ]);
+
+  expect(callCount).toBe(1);
+
+  ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}});
+
+  // We don't get called until flush.
+  expect(callCount).toBe(1);
+
+  view.flush();
+  expect(callCount).toBe(2);
+  expect(data).toEqual([
+    {a: 1, b: 'a'},
+    {a: 2, b: 'b2'},
+  ]);
+
+  ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}});
+
+  view.flush();
+  expect(callCount).toBe(3);
+  expect(data).toEqual([
+    {a: 1, b: 'a'},
+    {a: 3, b: 'b3'},
+  ]);
+
+  unlisten();
+});
+
+test('tree edit', () => {
+  const ms = new MemorySource(
+    'table',
+    {id: {type: 'number'}, name: {type: 'string'}, data: {type: 'string'}},
+    ['id'],
+  );
+  for (const row of [
+    {id: 1, name: 'foo', data: 'a', childID: 2},
+    {id: 2, name: 'foobar', data: 'b', childID: null},
+    {id: 3, name: 'mon', data: 'c', childID: 4},
+    {id: 4, name: 'monkey', data: 'd', childID: null},
+  ] as const) {
+    ms.push({type: 'add', row});
+  }
+
+  const join = new Join({
+    parent: ms.connect([
+      ['name', 'asc'],
+      ['id', 'asc'],
+    ]),
+    child: ms.connect([
+      ['name', 'desc'],
+      ['id', 'desc'],
+    ]),
+    storage: new MemoryStorage(),
+    parentKey: 'childID',
+    childKey: 'id',
+    relationshipName: 'children',
+    hidden: false,
+  });
+
+  const view = new ArrayView(join);
+  let data: unknown[] = [];
+  const listener = (d: Immutable<EntryList>) => {
+    data = deepClone(d) as unknown[];
+  };
+  view.addListener(listener);
+
+  view.hydrate();
+  expect(data).toEqual([
+    {
+      id: 1,
+      name: 'foo',
+      data: 'a',
+      childID: 2,
+      children: [
+        {
+          id: 2,
+          name: 'foobar',
+          data: 'b',
+          childID: null,
+        },
+      ],
+    },
+    {
+      id: 2,
+      name: 'foobar',
+      data: 'b',
+      childID: null,
+      children: [],
+    },
+    {
+      id: 3,
+      name: 'mon',
+      data: 'c',
+      childID: 4,
+      children: [
+        {
+          id: 4,
+          name: 'monkey',
+          data: 'd',
+          childID: null,
+        },
+      ],
+    },
+    {
+      id: 4,
+      name: 'monkey',
+      data: 'd',
+      childID: null,
+      children: [],
+    },
+  ]);
+
+  // Edit root
+  ms.push({
+    type: 'edit',
+    oldRow: {id: 1, name: 'foo', data: 'a', childID: 2},
+    row: {id: 1, name: 'foo', data: 'a2', childID: 2},
+  });
+  view.flush();
+  expect(data).toEqual([
+    {
+      id: 1,
+      name: 'foo',
+      data: 'a2',
+      childID: 2,
+      children: [
+        {
+          id: 2,
+          name: 'foobar',
+          data: 'b',
+          childID: null,
+        },
+      ],
+    },
+    {
+      id: 2,
+      name: 'foobar',
+      data: 'b',
+      childID: null,
+      children: [],
+    },
+    {
+      id: 3,
+      name: 'mon',
+      data: 'c',
+      childID: 4,
+      children: [
+        {
+          id: 4,
+          name: 'monkey',
+          data: 'd',
+          childID: null,
+        },
+      ],
+    },
+    {
+      id: 4,
+      name: 'monkey',
+      data: 'd',
+      childID: null,
+      children: [],
     },
   ]);
 });

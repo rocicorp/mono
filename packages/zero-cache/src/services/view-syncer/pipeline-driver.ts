@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {TableSource} from 'zqlite/src/table-source.js';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
 import {RowKey} from 'zero-cache/src/types/row-key.js';
@@ -11,6 +10,7 @@ import {Node, Row} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
 import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
+import {TableSource} from 'zqlite/src/table-source.js';
 import {listTables} from '../replicator/tables/list.js';
 import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
@@ -302,17 +302,27 @@ class Streamer {
   ): Iterable<RowChange> {
     for (const change of changes) {
       const {type} = change;
-      if (type === 'child') {
-        const {child} = change;
-        const childSchema = must(
-          schema.relationships?.[child.relationshipName],
-        );
 
-        yield* this.#streamChanges(queryHash, childSchema, [child.change]);
-      } else {
-        const {node} = change;
+      switch (type) {
+        case 'add':
+        case 'remove': {
+          yield* this.#streamNodes(queryHash, schema, type, [change.node]);
+          break;
+        }
+        case 'child': {
+          const {child} = change;
+          const childSchema = must(
+            schema.relationships?.[child.relationshipName],
+          );
 
-        yield* this.#streamNodes(queryHash, schema, type, [node]);
+          yield* this.#streamChanges(queryHash, childSchema, [child.change]);
+          break;
+        }
+        case 'edit':
+          assert(false, 'edit changes not supported here');
+          break;
+        default:
+          unreachable(type);
       }
     }
   }

@@ -53,6 +53,7 @@ export class Skip implements Operator {
       return;
     }
 
+    assert(change.type !== 'edit', 'Edit changes are not yet implemented');
     const changeRow = change.type === 'child' ? change.row : change.node.row;
     const cmp = this.#comparator(this.#bound.row, changeRow);
     if (cmp > 0) {
