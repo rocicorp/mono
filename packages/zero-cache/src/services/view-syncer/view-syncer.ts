@@ -309,7 +309,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      this.#cvr = await updater.flush(lc);
+      this.#cvr = (await updater.flush(lc)).cvr;
     }
 
     if (this.#pipelines.initialized()) {
@@ -464,7 +464,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = await updater.flush(lc);
+    this.#cvr = (await updater.flush(lc)).cvr;
 
     // Before ending the poke, catch up clients that were behind the old CVR.
     await this.#catchupClients(lc, cvr, addQueries, pokers);
@@ -621,7 +621,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#processChanges(lc, changes, updater, pokers);
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = await updater.flush(lc);
+    this.#cvr = (await updater.flush(lc)).cvr;
 
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());

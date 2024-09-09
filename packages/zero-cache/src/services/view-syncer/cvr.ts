@@ -108,24 +108,27 @@ export class CVRUpdater {
     this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
   }
 
-  // Exposed for testing.
-  numPendingWrites() {
-    return this._cvrStore.numPendingWrites();
-  }
-
-  async flush(lc: LogContext, lastActive = new Date()): Promise<CVRSnapshot> {
+  async flush(
+    lc: LogContext,
+    lastActive = new Date(),
+  ): Promise<{
+    cvr: CVRSnapshot;
+    stats: {entries: number; statements: number};
+  }> {
     const start = Date.now();
 
     this.#setLastActive(lastActive);
-    const numEntries = this._cvrStore.numPendingWrites();
-    const statements = await this._cvrStore.flush();
+    const stats = await this._cvrStore.flush();
 
     lc.debug?.(
-      `flushed ${numEntries} CVR entries with ${statements} statements (${
-        Date.now() - start
-      } ms)`,
+      `flushed ${stats.entries} CVR entries with ${
+        stats.statements
+      } statements (${Date.now() - start} ms)`,
     );
-    return this._cvr;
+    return {
+      cvr: this._cvr,
+      stats,
+    };
   }
 }
 
@@ -238,7 +241,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
   }
 
-  flush(lc: LogContext, lastActive = new Date()): Promise<CVRSnapshot> {
+  flush(lc: LogContext, lastActive = new Date()) {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
     return super.flush(lc, lastActive);
   }

@@ -47,8 +47,10 @@ class RowRecordCache {
     this.#cvrID = cvrID;
   }
 
-  async load(): Promise<CustomKeyMap<RowID, RowRecord>> {
-    assert(!this.#cache);
+  async #ensureLoaded(): Promise<CustomKeyMap<RowID, RowRecord>> {
+    if (this.#cache) {
+      return this.#cache;
+    }
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
     for await (const rows of this.#db<
       RowsRow[]
@@ -66,14 +68,12 @@ class RowRecordCache {
     return this.#cache;
   }
 
-  getRowRecords(): ReadonlyMap<RowID, RowRecord> {
-    assert(this.#cache);
-    return this.#cache;
+  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
+    return this.#ensureLoaded();
   }
 
-  flush(rowRecords: Iterable<RowRecord>) {
-    const cache = this.#cache;
-    assert(cache);
+  async flush(rowRecords: Iterable<RowRecord>) {
+    const cache = await this.#ensureLoaded();
     for (const row of rowRecords) {
       if (row.refCounts === null) {
         cache.delete(row.id);
@@ -201,14 +201,12 @@ export class CVRStore {
         query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
     }
-
-    await this.#rowCache.load();
     this.#lc.debug?.(`loaded CVR (${Date.now() - start} ms)`);
 
     return cvr;
   }
 
-  getRowRecords(): ReadonlyMap<RowID, RowRecord> {
+  getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
     return this.#rowCache.getRowRecords();
   }
 
@@ -217,17 +215,6 @@ export class CVRStore {
   }
 
   putRowRecord(row: RowRecord): void {
-    const existing = this.getRowRecords().get(row.id);
-    if (
-      deepEqual(
-        row as ReadonlyJSONValue,
-        existing as ReadonlyJSONValue | undefined,
-      ) ||
-      (existing === undefined && row.refCounts === null)
-    ) {
-      this.#pendingRowRecordPuts.delete(row.id);
-      return;
-    }
     this.#pendingRowRecordPuts.set(row.id, row);
   }
 
@@ -243,10 +230,6 @@ export class CVRStore {
           change,
         )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`,
     );
-  }
-
-  numPendingWrites(): number {
-    return this.#writes.size + this.#pendingRowRecordPuts.size;
   }
 
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
@@ -470,11 +453,25 @@ export class CVRStore {
     return patches;
   }
 
-  async flush(): Promise<number> {
+  async flush(): Promise<{entries: number; statements: number}> {
+    const existingRowRecords = await this.getRowRecords();
+    const rowRecordsToFlush = [...this.#pendingRowRecordPuts.values()].filter(
+      row => {
+        const existing = existingRowRecords.get(row.id);
+        return (
+          !deepEqual(
+            row as ReadonlyJSONValue,
+            existing as ReadonlyJSONValue | undefined,
+          ) &&
+          (existing !== undefined || row.refCounts !== null)
+        );
+      },
+    );
+    const entries = rowRecordsToFlush.length + this.#writes.size;
     const statements = await this.#db.begin(tx => {
       let statements = 0;
       if (this.#pendingRowRecordPuts.size > 0) {
-        const rowRecordRows = [...this.#pendingRowRecordPuts.values()].map(r =>
+        const rowRecordRows = rowRecordsToFlush.map(r =>
           rowRecordToRowsRow(this.#id, r),
         );
         let i = 0;
@@ -496,11 +493,11 @@ export class CVRStore {
       }
       return statements;
     });
-    await this.#rowCache.flush(this.#pendingRowRecordPuts.values());
+    await this.#rowCache.flush(rowRecordsToFlush);
 
     this.#writes.clear();
     this.#pendingRowRecordPuts.clear();
-    return statements;
+    return {entries, statements};
   }
 }
 
