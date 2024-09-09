@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import {Mode, TransactionPool} from 'zero-cache/src/db/transaction-pool.js';
 import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
@@ -56,7 +57,7 @@ export class Storer implements Service {
         if (tx) {
           catchupQueue.push(subscriber); // Wait for the current tx to complete.
         } else {
-          this.#processCatchup(subscriber); // Catch up immediately.
+          this.#processCatchup([subscriber]); // Catch up immediately.
         }
         continue;
       }
@@ -93,14 +94,14 @@ export class Storer implements Service {
 
         // Before beginning the next transaction, open a READONLY snapshot to
         // concurrently catchup any queued subscribers.
-        this.#processCatchup(...catchupQueue.splice(0));
+        this.#processCatchup(catchupQueue.splice(0));
       }
     }
 
     this.#lc.info?.('storer stopped');
   }
 
-  #processCatchup(...subs: Subscriber[]) {
+  #processCatchup(subs: Subscriber[]) {
     if (subs.length === 0) {
       return;
     }
@@ -147,8 +148,8 @@ export class Storer implements Service {
     }
   }
 
-  // eslint-disable-next-line require-await
-  async stop() {
+  stop() {
     this.stopped.resolve(false);
+    return promiseVoid;
   }
 }

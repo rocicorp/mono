@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {
   LogicalReplicationService,
   Pgoutput,
@@ -47,9 +48,7 @@ export async function initializeStreamer(
   replicaID: string,
   replica: Database,
 ): Promise<ChangeStreamerService> {
-  const {watermark: _, ...replicationConfig} = getSubscriptionState(
-    new StatementRunner(replica),
-  );
+  const replicationConfig = getSubscriptionState(new StatementRunner(replica));
 
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB);
@@ -132,7 +131,8 @@ class PostgresChangeStreamer implements ChangeStreamerService {
 
   #service: LogicalReplicationService | undefined;
   #lastLSN = '0/0';
-  #stopped = false;
+  #running = false;
+  readonly #stopped = resolver<true>();
 
   constructor(
     lc: LogContext,
@@ -151,11 +151,12 @@ class PostgresChangeStreamer implements ChangeStreamerService {
   }
 
   async run() {
+    this.#running = true;
     void this.#storer.run();
 
     let retryDelay = INITIAL_RETRY_DELAY_MS;
 
-    while (!this.#stopped) {
+    while (this.#running) {
       this.#service = new LogicalReplicationService(
         {connectionString: this.#upstreamUri},
         {acknowledge: {auto: false, timeoutSeconds: 0}},
@@ -177,7 +178,7 @@ class PostgresChangeStreamer implements ChangeStreamerService {
           this.#lastLSN,
         );
       } catch (e) {
-        if (!this.#stopped) {
+        if (this.#running) {
           await this.#service.stop();
           this.#service = undefined;
 
@@ -187,7 +188,7 @@ class PostgresChangeStreamer implements ChangeStreamerService {
             `Error in Replication Stream. Retrying in ${delay}ms`,
             e,
           );
-          await sleep(delay);
+          await Promise.race([sleep(delay), this.#stopped.promise]);
         }
       }
     }
@@ -211,27 +212,27 @@ class PostgresChangeStreamer implements ChangeStreamerService {
       }
 
       default:
-        change satisfies never; // All change types are covered.
-        break;
-    }
+        change satisfies never; // All Change types are covered.
 
-    switch (msg.tag) {
-      case 'relation':
-        break; // Explicitly ignored. Schema handling is TODO.
-      case 'type':
-        throw new Error(
-          `Custom types are not supported (received "${msg.typeName}")`,
-        );
-      case 'origin':
-        // We do not set the `origin` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-      case 'message':
-        // We do not set the `messages` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-      default:
-        throw new Error(`Unexpected message type ${stringify(msg)}`);
+        // But we can technically receive other Message types.
+        switch (msg.tag) {
+          case 'relation':
+            break; // Explicitly ignored. Schema handling is TODO.
+          case 'type':
+            throw new Error(
+              `Custom types are not supported (received "${msg.typeName}")`,
+            );
+          case 'origin':
+            // We do not set the `origin` option in the pgoutput parameters:
+            // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+            throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+          case 'message':
+            // We do not set the `messages` option in the pgoutput parameters:
+            // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+            throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
+          default:
+            throw new Error(`Unexpected message type ${stringify(msg)}`);
+        }
     }
   };
 
@@ -268,7 +269,8 @@ class PostgresChangeStreamer implements ChangeStreamerService {
 
   async stop() {
     this.#lc.info?.('Stopping ChangeStreamer');
-    this.#stopped = true;
+    this.#running = false;
+    this.#stopped.resolve(true);
     await this.#service?.stop();
     await this.#storer.stop();
   }
