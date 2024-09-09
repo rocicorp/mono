@@ -90,7 +90,7 @@ export type ChangeEntry = {
   watermark: string;
 };
 
-export enum ErrorType {
+export const enum ErrorType {
   Unknown,
   WrongReplicaVersion,
   WatermarkTooOld,
