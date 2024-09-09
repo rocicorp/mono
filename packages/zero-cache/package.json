@@ -21,7 +21,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.2.2",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zqlite": "0.0.0",
+    "zqlite": "0.0.0",
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",
     "eventemitter3": "^5.0.1",

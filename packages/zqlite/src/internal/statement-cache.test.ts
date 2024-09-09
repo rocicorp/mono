@@ -1,9 +1,10 @@
 import {expect, test} from 'vitest';
 import {CachedStatement, StatementCache} from './statement-cache.js';
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 test('Same sql results in same statement instance. The same instance is not outstanding twice.', () => {
-  const db = new Database(':memory:');
+  const db = new Database(createSilentLogContext(), ':memory:');
   const cache = new StatementCache(db);
   const LOOP_COUNT = 100;
   const expected: CachedStatement[] = [];

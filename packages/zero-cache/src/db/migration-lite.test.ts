@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Database as Db} from 'better-sqlite3';
+import type {Database as Db} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {DbFile} from '../test/lite.js';
@@ -178,7 +178,7 @@ describe('db/migration-lite', () => {
 
   beforeEach(() => {
     dbFile = new DbFile('migration-test');
-    db = dbFile.connect();
+    db = dbFile.connect(createSilentLogContext());
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
     db.prepare(`CREATE TABLE "MigrationHistory" (event TEXT)`).run();

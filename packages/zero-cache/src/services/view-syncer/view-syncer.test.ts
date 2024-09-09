@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
@@ -46,9 +46,9 @@ const EXPECTED_LMIDS_AST: AST = {
 };
 
 describe('view-syncer/service', () => {
-  let storageDB: Database.Database;
+  let storageDB: Database;
   let replicaDbFile: DbFile;
-  let replica: Database.Database;
+  let replica: Database;
   let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
   let versionNotifications: Subscription<ReplicaVersionReady>;
@@ -63,11 +63,12 @@ describe('view-syncer/service', () => {
   const messages = new ReplicationMessages({issues: 'id', users: 'id'});
 
   beforeEach(async () => {
-    storageDB = new Database(':memory:');
+    const lc = createSilentLogContext();
+    storageDB = new Database(lc, ':memory:');
     storageDB.prepare(CREATE_STORAGE_TABLE).run();
 
     replicaDbFile = new DbFile('view_syncer_service_test');
-    replica = replicaDbFile.connect();
+    replica = replicaDbFile.connect(lc);
     initChangeLog(replica);
     initReplicationState(replica, ['zero_data'], '0/1');
 

@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import Database, {Database as DB} from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
+import type {Database as DB} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {DbFile} from 'zero-cache/src/test/lite.js';
@@ -20,7 +21,7 @@ describe('view-syncer/pipeline-driver', () => {
   beforeEach(() => {
     dbFile = new DbFile('pipelines_test');
     lc = createSilentLogContext();
-    const storage = new Database(':memory:');
+    const storage = new Database(lc, ':memory:');
     storage.prepare(CREATE_STORAGE_TABLE).run();
 
     pipelines = new PipelineDriver(
@@ -29,7 +30,7 @@ describe('view-syncer/pipeline-driver', () => {
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
     );
 
-    db = dbFile.connect();
+    db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '0/123');
     initChangeLog(db);
     db.exec(`

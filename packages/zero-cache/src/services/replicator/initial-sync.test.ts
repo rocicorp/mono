@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
@@ -460,11 +460,11 @@ describe('replicator/initial-sync', () => {
   ];
 
   let upstream: PostgresDB;
-  let replica: Database.Database;
+  let replica: Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_upstream');
-    replica = new Database(':memory:');
+    replica = new Database(createSilentLogContext(), ':memory:');
   });
 
   afterEach(async () => {
@@ -496,7 +496,7 @@ describe('replicator/initial-sync', () => {
       ).toMatchObject(c.replicatedSchema);
       const {pubs} = replica
         .prepare(`SELECT publications as pubs FROM "_zero.ReplicationConfig"`)
-        .get();
+        .get<{pubs: string}>();
       expect(new Set(JSON.parse(pubs))).toEqual(new Set(c.publications));
 
       const syncedIndices = listIndices(replica);
@@ -506,7 +506,12 @@ describe('replicator/initial-sync', () => {
 
       const replicaState = replica
         .prepare('SELECT * FROM "_zero.ReplicationState"')
-        .get();
+        .get<{
+          watermark: string;
+          stateVersion: string;
+          nextStateVersion: string;
+          lock: number;
+        }>();
       expect(replicaState).toMatchObject({
         watermark: /[0-9A-F]+\/[0-9A-F]+/,
         stateVersion: '00',

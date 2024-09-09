@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import {Database} from 'zqlite/src/db.js';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
@@ -7,6 +7,7 @@ import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
 import {compile, sql} from './internal/sql.js';
 import {TableSource, UnsupportedValueError} from './table-source.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 const columns = {
   id: {type: 'string'},
@@ -25,7 +26,7 @@ describe('fetching from a table source', () => {
     ['id', 'asc'],
   ] as const;
   const compoundComparator = makeComparator(compoundOrder);
-  const db = new Database(':memory:');
+  const db = new Database(createSilentLogContext(), ':memory:');
   db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c);`);
   const stmt = db.prepare(
     /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
@@ -246,7 +247,7 @@ describe('fetched value types', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      const db = new Database(':memory:');
+      const db = new Database(createSilentLogContext(), ':memory:');
       db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c);`);
       const stmt = db.prepare(
         /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
@@ -265,8 +266,8 @@ describe('fetched value types', () => {
 });
 
 test('pushing values does the correct writes and outputs', () => {
-  const db1 = new Database(':memory:');
-  const db2 = new Database(':memory:');
+  const db1 = new Database(createSilentLogContext(), ':memory:');
+  const db2 = new Database(createSilentLogContext(), ':memory:');
   db1.exec(/* sql */ `CREATE TABLE foo (a, b, c, PRIMARY KEY (a, b));`);
   db2.exec(/* sql */ `CREATE TABLE foo (a, b, c, PRIMARY KEY (a, b));`);
   const source = new TableSource(
@@ -424,7 +425,7 @@ test('pushing values does the correct writes and outputs', () => {
 });
 
 test('getByKey', () => {
-  const db = new Database(':memory:');
+  const db = new Database(createSilentLogContext(), ':memory:');
   db.exec(
     /* sql */ `CREATE TABLE foo (id TEXT, a INTEGER, b, c, PRIMARY KEY(id, a));`,
   );
@@ -503,7 +504,7 @@ describe('shared test cases', () => {
       columns: Record<string, SchemaValue>,
       primaryKey: readonly [string, ...string[]],
     ) => {
-      const db = new Database(':memory:');
+      const db = new Database(createSilentLogContext(), ':memory:');
       // create a table with desired columns and primary keys
       const query = compile(
         sql`CREATE TABLE ${sql.ident(name)} (${sql.join(
