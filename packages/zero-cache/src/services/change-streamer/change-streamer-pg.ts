@@ -13,7 +13,7 @@ import {
   PostgresDB,
   registerPostgresTypeParsers,
 } from 'zero-cache/src/types/pg.js';
-import {CancelableAsyncIterable} from 'zero-cache/src/types/streams.js';
+import {Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {replicationSlot} from '../replicator/initial-sync.js';
@@ -251,7 +251,7 @@ class PostgresChangeStreamer implements ChangeStreamerService {
     return this.#service?.acknowledge(this.#lastLSN);
   };
 
-  subscribe(ctx: SubscriberContext): CancelableAsyncIterable<Downstream> {
+  subscribe(ctx: SubscriberContext): Source<Downstream> {
     const {id, watermark} = ctx;
     const downstream = Subscription.create<Downstream>({
       cleanup: () => this.#forwarder.remove(id, subscriber),
