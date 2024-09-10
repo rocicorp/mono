@@ -1,4 +1,5 @@
 import {assert} from 'shared/src/asserts.js';
+import {compareLSN} from 'zero-cache/src/types/lsn.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {ChangeEntry, Downstream, ErrorType} from './change-streamer.js';
 
@@ -28,7 +29,7 @@ export class Subscriber {
 
   send(change: ChangeEntry) {
     const {watermark} = change;
-    if (watermark > this.watermark) {
+    if (compareLSN(watermark, this.watermark) > 0) {
       if (this.#backlog) {
         this.#backlog.push(change);
       } else {
@@ -56,7 +57,7 @@ export class Subscriber {
 
   #send(change: ChangeEntry) {
     const {watermark} = change;
-    if (watermark > this.watermark) {
+    if (compareLSN(watermark, this.watermark) > 0) {
       this.#downstream.push(['change', change]);
     }
   }
