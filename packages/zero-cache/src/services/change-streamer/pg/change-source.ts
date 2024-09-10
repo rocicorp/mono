@@ -123,10 +123,8 @@ function messageToChangeEntry(lsn: string, msg: Pgoutput.Message) {
     case 'update':
     case 'delete':
     case 'truncate':
-    case 'commit': {
-      const watermark = lsn;
-      return {watermark, change};
-    }
+    case 'commit':
+      return {watermark: lsn, change};
 
     default:
       change satisfies never; // All Change types are covered.
