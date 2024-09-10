@@ -498,11 +498,11 @@ export class CVRStore {
       row => {
         const existing = existingRowRecords.get(row.id);
         return (
+          (existing !== undefined || row.refCounts !== null) &&
           !deepEqual(
             row as ReadonlyJSONValue,
             existing as ReadonlyJSONValue | undefined,
-          ) &&
-          (existing !== undefined || row.refCounts !== null)
+          )
         );
       },
     );
