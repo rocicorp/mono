@@ -14,7 +14,7 @@ import {
 } from './cvr.js';
 import {
   ClientsRow,
-  compareClientsRow,
+  compareClientsRows,
   compareDesiresRows,
   compareInstancesRows,
   compareQueriesRows,
@@ -61,8 +61,8 @@ describe('view-syncer/cvr', () => {
           break;
         }
         case 'clients': {
-          (res as ClientsRow[]).sort(compareClientsRow);
-          (tableState as ClientsRow[]).sort(compareClientsRow);
+          (res as ClientsRow[]).sort(compareClientsRows);
+          (tableState as ClientsRow[]).sort(compareClientsRows);
           break;
         }
         case 'queries': {
@@ -146,10 +146,12 @@ describe('view-syncer/cvr', () => {
       clients: {},
       queries: {},
     } satisfies CVRSnapshot);
-    const flushed = await new CVRUpdater(pgStore, cvr).flush(
-      lc,
-      new Date(Date.UTC(2024, 3, 20)),
-    );
+    const flushed = (
+      await new CVRUpdater(pgStore, cvr).flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 20)),
+      )
+    ).cvr;
 
     expect(flushed).toEqual({
       ...cvr,
@@ -291,7 +293,18 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRUpdater(cvrStore, cvr);
 
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 24)),
+    );
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
 
     expect(cvr).toEqual({
       id: 'abc123',
@@ -445,8 +458,19 @@ describe('view-syncer/cvr', () => {
     expect(updater.putDesiredQueries('bonkClient', {})).toEqual([]);
     updater.clearDesiredQueries('dooClient');
 
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 24)),
+    );
 
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 7,
+      desires: 8,
+      clients: 4,
+      rows: 0,
+      statements: 21,
+    });
     expect(updated).toEqual({
       id: 'abc123',
       version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump
@@ -721,7 +745,18 @@ describe('view-syncer/cvr', () => {
     ).toEqual([]);
 
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
     expect(updated).toEqual({
       ...cvr,
       lastActive: {epochMillis: 1713834000000},
@@ -996,10 +1031,19 @@ describe('view-syncer/cvr', () => {
 
     expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
-    // expect(updater.numPendingWrites()).toBe(11);
-
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 3,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1390,10 +1434,19 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    // expect(updater.numPendingWrites()).toBe(11);
-
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1835,7 +1888,18 @@ describe('view-syncer/cvr', () => {
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 2,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 5,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2233,11 +2297,20 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    // expect(updater.numPendingWrites()).toBe(10);
-
     // Same last active day (no index change), but different hour.
     // Note: Must flush before generating config patches.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2705,11 +2778,19 @@ describe('view-syncer/cvr', () => {
 
     expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
-    // No writes!
-    expect(updater.numPendingWrites()).toBe(0);
-
     // Only the last active time should change.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2940,10 +3021,19 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    expect(updater.numPendingWrites()).toBe(2);
-
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 1,
+      statements: 3,
+    });
 
     // Verify round tripping.
     const cvrStore2 = new CVRStore(lc, db, 'abc123');
