@@ -1,13 +1,13 @@
-import {Database} from 'zqlite/src/db.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
 import {makeComparator, Row, Value} from 'zql/src/zql/ivm/data.js';
 import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
+import {Database} from 'zqlite/src/db.js';
 import {compile, sql} from './internal/sql.js';
 import {TableSource, UnsupportedValueError} from './table-source.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 const columns = {
   id: {type: 'string'},
@@ -421,6 +421,33 @@ test('pushing values does the correct writes and outputs', () => {
       {a: 1, b: 2.123, c: 1},
       {a: 9007199254740991, b: 3.456, c: 1},
     ]);
+
+    // edit changes
+    source.push({
+      type: 'edit',
+      row: {a: 1, b: 2.123, c: false},
+      oldRow: {a: 1, b: 2.123, c: true},
+    });
+
+    expect(outputted.shift()).toEqual({
+      type: 'edit',
+      oldRow: {a: 1, b: 2.123, c: true},
+      row: {a: 1, b: 2.123, c: false},
+    });
+
+    expect(read.all()).toEqual([
+      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 0},
+    ]);
+
+    // non existing old row
+    expect(() => {
+      source.push({
+        type: 'edit',
+        row: {a: 11, b: 2.123, c: false},
+        oldRow: {a: 12, b: 2.123, c: true},
+      });
+    }).toThrow('Row not found');
   }
 });
 
