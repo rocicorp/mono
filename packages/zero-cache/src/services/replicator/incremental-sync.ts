@@ -13,9 +13,10 @@ import {Database} from 'zqlite/src/db.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {toLexiVersion} from '../../types/lsn.js';
+import {liteTableName} from '../../types/names.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
-import {replicationSlot} from './initial-sync.js';
+import {replicationSlot} from '../change-streamer/pg/initial-sync.js';
 import {Notifier} from './notifier.js';
 import {ReplicaVersionReady} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
@@ -25,7 +26,6 @@ import {
   getSubscriptionState,
   updateReplicationWatermark,
 } from './schema/replication-state.js';
-import {liteTableName} from './tables/names.js';
 
 // BigInt support from LogicalReplicationService.
 registerPostgresTypeParsers();

@@ -10,12 +10,13 @@ import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
-import {initialSync, replicationSlot} from '../../replicator/initial-sync.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import {ChangeSource, ChangeStream} from '../change-streamer-service.js';
 import {ChangeEntry} from '../change-streamer.js';
 import {Change} from '../schema/change.js';
 import {ReplicationConfig} from '../schema/tables.js';
+import {replicationSlot} from './initial-sync.js';
+import {initSyncSchema} from './sync-schema.js';
 
 // BigInt support from LogicalReplicationService.
 registerPostgresTypeParsers();
@@ -29,10 +30,17 @@ export async function initializeChangeSource(
   lc: LogContext,
   upstreamURI: string,
   replicaID: string,
-  replica: Database,
+  replicaDbFile: string,
 ): Promise<ChangeSource> {
-  await initialSync(lc, replicaID, replica, upstreamURI);
+  await initSyncSchema(
+    lc,
+    'change-streamer',
+    replicaID,
+    replicaDbFile,
+    upstreamURI,
+  );
 
+  const replica = new Database(lc, replicaDbFile);
   const replicationConfig = getSubscriptionState(new StatementRunner(replica));
 
   return new PostgresChangeSource(

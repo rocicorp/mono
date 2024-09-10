@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {TableSource} from 'zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
@@ -11,8 +10,9 @@ import {Node, Row} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
 import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
-import {listTables} from '../replicator/tables/list.js';
-import {TableSpec} from '../replicator/tables/specs.js';
+import {TableSource} from 'zqlite/src/table-source.js';
+import {listTables} from '../../db/lite-tables.js';
+import {TableSpec} from '../../types/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
 

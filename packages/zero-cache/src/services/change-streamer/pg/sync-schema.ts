@@ -4,7 +4,7 @@ import {
   runSchemaMigrations,
   VersionMigrationMap,
 } from 'zero-cache/src/db/migration-lite.js';
-import {initialSync} from '../initial-sync.js';
+import {initialSync} from './initial-sync.js';
 
 export async function initSyncSchema(
   log: LogContext,
