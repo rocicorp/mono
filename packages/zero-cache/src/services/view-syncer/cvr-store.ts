@@ -37,6 +37,15 @@ import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
 
 type NotNull<T> = T extends null ? never : T;
 
+export type CVRFlushStats = {
+  instances: number;
+  queries: number;
+  desires: number;
+  clients: number;
+  rows: number;
+  statements: number;
+};
+
 class RowRecordCache {
   #cache: CustomKeyMap<RowID, RowRecord> | undefined;
   readonly #db: PostgresDB;
@@ -120,8 +129,10 @@ export class CVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
   readonly #db: PostgresDB;
-  readonly #writes: Set<(tx: PostgresTransaction) => PendingQuery<MaybeRow[]>> =
-    new Set();
+  readonly #writes: Set<{
+    stats: Partial<CVRFlushStats>;
+    write: (tx: PostgresTransaction) => PendingQuery<MaybeRow[]>;
+  }> = new Set();
   readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
     rowIDHash,
   );
@@ -174,8 +185,10 @@ export class CVRStore {
         version: versionString(cvr.version),
         lastActive: new Date(0),
       };
-      console.log('177');
-      this.#writes.add(tx => tx`INSERT INTO cvr.instances ${tx(change)}`);
+      this.#writes.add({
+        stats: {instances: 1},
+        write: tx => tx`INSERT INTO cvr.instances ${tx(change)}`,
+      });
     }
 
     for (const row of clientsRows) {
@@ -225,26 +238,26 @@ export class CVRStore {
       version: versionString(version),
       lastActive: new Date(lastActive.epochMillis),
     };
-    console.log('228');
-    this.#writes.add(
-      tx =>
+    this.#writes.add({
+      stats: {instances: 1},
+      write: tx =>
         tx`INSERT INTO cvr.instances ${tx(
           change,
         )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`,
-    );
+    });
   }
 
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
-    console.log('238');
-    this.#writes.add(
-      tx => tx`UPDATE cvr.queries SET ${tx({
+    this.#writes.add({
+      stats: {queries: 1},
+      write: tx => tx`UPDATE cvr.queries SET ${tx({
         patchVersion: versionString(version),
         deleted: true,
         transformationHash: null,
         transformationVersion: null,
       })}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
-    );
+    });
   }
 
   putQuery(query: QueryRecord): void {
@@ -276,12 +289,12 @@ export class CVRStore {
           internal: null,
           deleted: false, // put vs del "got" query
         };
-    console.log('279');
-    this.#writes.add(
-      tx => tx`INSERT INTO cvr.queries ${tx(change)}
+    this.#writes.add({
+      stats: {queries: 1},
+      write: tx => tx`INSERT INTO cvr.queries ${tx(change)}
       ON CONFLICT ("clientGroupID", "queryHash")
       DO UPDATE SET ${tx(change)}`,
-    );
+    });
   }
 
   updateQuery(query: QueryRecord) {
@@ -303,20 +316,20 @@ export class CVRStore {
       deleted: false,
     };
 
-    console.log('306');
-    this.#writes.add(
-      tx => tx`UPDATE cvr.queries SET ${tx(change)}
+    this.#writes.add({
+      stats: {queries: 1},
+      write: tx => tx`UPDATE cvr.queries SET ${tx(change)}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${query.id}`,
-    );
+    });
   }
 
   updateClientPatchVersion(clientID: string, patchVersion: CVRVersion): void {
-    console.log('314');
-    this.#writes.add(
-      tx => tx`UPDATE cvr.clients
+    this.#writes.add({
+      stats: {clients: 1},
+      write: tx => tx`UPDATE cvr.clients
       SET "patchVersion" = ${versionString(patchVersion)}
       WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
-    );
+    });
   }
 
   insertClient(client: ClientRecord): void {
@@ -328,8 +341,10 @@ export class CVRStore {
       deleted: false,
     };
 
-    console.log('331');
-    this.#writes.add(tx => tx`INSERT INTO cvr.clients ${tx(change)}`);
+    this.#writes.add({
+      stats: {clients: 1},
+      write: tx => tx`INSERT INTO cvr.clients ${tx(change)}`,
+    });
   }
 
   insertDesiredQuery(
@@ -345,8 +360,10 @@ export class CVRStore {
       patchVersion: versionString(newVersion),
       deleted,
     };
-    console.log('348');
-    this.#writes.add(tx => tx`INSERT INTO cvr.desires ${tx(change)}`);
+    this.#writes.add({
+      stats: {desires: 1},
+      write: tx => tx`INSERT INTO cvr.desires ${tx(change)}`,
+    });
   }
 
   delDesiredQuery(
@@ -354,15 +371,15 @@ export class CVRStore {
     query: {id: string},
     client: {id: string},
   ): void {
-    console.log('357');
-    this.#writes.add(
-      tx =>
+    this.#writes.add({
+      stats: {desires: 1},
+      write: tx =>
         tx`DELETE FROM cvr.desires WHERE "clientGroupID" = ${
           this.#id
         } AND "clientID" = ${client.id} AND "queryHash" = ${
           query.id
         } AND "patchVersion" = ${versionString(oldPutVersion)}`,
-    );
+    });
   }
 
   async *catchupRowPatches(
@@ -464,12 +481,19 @@ export class CVRStore {
     return patches;
   }
 
-  async flush(): Promise<{entries: number; statements: number}> {
+  async flush(): Promise<CVRFlushStats> {
+    const stats: CVRFlushStats = {
+      instances: 0,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 0,
+    };
     const existingRowRecords = await this.getRowRecords();
     const rowRecordsToFlush = [...this.#pendingRowRecordPuts.values()].filter(
       row => {
         const existing = existingRowRecords.get(row.id);
-        console.log('existing\n', existing, '\nrow\n', row);
         return (
           !deepEqual(
             row as ReadonlyJSONValue,
@@ -479,11 +503,8 @@ export class CVRStore {
         );
       },
     );
-    console.log(rowRecordsToFlush);
-    console.log(this.#writes);
-    const entries = rowRecordsToFlush.length + this.#writes.size;
-    const statements = await this.#db.begin(tx => {
-      let statements = 0;
+    stats.rows = rowRecordsToFlush.length;
+    await this.#db.begin(tx => {
       if (this.#pendingRowRecordPuts.size > 0) {
         const rowRecordRows = rowRecordsToFlush.map(r =>
           rowRecordToRowsRow(this.#id, r),
@@ -498,20 +519,24 @@ export class CVRStore {
               "patchVersion" = excluded."patchVersion",
               "refCounts" = excluded."refCounts"`.execute();
           i += ROW_RECORD_UPSERT_BATCH_SIZE;
-          statements++;
+          stats.statements++;
         }
       }
       for (const write of this.#writes) {
-        void write(tx).execute();
-        statements++;
+        stats.instances += write.stats.instances ?? 0;
+        stats.queries += write.stats.queries ?? 0;
+        stats.desires += write.stats.desires ?? 0;
+        stats.clients += write.stats.clients ?? 0;
+
+        void write.write(tx).execute();
+        stats.statements++;
       }
-      return statements;
     });
     await this.#rowCache.flush(rowRecordsToFlush);
 
     this.#writes.clear();
     this.#pendingRowRecordPuts.clear();
-    return {entries, statements};
+    return stats;
   }
 }
 

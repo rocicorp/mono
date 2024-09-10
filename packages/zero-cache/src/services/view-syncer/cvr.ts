@@ -8,7 +8,7 @@ import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
-import type {CVRStore} from './cvr-store.js';
+import type {CVRFlushStats, CVRStore} from './cvr-store.js';
 import {
   ClientQueryRecord,
   InternalQueryRecord,
@@ -113,7 +113,7 @@ export class CVRUpdater {
     lastActive = new Date(),
   ): Promise<{
     cvr: CVRSnapshot;
-    stats: {entries: number; statements: number};
+    stats: CVRFlushStats;
   }> {
     const start = Date.now();
 
@@ -121,9 +121,7 @@ export class CVRUpdater {
     const stats = await this._cvrStore.flush();
 
     lc.debug?.(
-      `flushed ${stats.entries} CVR entries with ${
-        stats.statements
-      } statements (${Date.now() - start} ms)`,
+      `flushed CVR ${JSON.stringify(stats)} in (${Date.now() - start} ms)`,
     );
     return {
       cvr: this._cvr,

@@ -297,7 +297,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 24)),
     );
-    expect(stats).toEqual({entries: 1, statements: 1});
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
 
     expect(cvr).toEqual({
       id: 'abc123',
@@ -456,7 +463,14 @@ describe('view-syncer/cvr', () => {
       new Date(Date.UTC(2024, 3, 24)),
     );
 
-    expect(stats).toEqual({entries: 21, statements: 21});
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 7,
+      desires: 8,
+      clients: 4,
+      rows: 0,
+      statements: 21,
+    });
     expect(updated).toEqual({
       id: 'abc123',
       version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump
@@ -735,7 +749,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 1, statements: 1});
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
     expect(updated).toEqual({
       ...cvr,
       lastActive: {epochMillis: 1713834000000},
@@ -1015,7 +1036,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 6, statements: 4});
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 3,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1411,7 +1439,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 5, statements: 4});
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1857,7 +1892,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 6, statements: 5});
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 2,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 5,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2261,7 +2303,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 5, statements: 4});
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2436,7 +2485,7 @@ describe('view-syncer/cvr', () => {
     });
   });
 
-  test.only('unchanged queries', async () => {
+  test('unchanged queries', async () => {
     const initialState: DBState = {
       instances: [
         {
@@ -2734,7 +2783,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 1, statements: 1});
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2970,7 +3026,14 @@ describe('view-syncer/cvr', () => {
       lc,
       new Date(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(stats).toEqual({entries: 3, statements: 3});
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 1,
+      statements: 3,
+    });
 
     // Verify round tripping.
     const cvrStore2 = new CVRStore(lc, db, 'abc123');
