@@ -12,7 +12,7 @@ import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {initialSync, replicationSlot} from '../../replicator/initial-sync.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
-import {ChangeSource} from '../change-streamer-service.js';
+import {ChangeSource, ChangeStream} from '../change-streamer-service.js';
 import {ChangeEntry} from '../change-streamer.js';
 import {Change} from '../schema/change.js';
 import {ReplicationConfig} from '../schema/tables.js';
@@ -65,7 +65,7 @@ class PostgresChangeSource implements ChangeSource {
     this.#replicationConfig = replicationConfig;
   }
 
-  startStream() {
+  startStream(): ChangeStream {
     let lastLSN = '0/0';
 
     const ack = (commit?: Pgoutput.MessageCommit) => {
@@ -85,7 +85,7 @@ class PostgresChangeSource implements ChangeSource {
         respond && ack();
       })
       .on('data', (lsn, msg) => {
-        const change = this.#toChange(lsn, msg);
+        const change = messageToChangeEntry(lsn, msg);
         if (change) {
           changes.push(change);
         }
@@ -106,42 +106,42 @@ class PostgresChangeSource implements ChangeSource {
 
     return {changes, acks: {push: ack}};
   }
+}
 
-  #toChange(lsn: string, msg: Pgoutput.Message) {
-    const change = msg as Change;
-    switch (change.tag) {
-      case 'begin':
-      case 'insert':
-      case 'update':
-      case 'delete':
-      case 'truncate':
-      case 'commit': {
-        const watermark = toLexiVersion(lsn);
-        return {watermark, change};
-      }
-
-      default:
-        change satisfies never; // All Change types are covered.
-
-        // But we can technically receive other Message types.
-        switch (msg.tag) {
-          case 'relation':
-            return undefined; // Explicitly ignored. Schema handling is TODO.
-          case 'type':
-            throw new Error(
-              `Custom types are not supported (received "${msg.typeName}")`,
-            );
-          case 'origin':
-            // We do not set the `origin` option in the pgoutput parameters:
-            // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-            throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-          case 'message':
-            // We do not set the `messages` option in the pgoutput parameters:
-            // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-            throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-          default:
-            throw new Error(`Unexpected message type ${stringify(msg)}`);
-        }
+function messageToChangeEntry(lsn: string, msg: Pgoutput.Message) {
+  const change = msg as Change;
+  switch (change.tag) {
+    case 'begin':
+    case 'insert':
+    case 'update':
+    case 'delete':
+    case 'truncate':
+    case 'commit': {
+      const watermark = toLexiVersion(lsn);
+      return {watermark, change};
     }
+
+    default:
+      change satisfies never; // All Change types are covered.
+
+      // But we can technically receive other Message types.
+      switch (msg.tag) {
+        case 'relation':
+          return undefined; // Explicitly ignored. Schema handling is TODO.
+        case 'type':
+          throw new Error(
+            `Custom types are not supported (received "${msg.typeName}")`,
+          );
+        case 'origin':
+          // We do not set the `origin` option in the pgoutput parameters:
+          // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+          throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+        case 'message':
+          // We do not set the `messages` option in the pgoutput parameters:
+          // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+          throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
+        default:
+          throw new Error(`Unexpected message type ${stringify(msg)}`);
+      }
   }
 }
