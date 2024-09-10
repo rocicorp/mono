@@ -46,7 +46,7 @@ import type {
   PullerResultV0,
   PullerResultV1,
 } from '../puller.js';
-import {stringCompare} from '../string-compare.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {
   withRead,
