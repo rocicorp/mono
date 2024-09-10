@@ -6,7 +6,6 @@ import {
 } from 'pg-logical-replication';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
@@ -124,10 +123,8 @@ function messageToChangeEntry(lsn: string, msg: Pgoutput.Message) {
     case 'update':
     case 'delete':
     case 'truncate':
-    case 'commit': {
-      const watermark = toLexiVersion(lsn);
-      return {watermark, change};
-    }
+    case 'commit':
+      return {watermark: lsn, change};
 
     default:
       change satisfies never; // All Change types are covered.
