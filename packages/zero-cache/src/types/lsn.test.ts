@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 import {versionFromLexi, type LexiVersion} from './lexi-version.js';
-import {toLexiVersion, type LSN} from './lsn.js';
+import {compareLSN, toLexiVersion, type LSN} from './lsn.js';
 
 test('lsn to LexiVersion', () => {
   type Case = [LSN, LexiVersion, bigint];
@@ -13,5 +13,18 @@ test('lsn to LexiVersion', () => {
   for (const [lsn, lexi, ver] of cases) {
     expect(toLexiVersion(lsn)).toBe(lexi);
     expect(versionFromLexi(lexi).toString()).toBe(ver.toString());
+  }
+});
+
+test('compareLSN', () => {
+  type Case = [LSN, LSN, number];
+  const cases: Case[] = [
+    ['0/0', '00/00', 0],
+    ['0/A', '0/0a', 0],
+    ['16/B374D848', '16/B374D850', -1],
+    ['16/B374D848', '16/B374D840', 1],
+  ];
+  for (const [a, b, cmp] of cases) {
+    expect(compareLSN(a, b)).toBe(cmp);
   }
 });

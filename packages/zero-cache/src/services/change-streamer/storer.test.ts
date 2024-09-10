@@ -23,12 +23,12 @@ describe('change-streamer/storer', () => {
       await setupCDCTables(lc, tx);
       await Promise.all(
         [
-          {watermark: '01', pos: 0, change: {foo: 'bar'}},
-          {watermark: '01', pos: 1, change: {foo: 'boo'}},
-          {watermark: '02', pos: 0, change: {bar: 'boo'}},
-          {watermark: '02', pos: 1, change: {baz: 'moo'}},
-          {watermark: '03', pos: 0, change: {boo: 'doo'}},
-          {watermark: '04', pos: 0, change: {moo: 'foo'}},
+          {watermark: '0/1', pos: 0, change: {foo: 'bar'}},
+          {watermark: '0/1', pos: 1, change: {foo: 'boo'}},
+          {watermark: '0/2', pos: 0, change: {bar: 'boo'}},
+          {watermark: '0/2', pos: 1, change: {baz: 'moo'}},
+          {watermark: '0/3', pos: 0, change: {boo: 'doo'}},
+          {watermark: '0/4', pos: 0, change: {moo: 'foo'}},
         ].map(row => tx`INSERT INTO cdc."ChangeLog" ${tx(row)}`),
       );
     });
@@ -59,15 +59,15 @@ describe('change-streamer/storer', () => {
   }
 
   test('no queueing if not in transaction', async () => {
-    const [sub, _, stream] = createSubscriber('00');
+    const [sub, _, stream] = createSubscriber('0/0');
 
     // This should be buffered until catchup is complete.
-    sub.send({watermark: '05', change: messages.begin('123')});
+    sub.send({watermark: '0/5', change: messages.begin('123')});
 
     // Catchup should start immediately since there are no txes in progress.
     storer.catchup(sub);
 
-    expect(await drainUntil('05', stream)).toMatchInlineSnapshot(`
+    expect(await drainUntil('0/5', stream)).toMatchInlineSnapshot(`
       [
         [
           "change",
@@ -75,7 +75,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "foo": "bar",
             },
-            "watermark": "01",
+            "watermark": "0/1",
           },
         ],
         [
@@ -84,7 +84,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "foo": "boo",
             },
-            "watermark": "01",
+            "watermark": "0/1",
           },
         ],
         [
@@ -93,7 +93,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "bar": "boo",
             },
-            "watermark": "02",
+            "watermark": "0/2",
           },
         ],
         [
@@ -102,7 +102,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "baz": "moo",
             },
-            "watermark": "02",
+            "watermark": "0/2",
           },
         ],
         [
@@ -111,7 +111,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "boo": "doo",
             },
-            "watermark": "03",
+            "watermark": "0/3",
           },
         ],
         [
@@ -120,7 +120,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "moo": "foo",
             },
-            "watermark": "04",
+            "watermark": "0/4",
           },
         ],
         [
@@ -132,7 +132,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "05",
+            "watermark": "0/5",
           },
         ],
       ]
@@ -140,24 +140,24 @@ describe('change-streamer/storer', () => {
   });
 
   test('queued if transaction in progress', async () => {
-    const [sub1, _0, stream1] = createSubscriber('02');
-    const [sub2, _1, stream2] = createSubscriber('03');
+    const [sub1, _0, stream1] = createSubscriber('0/2');
+    const [sub2, _1, stream2] = createSubscriber('0/3');
 
     // This should be buffered until catchup is complete.
-    sub1.send({watermark: '07', change: messages.begin('456')});
-    sub2.send({watermark: '07', change: messages.begin('456')});
+    sub1.send({watermark: '0/7', change: messages.begin('456')});
+    sub2.send({watermark: '0/7', change: messages.begin('456')});
 
     // Start a transaction before enqueuing catchup.
-    storer.store({watermark: '05', change: messages.begin('123')});
+    storer.store({watermark: '0/5', change: messages.begin('123')});
     // Enqueue catchup before transaction completes.
     storer.catchup(sub1);
     storer.catchup(sub2);
     // Finish the transaction.
-    storer.store({watermark: '06', change: messages.commit('312')});
+    storer.store({watermark: '0/6', change: messages.commit('312')});
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '02'.
-    expect(await drainUntil('07', stream1)).toMatchInlineSnapshot(`
+    expect(await drainUntil('0/7', stream1)).toMatchInlineSnapshot(`
       [
         [
           "change",
@@ -165,7 +165,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "boo": "doo",
             },
-            "watermark": "03",
+            "watermark": "0/3",
           },
         ],
         [
@@ -174,7 +174,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "moo": "foo",
             },
-            "watermark": "04",
+            "watermark": "0/4",
           },
         ],
         [
@@ -186,7 +186,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "05",
+            "watermark": "0/5",
           },
         ],
         [
@@ -199,7 +199,7 @@ describe('change-streamer/storer', () => {
               "flags": 0,
               "tag": "commit",
             },
-            "watermark": "06",
+            "watermark": "0/6",
           },
         ],
         [
@@ -211,7 +211,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "07",
+            "watermark": "0/7",
           },
         ],
       ]
@@ -219,7 +219,7 @@ describe('change-streamer/storer', () => {
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
-    expect(await drainUntil('07', stream2)).toMatchInlineSnapshot(`
+    expect(await drainUntil('0/7', stream2)).toMatchInlineSnapshot(`
       [
         [
           "change",
@@ -227,7 +227,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "moo": "foo",
             },
-            "watermark": "04",
+            "watermark": "0/4",
           },
         ],
         [
@@ -239,7 +239,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "05",
+            "watermark": "0/5",
           },
         ],
         [
@@ -252,7 +252,7 @@ describe('change-streamer/storer', () => {
               "flags": 0,
               "tag": "commit",
             },
-            "watermark": "06",
+            "watermark": "0/6",
           },
         ],
         [
@@ -264,7 +264,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "07",
+            "watermark": "0/7",
           },
         ],
       ]
@@ -272,29 +272,29 @@ describe('change-streamer/storer', () => {
   });
 
   test('catchup does not include subsequent transactions', async () => {
-    const [sub, _0, stream] = createSubscriber('04');
+    const [sub, _0, stream] = createSubscriber('0/4');
 
     // This should be buffered until catchup is complete.
-    sub.send({watermark: '09', change: messages.begin('789')});
+    sub.send({watermark: '0/9', change: messages.begin('789')});
 
     // Start a transaction before enqueuing catchup.
-    storer.store({watermark: '05', change: messages.begin('123')});
+    storer.store({watermark: '0/5', change: messages.begin('123')});
     // Enqueue catchup before transaction completes.
     storer.catchup(sub);
     // Finish the transaction.
-    storer.store({watermark: '06', change: messages.commit('312')});
+    storer.store({watermark: '0/6', change: messages.commit('312')});
 
     // And finish another the transaction. In reality, these would be
     // sent by the forwarder, but we skip it in the test to confirm that
     // catchup doesn't include the next transaction.
-    storer.store({watermark: '07', change: messages.begin('456')});
-    storer.store({watermark: '08', change: messages.commit('654')});
+    storer.store({watermark: '0/7', change: messages.begin('456')});
+    storer.store({watermark: '0/8', change: messages.commit('654')});
 
     // Messages should catchup from after '04' and include '05' and '06'
     // from the pending transaction. '07' and '08' should not be included
     // in the snapshot used for catchup. We confirm this by sending the '09'
     // message and ensuring that that was sent.
-    expect(await drainUntil('09', stream)).toMatchInlineSnapshot(`
+    expect(await drainUntil('0/9', stream)).toMatchInlineSnapshot(`
       [
         [
           "change",
@@ -305,7 +305,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "05",
+            "watermark": "0/5",
           },
         ],
         [
@@ -318,7 +318,7 @@ describe('change-streamer/storer', () => {
               "flags": 0,
               "tag": "commit",
             },
-            "watermark": "06",
+            "watermark": "0/6",
           },
         ],
         [
@@ -330,7 +330,7 @@ describe('change-streamer/storer', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "09",
+            "watermark": "0/9",
           },
         ],
       ]
@@ -338,25 +338,25 @@ describe('change-streamer/storer', () => {
   });
 
   test('change positioning and replay detection', async () => {
-    storer.store({watermark: '05', change: messages.begin('123')});
-    storer.store({watermark: '05', change: messages.truncate('issues')});
-    storer.store({watermark: '06', change: messages.commit('321')});
+    storer.store({watermark: '0/5', change: messages.begin('123')});
+    storer.store({watermark: '0/5', change: messages.truncate('issues')});
+    storer.store({watermark: '0/6', change: messages.commit('321')});
     expect(await commits.dequeue()).toBe('321');
 
     // Simulate a replay.
-    storer.store({watermark: '05', change: messages.begin('123')});
-    storer.store({watermark: '05', change: messages.truncate('issues')});
-    storer.store({watermark: '06', change: messages.commit('321')});
+    storer.store({watermark: '0/5', change: messages.begin('123')});
+    storer.store({watermark: '0/5', change: messages.truncate('issues')});
+    storer.store({watermark: '0/6', change: messages.commit('321')});
     // ACK should be resent.
     expect(await commits.dequeue()).toBe('321');
 
     // Continue to the next transaction.
-    storer.store({watermark: '07', change: messages.begin('456')});
-    storer.store({watermark: '07', change: messages.truncate('issues')});
-    storer.store({watermark: '08', change: messages.commit('654')});
+    storer.store({watermark: '0/7', change: messages.begin('456')});
+    storer.store({watermark: '0/7', change: messages.truncate('issues')});
+    storer.store({watermark: '0/8', change: messages.commit('654')});
     expect(await commits.dequeue()).toBe('654');
 
-    expect(await db`SELECT * FROM cdc."ChangeLog" WHERE watermark >= '05'`)
+    expect(await db`SELECT * FROM cdc."ChangeLog" WHERE watermark >= '0/5'`)
       .toMatchInlineSnapshot(`
       Result [
         {
@@ -367,7 +367,7 @@ describe('change-streamer/storer', () => {
             "xid": 0,
           },
           "pos": 0n,
-          "watermark": "05",
+          "watermark": "0/5",
         },
         {
           "change": {
@@ -398,7 +398,7 @@ describe('change-streamer/storer', () => {
             "tag": "truncate",
           },
           "pos": 1n,
-          "watermark": "05",
+          "watermark": "0/5",
         },
         {
           "change": {
@@ -409,7 +409,7 @@ describe('change-streamer/storer', () => {
             "tag": "commit",
           },
           "pos": 2n,
-          "watermark": "06",
+          "watermark": "0/6",
         },
         {
           "change": {
@@ -419,7 +419,7 @@ describe('change-streamer/storer', () => {
             "xid": 0,
           },
           "pos": 0n,
-          "watermark": "07",
+          "watermark": "0/7",
         },
         {
           "change": {
@@ -450,7 +450,7 @@ describe('change-streamer/storer', () => {
             "tag": "truncate",
           },
           "pos": 1n,
-          "watermark": "07",
+          "watermark": "0/7",
         },
         {
           "change": {
@@ -461,7 +461,7 @@ describe('change-streamer/storer', () => {
             "tag": "commit",
           },
           "pos": 2n,
-          "watermark": "08",
+          "watermark": "0/8",
         },
       ]
     `);
