@@ -1,13 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {Pgoutput} from 'pg-logical-replication';
-import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Sink, Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
+import {RunningState} from '../running-state.js';
 import {
   ChangeEntry,
   ChangeStreamerService,
@@ -20,9 +19,6 @@ import {initChangeStreamerSchema} from './schema/init.js';
 import {ensureReplicationConfig, ReplicationConfig} from './schema/tables.js';
 import {Storer} from './storer.js';
 import {Subscriber} from './subscriber.js';
-
-const INITIAL_RETRY_DELAY_MS = 100;
-const MAX_RETRY_DELAY_MS = 10000;
 
 /**
  * Performs initialization and schema migrations to initialize a ChangeStreamerImpl.
@@ -119,9 +115,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
 
+  readonly #state = new RunningState('ChangeStreamer');
   #stream: ChangeStream | undefined;
-  #running = false;
-  readonly #stopped = resolver<true>();
 
   constructor(
     lc: LogContext,
@@ -142,36 +137,27 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async run() {
-    this.#running = true;
     void this.#storer.run();
 
-    let retryDelay = INITIAL_RETRY_DELAY_MS;
-
-    while (this.#running) {
+    while (this.#state.shouldRun()) {
       const stream = this.#source.startStream();
       this.#stream = stream;
 
       try {
         for await (const changeEntry of stream.changes) {
-          retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
+          this.#state.resetBackoff();
 
           this.#storer.store(changeEntry);
           this.#forwarder.forward(changeEntry);
         }
       } catch (e) {
         this.#lc.error?.(`Error in Replication Stream.`, e);
-      }
-
-      if (this.#running) {
+      } finally {
         stream.changes.cancel();
         this.#stream = undefined;
-
-        const delay = retryDelay;
-        retryDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
-
-        this.#lc.info?.(`Retrying in ${delay} ms`);
-        await Promise.race([sleep(delay), this.#stopped.promise]);
       }
+
+      await this.#state.backoff(this.#lc);
     }
     this.#lc.info?.('ChangeStreamer stopped');
   }
@@ -194,9 +180,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async stop() {
-    this.#lc.info?.('Stopping ChangeStreamer');
-    this.#running = false;
-    this.#stopped.resolve(true);
+    this.#state.stop(this.#lc);
     this.#stream?.changes.cancel();
     await this.#storer.stop();
   }
