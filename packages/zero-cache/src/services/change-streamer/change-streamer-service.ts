@@ -1,51 +1,36 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {
-  LogicalReplicationService,
-  Pgoutput,
-  PgoutputPlugin,
-} from 'pg-logical-replication';
+import {Pgoutput} from 'pg-logical-replication';
 import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
-import {
-  PostgresDB,
-  registerPostgresTypeParsers,
-} from 'zero-cache/src/types/pg.js';
-import {Source} from 'zero-cache/src/types/streams.js';
+import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {Sink, Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
-import {replicationSlot} from '../replicator/initial-sync.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import {
+  ChangeEntry,
   ChangeStreamerService,
   Downstream,
   ErrorType,
   SubscriberContext,
 } from './change-streamer.js';
 import {Forwarder} from './forwarder.js';
-import {Change} from './schema/change.js';
 import {initChangeStreamerSchema} from './schema/init.js';
 import {ensureReplicationConfig, ReplicationConfig} from './schema/tables.js';
 import {Storer} from './storer.js';
 import {Subscriber} from './subscriber.js';
 
-// BigInt support from LogicalReplicationService.
-registerPostgresTypeParsers();
-
 const INITIAL_RETRY_DELAY_MS = 100;
 const MAX_RETRY_DELAY_MS = 10000;
 
 /**
- * Performs initialization and schema migrations and creates a
- * PostgresChangeStreamer instance.
+ * Performs initialization and schema migrations to initialize a ChangeStreamerImpl.
  */
 export async function initializeStreamer(
   lc: LogContext,
   changeDB: PostgresDB,
-  upstreamUri: string,
-  replicaID: string,
+  changeSource: ChangeSource,
   replica: Database,
 ): Promise<ChangeStreamerService> {
   const replicationConfig = getSubscriptionState(new StatementRunner(replica));
@@ -54,21 +39,27 @@ export async function initializeStreamer(
   await initChangeStreamerSchema(lc, changeDB);
   await ensureReplicationConfig(lc, changeDB, replicationConfig);
 
-  return new PostgresChangeStreamer(
-    lc,
-    changeDB,
-    upstreamUri,
-    replicaID,
-    replicationConfig,
-  );
+  return new ChangeStreamerImpl(lc, changeDB, replicationConfig, changeSource);
+}
+
+export type ChangeStream = {
+  changes: Source<ChangeEntry>;
+  acks: Sink<Pgoutput.MessageCommit>;
+};
+
+/** Encapsulates an upstream-specific implementation of a stream of Changes. */
+export interface ChangeSource {
+  /**
+   * Starts a stream of changes, with a corresponding sink for upstream
+   * acknowledgements.
+   */
+  startStream(): ChangeStream;
 }
 
 /**
- * The PostgresChangeStreamer implementation connects to a logical
- * replication slot on the upstream Postgres and dispatches messages
- * in the replication stream to a {@link Forwarder} and {@link Storer}
- * to execute the forward-store-ack procedure described in
- * {@link ChangeStreamer}.
+ * Upstream-agnostic dispatch of messages in a {@link ChangeStream} to a
+ * {@link Forwarder} and {@link Storer} to execute the forward-store-ack
+ * procedure described in {@link ChangeStreamer}.
  *
  * Connecting clients first need to be "caught up" to the current watermark
  * (from stored change log entries) before new entries are forwarded to
@@ -120,33 +111,33 @@ export async function initializeStreamer(
  * set. However, the Subscriber still buffers any forwarded messages until
  * its catchup is complete.
  */
-class PostgresChangeStreamer implements ChangeStreamerService {
+class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #upstreamUri: string;
-  readonly #replicaID: string;
   readonly #replicationConfig: ReplicationConfig;
+  readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
 
-  #service: LogicalReplicationService | undefined;
-  #lastLSN = '0/0';
+  #stream: ChangeStream | undefined;
   #running = false;
   readonly #stopped = resolver<true>();
 
   constructor(
     lc: LogContext,
     changeDB: PostgresDB,
-    upstreamUri: string,
-    replicaID: string,
     replicationConfig: ReplicationConfig,
+    source: ChangeSource,
   ) {
-    this.id = `change-streamer:${replicaID}`;
+    this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
-    this.#upstreamUri = upstreamUri;
-    this.#replicaID = replicaID;
     this.#replicationConfig = replicationConfig;
-    this.#storer = new Storer(lc, changeDB, this.#ack);
+    this.#source = source;
+    this.#storer = new Storer(
+      lc,
+      changeDB,
+      commit => this.#stream?.acks.push(commit),
+    );
     this.#forwarder = new Forwarder();
   }
 
@@ -157,99 +148,33 @@ class PostgresChangeStreamer implements ChangeStreamerService {
     let retryDelay = INITIAL_RETRY_DELAY_MS;
 
     while (this.#running) {
-      this.#service = new LogicalReplicationService(
-        {connectionString: this.#upstreamUri},
-        {acknowledge: {auto: false, timeoutSeconds: 0}},
-      )
-        .on('heartbeat', this.#handleHeartbeat)
-        .on('data', this.#processMessage)
-        .on('data', () => {
-          retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
-        });
+      const stream = this.#source.startStream();
+      this.#stream = stream;
 
       try {
-        this.#lc.debug?.('starting upstream replication stream');
-        await this.#service.subscribe(
-          new PgoutputPlugin({
-            protoVersion: 1,
-            publicationNames: this.#replicationConfig.publications,
-          }),
-          replicationSlot(this.#replicaID),
-          this.#lastLSN,
-        );
-      } catch (e) {
-        if (this.#running) {
-          await this.#service.stop();
-          this.#service = undefined;
+        for await (const changeEntry of stream.changes) {
+          retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
 
-          const delay = retryDelay;
-          retryDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
-          this.#lc.error?.(
-            `Error in Replication Stream. Retrying in ${delay}ms`,
-            e,
-          );
-          await Promise.race([sleep(delay), this.#stopped.promise]);
+          this.#storer.store(changeEntry);
+          this.#forwarder.forward(changeEntry);
         }
+      } catch (e) {
+        this.#lc.error?.(`Error in Replication Stream.`, e);
+      }
+
+      if (this.#running) {
+        stream.changes.cancel();
+        this.#stream = undefined;
+
+        const delay = retryDelay;
+        retryDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
+
+        this.#lc.info?.(`Retrying in ${delay} ms`);
+        await Promise.race([sleep(delay), this.#stopped.promise]);
       }
     }
     this.#lc.info?.('ChangeStreamer stopped');
   }
-
-  readonly #processMessage = (lsn: string, msg: Pgoutput.Message) => {
-    const change = msg as Change;
-    switch (change.tag) {
-      case 'begin':
-      case 'insert':
-      case 'update':
-      case 'delete':
-      case 'truncate':
-      case 'commit': {
-        const watermark = toLexiVersion(lsn);
-        const changeEntry = {watermark, change};
-        this.#storer.store(changeEntry);
-        this.#forwarder.forward(changeEntry);
-        return;
-      }
-
-      default:
-        change satisfies never; // All Change types are covered.
-
-        // But we can technically receive other Message types.
-        switch (msg.tag) {
-          case 'relation':
-            break; // Explicitly ignored. Schema handling is TODO.
-          case 'type':
-            throw new Error(
-              `Custom types are not supported (received "${msg.typeName}")`,
-            );
-          case 'origin':
-            // We do not set the `origin` option in the pgoutput parameters:
-            // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-            throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-          case 'message':
-            // We do not set the `messages` option in the pgoutput parameters:
-            // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-            throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-          default:
-            throw new Error(`Unexpected message type ${stringify(msg)}`);
-        }
-    }
-  };
-
-  readonly #handleHeartbeat = (
-    _lsn: string,
-    _time: number,
-    respond: boolean,
-  ) => {
-    if (respond) {
-      void this.#ack();
-    }
-  };
-
-  readonly #ack = (commit?: Pgoutput.MessageCommit) => {
-    this.#lastLSN = commit?.commitEndLsn ?? this.#lastLSN;
-    return this.#service?.acknowledge(this.#lastLSN);
-  };
 
   subscribe(ctx: SubscriberContext): Source<Downstream> {
     const {id, watermark} = ctx;
@@ -261,6 +186,7 @@ class PostgresChangeStreamer implements ChangeStreamerService {
       subscriber.close(ErrorType.WrongReplicaVersion);
     } else {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
+
       this.#forwarder.add(subscriber);
       this.#storer.catchup(subscriber);
     }
@@ -271,7 +197,7 @@ class PostgresChangeStreamer implements ChangeStreamerService {
     this.#lc.info?.('Stopping ChangeStreamer');
     this.#running = false;
     this.#stopped.resolve(true);
-    await this.#service?.stop();
+    this.#stream?.changes.cancel();
     await this.#storer.stop();
   }
 }
