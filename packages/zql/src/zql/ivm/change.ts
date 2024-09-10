@@ -32,8 +32,8 @@ export type ChildChange = {
 };
 
 /**
- * Represents a node changing. Depending on the change in the node, the
- * children may be removed, added, or changed.
+ * We only represent changes to a single row as an "edit". If an edit causes
+ * child rows to change, we convert it to the corresponding remove/add changes.
  */
 export type EditChange = {
   type: 'edit';

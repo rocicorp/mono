@@ -132,8 +132,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
 
   switch (change.type) {
     case 'add': {
-      // TODO(arv): Do we really need to clone the node? We should make these
-      // immutable to start with to reduce allocations.
+      // TODO: Only create a new entry if we need to mutate the existing one.
       const newEntry: Entry = {
         ...change.node.row,
       };
@@ -195,7 +194,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
   }
 }
 
-// TODO(arv): Do not return an object. It puts unnecessary pressure on the GC.
+// TODO: Do not return an object. It puts unnecessary pressure on the GC.
 function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
   let low = 0;
   let high = view.length - 1;
