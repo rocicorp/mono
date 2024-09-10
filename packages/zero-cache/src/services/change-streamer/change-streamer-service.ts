@@ -129,7 +129,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#replicationConfig = replicationConfig;
     this.#source = source;
     this.#storer = new Storer(
-      this.#lc,
+      lc,
       changeDB,
       commit => this.#stream?.acks.push(commit),
     );
