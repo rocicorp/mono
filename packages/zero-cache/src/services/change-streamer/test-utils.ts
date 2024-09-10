@@ -6,7 +6,7 @@ import {Subscriber} from './subscriber.js';
 let nextID = 1;
 
 export function createSubscriber(
-  watermark = '0/00',
+  watermark = '0/0',
   caughtUp = false,
 ): [Subscriber, Downstream[], Subscription<Downstream>] {
   // Sanity check the watermark.
