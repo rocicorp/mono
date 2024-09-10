@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {sleep} from 'shared/src/sleep.js';
+import {sleepWithAbort} from 'shared/src/sleep.js';
 
 const DEFAULT_INITIAL_RETRY_DELAY_MS = 100;
 const DEFAULT_MAX_RETRY_DELAY_MS = 10000;
@@ -76,14 +76,18 @@ export class RunningState {
    * loop of the service. The returned Promise will resolve after an
    * exponential delay, or once {@link stop()} is called.
    */
-  backoff(lc: LogContext): Promise<void> {
+  async backoff(lc: LogContext): Promise<void> {
     const delay = this.#retryDelay;
     this.#retryDelay = Math.min(delay * 2, this.#maxRetryDelay);
 
     if (this.#shouldRun) {
       lc.info?.(`retrying ${this.#serviceName} in ${delay} ms`);
+
+      const ac = new AbortController();
+      const [timeout] = sleepWithAbort(delay, ac.signal);
+      await Promise.race([timeout, this.#stopped.promise]);
+      ac.abort();
     }
-    return Promise.race([sleep(delay), this.#stopped.promise]);
   }
 
   /**
