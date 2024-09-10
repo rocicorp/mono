@@ -2,7 +2,11 @@ import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {equals} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
-import type {FilteredTableSpec, IndexSpec, MutableIndexSpec} from './specs.js';
+import type {
+  FilteredTableSpec,
+  IndexSpec,
+  MutableIndexSpec,
+} from 'zero-cache/src/types/specs.js';
 
 const publishedColumnsSchema = v.array(
   v.object({

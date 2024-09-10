@@ -1,8 +1,8 @@
-import {Database} from 'zqlite/src/db.js';
-import {describe, expect, test} from 'vitest';
-import {listTables} from './list.js';
-import {TableSpec} from './specs.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {describe, expect, test} from 'vitest';
+import {Database} from 'zqlite/src/db.js';
+import {TableSpec} from '../types/specs.js';
+import {listTables} from './lite-tables.js';
 
 describe('tables/list', () => {
   type Case = {

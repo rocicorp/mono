@@ -1,5 +1,6 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {listIndices, listTables} from 'zero-cache/src/db/lite-tables.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -8,15 +9,14 @@ import {
 } from 'zero-cache/src/test/db.js';
 import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {Database} from 'zqlite/src/db.js';
-import {listIndices, listTables} from '../../replicator/tables/list.js';
-import {getPublicationInfo} from '../../replicator/tables/published.js';
 import type {
   FilteredTableSpec,
   IndexSpec,
   TableSpec,
-} from '../../replicator/tables/specs.js';
+} from 'zero-cache/src/types/specs.js';
+import {Database} from 'zqlite/src/db.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
+import {getPublicationInfo} from './tables/published.js';
 
 const REPLICA_ID = 'initial_sync_test_id';
 
