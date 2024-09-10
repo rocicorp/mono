@@ -33,8 +33,9 @@ export class RunningState {
   }
 
   /**
-   * Usable in the services mail `while` loop to determine if
-   * the next iteration should execute.
+   * Usable in the service's main `while` loop to determine if
+   * the next iteration should execute. Returns `true` until
+   * {@link stop()} has been called.
    */
   shouldRun(): boolean {
     return this.#shouldRun;
