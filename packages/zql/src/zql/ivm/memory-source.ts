@@ -481,6 +481,49 @@ export function* generateWithOverlay(
   overlay: Overlay | undefined,
   compare: (r1: Row, r2: Row) => number,
 ) {
+  if (overlay && overlay.change.type === 'edit') {
+    const innerRowIterator = generateWithOverlayInner(
+      startAt,
+      rowIterator,
+      constraint,
+      {
+        outputIndex: overlay.outputIndex,
+        change: {type: 'remove', row: overlay.change.oldRow},
+      },
+      compare,
+    );
+    for (const row of generateWithOverlayInner(
+      startAt,
+      innerRowIterator,
+      constraint,
+      {
+        outputIndex: overlay.outputIndex,
+        change: {type: 'add', row: overlay.change.row},
+      },
+      compare,
+    )) {
+      yield {row, relationships: {}};
+    }
+  } else {
+    for (const row of generateWithOverlayInner(
+      startAt,
+      rowIterator,
+      constraint,
+      overlay,
+      compare,
+    )) {
+      yield {row, relationships: {}};
+    }
+  }
+}
+
+function* generateWithOverlayInner(
+  startAt: Row | undefined,
+  rowIterator: IterableIterator<Row>,
+  constraint: Constraint | undefined,
+  overlay: Overlay | undefined,
+  compare: (r1: Row, r2: Row) => number,
+): Generator<Row, void> {
   if (startAt && overlay && compare(overlay.change.row, startAt) < 0) {
     overlay = undefined;
   }
@@ -497,26 +540,47 @@ export function* generateWithOverlay(
 
   for (const row of rowIterator) {
     if (overlay) {
-      const cmp = compare(overlay.change.row, row);
-      if (overlay.change.type === 'add') {
-        if (cmp < 0) {
-          yield {row: overlay.change.row, relationships: {}};
-          overlay = undefined;
+      const {change} = overlay;
+      switch (change.type) {
+        case 'add': {
+          const cmp = compare(change.row, row);
+          if (cmp < 0) {
+            yield change.row;
+            overlay = undefined;
+          }
+          break;
         }
-      } else if (overlay.change.type === 'remove') {
-        if (cmp < 0) {
-          overlay = undefined;
-        } else if (cmp === 0) {
-          overlay = undefined;
-          continue;
+        case 'remove': {
+          const cmp = compare(change.row, row);
+          if (cmp < 0) {
+            overlay = undefined;
+          } else if (cmp === 0) {
+            overlay = undefined;
+            continue;
+          }
+          break;
         }
+        case 'edit': {
+          const oldCmp = compare(change.oldRow, row);
+          const newCmp = compare(change.row, row);
+          if (oldCmp < 0 && newCmp >= 0) {
+            yield change.row;
+            overlay = undefined;
+          }
+          if (oldCmp === 0) {
+            // skip row
+          }
+          break;
+        }
+        default:
+          unreachable(change);
       }
     }
-    yield {row, relationships: {}};
+    yield row;
   }
 
   if (overlay && overlay.change.type === 'add') {
-    yield {row: overlay.change.row, relationships: {}};
+    yield overlay.change.row;
   }
 }
 

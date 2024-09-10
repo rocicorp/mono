@@ -1,6 +1,6 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
-import type {Change, RemoveChange} from './change.js';
+import type {Change, EditChange, RemoveChange} from './change.js';
 import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
   Constraint,
@@ -197,7 +197,10 @@ export class Take implements Operator {
   }
 
   push(change: Change): void {
-    assert(change.type !== 'edit', 'Edit changes are not yet implemented');
+    if (change.type === 'edit') {
+      this.#pushEditChange(change);
+      return;
+    }
 
     assert(this.#output, 'Output not set');
     // When take below join is supported, this assert should be removed
@@ -210,6 +213,10 @@ export class Take implements Operator {
         : change.node.row[this.#partitionKey];
     const takeStateKey = getTakeStateKey(partitionValue);
     const takeState = this.#storage.get(takeStateKey);
+    // The partition key was never fetched, so this push can be discarded.
+    if (!takeState) {
+      return;
+    }
     const maxBound = this.#storage.get(MAX_BOUND_KEY);
     const constraint: Constraint | undefined = this.#partitionKey
       ? {
@@ -217,11 +224,6 @@ export class Take implements Operator {
           value: change.node.row[this.#partitionKey],
         }
       : undefined;
-
-    // The partition key was never fetched, so this push can be discarded.
-    if (!takeState) {
-      return;
-    }
 
     if (change.type === 'add') {
       if (takeState.size < this.#limit) {
@@ -359,6 +361,253 @@ export class Take implements Operator {
       );
       this.#output.push(change);
     }
+  }
+
+  #pushEditChange(change: EditChange): void {
+    assert(this.#output, 'Output not set');
+
+    if (
+      this.#partitionKey !== undefined &&
+      change.oldRow[this.#partitionKey] !== change.row[this.#partitionKey]
+    ) {
+      // different partition key so fall back to remove/add.
+      this.#output.push({
+        type: 'remove',
+        node: {
+          row: change.oldRow,
+          relationships: {},
+        },
+      });
+      this.#output.push({
+        type: 'add',
+        node: {
+          row: change.row,
+          relationships: {},
+        },
+      });
+      return;
+    }
+
+    const partitionValue =
+      this.#partitionKey === undefined
+        ? undefined
+        : change.oldRow[this.#partitionKey];
+    const takeStateKey = getTakeStateKey(partitionValue);
+    const takeState = this.#storage.get(takeStateKey);
+    // The partition key was never fetched, so this push can be discarded.
+    if (!takeState) {
+      return;
+    }
+
+    assert(takeState.bound, 'Bound should be set');
+
+    const maxBound = this.#storage.get(MAX_BOUND_KEY);
+    const constraint: Constraint | undefined = this.#partitionKey
+      ? {
+          key: this.#partitionKey,
+          value: partitionValue,
+        }
+      : undefined;
+
+    const {compareRows} = this.getSchema();
+    const oldCmp = compareRows(change.oldRow, takeState.bound);
+    const newCmp = compareRows(change.row, takeState.bound);
+
+    const replaceBounds = () => {
+      this.#storage.set(takeStateKey, {
+        size: takeState.size,
+        bound: change.row,
+      });
+      this.#storage.set(MAX_BOUND_KEY, change.row);
+      this.#output!.push(change);
+    };
+
+    // The bounds row was changed.
+    if (oldCmp === 0) {
+      // The new row is the new bound.
+      if (newCmp === 0) {
+        replaceBounds();
+        return;
+      }
+
+      if (newCmp < 0) {
+        if (this.#limit === 1) {
+          replaceBounds();
+          return;
+        }
+
+        // New row will be in the result but it might not be the bounds any
+        // more. We need to find the row before the bounds to determine the new
+        // bounds.
+
+        const [beforeBoundNode] = [
+          ...take(
+            this.#input.fetch({
+              start: {
+                row: takeState.bound,
+                basis: 'before',
+              },
+              constraint,
+            }),
+            1,
+          ),
+        ];
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size,
+          beforeBoundNode.row,
+          maxBound,
+        );
+        this.#output.push(change);
+        return;
+      }
+
+      {
+        assert(newCmp > 0);
+        // Find the first item at the old bounds. This will be the new bounds.
+        const [newBoundNode] = [
+          ...take(
+            this.#input.fetch({
+              start: {
+                row: takeState.bound,
+                basis: 'at',
+              },
+              constraint,
+            }),
+            1,
+          ),
+        ];
+
+        // The next row is the new row. We can replace the bounds and keep the
+        // edit change.
+        if (compareRows(newBoundNode.row, change.row) === 0) {
+          replaceBounds();
+          return;
+        }
+
+        // The new row is now outside the bounds, so we need to remove the old
+        // row and add the new bounds row.
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size,
+          newBoundNode.row,
+          maxBound,
+        );
+        this.#output.push({
+          type: 'remove',
+          node: {
+            row: change.oldRow,
+            relationships: {},
+          },
+        });
+        this.#output.push({
+          type: 'add',
+          node: newBoundNode,
+        });
+        return;
+      }
+    }
+
+    if (oldCmp > 0) {
+      assert(newCmp !== 0, 'Invalid state. Row has duplicate primary key');
+
+      // Both old and new outside of bounds
+      if (newCmp > 0) {
+        return;
+      }
+
+      {
+        assert(newCmp < 0);
+        let newBoundRow: Row;
+        if (this.#limit === 1) {
+          newBoundRow = change.row;
+        } else if (takeState.size < this.#limit) {
+          // add new row
+          this.#setTakeState(
+            takeStateKey,
+            takeState.size + 1,
+            takeState.bound === undefined ||
+              compareRows(takeState.bound, change.row) < 0
+              ? change.row
+              : takeState.bound,
+            maxBound,
+          );
+          this.#output.push({
+            type: 'add',
+            node: {
+              row: change.row,
+              relationships: {},
+            },
+          });
+          return;
+        } else {
+          const [beforeBoundNode] = [
+            ...take(
+              this.#input.fetch({
+                start: {
+                  row: takeState.bound,
+                  basis: 'before',
+                },
+                constraint,
+              }),
+              1,
+            ),
+          ];
+          newBoundRow = beforeBoundNode.row;
+        }
+
+        this.#setTakeState(takeStateKey, takeState.size, newBoundRow, maxBound);
+
+        this.#output.push({
+          type: 'remove',
+          node: {
+            row: takeState.bound,
+            relationships: {},
+          },
+        });
+        this.#output.push({
+          type: 'add',
+          node: {
+            row: change.row,
+            relationships: {},
+          },
+        });
+
+        return;
+      }
+    }
+
+    if (oldCmp < 0) {
+      assert(newCmp !== 0, 'Invalid state. Row has duplicate primary key');
+
+      // Both old and new inside of bounds
+      if (newCmp < 0) {
+        this.#output.push(change);
+        return;
+      }
+
+      // old was inside, new is outside
+      {
+        assert(newCmp > 0);
+
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size - 1,
+          takeState.bound,
+          maxBound,
+        );
+        this.#output.push({
+          type: 'remove',
+          node: {
+            row: change.oldRow,
+            relationships: {},
+          },
+        });
+        return;
+      }
+    }
+
+    unreachable();
   }
 
   #setTakeState(

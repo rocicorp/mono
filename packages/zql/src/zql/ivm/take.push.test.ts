@@ -526,6 +526,372 @@ suite('take with no partition', () => {
       ],
     });
   });
+
+  suite('edit', () => {
+    const base = {
+      columns: {
+        id: {type: 'string'},
+        created: {type: 'number'},
+        text: {type: 'string'},
+      },
+      primaryKey: ['id'],
+      sort: [
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ],
+      partition: undefined,
+    } as const;
+
+    takeTest({
+      ...base,
+      name: 'limit 0',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+      ],
+      limit: 0,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i2', created: 200, text: 'b'},
+          row: {id: 'i2', created: 200, text: 'c'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 200, text: 'c'},
+          },
+        ],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
+    takeTest({
+      ...base,
+      name: 'less than limit edit row at start',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+      ],
+      limit: 5,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i1', created: 100, text: 'a'},
+          row: {id: 'i1', created: 100, text: 'a2'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', created: 100, text: 'a'},
+            row: {id: 'i1', created: 100, text: 'a2'},
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+          size: 3,
+        },
+        'maxBound': {
+          created: 300,
+          id: 'i3',
+          text: 'c',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i1', created: 100, text: 'a'},
+          row: {id: 'i1', created: 100, text: 'a2'},
+        },
+      ],
+    });
+
+    takeTest({
+      ...base,
+      name: 'less than limit edit row at end',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+      ],
+      limit: 5,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i3', created: 300, text: 'c'},
+          row: {id: 'i3', created: 300, text: 'c2'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i3', created: 300, text: 'c'},
+            row: {id: 'i3', created: 300, text: 'c2'},
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 300,
+            id: 'i3',
+            text: 'c2',
+          },
+          size: 3,
+        },
+        'maxBound': {
+          created: 300,
+          id: 'i3',
+          text: 'c2',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i3', created: 300, text: 'c'},
+          row: {id: 'i3', created: 300, text: 'c2'},
+        },
+      ],
+    });
+
+    takeTest({
+      ...base,
+      name: 'at limit edit row after boundary',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+        {id: 'i4', created: 400, text: 'd'},
+      ],
+      limit: 3,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i4', created: 400, text: 'd'},
+          row: {id: 'i4', created: 400, text: 'd2'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i4', created: 400, text: 'd'},
+            row: {id: 'i4', created: 400, text: 'd2'},
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+          size: 3,
+        },
+        'maxBound': {
+          created: 300,
+          id: 'i3',
+          text: 'c',
+        },
+      },
+      expectedOutput: [],
+    });
+
+    takeTest({
+      ...base,
+      name: 'at limit edit row before boundary',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+        {id: 'i4', created: 400, text: 'd'},
+      ],
+      limit: 3,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i2', created: 200, text: 'b'},
+          row: {id: 'i2', created: 200, text: 'b2'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 200, text: 'b2'},
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+          size: 3,
+        },
+        'maxBound': {
+          created: 300,
+          id: 'i3',
+          text: 'c',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i2', created: 200, text: 'b'},
+          row: {id: 'i2', created: 200, text: 'b2'},
+        },
+      ],
+    });
+
+    takeTest({
+      ...base,
+      name: 'at limit edit row at boundary',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+        {id: 'i4', created: 400, text: 'd'},
+      ],
+      limit: 3,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i3', created: 300, text: 'c'},
+          row: {id: 'i3', created: 300, text: 'c2'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i3', created: 300, text: 'c'},
+            row: {id: 'i3', created: 300, text: 'c2'},
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 300,
+            id: 'i3',
+            text: 'c2',
+          },
+          size: 3,
+        },
+        'maxBound': {
+          created: 300,
+          id: 'i3',
+          text: 'c2',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i3', created: 300, text: 'c'},
+          row: {id: 'i3', created: 300, text: 'c2'},
+        },
+      ],
+    });
+
+    takeTest({
+      ...base,
+      name: 'at limit edit row after boundary to make it the new boundary',
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+        {id: 'i4', created: 400, text: 'd'},
+      ],
+      limit: 3,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i4', created: 400, text: 'd'},
+          row: {id: 'i4', created: 250, text: 'd'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i4', created: 400, text: 'd'},
+            row: {id: 'i4', created: 250, text: 'd'},
+          },
+        ],
+        [
+          'takeSnitch',
+          'fetch',
+          {
+            constraint: undefined,
+            start: {
+              basis: 'before',
+              row: {
+                id: 'i3',
+                created: 300,
+                text: 'c',
+              },
+            },
+          },
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 250,
+            id: 'i4',
+            text: 'd',
+          },
+          size: 3,
+        },
+        'maxBound': {
+          created: 250,
+          id: 'i4',
+          text: 'd',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i3', created: 300, text: 'c'},
+          row: {id: 'i3', created: 300, text: 'c2'},
+        },
+      ],
+    });
+  });
 });
 
 suite('take with partition', () => {
