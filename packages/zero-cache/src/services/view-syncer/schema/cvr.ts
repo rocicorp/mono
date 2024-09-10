@@ -55,7 +55,7 @@ CREATE TABLE cvr.clients (
 CREATE INDEX client_patch_version ON cvr.clients ("patchVersion");
 `;
 
-export function compareClientsRow(a: ClientsRow, b: ClientsRow) {
+export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
   const clientGroupIDComp = a.clientGroupID.localeCompare(b.clientGroupID);
   if (clientGroupIDComp !== 0) {
     return clientGroupIDComp;
