@@ -49,15 +49,20 @@ export class RunningState {
     this.#stopped.resolve();
   }
 
-  /** A Promise that resolves if the service has  */
+  /**
+   * Returns a Promise that resolves when {@link stop()} is called.
+   * This is used internally to cut off a {@link backoff()} delay, but
+   * can also be used explicitly in a `Promise.race(...)` call to stop
+   * stop waiting for work.
+   */
   stopped(): Promise<void> {
     return this.#stopped.promise;
   }
 
   /**
-   * Call in response to an error in the main loop of the service. The
-   * returned Promise will resolve after an exponential delay, or
-   * if {@link stop()} is called.
+   * Call in response to an error or unexpected termination in the main
+   * loop of the service. The returned Promise will resolve after an
+   * exponential delay, or once {@link stop()} is called.
    */
   backoff(lc?: LogContext): Promise<void> {
     const delay = this.#retryDelay;
@@ -68,7 +73,8 @@ export class RunningState {
   }
 
   /**
-   * Called when the service receives a healthy signal (e.g. an upstream
+   * When using {@link backoff()}, this method should be called when the
+   * implementation receives a healthy signal (e.g. an upstream
    * response). This resets the delay used in {@link backoff()}.
    */
   resetBackoff() {
