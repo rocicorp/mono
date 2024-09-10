@@ -1,8 +1,8 @@
-import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {getConnectionURI, initDB, testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {getConnectionURI, initDB, testDBs} from '../../test/db.js';
+import {Database} from 'zqlite/src/db.js';
 import {initialSync} from './initial-sync.js';
 
 const REPLICA_ID = 'initial_sync_validation_test_id';

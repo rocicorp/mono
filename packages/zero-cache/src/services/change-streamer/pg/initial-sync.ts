@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import {ident} from 'pg-format';
 import postgres from 'postgres';
 import {
@@ -11,20 +10,25 @@ import {
   liteValues,
   mapPostgresToLiteDataType,
 } from 'zero-cache/src/types/lite.js';
+import {liteTableName} from 'zero-cache/src/types/names.js';
 import {PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
-import {initChangeLog} from './schema/change-log.js';
+import type {
+  ColumnSpec,
+  FilteredTableSpec,
+  IndexSpec,
+} from 'zero-cache/src/types/specs.js';
+import {Database} from 'zqlite/src/db.js';
+import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
-} from './schema/replication-state.js';
+} from '../../replicator/schema/replication-state.js';
 import {createTableStatement} from './tables/create.js';
-import {liteTableName} from './tables/names.js';
 import {
   getPublicationInfo,
   PublicationInfo,
   ZERO_PUB_PREFIX,
 } from './tables/published.js';
-import type {ColumnSpec, FilteredTableSpec, IndexSpec} from './tables/specs.js';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   characterMaximumLength: null,

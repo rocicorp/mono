@@ -1,9 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
+import {Database} from 'zqlite/src/db.js';
+import {listTables} from '../../db/lite-tables.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -12,11 +13,13 @@ import {
 } from '../../test/db.js';
 import {versionFromLexi, type LexiVersion} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
+import {TableSpec} from '../../types/specs.js';
+import {
+  initialSync,
+  replicationSlot,
+} from '../change-streamer/pg/initial-sync.js';
 import {IncrementalSyncer} from './incremental-sync.js';
-import {initialSync, replicationSlot} from './initial-sync.js';
 import {getReplicationVersions} from './schema/replication-state.js';
-import {listTables} from './tables/list.js';
-import {TableSpec} from './tables/specs.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 
