@@ -34,7 +34,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     changeDB = await testDBs.create('change_streamer_test_change_db');
 
     const replica = new Database(lc, ':memory:');
-    initReplicationState(replica, ['zero_data'], `0/${REPLICA_VERSION}`);
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
     changes = Subscription.create();
     acks = new Queue();

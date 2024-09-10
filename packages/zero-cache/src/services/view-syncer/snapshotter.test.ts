@@ -35,7 +35,7 @@ describe('view-syncer/snapshotter', () => {
         INSERT INTO users(id, handle, _0_version) VALUES(20, 'bob', '00');
       `,
     );
-    initReplicationState(db, ['zero_data'], '0/1');
+    initReplicationState(db, ['zero_data'], '01');
     initChangeLog(db);
 
     replicator = createMessageProcessor(db);

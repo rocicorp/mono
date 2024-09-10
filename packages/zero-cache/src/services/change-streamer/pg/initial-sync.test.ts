@@ -8,6 +8,7 @@ import {
   testDBs,
 } from 'zero-cache/src/test/db.js';
 import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
+import {fromLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import type {
   FilteredTableSpec,
@@ -531,7 +532,7 @@ describe('replicator/initial-sync', () => {
           )}`;
       expect(slots[0]).toEqual({
         slotName: replicationSlot(REPLICA_ID),
-        lsn: replicaState.watermark,
+        lsn: fromLexiVersion(replicaState.watermark),
       });
     });
   }
