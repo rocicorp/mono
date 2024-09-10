@@ -2,9 +2,9 @@ import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {Database} from 'zqlite/src/db.js';
 import type {Source} from '../../types/streams.js';
+import {initSyncSchema} from '../change-streamer/pg/sync-schema.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
-import {initSyncSchema} from './schema/sync-schema.js';
 
 // The version ready payload is simply a signal. All of the information
 // that the consumer needs is retrieved by opening a new snapshot transaction

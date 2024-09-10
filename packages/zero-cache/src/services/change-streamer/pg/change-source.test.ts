@@ -7,26 +7,26 @@ import {
   getConnectionURI,
   testDBs,
 } from 'zero-cache/src/test/db.js';
+import {DbFile} from 'zero-cache/src/test/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
-import {Database} from 'zqlite/src/db.js';
-import {replicationSlot} from '../../replicator/initial-sync.js';
 import {ChangeSource} from '../change-streamer-service.js';
 import {ChangeEntry} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
+import {replicationSlot} from './initial-sync.js';
 
 const REPLICA_ID = 'change_streamer_test_id';
 
 describe('change-source/pg', {retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
-  let replica: Database;
+  let replicaDbFile: DbFile;
   let source: ChangeSource;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
-    upstream = await testDBs.create('change_streamer_test_upstream');
-    replica = new Database(lc, ':memory:');
+    upstream = await testDBs.create('change_source_pg_test_upstream');
+    replicaDbFile = new DbFile('change_source_pg_test_replica');
 
     const upstreamURI = getConnectionURI(upstream);
     await upstream`
@@ -38,12 +38,18 @@ describe('change-source/pg', {retry: 3}, () => {
       bool BOOLEAN
     )`;
 
-    source = await initializeChangeSource(lc, upstreamURI, REPLICA_ID, replica);
+    source = await initializeChangeSource(
+      lc,
+      upstreamURI,
+      REPLICA_ID,
+      replicaDbFile.path,
+    );
   });
 
   afterEach(async () => {
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(upstream);
+    await replicaDbFile.unlink();
   });
 
   function drainToQueue(sub: Source<ChangeEntry>): Queue<ChangeEntry> {

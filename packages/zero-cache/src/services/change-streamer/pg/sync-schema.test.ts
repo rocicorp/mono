@@ -13,8 +13,8 @@ import {
   initDB,
   testDBs,
 } from '../../../test/db.js';
-import {replicationSlot} from '../initial-sync.js';
-import {initSyncSchema} from './sync-schema.js';
+import {replicationSlot} from '../../change-streamer/pg/initial-sync.js';
+import {initSyncSchema} from '../../change-streamer/pg/sync-schema.js';
 
 const REPLICA_ID = 'sync_schema_test_id';
 
