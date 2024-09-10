@@ -115,7 +115,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
 
-  readonly #state = new RunningState();
+  readonly #state = new RunningState('ChangeStreamer');
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -180,8 +180,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async stop() {
-    this.#lc.info?.('Stopping ChangeStreamer');
-    this.#state.stop();
+    this.#state.stop(this.#lc);
     this.#stream?.changes.cancel();
     await this.#storer.stop();
   }

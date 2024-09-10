@@ -14,6 +14,7 @@ export type RetryConfig = {
  * Facilitates lifecycle control with exponential backoff.
  */
 export class RunningState {
+  readonly #serviceName: string;
   readonly #initialRetryDelay: number;
   readonly #maxRetryDelay: number;
   #retryDelay: number;
@@ -21,12 +22,13 @@ export class RunningState {
   #shouldRun = true;
   #stopped = resolver();
 
-  constructor(retryConfig?: RetryConfig) {
+  constructor(serviceName: string, retryConfig?: RetryConfig) {
     const {
       initialRetryDelay = DEFAULT_INITIAL_RETRY_DELAY_MS,
       maxRetryDelay = DEFAULT_MAX_RETRY_DELAY_MS,
     } = retryConfig ?? {};
 
+    this.#serviceName = serviceName;
     this.#initialRetryDelay = initialRetryDelay;
     this.#maxRetryDelay = maxRetryDelay;
     this.#retryDelay = initialRetryDelay;
@@ -46,9 +48,17 @@ export class RunningState {
    * Called to stop the service. After this is called, {@link shouldRun()}
    * will return `false` and the {@link stopped()} Promise will be resolved.
    */
-  stop(): void {
-    this.#shouldRun = false;
-    this.#stopped.resolve();
+  stop(lc: LogContext, err?: unknown): void {
+    if (this.#shouldRun) {
+      if (err) {
+        lc.error?.(`stopping ${this.#serviceName} with error`, err);
+      } else {
+        lc.info?.(`stopping ${this.#serviceName}`);
+      }
+
+      this.#shouldRun = false;
+      this.#stopped.resolve();
+    }
   }
 
   /**
@@ -66,11 +76,13 @@ export class RunningState {
    * loop of the service. The returned Promise will resolve after an
    * exponential delay, or once {@link stop()} is called.
    */
-  backoff(lc?: LogContext): Promise<void> {
+  backoff(lc: LogContext): Promise<void> {
     const delay = this.#retryDelay;
     this.#retryDelay = Math.min(delay * 2, this.#maxRetryDelay);
 
-    lc?.info?.(`Retrying in ${delay} ms`);
+    if (this.#shouldRun) {
+      lc.info?.(`retrying ${this.#serviceName} in ${delay} ms`);
+    }
     return Promise.race([sleep(delay), this.#stopped.promise]);
   }
 
