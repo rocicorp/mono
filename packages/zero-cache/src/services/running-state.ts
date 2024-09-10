@@ -33,9 +33,10 @@ export class RunningState {
   }
 
   /**
-   * Usable in the service's main `while` loop to determine if
-   * the next iteration should execute. Returns `true` until
-   * {@link stop()} has been called.
+   * Returns `true` until {@link stop()} has been called.
+   *
+   * This is usually called as part of the service's main loop
+   * conditional to determine if the next iteration should execute.
    */
   shouldRun(): boolean {
     return this.#shouldRun;
@@ -75,7 +76,7 @@ export class RunningState {
 
   /**
    * When using {@link backoff()}, this method should be called when the
-   * implementation receives a healthy signal (e.g. an upstream
+   * implementation receives a healthy signal (e.g. a successful
    * response). This resets the delay used in {@link backoff()}.
    */
   resetBackoff() {
