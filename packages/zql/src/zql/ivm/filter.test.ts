@@ -78,8 +78,20 @@ test('edit', () => {
   ms.push({type: 'edit', oldRow: {a: 3, x: 3}, row: {a: 3, x: 6}});
 
   expect(out.pushes).toEqual([
-    {type: 'add', node: {row: {a: 4, x: 4}, relationships: {}}},
-    {type: 'edit', oldRow: {a: 3, x: 3}, row: {a: 3, x: 6}},
+    {
+      type: 'add',
+      node: {
+        row: {a: 4, x: 4},
+        relationships: {},
+      },
+    },
+    {
+      type: 'add',
+      node: {
+        row: {a: 3, x: 6},
+        relationships: {},
+      },
+    },
   ]);
 
   expect(out.fetch({})).toEqual([
@@ -90,8 +102,14 @@ test('edit', () => {
 
   out.pushes.length = 0;
   ms.push({type: 'edit', oldRow: {a: 3, x: 6}, row: {a: 3, x: 5}});
-  expect(out.pushes).toEqual([
-    {type: 'edit', oldRow: {a: 3, x: 6}, row: {a: 3, x: 5}},
+  expect(out.pushes).toMatchInlineSnapshot([
+    {
+      type: 'remove',
+      node: {
+        row: {a: 3, x: 6},
+        relationships: {},
+      },
+    },
   ]);
   expect(out.fetch({})).toEqual([
     {row: {a: 2, x: 2}, relationships: {}},

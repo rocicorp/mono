@@ -3,6 +3,7 @@ import {Change} from './change.js';
 import {Node, Row} from './data.js';
 import {FetchRequest, Input, Operator, Output} from './operator.js';
 import {Schema} from './schema.js';
+import {splitAndPushEditChange} from './split-and-push-edit-change.js';
 import {Stream} from './stream.js';
 
 /**
@@ -70,15 +71,9 @@ export class Filter implements Operator {
           this.#output.push(change);
         }
         break;
-      case 'edit': {
-        // The only case we do not need to propagate the change is when the old
-        // row was not passing the predicate and the new row is not passing the
-        // predicate either.
-        if (this.#predicate(change.oldRow) || this.#predicate(change.row)) {
-          this.#output.push(change);
-        }
+      case 'edit':
+        splitAndPushEditChange(change, this.#predicate, this.#output);
         break;
-      }
       default:
         unreachable(change);
     }

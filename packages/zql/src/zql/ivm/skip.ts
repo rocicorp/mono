@@ -1,14 +1,9 @@
 import {assert} from 'shared/src/asserts.js';
-import {
-  AddChange,
-  Change,
-  ChildChange,
-  EditChange,
-  RemoveChange,
-} from './change.js';
+import {AddChange, Change, ChildChange, RemoveChange} from './change.js';
 import {Comparator, Node, Row} from './data.js';
 import {FetchRequest, Input, Operator, Output, Start} from './operator.js';
 import {Schema} from './schema.js';
+import {splitAndPushEditChange} from './split-and-push-edit-change.js';
 import {Stream} from './stream.js';
 
 export type Bound = {
@@ -57,47 +52,21 @@ export class Skip implements Operator {
   push(change: Change): void {
     assert(this.#output, 'Output not set');
 
+    const shouldBePresent = (row: Row) => {
+      const cmp = this.#comparator(this.#bound.row, row);
+      return cmp < 0 || (cmp === 0 && !this.#bound.exclusive);
+    };
+
     if (change.type === 'edit') {
-      this.#pushEdit(change);
+      splitAndPushEditChange(change, shouldBePresent, this.#output);
       return;
     }
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
     const changeRow = change.type === 'child' ? change.row : change.node.row;
-    const cmp = this.#comparator(this.#bound.row, changeRow);
-    if (cmp > 0 || (cmp === 0 && this.#bound.exclusive)) {
-      return;
-    }
-
-    this.#output.push(change);
-  }
-
-  #pushEdit(change: EditChange): void {
-    const oldCmp = this.#comparator(this.#bound.row, change.oldRow);
-    const newCmp = this.#comparator(this.#bound.row, change.row);
-
-    const oldWasPresent =
-      oldCmp < 0 || (oldCmp === 0 && !this.#bound.exclusive);
-    const newIsPresent = newCmp < 0 || (newCmp === 0 && !this.#bound.exclusive);
-    if (oldWasPresent && newIsPresent) {
-      this.#output!.push(change);
-    } else if (oldWasPresent && !newIsPresent) {
-      this.#output!.push({
-        type: 'remove',
-        node: {
-          row: change.oldRow,
-          relationships: {},
-        },
-      });
-    } else if (!oldWasPresent && newIsPresent) {
-      this.#output!.push({
-        type: 'add',
-        node: {
-          row: change.row,
-          relationships: {},
-        },
-      });
+    if (shouldBePresent(changeRow)) {
+      this.#output.push(change);
     }
   }
 
