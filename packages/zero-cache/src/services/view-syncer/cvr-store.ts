@@ -34,6 +34,7 @@ import {
   type RowRecord,
 } from './schema/types.js';
 import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
+import {resolver} from '@rocicorp/resolver';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -47,7 +48,7 @@ export type CVRFlushStats = {
 };
 
 class RowRecordCache {
-  #cache: CustomKeyMap<RowID, RowRecord> | undefined;
+  #cache: Promise<CustomKeyMap<RowID, RowRecord>> | undefined;
   readonly #db: PostgresDB;
   readonly #cvrID: string;
 
@@ -60,6 +61,7 @@ class RowRecordCache {
     if (this.#cache) {
       return this.#cache;
     }
+    const r = resolver<CustomKeyMap<RowID, RowRecord>>();
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
     for await (const rows of this.#db<
       RowsRow[]
@@ -73,7 +75,8 @@ class RowRecordCache {
         cache.set(rowRecord.id, rowRecord);
       }
     }
-    this.#cache = cache;
+    r.resolve(cache);
+    this.#cache = r.promise;
     return this.#cache;
   }
 
