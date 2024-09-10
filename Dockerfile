@@ -10,6 +10,7 @@ RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc && \
     npm run build-ci && \
     rm -f .npmrc
 RUN apk add --update curl
+WORKDIR /opt/app/packages/zero-cache
 EXPOSE 3000
-CMD [ "litestream", "-c", "litestream.yml"]
-
+RUN ./restore-litestream-db.sh
+CMD ["litestream", "replicate", "-config", "/opt/app/litestream.yml"]
