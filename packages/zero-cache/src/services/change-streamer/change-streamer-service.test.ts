@@ -1,55 +1,53 @@
 import {LogContext} from '@rocicorp/logger';
+import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {
-  dropReplicationSlot,
-  getConnectionURI,
-  testDBs,
-} from 'zero-cache/src/test/db.js';
+import {testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
+import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
-import {initialSync, replicationSlot} from '../replicator/initial-sync.js';
-import {getSubscriptionState} from '../replicator/schema/replication-state.js';
-import {initializeStreamer} from './change-streamer-pg.js';
-import {ChangeStreamerService, Downstream} from './change-streamer.js';
+import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {ReplicationMessages} from '../replicator/test-utils.js';
+import {initializeStreamer} from './change-streamer-service.js';
+import {
+  ChangeEntry,
+  ChangeStreamerService,
+  Downstream,
+} from './change-streamer.js';
 import {ChangeLogEntry} from './schema/tables.js';
-
-const REPLICA_ID = 'change_streamer_test_id';
 
 describe('change-streamer/service', {retry: 3}, () => {
   let lc: LogContext;
-  let upstream: PostgresDB;
   let changeDB: PostgresDB;
-  let replica: Database;
   let streamer: ChangeStreamerService;
+  let changes: Subscription<ChangeEntry>;
+  let acks: Queue<Pgoutput.MessageCommit>;
+
+  const REPLICA_VERSION = '01';
 
   beforeEach(async () => {
     lc = createSilentLogContext();
-    upstream = await testDBs.create('change_streamer_test_upstream');
+
     changeDB = await testDBs.create('change_streamer_test_change_db');
-    replica = new Database(lc, ':memory:');
 
-    const upstreamURI = getConnectionURI(upstream);
-    await upstream`
-    CREATE TABLE foo(
-      id TEXT PRIMARY KEY,
-      int INT4,
-      big BIGINT,
-      flt FLOAT8,
-      bool BOOLEAN
-    )`;
+    const replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], `0/${REPLICA_VERSION}`);
 
-    await initialSync(lc, REPLICA_ID, replica, upstreamURI);
+    changes = Subscription.create();
+    acks = new Queue();
 
     streamer = await initializeStreamer(
       lc,
       changeDB,
-      upstreamURI,
-      REPLICA_ID,
+      {
+        startStream: () => ({
+          changes,
+          acks: {push: commit => acks.enqueue(commit)},
+        }),
+      },
       replica,
     );
     void streamer.run();
@@ -57,8 +55,7 @@ describe('change-streamer/service', {retry: 3}, () => {
 
   afterEach(async () => {
     await streamer.stop();
-    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
-    await testDBs.drop(upstream, changeDB);
+    await testDBs.drop(changeDB);
   });
 
   function drainToQueue(sub: Source<Downstream>): Queue<Downstream> {
@@ -77,21 +74,29 @@ describe('change-streamer/service', {retry: 3}, () => {
     return down[1].change;
   }
 
+  const messages = new ReplicationMessages({foo: 'id'});
+
   test('immediate forwarding, transaction storage', async () => {
-    const {replicaVersion, watermark} = getSubscriptionState(
-      new StatementRunner(replica),
-    );
     const sub = streamer.subscribe({
       id: 'myid',
-      watermark,
-      replicaVersion,
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
       initial: true,
     });
     const downstream = drainToQueue(sub);
 
-    await upstream.begin(async tx => {
-      await tx`INSERT INTO foo(id) VALUES('hello')`;
-      await tx`INSERT INTO foo(id) VALUES('world')`;
+    changes.push({watermark: '02', change: messages.begin()});
+    changes.push({
+      watermark: '02',
+      change: messages.insert('foo', {id: 'hello'}),
+    });
+    changes.push({
+      watermark: '03',
+      change: messages.insert('foo', {id: 'world'}),
+    });
+    changes.push({
+      watermark: '04',
+      change: messages.commit('04'),
     });
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -105,6 +110,9 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
 
+    // Await the ACK for the single commit.
+    await acks.dequeue();
+
     const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM cdc."ChangeLog"`;
@@ -117,27 +125,39 @@ describe('change-streamer/service', {retry: 3}, () => {
   });
 
   test('subscriber catchup and continuation', async () => {
-    // Capture watermark before any changes.
-    const {replicaVersion, watermark} = getSubscriptionState(
-      new StatementRunner(replica),
-    );
-
-    // Write some changes upstream.
-    await upstream.begin(async tx => {
-      await tx`INSERT INTO foo(id) VALUES('hello')`;
-      await tx`INSERT INTO foo(id) VALUES('world')`;
+    // Process some changes upstream.
+    changes.push({watermark: '02', change: messages.begin()});
+    changes.push({
+      watermark: '02',
+      change: messages.insert('foo', {id: 'hello'}),
+    });
+    changes.push({
+      watermark: '03',
+      change: messages.insert('foo', {id: 'world'}),
+    });
+    changes.push({
+      watermark: '04',
+      change: messages.commit('04'),
     });
 
     // Subscribe to the original watermark.
     const sub = streamer.subscribe({
       id: 'myid',
-      watermark,
-      replicaVersion,
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
       initial: true,
     });
 
-    // Write more upstream changes.
-    await upstream`DELETE FROM foo WHERE id = 'world'`;
+    // Process more upstream changes.
+    changes.push({watermark: '05', change: messages.begin()});
+    changes.push({
+      watermark: '05',
+      change: messages.delete('foo', {id: 'world'}),
+    });
+    changes.push({
+      watermark: '06',
+      change: messages.commit('06'),
+    });
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
@@ -158,7 +178,10 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
 
-    // and stored to the DB.
+    // Two commits
+    await acks.dequeue();
+    await acks.dequeue();
+
     const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM cdc."ChangeLog"`;
@@ -174,22 +197,26 @@ describe('change-streamer/service', {retry: 3}, () => {
   });
 
   test('data types (forwarded and catchup)', async () => {
-    const {replicaVersion, watermark} = getSubscriptionState(
-      new StatementRunner(replica),
-    );
     const sub = streamer.subscribe({
       id: 'myid',
-      watermark,
-      replicaVersion,
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
       initial: true,
     });
     const downstream = drainToQueue(sub);
 
-    await upstream.begin(async tx => {
-      await tx`
-      INSERT INTO foo(id, int, big, flt, bool) 
-        VALUES('hello', 123456789, 987654321987654321, 123.456, true)`;
+    changes.push({watermark: '02', change: messages.begin()});
+    changes.push({
+      watermark: '02',
+      change: messages.insert('foo', {
+        id: 'hello',
+        int: 123456789,
+        big: 987654321987654321n,
+        flt: 123.456,
+        bool: true,
+      }),
     });
+    changes.push({watermark: '03', change: messages.commit('03')});
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
@@ -203,6 +230,8 @@ describe('change-streamer/service', {retry: 3}, () => {
       },
     });
     expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+
+    await acks.dequeue();
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
@@ -225,8 +254,8 @@ describe('change-streamer/service', {retry: 3}, () => {
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = streamer.subscribe({
       id: 'myid2',
-      watermark,
-      replicaVersion,
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
       initial: true,
     });
     const catchup = drainToQueue(catchupSub);
