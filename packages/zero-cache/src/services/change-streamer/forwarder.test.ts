@@ -9,18 +9,18 @@ describe('change-streamer/forwarder', () => {
   test('in transaction queueing', () => {
     const forwarder = new Forwarder();
 
-    const [sub1, stream1] = createSubscriber('0/0', true);
-    const [sub2, stream2] = createSubscriber('0/0', true);
-    const [sub3, stream3] = createSubscriber('0/0', true);
-    const [sub4, stream4] = createSubscriber('0/0', true);
+    const [sub1, stream1] = createSubscriber('00', true);
+    const [sub2, stream2] = createSubscriber('00', true);
+    const [sub3, stream3] = createSubscriber('00', true);
+    const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward({watermark: '0/11', change: messages.begin('123')});
+    forwarder.forward({watermark: '11', change: messages.begin('123')});
     forwarder.add(sub2);
-    forwarder.forward({watermark: '0/12', change: messages.truncate('issues')});
-    forwarder.forward({watermark: '0/13', change: messages.commit('lsn')});
+    forwarder.forward({watermark: '12', change: messages.truncate('issues')});
+    forwarder.forward({watermark: '13', change: messages.commit('lsn')});
     forwarder.add(sub3);
-    forwarder.forward({watermark: '0/14', change: messages.begin('456')});
+    forwarder.forward({watermark: '14', change: messages.begin('456')});
     forwarder.add(sub4);
 
     for (const sub of [sub1, sub2, sub3, sub4]) {
@@ -39,7 +39,7 @@ describe('change-streamer/forwarder', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "0/11",
+            "watermark": "11",
           },
         ],
         [
@@ -73,7 +73,7 @@ describe('change-streamer/forwarder', () => {
               "restartIdentity": false,
               "tag": "truncate",
             },
-            "watermark": "0/12",
+            "watermark": "12",
           },
         ],
         [
@@ -86,7 +86,7 @@ describe('change-streamer/forwarder', () => {
               "flags": 0,
               "tag": "commit",
             },
-            "watermark": "0/13",
+            "watermark": "13",
           },
         ],
         [
@@ -98,7 +98,7 @@ describe('change-streamer/forwarder', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "0/14",
+            "watermark": "14",
           },
         ],
       ]
@@ -117,7 +117,7 @@ describe('change-streamer/forwarder', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "0/14",
+            "watermark": "14",
           },
         ],
       ]
@@ -133,7 +133,7 @@ describe('change-streamer/forwarder', () => {
               "tag": "begin",
               "xid": 0,
             },
-            "watermark": "0/14",
+            "watermark": "14",
           },
         ],
       ]

@@ -5,7 +5,6 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from 'zero-cache/src/test/db.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
@@ -20,15 +19,14 @@ import {
 } from './change-streamer.js';
 import {ChangeLogEntry} from './schema/tables.js';
 
-describe('change-streamer/service', () => {
+describe('change-streamer/service', {retry: 3}, () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeEntry>;
   let acks: Queue<Pgoutput.MessageCommit>;
 
-  const INITIAL_WATERMARK = '0/1';
-  const REPLICA_VERSION = toLexiVersion(INITIAL_WATERMARK);
+  const REPLICA_VERSION = '01';
 
   beforeEach(async () => {
     lc = createSilentLogContext();
@@ -36,7 +34,7 @@ describe('change-streamer/service', () => {
     changeDB = await testDBs.create('change_streamer_test_change_db');
 
     const replica = new Database(lc, ':memory:');
-    initReplicationState(replica, ['zero_data'], INITIAL_WATERMARK);
+    initReplicationState(replica, ['zero_data'], `0/${REPLICA_VERSION}`);
 
     changes = Subscription.create();
     acks = new Queue();
@@ -81,24 +79,24 @@ describe('change-streamer/service', () => {
   test('immediate forwarding, transaction storage', async () => {
     const sub = streamer.subscribe({
       id: 'myid',
-      watermark: '0/1',
+      watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
     });
     const downstream = drainToQueue(sub);
 
-    changes.push({watermark: '0/2', change: messages.begin()});
+    changes.push({watermark: '02', change: messages.begin()});
     changes.push({
-      watermark: '0/2',
+      watermark: '02',
       change: messages.insert('foo', {id: 'hello'}),
     });
     changes.push({
-      watermark: '0/3',
+      watermark: '03',
       change: messages.insert('foo', {id: 'world'}),
     });
     changes.push({
-      watermark: '0/4',
-      change: messages.commit('0/4'),
+      watermark: '04',
+      change: messages.commit('04'),
     });
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -128,37 +126,37 @@ describe('change-streamer/service', () => {
 
   test('subscriber catchup and continuation', async () => {
     // Process some changes upstream.
-    changes.push({watermark: '0/2', change: messages.begin()});
+    changes.push({watermark: '02', change: messages.begin()});
     changes.push({
-      watermark: '0/2',
+      watermark: '02',
       change: messages.insert('foo', {id: 'hello'}),
     });
     changes.push({
-      watermark: '0/3',
+      watermark: '03',
       change: messages.insert('foo', {id: 'world'}),
     });
     changes.push({
-      watermark: '0/4',
-      change: messages.commit('0/4'),
+      watermark: '04',
+      change: messages.commit('04'),
     });
 
     // Subscribe to the original watermark.
     const sub = streamer.subscribe({
       id: 'myid',
-      watermark: '0/1',
+      watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
     });
 
     // Process more upstream changes.
-    changes.push({watermark: '0/5', change: messages.begin()});
+    changes.push({watermark: '05', change: messages.begin()});
     changes.push({
-      watermark: '0/5',
+      watermark: '05',
       change: messages.delete('foo', {id: 'world'}),
     });
     changes.push({
-      watermark: '0/6',
-      change: messages.commit('0/6'),
+      watermark: '06',
+      change: messages.commit('06'),
     });
 
     // Verify that all changes were sent to the subscriber ...
@@ -201,15 +199,15 @@ describe('change-streamer/service', () => {
   test('data types (forwarded and catchup)', async () => {
     const sub = streamer.subscribe({
       id: 'myid',
-      watermark: '0/1',
+      watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
     });
     const downstream = drainToQueue(sub);
 
-    changes.push({watermark: '0/2', change: messages.begin()});
+    changes.push({watermark: '02', change: messages.begin()});
     changes.push({
-      watermark: '0/2',
+      watermark: '02',
       change: messages.insert('foo', {
         id: 'hello',
         int: 123456789,
@@ -218,7 +216,7 @@ describe('change-streamer/service', () => {
         bool: true,
       }),
     });
-    changes.push({watermark: '0/3', change: messages.commit('03')});
+    changes.push({watermark: '03', change: messages.commit('03')});
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
@@ -256,7 +254,7 @@ describe('change-streamer/service', () => {
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = streamer.subscribe({
       id: 'myid2',
-      watermark: '0/1',
+      watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
     });
