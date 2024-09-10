@@ -6,7 +6,7 @@ import {BTreeWrite} from '../btree/write.js';
 import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
-import {stringCompare} from '../string-compare.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import {withWrite} from '../with-transactions.js';
 import {
   IndexKey,
