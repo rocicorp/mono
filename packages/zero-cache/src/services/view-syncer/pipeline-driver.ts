@@ -16,6 +16,14 @@ import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
 
+declare const TESTING: boolean;
+
+let editChangesEnabled = TESTING;
+
+export function setEditChangesEnabled(b: boolean): void {
+  editChangesEnabled = b;
+}
+
 export type RowAdd = {
   readonly queryHash: string;
   readonly table: string;
@@ -202,11 +210,27 @@ export class PipelineDriver {
 
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
-      if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
-      }
-      if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: nextValue as Row});
+      if (editChangesEnabled) {
+        if (prevValue) {
+          if (nextValue) {
+            yield* this.#push(table, {
+              type: 'edit',
+              row: nextValue as Row,
+              oldRow: prevValue as Row,
+            });
+          } else {
+            yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+          }
+        } else if (nextValue) {
+          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        }
+      } else {
+        if (prevValue) {
+          yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+        }
+        if (nextValue) {
+          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        }
       }
     }
 
@@ -319,7 +343,7 @@ class Streamer {
           break;
         }
         case 'edit':
-          assert(false, 'edit changes not supported here');
+          assert(false, 'edit changes are not yet supported yet');
           break;
         default:
           unreachable(type);
