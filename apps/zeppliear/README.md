@@ -40,6 +40,13 @@ UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6432/postgres"
 # for it to be a separate "database" in the same postgres "cluster".
 CVR_DB_URI = "postgresql://user:password@127.0.0.1:6433/postgres"
 
+# A separate postgres database we use to temporarily store replication messages.
+# This facilitates running multiple replicas or catching up replicas from
+# asynchronous backups without the expense of using multiple upstream Postgres
+# replication slots. It can be same database as above, but it makes most sense
+# for it to be a separate "database" in the same postgres "cluster".
+CHANGE_DB_URI = "postgresql://user:password@127.0.0.1:6433/postgres"
+
 # Uniquely identifies a single instance of the zero-cache service.
 REPLICA_ID = "r1"
 

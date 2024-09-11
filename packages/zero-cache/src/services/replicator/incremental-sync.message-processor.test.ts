@@ -1,11 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
 import {Database} from 'zqlite/src/db.js';
-import {fromLexiVersion} from '../change-streamer/pg/lsn.js';
+import {Change} from '../change-streamer/schema/change.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,
@@ -35,7 +34,7 @@ describe('replicator/message-processor', () => {
 
   type Case = {
     name: string;
-    messages: Record<string, Pgoutput.Message[]>;
+    messages: [watermark: string, change: Change][];
     acknowledged: string[];
     expectedVersionChanges: number;
     replicated: Record<string, object[]>;
@@ -47,30 +46,24 @@ describe('replicator/message-processor', () => {
   const cases: Case[] = [
     {
       name: 'malformed replication stream',
-      messages: {
-        '0/1': [
-          messages.begin(),
-          messages.insert('foo', {id: 123}),
-          messages.insert('foo', {id: 234}),
-          messages.commit('0/E'),
-        ],
+      messages: [
+        ['04', messages.begin()],
+        ['05', messages.insert('foo', {id: 123})],
+        ['06', messages.insert('foo', {id: 234})],
+        ['07', messages.commit('0/E')],
 
         // Induce a failure with a missing 'begin' message.
-        '0/20': [
-          messages.insert('foo', {id: 456}),
-          messages.insert('foo', {id: 345}),
-          messages.commit('0/31'),
-        ],
+        ['08', messages.insert('foo', {id: 456})],
+        ['09', messages.insert('foo', {id: 345})],
+        ['0a', messages.commit('0/31')],
 
         // This should be dropped.
-        '0/40': [
-          messages.begin(),
-          messages.insert('foo', {id: 789}),
-          messages.insert('foo', {id: 987}),
-          messages.commit('0/51'),
-        ],
-      },
-      acknowledged: ['0/E'],
+        ['0b', messages.begin()],
+        ['0c', messages.insert('foo', {id: 789})],
+        ['0d', messages.insert('foo', {id: 987})],
+        ['0e', messages.commit('0/51')],
+      ],
+      acknowledged: ['07'],
       expectedVersionChanges: 1,
       replicated: {
         foo: [
@@ -82,63 +75,53 @@ describe('replicator/message-processor', () => {
     },
     {
       name: 'transaction replay',
-      messages: {
-        '0/1': [
-          messages.begin(),
-          messages.insert('foo', {id: 123}),
-          messages.commit('0/4'),
-        ],
+      messages: [
+        ['05', messages.begin()],
+        ['06', messages.insert('foo', {id: 123})],
+        ['08', messages.commit('0/4')],
 
-        '0/5': [
-          messages.begin(),
-          messages.insert('foo', {id: 234}),
-          messages.commit('0/A'),
-        ],
+        ['09', messages.begin()],
+        ['0a', messages.insert('foo', {id: 234})],
+        ['0c', messages.commit('0/A')],
 
         // Simulate Postgres resending the first two transactions (e.g. reconnecting after
         // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
-        '0/6': [
-          messages.begin(),
-          messages.insert('foo', {id: 123}),
-          // For good measure, add new inserts that didn't appear in the previous transaction.
-          // This would not actually happen, but it allows us to confirm that no mutations
-          // are applied.
-          messages.insert('foo', {id: 456}),
-          messages.commit('0/4'),
-        ],
+        ['05', messages.begin()],
+        ['06', messages.insert('foo', {id: 123})],
+        // For good measure, add new inserts that didn't appear in the previous transaction.
+        // This would not actually happen, but it allows us to confirm that no mutations
+        // are applied.
+        ['07', messages.insert('foo', {id: 456})],
+        ['08', messages.commit('0/4')],
 
-        '0/7': [
-          messages.begin(),
-          messages.insert('foo', {id: 234}),
-          // For good measure, add new inserts that didn't appear in the previous transaction.
-          // This would not actually happen, but it allows us to confirm that no mutations
-          // are applied.
-          messages.insert('foo', {id: 654}),
-          messages.commit('0/A'),
-        ],
+        ['09', messages.begin()],
+        ['0a', messages.insert('foo', {id: 234})],
+        // For good measure, add new inserts that didn't appear in the previous transaction.
+        // This would not actually happen, but it allows us to confirm that no mutations
+        // are applied.
+        ['0b', messages.insert('foo', {id: 654})],
+        ['0c', messages.commit('0/A')],
 
         // This should succeed.
-        '0/40': [
-          messages.begin(),
-          messages.insert('foo', {id: 789}),
-          messages.insert('foo', {id: 987}),
-          messages.commit('0/F'),
-        ],
-      },
+        ['0d', messages.begin()],
+        ['0e', messages.insert('foo', {id: 789})],
+        ['0f', messages.insert('foo', {id: 987})],
+        ['0g', messages.commit('0/F')],
+      ],
       acknowledged: [
-        '0/4',
-        '0/A',
-        '0/4', // Note: The acknowledgements should be resent
-        '0/A', //       so that Postgres can track progress.
-        '0/F',
+        '08',
+        '0c',
+        '08', // Note: The acknowledgements should be resent
+        '0c', //       so that Postgres can track progress.
+        '0g',
       ],
       expectedVersionChanges: 3,
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '02'},
-          {id: 234, big: null, ['_0_version']: '0g'},
-          {id: 789, big: null, ['_0_version']: '114'},
-          {id: 987, big: null, ['_0_version']: '114'},
+          {id: 234, big: null, ['_0_version']: '08'},
+          {id: 789, big: null, ['_0_version']: '0c'},
+          {id: 987, big: null, ['_0_version']: '0c'},
         ],
       },
       expectFailure: false,
@@ -158,10 +141,8 @@ describe('replicator/message-processor', () => {
         (_: LogContext, err: unknown) => failures.push(err),
       );
 
-      for (const [lsn, msgs] of Object.entries(c.messages)) {
-        for (const msg of msgs) {
-          processor.processMessage(lc, lsn, msg);
-        }
+      for (const [watermark, msg] of c.messages) {
+        processor.processMessage(lc, watermark, msg);
       }
 
       expect(acknowledgements).toEqual(c.acknowledged);
@@ -174,7 +155,7 @@ describe('replicator/message-processor', () => {
       expectTables(replica, c.replicated);
 
       const {watermark} = getSubscriptionState(new StatementRunner(replica));
-      expect(fromLexiVersion(watermark)).toBe(c.acknowledged.at(-1));
+      expect(watermark).toBe(c.acknowledged.at(-1));
     });
   }
 });

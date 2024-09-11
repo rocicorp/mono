@@ -506,7 +506,7 @@ describe('view-syncer/service', () => {
 
     const replicator = fakeReplicator(lc, replica);
     replicator.processTransaction(
-      '0/123',
+      '123',
       messages.update('issues', {
         id: '1',
         title: 'new title',
@@ -647,7 +647,7 @@ describe('view-syncer/service', () => {
 
     const replicator = fakeReplicator(lc, replica);
     replicator.processTransaction(
-      '0/123',
+      '123',
       messages.update('issues', {
         id: '1',
         title: 'new title',

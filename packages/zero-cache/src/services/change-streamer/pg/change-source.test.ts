@@ -30,14 +30,16 @@ describe('change-source/pg', {retry: 3}, () => {
     replicaDbFile = new DbFile('change_source_pg_test_replica');
 
     const upstreamURI = getConnectionURI(upstream);
-    await upstream`
+    await upstream.unsafe(`
     CREATE TABLE foo(
       id TEXT PRIMARY KEY,
       int INT4,
       big BIGINT,
       flt FLOAT8,
       bool BOOLEAN
-    )`;
+    );
+    CREATE PUBLICATION zero_all FOR TABLE foo WHERE (id != 'exclude-me');
+    `);
 
     source = await initializeChangeSource(
       lc,
@@ -108,6 +110,8 @@ describe('change-source/pg', {retry: 3}, () => {
       await tx`DELETE FROM foo WHERE id = 'world'`;
       await tx`UPDATE foo SET int = 123 WHERE id = 'hello';`;
       await tx`TRUNCATE foo`;
+      await tx`INSERT INTO foo(id) VALUES ('exclude-me')`;
+      await tx`INSERT INTO foo(id) VALUES ('include-me')`;
     });
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -122,13 +126,17 @@ describe('change-source/pg', {retry: 3}, () => {
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'truncate',
     });
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'include-me'},
+    });
     expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
 
     // Close the stream.
     changes.cancel();
 
-    expect(watermarks).toHaveLength(10);
-    expect(new Set(watermarks).size).toBe(10);
+    expect(watermarks).toHaveLength(11);
+    expect(new Set(watermarks).size).toBe(11);
 
     expect([...watermarks].sort()).toEqual(watermarks);
   });
