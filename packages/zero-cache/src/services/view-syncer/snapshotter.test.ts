@@ -90,24 +90,24 @@ describe('view-syncer/snapshotter', () => {
     expect(s1.current().version).toBe('00');
     expect(s2.current().version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
+    replicator.processMessage(lc, '04', messages.begin());
     replicator.processMessage(
       lc,
-      '0/1',
+      '05',
       messages.insert('issues', {id: 4, owner: 20}),
     );
     replicator.processMessage(
       lc,
-      '0/1',
+      '06',
       messages.update('issues', {id: 1, owner: 10, desc: 'food'}),
     );
     replicator.processMessage(
       lc,
-      '0/1',
+      '07',
       messages.update('issues', {id: 5, owner: 10, desc: 'bard'}, {id: 2}),
     );
-    replicator.processMessage(lc, '0/1', messages.delete('issues', {id: 3}));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '08', messages.delete('issues', {id: 3}));
+    replicator.processMessage(lc, '09', messages.commit('0/2'));
 
     const diff1 = s1.advance();
     expect(diff1.prev.version).toBe('00');
@@ -236,25 +236,25 @@ describe('view-syncer/snapshotter', () => {
     `);
 
     // Replicate a second transaction
-    replicator.processMessage(lc, '0/3', messages.begin());
-    replicator.processMessage(lc, '0/3', messages.delete('issues', {id: 4}));
+    replicator.processMessage(lc, '0a', messages.begin());
+    replicator.processMessage(lc, '0b', messages.delete('issues', {id: 4}));
     replicator.processMessage(
       lc,
-      '0/3',
+      '0c',
       messages.update('issues', {id: 2, owner: 10, desc: 'bard'}, {id: 5}),
     );
-    replicator.processMessage(lc, '0/3', messages.commit('0/4'));
+    replicator.processMessage(lc, '0d', messages.commit('0/4'));
 
     const diff2 = s1.advance();
     expect(diff2.prev.version).toBe('01');
-    expect(diff2.curr.version).toBe('08');
+    expect(diff2.curr.version).toBe('09');
     expect(diff2.changes).toBe(3);
 
     expect([...diff2]).toMatchInlineSnapshot(`
       [
         {
           "nextValue": {
-            "_0_version": "08",
+            "_0_version": "09",
             "desc": "bard",
             "id": 2n,
             "owner": 10n,
@@ -299,7 +299,7 @@ describe('view-syncer/snapshotter', () => {
     // (e.g. rows that return to their original state).
     const diff3 = s2.advance();
     expect(diff3.prev.version).toBe('00');
-    expect(diff3.curr.version).toBe('08');
+    expect(diff3.curr.version).toBe('09');
     expect(diff3.changes).toBe(5);
     expect([...diff3]).toMatchInlineSnapshot(`
       [
@@ -330,7 +330,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "08",
+            "_0_version": "09",
             "desc": "bard",
             "id": 2n,
             "owner": 10n,
@@ -353,9 +353,9 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('comments'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '05', messages.begin());
+    replicator.processMessage(lc, '06', messages.truncate('comments'));
+    replicator.processMessage(lc, '07', messages.commit('0/2'));
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -371,9 +371,9 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '05', messages.begin());
+    replicator.processMessage(lc, '06', messages.truncate('users'));
+    replicator.processMessage(lc, '07', messages.commit('0/2'));
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -410,10 +410,10 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('issues'));
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '05', messages.begin());
+    replicator.processMessage(lc, '06', messages.truncate('issues'));
+    replicator.processMessage(lc, '07', messages.truncate('users'));
+    replicator.processMessage(lc, '08', messages.commit('0/2'));
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -480,19 +480,19 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
+    replicator.processMessage(lc, '05', messages.begin());
+    replicator.processMessage(lc, '06', messages.truncate('users'));
     replicator.processMessage(
       lc,
-      '0/1',
+      '07',
       messages.insert('users', {id: 20, handle: 'robert'}),
     );
     replicator.processMessage(
       lc,
-      '0/1',
+      '08',
       messages.insert('users', {id: 30, handle: 'candice'}),
     );
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '09', messages.commit('0/2'));
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -547,9 +547,9 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.insert('comments', {id: 1}));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '05', messages.begin());
+    replicator.processMessage(lc, '06', messages.insert('comments', {id: 1}));
+    replicator.processMessage(lc, '07', messages.commit('0/2'));
 
     const diff = s.advance();
     let currStmts = 0;
@@ -583,9 +583,9 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, '05', messages.begin());
+    replicator.processMessage(lc, '06', messages.truncate('users'));
+    replicator.processMessage(lc, '07', messages.commit('0/2'));
 
     const diff = s.advance();
     let currStmts = 0;

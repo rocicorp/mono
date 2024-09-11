@@ -176,7 +176,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: BigInt(0)}),
       messages.insert('comments', {
         id: '41',
@@ -236,7 +236,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.delete('issues', {id: '1'}),
       messages.delete('comments', {id: '21'}),
     );
@@ -277,7 +277,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.update('comments', {id: '22', issueID: '3'}),
     );
 
@@ -329,7 +329,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
     );
     [...pipelines.advance().changes];
@@ -349,7 +349,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('issues', {id: '4', closed: 0}),
     );
 
@@ -371,7 +371,7 @@ describe('view-syncer/pipeline-driver', () => {
     `);
 
     replicator.processTransaction(
-      '0/456',
+      '156',
       messages.insert('comments', {id: '41', issueID: '4', upvotes: 10}),
     );
 
@@ -380,7 +380,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "21qo",
+            "_0_version": "134",
             "id": "41",
             "issueID": "4",
             "upvotes": 10,
@@ -393,10 +393,7 @@ describe('view-syncer/pipeline-driver', () => {
       ]
     `);
 
-    replicator.processTransaction(
-      '0/789',
-      messages.delete('issues', {id: '4'}),
-    );
+    replicator.processTransaction('189', messages.delete('issues', {id: '4'}));
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
@@ -430,7 +427,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: 0}),
       messages.insert('comments', {id: '41', issueID: '4', upvotes: 0}),
       messages.insert('issues', {id: '4', closed: 1}),
@@ -447,7 +444,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('comments', {
         id: '31',
         issueID: '3',
