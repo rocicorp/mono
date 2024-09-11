@@ -89,7 +89,7 @@ export async function initialSync(
     );
     copiers.setDone();
 
-    initReplicationState(tx, pubNames, toLexiVersion(lsn, 'commit'));
+    initReplicationState(tx, pubNames, toLexiVersion(lsn));
     initChangeLog(tx);
     lc.info?.(`Synced initial data from ${pubNames} up to ${lsn}`);
 

@@ -531,7 +531,7 @@ describe('replicator/initial-sync', () => {
           )}`;
       expect(slots[0]).toEqual({
         slotName: replicationSlot(REPLICA_ID),
-        lsn: fromLexiVersion(replicaState.watermark, 'commit'),
+        lsn: fromLexiVersion(replicaState.watermark),
       });
     });
   }
