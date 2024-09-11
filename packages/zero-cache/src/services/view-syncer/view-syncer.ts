@@ -93,22 +93,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
 
+  #runInLockWithCVR<T>(fn: (cvr: CVRSnapshot) => Promise<T> | T): Promise<T> {
+    return this.#lock.withLock(async () => {
+      if (!this.#cvr) {
+        this.#cvr = await this.#cvrStore.load();
+      }
+      return fn(this.#cvr);
+    });
+  }
+
   async run(): Promise<void> {
     try {
-      await this.#lock.withLock(async () => {
-        this.#cvr = await this.#cvrStore.load();
-      });
-
-      this.#lc.info?.('view-syncer started', this.#cvr?.version);
-
       for await (const _ of this.#versionChanges) {
-        await this.#lock.withLock(async () => {
+        await this.#runInLockWithCVR(async cvr => {
           if (!this.#pipelines.initialized()) {
             this.#pipelines.init();
-            this.#hydrateUnchangedQueries();
-            await this.#syncQueryPipelineSet();
+            this.#hydrateUnchangedQueries(cvr);
+            await this.#syncQueryPipelineSet(cvr);
           } else {
-            await this.#advancePipelines();
+            await this.#advancePipelines(cvr);
           }
         });
       }
@@ -171,6 +174,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #deleteClient(clientID: string, client: ClientHandler): Promise<void> {
+    // Note: The CVR is not needed here so there's no need to call runInLockWithCVR().
     return this.#lock.withLock(() => {
       const c = this.#clients.get(clientID);
       if (c === client) {
@@ -235,7 +239,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #runInLockForClient<B, M extends [cmd: string, B] = [string, B]>(
     ctx: SyncContext,
     msg: M,
-    fn: (lc: LogContext, clientID: string, body: B) => Promise<void>,
+    fn: (
+      lc: LogContext,
+      clientID: string,
+      body: B,
+      cvr: CVRSnapshot,
+    ) => Promise<void>,
     newClient?: ClientHandler,
   ): Promise<void> {
     const {clientID, wsID} = ctx;
@@ -248,7 +257,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     let client: ClientHandler | undefined;
     try {
-      await this.#lock.withLock(() => {
+      await this.#runInLockWithCVR(cvr => {
         if (newClient) {
           assert(newClient.wsID === wsID);
           this.#clients.get(clientID)?.close();
@@ -264,7 +273,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
         }
 
-        return fn(lc, clientID, body);
+        return fn(lc, clientID, body, cvr);
       });
     } catch (e) {
       lc.error?.(`closing connection with error`, e);
@@ -284,13 +293,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     clientID: string,
     {desiredQueriesPatch}: ChangeDesiredQueriesBody,
+    cvr: CVRSnapshot,
   ) => {
-    assert(this.#cvr, 'CVR must be loaded before patching queries');
-
     // Apply requested patches.
     if (desiredQueriesPatch.length) {
       lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
-      const updater = new CVRConfigDrivenUpdater(this.#cvrStore, this.#cvr);
+      const updater = new CVRConfigDrivenUpdater(this.#cvrStore, cvr);
 
       const added: {id: string; ast: AST}[] = [];
       for (const patch of desiredQueriesPatch) {
@@ -310,10 +318,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       this.#cvr = (await updater.flush(lc)).cvr;
+      cvr = this.#cvr; // For #syncQueryPipelineSet().
     }
 
     if (this.#pipelines.initialized()) {
-      await this.#syncQueryPipelineSet();
+      await this.#syncQueryPipelineSet(cvr);
     }
   };
 
@@ -332,12 +341,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  #hydrateUnchangedQueries() {
-    assert(this.#cvr, 'service must be running');
+  #hydrateUnchangedQueries(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
 
     const dbVersion = this.#pipelines.currentVersion();
-    const cvrVersion = this.#cvr.version;
+    const cvrVersion = cvr.version;
 
     if (cvrVersion.stateVersion !== dbVersion) {
       this.#lc.info?.(
@@ -346,7 +354,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return; // hydration needs to be run with the CVR updater.
     }
 
-    const gotQueries = Object.entries(this.#cvr.queries).filter(
+    const gotQueries = Object.entries(cvr.queries).filter(
       ([_, state]) => state.transformationHash !== undefined,
     );
 
@@ -377,10 +385,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  async #syncQueryPipelineSet() {
-    assert(this.#cvr, 'service must be running');
+  async #syncQueryPipelineSet(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
-    const cvr = this.#cvr;
     const lc = this.#lc.withContext('cvrVersion', versionString(cvr.version));
 
     const hydratedQueries = this.#pipelines.addedQueries();
@@ -404,7 +410,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     // The CVR, database, and all clients should now be at the same version.
-    assert(this.#cvr.version.stateVersion === this.#pipelines.currentVersion());
+    assert(
+      this.#cvr?.version.stateVersion === this.#pipelines.currentVersion(),
+    );
   }
 
   // This must be called from within the #lock.
@@ -602,14 +610,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * Must be called from within the #lock.
    */
-  async #advancePipelines() {
-    assert(this.#cvr, 'service must be running');
+  async #advancePipelines(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
     const start = Date.now();
 
     const {version, numChanges, changes} = this.#pipelines.advance();
     const lc = this.#lc.withContext('newVersion', version);
-    const cvr = this.#cvr;
 
     // Probably need a new updater type. CVRAdvancementUpdater?
     const updater = new CVRQueryDrivenUpdater(this.#cvrStore, cvr, version);
