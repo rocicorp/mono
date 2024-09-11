@@ -11,8 +11,8 @@ import {ChangeEntry, Downstream, ErrorType} from './change-streamer.js';
  */
 export class Subscriber {
   readonly id: string;
-  readonly watermark: string;
   readonly #downstream: Subscription<Downstream>;
+  #watermark: string;
   #backlog: ChangeEntry[] | null;
 
   constructor(
@@ -21,14 +21,18 @@ export class Subscriber {
     downstream: Subscription<Downstream>,
   ) {
     this.id = id;
-    this.watermark = watermark;
     this.#downstream = downstream;
+    this.#watermark = watermark;
     this.#backlog = [];
+  }
+
+  get watermark() {
+    return this.#watermark;
   }
 
   send(change: ChangeEntry) {
     const {watermark} = change;
-    if (watermark > this.watermark) {
+    if (watermark > this.#watermark) {
       if (this.#backlog) {
         this.#backlog.push(change);
       } else {
@@ -58,6 +62,7 @@ export class Subscriber {
     const {watermark} = change;
     if (watermark > this.watermark) {
       this.#downstream.push(['change', change]);
+      this.#watermark = watermark;
     }
   }
 

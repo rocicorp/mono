@@ -6,7 +6,6 @@ import {
 } from 'pg-logical-replication';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
@@ -16,6 +15,7 @@ import {ChangeEntry} from '../change-streamer.js';
 import {Change} from '../schema/change.js';
 import {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
+import {toLexiVersion} from './lsn.js';
 import {initSyncSchema} from './sync-schema.js';
 
 // BigInt support from LogicalReplicationService.
@@ -118,14 +118,15 @@ class PostgresChangeSource implements ChangeSource {
 
 function messageToChangeEntry(lsn: string, msg: Pgoutput.Message) {
   const change = msg as Change;
-  switch (change.tag) {
+  const {tag} = change;
+  switch (tag) {
     case 'begin':
     case 'insert':
     case 'update':
     case 'delete':
     case 'truncate':
     case 'commit': {
-      const watermark = toLexiVersion(lsn);
+      const watermark = toLexiVersion(lsn, tag);
       return {watermark, change};
     }
 

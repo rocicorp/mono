@@ -46,7 +46,6 @@ export class Storer implements Service {
   async run() {
     let tx: TransactionPool | null = null;
     let next: QueueEntry | false;
-    let pos = 0;
 
     const catchupQueue: Subscriber[] = [];
     while (
@@ -71,13 +70,10 @@ export class Storer implements Service {
           Mode.SERIALIZABLE,
         );
         void tx.run(this.#db);
-        pos = 0;
-      } else {
-        pos++;
       }
 
       assert(tx, `received ${tag} outside of transaction`);
-      const entry = {watermark, pos, change: change as unknown as JSONValue};
+      const entry = {watermark, change: change as unknown as JSONValue};
       tx.process(tx => [
         // Ignore conflicts to take into account transaction replay when an
         // acknowledgement doesn't reach upstream.
