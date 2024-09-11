@@ -15,12 +15,12 @@ export type RetryConfig = {
  */
 export class RunningState {
   readonly #serviceName: string;
+  readonly #controller: AbortController;
+  readonly #stopped: Promise<void>;
+
   readonly #initialRetryDelay: number;
   readonly #maxRetryDelay: number;
   #retryDelay: number;
-
-  #shouldRun = true;
-  #stopped = resolver();
 
   constructor(serviceName: string, retryConfig?: RetryConfig) {
     const {
@@ -32,6 +32,14 @@ export class RunningState {
     this.#initialRetryDelay = initialRetryDelay;
     this.#maxRetryDelay = maxRetryDelay;
     this.#retryDelay = initialRetryDelay;
+
+    this.#controller = new AbortController();
+
+    const {promise, resolve} = resolver();
+    this.#stopped = promise;
+    this.#controller.signal.addEventListener('abort', () => resolve(), {
+      once: true,
+    });
   }
 
   /**
@@ -41,7 +49,7 @@ export class RunningState {
    * conditional to determine if the next iteration should execute.
    */
   shouldRun(): boolean {
-    return this.#shouldRun;
+    return !this.#controller.signal.aborted;
   }
 
   /**
@@ -49,15 +57,13 @@ export class RunningState {
    * will return `false` and the {@link stopped()} Promise will be resolved.
    */
   stop(lc: LogContext, err?: unknown): void {
-    if (this.#shouldRun) {
+    if (this.shouldRun()) {
       if (err) {
         lc.error?.(`stopping ${this.#serviceName} with error`, err);
       } else {
         lc.info?.(`stopping ${this.#serviceName}`);
       }
-
-      this.#shouldRun = false;
-      this.#stopped.resolve();
+      this.#controller.abort();
     }
   }
 
@@ -68,7 +74,7 @@ export class RunningState {
    * stop waiting for work.
    */
   stopped(): Promise<void> {
-    return this.#stopped.promise;
+    return this.#stopped;
   }
 
   /**
@@ -80,13 +86,9 @@ export class RunningState {
     const delay = this.#retryDelay;
     this.#retryDelay = Math.min(delay * 2, this.#maxRetryDelay);
 
-    if (this.#shouldRun) {
+    if (this.shouldRun()) {
       lc.info?.(`retrying ${this.#serviceName} in ${delay} ms`);
-
-      const ac = new AbortController();
-      const [timeout] = sleepWithAbort(delay, ac.signal);
-      await Promise.race([timeout, this.#stopped.promise]);
-      ac.abort();
+      await Promise.race(sleepWithAbort(delay, this.#controller.signal));
     }
   }
 
