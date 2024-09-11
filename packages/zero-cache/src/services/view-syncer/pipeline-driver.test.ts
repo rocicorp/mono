@@ -380,7 +380,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "1fo",
+            "_0_version": "21qo",
             "id": "41",
             "issueID": "4",
             "upvotes": 10,

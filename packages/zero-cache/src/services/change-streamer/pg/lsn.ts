@@ -18,7 +18,7 @@ import {Change} from '../schema/change.js';
  */
 export type LSN = string;
 
-export type RecordType = Pick<Change, 'tag'>['tag'];
+export type RecordType = Change['tag'];
 
 export function toLexiVersion(
   lsn: LSN,
@@ -28,17 +28,15 @@ export function toLexiVersion(
   assert(parts.length === 2, `Malformed LSN: "${lsn}"`);
   const high = BigInt(`0x${parts[0]}`);
   const low = BigInt(`0x${parts[1]}`);
-  const val = (high << 32n) + low + lsnOffset(type);
+  // Shift by 2 bits and add offset().
+  const val = (high << 34n) + (low << 2n) + offset(type);
   return versionToLexi(val);
 }
 
-export function fromLexiVersion(
-  lexi: LexiVersion,
-  type: RecordType = 'commit',
-): LSN {
-  const val = versionFromLexi(lexi) - lsnOffset(type);
-  const high = val >> 32n;
-  const low = val & 0xffffffffn;
+export function fromLexiVersion(lexi: LexiVersion): LSN {
+  const val = versionFromLexi(lexi);
+  const high = val >> 34n;
+  const low = (val >> 2n) & 0xffffffffn;
   return `${high.toString(16).toUpperCase()}/${low.toString(16).toUpperCase()}`;
 }
 
@@ -51,11 +49,11 @@ export function fromLexiVersion(
  * and a WAL record being a "low-level description of an individual data change".
  *
  * Unfortunately, 'begin' and 'commit' transaction markers are not technically
- * data changes, and while they often have their own LSNs, it is not always
- * the case.
+ * "data changes" (i.e. they are not DML statements), and thus do not always
+ * have their own LSN.
  *
  * In fact, a 'begin' message always has the same LSN as its transaction's first
- * data change. Moreover, executing commands in quick succession can result
+ * DML statement. Moreover, executing commands in quick succession can result
  * in a 'commit', the next 'begin', and the subsequent data change all sharing
  * the same LSN:
  *
@@ -93,23 +91,27 @@ export function fromLexiVersion(
  * },
  * ```
  *
- * This renders the LSN very difficult to use as a watermark. Even attaching
+ * This renders the LSN unsuitable as a watermark on its own. Even attaching
  * the position of the message within the transaction (with 'begin' starting at 0)
  * does not work since the 'commit' from the previous transaction would be sorted
  * after the 'begin' from the next one if they shared the same LSN.
  *
- * The workaround to convert an LSN to a monotonic value assumes that all
- * WAL records are more than 2 bytes in size (a safe assumption), and offsets
- * the LSN associated with a 'begin' record by 1 and those of non-'commit'
- * records by 2. Note that the scheme keeps the LSN of 'commit' messages the
- * same as these are most often used in the Postgres replication protocol
- * (e.g. as the `confirmed_flush_lsn`).
+ * The scheme to convert an LSN to a monotonic value is based on the
+ * characteristic that like-LSN records always follow a specific order:
+ * - `commit`
+ * - `begin`
+ * - DML statement (i.e. `insert`, `update`, `delete`, `truncate`)
+ *
+ * A monotonic watermark is thus computed from the LSN by:
+ * - Shifting the LSN by 2 bits.
+ * - Adding 1 for `begin` records.
+ * - Adding 2 for DML records.
  *
  * This ensures that the resulting watermarks are strictly monotonic and
  * sorted in stream order.
  */
 
-function lsnOffset(type: RecordType): bigint {
+function offset(type: RecordType): bigint {
   switch (type) {
     case 'commit':
       return 0n;

@@ -136,9 +136,9 @@ describe('replicator/message-processor', () => {
       replicated: {
         foo: [
           {id: 123, big: null, ['_0_version']: '02'},
-          {id: 234, big: null, ['_0_version']: '04'},
-          {id: 789, big: null, ['_0_version']: '0a'},
-          {id: 987, big: null, ['_0_version']: '0a'},
+          {id: 234, big: null, ['_0_version']: '0g'},
+          {id: 789, big: null, ['_0_version']: '114'},
+          {id: 987, big: null, ['_0_version']: '114'},
         ],
       },
       expectFailure: false,
