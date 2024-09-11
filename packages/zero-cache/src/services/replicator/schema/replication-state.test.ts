@@ -1,14 +1,14 @@
-import {Database} from 'zqlite/src/db.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
+import {Database} from 'zqlite/src/db.js';
 import {
   getReplicationVersions,
   getSubscriptionState,
   initReplicationState,
   updateReplicationWatermark,
 } from './replication-state.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 describe('replicator/schema/replication-state', () => {
   let db: StatementRunner;
@@ -17,7 +17,7 @@ describe('replicator/schema/replication-state', () => {
     db = new StatementRunner(
       new Database(createSilentLogContext(), ':memory:'),
     );
-    initReplicationState(db.db, ['zero_data', 'zero_metadata'], '0/0a');
+    initReplicationState(db.db, ['zero_data', 'zero_metadata'], '0a');
   });
 
   test('initial replication state', () => {
@@ -32,9 +32,8 @@ describe('replicator/schema/replication-state', () => {
       ['_zero.ReplicationState']: [
         {
           lock: 1,
-          watermark: '0/0a',
+          watermark: '0a',
           stateVersion: '00',
-          nextStateVersion: '0a',
         },
       ],
     });
@@ -44,7 +43,7 @@ describe('replicator/schema/replication-state', () => {
     expect(getSubscriptionState(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
-      watermark: '0/0a',
+      watermark: '0a',
     });
   });
 
@@ -56,14 +55,13 @@ describe('replicator/schema/replication-state', () => {
   });
 
   test('update watermark state', () => {
-    updateReplicationWatermark(db, '0/0f');
+    updateReplicationWatermark(db, '0f');
     expectTables(db.db, {
       ['_zero.ReplicationState']: [
         {
           lock: 1,
-          watermark: '0/0f',
+          watermark: '0f',
           stateVersion: '0a',
-          nextStateVersion: '0f',
         },
       ],
     });
@@ -74,17 +72,16 @@ describe('replicator/schema/replication-state', () => {
     expect(getSubscriptionState(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
-      watermark: '0/0f',
+      watermark: '0f',
     });
 
-    updateReplicationWatermark(db, '0/1b');
+    updateReplicationWatermark(db, '0r');
     expectTables(db.db, {
       ['_zero.ReplicationState']: [
         {
           lock: 1,
-          watermark: '0/1b',
+          watermark: '0r',
           stateVersion: '0f',
-          nextStateVersion: '0r',
         },
       ],
     });
@@ -95,7 +92,7 @@ describe('replicator/schema/replication-state', () => {
     expect(getSubscriptionState(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
-      watermark: '0/1b',
+      watermark: '0r',
     });
   });
 });

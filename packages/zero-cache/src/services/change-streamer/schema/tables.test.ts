@@ -21,7 +21,7 @@ describe('change-streamer/schema/tables', () => {
 
   test('ensureReplicationConfig', async () => {
     const replica1 = new Database(lc, ':memory:');
-    initReplicationState(replica1, ['zero_data', 'zero_metadata'], '0/123');
+    initReplicationState(replica1, ['zero_data', 'zero_metadata'], '123');
 
     await ensureReplicationConfig(lc, db, {
       replicaVersion: '183',

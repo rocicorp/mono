@@ -1,10 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import type {Pgoutput} from 'pg-logical-replication';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
+import {fromLexiVersion} from 'zero-cache/src/types/lsn.js';
+import {Database} from 'zqlite/src/db.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,
@@ -28,7 +29,7 @@ describe('replicator/message-processor', () => {
     );
     `);
 
-    initReplicationState(replica, ['zero_data', 'zero_metadata'], '0/2');
+    initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
     initChangeLog(replica);
   });
 
@@ -51,7 +52,7 @@ describe('replicator/message-processor', () => {
           messages.begin(),
           messages.insert('foo', {id: 123}),
           messages.insert('foo', {id: 234}),
-          messages.commit('0/e'),
+          messages.commit('0/E'),
         ],
 
         // Induce a failure with a missing 'begin' message.
@@ -69,7 +70,7 @@ describe('replicator/message-processor', () => {
           messages.commit('0/51'),
         ],
       },
-      acknowledged: ['0/e'],
+      acknowledged: ['0/E'],
       expectedVersionChanges: 1,
       replicated: {
         foo: [
@@ -91,7 +92,7 @@ describe('replicator/message-processor', () => {
         '0/5': [
           messages.begin(),
           messages.insert('foo', {id: 234}),
-          messages.commit('0/a'),
+          messages.commit('0/A'),
         ],
 
         // Simulate Postgres resending the first two transactions (e.g. reconnecting after
@@ -113,7 +114,7 @@ describe('replicator/message-processor', () => {
           // This would not actually happen, but it allows us to confirm that no mutations
           // are applied.
           messages.insert('foo', {id: 654}),
-          messages.commit('0/a'),
+          messages.commit('0/A'),
         ],
 
         // This should succeed.
@@ -121,15 +122,15 @@ describe('replicator/message-processor', () => {
           messages.begin(),
           messages.insert('foo', {id: 789}),
           messages.insert('foo', {id: 987}),
-          messages.commit('0/f'),
+          messages.commit('0/F'),
         ],
       },
       acknowledged: [
         '0/4',
-        '0/a',
+        '0/A',
         '0/4', // Note: The acknowledgements should be resent
-        '0/a', //       so that Postgres can track progress.
-        '0/f',
+        '0/A', //       so that Postgres can track progress.
+        '0/F',
       ],
       expectedVersionChanges: 3,
       replicated: {
@@ -173,7 +174,7 @@ describe('replicator/message-processor', () => {
       expectTables(replica, c.replicated);
 
       const {watermark} = getSubscriptionState(new StatementRunner(replica));
-      expect(watermark).toBe(c.acknowledged.at(-1));
+      expect(fromLexiVersion(watermark)).toBe(c.acknowledged.at(-1));
     });
   }
 });

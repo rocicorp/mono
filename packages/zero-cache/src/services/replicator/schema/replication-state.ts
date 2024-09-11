@@ -5,10 +5,9 @@
  * after the logical replication handoff when initial data synchronization has completed.
  */
 
-import {Database} from 'zqlite/src/db.js';
 import * as v from 'shared/src/valita.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
+import {Database} from 'zqlite/src/db.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
@@ -28,16 +27,15 @@ const CREATE_REPLICATION_STATE_SCHEMA =
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
-  // watermark        : Opaque, upstream-specific watermark denoting the point from which replication
-  //                    should continue. For a Postgres upstream, for example, this is the LSN string.
+  // watermark        : Lexicographically sortable watermark denoting the point from which replication
+  //                    should continue. For a Postgres upstream, for example, this is the
+  //                    LexiVersion-encoded LSN. This is also used as the state version for rows
+  //                    modified in the **next** transaction.
   // stateVersion     : The value of the _0_version column for the newest rows in the database.
-  // nextStateVersion : The value to use for the _0_version column of rows in the _next_ transaction.
-  //                    This is generally a lexicographically sortable representation of the watermark.
   `
   CREATE TABLE "_zero.ReplicationState" (
     watermark TEXT NOT NULL,
     stateVersion TEXT NOT NULL,
-    nextStateVersion TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   `;
@@ -65,22 +63,21 @@ export type ReplicationVersions = v.Infer<typeof versionsSchema>;
 export function initReplicationState(
   db: Database,
   publications: string[],
-  lsn: string,
+  watermark: string,
 ) {
-  const version = toLexiVersion(lsn);
   db.exec(CREATE_REPLICATION_STATE_SCHEMA);
   db.prepare(
     `
     INSERT INTO "_zero.ReplicationConfig" 
        (replicaVersion, publications) VALUES (?, ?)
     `,
-  ).run(version, JSON.stringify(publications));
+  ).run(watermark, JSON.stringify(publications));
   db.prepare(
     `
     INSERT INTO "_zero.ReplicationState" 
-       (watermark, stateVersion, nextStateVersion) VALUES (?,'00',?)
+       (watermark, stateVersion) VALUES (?,'00')
     `,
-  ).run(lsn, version);
+  ).run(watermark);
 }
 
 export function getSubscriptionState(db: StatementRunner) {
@@ -95,20 +92,22 @@ export function getSubscriptionState(db: StatementRunner) {
   return v.parse(result, subscriptionStateSchema);
 }
 
-export function updateReplicationWatermark(db: StatementRunner, lsn: string) {
-  // The previous `nextStateVersion` needs to be set as the next `stateVersion`.
+export function updateReplicationWatermark(
+  db: StatementRunner,
+  watermark: string,
+) {
+  // The previous `watermark` needs to be set as the next `stateVersion`.
   // Rather than explicitly looking that up with an additional statement, use an
-  // UPSERT for which the INSERT fails so that the value of `nextStateVersion`
+  // UPSERT for which the INSERT fails so that the value of `watermark`
   // from the original row can be used to set the new `stateVersion`.
   db.run(
     `
       INSERT INTO "_zero.ReplicationState" 
-        (lock, watermark, stateVersion, nextStateVersion) VALUES (1,'','','')
+        (lock, watermark, stateVersion) VALUES (1,'','')
         ON CONFLICT (lock)
-        DO UPDATE SET watermark=?, stateVersion=nextStateVersion, nextStateVersion=?
+        DO UPDATE SET watermark=?, stateVersion=watermark
     `,
-    lsn,
-    toLexiVersion(lsn),
+    watermark,
   );
 }
 
@@ -116,7 +115,7 @@ export function getReplicationVersions(
   db: StatementRunner,
 ): ReplicationVersions {
   const result = db.get(
-    `SELECT stateVersion, nextStateVersion FROM "_zero.ReplicationState"`,
+    `SELECT stateVersion, watermark as nextStateVersion FROM "_zero.ReplicationState"`,
   );
   return v.parse(result, versionsSchema);
 }

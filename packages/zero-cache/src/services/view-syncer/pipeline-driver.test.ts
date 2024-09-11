@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
-import type {Database as DB} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {DbFile} from 'zero-cache/src/test/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
+import type {Database as DB} from 'zqlite/src/db.js';
+import {Database} from 'zqlite/src/db.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
@@ -31,7 +31,7 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     db = dbFile.connect(lc);
-    initReplicationState(db, ['zero_data'], '0/123');
+    initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
       CREATE TABLE issues (
@@ -191,7 +191,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "id": "31",
             "issueID": "3",
             "upvotes": 0,
@@ -204,7 +204,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "closed": false,
             "id": "4",
           },
@@ -216,7 +216,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "id": "41",
             "issueID": "4",
             "upvotes": 9007199254740991,
@@ -294,7 +294,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "id": "22",
             "issueID": "3",
             "upvotes": 20000,
@@ -339,7 +339,7 @@ describe('view-syncer/pipeline-driver', () => {
       id: '22',
       issueID: '3',
       upvotes: 20000,
-      ['_0_version']: '183',
+      ['_0_version']: '123',
     });
   });
 
@@ -358,7 +358,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "closed": false,
             "id": "4",
           },
@@ -438,7 +438,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     expect(pipelines.currentVersion()).toBe('00');
     expect([...pipelines.advance().changes]).toHaveLength(0);
-    expect(pipelines.currentVersion()).toBe('183');
+    expect(pipelines.currentVersion()).toBe('123');
   });
 
   test('push fails on out of bounds numbers', () => {

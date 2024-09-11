@@ -1,4 +1,3 @@
-import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
@@ -10,6 +9,7 @@ import type {
   QueriesPatch,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
+import {Database} from 'zqlite/src/db.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
@@ -70,7 +70,7 @@ describe('view-syncer/service', () => {
     replicaDbFile = new DbFile('view_syncer_service_test');
     replica = replicaDbFile.connect(lc);
     initChangeLog(replica);
-    initReplicationState(replica, ['zero_data'], '0/1');
+    initReplicationState(replica, ['zero_data'], '01');
 
     replica.exec(`
     CREATE TABLE "zero.clients" (
