@@ -12,7 +12,7 @@ import {liteValues} from 'zero-cache/src/types/lite.js';
 import {Database} from 'zqlite/src/db.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
-import {toLexiVersion} from '../../types/lsn.js';
+import {fromLexiVersion, toLexiVersion} from '../../types/lsn.js';
 import {liteTableName} from '../../types/names.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
@@ -66,7 +66,7 @@ export class IncrementalSyncer {
     this.#notifier.notifySubscribers();
 
     const {publications, watermark} = getSubscriptionState(this.#replica);
-    let lastLSN = watermark;
+    let lastLSN = fromLexiVersion(watermark);
 
     lc.info?.(`Syncing publications ${publications}`);
     while (!this.#stopped) {
@@ -452,7 +452,7 @@ class TransactionProcessor {
       this.#db.rollback();
       throw new ReplayedTransactionError(lsn);
     }
-    updateReplicationWatermark(this.#db, lsn);
+    updateReplicationWatermark(this.#db, toLexiVersion(lsn));
     this.#db.commit();
 
     const elapsedMs = Date.now() - this.#startMs;

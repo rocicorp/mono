@@ -10,6 +10,7 @@ import {
   liteValues,
   mapPostgresToLiteDataType,
 } from 'zero-cache/src/types/lite.js';
+import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {liteTableName} from 'zero-cache/src/types/names.js';
 import {PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
 import type {
@@ -88,7 +89,7 @@ export async function initialSync(
     );
     copiers.setDone();
 
-    initReplicationState(tx, pubNames, lsn);
+    initReplicationState(tx, pubNames, toLexiVersion(lsn));
     initChangeLog(tx);
     lc.info?.(`Synced initial data from ${pubNames} up to ${lsn}`);
 
