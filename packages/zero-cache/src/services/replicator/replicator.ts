@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {Database} from 'zqlite/src/db.js';
 import type {Source} from '../../types/streams.js';
-import {initSyncSchema} from '../change-streamer/pg/sync-schema.js';
+import {ChangeStreamer} from '../change-streamer/change-streamer.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 
@@ -36,30 +36,22 @@ export interface Replicator extends ReplicaVersionNotifier {
 export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #upstreamUri: string;
-  readonly #syncReplicaDbFile: string;
   readonly #incrementalSyncer: IncrementalSyncer;
 
   constructor(
     lc: LogContext,
-    replicaID: string,
-    upstreamUri: string,
-    syncReplicaDbFile: string,
+    id: string,
+    changeStreamer: ChangeStreamer,
+    replica: Database,
   ) {
-    this.id = replicaID;
+    this.id = id;
     this.#lc = lc
-      .withContext('component', 'Replicator')
+      .withContext('component', 'replicator')
       .withContext('serviceID', this.id);
-    this.#upstreamUri = upstreamUri;
-    this.#syncReplicaDbFile = syncReplicaDbFile;
-
-    const replica = new Database(this.#lc, syncReplicaDbFile);
-    replica.pragma('journal_mode = WAL');
-    // TODO: Any other replica setup required here?
 
     this.#incrementalSyncer = new IncrementalSyncer(
-      upstreamUri,
-      replicaID,
+      id,
+      changeStreamer,
       replica,
     );
   }
@@ -68,16 +60,8 @@ export class ReplicatorService implements Replicator, Service {
     return Promise.resolve({status: 'ok'});
   }
 
-  async run() {
-    await initSyncSchema(
-      this.#lc,
-      'replicator',
-      this.id,
-      this.#syncReplicaDbFile,
-      this.#upstreamUri,
-    );
-
-    await this.#incrementalSyncer.run(this.#lc);
+  run() {
+    return this.#incrementalSyncer.run(this.#lc);
   }
 
   subscribe(): Source<ReplicaVersionReady> {

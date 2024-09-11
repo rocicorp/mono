@@ -1,19 +1,24 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
+import {
+  versionFromLexi,
+  versionToLexi,
+} from 'zero-cache/src/types/lexi-version.js';
 import {RowKey, RowValue} from 'zero-cache/src/types/row-key.js';
 import {h32} from 'zero-cache/src/types/xxhash.js';
+import {Database} from 'zqlite/src/db.js';
+import {Change} from '../change-streamer/schema/change.js';
 import {MessageProcessor} from './incremental-sync.js';
 
 const NOOP = () => {};
 
 export interface FakeReplicator {
-  process(...msgs: Pgoutput.Message[]): void;
+  process(...msgs: Change[]): void;
 
   processTransaction(
-    finalLSN: string,
+    finalWatermark: string,
     ...msgs: (
       | Pgoutput.MessageInsert
       | Pgoutput.MessageDelete
@@ -24,28 +29,30 @@ export interface FakeReplicator {
 
 export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
   const messageProcessor = createMessageProcessor(db);
+  let watermark = 123;
   return {
     process: (...msgs) => {
       for (const msg of msgs) {
-        messageProcessor.processMessage(lc, '0/1', msg);
+        messageProcessor.processMessage(lc, versionToLexi(watermark++), msg);
       }
     },
 
-    processTransaction: (commitEndLsn, ...msgs) => {
-      messageProcessor.processMessage(lc, '0/1', {
+    processTransaction: (finalWatermark, ...msgs) => {
+      let watermark = Number(versionFromLexi(finalWatermark)) - msgs.length - 1;
+      messageProcessor.processMessage(lc, versionToLexi(watermark++), {
         tag: 'begin',
         commitLsn: null,
         commitTime: 0n,
         xid: 0,
       });
       for (const msg of msgs) {
-        messageProcessor.processMessage(lc, '0/1', msg);
+        messageProcessor.processMessage(lc, versionToLexi(watermark++), msg);
       }
-      messageProcessor.processMessage(lc, '0/1', {
+      messageProcessor.processMessage(lc, finalWatermark, {
         tag: 'commit',
         flags: 0,
         commitLsn: null,
-        commitEndLsn,
+        commitEndLsn: finalWatermark,
         commitTime: 0n,
       });
     },
