@@ -17,16 +17,17 @@ import {
  */
 export type LSN = string;
 
-export function toLexiVersion(lsn: LSN): LexiVersion {
+export function toLexiVersion(lsn: LSN, offset = 0): LexiVersion {
   const parts = lsn.split('/');
   assert(parts.length === 2, `Malformed LSN: "${lsn}"`);
   const high = BigInt(`0x${parts[0]}`);
   const low = BigInt(`0x${parts[1]}`);
-  return versionToLexi((high << 32n) + low);
+  const val = (high << 32n) + low + BigInt(offset);
+  return versionToLexi(val);
 }
 
-export function fromLexiVersion(lexi: LexiVersion): LSN {
-  const val = versionFromLexi(lexi);
+export function fromLexiVersion(lexi: LexiVersion, offset = 0): LSN {
+  const val = versionFromLexi(lexi) + BigInt(offset);
   const high = val >> 32n;
   const low = val & 0xffffffffn;
   return `${high.toString(16).toUpperCase()}/${low.toString(16).toUpperCase()}`;

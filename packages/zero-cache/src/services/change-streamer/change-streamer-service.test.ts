@@ -87,15 +87,15 @@ describe('change-streamer/service', {retry: 3}, () => {
 
     changes.push({watermark: '02', change: messages.begin()});
     changes.push({
-      watermark: '02',
+      watermark: '03',
       change: messages.insert('foo', {id: 'hello'}),
     });
     changes.push({
-      watermark: '03',
+      watermark: '04',
       change: messages.insert('foo', {id: 'world'}),
     });
     changes.push({
-      watermark: '04',
+      watermark: '05',
       change: messages.commit('04'),
     });
 
@@ -116,11 +116,11 @@ describe('change-streamer/service', {retry: 3}, () => {
     const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM cdc."ChangeLog"`;
-    expect(logEntries.map(e => [e.pos, e.change.tag])).toEqual([
-      [0n, 'begin'],
-      [1n, 'insert'],
-      [2n, 'insert'],
-      [3n, 'commit'],
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'insert',
+      'commit',
     ]);
   });
 
@@ -128,15 +128,15 @@ describe('change-streamer/service', {retry: 3}, () => {
     // Process some changes upstream.
     changes.push({watermark: '02', change: messages.begin()});
     changes.push({
-      watermark: '02',
+      watermark: '03',
       change: messages.insert('foo', {id: 'hello'}),
     });
     changes.push({
-      watermark: '03',
+      watermark: '04',
       change: messages.insert('foo', {id: 'world'}),
     });
     changes.push({
-      watermark: '04',
+      watermark: '05',
       change: messages.commit('04'),
     });
 
@@ -149,13 +149,13 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
 
     // Process more upstream changes.
-    changes.push({watermark: '05', change: messages.begin()});
+    changes.push({watermark: '06', change: messages.begin()});
     changes.push({
-      watermark: '05',
+      watermark: '07',
       change: messages.delete('foo', {id: 'world'}),
     });
     changes.push({
-      watermark: '06',
+      watermark: '08',
       change: messages.commit('06'),
     });
 
@@ -185,14 +185,14 @@ describe('change-streamer/service', {retry: 3}, () => {
     const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM cdc."ChangeLog"`;
-    expect(logEntries.map(e => [e.pos, e.change.tag])).toEqual([
-      [0n, 'begin'],
-      [1n, 'insert'],
-      [2n, 'insert'],
-      [3n, 'commit'],
-      [0n, 'begin'],
-      [1n, 'delete'],
-      [2n, 'commit'],
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'insert',
+      'commit',
+      'begin',
+      'delete',
+      'commit',
     ]);
   });
 
@@ -207,7 +207,7 @@ describe('change-streamer/service', {retry: 3}, () => {
 
     changes.push({watermark: '02', change: messages.begin()});
     changes.push({
-      watermark: '02',
+      watermark: '03',
       change: messages.insert('foo', {
         id: 'hello',
         int: 123456789,
@@ -216,7 +216,7 @@ describe('change-streamer/service', {retry: 3}, () => {
         bool: true,
       }),
     });
-    changes.push({watermark: '03', change: messages.commit('03')});
+    changes.push({watermark: '04', change: messages.commit('03')});
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
@@ -236,10 +236,10 @@ describe('change-streamer/service', {retry: 3}, () => {
     const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM cdc."ChangeLog"`;
-    expect(logEntries.map(e => [e.pos, e.change.tag])).toEqual([
-      [0n, 'begin'],
-      [1n, 'insert'],
-      [2n, 'commit'],
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'commit',
     ]);
     const insert = logEntries[1].change;
     assert(insert.tag === 'insert');

@@ -40,8 +40,8 @@ describe('change-streamer/schema/tables', () => {
     });
 
     await db`
-    INSERT INTO cdc."ChangeLog" (watermark, pos, change)
-        values ('184', 0, JSONB('{"foo":"bar"}'));
+    INSERT INTO cdc."ChangeLog" (watermark, change)
+        values ('184', JSONB('{"foo":"bar"}'));
     `;
 
     // Should be a no-op.
@@ -61,7 +61,6 @@ describe('change-streamer/schema/tables', () => {
       ['cdc.ChangeLog']: [
         {
           watermark: '184',
-          pos: 0n,
           change: {foo: 'bar'},
         },
       ],
