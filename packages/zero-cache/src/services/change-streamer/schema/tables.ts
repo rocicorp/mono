@@ -9,8 +9,8 @@ export const PG_SCHEMA = 'cdc';
 const CREATE_CDC_SCHEMA = `CREATE SCHEMA IF NOT EXISTS cdc;`;
 
 export type ChangeLogEntry = {
-  // Strictly monotonically lexicographically sortable value that uniquely
-  // identifies a position in the change stream.
+  // A strictly monotonically increasing, lexicographically sortable
+  // value that uniquely identifies a position in the change stream.
   watermark: string;
   change: Change;
 };

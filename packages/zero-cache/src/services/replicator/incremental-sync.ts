@@ -66,7 +66,8 @@ export class IncrementalSyncer {
     this.#notifier.notifySubscribers();
 
     const {publications, watermark} = getSubscriptionState(this.#replica);
-    let lastLSN = fromLexiVersion(watermark);
+    // Note: This will go away when migrating to the ChangeStreamer.
+    let lastLSN = fromLexiVersion(watermark, /* commit offset */ 2);
 
     lc.info?.(`Syncing publications ${publications}`);
     while (!this.#stopped) {

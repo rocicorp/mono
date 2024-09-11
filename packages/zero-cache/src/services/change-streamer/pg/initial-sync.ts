@@ -24,6 +24,7 @@ import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
+import {lsnOffset} from './change-source.js';
 import {createTableStatement} from './tables/create.js';
 import {
   getPublicationInfo,
@@ -89,7 +90,11 @@ export async function initialSync(
     );
     copiers.setDone();
 
-    initReplicationState(tx, pubNames, toLexiVersion(lsn));
+    initReplicationState(
+      tx,
+      pubNames,
+      toLexiVersion(lsn, lsnOffset({tag: 'commit'})),
+    );
     initChangeLog(tx);
     lc.info?.(`Synced initial data from ${pubNames} up to ${lsn}`);
 

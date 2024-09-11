@@ -178,7 +178,7 @@ class PostgresChangeSource implements ChangeSource {
  * This ensures that the resulting watermarks are strictly monotonic and
  * sorted in stream order.
  */
-function lsnOffset(change: Change) {
+export function lsnOffset(change: Pick<Change, 'tag'>) {
   const {tag} = change;
   switch (tag) {
     case 'begin':
