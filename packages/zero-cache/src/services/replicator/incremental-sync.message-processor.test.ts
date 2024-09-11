@@ -4,8 +4,8 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
-import {fromLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {Database} from 'zqlite/src/db.js';
+import {fromLexiVersion} from '../change-streamer/pg/lsn.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,

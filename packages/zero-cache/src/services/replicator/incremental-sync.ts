@@ -12,11 +12,11 @@ import {liteValues} from 'zero-cache/src/types/lite.js';
 import {Database} from 'zqlite/src/db.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
-import {fromLexiVersion, toLexiVersion} from '../../types/lsn.js';
 import {liteTableName} from '../../types/names.js';
 import {registerPostgresTypeParsers} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {replicationSlot} from '../change-streamer/pg/initial-sync.js';
+import {fromLexiVersion, toLexiVersion} from '../change-streamer/pg/lsn.js';
 import {Notifier} from './notifier.js';
 import {ReplicaVersionReady} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
@@ -67,7 +67,7 @@ export class IncrementalSyncer {
 
     const {publications, watermark} = getSubscriptionState(this.#replica);
     // Note: This will go away when migrating to the ChangeStreamer.
-    let lastLSN = fromLexiVersion(watermark, /* commit offset */ 2);
+    let lastLSN = fromLexiVersion(watermark);
 
     lc.info?.(`Syncing publications ${publications}`);
     while (!this.#stopped) {
@@ -453,7 +453,7 @@ class TransactionProcessor {
       this.#db.rollback();
       throw new ReplayedTransactionError(lsn);
     }
-    updateReplicationWatermark(this.#db, toLexiVersion(lsn));
+    updateReplicationWatermark(this.#db, nextVersion);
     this.#db.commit();
 
     const elapsedMs = Date.now() - this.#startMs;

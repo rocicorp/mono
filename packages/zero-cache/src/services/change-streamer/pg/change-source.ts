@@ -6,7 +6,6 @@ import {
 } from 'pg-logical-replication';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
@@ -16,6 +15,7 @@ import {ChangeEntry} from '../change-streamer.js';
 import {Change} from '../schema/change.js';
 import {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
+import {toLexiVersion} from './lsn.js';
 import {initSyncSchema} from './sync-schema.js';
 
 // BigInt support from LogicalReplicationService.
@@ -116,90 +116,17 @@ class PostgresChangeSource implements ChangeSource {
   }
 }
 
-/**
- * Postgres defines the "Log sequence number (LSN)" as a value that
- * "increases monotonically with each new WAL record":
- *
- * https://www.postgresql.org/docs/current/glossary.html#:~:text=Log%20sequence%20number%20(LSN)
- *
- * and a WAL record being a "low-level description of an individual data change".
- *
- * Unfortunately, 'begin' and 'commit' transaction markers are not technically
- * data changes, and while they often have their own LSNs, it is not always
- * the case.
- *
- * In fact, a 'begin' message always has the same LSN as its transaction's first
- * data change. Moreover, executing commands in quick succession can result
- * in a 'commit', the next 'begin', and the subsequent data change all sharing
- * the same LSN:
- *
- *
- * ```json
- * "8F/38B017C0": {
- *   "tag": "insert",
- *   "relation": {
- *   ...
- * }
- * "8F/38B01E18": {
- *   "tag": "commit",
- *   "flags": 0,
- *   "commitLsn": "0000008F/38B01DE8",
- *   "commitEndLsn": "0000008F/38B01E18",
- *   "commitTime": "BigInt(1726014579672237)"
- * },
- * "8F/38B01E18": {
- *   "tag": "begin",
- *   "commitLsn": "0000008F/38B01E98",
- *   "commitTime": "BigInt(1726014580746075)",
- *   "xid": 494599
- * },
- * "8F/38B01E18": {
- *   "tag": "insert",
- *   "relation": {
- *   ...
- * }
- * "8F/38B01EC8": {
- *   "tag": "commit",
- *   "flags": 0,
- *   "commitLsn": "0000008F/38B01E98",
- *   "commitEndLsn": "0000008F/38B01EC8",
- *   "commitTime": "BigInt(1726014580746075)"
- * },
- * ```
- *
- * This renders the LSN very difficult to use as a watermark. Even attaching
- * the position of the message within the transaction (with 'begin' starting at 0)
- * does not work since the 'commit' from the previous transaction would be sorted
- * after the 'begin' from the next one if they shared the same LSN.
- *
- * The workaround to convert an LSN to a monotonic value assumes that all
- * WAL records are more than 2 bytes in size (a safe assumption), and offsets
- * the LSN associated with a 'commit' by -2 and that of a 'begin' by -1.
- * This ensures that the resulting watermarks are strictly monotonic and
- * sorted in stream order.
- */
-export function lsnOffset(change: Pick<Change, 'tag'>) {
-  const {tag} = change;
-  switch (tag) {
-    case 'begin':
-      return -1;
-    case 'commit':
-      return -2;
-    default:
-      return 0;
-  }
-}
-
 function messageToChangeEntry(lsn: string, msg: Pgoutput.Message) {
   const change = msg as Change;
-  switch (change.tag) {
+  const {tag} = change;
+  switch (tag) {
     case 'begin':
     case 'insert':
     case 'update':
     case 'delete':
     case 'truncate':
     case 'commit': {
-      const watermark = toLexiVersion(lsn, lsnOffset(change));
+      const watermark = toLexiVersion(lsn, tag);
       return {watermark, change};
     }
 
