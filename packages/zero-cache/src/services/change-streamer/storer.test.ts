@@ -356,9 +356,8 @@ describe('change-streamer/storer', () => {
     storer.store({watermark: '0c', change: messages.commit('654')});
     expect(await commits.dequeue()).toBe('654');
 
-    expect(
-      await db`SELECT * FROM cdc."ChangeLog" WHERE watermark >= '07'`,
-    ).toMatchInlineSnapshot(`
+    expect(await db`SELECT * FROM cdc."ChangeLog" WHERE watermark >= '07'`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "change": {
