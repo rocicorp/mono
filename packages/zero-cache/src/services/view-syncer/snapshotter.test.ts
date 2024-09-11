@@ -247,14 +247,14 @@ describe('view-syncer/snapshotter', () => {
 
     const diff2 = s1.advance();
     expect(diff2.prev.version).toBe('01');
-    expect(diff2.curr.version).toBe('02');
+    expect(diff2.curr.version).toBe('08');
     expect(diff2.changes).toBe(3);
 
     expect([...diff2]).toMatchInlineSnapshot(`
       [
         {
           "nextValue": {
-            "_0_version": "02",
+            "_0_version": "08",
             "desc": "bard",
             "id": 2n,
             "owner": 10n,
@@ -294,12 +294,12 @@ describe('view-syncer/snapshotter', () => {
     }
     expect(thrown).toBeInstanceOf(InvalidDiffError);
 
-    // The diff for s2 goes straight from '00' to '02'.
+    // The diff for s2 goes straight from '00' to '08'.
     // This will coalesce multiple changes to a row, and can result in some noops,
     // (e.g. rows that return to their original state).
     const diff3 = s2.advance();
     expect(diff3.prev.version).toBe('00');
-    expect(diff3.curr.version).toBe('02');
+    expect(diff3.curr.version).toBe('08');
     expect(diff3.changes).toBe(5);
     expect([...diff3]).toMatchInlineSnapshot(`
       [
@@ -330,7 +330,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "02",
+            "_0_version": "08",
             "desc": "bard",
             "id": 2n,
             "owner": 10n,
