@@ -67,7 +67,7 @@ class PostgresChangeSource implements ChangeSource {
     replicaID: string,
     replicationConfig: ReplicationConfig,
   ) {
-    this.#lc = lc;
+    this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
     this.#replicaID = replicaID;
     this.#replicationConfig = replicationConfig;
