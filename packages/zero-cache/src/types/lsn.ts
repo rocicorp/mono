@@ -8,7 +8,7 @@ import {
 /**
  * Parsing and conversion utilities for the pg_lsn Type, which represents
  * the "Log Sequence Number" used as a monotonic progress marker for logical
- * replication from a PostreSQL database.
+ * replication from a PostgresSQL database.
  *
  * The LSN is a 64-bit integer represented in logical replication as two
  * hexadecimal numbers (up to 8 digits each) separated by a slash. This is

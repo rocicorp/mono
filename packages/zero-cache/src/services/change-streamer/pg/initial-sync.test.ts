@@ -518,9 +518,8 @@ describe('replicator/initial-sync', () => {
           lock: number;
         }>();
       expect(replicaState).toMatchObject({
-        watermark: /[0-9A-F]+\/[0-9A-F]+/,
+        watermark: /[0-9a-f]{2,}/,
         stateVersion: '00',
-        nextStateVersion: /[0-9a-f]{2,}/,
       });
       expectTables(replica, {['_zero.ChangeLog']: []});
 

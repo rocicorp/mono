@@ -34,7 +34,6 @@ describe('replicator/schema/replication-state', () => {
           lock: 1,
           watermark: '0a',
           stateVersion: '00',
-          nextStateVersion: '0a',
         },
       ],
     });
@@ -63,7 +62,6 @@ describe('replicator/schema/replication-state', () => {
           lock: 1,
           watermark: '0f',
           stateVersion: '0a',
-          nextStateVersion: '0f',
         },
       ],
     });
@@ -84,7 +82,6 @@ describe('replicator/schema/replication-state', () => {
           lock: 1,
           watermark: '0r',
           stateVersion: '0f',
-          nextStateVersion: '0r',
         },
       ],
     });
