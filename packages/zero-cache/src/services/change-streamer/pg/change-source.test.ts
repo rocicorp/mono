@@ -22,6 +22,7 @@ describe('change-source/pg', {retry: 3}, () => {
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
   let source: ChangeSource;
+  let watermarks: string[];
 
   beforeEach(async () => {
     lc = createSilentLogContext();
@@ -44,6 +45,7 @@ describe('change-source/pg', {retry: 3}, () => {
       REPLICA_ID,
       replicaDbFile.path,
     );
+    watermarks = [];
   });
 
   afterEach(async () => {
@@ -63,7 +65,9 @@ describe('change-source/pg', {retry: 3}, () => {
   }
 
   async function nextChange(sub: Queue<ChangeEntry>) {
-    return (await sub.dequeue()).change;
+    const entry = await sub.dequeue();
+    watermarks.push(entry.watermark);
+    return entry.change;
   }
 
   test('changes', async () => {
@@ -122,5 +126,10 @@ describe('change-source/pg', {retry: 3}, () => {
 
     // Close the stream.
     changes.cancel();
+
+    expect(watermarks).toHaveLength(10);
+    expect(new Set(watermarks).size).toBe(10);
+
+    expect([...watermarks].sort()).toEqual(watermarks);
   });
 });

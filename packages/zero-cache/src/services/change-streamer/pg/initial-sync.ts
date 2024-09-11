@@ -10,7 +10,6 @@ import {
   liteValues,
   mapPostgresToLiteDataType,
 } from 'zero-cache/src/types/lite.js';
-import {toLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {liteTableName} from 'zero-cache/src/types/names.js';
 import {PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
 import type {
@@ -24,6 +23,7 @@ import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
+import {toLexiVersion} from './lsn.js';
 import {createTableStatement} from './tables/create.js';
 import {
   getPublicationInfo,

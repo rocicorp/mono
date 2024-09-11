@@ -8,7 +8,6 @@ import {
   testDBs,
 } from 'zero-cache/src/test/db.js';
 import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
-import {fromLexiVersion} from 'zero-cache/src/types/lsn.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import type {
   FilteredTableSpec,
@@ -17,6 +16,7 @@ import type {
 } from 'zero-cache/src/types/specs.js';
 import {Database} from 'zqlite/src/db.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
+import {fromLexiVersion} from './lsn.js';
 import {getPublicationInfo} from './tables/published.js';
 
 const REPLICA_ID = 'initial_sync_test_id';

@@ -9,23 +9,16 @@ export const PG_SCHEMA = 'cdc';
 const CREATE_CDC_SCHEMA = `CREATE SCHEMA IF NOT EXISTS cdc;`;
 
 export type ChangeLogEntry = {
-  // Lexicographically sortable representation of the LSN.
+  // A strictly monotonically increasing, lexicographically sortable
+  // value that uniquely identifies a position in the change stream.
   watermark: string;
-  // The position of the change within the transaction, with the initial
-  // BEGIN starting at 0. This is needed for uniqueness / ordering because
-  // multiple changes can share the same LSN.
-  pos: number;
-
   change: Change;
 };
 
 const CREATE_CHANGE_LOG_TABLE = `
   CREATE TABLE cdc."ChangeLog" (
-    watermark  TEXT,
-    pos        INT8,
-    change     JSONB NOT NULL,
-
-    PRIMARY KEY (watermark, pos)
+    watermark  TEXT PRIMARY KEY,
+    change     JSONB NOT NULL
   );
 `;
 

@@ -123,6 +123,10 @@ describe('change-streamer/subscriber', () => {
     sub.send({watermark: '124', change: messages.begin('23')});
     sub.send({watermark: '125', change: messages.begin('24')});
 
+    // Replays should be ignored.
+    sub.send({watermark: '124', change: messages.begin('23')});
+    sub.send({watermark: '125', change: messages.begin('24')});
+
     sub.close();
     expect(stream).toMatchInlineSnapshot(`
       [
