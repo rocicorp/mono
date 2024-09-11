@@ -28,7 +28,7 @@ export function toLexiVersion(
   assert(parts.length === 2, `Malformed LSN: "${lsn}"`);
   const high = BigInt(`0x${parts[0]}`);
   const low = BigInt(`0x${parts[1]}`);
-  const val = (high << 32n) + low + BigInt(lsnOffset(type));
+  const val = (high << 32n) + low + lsnOffset(type);
   return versionToLexi(val);
 }
 
@@ -36,7 +36,7 @@ export function fromLexiVersion(
   lexi: LexiVersion,
   type: RecordType = 'commit',
 ): LSN {
-  const val = versionFromLexi(lexi) - BigInt(lsnOffset(type));
+  const val = versionFromLexi(lexi) - lsnOffset(type);
   const high = val >> 32n;
   const low = val & 0xffffffffn;
   return `${high.toString(16).toUpperCase()}/${low.toString(16).toUpperCase()}`;
@@ -101,19 +101,21 @@ export function fromLexiVersion(
  * The workaround to convert an LSN to a monotonic value assumes that all
  * WAL records are more than 2 bytes in size (a safe assumption), and offsets
  * the LSN associated with a 'begin' record by 1 and those of non-'commit'
- * records by 2.
+ * records by 2. Note that the scheme keeps the LSN of 'commit' messages the
+ * same as these are most often used in the Postgres replication protocol
+ * (e.g. as the `confirmed_flush_lsn`).
  *
  * This ensures that the resulting watermarks are strictly monotonic and
  * sorted in stream order.
  */
 
-function lsnOffset(type: RecordType) {
+function lsnOffset(type: RecordType): bigint {
   switch (type) {
     case 'commit':
-      return 0;
+      return 0n;
     case 'begin':
-      return 1;
+      return 1n;
     default:
-      return 2;
+      return 2n;
   }
 }
