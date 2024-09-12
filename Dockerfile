@@ -5,7 +5,9 @@ RUN mkdir -p /opt/app
 RUN mkdir -p /data/db
 WORKDIR /opt/app
 COPY . ./
-COPY --from=litestream/litestream:latest /usr/local/bin/litestream /usr/local/bin/litestream
+ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.tar.gz /tmp/litestream.tar.gz
+RUN tar -C /usr/local/bin -xzf /tmp/litestream.tar.gz
+RUN chmod +x /usr/local/bin/litestream
 RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc && \
     npm run build-ci && \
     rm -f .npmrc
