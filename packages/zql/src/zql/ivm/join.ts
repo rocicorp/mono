@@ -1,4 +1,5 @@
 import {assert, unreachable} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import type {Change, ChildChange} from './change.js';
 import {
   normalizeUndefined,
@@ -8,7 +9,7 @@ import {
 } from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {Schema} from './schema.js';
-import {take, type Stream} from './stream.js';
+import {first, take, type Stream} from './stream.js';
 
 type Args = {
   parent: Input;
@@ -209,18 +210,16 @@ export class Join implements Input {
           // therefore treat this as a remove from the old row followed by an
           // add to the new row.
 
-          const [x] = [
-            ...take(
+          const {relationships} = must(
+            first(
               this.#child.fetch({
                 constraint: {
                   key: this.#childKey,
                   value: oldChildRow[this.#childKey],
                 },
               }),
-              1,
             ),
-          ];
-          const {relationships} = x;
+          );
 
           pushChildChange(oldChildRow, {
             type: 'remove',

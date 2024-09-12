@@ -237,6 +237,7 @@ export class MemorySource implements Source {
     // If there is an overlay for this output, does it match the requested
     // constraints and filters?
     if (overlay) {
+      // TODO: This looks wrong given that we can have edit changes in the overlay.
       if (!matchesConstraintAndFilters(overlay.change.row)) {
         overlay = undefined;
       }
@@ -262,7 +263,6 @@ export class MemorySource implements Source {
       }
       return o?.change.row;
     };
-
     let startAt = req.start?.row;
     if (startAt) {
       if (req.constraint) {

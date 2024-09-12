@@ -14,7 +14,7 @@ export function* take<T>(stream: Stream<T>, limit: number): Stream<T> {
   let count = 0;
   for (const v of stream) {
     yield v;
-    if (count++ === limit) {
+    if (++count === limit) {
       break;
     }
   }
