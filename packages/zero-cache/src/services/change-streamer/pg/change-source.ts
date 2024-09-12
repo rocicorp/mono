@@ -4,6 +4,7 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
+import {assertString} from 'shared/src/asserts.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
@@ -12,7 +13,7 @@ import {Database} from 'zqlite/src/db.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import {ChangeSource, ChangeStream} from '../change-streamer-service.js';
 import {ChangeEntry} from '../change-streamer.js';
-import {Change} from '../schema/change.js';
+import {Change, MessageCommit} from '../schema/change.js';
 import {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {toLexiVersion} from './lsn.js';
@@ -76,8 +77,11 @@ class PostgresChangeSource implements ChangeSource {
   startStream(): ChangeStream {
     let lastLSN = '0/0';
 
-    const ack = (commit?: Pgoutput.MessageCommit) => {
-      lastLSN = commit?.commitEndLsn ?? lastLSN;
+    const ack = (commit?: MessageCommit) => {
+      if (commit) {
+        assertString(commit.commitEndLsn);
+        lastLSN = commit.commitEndLsn;
+      }
       void service.acknowledge(lastLSN);
     };
 

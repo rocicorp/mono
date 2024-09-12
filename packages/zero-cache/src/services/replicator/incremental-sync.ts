@@ -10,7 +10,7 @@ import type {LexiVersion} from '../../types/lexi-version.js';
 import {liteTableName} from '../../types/names.js';
 import type {Source} from '../../types/streams.js';
 import {ChangeStreamer} from '../change-streamer/change-streamer.js';
-import {Change} from '../change-streamer/schema/change.js';
+import {Change, MessageCommit} from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
 import {ReplicaVersionReady} from './replicator.js';
@@ -111,7 +111,7 @@ function ensureError(err: unknown): Error {
 class ReplayedTransactionError extends Error {
   readonly watermark: string;
 
-  constructor(watermark: string, commit: Pgoutput.MessageCommit) {
+  constructor(watermark: string, commit: MessageCommit) {
     super(`${watermark} has already been processed: ${stringify(commit)}`);
     this.watermark = watermark;
   }
@@ -182,7 +182,7 @@ export class MessageProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = new TransactionProcessor(this.#db, msg);
+      this.#currentTx = new TransactionProcessor(this.#db);
       return;
     }
     // For non-begin messages, there should be a #currentTx set.
@@ -249,7 +249,7 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #version: LexiVersion;
 
-  constructor(db: StatementRunner, _: Pgoutput.MessageBegin) {
+  constructor(db: StatementRunner) {
     this.#startMs = Date.now();
 
     // Although the Replicator / Incremental Syncer is the only writer of the replica,
@@ -365,7 +365,7 @@ class TransactionProcessor {
     }
   }
 
-  processCommit(commit: Pgoutput.MessageCommit, watermark: string) {
+  processCommit(commit: MessageCommit, watermark: string) {
     const nextVersion = watermark;
     if (nextVersion <= this.#version) {
       this.#db.rollback();
