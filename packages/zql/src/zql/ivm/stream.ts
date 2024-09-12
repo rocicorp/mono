@@ -19,3 +19,10 @@ export function* take<T>(stream: Stream<T>, limit: number): Stream<T> {
     }
   }
 }
+
+export function first<T>(stream: Stream<T>): T | undefined {
+  const it = stream[Symbol.iterator]();
+  const {value} = it.next();
+  it.return?.();
+  return value;
+}
