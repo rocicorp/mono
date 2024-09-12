@@ -20,15 +20,6 @@ describe('building the AST', () => {
     });
   });
 
-  test('as sets an alias', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
-    const aliased = issueQuery.as('i');
-    expect(aliased.ast).toEqual({
-      table: 'issue',
-      alias: 'i',
-    });
-  });
-
   test('where inserts a condition', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const where = issueQuery.where('id', '=', '1');
