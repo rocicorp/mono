@@ -158,4 +158,14 @@ describe('replicator/message-processor', () => {
       expect(watermark).toBe(c.acknowledged.at(-1));
     });
   }
+
+  test('abort', () => {
+    const processor = createMessageProcessor(replica);
+
+    expect(replica.inTransaction).toBe(false);
+    processor.processMessage(lc, '02', {tag: 'begin'});
+    expect(replica.inTransaction).toBe(true);
+    processor.abort(lc);
+    expect(replica.inTransaction).toBe(false);
+  });
 });
