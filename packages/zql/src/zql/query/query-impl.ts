@@ -23,7 +23,7 @@ import {
   Schema,
 } from './schema.js';
 import {TypedView} from './typed-view.js';
-import { Row } from '../ivm/data.js';
+import {Row} from '../ivm/data.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -240,9 +240,23 @@ class QueryImpl<
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
-    op: Operator,
-    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
+    opOrValue:
+      | Operator
+      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
+    value?: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
   ): Query<TSchema, TReturn, TAs> {
+    let op: Operator;
+    if (value === undefined) {
+      value = opOrValue as GetFieldTypeNoNullOrUndefined<
+        TSchema,
+        TSelector,
+        Operator
+      >;
+      op = '=';
+    } else {
+      op = opOrValue as Operator;
+    }
+
     return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       where: [
