@@ -23,7 +23,7 @@ test('cancelOnStop', () => {
   expect(cancelable3.cancel).toHaveBeenCalledOnce();
 });
 
-test('backoff', async () => {
+test('backoff', () => {
   const mockSleep = vi
     .fn()
     .mockImplementation(() => [Promise.resolve(), Promise.resolve()]);
