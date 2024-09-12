@@ -81,15 +81,15 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '03', change: issues.begin('0/06')},
+        {watermark: '03', change: issues.begin()},
         {watermark: '04', change: issues.insert('issues', {issueID: 123})},
         {
           watermark: '05',
           change: issues.insert('issues', {issueID: 456, bool: false}),
         },
-        {watermark: '06', change: issues.commit('0/06')},
+        {watermark: '06', change: issues.commit()},
 
-        {watermark: '07', change: issues.begin('0/0B')},
+        {watermark: '07', change: issues.begin()},
         {
           watermark: '08',
           change: issues.insert('issues', {
@@ -105,7 +105,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
           watermark: '0a',
           change: issues.insert('issues', {issueID: 234, flt: 123.456}),
         },
-        {watermark: '0b', change: issues.commit('0/0B')},
+        {watermark: '0b', change: issues.commit()},
       ],
       data: {
         issues: [
@@ -197,7 +197,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '02', change: orgIssues.begin('0/06')},
+        {watermark: '02', change: orgIssues.begin()},
         {
           watermark: '03',
           change: orgIssues.insert('issues', {orgID: 1, issueID: 123}),
@@ -210,9 +210,9 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
           watermark: '05',
           change: orgIssues.insert('issues', {orgID: 2, issueID: 789}),
         },
-        {watermark: '06', change: orgIssues.commit('0/06')},
+        {watermark: '06', change: orgIssues.commit()},
 
-        {watermark: '07', change: orgIssues.begin('0/0A')},
+        {watermark: '07', change: orgIssues.begin()},
         {
           watermark: '08',
           change: orgIssues.update('issues', {
@@ -235,7 +235,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             {orgID: 1, issueID: 123},
           ),
         },
-        {watermark: '0a', change: orgIssues.commit('0/0A')},
+        {watermark: '0a', change: orgIssues.commit()},
       ],
       data: {
         issues: [
@@ -301,7 +301,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '02', change: orgIssues.begin('0/07')},
+        {watermark: '02', change: orgIssues.begin()},
         {
           watermark: '03',
           change: orgIssues.insert('issues', {orgID: 1, issueID: 123}),
@@ -318,9 +318,9 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
           watermark: '06',
           change: orgIssues.insert('issues', {orgID: 2, issueID: 987}),
         },
-        {watermark: '07', change: orgIssues.commit('0/07')},
+        {watermark: '07', change: orgIssues.commit()},
 
-        {watermark: '08', change: orgIssues.begin('0/0C')},
+        {watermark: '08', change: orgIssues.begin()},
         {
           watermark: '09',
           change: orgIssues.delete('issues', {orgID: 1, issueID: 123}),
@@ -333,7 +333,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
           watermark: '0b',
           change: orgIssues.delete('issues', {orgID: 2, issueID: 987}),
         },
-        {watermark: '0c', change: orgIssues.commit('0/0C')},
+        {watermark: '0c', change: orgIssues.commit()},
       ],
       data: {
         issues: [
@@ -375,7 +375,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       CREATE TABLE baz(id INTEGER PRIMARY KEY, _0_version TEXT NOT NULL);
       `,
       downstream: [
-        {watermark: '02', change: fooBarBaz.begin('0/0E')},
+        {watermark: '02', change: fooBarBaz.begin()},
         {watermark: '03', change: fooBarBaz.insert('foo', {id: 1})},
         {watermark: '04', change: fooBarBaz.insert('foo', {id: 2})},
         {watermark: '05', change: fooBarBaz.insert('foo', {id: 3})},
@@ -387,12 +387,12 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         {watermark: '0b', change: fooBarBaz.insert('baz', {id: 9})},
         {watermark: '0c', change: fooBarBaz.truncate('foo', 'baz')},
         {watermark: '0d', change: fooBarBaz.truncate('foo')}, // Redundant. Shouldn't cause problems.
-        {watermark: '0e', change: fooBarBaz.commit('0/0E')},
+        {watermark: '0e', change: fooBarBaz.commit()},
 
-        {watermark: '0f', change: fooBarBaz.begin('0/12')},
+        {watermark: '0f', change: fooBarBaz.begin()},
         {watermark: '0g', change: fooBarBaz.truncate('foo')},
         {watermark: '0h', change: fooBarBaz.insert('foo', {id: 101})},
-        {watermark: '0i', change: fooBarBaz.commit('0/12')},
+        {watermark: '0i', change: fooBarBaz.commit()},
       ],
       data: {
         foo: [{id: 101n, ['_0_version']: '0e'}],
@@ -454,7 +454,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '02', change: orgIssues.begin('0/08')},
+        {watermark: '02', change: orgIssues.begin()},
         {
           watermark: '03',
           change: orgIssues.insert('issues', {orgID: 1, issueID: 123}),
@@ -483,7 +483,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             description: 'foo',
           }),
         },
-        {watermark: '08', change: orgIssues.commit('0/08')},
+        {watermark: '08', change: orgIssues.commit()},
       ],
       data: {
         issues: [

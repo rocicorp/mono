@@ -9,18 +9,18 @@ describe('change-streamer/subscriber', () => {
     const [sub, stream] = createSubscriber('00');
 
     // Send some messages while it is catching up.
-    sub.send({watermark: '11', change: messages.begin('123')});
-    sub.send({watermark: '12', change: messages.commit('124')});
+    sub.send({watermark: '11', change: messages.begin()});
+    sub.send({watermark: '12', change: messages.commit()});
 
     // Send catchup messages.
-    sub.catchup({watermark: '01', change: messages.begin('012')});
-    sub.catchup({watermark: '02', change: messages.commit('013')});
+    sub.catchup({watermark: '01', change: messages.begin()});
+    sub.catchup({watermark: '02', change: messages.commit()});
 
     sub.setCaughtUp();
 
     // Send some messages after catchup.
-    sub.send({watermark: '21', change: messages.begin('321')});
-    sub.send({watermark: '22', change: messages.commit('322')});
+    sub.send({watermark: '21', change: messages.begin()});
+    sub.send({watermark: '22', change: messages.commit()});
 
     sub.close();
 
@@ -30,10 +30,7 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitLsn": "012",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "01",
           },
@@ -42,10 +39,6 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitEndLsn": "013",
-              "commitLsn": null,
-              "commitTime": 0n,
-              "flags": 0,
               "tag": "commit",
             },
             "watermark": "02",
@@ -55,10 +48,7 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitLsn": "123",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "11",
           },
@@ -67,10 +57,6 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitEndLsn": "124",
-              "commitLsn": null,
-              "commitTime": 0n,
-              "flags": 0,
               "tag": "commit",
             },
             "watermark": "12",
@@ -80,10 +66,7 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitLsn": "321",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "21",
           },
@@ -92,10 +75,6 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitEndLsn": "322",
-              "commitLsn": null,
-              "commitTime": 0n,
-              "flags": 0,
               "tag": "commit",
             },
             "watermark": "22",
@@ -111,21 +90,21 @@ describe('change-streamer/subscriber', () => {
     // Technically, catchup should never send any messages if the subscriber
     // is ahead, since the watermark query would return no results. But pretend it
     // does just to ensure that catchup messages are subject to the filter.
-    sub.catchup({watermark: '01', change: messages.begin('01')});
-    sub.catchup({watermark: '02', change: messages.begin('02')});
+    sub.catchup({watermark: '01', change: messages.begin()});
+    sub.catchup({watermark: '02', change: messages.begin()});
     sub.setCaughtUp();
 
     // Still lower than the watermark ...
-    sub.send({watermark: '121', change: messages.begin('12')});
-    sub.send({watermark: '123', change: messages.begin('13')});
+    sub.send({watermark: '121', change: messages.begin()});
+    sub.send({watermark: '123', change: messages.begin()});
 
     // These should be sent.
-    sub.send({watermark: '124', change: messages.begin('23')});
-    sub.send({watermark: '125', change: messages.begin('24')});
+    sub.send({watermark: '124', change: messages.begin()});
+    sub.send({watermark: '125', change: messages.begin()});
 
     // Replays should be ignored.
-    sub.send({watermark: '124', change: messages.begin('23')});
-    sub.send({watermark: '125', change: messages.begin('24')});
+    sub.send({watermark: '124', change: messages.begin()});
+    sub.send({watermark: '125', change: messages.begin()});
 
     sub.close();
     expect(stream).toMatchInlineSnapshot(`
@@ -134,10 +113,7 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitLsn": "23",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "124",
           },
@@ -146,10 +122,7 @@ describe('change-streamer/subscriber', () => {
           "change",
           {
             "change": {
-              "commitLsn": "24",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "125",
           },

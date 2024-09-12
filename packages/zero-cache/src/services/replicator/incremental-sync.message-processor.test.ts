@@ -50,18 +50,18 @@ describe('replicator/message-processor', () => {
         ['04', messages.begin()],
         ['05', messages.insert('foo', {id: 123})],
         ['06', messages.insert('foo', {id: 234})],
-        ['07', messages.commit('0/E')],
+        ['07', messages.commit()],
 
         // Induce a failure with a missing 'begin' message.
         ['08', messages.insert('foo', {id: 456})],
         ['09', messages.insert('foo', {id: 345})],
-        ['0a', messages.commit('0/31')],
+        ['0a', messages.commit()],
 
         // This should be dropped.
         ['0b', messages.begin()],
         ['0c', messages.insert('foo', {id: 789})],
         ['0d', messages.insert('foo', {id: 987})],
-        ['0e', messages.commit('0/51')],
+        ['0e', messages.commit()],
       ],
       acknowledged: ['07'],
       expectedVersionChanges: 1,
@@ -78,11 +78,11 @@ describe('replicator/message-processor', () => {
       messages: [
         ['05', messages.begin()],
         ['06', messages.insert('foo', {id: 123})],
-        ['08', messages.commit('0/4')],
+        ['08', messages.commit()],
 
         ['09', messages.begin()],
         ['0a', messages.insert('foo', {id: 234})],
-        ['0c', messages.commit('0/A')],
+        ['0c', messages.commit()],
 
         // Simulate Postgres resending the first two transactions (e.g. reconnecting after
         // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
@@ -92,7 +92,7 @@ describe('replicator/message-processor', () => {
         // This would not actually happen, but it allows us to confirm that no mutations
         // are applied.
         ['07', messages.insert('foo', {id: 456})],
-        ['08', messages.commit('0/4')],
+        ['08', messages.commit()],
 
         ['09', messages.begin()],
         ['0a', messages.insert('foo', {id: 234})],
@@ -100,13 +100,13 @@ describe('replicator/message-processor', () => {
         // This would not actually happen, but it allows us to confirm that no mutations
         // are applied.
         ['0b', messages.insert('foo', {id: 654})],
-        ['0c', messages.commit('0/A')],
+        ['0c', messages.commit()],
 
         // This should succeed.
         ['0d', messages.begin()],
         ['0e', messages.insert('foo', {id: 789})],
         ['0f', messages.insert('foo', {id: 987})],
-        ['0g', messages.commit('0/F')],
+        ['0g', messages.commit()],
       ],
       acknowledged: [
         '08',
