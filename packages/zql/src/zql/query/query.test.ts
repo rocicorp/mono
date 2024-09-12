@@ -210,6 +210,26 @@ describe('types', () => {
     >();
   });
 
+  test('where-optional-op', () => {
+    const query = mockQuery as unknown as Query<TestSchema>;
+
+    const query2 = query.where('s', 'foo');
+    expectTypeOf(query2.materialize().data).toMatchTypeOf<Array<{}>>();
+
+    // @ts-expect-error - cannot use a field that does not exist
+    query.where('doesNotExist', 'foo');
+    // @ts-expect-error - value and field types must match
+    query.where('b', 'false');
+
+    expectTypeOf(
+      query.select('b').where('b', true).materialize().data,
+    ).toMatchTypeOf<
+      Array<{
+        b: boolean;
+      }>
+    >();
+  });
+
   test('start', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
     const query2 = query.start({b: true, s: 'foo'});
