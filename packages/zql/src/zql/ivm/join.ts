@@ -1,5 +1,5 @@
 import {assert, unreachable} from 'shared/src/asserts.js';
-import type {Change} from './change.js';
+import type {Change, ChildChange} from './change.js';
 import {
   normalizeUndefined,
   type Node,
@@ -174,7 +174,7 @@ export class Join implements Input {
       });
 
       for (const parentNode of parentNodes) {
-        const childChange: Change = {
+        const childChange: ChildChange = {
           type: 'child',
           row: parentNode.row,
           child: {
@@ -197,11 +197,10 @@ export class Join implements Input {
       case 'edit': {
         const childRow = change.row;
         const oldChildRow = change.oldRow;
-        const oldChildKeyValue = normalizeUndefined(
-          oldChildRow[this.#childKey],
-        );
-        const newChildKeyValue = normalizeUndefined(childRow[this.#childKey]);
-        if (oldChildKeyValue === newChildKeyValue) {
+        if (
+          normalizeUndefined(oldChildRow[this.#childKey]) ===
+          normalizeUndefined(childRow[this.#childKey])
+        ) {
           // The child row was edited in a way that does not change the relationship.
           // We can therefore just push the change down (wrapped in a child change).
           pushChildChange(childRow, change);
@@ -209,18 +208,32 @@ export class Join implements Input {
           // The child row was edited in a way that changes the relationship. We
           // therefore treat this as a remove from the old row followed by an
           // add to the new row.
+
+          const [x] = [
+            ...take(
+              this.#child.fetch({
+                constraint: {
+                  key: this.#childKey,
+                  value: oldChildRow[this.#childKey],
+                },
+              }),
+              1,
+            ),
+          ];
+          const {relationships} = x;
+
           pushChildChange(oldChildRow, {
             type: 'remove',
             node: {
               row: oldChildRow,
-              relationships: {},
+              relationships,
             },
           });
           pushChildChange(childRow, {
             type: 'add',
             node: {
               row: childRow,
-              relationships: {},
+              relationships,
             },
           });
         }

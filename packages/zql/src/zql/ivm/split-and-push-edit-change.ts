@@ -18,7 +18,10 @@ export function splitAndPushEditChange(
   if (oldWasPresent && newIsPresent) {
     output.push(change);
   } else if (oldWasPresent && !newIsPresent) {
-    output!.push({
+    // The relationships are empty at this point and that is fine since
+    // splitAndPushEditChange is only used by operators that are before the Join
+    // operator.
+    output.push({
       type: 'remove',
       node: {
         row: change.oldRow,
