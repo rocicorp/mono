@@ -325,6 +325,8 @@ export class Zero<QD extends SchemaDefs> {
 
   readonly query: MakeEntityQueriesFromQueryDefs<QD>;
 
+  // TODO: Metrics needs to be rethought entirely as we're not going to
+  // send metrics to customer server.
   #metrics: MetricManager;
 
   // Store as field to allow test subclass to override. Web API doesn't allow
@@ -441,7 +443,8 @@ export class Zero<QD extends SchemaDefs> {
 
     this.#metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
-      host: location.host,
+      // RN doesn't have location.
+      host: typeof location === 'undefined' ? '' : location.host,
       source: 'client',
       reporter: this.#enableAnalytics
         ? allSeries => this.#reportMetrics(allSeries)
@@ -1507,7 +1510,8 @@ export function createSocket(
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
   return new WebSocket(
-    url,
+    // toString() required for RN URL polyfill.
+    url.toString(),
     auth === '' || auth === undefined ? undefined : encodeURIComponent(auth),
   );
 }
