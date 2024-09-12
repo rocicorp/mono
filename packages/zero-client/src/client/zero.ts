@@ -15,7 +15,7 @@ import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
 import type {UpdateNeededReason as ReplicacheUpdateNeededReason} from 'replicache/src/types.js';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
-import {getDocument} from 'shared/src/get-document.js';
+import {getDocument, getLocation} from 'shared/src/browser-env.js';
 import {must} from 'shared/src/must.js';
 import {navigator} from 'shared/src/navigator.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
@@ -325,11 +325,13 @@ export class Zero<QD extends SchemaDefs> {
 
   readonly query: MakeEntityQueriesFromQueryDefs<QD>;
 
+  // TODO: Metrics needs to be rethought entirely as we're not going to
+  // send metrics to customer server.
   #metrics: MetricManager;
 
   // Store as field to allow test subclass to override. Web API doesn't allow
   // overwriting location fields for security reasons.
-  #reload = () => location.reload();
+  #reload = () => getLocation()?.reload();
 
   /**
    * Constructs a new Zero client.
@@ -441,7 +443,7 @@ export class Zero<QD extends SchemaDefs> {
 
     this.#metrics = new MetricManager({
       reportIntervalMs: REPORT_INTERVAL_MS,
-      host: location.host,
+      host: getLocation()?.host ?? '',
       source: 'client',
       reporter: this.#enableAnalytics
         ? allSeries => this.#reportMetrics(allSeries)
@@ -1507,7 +1509,8 @@ export function createSocket(
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
   return new WebSocket(
-    url,
+    // toString() required for RN URL polyfill.
+    url.toString(),
     auth === '' || auth === undefined ? undefined : encodeURIComponent(auth),
   );
 }
