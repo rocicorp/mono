@@ -74,6 +74,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
   #cvr: CVRSnapshot | undefined;
+  #pipelinesReady = false;
 
   constructor(
     lc: LogContext,
@@ -105,14 +106,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async run(): Promise<void> {
     try {
       for await (const _ of this.#versionChanges) {
+        if (!this.#pipelines.initialized()) {
+          // On the first version-ready signal, connect to the replica.
+          this.#pipelines.init();
+        }
         await this.#runInLockWithCVR(async cvr => {
-          if (!this.#pipelines.initialized()) {
-            this.#pipelines.init();
-            this.#hydrateUnchangedQueries(cvr);
-            await this.#syncQueryPipelineSet(cvr);
-          } else {
+          if (this.#pipelinesReady) {
             await this.#advancePipelines(cvr);
+            return;
           }
+
+          // Advance the snapshot to the current version. Note that it is
+          // okay not to iterate over the diff because there are no pipelines
+          // to push changes to.
+          const {version} = this.#pipelines.advance();
+          if (version < cvr.version.stateVersion) {
+            this.#lc.debug?.(
+              `replica@${version} is behind cvr@${versionString(cvr.version)}`,
+            );
+            return; // Wait for the next advancement.
+          }
+
+          // Initialize the pipelines.
+          this.#hydrateUnchangedQueries(cvr);
+          await this.#syncQueryPipelineSet(cvr);
+          this.#pipelinesReady = true;
         });
       }
 
@@ -321,7 +339,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr = this.#cvr; // For #syncQueryPipelineSet().
     }
 
-    if (this.#pipelines.initialized()) {
+    if (this.#pipelinesReady) {
       await this.#syncQueryPipelineSet(cvr);
     }
   };
