@@ -1,10 +1,12 @@
+import {getNonCryptoRandomValues} from 'shared/src/random-values.js';
+
 import type {ClientID} from './ids.js';
 
 let sessionID = '';
 function getSessionID() {
   if (sessionID === '') {
     const buf = new Uint8Array(4);
-    crypto.getRandomValues(buf);
+    getNonCryptoRandomValues(buf);
     sessionID = Array.from(buf, x => x.toString(16)).join('');
   }
   return sessionID;
