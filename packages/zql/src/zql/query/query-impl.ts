@@ -3,6 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import {AST, Ordering} from '../ast/ast.js';
 import {BuilderDelegate, buildPipeline} from '../builder/builder.js';
 import {ArrayView} from '../ivm/array-view.js';
+import {Row} from '../ivm/data.js';
 import {
   AddSelections,
   AddSubselect,
@@ -23,7 +24,6 @@ import {
   Schema,
 } from './schema.js';
 import {TypedView} from './typed-view.js';
-import {Row} from '../ivm/data.js';
 
 export function newQuery<
   TSchema extends Schema,
@@ -35,12 +35,7 @@ export function newQuery<
 function newQueryWithAST<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow>,
-  TAs extends string,
->(
-  delegate: QueryDelegate,
-  schema: TSchema,
-  ast: AST,
-): Query<TSchema, TReturn, TAs> {
+>(delegate: QueryDelegate, schema: TSchema, ast: AST): Query<TSchema, TReturn> {
   return new QueryImpl(delegate, schema, ast);
 }
 
@@ -53,8 +48,7 @@ export interface QueryDelegate extends BuilderDelegate {
 class QueryImpl<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
-  TAs extends string = string,
-> implements Query<TSchema, TReturn, TAs>
+> implements Query<TSchema, TReturn>
 {
   readonly #ast: AST;
   readonly #delegate: QueryDelegate;
@@ -74,7 +68,7 @@ class QueryImpl<
 
   select<TFields extends Selector<TSchema>[]>(
     ..._fields: TFields
-  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[], TAs> {
+  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[]> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
     return newQueryWithAST(this.#delegate, this.#schema, this.#ast);
   }
@@ -138,18 +132,17 @@ class QueryImpl<
             DefaultQueryResultRow<
               PullSchemaForRelationship<TSchema, TRelationship>
             >
-          >,
-          TRelationship & string
+          >
         >,
-        TReturn
+        TReturn,
+        TRelationship & string
       >
-    >,
-    TAs
+    >
   >;
   related<
     TRelationship extends keyof TSchema['relationships'],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TSub extends Query<any, any, any>,
+    TSub extends Query<any, any>,
   >(
     relationship: TRelationship,
     cb: (
@@ -159,11 +152,10 @@ class QueryImpl<
           DefaultQueryResultRow<
             PullSchemaForRelationship<TSchema, TRelationship>
           >
-        >,
-        TRelationship & string
+        >
       >,
     ) => TSub = q => q as any,
-  ): Query<TSchema, Array<AddSubselect<TSub, TReturn>>, TAs> {
+  ) {
     const related = this.#schema.relationships?.[relationship as string];
     assert(related, 'Invalid relationship');
     const related1 = related;
@@ -244,7 +236,7 @@ class QueryImpl<
       | Operator
       | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
     value?: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
-  ): Query<TSchema, TReturn, TAs> {
+  ): Query<TSchema, TReturn> {
     let op: Operator;
     if (value === undefined) {
       value = opOrValue as GetFieldTypeNoNullOrUndefined<
@@ -271,17 +263,10 @@ class QueryImpl<
     });
   }
 
-  as<TAs2 extends string>(alias: TAs2): Query<TSchema, TReturn, TAs2> {
-    return newQueryWithAST(this.#delegate, this.#schema, {
-      ...this.#ast,
-      alias,
-    });
-  }
-
   start(
     row: Partial<SchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
-  ): Query<TSchema, TReturn, TAs> {
+  ): Query<TSchema, TReturn> {
     return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       start: {
@@ -291,7 +276,7 @@ class QueryImpl<
     });
   }
 
-  limit(limit: number): Query<TSchema, TReturn, TAs> {
+  limit(limit: number): Query<TSchema, TReturn> {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -308,7 +293,7 @@ class QueryImpl<
   orderBy<TSelector extends keyof TSchema['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TReturn, TAs> {
+  ): Query<TSchema, TReturn> {
     return newQueryWithAST(this.#delegate, this.#schema, {
       ...this.#ast,
       orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
