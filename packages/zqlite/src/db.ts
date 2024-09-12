@@ -48,6 +48,10 @@ export class Database {
   get name() {
     return this.#db.name;
   }
+
+  get inTransaction() {
+    return this.#db.inTransaction;
+  }
 }
 
 export class Statement {

@@ -10,19 +10,30 @@ export type RetryConfig = {
   maxRetryDelay?: number;
 };
 
+export interface Cancelable {
+  cancel(): void;
+}
+
+export type UnregisterFn = () => void;
+
 /**
  * Facilitates lifecycle control with exponential backoff.
  */
 export class RunningState {
   readonly #serviceName: string;
   readonly #controller: AbortController;
+  readonly #sleep: typeof sleepWithAbort;
   readonly #stopped: Promise<void>;
 
   readonly #initialRetryDelay: number;
   readonly #maxRetryDelay: number;
   #retryDelay: number;
 
-  constructor(serviceName: string, retryConfig?: RetryConfig) {
+  constructor(
+    serviceName: string,
+    retryConfig?: RetryConfig,
+    sleeper = sleepWithAbort,
+  ) {
     const {
       initialRetryDelay = DEFAULT_INITIAL_RETRY_DELAY_MS,
       maxRetryDelay = DEFAULT_MAX_RETRY_DELAY_MS,
@@ -34,6 +45,7 @@ export class RunningState {
     this.#retryDelay = initialRetryDelay;
 
     this.#controller = new AbortController();
+    this.#sleep = sleeper;
 
     const {promise, resolve} = resolver();
     this.#stopped = promise;
@@ -50,6 +62,16 @@ export class RunningState {
    */
   shouldRun(): boolean {
     return !this.#controller.signal.aborted;
+  }
+
+  /**
+   * Registers a Cancelable object to be invoked when {@link stop()} is called.
+   * Returns a method to unregister the object.
+   */
+  cancelOnStop(c: Cancelable): UnregisterFn {
+    const onStop = () => c.cancel();
+    this.#controller.signal.addEventListener('abort', onStop, {once: true});
+    return () => this.#controller.signal.removeEventListener('abort', onStop);
   }
 
   /**
@@ -88,7 +110,7 @@ export class RunningState {
 
     if (this.shouldRun()) {
       lc.info?.(`retrying ${this.#serviceName} in ${delay} ms`);
-      await Promise.race(sleepWithAbort(delay, this.#controller.signal));
+      await Promise.race(this.#sleep(delay, this.#controller.signal));
     }
   }
 
