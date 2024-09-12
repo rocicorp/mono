@@ -9,7 +9,11 @@ import {
 import {RowKey, RowValue} from 'zero-cache/src/types/row-key.js';
 import {h32} from 'zero-cache/src/types/xxhash.js';
 import {Database} from 'zqlite/src/db.js';
-import {Change} from '../change-streamer/schema/change.js';
+import {
+  Change,
+  MessageBegin,
+  MessageCommit,
+} from '../change-streamer/schema/change.js';
 import {MessageProcessor} from './incremental-sync.js';
 
 const NOOP = () => {};
@@ -41,19 +45,12 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
       let watermark = Number(versionFromLexi(finalWatermark)) - msgs.length - 1;
       messageProcessor.processMessage(lc, versionToLexi(watermark++), {
         tag: 'begin',
-        commitLsn: null,
-        commitTime: 0n,
-        xid: 0,
       });
       for (const msg of msgs) {
         messageProcessor.processMessage(lc, versionToLexi(watermark++), msg);
       }
       messageProcessor.processMessage(lc, finalWatermark, {
         tag: 'commit',
-        flags: 0,
-        commitLsn: null,
-        commitEndLsn: finalWatermark,
-        commitTime: 0n,
       });
     },
   };
@@ -103,8 +100,8 @@ export class ReplicationMessages<
     return relation;
   }
 
-  begin(commitLsn: string | null = null): Pgoutput.MessageBegin {
-    return {tag: 'begin', commitLsn, commitTime: 0n, xid: 0};
+  begin(): MessageBegin {
+    return {tag: 'begin'};
   }
 
   insert<TableName extends string & keyof TablesAndKeys>(
@@ -153,13 +150,7 @@ export class ReplicationMessages<
     };
   }
 
-  commit(lsn: string): Pgoutput.MessageCommit {
-    return {
-      tag: 'commit',
-      flags: 0,
-      commitLsn: null,
-      commitEndLsn: lsn,
-      commitTime: 0n,
-    };
+  commit(extra?: object): MessageCommit {
+    return {tag: 'commit', ...extra};
   }
 }

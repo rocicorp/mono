@@ -15,12 +15,12 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward({watermark: '11', change: messages.begin('123')});
+    forwarder.forward({watermark: '11', change: messages.begin()});
     forwarder.add(sub2);
     forwarder.forward({watermark: '12', change: messages.truncate('issues')});
-    forwarder.forward({watermark: '13', change: messages.commit('lsn')});
+    forwarder.forward({watermark: '13', change: messages.commit()});
     forwarder.add(sub3);
-    forwarder.forward({watermark: '14', change: messages.begin('456')});
+    forwarder.forward({watermark: '14', change: messages.begin()});
     forwarder.add(sub4);
 
     for (const sub of [sub1, sub2, sub3, sub4]) {
@@ -34,10 +34,7 @@ describe('change-streamer/forwarder', () => {
           "change",
           {
             "change": {
-              "commitLsn": "123",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "11",
           },
@@ -80,10 +77,6 @@ describe('change-streamer/forwarder', () => {
           "change",
           {
             "change": {
-              "commitEndLsn": "lsn",
-              "commitLsn": null,
-              "commitTime": 0n,
-              "flags": 0,
               "tag": "commit",
             },
             "watermark": "13",
@@ -93,10 +86,7 @@ describe('change-streamer/forwarder', () => {
           "change",
           {
             "change": {
-              "commitLsn": "456",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "14",
           },
@@ -112,10 +102,7 @@ describe('change-streamer/forwarder', () => {
           "change",
           {
             "change": {
-              "commitLsn": "456",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "14",
           },
@@ -128,10 +115,7 @@ describe('change-streamer/forwarder', () => {
           "change",
           {
             "change": {
-              "commitLsn": "456",
-              "commitTime": 0n,
               "tag": "begin",
-              "xid": 0,
             },
             "watermark": "14",
           },

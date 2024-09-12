@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
@@ -17,6 +16,7 @@ import {
   ChangeStreamerService,
   Downstream,
 } from './change-streamer.js';
+import {MessageCommit} from './schema/change.js';
 import {ChangeLogEntry} from './schema/tables.js';
 
 describe('change-streamer/service', {retry: 3}, () => {
@@ -24,7 +24,7 @@ describe('change-streamer/service', {retry: 3}, () => {
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeEntry>;
-  let acks: Queue<Pgoutput.MessageCommit>;
+  let acks: Queue<MessageCommit>;
 
   const REPLICA_VERSION = '01';
 
@@ -96,7 +96,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     changes.push({
       watermark: '05',
-      change: messages.commit('04'),
+      change: messages.commit({extra: 'fields'}),
     });
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -108,7 +108,10 @@ describe('change-streamer/service', {retry: 3}, () => {
       tag: 'insert',
       new: {id: 'world'},
     });
-    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      extra: 'fields',
+    });
 
     // Await the ACK for the single commit.
     await acks.dequeue();
@@ -137,7 +140,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     changes.push({
       watermark: '05',
-      change: messages.commit('04'),
+      change: messages.commit({extra: 'stuff'}),
     });
 
     // Subscribe to the original watermark.
@@ -156,7 +159,7 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     changes.push({
       watermark: '08',
-      change: messages.commit('06'),
+      change: messages.commit({more: 'stuff'}),
     });
 
     // Verify that all changes were sent to the subscriber ...
@@ -170,13 +173,19 @@ describe('change-streamer/service', {retry: 3}, () => {
       tag: 'insert',
       new: {id: 'world'},
     });
-    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      extra: 'stuff',
+    });
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'delete',
       key: {id: 'world'},
     });
-    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      more: 'stuff',
+    });
 
     // Two commits
     await acks.dequeue();
@@ -216,7 +225,7 @@ describe('change-streamer/service', {retry: 3}, () => {
         bool: true,
       }),
     });
-    changes.push({watermark: '04', change: messages.commit('03')});
+    changes.push({watermark: '04', change: messages.commit({extra: 'info'})});
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
@@ -229,7 +238,10 @@ describe('change-streamer/service', {retry: 3}, () => {
         bool: true,
       },
     });
-    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      extra: 'info',
+    });
 
     await acks.dequeue();
 
@@ -270,6 +282,9 @@ describe('change-streamer/service', {retry: 3}, () => {
         bool: true,
       },
     });
-    expect(await nextChange(catchup)).toMatchObject({tag: 'commit'});
+    expect(await nextChange(catchup)).toMatchObject({
+      tag: 'commit',
+      extra: 'info',
+    });
   });
 });

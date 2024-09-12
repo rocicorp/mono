@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
@@ -9,6 +8,7 @@ import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Service} from '../service.js';
 import {ChangeEntry} from './change-streamer.js';
+import {MessageCommit} from './schema/change.js';
 import {Subscriber} from './subscriber.js';
 
 type QueueEntry = ['change', ChangeEntry] | ['subscriber', Subscriber];
@@ -21,14 +21,14 @@ export class Storer implements Service {
   readonly id = 'storer';
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
-  readonly #onCommit: (c: Pgoutput.MessageCommit) => void;
+  readonly #onCommit: (c: MessageCommit) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly stopped = resolver<false>();
 
   constructor(
     lc: LogContext,
     db: PostgresDB,
-    onCommit: (c: Pgoutput.MessageCommit) => void,
+    onCommit: (c: MessageCommit) => void,
   ) {
     this.#lc = lc;
     this.#db = db;
@@ -66,7 +66,7 @@ export class Storer implements Service {
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
         tx = new TransactionPool(
-          this.#lc.withContext('lsn', change.commitLsn),
+          this.#lc.withContext('watermark', watermark),
           Mode.SERIALIZABLE,
         );
         void tx.run(this.#db);

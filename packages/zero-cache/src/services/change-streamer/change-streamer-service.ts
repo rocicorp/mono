@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {Pgoutput} from 'pg-logical-replication';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Sink, Source} from 'zero-cache/src/types/streams.js';
@@ -15,6 +14,7 @@ import {
   SubscriberContext,
 } from './change-streamer.js';
 import {Forwarder} from './forwarder.js';
+import {MessageCommit} from './schema/change.js';
 import {initChangeStreamerSchema} from './schema/init.js';
 import {ensureReplicationConfig, ReplicationConfig} from './schema/tables.js';
 import {Storer} from './storer.js';
@@ -40,7 +40,14 @@ export async function initializeStreamer(
 
 export type ChangeStream = {
   changes: Source<ChangeEntry>;
-  acks: Sink<Pgoutput.MessageCommit>;
+
+  /**
+   * A Sink to push the MessageCommit messages that have been successfully
+   * stored by the {@link Storer}. The ACKs should contain the full MessageCommit
+   * that was received from the `changes` Source, which may contain implementation
+   * specific fields needed by the ChangeSource implementation.
+   */
+  acks: Sink<MessageCommit>;
 };
 
 /** Encapsulates an upstream-specific implementation of a stream of Changes. */
