@@ -16,7 +16,7 @@ import {
 import {LookaheadIterator} from './lookahead-iterator.js';
 import {Constraint, FetchRequest, Input, Output} from './operator.js';
 import {PrimaryKey, Schema, SchemaValue} from './schema.js';
-import {Source, SourceChange, SourceInput} from './source.js';
+import {Source, SourceChange, SourceChangeEdit, SourceInput} from './source.js';
 import {Stream} from './stream.js';
 
 export type Overlay = {
@@ -468,7 +468,7 @@ export function* generateWithStart(
  *
  * @param startAt - if there is a lower bound to the stream. If the lower bound of the stream
  * is above the overlay, the overlay will be skipped.
- * @param rowIterator - the stream into which the overlay should be spliced
+ * @param rows - the stream into which the overlay should be spliced
  * @param constraint - constraint that was applied to the rowIterator and should
  * also be applied to the overlay.
  * @param overlay - the overlay values to splice in
@@ -476,111 +476,134 @@ export function* generateWithStart(
  */
 export function* generateWithOverlay(
   startAt: Row | undefined,
-  rowIterator: IterableIterator<Row>,
+  rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
-  compare: (r1: Row, r2: Row) => number,
+  compare: Comparator,
 ) {
-  if (overlay && overlay.change.type === 'edit') {
-    const innerRowIterator = generateWithOverlayInner(
-      startAt,
-      rowIterator,
-      constraint,
-      {
-        outputIndex: overlay.outputIndex,
-        change: {type: 'remove', row: overlay.change.oldRow},
-      },
-      compare,
-    );
-    for (const row of generateWithOverlayInner(
-      startAt,
-      innerRowIterator,
-      constraint,
-      {
-        outputIndex: overlay.outputIndex,
-        change: {type: 'add', row: overlay.change.row},
-      },
-      compare,
-    )) {
-      yield {row, relationships: {}};
-    }
-  } else {
-    for (const row of generateWithOverlayInner(
-      startAt,
-      rowIterator,
-      constraint,
-      overlay,
-      compare,
-    )) {
-      yield {row, relationships: {}};
-    }
-  }
+  const overlays = computeOverlays(startAt, constraint, overlay, compare);
+  yield* generateWithOverlayInner(rows, overlays, compare);
 }
 
-function* generateWithOverlayInner(
+function computeOverlays(
   startAt: Row | undefined,
-  rowIterator: IterableIterator<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
+  compare: Comparator,
+): [Overlay | undefined, Overlay | undefined] {
+  let secondOverlay: Overlay | undefined;
+
+  if (overlay?.change.type === 'edit') {
+    [overlay, secondOverlay] = splitEditChange(overlay, compare);
+  }
+
+  if (startAt) {
+    overlay = overlayForStartAt(overlay, startAt, compare);
+    secondOverlay = overlayForStartAt(secondOverlay, startAt, compare);
+  }
+
+  if (constraint) {
+    overlay = overlayForConstraint(overlay, constraint);
+    secondOverlay = overlayForConstraint(secondOverlay, constraint);
+  }
+
+  if (secondOverlay !== undefined && overlay === undefined) {
+    overlay = secondOverlay;
+    secondOverlay = undefined;
+  }
+
+  return [overlay, secondOverlay];
+}
+
+export {overlayForStartAt as overlayForStartAtForTest};
+
+function overlayForStartAt(
+  overlay: Overlay | undefined,
+  startAt: Row,
+  compare: Comparator,
+): Overlay | undefined {
+  if (!overlay) {
+    return undefined;
+  }
+  if (compare(overlay.change.row, startAt) < 0) {
+    return undefined;
+  }
+  return overlay;
+}
+
+export {overlayForConstraint as overlayForConstraintForTest};
+
+function overlayForConstraint(
+  overlay: Overlay | undefined,
+  constraint: Constraint,
+): Overlay | undefined {
+  if (!overlay) {
+    return undefined;
+  }
+
+  if (!valuesEqual(overlay.change.row[constraint.key], constraint.value)) {
+    return undefined;
+  }
+  return overlay;
+}
+
+function splitEditChange(
+  overlay: Overlay,
+  compare: Comparator,
+): [Overlay, Overlay] {
+  const {oldRow, row} = overlay.change as SourceChangeEdit;
+
+  const removeOverlay: Overlay = {
+    outputIndex: overlay.outputIndex,
+    change: {type: 'remove', row: oldRow},
+  };
+  const addOverlay: Overlay = {
+    outputIndex: overlay.outputIndex,
+    change: {type: 'add', row},
+  };
+
+  const cmp = compare(oldRow, row);
+  if (cmp <= 0) {
+    return [removeOverlay, addOverlay];
+  }
+  return [addOverlay, removeOverlay];
+}
+
+export function* generateWithOverlayInner(
+  rowIterator: Iterable<Row>,
+  overlays: [Overlay | undefined, Overlay | undefined],
   compare: (r1: Row, r2: Row) => number,
-): Generator<Row, void> {
-  if (startAt && overlay && compare(overlay.change.row, startAt) < 0) {
-    overlay = undefined;
-  }
-
-  if (overlay) {
-    if (constraint) {
-      const {key, value} = constraint;
-      const {change} = overlay;
-      if (!valuesEqual(change.row[key], value)) {
-        overlay = undefined;
-      }
-    }
-  }
-
+) {
+  let [overlay, secondOverlay] = overlays;
   for (const row of rowIterator) {
     if (overlay) {
-      const {change} = overlay;
-      switch (change.type) {
-        case 'add': {
-          const cmp = compare(change.row, row);
-          if (cmp < 0) {
-            yield change.row;
-            overlay = undefined;
-          }
-          break;
+      if (overlay.change.type === 'add') {
+        const cmp = compare(overlay.change.row, row);
+        if (cmp < 0) {
+          yield {row: overlay.change.row, relationships: {}};
+          overlay = secondOverlay;
+          secondOverlay = undefined;
         }
-        case 'remove': {
-          const cmp = compare(change.row, row);
+      }
+      if (overlay) {
+        if (overlay.change.type === 'remove') {
+          const cmp = compare(overlay.change.row, row);
           if (cmp < 0) {
-            overlay = undefined;
+            overlay = secondOverlay;
+            secondOverlay = undefined;
           } else if (cmp === 0) {
-            overlay = undefined;
+            overlay = secondOverlay;
+            secondOverlay = undefined;
             continue;
           }
-          break;
         }
-        case 'edit': {
-          const oldCmp = compare(change.oldRow, row);
-          const newCmp = compare(change.row, row);
-          if (oldCmp < 0 && newCmp >= 0) {
-            yield change.row;
-            overlay = undefined;
-          }
-          if (oldCmp === 0) {
-            // skip row
-          }
-          break;
-        }
-        default:
-          unreachable(change);
       }
     }
-    yield row;
+    yield {row, relationships: {}};
   }
 
   if (overlay && overlay.change.type === 'add') {
-    yield overlay.change.row;
+    yield {row: overlay.change.row, relationships: {}};
   }
 }
 
