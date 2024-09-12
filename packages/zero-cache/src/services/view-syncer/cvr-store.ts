@@ -1,7 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {MaybeRow, PendingQuery} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
+import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import {astSchema} from 'zero-protocol';
 import type {JSONValue} from '../../types/bigint-json.js';
@@ -33,8 +35,6 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.js';
-import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
-import {resolver} from '@rocicorp/resolver';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -218,7 +218,9 @@ export class CVRStore {
         query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
     }
-    this.#lc.debug?.(`loaded CVR (${Date.now() - start} ms)`);
+    this.#lc.debug?.(
+      `loaded CVR @${versionString(cvr.version)} (${Date.now() - start} ms)`,
+    );
 
     return cvr;
   }
