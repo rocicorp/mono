@@ -114,6 +114,7 @@ export class PipelineDriver {
    */
   destroy() {
     this.#storage.destroy();
+    this.#snapshotter.destroy();
   }
 
   /** @return The Set of query hashes for all added queries. */

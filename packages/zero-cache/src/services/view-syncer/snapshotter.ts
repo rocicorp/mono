@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'zqlite/src/db.js';
 import {ident} from 'pg-format';
 import {assert} from 'shared/src/asserts.js';
 import * as v from 'shared/src/valita.js';
@@ -10,6 +9,7 @@ import {
   RowKey,
   RowValue,
 } from 'zero-cache/src/types/row-key.js';
+import {Database} from 'zqlite/src/db.js';
 import {
   changeLogEntrySchema as schema,
   SET_OP,
@@ -157,6 +157,16 @@ export class Snapshotter {
     this.#prev = this.#curr;
     this.#curr = next;
     return new Diff(this.#prev, this.#curr);
+  }
+
+  /**
+   * Call this to close the database connections when the Snapshotter is
+   * no longer needed.
+   */
+  destroy() {
+    this.#curr?.db.db.close();
+    this.#prev?.db.db.close();
+    this.#lc.debug?.('closed database connections');
   }
 }
 
