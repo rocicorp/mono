@@ -2,13 +2,7 @@ import {assert, unreachable} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
 import type {Change, EditChange, RemoveChange} from './change.js';
-import {
-  Comparator,
-  normalizeUndefined,
-  type Node,
-  type Row,
-  type Value,
-} from './data.js';
+import {normalizeUndefined, type Node, type Row, type Value} from './data.js';
 import type {
   Constraint,
   FetchRequest,
@@ -653,8 +647,4 @@ export class Take implements Operator {
 
 function getTakeStateKey(partitionValue: Value): string {
   return JSON.stringify(['take', normalizeUndefined(partitionValue)]);
-}
-
-function smaller(bound: Row, row: Row, compareRows: Comparator): Row {
-  return compareRows(bound, row) < 0 ? bound : row;
 }

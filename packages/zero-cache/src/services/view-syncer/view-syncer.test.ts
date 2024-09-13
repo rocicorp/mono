@@ -10,6 +10,7 @@ import type {
   QueriesPatch,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
+import {setEditChangesEnabled} from 'zql/src/zql/ivm/source.js';
 import {Database} from 'zqlite/src/db.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -32,6 +33,8 @@ import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
 import {SyncContext, ViewSyncerService} from './view-syncer.js';
+
+setEditChangesEnabled(false);
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',

@@ -1,6 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import type {PluginOption} from 'vite';
 import {defineConfig} from 'vitest/config';
+import {config} from '../shared/src/tool/vitest-config.js';
 
 /**
  * This plugin creates a default export for `.wasm` files that exports a
@@ -21,7 +22,12 @@ function inlineWASM(): PluginOption {
   };
 }
 
+const {define, plugins, esbuild} = config;
+
 export default defineConfig({
+  define,
+  esbuild,
+  plugins: [...plugins, inlineWASM()],
   test: {
     include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     retry: 3,
@@ -37,5 +43,4 @@ export default defineConfig({
       return undefined;
     },
   },
-  plugins: [inlineWASM()],
 });
