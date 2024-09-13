@@ -1,9 +1,9 @@
 import {ExperimentalNoIndexDiff} from 'replicache';
 import {expect, test} from 'vitest';
+import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Join} from 'zql/src/zql/ivm/join.js';
 import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
-import {Catch} from '../../../zql/src/zql/ivm/catch.js';
 import {AddQuery, ZeroContext} from './context.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
@@ -101,8 +101,11 @@ test('processChanges', () => {
   expect(out.pushes).toEqual([
     {type: 'add', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
     {type: 'add', node: {row: {id: 'e2', name: 'name2'}, relationships: {}}},
-    {type: 'remove', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
-    {type: 'add', node: {row: {id: 'e1', name: 'name1.1'}, relationships: {}}},
+    {
+      type: 'edit',
+      oldRow: {id: 'e1', name: 'name1'},
+      row: {id: 'e1', name: 'name1.1'},
+    },
   ]);
 
   expect(out.fetch({})).toEqual([

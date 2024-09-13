@@ -1,8 +1,8 @@
 import type {SQLQuery} from '@databases/sql';
-import {Database, Statement} from 'zqlite/src/db.js';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
 import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
+import {Change} from 'zql/src/zql/ivm/change.js';
 import {
   Comparator,
   Node,
@@ -33,6 +33,7 @@ import type {
   SourceInput,
 } from 'zql/src/zql/ivm/source.js';
 import {Stream} from 'zql/src/zql/ivm/stream.js';
+import {Database, Statement} from 'zqlite/src/db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
 
@@ -297,40 +298,67 @@ export class TableSource implements Source {
   }
 
   push(change: SourceChange) {
+    const exists = (row: Row) =>
+      this.#stmts.checkExists.get<{exists: number}>(
+        ...pickColumns(this.#primaryKey, row),
+      )?.exists === 1;
+
     // need to check for the existence of the row before modifying
     // the db so we don't push it to outputs if it does/doest not exist.
-    const exists =
-      this.#stmts.checkExists.get<{exists: number}>(
-        ...pickColumns(this.#primaryKey, change.row),
-      )?.exists === 1;
-    if (change.type === 'add') {
-      assert(!exists, 'Row already exists');
-    } else {
-      assert(exists, 'Row not found');
+    switch (change.type) {
+      case 'add':
+        assert(!exists(change.row), 'Row already exists');
+        break;
+      case 'remove':
+        assert(exists(change.row), 'Row not found');
+        break;
+      case 'edit':
+        assert(exists(change.oldRow), 'Row not found');
+        break;
+      default:
+        unreachable(change);
     }
 
     // Outputs should see converted types (e.g. boolean).
     fromSQLiteTypes(this.#columns, change.row);
+
+    const outputChange: Change =
+      change.type === 'edit'
+        ? change
+        : {
+            type: change.type,
+            node: {
+              row: change.row,
+              relationships: {},
+            },
+          };
+
     for (const [outputIndex, {output}] of this.#connections.entries()) {
       this.#overlay = {outputIndex, change};
       if (output) {
-        output.push({
-          type: change.type,
-          node: {
-            row: change.row,
-            relationships: {},
-          },
-        });
+        output.push(outputChange);
       }
     }
     this.#overlay = undefined;
-    if (change.type === 'add') {
-      this.#stmts.insert.run(
-        ...toSQLiteTypes(Object.keys(this.#columns), change.row),
-      );
-    } else {
-      change.type satisfies 'remove';
-      this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
+    switch (change.type) {
+      case 'add':
+        this.#stmts.insert.run(
+          ...toSQLiteTypes(Object.keys(this.#columns), change.row),
+        );
+        break;
+      case 'remove':
+        this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
+        break;
+      case 'edit':
+        this.#stmts.delete.run(
+          ...toSQLiteTypes(this.#primaryKey, change.oldRow),
+        );
+        this.#stmts.insert.run(
+          ...toSQLiteTypes(Object.keys(this.#columns), change.row),
+        );
+        break;
+      default:
+        unreachable(change);
     }
   }
 

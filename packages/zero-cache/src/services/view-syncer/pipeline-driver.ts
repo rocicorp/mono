@@ -1,18 +1,22 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
+import {listTables} from 'zero-cache/src/db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
 import {RowKey} from 'zero-cache/src/types/row-key.js';
+import {TableSpec} from 'zero-cache/src/types/specs.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
 import {Node, Row} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
-import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
+import {
+  editChangesEnabled,
+  Source,
+  SourceChange,
+} from 'zql/src/zql/ivm/source.js';
 import {TableSource} from 'zqlite/src/table-source.js';
-import {listTables} from '../../db/lite-tables.js';
-import {TableSpec} from '../../types/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
 
@@ -203,11 +207,27 @@ export class PipelineDriver {
 
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
-      if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
-      }
-      if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: nextValue as Row});
+      if (editChangesEnabled()) {
+        if (prevValue) {
+          if (nextValue) {
+            yield* this.#push(table, {
+              type: 'edit',
+              row: nextValue as Row,
+              oldRow: prevValue as Row,
+            });
+          } else {
+            yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+          }
+        } else if (nextValue) {
+          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        }
+      } else {
+        if (prevValue) {
+          yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+        }
+        if (nextValue) {
+          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        }
       }
     }
 
@@ -303,17 +323,27 @@ class Streamer {
   ): Iterable<RowChange> {
     for (const change of changes) {
       const {type} = change;
-      if (type === 'child') {
-        const {child} = change;
-        const childSchema = must(
-          schema.relationships?.[child.relationshipName],
-        );
 
-        yield* this.#streamChanges(queryHash, childSchema, [child.change]);
-      } else {
-        const {node} = change;
+      switch (type) {
+        case 'add':
+        case 'remove': {
+          yield* this.#streamNodes(queryHash, schema, type, [change.node]);
+          break;
+        }
+        case 'child': {
+          const {child} = change;
+          const childSchema = must(
+            schema.relationships?.[child.relationshipName],
+          );
 
-        yield* this.#streamNodes(queryHash, schema, type, [node]);
+          yield* this.#streamChanges(queryHash, childSchema, [child.change]);
+          break;
+        }
+        case 'edit':
+          assert(false, 'edit changes are not yet supported yet');
+          break;
+        default:
+          unreachable(type);
       }
     }
   }

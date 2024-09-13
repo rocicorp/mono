@@ -1,9 +1,15 @@
-import {assert} from 'shared/src/asserts.js';
-import type {Change} from './change.js';
-import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
+import type {Change, ChildChange} from './change.js';
+import {
+  normalizeUndefined,
+  type Node,
+  type NormalizedValue,
+  type Row,
+} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {Schema} from './schema.js';
-import {take, type Stream} from './stream.js';
+import {first, take, type Stream} from './stream.js';
 
 type Args = {
   parent: Input;
@@ -87,62 +93,166 @@ export class Join implements Input {
 
   *fetch(req: FetchRequest): Stream<Node> {
     for (const parentNode of this.#parent.fetch(req)) {
-      yield this.#processParentNode(parentNode, 'fetch');
+      yield this.#processParentNode(
+        parentNode.row,
+        parentNode.relationships,
+        'fetch',
+      );
     }
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
     for (const parentNode of this.#parent.cleanup(req)) {
-      yield this.#processParentNode(parentNode, 'cleanup');
+      yield this.#processParentNode(
+        parentNode.row,
+        parentNode.relationships,
+        'cleanup',
+      );
     }
   }
 
   #pushParent(change: Change): void {
     assert(this.#output, 'Output not set');
-    if (change.type === 'add') {
-      this.#output.push({
-        type: 'add',
-        node: this.#processParentNode(change.node, 'fetch'),
-      });
-    } else if (change.type === 'remove') {
-      this.#output.push({
-        type: 'remove',
-        node: this.#processParentNode(change.node, 'cleanup'),
-      });
-    } else {
-      change.type satisfies 'child';
-      this.#output.push(change);
+
+    switch (change.type) {
+      case 'add':
+        this.#output.push({
+          type: 'add',
+          node: this.#processParentNode(
+            change.node.row,
+            change.node.relationships,
+            'fetch',
+          ),
+        });
+        break;
+      case 'remove':
+        this.#output.push({
+          type: 'remove',
+          node: this.#processParentNode(
+            change.node.row,
+            change.node.relationships,
+            'cleanup',
+          ),
+        });
+        break;
+      case 'child':
+        this.#output.push(change);
+        break;
+      case 'edit':
+        // If the join key value didn't change we push the change down
+        if (
+          normalizeUndefined(change.row[this.#parentKey]) ===
+          normalizeUndefined(change.oldRow[this.#parentKey])
+        ) {
+          this.#output.push(change);
+        } else {
+          // The join key value changed so we treat this as a remove followed by
+          // an add.
+          this.#output.push({
+            type: 'remove',
+            node: this.#processParentNode(change.oldRow, {}, 'cleanup'),
+          });
+          this.#output.push({
+            type: 'add',
+            node: this.#processParentNode(change.row, {}, 'fetch'),
+          });
+        }
+        break;
+      default:
+        unreachable(change);
     }
   }
 
   #pushChild(change: Change): void {
-    assert(this.#output, 'Output not set');
-    const childRow = change.type === 'child' ? change.row : change.node.row;
-    const parentNodes = this.#parent.fetch({
-      constraint: {
-        key: this.#parentKey,
-        value: childRow[this.#childKey],
-      },
-    });
+    const pushChildChange = (childRow: Row, change: Change) => {
+      assert(this.#output, 'Output not set');
 
-    for (const parentNode of parentNodes) {
-      const result: Change = {
-        type: 'child',
-        row: parentNode.row,
-        child: {
-          relationshipName: this.#relationshipName,
-          change,
+      const parentNodes = this.#parent.fetch({
+        constraint: {
+          key: this.#parentKey,
+          value: childRow[this.#childKey],
         },
-      };
-      this.#output.push(result);
+      });
+
+      for (const parentNode of parentNodes) {
+        const childChange: ChildChange = {
+          type: 'child',
+          row: parentNode.row,
+          child: {
+            relationshipName: this.#relationshipName,
+            change,
+          },
+        };
+        this.#output.push(childChange);
+      }
+    };
+
+    switch (change.type) {
+      case 'add':
+      case 'remove':
+        pushChildChange(change.node.row, change);
+        break;
+      case 'child':
+        pushChildChange(change.row, change);
+        break;
+      case 'edit': {
+        const childRow = change.row;
+        const oldChildRow = change.oldRow;
+        if (
+          normalizeUndefined(oldChildRow[this.#childKey]) ===
+          normalizeUndefined(childRow[this.#childKey])
+        ) {
+          // The child row was edited in a way that does not change the relationship.
+          // We can therefore just push the change down (wrapped in a child change).
+          pushChildChange(childRow, change);
+        } else {
+          // The child row was edited in a way that changes the relationship. We
+          // therefore treat this as a remove from the old row followed by an
+          // add to the new row.
+
+          const {relationships} = must(
+            first(
+              this.#child.fetch({
+                constraint: {
+                  key: this.#childKey,
+                  value: oldChildRow[this.#childKey],
+                },
+              }),
+            ),
+          );
+
+          pushChildChange(oldChildRow, {
+            type: 'remove',
+            node: {
+              row: oldChildRow,
+              relationships,
+            },
+          });
+          pushChildChange(childRow, {
+            type: 'add',
+            node: {
+              row: childRow,
+              relationships,
+            },
+          });
+        }
+        break;
+      }
+
+      default:
+        unreachable(change);
     }
   }
 
-  #processParentNode(parentNode: Node, mode: ProcessParentMode): Node {
-    const parentKeyValue = normalizeUndefined(parentNode.row[this.#parentKey]);
+  #processParentNode(
+    parentNodeRow: Row,
+    parentNodeRelations: Record<string, Stream<Node>>,
+    mode: ProcessParentMode,
+  ): Node {
+    const parentKeyValue = normalizeUndefined(parentNodeRow[this.#parentKey]);
     const parentPrimaryKey: NormalizedValue[] = [];
     for (const key of this.#parent.getSchema().primaryKey) {
-      parentPrimaryKey.push(normalizeUndefined(parentNode.row[key]));
+      parentPrimaryKey.push(normalizeUndefined(parentNodeRow[key]));
     }
 
     // This storage key tracks the primary keys seen for each unique
@@ -154,14 +264,12 @@ export class Join implements Input {
 
     let method: ProcessParentMode = mode;
     if (mode === 'cleanup') {
-      const [, second] = [
-        ...take(
-          this.#storage.scan({
-            prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
-          }),
-          2,
-        ),
-      ];
+      const [, second] = take(
+        this.#storage.scan({
+          prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
+        }),
+        2,
+      );
       method = second ? 'fetch' : 'cleanup';
     }
 
@@ -180,9 +288,9 @@ export class Join implements Input {
     }
 
     return {
-      ...parentNode,
+      row: parentNodeRow,
       relationships: {
-        ...parentNode.relationships,
+        ...parentNodeRelations,
         [this.#relationshipName]: childStream,
       },
     };

@@ -1,7 +1,7 @@
-import type {FetchRequest, Input, Operator, Output} from './operator.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import type {Change} from './change.js';
 import type {Node, Row} from './data.js';
-import {assert} from 'shared/src/asserts.js';
+import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {Schema} from './schema.js';
 import {Stream} from './stream.js';
 
@@ -80,17 +80,21 @@ export class Snitch implements Operator {
 }
 
 function toChangeRecord(change: Change): ChangeRecord {
-  if (change.type === 'add') {
-    return {type: 'add', row: change.node.row};
+  switch (change.type) {
+    case 'add':
+    case 'remove':
+      return {type: change.type, row: change.node.row};
+    case 'edit':
+      return change;
+    case 'child':
+      return {
+        type: 'child',
+        row: change.row,
+        child: toChangeRecord(change.child.change),
+      };
+    default:
+      unreachable(change);
   }
-  if (change.type === 'remove') {
-    return {type: 'remove', row: change.node.row};
-  }
-  return {
-    type: 'child',
-    row: change.row,
-    child: toChangeRecord(change.child.change),
-  };
 }
 
 export type SnitchMessage =
@@ -107,7 +111,8 @@ export type PushMessage = [string, 'push', ChangeRecord];
 export type ChangeRecord =
   | AddChangeRecord
   | RemoveChangeRecord
-  | ChildChangeRecord;
+  | ChildChangeRecord
+  | EditChangeRecord;
 
 export type AddChangeRecord = {
   type: 'add';
@@ -125,6 +130,12 @@ export type ChildChangeRecord = {
   type: 'child';
   row: Row;
   child: ChangeRecord;
+};
+
+export type EditChangeRecord = {
+  type: 'edit';
+  row: Row;
+  oldRow: Row;
 };
 
 export type LogType = 'fetch' | 'push' | 'cleanup' | 'fetchCount';
