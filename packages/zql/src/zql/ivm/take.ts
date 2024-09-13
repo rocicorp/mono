@@ -79,7 +79,7 @@ export class Take implements Operator {
         this.#partitionKey === undefined ? undefined : req.constraint?.value;
       const takeStateKey = getTakeStateKey(partitionValue);
       const takeState = this.#storage.get(takeStateKey);
-      if (takeState === undefined) {
+      if (!takeState) {
         yield* this.#initialFetch(req);
         return;
       }
@@ -112,8 +112,7 @@ export class Take implements Operator {
       const takeStateKey = getTakeStateKey(partitionValue);
       const takeState = this.#storage.get(takeStateKey);
       if (
-        takeState &&
-        takeState.bound !== undefined &&
+        takeState?.bound !== undefined &&
         this.getSchema().compareRows(takeState.bound, inputNode.row) >= 0
       ) {
         yield inputNode;
@@ -197,6 +196,39 @@ export class Take implements Operator {
     }
   }
 
+  #getStateAndConstraint(row: Row) {
+    const partitionValue =
+      this.#partitionKey === undefined ? undefined : row[this.#partitionKey];
+    const takeStateKey = getTakeStateKey(partitionValue);
+    const takeState = this.#storage.get(takeStateKey);
+    let maxBound: Row | undefined;
+    let constraint: Constraint | undefined;
+    // The partition key was never fetched, so this push can be discarded.
+    if (takeState) {
+      maxBound = this.#storage.get(MAX_BOUND_KEY);
+      constraint = this.#partitionKey
+        ? {
+            key: this.#partitionKey,
+            value: partitionValue,
+          }
+        : undefined;
+    }
+
+    return {takeState, takeStateKey, maxBound, constraint} as
+      | {
+          takeState: undefined;
+          takeStateKey: string;
+          maxBound: undefined;
+          constraint: undefined;
+        }
+      | {
+          takeState: TakeState;
+          takeStateKey: string;
+          maxBound: Row | undefined;
+          constraint: Constraint | undefined;
+        };
+  }
+
   push(change: Change): void {
     if (change.type === 'edit') {
       this.#pushEditChange(change);
@@ -208,23 +240,13 @@ export class Take implements Operator {
     // and a 'child' change should be pushed to output if its row
     // is <= bound.
     assert(change.type !== 'child', 'child changes are not supported');
-    const partitionValue =
-      this.#partitionKey === undefined
-        ? undefined
-        : change.node.row[this.#partitionKey];
-    const takeStateKey = getTakeStateKey(partitionValue);
-    const takeState = this.#storage.get(takeStateKey);
-    // The partition key was never fetched, so this push can be discarded.
+
+    const {takeState, takeStateKey, maxBound, constraint} =
+      this.#getStateAndConstraint(change.node.row);
     if (!takeState) {
       return;
     }
-    const maxBound = this.#storage.get(MAX_BOUND_KEY);
-    const constraint: Constraint | undefined = this.#partitionKey
-      ? {
-          key: this.#partitionKey,
-          value: change.node.row[this.#partitionKey],
-        }
-      : undefined;
+    const {compareRows} = this.getSchema();
 
     if (change.type === 'add') {
       if (takeState.size < this.#limit) {
@@ -232,7 +254,7 @@ export class Take implements Operator {
           takeStateKey,
           takeState.size + 1,
           takeState.bound === undefined ||
-            this.getSchema().compareRows(takeState.bound, change.node.row) < 0
+            compareRows(takeState.bound, change.node.row) < 0
             ? change.node.row
             : takeState.bound,
           maxBound,
@@ -243,7 +265,7 @@ export class Take implements Operator {
       // size === limit
       if (
         takeState.bound === undefined ||
-        this.getSchema().compareRows(change.node.row, takeState.bound) >= 0
+        compareRows(change.node.row, takeState.bound) >= 0
       ) {
         return;
       }
@@ -263,18 +285,16 @@ export class Take implements Operator {
           ),
         );
       } else {
-        [beforeBoundNode, boundNode] = [
-          ...take(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'before',
-              },
-              constraint,
-            }),
-            2,
-          ),
-        ];
+        [beforeBoundNode, boundNode] = take(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'before',
+            },
+            constraint,
+          }),
+          2,
+        );
       }
       const removeChange: RemoveChange = {
         type: 'remove',
@@ -284,7 +304,7 @@ export class Take implements Operator {
         takeStateKey,
         takeState.size,
         beforeBoundNode === undefined ||
-          this.getSchema().compareRows(change.node.row, beforeBoundNode.row) > 0
+          compareRows(change.node.row, beforeBoundNode.row) > 0
           ? change.node.row
           : beforeBoundNode.row,
         maxBound,
@@ -296,10 +316,7 @@ export class Take implements Operator {
         // change is after bound
         return;
       }
-      const compToBound = this.getSchema().compareRows(
-        change.node.row,
-        takeState.bound,
-      );
+      const compToBound = compareRows(change.node.row, takeState.bound);
       if (compToBound > 0) {
         // change is after bound
         return;
@@ -398,27 +415,13 @@ export class Take implements Operator {
       return;
     }
 
-    const partitionValue =
-      this.#partitionKey === undefined
-        ? undefined
-        : change.oldRow[this.#partitionKey];
-    const takeStateKey = getTakeStateKey(partitionValue);
-    const takeState = this.#storage.get(takeStateKey);
-    // The partition key was never fetched, so this push can be discarded.
+    const {takeState, takeStateKey, maxBound, constraint} =
+      this.#getStateAndConstraint(change.oldRow);
     if (!takeState) {
       return;
     }
 
     assert(takeState.bound, 'Bound should be set');
-
-    const maxBound = this.#storage.get(MAX_BOUND_KEY);
-    const constraint: Constraint | undefined = this.#partitionKey
-      ? {
-          key: this.#partitionKey,
-          value: partitionValue,
-        }
-      : undefined;
-
     const {compareRows} = this.getSchema();
     const oldCmp = compareRows(change.oldRow, takeState.bound);
     const newCmp = compareRows(change.row, takeState.bound);
@@ -521,46 +524,42 @@ export class Take implements Operator {
         return;
       }
 
-      {
-        // old was outside, new is inside. Pushing out the old bounds
-        assert(newCmp < 0);
+      // old was outside, new is inside. Pushing out the old bounds
+      assert(newCmp < 0);
 
-        const [newBoundNode, oldBoundNode] = [
-          ...take(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'before',
-              },
-              constraint,
-            }),
-            2,
-          ),
-        ];
-
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          newBoundNode.row,
-          maxBound,
-        );
-
-        this.#output.push({
-          type: 'remove',
-          node: oldBoundNode,
-        });
-
-        // We do not need the relationships because Take comes before Join
-        this.#output.push({
-          type: 'add',
-          node: {
-            row: change.row,
-            relationships: {},
+      const [newBoundNode, oldBoundNode] = take(
+        this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'before',
           },
-        });
+          constraint,
+        }),
+        2,
+      );
 
-        return;
-      }
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size,
+        newBoundNode.row,
+        maxBound,
+      );
+
+      this.#output.push({
+        type: 'remove',
+        node: oldBoundNode,
+      });
+
+      // We do not need the relationships because Take comes before Join
+      this.#output.push({
+        type: 'add',
+        node: {
+          row: change.row,
+          relationships: {},
+        },
+      });
+
+      return;
     }
 
     if (oldCmp < 0) {
@@ -573,49 +572,49 @@ export class Take implements Operator {
       }
 
       // old was inside, new is larger than old bound
-      {
-        assert(newCmp > 0);
 
-        // at this point we need to find the row after the bound and use that or
-        // the newRow as the new bound.
-        const afterBoundNode = must(
-          first(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'after',
-              },
-              constraint,
-            }),
-          ),
-        );
+      assert(newCmp > 0);
 
-        if (compareRows(afterBoundNode.row, change.row) === 0) {
-          replaceBoundAndForwardChange();
-          return;
-        }
+      // at this point we need to find the row after the bound and use that or
+      // the newRow as the new bound.
+      const afterBoundNode = must(
+        first(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'after',
+            },
+            constraint,
+          }),
+        ),
+      );
 
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          afterBoundNode.row,
-          maxBound,
-        );
-
-        // We do not need the relationships because Take comes before Join
-        this.#output.push({
-          type: 'remove',
-          node: {
-            row: change.oldRow,
-            relationships: {},
-          },
-        });
-        this.#output.push({
-          type: 'add',
-          node: afterBoundNode,
-        });
+      // The new row is the new bound. Use an edit change.
+      if (compareRows(afterBoundNode.row, change.row) === 0) {
+        replaceBoundAndForwardChange();
         return;
       }
+
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size,
+        afterBoundNode.row,
+        maxBound,
+      );
+
+      // We do not need the relationships because Take comes before Join
+      this.#output.push({
+        type: 'remove',
+        node: {
+          row: change.oldRow,
+          relationships: {},
+        },
+      });
+      this.#output.push({
+        type: 'add',
+        node: afterBoundNode,
+      });
+      return;
     }
 
     unreachable();

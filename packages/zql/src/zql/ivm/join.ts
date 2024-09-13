@@ -264,14 +264,12 @@ export class Join implements Input {
 
     let method: ProcessParentMode = mode;
     if (mode === 'cleanup') {
-      const [, second] = [
-        ...take(
-          this.#storage.scan({
-            prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
-          }),
-          2,
-        ),
-      ];
+      const [, second] = take(
+        this.#storage.scan({
+          prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
+        }),
+        2,
+      );
       method = second ? 'fetch' : 'cleanup';
     }
 

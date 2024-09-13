@@ -102,7 +102,7 @@ test('edit', () => {
 
   out.pushes.length = 0;
   ms.push({type: 'edit', oldRow: {a: 3, x: 6}, row: {a: 3, x: 5}});
-  expect(out.pushes).toMatchInlineSnapshot([
+  expect(out.pushes).toEqual([
     {
       type: 'remove',
       node: {
