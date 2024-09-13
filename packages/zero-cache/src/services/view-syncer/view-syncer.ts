@@ -35,6 +35,7 @@ import {
   versionFromString,
   versionString,
   versionToCookie,
+  versionToNullableCookie,
 } from './schema/types.js';
 
 export type SyncContext = {
@@ -429,8 +430,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     // The CVR, database, and all clients should now be at the same version.
+    const cvrVersion = this.#cvr?.version ?? null;
+    const dbVersion = this.#pipelines.currentVersion();
     assert(
-      this.#cvr?.version.stateVersion === this.#pipelines.currentVersion(),
+      cvrVersion?.stateVersion === dbVersion,
+      `CVR@${versionToNullableCookie(
+        cvrVersion,
+      )}" does not match DB@${dbVersion}`,
     );
   }
 
