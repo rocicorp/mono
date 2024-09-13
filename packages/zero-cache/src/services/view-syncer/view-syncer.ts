@@ -35,7 +35,6 @@ import {
   versionFromString,
   versionString,
   versionToCookie,
-  versionToNullableCookie,
 } from './schema/types.js';
 
 export type SyncContext = {
@@ -273,11 +272,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       .withContext('clientID', clientID)
       .withContext('wsID', wsID)
       .withContext('cmd', cmd);
-    lc.debug?.(cmd, body);
 
     let client: ClientHandler | undefined;
     try {
       await this.#runInLockWithCVR(cvr => {
+        lc.debug?.(cmd, body);
+
         if (newClient) {
           assert(newClient.wsID === wsID);
           this.#clients.get(clientID)?.close();
@@ -429,15 +429,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#catchupClients(lc, cvr);
     }
 
-    // The CVR, database, and all clients should now be at the same version.
-    const cvrVersion = this.#cvr?.version ?? null;
-    const dbVersion = this.#pipelines.currentVersion();
-    assert(
-      cvrVersion?.stateVersion === dbVersion,
-      `CVR@${versionToNullableCookie(
-        cvrVersion,
-      )}" does not match DB@${dbVersion}`,
-    );
+    // If CVR was non-empty, then the CVR, database, and all clients
+    // should now be at the same version.
+    if (allClientQueries.size) {
+      const cvrVersion = must(this.#cvr).version;
+      const dbVersion = this.#pipelines.currentVersion();
+      assert(
+        cvrVersion.stateVersion === dbVersion,
+        `CVR@${versionString(cvrVersion)}" does not match DB@${dbVersion}`,
+      );
+    }
   }
 
   // This must be called from within the #lock.
