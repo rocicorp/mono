@@ -776,7 +776,6 @@ describe('view-syncer/service', () => {
                 "entityType": "issues",
                 "op": "put",
                 "value": {
-                  "_0_version": "01",
                   "big": 9007199254740991,
                   "id": "1",
                   "owner": "100.0",
