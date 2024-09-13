@@ -11,6 +11,9 @@ import {setUpMessageHandlers} from '../workers/replicator.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
 
+// As recommended by https://litestream.io/tips/#busy-timeout
+const REPLICA_LOCK_TIMEOUT_MS = 5000;
+
 const MAX_CHANGE_DB_CONNECTIONS = 5;
 
 export default async function runWorker(parent: Worker) {
@@ -38,6 +41,7 @@ export default async function runWorker(parent: Worker) {
 
   const replica = new Database(lc, config.REPLICA_DB_FILE);
   replica.pragma('journal_mode = WAL');
+  replica.pragma(`busy_timeout = ${REPLICA_LOCK_TIMEOUT_MS}`);
 
   const changeStreamer = await initializeStreamer(
     lc,
