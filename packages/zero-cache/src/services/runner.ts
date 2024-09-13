@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {sleep} from 'shared/src/sleep.js';
 import {Service} from './service.js';
 
 /**
@@ -45,5 +46,19 @@ export class ServiceRunner<S extends Service> {
         this.#instances.delete(id);
       });
     return service;
+  }
+}
+
+/**
+ * Runs a singleton service, logging an error and exiting the process if the
+ * service stops or fails.
+ */
+export async function runOrExit(lc: LogContext, svc: Service): Promise<void> {
+  try {
+    await svc.run();
+  } finally {
+    lc.error?.(`exiting because ${svc.constructor.name} (${svc.id}) stopped`);
+    await sleep(1000); // Allow logs to flush.
+    process.exit(-1);
   }
 }
