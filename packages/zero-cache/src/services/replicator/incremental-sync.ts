@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import {LogicalReplicationService, Pgoutput} from 'pg-logical-replication';
+import {AbortError} from 'shared/src/abort-error.js';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {liteValues} from 'zero-cache/src/types/lite.js';
@@ -67,6 +68,7 @@ export class IncrementalSyncer {
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
 
+      const unregister = this.#state.cancelOnStop(downstream);
       try {
         for await (const message of downstream) {
           if (message[0] === 'error') {
@@ -79,10 +81,13 @@ export class IncrementalSyncer {
           const {watermark, change} = message[1];
           processor.processMessage(lc, watermark, change);
         }
+        processor.abort(lc);
       } catch (e) {
         lc.error?.('Received error from ChangeStreamer', e);
+        processor.abort(lc, e);
       } finally {
         downstream.cancel();
+        unregister();
       }
       await this.#state.backoff(lc);
     }
@@ -153,10 +158,23 @@ export class MessageProcessor {
 
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
+      this.#currentTx?.abort(lc); // roll back any pending transaction.
+
       this.#failure = ensureError(err);
-      lc.error?.('Message Processing failed:', this.#failure);
-      this.#failService(lc, this.#failure);
+
+      if (err instanceof AbortError) {
+        // Aborted by the service.
+        lc.info?.('stopping MessageProcessor');
+      } else {
+        // Propagate the failure up to the service.
+        lc.error?.('Message Processing failed:', this.#failure);
+        this.#failService(lc, this.#failure);
+      }
     }
+  }
+
+  abort(lc: LogContext, err?: unknown) {
+    this.#fail(lc, err ?? new AbortError());
   }
 
   processMessage(lc: LogContext, watermark: string, message: Change) {
@@ -376,5 +394,10 @@ class TransactionProcessor {
 
     const elapsedMs = Date.now() - this.#startMs;
     return elapsedMs;
+  }
+
+  abort(lc: LogContext) {
+    lc.info?.(`aborting transaction ${this.#version}`);
+    this.#db.rollback();
   }
 }

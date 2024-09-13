@@ -10,7 +10,7 @@ import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
-import {getDocument} from 'shared/src/get-document.js';
+import {getDocument} from 'shared/src/browser-env.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import {initBgIntervalProcess} from './bg-interval.js';

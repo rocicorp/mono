@@ -4,11 +4,15 @@ import {Database} from 'zqlite/src/db.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
 import {initializeChangeSource} from '../services/change-streamer/pg/change-source.js';
 import {ReplicatorService} from '../services/replicator/replicator.js';
+import {runOrExit} from '../services/runner.js';
 import {postgresTypeConfig} from '../types/pg.js';
 import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
-import {runAsWorker} from '../workers/replicator.js';
+import {setUpMessageHandlers} from '../workers/replicator.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
+
+// As recommended by https://litestream.io/tips/#busy-timeout
+const REPLICA_LOCK_TIMEOUT_MS = 5000;
 
 const MAX_CHANGE_DB_CONNECTIONS = 5;
 
@@ -37,6 +41,7 @@ export default async function runWorker(parent: Worker) {
 
   const replica = new Database(lc, config.REPLICA_DB_FILE);
   replica.pragma('journal_mode = WAL');
+  replica.pragma(`busy_timeout = ${REPLICA_LOCK_TIMEOUT_MS}`);
 
   const changeStreamer = await initializeStreamer(
     lc,
@@ -45,7 +50,7 @@ export default async function runWorker(parent: Worker) {
     replica,
   );
 
-  void changeStreamer.run();
+  void runOrExit(lc, changeStreamer);
 
   const replicator = new ReplicatorService(
     lc,
@@ -54,7 +59,9 @@ export default async function runWorker(parent: Worker) {
     replica,
   );
 
-  void runAsWorker(replicator, parent);
+  setUpMessageHandlers(replicator, parent);
+
+  void runOrExit(lc, replicator);
 
   // Signal readiness once the first ReplicaVersionReady notification is received.
   for await (const _ of replicator.subscribe()) {
