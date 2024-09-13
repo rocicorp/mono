@@ -42,6 +42,7 @@ export function expandChange(change: Change): Change {
         node: expandNode(change.node),
       };
     case 'edit':
+      // No generators to expand in edit changes.
       return change;
     case 'child':
       return {

@@ -1,9 +1,9 @@
 import {assert} from 'shared/src/asserts.js';
 import {AddChange, Change, ChildChange, RemoveChange} from './change.js';
 import {Comparator, Node, Row} from './data.js';
+import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
 import {FetchRequest, Input, Operator, Output, Start} from './operator.js';
 import {Schema} from './schema.js';
-import {splitAndPushEditChange} from './split-and-push-edit-change.js';
 import {Stream} from './stream.js';
 
 export type Bound = {
@@ -58,7 +58,7 @@ export class Skip implements Operator {
     };
 
     if (change.type === 'edit') {
-      splitAndPushEditChange(change, shouldBePresent, this.#output);
+      maybeSplitAndPushEditChange(change, shouldBePresent, this.#output);
       return;
     }
 

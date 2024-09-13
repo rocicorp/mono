@@ -7,7 +7,7 @@ import {Output} from './operator.js';
  * should be present based on the row's data. It then splits the change and
  * pushes the appropriate changes to the output based on the predicate.
  */
-export function splitAndPushEditChange(
+export function maybeSplitAndPushEditChange(
   change: EditChange,
   predicate: (row: Row) => boolean,
   output: Output,

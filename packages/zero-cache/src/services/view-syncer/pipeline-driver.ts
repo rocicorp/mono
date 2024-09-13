@@ -9,20 +9,16 @@ import {Change} from 'zql/src/zql/ivm/change.js';
 import {Node, Row} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
-import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
+import {
+  editChangesEnabled,
+  Source,
+  SourceChange,
+} from 'zql/src/zql/ivm/source.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import {listTables} from '../replicator/tables/list.js';
 import {TableSpec} from '../replicator/tables/specs.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
-
-declare const TESTING: boolean;
-
-let editChangesEnabled = TESTING;
-
-export function setEditChangesEnabled(b: boolean): void {
-  editChangesEnabled = b;
-}
 
 export type RowAdd = {
   readonly queryHash: string;
@@ -210,7 +206,7 @@ export class PipelineDriver {
 
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
-      if (editChangesEnabled) {
+      if (editChangesEnabled()) {
         if (prevValue) {
           if (nextValue) {
             yield* this.#push(table, {

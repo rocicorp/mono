@@ -1,9 +1,9 @@
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {Change} from './change.js';
 import {Node, Row} from './data.js';
+import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
 import {FetchRequest, Input, Operator, Output} from './operator.js';
 import {Schema} from './schema.js';
-import {splitAndPushEditChange} from './split-and-push-edit-change.js';
 import {Stream} from './stream.js';
 
 /**
@@ -72,7 +72,7 @@ export class Filter implements Operator {
         }
         break;
       case 'edit':
-        splitAndPushEditChange(change, this.#predicate, this.#output);
+        maybeSplitAndPushEditChange(change, this.#predicate, this.#output);
         break;
       default:
         unreachable(change);

@@ -1,9 +1,9 @@
 import {ExperimentalNoIndexDiff} from 'replicache';
 import {expect, test} from 'vitest';
+import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Join} from 'zql/src/zql/ivm/join.js';
 import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
-import {Catch} from '../../../zql/src/zql/ivm/catch.js';
 import {AddQuery, ZeroContext} from './context.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 

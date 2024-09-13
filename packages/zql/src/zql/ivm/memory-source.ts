@@ -493,7 +493,11 @@ function computeOverlays(
 ): [Overlay | undefined, Overlay | undefined] {
   let secondOverlay: Overlay | undefined;
 
-  if (overlay?.change.type === 'edit') {
+  if (
+    overlay?.change.type === 'edit' &&
+    compare(overlay.change.row, overlay.change.oldRow) !== 0
+  ) {
+    // Different PK so we split the edit change into a remove and add.
     [overlay, secondOverlay] = splitEditChange(overlay, compare);
   }
 
@@ -563,7 +567,8 @@ function splitEditChange(
   };
 
   const cmp = compare(oldRow, row);
-  if (cmp <= 0) {
+  assert(cmp !== 0, 'We should not split edit change with same PK');
+  if (cmp < 0) {
     return [removeOverlay, addOverlay];
   }
   return [addOverlay, removeOverlay];
@@ -577,7 +582,9 @@ export function* generateWithOverlayInner(
   let [overlay, secondOverlay] = overlays;
   for (const row of rowIterator) {
     if (overlay) {
-      if (overlay.change.type === 'add') {
+      if (overlay.change.type === 'add' || overlay.change.type === 'edit') {
+        // For edit changes we can only get here if the edit change was not
+        // split an the row and the oldRow have the same PK.
         const cmp = compare(overlay.change.row, row);
         if (cmp < 0) {
           yield {row: overlay.change.row, relationships: {}};
@@ -585,17 +592,16 @@ export function* generateWithOverlayInner(
           secondOverlay = undefined;
         }
       }
-      if (overlay) {
-        if (overlay.change.type === 'remove') {
-          const cmp = compare(overlay.change.row, row);
-          if (cmp < 0) {
-            overlay = secondOverlay;
-            secondOverlay = undefined;
-          } else if (cmp === 0) {
-            overlay = secondOverlay;
-            secondOverlay = undefined;
-            continue;
-          }
+
+      if (overlay?.change.type === 'remove') {
+        const cmp = compare(overlay.change.row, row);
+        if (cmp < 0) {
+          overlay = secondOverlay;
+          secondOverlay = undefined;
+        } else if (cmp === 0) {
+          overlay = secondOverlay;
+          secondOverlay = undefined;
+          continue;
         }
       }
     }

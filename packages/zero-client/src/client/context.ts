@@ -1,25 +1,14 @@
 import {ExperimentalNoIndexDiff} from 'replicache';
 import {assert, unreachable} from 'shared/src/asserts.js';
-import {AST} from '../../../zql/src/zql/ast/ast.js';
-import {Row} from '../../../zql/src/zql/ivm/data.js';
-import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
-import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
-import {Storage} from '../../../zql/src/zql/ivm/operator.js';
-import {Source} from '../../../zql/src/zql/ivm/source.js';
-import {
-  CommitListener,
-  QueryDelegate,
-} from '../../../zql/src/zql/query/query-impl.js';
-import {Schema} from '../../../zql/src/zql/query/schema.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
+import {Row} from 'zql/src/zql/ivm/data.js';
+import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
+import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
+import {Storage} from 'zql/src/zql/ivm/operator.js';
+import {editChangesEnabled, Source} from 'zql/src/zql/ivm/source.js';
+import {CommitListener, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
+import {Schema} from 'zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
-
-declare const TESTING: boolean;
-
-let editChangesEnabled = TESTING;
-
-export function setEditChangesEnabled(b: boolean): void {
-  editChangesEnabled = b;
-}
 
 export type AddQuery = (ast: AST) => () => void;
 
@@ -100,7 +89,7 @@ export class ZeroContext implements QueryDelegate {
             assert(typeof diff.newValue === 'object');
             assert(typeof diff.oldValue === 'object');
 
-            if (editChangesEnabled) {
+            if (editChangesEnabled()) {
               // Edit changes are not yet supported everywhere. For now we only
               // generate them in tests.
               source.push({

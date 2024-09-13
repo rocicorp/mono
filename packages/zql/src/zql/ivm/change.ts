@@ -32,8 +32,14 @@ export type ChildChange = {
 };
 
 /**
- * We only represent changes to a single row as an "edit". If an edit causes
- * child rows to change, we convert it to the corresponding remove/add changes.
+ * The row changed (in a way that the {@linkcode Source} determines). Most
+ * likely the PK stayed the same but there is really no restriction in how it
+ * can change.
+ *
+ * The edit changes flows down in a {@linkcode Output.push}. There are cases
+ * where an edit change gets split into a remove and an add change when the
+ * presence of the row in the result changes (for example the row is no longer
+ * present due to a filter)
  */
 export type EditChange = {
   type: 'edit';
