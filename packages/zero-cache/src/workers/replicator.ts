@@ -4,14 +4,10 @@ import {
   ReplicaVersionNotifier,
   ReplicaVersionReady,
 } from 'zero-cache/src/services/replicator/replicator.js';
-import {Service} from 'zero-cache/src/services/service.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import {Worker} from '../types/processes.js';
 
-export function runAsWorker(
-  replicator: Replicator & Service,
-  parent: Worker,
-): Promise<void> {
+export function setUpMessageHandlers(replicator: Replicator, parent: Worker) {
   // Respond to status requests from the parent process.
   parent.onMessageType('status', async () => {
     const status = await replicator.status();
@@ -19,8 +15,6 @@ export function runAsWorker(
   });
 
   handleSubscriptionsFrom(parent, replicator);
-
-  return replicator.run();
 }
 
 export function getStatusFromWorker(replicator: Worker): Promise<unknown> {
