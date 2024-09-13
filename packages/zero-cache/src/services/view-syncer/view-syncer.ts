@@ -13,6 +13,7 @@ import type {
   InitConnectionMessage,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
+import {Row} from 'zql/src/zql/ivm/data.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
@@ -554,10 +555,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (!row.refCounts) {
           patch = {type: 'row', op: 'del', id};
         } else {
-          const contents = must(
+          const row = must(
             this.#pipelines.getRow(table, rowKey),
             `Missing row ${table}:${stringify(rowKey)}`,
           );
+          const {contents} = contentsAndVersion(row);
           patch = {type: 'row', op: 'put', id, contents};
         }
         const patchToVersion = {patch, toVersion};
@@ -605,10 +607,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       parsedRow.refCounts[queryHash] += row ? 1 : -1;
 
       if (row && !parsedRow.version) {
-        const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
-        if (typeof version !== 'string' || version.length === 0) {
-          throw new Error(`Invalid _0_version in ${stringify(row)}`);
-        }
+        const {version, contents} = contentsAndVersion(row);
         parsedRow.version = version;
         parsedRow.contents = contents;
       }
@@ -672,3 +671,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 }
 
 const CURSOR_PAGE_SIZE = 10000;
+
+function contentsAndVersion(row: Row) {
+  const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
+  if (typeof version !== 'string' || version.length === 0) {
+    throw new Error(`Invalid _0_version in ${stringify(row)}`);
+  }
+  return {contents, version};
+}
