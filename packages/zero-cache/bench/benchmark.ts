@@ -12,7 +12,7 @@ import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.js';
 import {schema} from './schema.js';
 
 // load up some data!
-function bench() {
+export function bench() {
   const db = new Database(createSilentLogContext(), '/tmp/sync-replica.db');
   const sources = new Map<string, Source>();
   const tableSpecs = new Map(listTables(db).map(spec => [spec.name, spec]));
@@ -65,5 +65,3 @@ function bench() {
   const end = performance.now();
   console.log(`hydrate took ${end - start}ms`);
 }
-
-bench();
