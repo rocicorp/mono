@@ -67,7 +67,7 @@ export function mapLiteDataTypeToZqlSchemaValue(
   return {type: mapLiteDataTypeToZqlValueType(liteDataType)};
 }
 
-function mapLiteDataTypeToZqlValueType(liteDataType: string): ValueType {
+export function mapLiteDataTypeToZqlValueType(liteDataType: string): ValueType {
   switch (liteDataType) {
     case INTEGER:
       return 'number';
