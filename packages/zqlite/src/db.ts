@@ -9,9 +9,14 @@ export class Database {
   readonly #lc: LogContext;
   readonly #threshold: number;
 
-  constructor(lc: LogContext, path: string, slowQueryThreshold = 300) {
+  constructor(
+    lc: LogContext,
+    path: string,
+    options?: SQLite3Database.Options,
+    slowQueryThreshold = 300,
+  ) {
     this.#lc = lc.withContext('class', 'Database').withContext('path', path);
-    this.#db = new SQLite3Database(path);
+    this.#db = new SQLite3Database(path, options);
     this.#threshold = slowQueryThreshold;
   }
 
@@ -33,8 +38,8 @@ export class Database {
     );
   }
 
-  pragma(sql: string): void {
-    this.#db.pragma(sql);
+  pragma(sql: string): unknown {
+    return this.#db.pragma(sql);
   }
 
   close(): void {
