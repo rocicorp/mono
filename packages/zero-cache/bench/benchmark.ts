@@ -1,15 +1,13 @@
 // create a zql query
 
 import Database from 'better-sqlite3';
-import {Host} from 'zql/src/zql/builder/builder.js';
-import {Source} from 'zql/src/zql/ivm2/source.js';
-import {listTables} from '../services/replicator/tables/list.js';
 import {must} from 'shared/src/must.js';
-import {TableSource} from '@rocicorp/zqlite/src/v2/table-source.js';
-import {mapLiteDataTypeToZqlValueType} from '../types/lite.js';
-import {MemoryStorage} from 'zql/src/zql/ivm2/memory-storage.js';
-import {newQuery} from 'zql/src/zql/query2/query-impl.js';
-import {SubscriptionDelegate} from 'zql/src/zql/context/context.js';
+import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
+import {Source} from 'zql/src/zql/ivm/source.js';
+import {newQuery, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
+import {TableSource} from 'zqlite/src/table-source.js';
+import {listTables} from '../src/services/replicator/tables/list.js';
+import {mapLiteDataTypeToZqlValueType} from '../src/types/lite.js';
 import {schema} from './schema.js';
 
 // load up some data!
@@ -17,7 +15,7 @@ function bench() {
   const db = new Database('/tmp/sync-replica.db');
   const sources = new Map<string, Source>();
   const tableSpecs = new Map(listTables(db).map(spec => [spec.name, spec]));
-  const host: Host & SubscriptionDelegate = {
+  const host: QueryDelegate = {
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {
@@ -32,7 +30,7 @@ function bench() {
         Object.fromEntries(
           Object.entries(columns).map(([name, {dataType}]) => [
             name,
-            mapLiteDataTypeToZqlValueType(dataType),
+            {type: mapLiteDataTypeToZqlValueType(dataType)},
           ]),
         ),
         [primaryKey[0], ...primaryKey.slice(1)],
@@ -46,8 +44,10 @@ function bench() {
       // TODO: table storage!!
       return new MemoryStorage();
     },
-
-    subscriptionAdded() {
+    addServerQuery() {
+      return () => {};
+    },
+    onTransactionCommit() {
       return () => {};
     },
   };
