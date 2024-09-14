@@ -1,12 +1,13 @@
-import Database from 'better-sqlite3';
 import type postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {listTables} from 'zero-cache/src/db/lite-tables.js';
 import {stripCommentsAndWhitespace} from 'zero-cache/src/db/query-test-util.js';
-import {testDBs} from '../../../test/db.js';
+import {testDBs} from 'zero-cache/src/test/db.js';
+import type {TableSpec} from 'zero-cache/src/types/specs.js';
+import {Database} from 'zqlite/src/db.js';
 import {createTableStatement} from './create.js';
-import {listTables} from './list.js';
 import {getPublicationInfo} from './published.js';
-import type {TableSpec} from './specs.js';
 
 describe('tables/create', () => {
   type Case = {
@@ -346,10 +347,10 @@ describe('tables/create', () => {
   });
 
   describe('sqlite', () => {
-    let db: Database.Database;
+    let db: Database;
 
     beforeEach(() => {
-      db = new Database(':memory:');
+      db = new Database(createSilentLogContext(), ':memory:');
     });
 
     for (const c of cases) {

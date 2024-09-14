@@ -1,20 +1,15 @@
-import type {UndoManager} from '@rocicorp/undo';
 import classnames from 'classnames';
-import {pickBy} from 'lodash';
-import {memo, useCallback, useEffect, useState} from 'react';
-import {HotKeys} from 'react-hotkeys';
+import {memo, useCallback, useState} from 'react';
 import type {Zero} from 'zero-client';
-import {getIssueOrder, getViewStatuses} from './filters.js';
+import {getIssueOrder} from './filters.js';
 import {
   FiltersState,
   useFilters,
   useIssueDetailState,
   useOrderByState,
-  useViewState,
 } from './hooks/query-state-hooks.js';
 import {useQuery} from './hooks/use-query.js';
 import {useZero} from './hooks/use-zero.js';
-import IssueBoard from './issue-board.jsx';
 import IssueDetail from './issue-detail.jsx';
 import IssueList from './issue-list.jsx';
 import {
@@ -24,7 +19,6 @@ import {
   IssueUpdate,
   createIssue,
   createIssueComment,
-  deleteIssueComment,
   updateIssues,
 } from './issue.js';
 import {useIssuesProps, type IssuesProps} from './issues-props.js';
@@ -32,89 +26,57 @@ import LeftMenu from './left-menu.jsx';
 import TopFilter from './top-filter.jsx';
 import {escapeLike} from './util/escape-like.js';
 import {Schema} from './schema.js';
-import {
-  crewNames,
-  getCrewQuery,
-  getIssueListQuery,
-  IssueListQuery,
-} from './queries.js';
+import {getIssueListQuery, IssueListQuery} from './queries.js';
 
-type AppProps = {
-  undoManager: UndoManager;
-};
-
-const activeUserName = crewNames[Math.floor(Math.random() * crewNames.length)];
+const crewUserNames = ['holden', 'naomi', 'alex', 'amos', 'bobbie'];
+const activeUserName =
+  crewUserNames[Math.floor(Math.random() * crewUserNames.length)];
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-const App = ({undoManager}: AppProps) => {
-  const [view] = useViewState();
+const App = () => {
   const filters = useFilters();
   const [orderBy] = useOrderByState();
   const [detailIssueID, setDetailIssueID] = useIssueDetailState();
   const [menuVisible, setMenuVisible] = useState(false);
-  const zero = useZero<Schema>();
 
-  // Sync the user rows for the entire crew so that when we pick a random
-  // crew member below to be the current active user, we already have it
-  // synced.
-  useQuery(getCrewQuery(zero));
+  // Sorry zod – times change.
+  const z = useZero<Schema>();
 
+  // TODO: zql needs .one() to make this return string|undefined.
+  // TODO: Should be able to say .where('name', activeUserName) (implying '=')
   const userID =
-    useQuery(
-      zero.query.member.select('id').where('name', '=', activeUserName),
-    ).at(0)?.id ?? '';
+    useQuery(z.query.member.select('id').where('name', '=', activeUserName)).at(
+      0,
+    )?.id ?? '';
 
-  useEffect(() => {
-    console.debug({activeUserName, userID});
-  }, [userID]);
+  const issueListQuery = getIssueListQuery(z);
+  const filteredQuery = filterQuery(issueListQuery, filters);
 
-  const issueListQuery = getIssueListQuery(zero);
-  const filteredQuery = filterQuery(issueListQuery, view, filters);
-
-  const issueOrder = getIssueOrder(view, orderBy);
-  const issueQueryDeps = [view, filters, issueOrder] as const;
-  const viewIssueCount = 0;
+  const issueOrder = getIssueOrder(orderBy);
+  const issueQueryDeps = [filters, issueOrder] as const;
 
   const issuesProps = useIssuesProps(filteredQuery, issueQueryDeps, issueOrder);
 
   const handleCreateIssue = useCallback(
     async (issue: IssueCreationPartial) => {
-      // TODO: UndoManager? - audit every other place we're doing mutations,
-      // or remove undo for now.
-      await createIssue(zero, issue, userID);
+      await createIssue(z, issue, userID);
     },
-    [zero, userID],
+    [z, userID],
   );
   const handleCreateComment = useCallback(
     async (comment: CommentCreationPartial) => {
-      await undoManager.add({
-        execute: () => createIssueComment(zero, comment, userID),
-        undo: () => deleteIssueComment(zero, comment.id, comment.issueID),
-      });
+      createIssueComment(z, comment, userID);
     },
-    [zero, undoManager, userID],
+    [z, userID],
   );
 
   const handleUpdateIssues = useCallback(
     async (issueUpdates: Array<{issue: Issue; update: IssueUpdate}>) => {
-      const uChanges: Array<IssueUpdate> = issueUpdates.map<IssueUpdate>(
-        ({issue, update}) => {
-          const undoChanges = pickBy(issue, (_, key) => key in update);
-          return {
-            id: issue.id,
-            issueChanges: undoChanges,
-          };
-        },
-      );
-      await undoManager.add({
-        execute: () =>
-          updateIssues(zero, {
-            issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
-          }),
-        undo: () => updateIssues(zero, {issueUpdates: uChanges}),
+      updateIssues(z, {
+        issueUpdates: issueUpdates.map<IssueUpdate>(({update}) => update),
       });
     },
-    [zero, undoManager],
+    [z],
   );
 
   const handleOpenDetail = useCallback(
@@ -130,53 +92,30 @@ const App = ({undoManager}: AppProps) => {
     [setMenuVisible, menuVisible],
   );
 
-  const handlers = {
-    undo: () => undoManager.undo(),
-    redo: () => undoManager.redo(),
-  };
-
   return (
-    <HotKeys
-      {...{
-        keyMap,
-        handlers,
-      }}
-    >
-      <Layout
-        menuVisible={menuVisible}
-        view={view!}
-        detailIssueID={detailIssueID}
-        // TODO: base on whether initial sync is done
-        isLoading={false}
-        viewIssueCount={viewIssueCount}
-        issuesProps={issuesProps}
-        hasNonViewFilters={filters.hasNonViewFilters}
-        zero={zero}
-        userID={userID}
-        onCloseMenu={handleCloseMenu}
-        onToggleMenu={handleToggleMenu}
-        onUpdateIssues={handleUpdateIssues}
-        onCreateIssue={handleCreateIssue}
-        onCreateComment={handleCreateComment}
-        onOpenDetail={handleOpenDetail}
-      ></Layout>
-    </HotKeys>
+    <Layout
+      menuVisible={menuVisible}
+      detailIssueID={detailIssueID}
+      // TODO: base on whether initial sync is done
+      isLoading={false}
+      issuesProps={issuesProps}
+      zero={z}
+      userID={userID}
+      onCloseMenu={handleCloseMenu}
+      onToggleMenu={handleToggleMenu}
+      onUpdateIssues={handleUpdateIssues}
+      onCreateIssue={handleCreateIssue}
+      onCreateComment={handleCreateComment}
+      onOpenDetail={handleOpenDetail}
+    ></Layout>
   );
-};
-
-const keyMap = {
-  undo: ['ctrl+z', 'command+z'],
-  redo: ['ctrl+y', 'command+shift+z', 'ctrl+shift+z'],
 };
 
 interface LayoutProps {
   menuVisible: boolean;
-  view: string;
   detailIssueID: string | null;
   isLoading: boolean;
-  viewIssueCount: number;
   issuesProps: IssuesProps;
-  hasNonViewFilters: boolean;
   zero: Zero<Schema>;
   userID: string;
   onCloseMenu: () => void;
@@ -189,12 +128,9 @@ interface LayoutProps {
 
 function RawLayout({
   menuVisible,
-  view,
   detailIssueID,
   isLoading,
-  viewIssueCount,
   issuesProps,
-  hasNonViewFilters,
   userID,
   onCloseMenu,
   onToggleMenu,
@@ -217,17 +153,7 @@ function RawLayout({
               hidden: detailIssueID,
             })}
           >
-            <TopFilter
-              onToggleMenu={onToggleMenu}
-              view={view}
-              filteredIssuesCount={
-                // TODO(arv): This is wrong. We need to know the count of the filtered issues
-                // hasNonViewFilters ? filteredIssues.length : undefined
-                hasNonViewFilters ? 123456 : undefined
-              }
-              issuesCount={viewIssueCount}
-              showSortOrderMenu={view !== 'board'}
-            />
+            <TopFilter onToggleMenu={onToggleMenu} />
           </div>
           <div className="relative flex flex-1 min-h-0">
             {detailIssueID && (
@@ -246,20 +172,11 @@ function RawLayout({
                 'pointer-events-none': detailIssueID,
               })}
             >
-              {view === 'board' ? (
-                <IssueBoard
-                  issuesProps={issuesProps}
-                  onUpdateIssues={onUpdateIssues}
-                  onOpenDetail={onOpenDetail}
-                />
-              ) : (
-                <IssueList
-                  onUpdateIssues={onUpdateIssues}
-                  onOpenDetail={onOpenDetail}
-                  view={view}
-                  issuesProps={issuesProps}
-                />
-              )}
+              <IssueList
+                onUpdateIssues={onUpdateIssues}
+                onOpenDetail={onOpenDetail}
+                issuesProps={issuesProps}
+              />
             </div>
           </div>
         </div>
@@ -271,18 +188,7 @@ function RawLayout({
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const Layout = memo(RawLayout);
 
-function filterQuery(
-  q: IssueListQuery,
-  view: string | null,
-  filters: FiltersState,
-) {
-  const viewStatuses = getViewStatuses(view);
-
-  // Apply view filter
-  if (viewStatuses && viewStatuses.size > 0) {
-    q = q.where('status', 'IN', [...viewStatuses]);
-  }
-
+function filterQuery(q: IssueListQuery, filters: FiltersState) {
   if (filters.statusFilter) {
     q = q.where('status', 'IN', [...filters.statusFilter]);
   }

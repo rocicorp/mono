@@ -2,6 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
+import {must} from 'shared/src/must.js';
 import {difference} from 'shared/src/set-utils.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {rowIDHash, RowKey} from 'zero-cache/src/types/row-key.js';
@@ -12,13 +13,14 @@ import type {
   InitConnectionMessage,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
+import {Row} from 'zql/src/zql/ivm/data.js';
 import type {PostgresDB} from '../../types/pg.js';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
+import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {ActivityBasedService} from '../service.js';
-import {ClientHandler, PokeHandler} from './client-handler.js';
+import {ClientHandler, PokeHandler, RowPatch} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
@@ -27,7 +29,13 @@ import {
   type CVRSnapshot,
 } from './cvr.js';
 import {PipelineDriver, RowChange} from './pipeline-driver.js';
-import {cmpVersions, RowID, versionToCookie} from './schema/types.js';
+import {
+  cmpVersions,
+  RowID,
+  versionFromString,
+  versionString,
+  versionToCookie,
+} from './schema/types.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -39,7 +47,7 @@ export interface ViewSyncer {
   initConnection(
     ctx: SyncContext,
     msg: InitConnectionMessage,
-  ): Promise<CancelableAsyncIterable<Downstream>>;
+  ): Promise<Source<Downstream>>;
 
   changeDesiredQueries(
     ctx: SyncContext,
@@ -67,6 +75,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
   #cvr: CVRSnapshot | undefined;
+  #pipelinesReady = false;
 
   constructor(
     lc: LogContext,
@@ -86,23 +95,43 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
 
+  #runInLockWithCVR<T>(fn: (cvr: CVRSnapshot) => Promise<T> | T): Promise<T> {
+    return this.#lock.withLock(async () => {
+      if (!this.#cvr) {
+        this.#cvr = await this.#cvrStore.load();
+      }
+      return fn(this.#cvr);
+    });
+  }
+
   async run(): Promise<void> {
     try {
-      await this.#lock.withLock(async () => {
-        this.#cvr = await this.#cvrStore.load();
-      });
-
-      this.#lc.info?.('view-syncer started', this.#cvr?.version);
-
       for await (const _ of this.#versionChanges) {
-        await this.#lock.withLock(async () => {
-          if (!this.#pipelines.initialized()) {
-            this.#pipelines.init();
-            this.#hydrateUnchangedQueries();
-            await this.#syncQueryPipelineSet();
-          } else {
-            await this.#advancePipelines();
+        if (!this.#pipelines.initialized()) {
+          // On the first version-ready signal, connect to the replica.
+          this.#pipelines.init();
+        }
+        await this.#runInLockWithCVR(async cvr => {
+          if (this.#pipelinesReady) {
+            await this.#advancePipelines(cvr);
+            return;
           }
+
+          // Advance the snapshot to the current version. Note that it is
+          // okay not to iterate over the diff because there are no pipelines
+          // to push changes to.
+          const {version} = this.#pipelines.advance();
+          if (version < cvr.version.stateVersion) {
+            this.#lc.debug?.(
+              `replica@${version} is behind cvr@${versionString(cvr.version)}`,
+            );
+            return; // Wait for the next advancement.
+          }
+
+          // Initialize the pipelines.
+          this.#hydrateUnchangedQueries(cvr);
+          await this.#syncQueryPipelineSet(cvr);
+          this.#pipelinesReady = true;
         });
       }
 
@@ -164,6 +193,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #deleteClient(clientID: string, client: ClientHandler): Promise<void> {
+    // Note: The CVR is not needed here so there's no need to call runInLockWithCVR().
     return this.#lock.withLock(() => {
       const c = this.#clients.get(clientID);
       if (c === client) {
@@ -179,12 +209,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async initConnection(
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
-  ): Promise<CancelableAsyncIterable<Downstream>> {
+  ): Promise<Source<Downstream>> {
     const {clientID, wsID, baseCookie} = ctx;
     const lc = this.#lc
       .withContext('clientID', clientID)
       .withContext('wsID', wsID);
-    lc.debug?.('initConnection', initConnectionMessage);
 
     // Setup the downstream connection.
     const downstream = Subscription.create<Downstream>({
@@ -192,11 +221,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         err
           ? lc.error?.(`client closed with error`, err)
           : lc.info?.('client closed');
-        void this.#deleteClient(clientID, client);
+        void this.#deleteClient(clientID, newClient);
       },
     });
 
-    const client = new ClientHandler(
+    const newClient = new ClientHandler(
       lc,
       this.id,
       clientID,
@@ -205,23 +234,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       downstream,
     );
 
-    // Note: It is tempting to try to re-use #runInLockForClient(), but for
-    // the initConnection case the client is not yet in the #clients map, and
-    // it must be added from within the lock, and only after the desired
-    // queries have been processed.
-    await this.#lock.withLock(async () => {
-      await this.#patchQueries(lc, client, initConnectionMessage[1]);
+    await this.#runInLockForClient(
+      ctx,
+      initConnectionMessage,
+      this.#patchQueries,
+      newClient,
+    );
 
-      // Update #clients, close any previous connection.
-      this.#clients.get(clientID)?.close();
-      this.#clients.set(clientID, client);
-
-      // Clear and cancel any idle timeout.
-      if (this.#idleToken) {
-        clearTimeout(this.#idleToken.timeoutID);
-        this.#idleToken = null;
-      }
-    });
     return downstream;
   }
 
@@ -229,78 +248,103 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
-    await this.#runInLockForClient<ChangeDesiredQueriesBody>(
-      ctx,
-      msg,
-      (lc, client, body) => this.#patchQueries(lc, client, body),
-    );
+    await this.#runInLockForClient(ctx, msg, this.#patchQueries);
   }
 
+  /**
+   * Runs the given `fn` to process the `msg` from within the `#lock`,
+   * optionally adding the `newClient` if supplied.
+   */
   async #runInLockForClient<B, M extends [cmd: string, B] = [string, B]>(
     ctx: SyncContext,
     msg: M,
-    fn: (lc: LogContext, client: ClientHandler, body: B) => Promise<void>,
+    fn: (
+      lc: LogContext,
+      clientID: string,
+      body: B,
+      cvr: CVRSnapshot,
+    ) => Promise<void>,
+    newClient?: ClientHandler,
   ): Promise<void> {
     const {clientID, wsID} = ctx;
+    const [cmd, body] = msg;
     const lc = this.#lc
       .withContext('clientID', clientID)
-      .withContext('wsID', wsID);
+      .withContext('wsID', wsID)
+      .withContext('cmd', cmd);
 
-    const [cmd, body] = msg;
-    lc.debug?.(cmd, body);
-
-    const client = this.#clients.get(clientID);
-    if (client?.wsID !== wsID) {
-      // Only respond to messages of the currently connected client.
-      // Past connections may have been dropped due to an error, so consider them invalid.
-      lc.info?.(`client no longer connected. dropping ${cmd} message`);
-      return;
-    }
-
+    let client: ClientHandler | undefined;
     try {
-      await this.#lock.withLock(() => fn(lc, client, body));
+      await this.#runInLockWithCVR(cvr => {
+        lc.debug?.(cmd, body);
+
+        if (newClient) {
+          assert(newClient.wsID === wsID);
+          this.#clients.get(clientID)?.close();
+          this.#clients.set(clientID, newClient);
+          client = newClient;
+        } else {
+          client = this.#clients.get(clientID);
+          if (client?.wsID !== wsID) {
+            // Only respond to messages of the currently connected client.
+            // Past connections may have been dropped due to an error, so consider them invalid.
+            lc.info?.(`client no longer connected. dropping ${cmd} message`);
+            return;
+          }
+        }
+
+        return fn(lc, clientID, body, cvr);
+      });
     } catch (e) {
       lc.error?.(`closing connection with error`, e);
-      client.fail(e);
+      client?.fail(e);
       throw e;
+    }
+
+    // Clear and cancel any idle timeout.
+    if (this.#idleToken) {
+      clearTimeout(this.#idleToken.timeoutID);
+      this.#idleToken = null;
     }
   }
 
   // Must be called from within #lock.
-  async #patchQueries(
+  readonly #patchQueries = async (
     lc: LogContext,
-    client: ClientHandler,
+    clientID: string,
     {desiredQueriesPatch}: ChangeDesiredQueriesBody,
-  ) {
-    assert(this.#cvr, 'CVR must be loaded before patching queries');
+    cvr: CVRSnapshot,
+  ) => {
+    // Apply requested patches.
+    if (desiredQueriesPatch.length) {
+      lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
+      const updater = new CVRConfigDrivenUpdater(this.#cvrStore, cvr);
 
-    // Apply patches requested in the initConnectionMessage.
-    const {clientID} = client;
-    const updater = new CVRConfigDrivenUpdater(this.#cvrStore, this.#cvr);
-
-    const added: {id: string; ast: AST}[] = [];
-    for (const patch of desiredQueriesPatch) {
-      switch (patch.op) {
-        case 'put':
-          added.push(
-            ...updater.putDesiredQueries(clientID, {[patch.hash]: patch.ast}),
-          );
-          break;
-        case 'del':
-          updater.deleteDesiredQueries(clientID, [patch.hash]);
-          break;
-        case 'clear':
-          updater.clearDesiredQueries(clientID);
-          break;
+      const added: {id: string; ast: AST}[] = [];
+      for (const patch of desiredQueriesPatch) {
+        switch (patch.op) {
+          case 'put':
+            added.push(
+              ...updater.putDesiredQueries(clientID, {[patch.hash]: patch.ast}),
+            );
+            break;
+          case 'del':
+            updater.deleteDesiredQueries(clientID, [patch.hash]);
+            break;
+          case 'clear':
+            updater.clearDesiredQueries(clientID);
+            break;
+        }
       }
+
+      this.#cvr = (await updater.flush(lc)).cvr;
+      cvr = this.#cvr; // For #syncQueryPipelineSet().
     }
 
-    this.#cvr = await updater.flush(lc);
-
-    if (this.#pipelines.initialized()) {
-      await this.#syncQueryPipelineSet();
+    if (this.#pipelinesReady) {
+      await this.#syncQueryPipelineSet(cvr);
     }
-  }
+  };
 
   /**
    * Adds and hydrates pipelines for queries whose results are already
@@ -317,12 +361,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  #hydrateUnchangedQueries() {
-    assert(this.#cvr, 'service must be running');
+  #hydrateUnchangedQueries(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
 
     const dbVersion = this.#pipelines.currentVersion();
-    const cvrVersion = this.#cvr.version;
+    const cvrVersion = cvr.version;
 
     if (cvrVersion.stateVersion !== dbVersion) {
       this.#lc.info?.(
@@ -331,7 +374,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return; // hydration needs to be run with the CVR updater.
     }
 
-    const gotQueries = Object.entries(this.#cvr.queries).filter(
+    const gotQueries = Object.entries(cvr.queries).filter(
       ([_, state]) => state.transformationHash !== undefined,
     );
 
@@ -342,7 +385,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       const newTransformationHash = hash; // Currently, no transformations are done.
       if (newTransformationHash !== transformationHash) {
-        continue; // Query results have changed.
+        continue; // Query results may have changed.
       }
       const start = Date.now();
       let count = 0;
@@ -359,11 +402,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * in sync with the set of queries in the CVR (both got and desired).
    * If queries are added, removed, or queried due to a new state version,
    * a new CVR version is created and pokes sent to connected clients.
+   *
+   * This must be called from within the #lock.
    */
-  async #syncQueryPipelineSet() {
-    assert(this.#cvr, 'service must be running');
+  async #syncQueryPipelineSet(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
-    const cvr = this.#cvr;
+    const lc = this.#lc.withContext('cvrVersion', versionString(cvr.version));
 
     const hydratedQueries = this.#pipelines.addedQueries();
     const allClientQueries = new Set(Object.keys(cvr.queries));
@@ -379,23 +423,36 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ...difference(allClientQueries, desiredClientQueries),
     ];
     if (addQueries.length > 0 || removeQueries.length > 0) {
-      await this.#addAndRemoveQueries(cvr, addQueries, removeQueries);
+      // Note: clients are caught up as part of #addAndRemoveQueries().
+      await this.#addAndRemoveQueries(lc, cvr, addQueries, removeQueries);
+    } else {
+      await this.#catchupClients(lc, cvr);
+    }
+
+    // If CVR was non-empty, then the CVR, database, and all clients
+    // should now be at the same version.
+    if (allClientQueries.size) {
+      const cvrVersion = must(this.#cvr).version;
+      const dbVersion = this.#pipelines.currentVersion();
+      assert(
+        cvrVersion.stateVersion === dbVersion,
+        `CVR@${versionString(cvrVersion)}" does not match DB@${dbVersion}`,
+      );
     }
   }
 
+  // This must be called from within the #lock.
   async #addAndRemoveQueries(
+    lc: LogContext,
     cvr: CVRSnapshot,
     addQueries: string[],
     removeQueries: string[],
   ) {
     assert(addQueries.length > 0 || removeQueries.length > 0);
     const start = Date.now();
-    const oldVersion = cvr.version;
 
     const stateVersion = this.#pipelines.currentVersion();
-    const lc = this.#lc
-      .withContext('cvrVersion', versionToCookie(oldVersion))
-      .withContext('stateVersion', stateVersion);
+    lc = lc.withContext('stateVersion', stateVersion);
     lc.info?.(`hydrating ${addQueries.length} queries`);
 
     const updater = new CVRQueryDrivenUpdater(
@@ -403,9 +460,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr,
       stateVersion,
     );
-    const minClientVersion = [...this.#clients.values()]
-      .map(c => c.version())
-      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b), {stateVersion});
 
     // Note: This kicks of background PG queries for CVR data associated with the
     // executed and removed queries.
@@ -413,7 +467,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc,
       addQueries.map(hash => ({id: hash, transformationHash: hash})),
       removeQueries,
-      minClientVersion,
     );
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(newVersion),
@@ -440,25 +493,92 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     lc.debug?.(`generating delete patches`);
-    for (const patch of await updater.deleteUnreferencedRows(lc)) {
+    for (const patch of await updater.deleteUnreferencedRows()) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = await updater.flush(lc);
+    this.#cvr = (await updater.flush(lc)).cvr;
 
     // Before ending the poke, catch up clients that were behind the old CVR.
-    for (const patch of await this.#cvrStore.catchupConfigPatches(
-      lc,
-      minClientVersion,
-      cvr,
-    )) {
-      pokers.forEach(poker => poker.addPatch(patch));
-    }
+    await this.#catchupClients(lc, cvr, addQueries, pokers);
+
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
 
     lc.info?.(`finished processing queries (${Date.now() - start} ms)`);
+  }
+
+  /**
+   * @param cvr The CVR to which clients should be caught up to. This does
+   *     not necessarily need to be the current CVR.
+   * @param excludeQueryHashes Exclude patches from rows associated with
+   *     the specified queries.
+   * @param usePokers If specified, sends pokes on existing PokeHandlers,
+   *     in which case the caller is responsible for sending the `pokeEnd`
+   *     messages. If unspecified, the pokes will be started and ended
+   *     using the version from the supplied `cvr`.
+   */
+  // Must be called within #lock
+  async #catchupClients(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    excludeQueryHashes: string[] = [],
+    usePokers?: PokeHandler[],
+  ) {
+    const pokers =
+      usePokers ??
+      [...this.#clients.values()].map(c => c.startPoke(cvr.version));
+
+    const catchupFrom = [...this.#clients.values()]
+      .map(c => c.version())
+      .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b), cvr.version);
+
+    const rowPatches = this.#cvrStore.catchupRowPatches(
+      lc,
+      catchupFrom,
+      cvr,
+      excludeQueryHashes,
+    );
+    const configPatches = this.#cvrStore.catchupConfigPatches(
+      lc,
+      catchupFrom,
+      cvr,
+    );
+
+    for (const patch of await configPatches) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
+
+    let rowPatchCount = 0;
+    for await (const rows of rowPatches) {
+      for (const row of rows) {
+        const {schema, table} = row;
+        const rowKey = row.rowKey as RowKey;
+        const toVersion = versionFromString(row.patchVersion);
+
+        const id: RowID = {schema, table, rowKey};
+        let patch: RowPatch;
+        if (!row.refCounts) {
+          patch = {type: 'row', op: 'del', id};
+        } else {
+          const row = must(
+            this.#pipelines.getRow(table, rowKey),
+            `Missing row ${table}:${stringify(rowKey)}`,
+          );
+          const {contents} = contentsAndVersion(row);
+          patch = {type: 'row', op: 'put', id, contents};
+        }
+        const patchToVersion = {patch, toVersion};
+        pokers.forEach(poker => poker.addPatch(patchToVersion));
+        rowPatchCount++;
+      }
+    }
+    lc.debug?.(`sent ${rowPatchCount} row patches`);
+
+    if (!usePokers) {
+      pokers.forEach(poker => poker.end());
+    }
   }
 
   async #processChanges(
@@ -494,10 +614,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       parsedRow.refCounts[queryHash] += row ? 1 : -1;
 
       if (row && !parsedRow.version) {
-        const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
-        if (typeof version !== 'string' || version.length === 0) {
-          throw new Error(`Invalid _0_version in ${stringify(row)}`);
-        }
+        const {version, contents} = contentsAndVersion(row);
         parsedRow.version = version;
         parsedRow.contents = contents;
       }
@@ -517,14 +634,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * Must be called from within the #lock.
    */
-  async #advancePipelines() {
-    assert(this.#cvr, 'service must be running');
+  async #advancePipelines(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
     const start = Date.now();
 
     const {version, numChanges, changes} = this.#pipelines.advance();
     const lc = this.#lc.withContext('newVersion', version);
-    const cvr = this.#cvr;
 
     // Probably need a new updater type. CVRAdvancementUpdater?
     const updater = new CVRQueryDrivenUpdater(this.#cvrStore, cvr, version);
@@ -536,7 +651,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#processChanges(lc, changes, updater, pokers);
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = await updater.flush(lc);
+    this.#cvr = (await updater.flush(lc)).cvr;
 
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
@@ -563,3 +678,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 }
 
 const CURSOR_PAGE_SIZE = 10000;
+
+function contentsAndVersion(row: Row) {
+  const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
+  if (typeof version !== 'string' || version.length === 0) {
+    throw new Error(`Invalid _0_version in ${stringify(row)}`);
+  }
+  return {contents, version};
+}

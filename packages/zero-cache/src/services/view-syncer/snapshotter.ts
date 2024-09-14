@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
 import {ident} from 'pg-format';
 import {assert} from 'shared/src/asserts.js';
 import * as v from 'shared/src/valita.js';
@@ -10,6 +9,7 @@ import {
   RowKey,
   RowValue,
 } from 'zero-cache/src/types/row-key.js';
+import {Database} from 'zqlite/src/db.js';
 import {
   changeLogEntrySchema as schema,
   SET_OP,
@@ -97,7 +97,7 @@ export class Snapshotter {
    */
   init(): this {
     assert(this.#curr === undefined, 'Already initialized');
-    this.#curr = Snapshot.create(this.#dbFile);
+    this.#curr = Snapshot.create(this.#lc, this.#dbFile);
     this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
     return this;
   }
@@ -153,10 +153,20 @@ export class Snapshotter {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     const next = this.#prev
       ? this.#prev.resetToHead()
-      : Snapshot.create(this.#curr.db.db.name);
+      : Snapshot.create(this.#lc, this.#curr.db.db.name);
     this.#prev = this.#curr;
     this.#curr = next;
     return new Diff(this.#prev, this.#curr);
+  }
+
+  /**
+   * Call this to close the database connections when the Snapshotter is
+   * no longer needed.
+   */
+  destroy() {
+    this.#curr?.db.db.close();
+    this.#prev?.db.db.close();
+    this.#lc.debug?.('closed database connections');
   }
 }
 
@@ -198,8 +208,8 @@ export interface SnapshotDiff extends Iterable<Change> {
 }
 
 class Snapshot {
-  static create(dbFile: string) {
-    const conn = new Database(dbFile);
+  static create(lc: LogContext, dbFile: string) {
+    const conn = new Database(lc, dbFile);
     conn.pragma('journal_mode = WAL');
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
 
@@ -246,7 +256,8 @@ class Snapshot {
     );
     cached.statement.safeIntegers(true);
     try {
-      return cached.statement.get(Object.values(key));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return cached.statement.get<any>(Object.values(key));
     } finally {
       this.db.statementCache.return(cached);
     }

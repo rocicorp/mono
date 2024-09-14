@@ -301,7 +301,7 @@ describe('kitchen sink query', () => {
     addData(queryDelegate);
     const issueQuery = newQuery(queryDelegate, issueSchema)
       .where('ownerId', 'IN', ['001', '002', '003'])
-      .where('closed', '=', false)
+      .where('closed', false)
       .related('owner', q => q.select('name'))
       .related('comments', q =>
         q

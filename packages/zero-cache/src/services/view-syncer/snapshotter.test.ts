@@ -19,7 +19,7 @@ describe('view-syncer/snapshotter', () => {
   beforeEach(() => {
     lc = createSilentLogContext();
     dbFile = new DbFile('snapshotter_test');
-    const db = dbFile.connect();
+    const db = dbFile.connect(lc);
     db.pragma('journal_mode = WAL');
     db.exec(
       `
@@ -35,7 +35,7 @@ describe('view-syncer/snapshotter', () => {
         INSERT INTO users(id, handle, _0_version) VALUES(20, 'bob', '00');
       `,
     );
-    initReplicationState(db, ['zero_data'], '0/1');
+    initReplicationState(db, ['zero_data'], '01');
     initChangeLog(db);
 
     replicator = createMessageProcessor(db);
@@ -90,24 +90,25 @@ describe('view-syncer/snapshotter', () => {
     expect(s1.current().version).toBe('00');
     expect(s2.current().version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(
-      lc,
-      '0/1',
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, [
+      'data',
       messages.insert('issues', {id: 4, owner: 20}),
-    );
-    replicator.processMessage(
-      lc,
-      '0/1',
+    ]);
+    replicator.processMessage(lc, [
+      'data',
       messages.update('issues', {id: 1, owner: 10, desc: 'food'}),
-    );
-    replicator.processMessage(
-      lc,
-      '0/1',
+    ]);
+    replicator.processMessage(lc, [
+      'data',
       messages.update('issues', {id: 5, owner: 10, desc: 'bard'}, {id: 2}),
-    );
-    replicator.processMessage(lc, '0/1', messages.delete('issues', {id: 3}));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    ]);
+    replicator.processMessage(lc, ['data', messages.delete('issues', {id: 3})]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '09'},
+    ]);
 
     const diff1 = s1.advance();
     expect(diff1.prev.version).toBe('00');
@@ -236,25 +237,29 @@ describe('view-syncer/snapshotter', () => {
     `);
 
     // Replicate a second transaction
-    replicator.processMessage(lc, '0/3', messages.begin());
-    replicator.processMessage(lc, '0/3', messages.delete('issues', {id: 4}));
-    replicator.processMessage(
-      lc,
-      '0/3',
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, ['data', messages.delete('issues', {id: 4})]);
+    replicator.processMessage(lc, [
+      'data',
       messages.update('issues', {id: 2, owner: 10, desc: 'bard'}, {id: 5}),
-    );
-    replicator.processMessage(lc, '0/3', messages.commit('0/4'));
+    ]);
+
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
 
     const diff2 = s1.advance();
     expect(diff2.prev.version).toBe('01');
-    expect(diff2.curr.version).toBe('02');
+    expect(diff2.curr.version).toBe('09');
     expect(diff2.changes).toBe(3);
 
     expect([...diff2]).toMatchInlineSnapshot(`
       [
         {
           "nextValue": {
-            "_0_version": "02",
+            "_0_version": "09",
             "desc": "bard",
             "id": 2n,
             "owner": 10n,
@@ -294,12 +299,12 @@ describe('view-syncer/snapshotter', () => {
     }
     expect(thrown).toBeInstanceOf(InvalidDiffError);
 
-    // The diff for s2 goes straight from '00' to '02'.
+    // The diff for s2 goes straight from '00' to '08'.
     // This will coalesce multiple changes to a row, and can result in some noops,
     // (e.g. rows that return to their original state).
     const diff3 = s2.advance();
     expect(diff3.prev.version).toBe('00');
-    expect(diff3.curr.version).toBe('02');
+    expect(diff3.curr.version).toBe('09');
     expect(diff3.changes).toBe(5);
     expect([...diff3]).toMatchInlineSnapshot(`
       [
@@ -330,7 +335,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "02",
+            "_0_version": "09",
             "desc": "bard",
             "id": 2n,
             "owner": 10n,
@@ -353,9 +358,13 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('comments'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, ['data', messages.truncate('comments')]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -371,9 +380,13 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, ['data', messages.truncate('users')]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -410,10 +423,14 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('issues'));
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, ['data', messages.truncate('issues')]);
+    replicator.processMessage(lc, ['data', messages.truncate('users')]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '08'},
+    ]);
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -480,19 +497,21 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(
-      lc,
-      '0/1',
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, ['data', messages.truncate('users')]);
+    replicator.processMessage(lc, [
+      'data',
       messages.insert('users', {id: 20, handle: 'robert'}),
-    );
-    replicator.processMessage(
-      lc,
-      '0/1',
+    ]);
+    replicator.processMessage(lc, [
+      'data',
       messages.insert('users', {id: 30, handle: 'candice'}),
-    );
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    ]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '09'},
+    ]);
 
     const diff = s.advance();
     expect(diff.prev.version).toBe('00');
@@ -547,9 +566,16 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.insert('comments', {id: 1}));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, [
+      'data',
+      messages.insert('comments', {id: 1}),
+    ]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
 
     const diff = s.advance();
     let currStmts = 0;
@@ -583,9 +609,13 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    replicator.processMessage(lc, '0/1', messages.begin());
-    replicator.processMessage(lc, '0/1', messages.truncate('users'));
-    replicator.processMessage(lc, '0/1', messages.commit('0/2'));
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, ['data', messages.truncate('users')]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
 
     const diff = s.advance();
     let currStmts = 0;

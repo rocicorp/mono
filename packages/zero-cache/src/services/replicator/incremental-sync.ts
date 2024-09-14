@@ -1,21 +1,21 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Database} from 'better-sqlite3';
 import {ident} from 'pg-format';
-import {
-  LogicalReplicationService,
-  Pgoutput,
-  PgoutputPlugin,
-} from 'pg-logical-replication';
+import {LogicalReplicationService, Pgoutput} from 'pg-logical-replication';
+import {AbortError} from 'shared/src/abort-error.js';
 import {assert, unreachable} from 'shared/src/asserts.js';
-import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {liteValues} from 'zero-cache/src/types/lite.js';
+import {Database} from 'zqlite/src/db.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
-import {toLexiVersion} from '../../types/lsn.js';
-import {registerPostgresTypeParsers} from '../../types/pg.js';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
-import {replicationSlot} from './initial-sync.js';
+import {liteTableName} from '../../types/names.js';
+import type {Source} from '../../types/streams.js';
+import {
+  ChangeStreamer,
+  DownstreamChange,
+} from '../change-streamer/change-streamer.js';
+import {Change, MessageCommit} from '../change-streamer/schema/change.js';
+import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
 import {ReplicaVersionReady} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
@@ -25,13 +25,6 @@ import {
   getSubscriptionState,
   updateReplicationWatermark,
 } from './schema/replication-state.js';
-import {liteTableName} from './tables/names.js';
-
-// BigInt support from LogicalReplicationService.
-registerPostgresTypeParsers();
-
-const INITIAL_RETRY_DELAY_MS = 100;
-const MAX_RETRY_DELAY_MS = 10000;
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -40,101 +33,75 @@ const MAX_RETRY_DELAY_MS = 10000;
  * replication messages is done by the {@link MessageProcessor}.
  */
 export class IncrementalSyncer {
-  readonly #upstreamUri: string;
-  readonly #replicaID: string;
+  readonly #id: string;
+  readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
   readonly #notifier: Notifier;
 
-  #retryDelay = INITIAL_RETRY_DELAY_MS;
+  readonly #state = new RunningState('IncrementalSyncer');
   #service: LogicalReplicationService | undefined;
-  #started = false;
-  #stopped = false;
 
-  constructor(upstreamUri: string, replicaID: string, replica: Database) {
-    this.#upstreamUri = upstreamUri;
-    this.#replicaID = replicaID;
+  constructor(id: string, changeStreamer: ChangeStreamer, replica: Database) {
+    this.#id = id;
+    this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
     this.#notifier = new Notifier();
   }
 
   async run(lc: LogContext) {
-    assert(!this.#started, `IncrementalSyncer has already been started`);
     lc.info?.(`Starting IncrementalSyncer`);
+    const {watermark: initialWatermark} = getSubscriptionState(this.#replica);
 
     // Notify any waiting subscribers that the replica is ready to be read.
-    this.#started = true;
     this.#notifier.notifySubscribers();
 
-    const {publications, watermark} = getSubscriptionState(this.#replica);
-    let lastLSN = watermark;
-
-    lc.info?.(`Syncing publications ${publications}`);
-    while (!this.#stopped) {
-      const service = new LogicalReplicationService(
-        {connectionString: this.#upstreamUri},
-        {acknowledge: {auto: false, timeoutSeconds: 0}},
-      );
-      this.#service = service;
+    while (this.#state.shouldRun()) {
+      const {replicaVersion, watermark} = getSubscriptionState(this.#replica);
+      const downstream = this.#changeStreamer.subscribe({
+        id: this.#id,
+        watermark,
+        replicaVersion,
+        initial: watermark === initialWatermark,
+      });
 
       const processor = new MessageProcessor(
         this.#replica,
-        (lsn: string) => {
-          if (!lastLSN || toLexiVersion(lastLSN) < toLexiVersion(lsn)) {
-            lastLSN = lsn;
-          }
-          void service.acknowledge(lsn);
-        },
+        (_watermark: string) => {}, // TODO: Add ACKs to ChangeStreamer API
         () => this.#notifier.notifySubscribers(),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
-      this.#service.on('data', (lsn: string, message: Pgoutput.Message) => {
-        this.#retryDelay = INITIAL_RETRY_DELAY_MS; // Reset exponential backoff.
-        processor.processMessage(lc, lsn, message);
-      });
-      this.#service.on(
-        'heartbeat',
-        (lsn: string, time: number, shouldRespond: boolean) => {
-          if (shouldRespond) {
-            lc.debug?.(`keepalive (lastLSN: ${lastLSN}): ${lsn}, ${time}`);
-            void service.acknowledge(lastLSN ?? '0/0');
-          }
-        },
-      );
 
+      const unregister = this.#state.cancelOnStop(downstream);
       try {
-        // TODO: Start from the last acknowledged LSN.
-        await this.#service.subscribe(
-          new PgoutputPlugin({protoVersion: 1, publicationNames: publications}),
-          replicationSlot(this.#replicaID),
-          lastLSN,
-        );
-      } catch (e) {
-        if (!this.#stopped) {
-          await this.#service.stop();
-          const delay = this.#retryDelay;
-          this.#retryDelay = Math.min(this.#retryDelay * 2, MAX_RETRY_DELAY_MS);
-          lc.error?.(`Error in Replication Stream. Retrying in ${delay}ms`, e);
-          await sleep(delay);
+        for await (const message of downstream) {
+          if (message[0] === 'error') {
+            // Unrecoverable error. Stop the service.
+            await this.stop(lc, message[1]);
+            break;
+          }
+          this.#state.resetBackoff();
+          processor.processMessage(lc, message);
         }
+        processor.abort(lc);
+      } catch (e) {
+        lc.error?.('Received error from ChangeStreamer', e);
+        processor.abort(lc, e);
+      } finally {
+        downstream.cancel();
+        unregister();
       }
+      await this.#state.backoff(lc);
     }
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
+  subscribe(): Source<ReplicaVersionReady> {
     return this.#notifier.subscribe();
   }
 
   async stop(lc: LogContext, err?: unknown) {
-    if (this.#service) {
-      if (err) {
-        lc.error?.('IncrementalSyncer stopped with error', err);
-      } else {
-        lc.info?.(`Stopping IncrementalSyncer`);
-      }
-      this.#stopped = true;
-      await this.#service.stop();
-    }
+    this.#state.stop(lc, err);
+    await this.#service?.stop();
   }
 }
 
@@ -148,11 +115,11 @@ function ensureError(err: unknown): Error {
 }
 
 class ReplayedTransactionError extends Error {
-  readonly lsn: string;
+  readonly watermark: string;
 
-  constructor(lsn: string) {
-    super(`LSN ${lsn} has already been processed.`);
-    this.lsn = lsn;
+  constructor(watermark: string, commit: MessageCommit) {
+    super(`${watermark} has already been processed: ${stringify(commit)}`);
+    this.watermark = watermark;
   }
 }
 
@@ -170,7 +137,7 @@ class ReplayedTransactionError extends Error {
 // Exported for testing.
 export class MessageProcessor {
   readonly #db: StatementRunner;
-  readonly #acknowledge: (lsn: string) => unknown;
+  readonly #acknowledge: (watermark: string) => unknown;
   readonly #notifyVersionChange: () => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -180,7 +147,7 @@ export class MessageProcessor {
 
   constructor(
     db: StatementRunner,
-    acknowledge: (lsn: string) => unknown,
+    acknowledge: (watermark: string) => unknown,
     notifyVersionChange: () => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
@@ -192,36 +159,50 @@ export class MessageProcessor {
 
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
+      this.#currentTx?.abort(lc); // roll back any pending transaction.
+
       this.#failure = ensureError(err);
-      lc.error?.('Message Processing failed:', this.#failure);
-      this.#failService(lc, this.#failure);
+
+      if (err instanceof AbortError) {
+        // Aborted by the service.
+        lc.info?.('stopping MessageProcessor');
+      } else {
+        // Propagate the failure up to the service.
+        lc.error?.('Message Processing failed:', this.#failure);
+        this.#failService(lc, this.#failure);
+      }
     }
   }
 
-  processMessage(lc: LogContext, lsn: string, message: Pgoutput.Message) {
-    lc = lc.withContext('lsn', lsn);
+  abort(lc: LogContext, err?: unknown) {
+    this.#fail(lc, err ?? new AbortError());
+  }
+
+  processMessage(lc: LogContext, downstream: DownstreamChange) {
+    const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);
       return;
     }
     try {
-      this.#processMessage(lc, message);
+      const watermark = type === 'commit' ? downstream[2].watermark : undefined;
+      this.#processMessage(lc, message, watermark);
     } catch (e) {
       if (e instanceof ReplayedTransactionError) {
         lc.info?.(e);
-        this.#acknowledge(e.lsn);
+        this.#acknowledge(e.watermark);
       } else {
         this.#fail(lc, e);
       }
     }
   }
 
-  #processMessage(lc: LogContext, msg: Pgoutput.Message) {
+  #processMessage(lc: LogContext, msg: Change, watermark: string | undefined) {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = new TransactionProcessor(this.#db, msg);
+      this.#currentTx = new TransactionProcessor(this.#db);
       return;
     }
     // For non-begin messages, there should be a #currentTx set.
@@ -232,9 +213,6 @@ export class MessageProcessor {
     }
     const tx = this.#currentTx;
     switch (msg.tag) {
-      case 'relation':
-        this.#processRelation(msg);
-        break;
       case 'insert':
         tx.processInsert(msg);
         break;
@@ -251,50 +229,18 @@ export class MessageProcessor {
         // Undef this.#currentTx to allow the assembly of the next transaction.
         this.#currentTx = null;
 
-        const elapsedMs = tx.processCommit(msg);
+        assert(watermark);
+        const elapsedMs = tx.processCommit(msg, watermark);
         lc.debug?.(`Committed tx (${elapsedMs} ms)`);
 
-        const lsn = msg.commitEndLsn;
-        assert(lsn);
-        this.#acknowledge(lsn);
+        this.#acknowledge(watermark);
         this.#notifyVersionChange();
         break;
       }
 
-      // Unexpected message types
-      case 'type':
-        throw new Error(
-          `Custom types are not supported (received "${msg.typeName}")`,
-        );
-      case 'origin':
-        // We do not set the `origin` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-      case 'message':
-        // We do not set the `messages` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-
       default:
         unreachable(msg);
     }
-  }
-
-  #processRelation(rel: Pgoutput.MessageRelation) {
-    if (rel.replicaIdentity !== 'default') {
-      throw new Error(
-        // REPLICA IDENTITY DEFAULT is the default setting for all tables.
-        // We require this so that the replication stream sends the PRIMARY KEY
-        // columns in the MessageRelation message.
-        //
-        // REPLICA IDENTITY FULL, on the other hand, handles all columns as "key"
-        // columns and hinders our ability to detect when the actual key columns change.
-        // It is not expected that anyone is changing the default; this check is here
-        // for defensive completeness.
-        `REPLICA IDENTITY for ${rel.schema}.${rel.name} must be DEFAULT, found ${rel.replicaIdentity}`,
-      );
-    }
-    // TODO: Check columns, keys, etc. for schema syncing.
   }
 }
 
@@ -305,15 +251,16 @@ export class MessageProcessor {
  *
  * When applying row contents to the replica, the `_0_version` column is added / updated,
  * and a corresponding entry in the `ChangeLog` is added. The version value is derived
- * from the LSN of the preceding transaction (stored as the `nextStateVersion` in the
+ * from the watermark of the preceding transaction (stored as the `nextStateVersion` in the
  * `ReplicationState` table).
  *
- *   Side note: The previous implementation used the LSN of the new transaction as the
- *   `stateVersion` of its constituent rows, but this is not compatible with the
- *   streaming (in-progress) transaction protocol, for which the LSN of the
- *   transaction is not known until the commit. To prepare for supporting streaming
- *   transactions, the LSN of the _previous_ commit is used instead, which provides
- *   an equally suitable deterministic function for row versions.
+ *   Side note: For non-streaming Postgres transactions, the commitEndLsn (and thus
+ *   commit watermark) is available in the `begin` message, so it could theoretically
+ *   be used for the row version of changes within the transaction. However, the
+ *   commitEndLsn is not available in the streaming (in-progress) transaction
+ *   protocol, and may not be available for CDC streams of other upstream types.
+ *   Therefore, the zero replication protocol is designed to not require the commit
+ *   watermark when a transaction begins.
  *
  * Also of interest is the fact that all INSERT Messages are logically applied as
  * UPSERTs. See {@link processInsert} for the underlying motivation.
@@ -323,7 +270,7 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #version: LexiVersion;
 
-  constructor(db: StatementRunner, _: Pgoutput.MessageBegin) {
+  constructor(db: StatementRunner) {
     this.#startMs = Date.now();
 
     // Although the Replicator / Incremental Syncer is the only writer of the replica,
@@ -341,21 +288,19 @@ class TransactionProcessor {
 
   /**
    * Note: All INSERTs are processed a UPSERTs in order to properly handle
-   * replayed transactions (e.g. if an LSN acknowledgement was lost). In the case
+   * replayed transactions (e.g. if an acknowledgement was lost). In the case
    * of a replayed transaction, the final commit results in an rollback if the
-   * lsn is earlier than what has already been processed. See {@link processCommit}.
+   * watermark is earlier than what has already been processed.
+   * See {@link processCommit}.
    *
-   * Note that a transaction replay can be detected at the BEGIN message since it
-   * contains the commitEndLsn, but that would not generalize to streaming transactions
-   * for which the commitEndLsn is not known until STREAM COMMIT.
+   * Note that a transaction replay could theoretically be detected at the BEGIN message
+   * since it contains the commitEndLsn (from which a watermark can be derived), but
+   * that would not generalize to streaming transactions for which the commitEndLsn
+   * is not known until STREAM COMMIT.
    *
    * This UPSERT strategy instead handles both protocols by accepting all messages and
-   * making the COMMIT/ROLLBACK decision when the commitEndLsn is guaranteed to be
+   * making the COMMIT/ROLLBACK decision when the commit watermark is guaranteed to be
    * available.
-   *
-   * Note that transaction replays should theoretically never happen because the
-   * replication stream is started with the replica's current `watermark` (which would
-   * be ahead of the upstream's `confirmed_flush_lsn` if an acknowledgement were lost).
    */
   processInsert(insert: Pgoutput.MessageInsert) {
     const table = liteTableName(insert.relation);
@@ -441,21 +386,21 @@ class TransactionProcessor {
     }
   }
 
-  processCommit(commit: Pgoutput.MessageCommit) {
-    const lsn = commit.commitEndLsn;
-    // The field is technically nullable because readLsn() returns null for "0/0",
-    // but in practice that can never happen for a `commitEndLsn`.
-    assert(lsn);
-
-    const nextVersion = toLexiVersion(lsn);
+  processCommit(commit: MessageCommit, watermark: string) {
+    const nextVersion = watermark;
     if (nextVersion <= this.#version) {
       this.#db.rollback();
-      throw new ReplayedTransactionError(lsn);
+      throw new ReplayedTransactionError(watermark, commit);
     }
-    updateReplicationWatermark(this.#db, lsn);
+    updateReplicationWatermark(this.#db, nextVersion);
     this.#db.commit();
 
     const elapsedMs = Date.now() - this.#startMs;
     return elapsedMs;
+  }
+
+  abort(lc: LogContext) {
+    lc.info?.(`aborting transaction ${this.#version}`);
+    this.#db.rollback();
   }
 }

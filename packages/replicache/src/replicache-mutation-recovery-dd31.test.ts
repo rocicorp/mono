@@ -26,7 +26,7 @@ import {
 } from './persist/clients.js';
 import type {PullResponseV0, PullResponseV1} from './puller.js';
 import type {PushResponse} from './pusher.js';
-import {stringCompare} from './string-compare.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import type {ClientID} from './sync/ids.js';
 import {
   PULL_VERSION_DD31,

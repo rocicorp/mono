@@ -1,6 +1,6 @@
-import type {Database} from 'better-sqlite3';
 import {assert} from 'shared/src/asserts.js';
-import {IndexSpec, TableSpec} from './specs.js';
+import type {Database} from 'zqlite/src/db.js';
+import {IndexSpec, TableSpec} from '../types/specs.js';
 
 type ColumnInfo = {
   table: string;

@@ -1,15 +1,11 @@
 import {describe, expect, test, vi} from 'vitest';
-import {
-  Replicator,
-  ReplicaVersionReady,
-} from 'zero-cache/src/services/replicator/replicator.js';
-import {Service} from 'zero-cache/src/services/service.js';
+import {ReplicaVersionReady} from 'zero-cache/src/services/replicator/replicator.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
 import {
   createNotifierFrom,
   getStatusFromWorker,
-  runAsWorker,
+  setUpMessageHandlers,
   subscribeTo,
 } from './replicator.js';
 
@@ -18,13 +14,11 @@ describe('workers/replicator', () => {
     const replicator = {
       status: vi.fn().mockResolvedValue({status: 'yo'}),
       subscribe: vi.fn(),
-      run: vi.fn(),
     };
 
     const [parent, child] = inProcChannel();
 
-    void runAsWorker(replicator as unknown as Replicator & Service, parent);
-    expect(replicator.run).toHaveBeenCalledOnce;
+    setUpMessageHandlers(replicator, parent);
 
     // Simulate a status request from the parent.
     const status = await getStatusFromWorker(child);
@@ -37,13 +31,11 @@ describe('workers/replicator', () => {
     const replicator = {
       status: vi.fn(),
       subscribe: () => originalSub,
-      run: vi.fn(),
     };
 
     const [parent, child] = inProcChannel();
 
-    void runAsWorker(replicator as unknown as Replicator & Service, parent);
-    expect(replicator.run).toHaveBeenCalledOnce;
+    void setUpMessageHandlers(replicator, parent);
 
     originalSub.push({foo: 'bar'});
     originalSub.push({foo: 'baz'});

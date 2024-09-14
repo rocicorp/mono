@@ -1,53 +1,36 @@
 import {LogContext} from '@rocicorp/logger';
-import {Database} from 'better-sqlite3';
 import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
-import {randInt} from 'shared/src/rand.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {RowKey, RowValue} from 'zero-cache/src/types/row-key.js';
+import {h32} from 'zero-cache/src/types/xxhash.js';
+import {Database} from 'zqlite/src/db.js';
+import {
+  DataChange,
+  MessageBegin,
+  MessageCommit,
+} from '../change-streamer/schema/change.js';
 import {MessageProcessor} from './incremental-sync.js';
 
 const NOOP = () => {};
 
 export interface FakeReplicator {
-  process(...msgs: Pgoutput.Message[]): void;
-
-  processTransaction(
-    finalLSN: string,
-    ...msgs: (
-      | Pgoutput.MessageInsert
-      | Pgoutput.MessageDelete
-      | Pgoutput.MessageUpdate
-    )[]
-  ): void;
+  processTransaction(finalWatermark: string, ...msgs: DataChange[]): void;
 }
 
 export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
   const messageProcessor = createMessageProcessor(db);
   return {
-    process: (...msgs) => {
+    processTransaction: (watermark, ...msgs) => {
+      messageProcessor.processMessage(lc, ['begin', {tag: 'begin'}]);
       for (const msg of msgs) {
-        messageProcessor.processMessage(lc, '0/1', msg);
+        messageProcessor.processMessage(lc, ['data', msg]);
       }
-    },
-
-    processTransaction: (commitEndLsn, ...msgs) => {
-      messageProcessor.processMessage(lc, '0/1', {
-        tag: 'begin',
-        commitLsn: null,
-        commitTime: 0n,
-        xid: 0,
-      });
-      for (const msg of msgs) {
-        messageProcessor.processMessage(lc, '0/1', msg);
-      }
-      messageProcessor.processMessage(lc, '0/1', {
-        tag: 'commit',
-        flags: 0,
-        commitLsn: null,
-        commitEndLsn,
-        commitTime: 0n,
-      });
+      messageProcessor.processMessage(lc, [
+        'commit',
+        {tag: 'commit'},
+        {watermark},
+      ]);
     },
   };
 }
@@ -71,7 +54,7 @@ export class ReplicationMessages<
       const keys = typeof k === 'string' ? [k] : [...k];
       const relation = {
         tag: 'relation',
-        relationOid: randInt(1, 10000),
+        relationOid: h32(table), // deterministic for snapshot-friendliness
         schema: 'public',
         name: table,
         replicaIdentity: 'default',
@@ -96,8 +79,8 @@ export class ReplicationMessages<
     return relation;
   }
 
-  begin(): Pgoutput.MessageBegin {
-    return {tag: 'begin', commitLsn: null, commitTime: 0n, xid: 0};
+  begin(): MessageBegin {
+    return {tag: 'begin'};
   }
 
   insert<TableName extends string & keyof TablesAndKeys>(
@@ -146,13 +129,7 @@ export class ReplicationMessages<
     };
   }
 
-  commit(lsn: string): Pgoutput.MessageCommit {
-    return {
-      tag: 'commit',
-      flags: 0,
-      commitLsn: null,
-      commitEndLsn: lsn,
-      commitTime: 0n,
-    };
+  commit(extra?: object): MessageCommit {
+    return {tag: 'commit', ...extra};
   }
 }

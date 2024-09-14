@@ -1,18 +1,29 @@
-import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {DbFile} from 'zero-cache/src/test/lite.js';
-import type {Downstream} from 'zero-protocol';
+import type {
+  Downstream,
+  PokePartBody,
+  PokeStartBody,
+  QueriesPatch,
+} from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
+import {setEditChangesEnabled} from 'zql/src/zql/ivm/source.js';
+import {Database} from 'zqlite/src/db.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicaVersionReady} from '../replicator/replicator.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
-import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {
+  initReplicationState,
+  updateReplicationWatermark,
+} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
 import {CVRStore} from './cvr-store.js';
+import {CVRQueryDrivenUpdater} from './cvr.js';
 import {
   ClientGroupStorage,
   CREATE_STORAGE_TABLE,
@@ -21,7 +32,9 @@ import {
 import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
-import {ViewSyncerService} from './view-syncer.js';
+import {SyncContext, ViewSyncerService} from './view-syncer.js';
+
+setEditChangesEnabled(false);
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
@@ -41,9 +54,9 @@ const EXPECTED_LMIDS_AST: AST = {
 };
 
 describe('view-syncer/service', () => {
-  let storageDB: Database.Database;
+  let storageDB: Database;
   let replicaDbFile: DbFile;
-  let replica: Database.Database;
+  let replica: Database;
   let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
   let versionNotifications: Subscription<ReplicaVersionReady>;
@@ -51,20 +64,20 @@ describe('view-syncer/service', () => {
   let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
-  let downstream: Queue<Downstream>;
 
   const SYNC_CONTEXT = {clientID: 'foo', wsID: 'ws1', baseCookie: null};
 
   const messages = new ReplicationMessages({issues: 'id', users: 'id'});
 
   beforeEach(async () => {
-    storageDB = new Database(':memory:');
+    const lc = createSilentLogContext();
+    storageDB = new Database(lc, ':memory:');
     storageDB.prepare(CREATE_STORAGE_TABLE).run();
 
     replicaDbFile = new DbFile('view_syncer_service_test');
-    replica = replicaDbFile.connect();
+    replica = replicaDbFile.connect(lc);
     initChangeLog(replica);
-    initReplicationState(replica, ['zero_data'], '0/1');
+    initReplicationState(replica, ['zero_data'], '01');
 
     replica.exec(`
     CREATE TABLE "zero.clients" (
@@ -105,7 +118,7 @@ describe('view-syncer/service', () => {
     `);
 
     cvrDB = await testDBs.create('view_syncer_service_test');
-    await initViewSyncerSchema(lc, 'view-syncer', 'cvr', cvrDB);
+    await initViewSyncerSchema(lc, cvrDB);
 
     versionNotifications = Subscription.create();
     operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(
@@ -123,41 +136,44 @@ describe('view-syncer/service', () => {
       versionNotifications,
     );
     viewSyncerDone = vs.run();
-    downstream = new Queue();
-    const stream = await vs.initConnection(SYNC_CONTEXT, [
-      'initConnection',
-      {
-        desiredQueriesPatch: [
-          {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-        ],
-      },
-    ]);
-    void pipeToQueue(stream, downstream);
   });
 
-  async function pipeToQueue(
-    stream: AsyncIterable<Downstream>,
-    queue: Queue<Downstream>,
-  ) {
-    try {
-      for await (const msg of stream) {
-        await queue.enqueue(msg);
+  async function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
+    const stream = await vs.initConnection(ctx, [
+      'initConnection',
+      {desiredQueriesPatch},
+    ]);
+    const downstream = new Queue<Downstream>();
+
+    void (async function () {
+      try {
+        for await (const msg of stream) {
+          await downstream.enqueue(msg);
+        }
+      } catch (e) {
+        await downstream.enqueueRejection(e);
       }
-    } catch (e) {
-      await queue.enqueueRejection(e);
-    }
+    })();
+
+    return downstream;
   }
 
-  async function nextPoke(): Promise<Downstream[]> {
+  async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
     const received: Downstream[] = [];
     for (;;) {
-      const msg = await downstream.dequeue();
+      const msg = await client.dequeue();
       received.push(msg);
       if (msg[0] === 'pokeEnd') {
         break;
       }
     }
     return received;
+  }
+
+  async function expectNoPokes(client: Queue<Downstream>) {
+    // Use the dequeue() API that cancels the dequeue() request after a timeout.
+    const timedOut = 'nothing' as unknown as Downstream;
+    expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
   }
 
   afterEach(async () => {
@@ -187,6 +203,10 @@ describe('view-syncer/service', () => {
   };
 
   test('adds desired queries from initConnectionMessage', async () => {
+    await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
     const cvrStore = new CVRStore(lc, cvrDB, serviceID);
     const cvr = await cvrStore.load();
     expect(cvr).toMatchObject({
@@ -210,6 +230,10 @@ describe('view-syncer/service', () => {
   });
 
   test('responds to changeQueriesPatch', async () => {
+    await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
     // Ignore messages from an old websockets.
     await vs.changeDesiredQueries({...SYNC_CONTEXT, wsID: 'old-wsid'}, [
       'changeDesiredQueries',
@@ -259,8 +283,12 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
     versionNotifications.push({});
-    expect(await nextPoke()).toMatchInlineSnapshot(`
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
         [
           "pokeStart",
@@ -483,8 +511,12 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
     versionNotifications.push({});
-    expect((await nextPoke())[0]).toEqual([
+    expect((await nextPoke(client))[0]).toEqual([
       'pokeStart',
       {
         baseCookie: null,
@@ -495,7 +527,7 @@ describe('view-syncer/service', () => {
 
     const replicator = fakeReplicator(lc, replica);
     replicator.processTransaction(
-      '0/123',
+      '123',
       messages.update('issues', {
         id: '1',
         title: 'new title',
@@ -507,7 +539,7 @@ describe('view-syncer/service', () => {
     );
 
     versionNotifications.push({});
-    expect(await nextPoke()).toMatchInlineSnapshot(`
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
         [
           "pokeStart",
@@ -621,6 +653,371 @@ describe('view-syncer/service', () => {
           "schema": "",
           "table": "issues",
         },
+      ]
+    `);
+  });
+
+  test('catch up client', async () => {
+    const client1 = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    versionNotifications.push({});
+    const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
+    expect(preAdvancement).toEqual({
+      baseCookie: null,
+      cookie: '00:02',
+      pokeID: '00:02',
+    });
+
+    const replicator = fakeReplicator(lc, replica);
+    replicator.processTransaction(
+      '123',
+      messages.update('issues', {
+        id: '1',
+        title: 'new title',
+        owner: 100,
+        parent: null,
+        big: 9007199254740991n,
+      }),
+      messages.delete('issues', {id: '2'}),
+    );
+
+    versionNotifications.push({});
+    const advancement = (await nextPoke(client1))[1][1] as PokePartBody;
+    expect(advancement).toEqual({
+      entitiesPatch: [
+        {
+          entityID: {id: '1'},
+          entityType: 'issues',
+          op: 'put',
+          value: {
+            big: 9007199254740991,
+            id: '1',
+            owner: '100.0',
+            parent: null,
+            title: 'new title',
+          },
+        },
+        {
+          entityID: {id: '2'},
+          entityType: 'issues',
+          op: 'del',
+        },
+      ],
+      pokeID: '01',
+    });
+
+    // Connect with another client (i.e. tab) at older version '00:02'
+    // (i.e. pre-advancement).
+    const client2 = await connect(
+      {clientID: 'bar', wsID: '9382', baseCookie: preAdvancement.cookie},
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+    );
+
+    // Response should catch client2 up with the entitiesPatch from
+    // the advancement.
+    const response2 = await nextPoke(client2);
+    expect(response2[1][1]).toMatchObject({
+      ...advancement,
+      pokeID: '01:01',
+    });
+    expect(response2).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:02",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "id": "1",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "2",
+                },
+                "entityType": "issues",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+
+    // client1 should be poked to get the new client2 config,
+    // but no new entities.
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('waits for replica to catch up', async () => {
+    // Before connecting, artificially set the CVR version to '07',
+    // which is ahead of the current replica version '00'.
+    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(),
+      '07',
+    ).flush(lc);
+
+    // Connect the client.
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Signal that the replica is ready.
+    versionNotifications.push({});
+    await expectNoPokes(client);
+
+    // Manually simulate advancements in the replica.
+    const db = new StatementRunner(replica);
+    replica.prepare(`DELETE from issues where id = '1'`).run();
+    updateReplicationWatermark(db, '03');
+    versionNotifications.push({});
+    await expectNoPokes(client);
+
+    replica.prepare(`DELETE from issues where id = '2'`).run();
+    updateReplicationWatermark(db, '05');
+    versionNotifications.push({});
+    await expectNoPokes(client);
+
+    replica.prepare(`DELETE from issues where id = '3'`).run();
+    updateReplicationWatermark(db, '07');
+    versionNotifications.push({});
+    await expectNoPokes(client);
+
+    replica
+      .prepare(`UPDATE issues SET title = 'caught up' where id = '4'`)
+      .run();
+    updateReplicationWatermark(db, '09'); // Caught up with stateVersion=07, watermark=09.
+    versionNotifications.push({});
+
+    // The single poke should only contain issues {id='4', title='caught up'}
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "07:02",
+            "pokeID": "07:02",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "id": "4",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "caught up",
+                },
+              },
+            ],
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": [
+                    {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                  ],
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "07:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "07:02",
+          },
+        ],
       ]
     `);
   });

@@ -14,11 +14,7 @@ import {Order, Priority, Status} from './issue.js';
 import SortOrderMenu from './sort-order-menu.jsx';
 
 interface Props {
-  view: string;
   onToggleMenu?: (() => void) | undefined;
-  filteredIssuesCount?: number | undefined;
-  issuesCount: number;
-  showSortOrderMenu: boolean;
 }
 
 interface FilterStatusProps<Enum extends number | string> {
@@ -75,30 +71,19 @@ function FilterStatus<Enum extends number | string>({
   );
 }
 
-function getTitle(view: string | null) {
-  switch (view?.toLowerCase()) {
-    case 'active':
-      return 'Active issues';
-    case 'backlog':
-      return 'Backlog issues';
-    case 'board':
-      return 'Board';
-    default:
-      return 'All issues';
-  }
-}
-
-function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
+function TopFilter({onToggleMenu = noop}: Props) {
   const [orderBy, setOrderByParam] = useOrderByState();
   const [statusFilters, setStatusFilterByParam] = useStatusFilterState();
   const [priorityFilters, setPriorityFilterByParam] = usePriorityFilterState();
   const [labelFilters, setLabelFilterByParam] = useLabelFilterState();
   const [textSearch, setTextSearch] = useTextSearchState();
-  const title = getTitle(view);
 
   return (
     <>
-      <div className="flex justify-between flex-shrink-0 pl-2 lg:pl-9 pr-2 lg:pr-6 border-b border-gray-850 h-14 border-b-color-gray-50">
+      <div
+        className="flex justify-between flex-shrink-0 border-b border-gray-850 h-14 border-b-color-gray-50"
+        style={{paddingLeft: '1.3rem', paddingRight: '1.3rem'}}
+      >
         {/* left section */}
         <div className="flex items-center">
           <button
@@ -107,18 +92,7 @@ function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
           >
             <MenuIcon className="w-3.5 text-white hover:text-gray-50" />
           </button>
-          <div className="p-1 font-semibold cursor-default">{title}</div>
-          {/*
-          {filteredIssuesCount ? (
-            <span>
-              {filteredIssuesCount} / {issuesCount}
-            </span>
-          ) : (
-            <span>{issuesCount}</span>
-          )}
-          */}
           <FilterMenu
-            view={view}
             onSelectPriority={createToggleFilterHandler(
               priorityFilters,
               setPriorityFilterByParam,
@@ -146,36 +120,37 @@ function TopFilter({view, onToggleMenu = noop, showSortOrderMenu}: Props) {
 
         {/* right section */}
         <div className="flex items-center">
-          {showSortOrderMenu && (
-            <SortOrderMenu
-              onSelect={orderBy => setOrderByParam(orderBy)}
-              order={orderBy ?? Order.Created}
-            />
-          )}
+          <SortOrderMenu
+            onSelect={orderBy => setOrderByParam(orderBy)}
+            order={orderBy ?? Order.Created}
+          />
         </div>
       </div>
-      {statusFilters || priorityFilters || labelFilters ? (
-        <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
-          <FilterStatus
-            filter={statusFilters}
-            displayStrings={statusDisplayStrings}
-            onDelete={() => setStatusFilterByParam(null)}
-            label="Status"
-          />
-          <FilterStatus
-            filter={priorityFilters}
-            displayStrings={priorityDisplayStrings}
-            onDelete={() => setPriorityFilterByParam(null)}
-            label="Priority"
-          />
-          <FilterStatus
-            filter={labelFilters}
-            onDelete={() => setLabelFilterByParam(null)}
-            label="Label"
-            operator="is any of"
-          />
-        </div>
-      ) : null}
+
+      <div className="flex pl-2 lg:pl-9 pr-6 border-b border-gray-850 h-8">
+        {statusFilters || priorityFilters || labelFilters ? (
+          <>
+            <FilterStatus
+              filter={statusFilters}
+              displayStrings={statusDisplayStrings}
+              onDelete={() => setStatusFilterByParam(null)}
+              label="Status"
+            />
+            <FilterStatus
+              filter={priorityFilters}
+              displayStrings={priorityDisplayStrings}
+              onDelete={() => setPriorityFilterByParam(null)}
+              label="Priority"
+            />
+            <FilterStatus
+              filter={labelFilters}
+              onDelete={() => setLabelFilterByParam(null)}
+              label="Label"
+              operator="is any of"
+            />
+          </>
+        ) : null}
+      </div>
     </>
   );
 }

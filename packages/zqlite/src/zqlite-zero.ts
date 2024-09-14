@@ -7,7 +7,7 @@ import {
   Update,
 } from 'zero-client/src/client/crud.js';
 import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
-import type {Database} from 'better-sqlite3';
+import type {Database} from 'zqlite/src/db.js';
 import type {EntityID} from 'zero-protocol/src/entity.js';
 import {
   SchemaDefs,
@@ -117,7 +117,7 @@ export class ZQLiteZero<SD extends SchemaDefs> {
         assertNotInBatch(entityType, 'update');
         const existingEntity = await db
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
-          .get(value.id);
+          .get<Row>(value.id);
         if (!existingEntity)
           throw new Error(`Entity with id ${value.id} not found`);
         const mergedValue = {...existingEntity, ...value};
@@ -132,7 +132,7 @@ export class ZQLiteZero<SD extends SchemaDefs> {
         assertNotInBatch(entityType, 'delete');
         const existingEntity = await db
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
-          .get(id);
+          .get<Row>(id);
         if (!existingEntity) throw new Error(`Entity with id ${id} not found`);
         await this.zeroContext
           .getSource(entityType)

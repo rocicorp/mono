@@ -1,43 +1,6 @@
-import {Order, Status, orderEnumSchema} from './issue.js';
+import {Order, orderEnumSchema} from './issue.js';
 
-export function hasNonViewFilters(
-  viewStatuses: Set<Status>,
-  statuses: Set<Status> | null,
-) {
-  if (statuses) {
-    for (const s of statuses) {
-      if (viewStatuses.has(s)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-export function getViewStatuses(view: string | null): Set<Status> {
-  switch (view?.toLowerCase()) {
-    case 'active':
-      return new Set([Status.InProgress, Status.Todo]);
-    case 'backlog':
-      return new Set([Status.Backlog]);
-    default:
-      return new Set([
-        Status.Backlog,
-        Status.Todo,
-        Status.InProgress,
-        Status.Done,
-        Status.Canceled,
-      ]);
-  }
-}
-
-export function getIssueOrder(
-  view: string | null,
-  orderBy: string | null,
-): Order {
-  if (view === 'board') {
-    return Order.Kanban;
-  }
+export function getIssueOrder(orderBy: string | null): Order {
   const parseResult = orderEnumSchema.safeParse(orderBy);
   return parseResult.success ? parseResult.data : Order.Modified;
 }

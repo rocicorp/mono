@@ -1,5 +1,6 @@
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {Catch} from './catch.js';
+import {Change} from './change.js';
 import {Row} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {Start} from './operator.js';
@@ -233,97 +234,250 @@ test('fetch', () => {
   }
 });
 
-test('push', () => {
+describe('push', () => {
   const cases: {
+    name?: string;
     skipBound: Bound;
-    push: SourceChange;
-    expectPush: boolean;
+    pushes: SourceChange[];
+    expectedPushes: Change[];
   }[] = [
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-      push: {type: 'add', row: {id: 1, date: '2014-01-23'}},
-      expectPush: false,
+      pushes: [{type: 'add', row: {id: 1, date: '2014-01-23'}}],
+      expectedPushes: [],
     },
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-      push: {type: 'add', row: {id: 2, date: '2014-01-23'}},
-      expectPush: false,
+      pushes: [{type: 'add', row: {id: 2, date: '2014-01-23'}}],
+      expectedPushes: [],
     },
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-      push: {type: 'add', row: {id: 1, date: '2014-01-24'}},
-      expectPush: true,
+      pushes: [{type: 'add', row: {id: 1, date: '2014-01-24'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 1, date: '2014-01-24'}, relationships: {}},
+        },
+      ],
     },
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-      push: {type: 'add', row: {id: 2, date: '2014-01-24'}},
-      expectPush: true,
+      pushes: [{type: 'add', row: {id: 2, date: '2014-01-24'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 2, date: '2014-01-24'}, relationships: {}},
+        },
+      ],
     },
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-      push: {type: 'add', row: {id: 1, date: '2014-01-25'}},
-      expectPush: true,
+      pushes: [{type: 'add', row: {id: 1, date: '2014-01-25'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 1, date: '2014-01-25'}, relationships: {}},
+        },
+      ],
     },
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-      push: {type: 'add', row: {id: 2, date: '2014-01-25'}},
-      expectPush: true,
+      pushes: [{type: 'add', row: {id: 2, date: '2014-01-25'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 2, date: '2014-01-25'}, relationships: {}},
+        },
+      ],
+    },
+    {
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
+      pushes: [{type: 'add', row: {id: 1, date: '2014-01-23'}}],
+      expectedPushes: [],
+    },
+    {
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
+      pushes: [{type: 'add', row: {id: 2, date: '2014-01-23'}}],
+      expectedPushes: [],
+    },
+    {
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
+      pushes: [{type: 'add', row: {id: 1, date: '2014-01-24'}}],
+      expectedPushes: [],
+    },
+    {
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
+      pushes: [{type: 'add', row: {id: 2, date: '2014-01-24'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 2, date: '2014-01-24'}, relationships: {}},
+        },
+      ],
+    },
+    {
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
+      pushes: [{type: 'add', row: {id: 1, date: '2014-01-25'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 1, date: '2014-01-25'}, relationships: {}},
+        },
+      ],
+    },
+    {
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
+      pushes: [{type: 'add', row: {id: 2, date: '2014-01-25'}}],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 2, date: '2014-01-25'}, relationships: {}},
+        },
+      ],
     },
 
     {
-      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-      push: {type: 'add', row: {id: 1, date: '2014-01-23'}},
-      expectPush: false,
+      name: 'Edit - Old and new before bound',
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
+      pushes: [
+        {type: 'add', row: {id: 1, date: '2014-01-22'}},
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-22'},
+          row: {id: 1, date: '2014-01-23'},
+        },
+      ],
+      expectedPushes: [],
     },
     {
-      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-      push: {type: 'add', row: {id: 2, date: '2014-01-23'}},
-      expectPush: false,
+      name: 'Edit - Old and new at bound. Inclusive',
+      skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
+      pushes: [
+        {type: 'add', row: {id: 1, date: '2014-01-24', x: 1}},
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-24', x: 1},
+          row: {id: 1, date: '2014-01-24', x: 2},
+        },
+      ],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 1, date: '2014-01-24', x: 1}, relationships: {}},
+        },
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-24', x: 1},
+          row: {id: 1, date: '2014-01-24', x: 2},
+        },
+      ],
     },
     {
+      name: 'Edit - Old and new at bound. Exclusive',
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-      push: {type: 'add', row: {id: 1, date: '2014-01-24'}},
-      expectPush: false,
+      pushes: [
+        {type: 'add', row: {id: 1, date: '2014-01-24', x: 1}},
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-24', x: 1},
+          row: {id: 1, date: '2014-01-24', x: 2},
+        },
+      ],
+      expectedPushes: [],
     },
     {
+      name: 'Edit - Old and new after bound',
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-      push: {type: 'add', row: {id: 2, date: '2014-01-24'}},
-      expectPush: true,
+      pushes: [
+        {type: 'add', row: {id: 1, date: '2014-01-25'}},
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-25'},
+          row: {id: 1, date: '2014-01-26'},
+        },
+      ],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 1, date: '2014-01-25'}, relationships: {}},
+        },
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-25'},
+          row: {id: 1, date: '2014-01-26'},
+        },
+      ],
     },
     {
+      name: 'Edit - Old before bound, new after bound',
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-      push: {type: 'add', row: {id: 1, date: '2014-01-25'}},
-      expectPush: true,
+      pushes: [
+        {type: 'add', row: {id: 1, date: '2014-01-23'}},
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-23'},
+          row: {id: 1, date: '2014-01-25'},
+        },
+      ],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {
+            row: {id: 1, date: '2014-01-25'},
+            relationships: {},
+          },
+        },
+      ],
     },
     {
+      name: 'Edit - Old after bound, new before bound',
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-      push: {type: 'add', row: {id: 2, date: '2014-01-25'}},
-      expectPush: true,
+      pushes: [
+        {type: 'add', row: {id: 1, date: '2014-01-25'}},
+        {
+          type: 'edit',
+          oldRow: {id: 1, date: '2014-01-25'},
+          row: {id: 1, date: '2014-01-23'},
+        },
+      ],
+      expectedPushes: [
+        {
+          type: 'add',
+          node: {row: {id: 1, date: '2014-01-25'}, relationships: {}},
+        },
+        {
+          type: 'remove',
+          node: {row: {id: 1, date: '2014-01-25'}, relationships: {}},
+        },
+      ],
     },
   ];
 
   for (const c of cases) {
-    const ms = new MemorySource(
-      'users',
-      {
-        id: {type: 'number'},
-        date: {type: 'string'},
-      },
-      ['id'],
-    );
+    test(c.name ?? 'Add', () => {
+      const ms = new MemorySource(
+        'users',
+        {
+          id: {type: 'number'},
+          date: {type: 'string'},
+          x: {type: 'number', optional: true},
+        },
+        ['id'],
+      );
 
-    const conn = ms.connect([
-      ['date', 'asc'],
-      ['id', 'asc'],
-    ]);
-    const skip = new Skip(conn, c.skipBound);
-    const out = new Catch(skip);
+      const conn = ms.connect([
+        ['date', 'asc'],
+        ['id', 'asc'],
+      ]);
+      const skip = new Skip(conn, c.skipBound);
+      const out = new Catch(skip);
 
-    ms.push(c.push);
-    expect(out.pushes).toEqual(
-      c.expectPush
-        ? [{type: c.push.type, node: {row: c.push.row, relationships: {}}}]
-        : [],
-    );
+      for (const push of c.pushes) {
+        ms.push(push);
+      }
+
+      expect(out.pushes).toEqual(c.expectedPushes);
+    });
   }
 });

@@ -1,5 +1,5 @@
 import {JSONValue} from 'shared/src/json.js';
-import {expect, suite, test} from 'vitest';
+import {describe, expect, suite, test} from 'vitest';
 import {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
 import {Change} from './change.js';
@@ -526,6 +526,526 @@ suite('take with no partition', () => {
       ],
     });
   });
+
+  suite('edit', () => {
+    const base = {
+      columns: {
+        id: {type: 'string'},
+        created: {type: 'number'},
+        text: {type: 'string'},
+      },
+      primaryKey: ['id'],
+      sort: [
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ],
+      sourceRows: [
+        {id: 'i1', created: 100, text: 'a'},
+        {id: 'i2', created: 200, text: 'b'},
+        {id: 'i3', created: 300, text: 'c'},
+        {id: 'i4', created: 400, text: 'd'},
+      ],
+      partition: undefined,
+    } as const;
+
+    takeTest({
+      ...base,
+      name: 'limit 0',
+      limit: 0,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'i2', created: 200, text: 'b'},
+          row: {id: 'i2', created: 200, text: 'c'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 200, text: 'c'},
+          },
+        ],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
+    describe('less than limit ', () => {
+      takeTest({
+        ...base,
+        name: 'edit row at start',
+        limit: 5,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', created: 100, text: 'a'},
+            row: {id: 'i1', created: 100, text: 'a2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i1', created: 100, text: 'a'},
+              row: {id: 'i1', created: 100, text: 'a2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 400,
+              id: 'i4',
+              text: 'd',
+            },
+            size: 4,
+          },
+          'maxBound': {
+            created: 400,
+            id: 'i4',
+            text: 'd',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', created: 100, text: 'a'},
+            row: {id: 'i1', created: 100, text: 'a2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row at end',
+        limit: 5,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i4', created: 400, text: 'd'},
+            row: {id: 'i4', created: 400, text: 'd2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i4', created: 400, text: 'd'},
+              row: {id: 'i4', created: 400, text: 'd2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 400,
+              id: 'i4',
+              text: 'd2',
+            },
+            size: 4,
+          },
+          'maxBound': {
+            created: 400,
+            id: 'i4',
+            text: 'd',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i4', created: 400, text: 'd'},
+            row: {id: 'i4', created: 400, text: 'd2'},
+          },
+        ],
+      });
+    });
+
+    describe('at limit', () => {
+      takeTest({
+        ...base,
+        name: 'edit row after boundary',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i4', created: 400, text: 'd'},
+            row: {id: 'i4', created: 400, text: 'd2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i4', created: 400, text: 'd'},
+              row: {id: 'i4', created: 400, text: 'd2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 300,
+              id: 'i3',
+              text: 'c',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+        },
+        expectedOutput: [],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row before boundary',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 200, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i2', created: 200, text: 'b'},
+              row: {id: 'i2', created: 200, text: 'b2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 300,
+              id: 'i3',
+              text: 'c',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 200, text: 'b2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row at boundary',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i3', created: 300, text: 'c'},
+            row: {id: 'i3', created: 300, text: 'c2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i3', created: 300, text: 'c'},
+              row: {id: 'i3', created: 300, text: 'c2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 300,
+              id: 'i3',
+              text: 'c2',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i3', created: 300, text: 'c'},
+            row: {id: 'i3', created: 300, text: 'c2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row before boundary, changing its order',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 50, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i2', created: 200, text: 'b'},
+              row: {id: 'i2', created: 50, text: 'b2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 300,
+              id: 'i3',
+              text: 'c',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 50, text: 'b2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row after boundary to make it the new boundary',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i4', created: 400, text: 'd'},
+            row: {id: 'i4', created: 250, text: 'd'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i4', created: 400, text: 'd'},
+              row: {id: 'i4', created: 250, text: 'd'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: undefined,
+              start: {
+                basis: 'before',
+                row: {
+                  id: 'i3',
+                  created: 300,
+                  text: 'c',
+                },
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 250,
+              id: 'i4',
+              text: 'd',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 300,
+            id: 'i3',
+            text: 'c',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'remove',
+            node: {row: {id: 'i3', created: 300, text: 'c'}, relationships: {}},
+          },
+          {
+            type: 'add',
+            node: {
+              row: {id: 'i4', created: 250, text: 'd'},
+              relationships: {},
+            },
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row before boundary to make it new boundary',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 350, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i2', created: 200, text: 'b'},
+              row: {id: 'i2', created: 350, text: 'b2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: undefined,
+              start: {
+                basis: 'after',
+                row: {
+                  id: 'i3',
+                  created: 300,
+                  text: 'c',
+                },
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 350,
+              id: 'i2',
+              text: 'b2',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 350,
+            id: 'i2',
+            text: 'b2',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 350, text: 'b2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row before boundary to fetch new boundary',
+        limit: 3,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'i2', created: 200, text: 'b'},
+            row: {id: 'i2', created: 450, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'i2', created: 200, text: 'b'},
+              row: {id: 'i2', created: 450, text: 'b2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: undefined,
+              start: {
+                basis: 'after',
+                row: {
+                  id: 'i3',
+                  created: 300,
+                  text: 'c',
+                },
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take",null]': {
+            bound: {
+              created: 400,
+              id: 'i4',
+              text: 'd',
+            },
+            size: 3,
+          },
+          'maxBound': {
+            created: 400,
+            id: 'i4',
+            text: 'd',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'remove',
+            node: {
+              row: {id: 'i2', created: 200, text: 'b'},
+              relationships: {},
+            },
+          },
+          {
+            type: 'add',
+            node: {
+              row: {id: 'i4', created: 400, text: 'd'},
+              relationships: {},
+            },
+          },
+        ],
+      });
+    });
+  });
 });
 
 suite('take with partition', () => {
@@ -844,6 +1364,914 @@ suite('take with partition', () => {
       expectedOutput: [],
     });
   });
+
+  suite('edit', () => {
+    const base = {
+      columns: {
+        id: {type: 'string'},
+        created: {type: 'number'},
+        text: {type: 'string'},
+      },
+      primaryKey: ['id'],
+      sort: [
+        ['created', 'asc'],
+        ['id', 'asc'],
+      ],
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+        {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+        {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+        {id: 'c4', issueID: 'i2', created: 400, text: 'd'},
+        {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+      ],
+      partition: {
+        key: 'issueID',
+        values: ['i1', 'i2'],
+      },
+    } as const;
+
+    takeTest({
+      ...base,
+      name: 'limit 0',
+      partition: {
+        key: 'issueID',
+        values: ['i1', 'i2'],
+      },
+      limit: 0,
+      pushes: [
+        {
+          type: 'edit',
+          oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+          row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+        },
+      ],
+      expectedMessages: [
+        [
+          'takeSnitch',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+          },
+        ],
+      ],
+      expectedStorage: {},
+      expectedOutput: [],
+    });
+
+    describe('less than limit ', () => {
+      takeTest({
+        ...base,
+        name: 'edit row at start',
+        limit: 5,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 3,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        name: 'edit row at end',
+        limit: 5,
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+            row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+              row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 3,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e2',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+            row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
+          },
+        ],
+      });
+    });
+
+    describe('at limit', () => {
+      takeTest({
+        ...base,
+        limit: 2,
+        name: 'edit row after boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 200,
+              id: 'c2',
+              issueID: 'i1',
+              text: 'b',
+            },
+            size: 2,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [],
+      });
+
+      takeTest({
+        ...base,
+        limit: 3,
+        name: 'edit row before boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 3,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 3,
+        name: 'edit row at boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c2',
+            },
+            size: 3,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 3,
+        name: 'edit row at boundary, making it not the boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i1',
+              },
+              start: {
+                basis: 'before',
+                row: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 200,
+              id: 'c2',
+              issueID: 'i1',
+              text: 'b',
+            },
+            size: 3,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 2,
+        name: 'edit row at boundary, making it fall outside the window',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i1',
+              },
+              start: {
+                basis: 'at',
+                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 2,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'remove',
+            node: {
+              row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              relationships: {},
+            },
+          },
+          {
+            type: 'add',
+            node: {
+              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              relationships: {},
+            },
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 3,
+        name: 'edit row before boundary, changing its order',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 3,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 2,
+        name: 'edit row after boundary to make it the new boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i1',
+              },
+              start: {
+                basis: 'before',
+                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 150,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c2',
+            },
+            size: 2,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'remove',
+            node: {
+              row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              relationships: {},
+            },
+          },
+          {
+            type: 'add',
+            node: {
+              row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+              relationships: {},
+            },
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 2,
+        name: 'edit row before boundary to make it new boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i1',
+              },
+              start: {
+                basis: 'after',
+                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 250,
+              id: 'c1',
+              issueID: 'i1',
+              text: 'a2',
+            },
+            size: 2,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
+          },
+        ],
+      });
+
+      takeTest({
+        ...base,
+        limit: 2,
+        name: 'edit row before boundary to fetch new boundary',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i1',
+              },
+              start: {
+                basis: 'after',
+                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 2,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 500,
+              id: 'c5',
+              issueID: 'i2',
+              text: 'e',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'remove',
+            node: {
+              row: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              relationships: {},
+            },
+          },
+          {
+            type: 'add',
+            node: {
+              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              relationships: {},
+            },
+          },
+        ],
+      });
+    });
+
+    describe('changing partition value', () => {
+      takeTest({
+        ...base,
+        limit: 2,
+        name: 'move to from first partition to second',
+        pushes: [
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
+          },
+        ],
+        expectedMessages: [
+          [
+            'takeSnitch',
+            'push',
+            {
+              type: 'edit',
+              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i1',
+              },
+              start: {
+                basis: 'before',
+                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              },
+            },
+          ],
+          [
+            'takeSnitch',
+            'fetch',
+            {
+              constraint: {
+                key: 'issueID',
+                value: 'i2',
+              },
+              start: {
+                basis: 'before',
+                row: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+              },
+            },
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1"]': {
+            bound: {
+              created: 300,
+              id: 'c3',
+              issueID: 'i1',
+              text: 'c',
+            },
+            size: 2,
+          },
+          '["take","i2"]': {
+            bound: {
+              created: 400,
+              id: 'c4',
+              issueID: 'i2',
+              text: 'd',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 500,
+            id: 'c5',
+            issueID: 'i2',
+            text: 'e',
+          },
+        },
+        expectedOutput: [
+          {
+            type: 'remove',
+            node: {
+              row: {
+                created: 100,
+                id: 'c1',
+                issueID: 'i1',
+                text: 'a',
+              },
+              relationships: {},
+            },
+          },
+          {
+            type: 'add',
+            node: {
+              row: {
+                created: 300,
+                id: 'c3',
+                issueID: 'i1',
+                text: 'c',
+              },
+              relationships: {},
+            },
+          },
+          {
+            type: 'remove',
+            node: {
+              row: {
+                created: 500,
+                id: 'c5',
+                issueID: 'i2',
+                text: 'e',
+              },
+              relationships: {},
+            },
+          },
+          {
+            type: 'add',
+            node: {
+              row: {
+                created: 100,
+                id: 'c1',
+                issueID: 'i2',
+                text: 'a2',
+              },
+              relationships: {},
+            },
+          },
+        ],
+      });
+    });
+  });
 });
 
 function takeTest(t: TakeTest) {
@@ -890,13 +2318,13 @@ type TakeTest = {
   name: string;
   columns: Record<string, SchemaValue>;
   primaryKey: PrimaryKey;
-  sourceRows: Row[];
+  sourceRows: readonly Row[];
   sort?: Ordering | undefined;
   limit: number;
   partition:
     | {
         key: string;
-        values: Value[];
+        values: readonly Value[];
       }
     | undefined;
   pushes: SourceChange[];

@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import Database from 'better-sqlite3';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import type {CancelableAsyncIterable} from '../../types/streams.js';
+import {Database} from 'zqlite/src/db.js';
+import type {Source} from '../../types/streams.js';
+import {ChangeStreamer} from '../change-streamer/change-streamer.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
-import {initSyncSchema} from './schema/sync-schema.js';
 
 // The version ready payload is simply a signal. All of the information
 // that the consumer needs is retrieved by opening a new snapshot transaction
@@ -21,7 +21,7 @@ export interface ReplicaVersionNotifier {
    * the next message. The messages themselves contain no information; the subscriber queries
    * the SQLite replica for the latest replicated changes.
    */
-  subscribe(): CancelableAsyncIterable<ReplicaVersionReady>;
+  subscribe(): Source<ReplicaVersionReady>;
 }
 
 export interface Replicator extends ReplicaVersionNotifier {
@@ -36,30 +36,22 @@ export interface Replicator extends ReplicaVersionNotifier {
 export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #upstreamUri: string;
-  readonly #syncReplicaDbFile: string;
   readonly #incrementalSyncer: IncrementalSyncer;
 
   constructor(
     lc: LogContext,
-    replicaID: string,
-    upstreamUri: string,
-    syncReplicaDbFile: string,
+    id: string,
+    changeStreamer: ChangeStreamer,
+    replica: Database,
   ) {
-    this.id = replicaID;
+    this.id = id;
     this.#lc = lc
-      .withContext('component', 'Replicator')
+      .withContext('component', 'replicator')
       .withContext('serviceID', this.id);
-    this.#upstreamUri = upstreamUri;
-    this.#syncReplicaDbFile = syncReplicaDbFile;
-
-    const replica = new Database(syncReplicaDbFile);
-    replica.pragma('journal_mode = WAL');
-    // TODO: Any other replica setup required here?
 
     this.#incrementalSyncer = new IncrementalSyncer(
-      upstreamUri,
-      replicaID,
+      id,
+      changeStreamer,
       replica,
     );
   }
@@ -68,19 +60,11 @@ export class ReplicatorService implements Replicator, Service {
     return Promise.resolve({status: 'ok'});
   }
 
-  async run() {
-    await initSyncSchema(
-      this.#lc,
-      'replicator',
-      this.id,
-      this.#syncReplicaDbFile,
-      this.#upstreamUri,
-    );
-
-    await this.#incrementalSyncer.run(this.#lc);
+  run() {
+    return this.#incrementalSyncer.run(this.#lc);
   }
 
-  subscribe(): CancelableAsyncIterable<ReplicaVersionReady> {
+  subscribe(): Source<ReplicaVersionReady> {
     return this.#incrementalSyncer.subscribe();
   }
 

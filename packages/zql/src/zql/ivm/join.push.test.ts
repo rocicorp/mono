@@ -360,6 +360,312 @@ suite('push one:many', () => {
       },
     ],
   });
+
+  suite('edit', () => {
+    const base = {
+      columns: [
+        {id: {type: 'string'}, text: {type: 'string'}},
+        {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          text: {type: 'string'},
+        },
+      ],
+      primaryKeys: [['id'], ['id']],
+      joins: [
+        {
+          parentKey: 'id',
+          childKey: 'issueID',
+          relationshipName: 'comments',
+        },
+      ],
+    } as const;
+
+    pushTest({
+      ...base,
+      name: 'edit issue text',
+      sources: [
+        [{id: 'i1', text: 'issue 1'}],
+        [
+          {id: 'c1', issueID: 'i1', text: 'comment 1'},
+          {id: 'c2', issueID: 'i1', text: 'comment 2'},
+        ],
+      ],
+      pushes: [
+        [
+          0,
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', text: 'issue 1'},
+            row: {id: 'i1', text: 'issue 1 edited'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '0',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', text: 'issue 1'},
+            row: {id: 'i1', text: 'issue 1 edited'},
+          },
+        ],
+      ],
+      expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
+      expectedOutput: [
+        {
+          type: 'edit',
+          row: {
+            id: 'i1',
+            text: 'issue 1 edited',
+          },
+          oldRow: {
+            id: 'i1',
+            text: 'issue 1',
+          },
+        },
+      ],
+    });
+
+    pushTest({
+      ...base,
+      name: 'edit comment text',
+      sources: [
+        [{id: 'i1', text: 'issue 1'}],
+        [
+          {id: 'c1', issueID: 'i1', text: 'comment 1'},
+          {id: 'c2', issueID: 'i1', text: 'comment 2'},
+        ],
+      ],
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
+          },
+        ],
+        ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'i1',
+            text: 'issue 1',
+          },
+          child: {
+            change: {
+              oldRow: {
+                id: 'c1',
+                issueID: 'i1',
+                text: 'comment 1',
+              },
+              row: {
+                id: 'c1',
+                issueID: 'i1',
+                text: 'comment 1 edited',
+              },
+              type: 'edit',
+            },
+            relationshipName: 'comments',
+          },
+        },
+      ],
+    });
+
+    pushTest({
+      ...base,
+      name: 'edit issueID of comment',
+      sources: [
+        [
+          {id: 'i1', text: 'issue 1'},
+          {id: 'i2', text: 'issue 2'},
+        ],
+        [
+          {id: 'c1', issueID: 'i1', text: 'comment 1'},
+          {id: 'c2', issueID: 'i1', text: 'comment 2'},
+        ],
+      ],
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
+          },
+        ],
+        ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+        ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+        ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['i1', 'i1'],
+          ['i2', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'i1',
+            text: 'issue 1',
+          },
+          child: {
+            change: {
+              type: 'remove',
+              node: {
+                row: {
+                  id: 'c1',
+                  issueID: 'i1',
+                  text: 'comment 1',
+                },
+                relationships: {},
+              },
+            },
+            relationshipName: 'comments',
+          },
+        },
+        {
+          type: 'child',
+          row: {
+            id: 'i2',
+            text: 'issue 2',
+          },
+          child: {
+            change: {
+              type: 'add',
+              node: {
+                row: {
+                  id: 'c1',
+                  issueID: 'i2',
+                  text: 'comment 1.2',
+                },
+                relationships: {},
+              },
+            },
+            relationshipName: 'comments',
+          },
+        },
+      ],
+    });
+
+    pushTest({
+      ...base,
+      name: 'edit id of issue',
+      sources: [
+        [
+          {id: 'i1', text: 'issue 1'},
+          {id: 'i2', text: 'issue 2'},
+        ],
+        [
+          {id: 'c1', issueID: 'i1', text: 'comment 1'},
+          {id: 'c2', issueID: 'i2', text: 'comment 2'},
+          {id: 'c3', issueID: 'i3', text: 'comment 3'},
+        ],
+      ],
+      pushes: [
+        [
+          0,
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', text: 'issue 1'},
+            row: {id: 'i3', text: 'issue 1.3'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '0',
+          'push',
+          {
+            type: 'edit',
+            oldRow: {id: 'i1', text: 'issue 1'},
+            row: {id: 'i3', text: 'issue 1.3'},
+          },
+        ],
+        ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+        ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['i2', 'i2'],
+          ['i3', 'i3'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'remove',
+          node: {
+            row: {
+              id: 'i1',
+              text: 'issue 1',
+            },
+            relationships: {
+              comments: [
+                {
+                  row: {
+                    id: 'c1',
+                    issueID: 'i1',
+                    text: 'comment 1',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: 'add',
+          node: {
+            row: {
+              id: 'i3',
+              text: 'issue 1.3',
+            },
+            relationships: {
+              comments: [
+                {
+                  relationships: {},
+                  row: {
+                    id: 'c3',
+                    issueID: 'i3',
+                    text: 'comment 3',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
+  });
 });
 
 suite('push many:one', () => {
@@ -524,6 +830,240 @@ suite('push many:one', () => {
         },
       },
     ],
+  });
+
+  suite('edit', () => {
+    const base = {
+      columns: [
+        {
+          id: {type: 'string'},
+          ownerID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        {id: {type: 'string'}, text: {type: 'string'}},
+      ],
+      primaryKeys: [['id'], ['id']],
+      joins: [
+        {
+          parentKey: 'ownerID',
+          childKey: 'id',
+          relationshipName: 'owner',
+        },
+      ],
+    } as const;
+
+    pushTest({
+      ...base,
+      name: 'edit child to make it match to parents',
+      sources: [
+        [
+          {id: 'i1', ownerID: 'u1', text: 'item 1'},
+          {id: 'i2', ownerID: 'u1', text: 'item 2'},
+        ],
+        [{id: 'u2', text: 'user 2'}],
+      ],
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            row: {id: 'u1', text: 'user 1'},
+            oldRow: {id: 'u2', text: 'user 2'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            row: {id: 'u1', text: 'user 1'},
+            oldRow: {id: 'u2', text: 'user 2'},
+          },
+        ],
+        ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
+        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u2'}}],
+        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['u1', 'i1'],
+          ['u1', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'i1',
+            ownerID: 'u1',
+            text: 'item 1',
+          },
+          child: {
+            relationshipName: 'owner',
+            change: {
+              type: 'add',
+              node: {
+                row: {
+                  id: 'u1',
+                  text: 'user 1',
+                },
+                relationships: {},
+              },
+            },
+          },
+        },
+        {
+          type: 'child',
+          row: {
+            id: 'i2',
+            ownerID: 'u1',
+            text: 'item 2',
+          },
+          child: {
+            relationshipName: 'owner',
+            change: {
+              type: 'add',
+              node: {
+                row: {
+                  id: 'u1',
+                  text: 'user 1',
+                },
+                relationships: {},
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    pushTest({
+      ...base,
+      name: 'edit non matching child',
+      sources: [
+        [
+          {id: 'i1', ownerID: 'u1', text: 'item 1'},
+          {id: 'i2', ownerID: 'u1', text: 'item 2'},
+        ],
+        [{id: 'u2', text: 'user 2'}],
+      ],
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            row: {id: 'u2', text: 'user 2 changed'},
+            oldRow: {id: 'u2', text: 'user 2'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            row: {id: 'u2', text: 'user 2 changed'},
+            oldRow: {id: 'u2', text: 'user 2'},
+          },
+        ],
+        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u2'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['u1', 'i1'],
+          ['u1', 'i2'],
+        ],
+      ],
+      expectedOutput: [],
+    });
+
+    pushTest({
+      ...base,
+      name: 'edit matching child',
+      sources: [
+        [
+          {id: 'i1', ownerID: 'u1', text: 'item 1'},
+          {id: 'i2', ownerID: 'u1', text: 'item 2'},
+        ],
+        [{id: 'u1', text: 'user 1'}],
+      ],
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            row: {id: 'u1', text: 'user 1 changed'},
+            oldRow: {id: 'u1', text: 'user 1'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            row: {id: 'u1', text: 'user 1 changed'},
+            oldRow: {id: 'u1', text: 'user 1'},
+          },
+        ],
+        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['u1', 'i1'],
+          ['u1', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'i1',
+            ownerID: 'u1',
+            text: 'item 1',
+          },
+          child: {
+            change: {
+              type: 'edit',
+              oldRow: {
+                id: 'u1',
+                text: 'user 1',
+              },
+              row: {
+                id: 'u1',
+                text: 'user 1 changed',
+              },
+            },
+            relationshipName: 'owner',
+          },
+        },
+        {
+          type: 'child',
+          row: {
+            id: 'i2',
+            ownerID: 'u1',
+            text: 'item 2',
+          },
+          child: {
+            change: {
+              type: 'edit',
+              oldRow: {
+                id: 'u1',
+                text: 'user 1',
+              },
+              row: {
+                id: 'u1',
+                text: 'user 1 changed',
+              },
+            },
+            relationshipName: 'owner',
+          },
+        },
+      ],
+    });
   });
 });
 

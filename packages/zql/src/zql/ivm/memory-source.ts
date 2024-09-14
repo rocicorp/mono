@@ -1,7 +1,9 @@
 import BTree from 'btree';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
+import {createPredicate} from '../builder/filter.js';
+import {Change} from './change.js';
 import {
   Comparator,
   compareValues,
@@ -14,7 +16,7 @@ import {
 import {LookaheadIterator} from './lookahead-iterator.js';
 import {Constraint, FetchRequest, Input, Output} from './operator.js';
 import {PrimaryKey, Schema, SchemaValue} from './schema.js';
-import {Source, SourceChange, SourceInput} from './source.js';
+import {Source, SourceChange, SourceChangeEdit, SourceInput} from './source.js';
 import {Stream} from './stream.js';
 
 export type Overlay = {
@@ -33,6 +35,7 @@ type Connection = {
   output: Output | undefined;
   sort: Ordering;
   compareRows: Comparator;
+  optionalFilters: ((row: Row) => boolean)[];
 };
 
 /**
@@ -93,7 +96,7 @@ export class MemorySource implements Source {
 
   connect(
     sort: Ordering,
-    _optionalFilters?: SimpleCondition[] | undefined,
+    optionalFilters?: SimpleCondition[] | undefined,
   ): SourceInput {
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
@@ -113,6 +116,7 @@ export class MemorySource implements Source {
       output: undefined,
       sort,
       compareRows: makeComparator(sort),
+      optionalFilters: (optionalFilters ?? []).map(f => createPredicate(f)),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
@@ -186,8 +190,8 @@ export class MemorySource implements Source {
 
     const callingConnectionNum = this.#connections.indexOf(from);
     assert(callingConnectionNum !== -1, 'Output not found');
-    const reg = this.#connections[callingConnectionNum];
-    const {sort: requestedSort} = reg;
+    const conn = this.#connections[callingConnectionNum];
+    const {sort: requestedSort} = conn;
 
     // If there is a constraint, we need an index sorted by it first.
     const indexSort: OrderPart[] = [];
@@ -225,24 +229,40 @@ export class MemorySource implements Source {
       return valuesEqual(row[key], value);
     };
 
+    const matchesFilters = (row: Row) =>
+      conn.optionalFilters.every(f => f(row));
+
+    const matchesConstraintAndFilters = (row: Row) =>
+      matchesConstraint(row) && matchesFilters(row);
     // If there is an overlay for this output, does it match the requested
-    // constraints?
+    // constraints and filters?
     if (overlay) {
-      if (!matchesConstraint(overlay.change.row)) {
+      // TODO: This looks wrong given that we can have edit changes in the overlay.
+      if (!matchesConstraintAndFilters(overlay.change.row)) {
         overlay = undefined;
       }
     }
-
     const nextLowerKey = (row: Row | undefined) => {
+      if (!row) {
+        return undefined;
+      }
+      let o = overlay;
+      if (o) {
+        if (comparator(o.change.row, row) >= 0) {
+          o = undefined;
+        }
+      }
       while (row !== undefined) {
         row = data.nextLowerKey(row);
-        if (row && matchesConstraint(row)) {
+        if (row && matchesConstraintAndFilters(row)) {
+          if (o && comparator(o.change.row, row) >= 0) {
+            return o.change.row;
+          }
           return row;
         }
       }
-      return row;
+      return o?.change.row;
     };
-
     let startAt = req.start?.row;
     if (startAt) {
       if (req.constraint) {
@@ -278,22 +298,26 @@ export class MemorySource implements Source {
           scanStart[key] = dir === 'asc' ? minValue : maxValue;
         }
       }
+    } else {
+      scanStart = startAt;
     }
 
+    const withOverlay = generateWithOverlay(
+      startAt,
+      // 😬 - btree library doesn't support ideas like start "before" this
+      // key.
+      data.keys(scanStart as Row),
+      req.constraint,
+      overlay,
+      comparator,
+    );
+
+    const withFilters = conn.optionalFilters.length
+      ? generateWithFilter(withOverlay, matchesFilters)
+      : withOverlay;
+
     yield* generateWithConstraint(
-      generateWithStart(
-        generateWithOverlay(
-          startAt,
-          // 😬 - btree library doesn't support ideas like start "before" this
-          // key.
-          data.keys(scanStart as Row),
-          req.constraint,
-          overlay,
-          comparator,
-        ),
-        req,
-        comparator,
-      ),
+      generateWithStart(withFilters, req, comparator),
       req.constraint,
     );
   }
@@ -302,43 +326,72 @@ export class MemorySource implements Source {
     return this.#fetch(req, connection);
   }
 
-  push(change: SourceChange) {
+  push(change: SourceChange): void {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
-    if (change.type === 'add') {
-      if (data.has(change.row)) {
-        throw new Error(`Row already exists: ` + JSON.stringify(change));
-      }
-    } else {
-      change.type satisfies 'remove';
-      if (!data.has(change.row)) {
-        throw new Error(`Row not found: ` + JSON.stringify(change));
-      }
+
+    switch (change.type) {
+      case 'add':
+        if (data.has(change.row)) {
+          throw new Error(`Row already exists: ` + JSON.stringify(change));
+        }
+        break;
+      case 'remove':
+        if (!data.has(change.row)) {
+          throw new Error(`Row not found: ` + JSON.stringify(change));
+        }
+        break;
+      case 'edit':
+        if (!data.has(change.oldRow)) {
+          throw new Error(`Row not found: ` + JSON.stringify(change));
+        }
+        break;
+      default:
+        unreachable(change);
     }
 
+    const outputChange: Change =
+      change.type === 'edit'
+        ? change
+        : {
+            type: change.type,
+            node: {
+              row: change.row,
+              relationships: {},
+            },
+          };
     for (const [outputIndex, {output}] of this.#connections.entries()) {
       if (output) {
         this.#overlay = {outputIndex, change};
-        output.push({
-          type: change.type,
-          node: {
-            row: change.row,
-            relationships: {},
-          },
-        });
+        output.push(outputChange);
       }
     }
     this.#overlay = undefined;
     for (const {data} of this.#indexes.values()) {
-      if (change.type === 'add') {
-        const added = data.add(change.row, undefined);
-        // must succeed since we checked has() above.
-        assert(added);
-      } else {
-        change.type satisfies 'remove';
-        const removed = data.delete(change.row);
-        // must succeed since we checked has() above.
-        assert(removed);
+      switch (change.type) {
+        case 'add': {
+          const added = data.add(change.row, undefined);
+          // must succeed since we checked has() above.
+          assert(added);
+          break;
+        }
+        case 'remove': {
+          const removed = data.delete(change.row);
+          // must succeed since we checked has() above.
+          assert(removed);
+          break;
+        }
+        case 'edit': {
+          // We cannot just do `set` with the new value since the `oldRow` might
+          // not map to the same entry as the new `row` in the index btree.
+          const removed = data.delete(change.oldRow);
+          // must succeed since we checked has() above.
+          assert(removed);
+          data.add(change.row, undefined);
+          break;
+        }
+        default:
+          unreachable(change);
       }
     }
   }
@@ -356,6 +409,14 @@ function* generateWithConstraint(
       break;
     }
     yield node;
+  }
+}
+
+function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
+  for (const node of it) {
+    if (filter(node.row)) {
+      yield node;
+    }
   }
 }
 
@@ -407,7 +468,7 @@ export function* generateWithStart(
  *
  * @param startAt - if there is a lower bound to the stream. If the lower bound of the stream
  * is above the overlay, the overlay will be skipped.
- * @param rowIterator - the stream into which the overlay should be spliced
+ * @param rows - the stream into which the overlay should be spliced
  * @param constraint - constraint that was applied to the rowIterator and should
  * also be applied to the overlay.
  * @param overlay - the overlay values to splice in
@@ -415,38 +476,131 @@ export function* generateWithStart(
  */
 export function* generateWithOverlay(
   startAt: Row | undefined,
-  rowIterator: IterableIterator<Row>,
+  rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
+  compare: Comparator,
+) {
+  const overlays = computeOverlays(startAt, constraint, overlay, compare);
+  yield* generateWithOverlayInner(rows, overlays, compare);
+}
+
+function computeOverlays(
+  startAt: Row | undefined,
+  constraint: Constraint | undefined,
+  overlay: Overlay | undefined,
+  compare: Comparator,
+): [Overlay | undefined, Overlay | undefined] {
+  let secondOverlay: Overlay | undefined;
+
+  if (
+    overlay?.change.type === 'edit' &&
+    compare(overlay.change.row, overlay.change.oldRow) !== 0
+  ) {
+    // Different PK so we split the edit change into a remove and add.
+    [overlay, secondOverlay] = splitEditChange(overlay, compare);
+  }
+
+  if (startAt) {
+    overlay = overlayForStartAt(overlay, startAt, compare);
+    secondOverlay = overlayForStartAt(secondOverlay, startAt, compare);
+  }
+
+  if (constraint) {
+    overlay = overlayForConstraint(overlay, constraint);
+    secondOverlay = overlayForConstraint(secondOverlay, constraint);
+  }
+
+  if (secondOverlay !== undefined && overlay === undefined) {
+    overlay = secondOverlay;
+    secondOverlay = undefined;
+  }
+
+  return [overlay, secondOverlay];
+}
+
+export {overlayForStartAt as overlayForStartAtForTest};
+
+function overlayForStartAt(
+  overlay: Overlay | undefined,
+  startAt: Row,
+  compare: Comparator,
+): Overlay | undefined {
+  if (!overlay) {
+    return undefined;
+  }
+  if (compare(overlay.change.row, startAt) < 0) {
+    return undefined;
+  }
+  return overlay;
+}
+
+export {overlayForConstraint as overlayForConstraintForTest};
+
+function overlayForConstraint(
+  overlay: Overlay | undefined,
+  constraint: Constraint,
+): Overlay | undefined {
+  if (!overlay) {
+    return undefined;
+  }
+
+  if (!valuesEqual(overlay.change.row[constraint.key], constraint.value)) {
+    return undefined;
+  }
+  return overlay;
+}
+
+function splitEditChange(
+  overlay: Overlay,
+  compare: Comparator,
+): [Overlay, Overlay] {
+  const {oldRow, row} = overlay.change as SourceChangeEdit;
+
+  const removeOverlay: Overlay = {
+    outputIndex: overlay.outputIndex,
+    change: {type: 'remove', row: oldRow},
+  };
+  const addOverlay: Overlay = {
+    outputIndex: overlay.outputIndex,
+    change: {type: 'add', row},
+  };
+
+  const cmp = compare(oldRow, row);
+  assert(cmp !== 0, 'We should not split edit change with same PK');
+  if (cmp < 0) {
+    return [removeOverlay, addOverlay];
+  }
+  return [addOverlay, removeOverlay];
+}
+
+export function* generateWithOverlayInner(
+  rowIterator: Iterable<Row>,
+  overlays: [Overlay | undefined, Overlay | undefined],
   compare: (r1: Row, r2: Row) => number,
 ) {
-  if (startAt && overlay && compare(overlay.change.row, startAt) < 0) {
-    overlay = undefined;
-  }
-
-  if (overlay) {
-    if (constraint) {
-      const {key, value} = constraint;
-      const {change} = overlay;
-      if (!valuesEqual(change.row[key], value)) {
-        overlay = undefined;
-      }
-    }
-  }
-
+  let [overlay, secondOverlay] = overlays;
   for (const row of rowIterator) {
     if (overlay) {
-      const cmp = compare(overlay.change.row, row);
-      if (overlay.change.type === 'add') {
+      if (overlay.change.type === 'add' || overlay.change.type === 'edit') {
+        // For edit changes we can only get here if the edit change was not
+        // split an the row and the oldRow have the same PK.
+        const cmp = compare(overlay.change.row, row);
         if (cmp < 0) {
           yield {row: overlay.change.row, relationships: {}};
-          overlay = undefined;
+          overlay = secondOverlay;
+          secondOverlay = undefined;
         }
-      } else if (overlay.change.type === 'remove') {
+      }
+
+      if (overlay?.change.type === 'remove') {
+        const cmp = compare(overlay.change.row, row);
         if (cmp < 0) {
-          overlay = undefined;
+          overlay = secondOverlay;
+          secondOverlay = undefined;
         } else if (cmp === 0) {
-          overlay = undefined;
+          overlay = secondOverlay;
+          secondOverlay = undefined;
           continue;
         }
       }
@@ -473,10 +627,12 @@ type MaxValue = typeof maxValue;
 
 function makeBoundComparator(sort: Ordering) {
   return (a: RowBound, b: RowBound) => {
-    for (const [key, dir] of sort) {
+    // Hot! Do not use destructuring
+    for (const entry of sort) {
+      const key = entry[0];
       const cmp = compareBounds(a[key], b[key]);
       if (cmp !== 0) {
-        return dir === 'asc' ? cmp : -cmp;
+        return entry[1] === 'asc' ? cmp : -cmp;
       }
     }
     return 0;

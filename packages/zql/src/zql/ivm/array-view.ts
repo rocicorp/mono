@@ -1,4 +1,4 @@
-import {assert, unreachable} from 'shared/src/asserts.js';
+import {assert, notImplemented, unreachable} from 'shared/src/asserts.js';
 import {Immutable} from 'shared/src/immutable.js';
 import {must} from 'shared/src/must.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
@@ -115,6 +115,9 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         }
         return;
       }
+      case 'edit':
+        notImplemented();
+        return;
       case 'child': {
         const childSchema = must(
           schema.relationships?.[change.child.relationshipName],
@@ -127,48 +130,71 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
     }
   }
 
-  if (change.type === 'add') {
-    const newEntry: Entry = {
-      ...change.node.row,
-    };
-    const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
-    assert(!found, 'node already exists');
-    view.splice(pos, 0, newEntry);
+  switch (change.type) {
+    case 'add': {
+      // TODO: Only create a new entry if we need to mutate the existing one.
+      const newEntry: Entry = {
+        ...change.node.row,
+      };
+      const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
+      assert(!found, 'node already exists');
+      view.splice(pos, 0, newEntry);
 
-    for (const [relationship, children] of Object.entries(
-      change.node.relationships,
-    )) {
-      // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
-      const childSchema = must(schema.relationships?.[relationship]);
-      const newView: EntryList = [];
-      newEntry[relationship] = newView;
-      for (const node of children) {
-        applyChange(newView, {type: 'add', node}, childSchema);
+      for (const [relationship, children] of Object.entries(
+        change.node.relationships,
+      )) {
+        // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
+        const childSchema = must(schema.relationships?.[relationship]);
+        const newView: EntryList = [];
+        newEntry[relationship] = newView;
+        for (const node of children) {
+          applyChange(newView, {type: 'add', node}, childSchema);
+        }
       }
+      break;
     }
-  } else if (change.type === 'remove') {
-    const {pos, found} = binarySearch(
-      view,
-      change.node.row,
-      schema.compareRows,
-    );
-    assert(found, 'node does not exist');
-    view.splice(pos, 1);
-  } else {
-    change.type satisfies 'child';
-    const {pos, found} = binarySearch(view, change.row, schema.compareRows);
-    assert(found, 'node does not exist');
+    case 'remove': {
+      const {pos, found} = binarySearch(
+        view,
+        change.node.row,
+        schema.compareRows,
+      );
+      assert(found, 'node does not exist');
+      view.splice(pos, 1);
+      break;
+    }
+    case 'child': {
+      const {pos, found} = binarySearch(view, change.row, schema.compareRows);
+      assert(found, 'node does not exist');
 
-    const existing = view[pos];
-    const childSchema = must(
-      schema.relationships?.[change.child.relationshipName],
-    );
-    const existingList = existing[change.child.relationshipName];
-    assert(Array.isArray(existingList));
-    applyChange(existingList, change.child.change, childSchema);
+      const existing = view[pos];
+      const childSchema = must(
+        schema.relationships?.[change.child.relationshipName],
+      );
+      const existingList = existing[change.child.relationshipName];
+      assert(Array.isArray(existingList));
+      applyChange(existingList, change.child.change, childSchema);
+      break;
+    }
+    case 'edit': {
+      const {pos, found} = binarySearch(
+        view,
+        change.oldRow,
+        schema.compareRows,
+      );
+      assert(found, 'node does not exists');
+      view[pos] = {
+        ...view[pos],
+        ...change.row,
+      };
+      break;
+    }
+    default:
+      unreachable(change);
   }
 }
 
+// TODO: Do not return an object. It puts unnecessary pressure on the GC.
 function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
   let low = 0;
   let high = view.length - 1;

@@ -13,7 +13,7 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
-import { AST } from '../ast/ast.js';
+import {AST} from '../ast/ast.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();
@@ -33,8 +33,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     }
   }
   addServerQuery(ast: AST): () => void {
-      this.addedServerQueries.push(ast);
-      return () => {};
+    this.addedServerQueries.push(ast);
+    return () => {};
   }
   getSource(name: string): Source {
     return this.#sources[name];

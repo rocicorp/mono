@@ -14,13 +14,19 @@ import {
 } from './cvr.js';
 import {
   ClientsRow,
+  compareClientsRows,
+  compareDesiresRows,
+  compareInstancesRows,
+  compareQueriesRows,
+  compareRowsRows,
   DesiresRow,
   InstancesRow,
   QueriesRow,
   RowsRow,
   setupCVRTables,
 } from './schema/cvr.js';
-import type {RowID} from './schema/types.js';
+import type {CVRVersion, RowID} from './schema/types.js';
+import {unreachable} from 'shared/src/asserts.js';
 
 describe('view-syncer/cvr', () => {
   type DBState = {
@@ -46,8 +52,39 @@ describe('view-syncer/cvr', () => {
 
   async function expectState(db: PostgresDB, state: Partial<DBState>) {
     for (const table of Object.keys(state)) {
-      const res = await db`SELECT * FROM ${db('cvr.' + table)}`;
-      expect(res).toEqual(state[table as keyof DBState]);
+      const res = [...(await db`SELECT * FROM ${db('cvr.' + table)}`)];
+      const tableState = [...(state[table as keyof DBState] || [])];
+      switch (table) {
+        case 'instances': {
+          (res as InstancesRow[]).sort(compareInstancesRows);
+          (tableState as InstancesRow[]).sort(compareInstancesRows);
+          break;
+        }
+        case 'clients': {
+          (res as ClientsRow[]).sort(compareClientsRows);
+          (tableState as ClientsRow[]).sort(compareClientsRows);
+          break;
+        }
+        case 'queries': {
+          (res as QueriesRow[]).sort(compareQueriesRows);
+          (tableState as QueriesRow[]).sort(compareQueriesRows);
+          break;
+        }
+        case 'desires': {
+          (res as DesiresRow[]).sort(compareDesiresRows);
+          (tableState as DesiresRow[]).sort(compareDesiresRows);
+          break;
+        }
+        case 'rows': {
+          (res as RowsRow[]).sort(compareRowsRows);
+          (tableState as RowsRow[]).sort(compareRowsRows);
+          break;
+        }
+        default: {
+          unreachable();
+        }
+      }
+      expect(res).toEqual(tableState);
     }
   }
 
@@ -80,6 +117,24 @@ describe('view-syncer/cvr', () => {
     await testDBs.drop(db);
   });
 
+  async function catchupRows(
+    cvrStore: CVRStore,
+    afterVersion: CVRVersion,
+    upToCVR: CVRSnapshot,
+    excludeQueries: string[] = [],
+  ) {
+    const rows: RowsRow[] = [];
+    for await (const batch of cvrStore.catchupRowPatches(
+      lc,
+      afterVersion,
+      upToCVR,
+      excludeQueries,
+    )) {
+      rows.push(...batch);
+    }
+    return rows;
+  }
+
   test('load first time cvr', async () => {
     const pgStore = new CVRStore(lc, db, 'abc123');
 
@@ -91,10 +146,12 @@ describe('view-syncer/cvr', () => {
       clients: {},
       queries: {},
     } satisfies CVRSnapshot);
-    const flushed = await new CVRUpdater(pgStore, cvr).flush(
-      lc,
-      new Date(Date.UTC(2024, 3, 20)),
-    );
+    const flushed = (
+      await new CVRUpdater(pgStore, cvr).flush(
+        lc,
+        new Date(Date.UTC(2024, 3, 20)),
+      )
+    ).cvr;
 
     expect(flushed).toEqual({
       ...cvr,
@@ -236,7 +293,18 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load();
     const updater = new CVRUpdater(cvrStore, cvr);
 
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 24)),
+    );
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
 
     expect(cvr).toEqual({
       id: 'abc123',
@@ -390,8 +458,19 @@ describe('view-syncer/cvr', () => {
     expect(updater.putDesiredQueries('bonkClient', {})).toEqual([]);
     updater.clearDesiredQueries('dooClient');
 
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 24)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 24)),
+    );
 
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 7,
+      desires: 8,
+      clients: 4,
+      rows: 0,
+      statements: 21,
+    });
     expect(updated).toEqual({
       id: 'abc123',
       version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump
@@ -512,18 +591,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientAST: {
-            table: 'comments',
-          },
-          clientGroupID: 'abc123',
-          deleted: false,
-          internal: null,
-          patchVersion: null,
-          queryHash: 'threeHash',
-          transformationHash: null,
-          transformationVersion: null,
-        },
-        {
-          clientAST: {
             schema: '',
             table: 'zero.clients',
             where: [
@@ -544,6 +611,18 @@ describe('view-syncer/cvr', () => {
           internal: true,
           patchVersion: null,
           queryHash: 'lmids',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'comments',
+          },
+          clientGroupID: 'abc123',
+          deleted: false,
+          internal: null,
+          patchVersion: null,
+          queryHash: 'threeHash',
           transformationHash: null,
           transformationVersion: null,
         },
@@ -666,7 +745,18 @@ describe('view-syncer/cvr', () => {
     ).toEqual([]);
 
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
     expect(updated).toEqual({
       ...cvr,
       lastActive: {epochMillis: 1713834000000},
@@ -704,11 +794,6 @@ describe('view-syncer/cvr', () => {
   };
 
   const DELETE_ROW_KEY = {id: '456'};
-  const DELETED_ROW_ID: RowID = {
-    schema: 'public',
-    table: 'issues',
-    rowKey: DELETE_ROW_KEY,
-  };
 
   const IN_OLD_PATCH_ROW_KEY = {id: '777'};
 
@@ -829,7 +914,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1aa', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -945,17 +1029,21 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '1aa'},
-      },
-    ] satisfies PatchToVersion[]);
-
-    // expect(updater.numPendingWrites()).toBe(11);
+    expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 3,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -995,6 +1083,23 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, ['oneHash']))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1aa",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -1260,7 +1365,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toHaveLength(0);
@@ -1323,21 +1427,26 @@ describe('view-syncer/cvr', () => {
       },
     ]);
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+    expect(await updater.deleteUnreferencedRows()).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
       },
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '1ba'},
-      },
     ] satisfies PatchToVersion[]);
 
-    // expect(updater.numPendingWrites()).toBe(11);
-
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1391,6 +1500,23 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, ['oneHash']))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -1668,7 +1794,6 @@ describe('view-syncer/cvr', () => {
         {id: 'twoHash', transformationHash: 'updatedServerTwoHash'},
       ],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toHaveLength(0);
@@ -1755,19 +1880,26 @@ describe('view-syncer/cvr', () => {
       ]),
     );
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+    expect(await updater.deleteUnreferencedRows()).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
       },
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '1ba'},
-      },
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 2,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 5,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1850,6 +1982,27 @@ describe('view-syncer/cvr', () => {
             "minorVersion": 1,
             "stateVersion": "1a9",
           },
+        },
+      ]
+    `);
+
+    expect(
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, [
+        'oneHash',
+        'twoHash',
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -2119,7 +2272,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [],
       ['oneHash'],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -2138,22 +2290,27 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(await updater.deleteUnreferencedRows(lc)).toEqual([
+    expect(await updater.deleteUnreferencedRows()).toEqual([
       {
         patch: {type: 'row', op: 'del', id: ROW_ID3},
         toVersion: newVersion,
       },
-      {
-        patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-        toVersion: {stateVersion: '19z'},
-      },
     ] satisfies PatchToVersion[]);
-
-    // expect(updater.numPendingWrites()).toBe(10);
 
     // Same last active day (no index change), but different hour.
     // Note: Must flush before generating config patches.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 1,
+      desires: 0,
+      clients: 0,
+      rows: 2,
+      statements: 4,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2167,6 +2324,49 @@ describe('view-syncer/cvr', () => {
           "toVersion": {
             "stateVersion": "19z",
           },
+        },
+      ]
+    `);
+
+    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, []))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "19z",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": {
+            "twoHash": 1,
+          },
+          "rowKey": {
+            "id": "321",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1aa:01",
+          "refCounts": {
+            "twoHash": 1,
+          },
+          "rowKey": {
+            "id": "123",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
         },
       ]
     `);
@@ -2263,7 +2463,7 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientGroupID: 'abc123',
-          patchVersion: '1ba:01',
+          patchVersion: '1aa:01',
           refCounts: {
             twoHash: 1,
           },
@@ -2491,7 +2691,6 @@ describe('view-syncer/cvr', () => {
         {id: 'twoHash', transformationHash: 'serverTwoHash'},
       ],
       [],
-      {stateVersion: '189'},
     );
     expect(newVersion).toEqual({stateVersion: '1ba'});
     expect(queryPatches).toHaveLength(0);
@@ -2577,20 +2776,21 @@ describe('view-syncer/cvr', () => {
       ]),
     );
 
-    expect(new Set(await updater.deleteUnreferencedRows(lc))).toEqual(
-      new Set([
-        {
-          patch: {type: 'row', op: 'del', id: DELETED_ROW_ID},
-          toVersion: {stateVersion: '1ba'},
-        },
-      ] satisfies PatchToVersion[]),
-    );
-
-    // No writes!
-    expect(updater.numPendingWrites()).toBe(0);
+    expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
     // Only the last active time should change.
-    const updated = await updater.flush(lc, new Date(Date.UTC(2024, 3, 23, 1)));
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 1,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 0,
+      statements: 1,
+    });
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2677,6 +2877,27 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
+    expect(
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, [
+        'oneHash',
+        'twoHash',
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "abc123",
+          "patchVersion": "1ba",
+          "refCounts": null,
+          "rowKey": {
+            "id": "456",
+          },
+          "rowVersion": "03",
+          "schema": "public",
+          "table": "issues",
+        },
+      ]
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       lastActive: {epochMillis: 1713834000000},
@@ -2693,5 +2914,189 @@ describe('view-syncer/cvr', () => {
     //     epochMillis: Date.UTC(2024, 3, 23, 1),
     //   } satisfies LastActive,
     // });
+  });
+
+  test('advance with delete that cancels out add', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          lastActive: new Date(Date.UTC(2024, 3, 23)),
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(lc, db, 'abc123');
+    const cvr = await cvrStore.load();
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba');
+
+    const newVerison = updater.updatedVersion();
+    expect(newVerison).toEqual({
+      stateVersion: '1ba',
+    });
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {oneHash: 0},
+              contents: {id: 'should-show-up-in-patch'},
+            },
+          ],
+          [
+            ROW_ID3,
+            {
+              version: '01',
+              refCounts: {oneHash: 0},
+              contents: {id: 'should-not-show-up-in-patch'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          contents: {id: 'should-show-up-in-patch'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    // Same last active day (no index change), but different hour.
+    const {cvr: updated, stats} = await updater.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(stats).toEqual({
+      instances: 2,
+      queries: 0,
+      desires: 0,
+      clients: 0,
+      rows: 1,
+      statements: 3,
+    });
+
+    // Verify round tripping.
+    const cvrStore2 = new CVRStore(lc, db, 'abc123');
+    const reloaded = await cvrStore2.load();
+    expect(reloaded).toEqual(updated);
+
+    await expectState(db, {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1ba',
+          lastActive: new Date(Date.UTC(2024, 3, 23, 1)),
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '04',
+          refCounts: {oneHash: 1},
+          patchVersion: '1ba',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    });
   });
 });

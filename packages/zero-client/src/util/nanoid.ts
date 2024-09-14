@@ -1,9 +1,16 @@
 // This is taken from https://github.com/ai/nanoid/blob/main/index.browser.js We
 // copy this because we want to use `--platform=neutral` which doesn't work with
-// the npm package
+// the npm package.
+// Also we changed the random number generator to use Math.random() for compat
+// with React Native.
+
+import {getNonCryptoRandomValues} from 'shared/src/random-values.js';
 
 export function nanoid(size = 21): string {
-  return crypto.getRandomValues(new Uint8Array(size)).reduce((id, byte) => {
+  // Use our custom getRandomValues function to fill a Uint8Array with random values.
+  const randomBytes = getNonCryptoRandomValues(new Uint8Array(size));
+
+  return randomBytes.reduce((id, byte) => {
     // It is incorrect to use bytes exceeding the alphabet size.
     // The following mask reduces the random byte in the 0-255 value
     // range to the 0-63 value range. Therefore, adding hacks, such

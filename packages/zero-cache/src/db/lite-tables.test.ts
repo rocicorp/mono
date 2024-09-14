@@ -1,7 +1,8 @@
-import Database from 'better-sqlite3';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
-import {listTables} from './list.js';
-import {TableSpec} from './specs.js';
+import {Database} from 'zqlite/src/db.js';
+import {TableSpec} from '../types/specs.js';
+import {listTables} from './lite-tables.js';
 
 describe('tables/list', () => {
   type Case = {
@@ -159,7 +160,7 @@ describe('tables/list', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      const db = new Database(':memory:');
+      const db = new Database(createSilentLogContext(), ':memory:');
       db.exec(c.setupQuery);
 
       const tables = listTables(db);

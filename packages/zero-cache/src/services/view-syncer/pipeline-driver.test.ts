@@ -1,9 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import Database, {Database as DB} from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {DbFile} from 'zero-cache/src/test/lite.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
+import type {Database as DB} from 'zqlite/src/db.js';
+import {Database} from 'zqlite/src/db.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
@@ -20,7 +21,7 @@ describe('view-syncer/pipeline-driver', () => {
   beforeEach(() => {
     dbFile = new DbFile('pipelines_test');
     lc = createSilentLogContext();
-    const storage = new Database(':memory:');
+    const storage = new Database(lc, ':memory:');
     storage.prepare(CREATE_STORAGE_TABLE).run();
 
     pipelines = new PipelineDriver(
@@ -29,8 +30,8 @@ describe('view-syncer/pipeline-driver', () => {
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
     );
 
-    db = dbFile.connect();
-    initReplicationState(db, ['zero_data'], '0/123');
+    db = dbFile.connect(lc);
+    initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
       CREATE TABLE issues (
@@ -175,7 +176,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: BigInt(0)}),
       messages.insert('comments', {
         id: '41',
@@ -190,7 +191,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "id": "31",
             "issueID": "3",
             "upvotes": 0,
@@ -203,7 +204,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "closed": false,
             "id": "4",
           },
@@ -215,7 +216,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "id": "41",
             "issueID": "4",
             "upvotes": 9007199254740991,
@@ -235,7 +236,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.delete('issues', {id: '1'}),
       messages.delete('comments', {id: '21'}),
     );
@@ -276,7 +277,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.update('comments', {id: '22', issueID: '3'}),
     );
 
@@ -293,7 +294,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "id": "22",
             "issueID": "3",
             "upvotes": 20000,
@@ -328,7 +329,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
     );
     [...pipelines.advance().changes];
@@ -338,7 +339,7 @@ describe('view-syncer/pipeline-driver', () => {
       id: '22',
       issueID: '3',
       upvotes: 20000,
-      ['_0_version']: '183',
+      ['_0_version']: '123',
     });
   });
 
@@ -348,7 +349,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('issues', {id: '4', closed: 0}),
     );
 
@@ -357,7 +358,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "183",
+            "_0_version": "123",
             "closed": false,
             "id": "4",
           },
@@ -370,7 +371,7 @@ describe('view-syncer/pipeline-driver', () => {
     `);
 
     replicator.processTransaction(
-      '0/456',
+      '156',
       messages.insert('comments', {id: '41', issueID: '4', upvotes: 10}),
     );
 
@@ -379,7 +380,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "1fo",
+            "_0_version": "134",
             "id": "41",
             "issueID": "4",
             "upvotes": 10,
@@ -392,10 +393,7 @@ describe('view-syncer/pipeline-driver', () => {
       ]
     `);
 
-    replicator.processTransaction(
-      '0/789',
-      messages.delete('issues', {id: '4'}),
-    );
+    replicator.processTransaction('189', messages.delete('issues', {id: '4'}));
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
@@ -429,7 +427,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: 0}),
       messages.insert('comments', {id: '41', issueID: '4', upvotes: 0}),
       messages.insert('issues', {id: '4', closed: 1}),
@@ -437,7 +435,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     expect(pipelines.currentVersion()).toBe('00');
     expect([...pipelines.advance().changes]).toHaveLength(0);
-    expect(pipelines.currentVersion()).toBe('183');
+    expect(pipelines.currentVersion()).toBe('123');
   });
 
   test('push fails on out of bounds numbers', () => {
@@ -446,7 +444,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
-      '0/234',
+      '134',
       messages.insert('comments', {
         id: '31',
         issueID: '3',

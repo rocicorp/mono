@@ -1,18 +1,23 @@
-import Database from 'better-sqlite3';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {listIndices, listTables} from 'zero-cache/src/db/lite-tables.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
   initDB,
   testDBs,
-} from '../../test/db.js';
+} from 'zero-cache/src/test/db.js';
+import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
+import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {
+  FilteredTableSpec,
+  IndexSpec,
+  TableSpec,
+} from 'zero-cache/src/types/specs.js';
+import {Database} from 'zqlite/src/db.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
-import {listIndices, listTables} from './tables/list.js';
+import {fromLexiVersion} from './lsn.js';
 import {getPublicationInfo} from './tables/published.js';
-import type {FilteredTableSpec, IndexSpec, TableSpec} from './tables/specs.js';
 
 const REPLICA_ID = 'initial_sync_test_id';
 
@@ -460,11 +465,11 @@ describe('replicator/initial-sync', () => {
   ];
 
   let upstream: PostgresDB;
-  let replica: Database.Database;
+  let replica: Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_upstream');
-    replica = new Database(':memory:');
+    replica = new Database(createSilentLogContext(), ':memory:');
   });
 
   afterEach(async () => {
@@ -496,7 +501,7 @@ describe('replicator/initial-sync', () => {
       ).toMatchObject(c.replicatedSchema);
       const {pubs} = replica
         .prepare(`SELECT publications as pubs FROM "_zero.ReplicationConfig"`)
-        .get();
+        .get<{pubs: string}>();
       expect(new Set(JSON.parse(pubs))).toEqual(new Set(c.publications));
 
       const syncedIndices = listIndices(replica);
@@ -506,11 +511,15 @@ describe('replicator/initial-sync', () => {
 
       const replicaState = replica
         .prepare('SELECT * FROM "_zero.ReplicationState"')
-        .get();
+        .get<{
+          watermark: string;
+          stateVersion: string;
+          nextStateVersion: string;
+          lock: number;
+        }>();
       expect(replicaState).toMatchObject({
-        watermark: /[0-9A-F]+\/[0-9A-F]+/,
+        watermark: /[0-9a-f]{2,}/,
         stateVersion: '00',
-        nextStateVersion: /[0-9a-f]{2,}/,
       });
       expectTables(replica, {['_zero.ChangeLog']: []});
 
@@ -522,7 +531,7 @@ describe('replicator/initial-sync', () => {
           )}`;
       expect(slots[0]).toEqual({
         slotName: replicationSlot(REPLICA_ID),
-        lsn: replicaState.watermark,
+        lsn: fromLexiVersion(replicaState.watermark),
       });
     });
   }

@@ -1,12 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import type {JSONValue} from '../../../types/bigint-json.js';
+import {
+  type JSONValue,
+  type JSONObject,
+  stringify,
+} from '../../../types/bigint-json.js';
 import {
   RowID,
   versionFromString,
   versionString,
   type RowRecord,
 } from './types.js';
+import {normalizedKeyOrder, RowKey} from 'zero-cache/src/types/row-key.js';
+import {stringCompare} from 'shared/src/string-compare.js';
+
+export const PG_SCHEMA = 'cvr';
 
 const CREATE_CVR_SCHEMA = `CREATE SCHEMA IF NOT EXISTS cvr;`;
 
@@ -23,6 +31,10 @@ CREATE TABLE cvr.instances (
   "lastActive"    TIMESTAMPTZ NOT NULL -- For garbage collection
 );
 `;
+
+export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
+  return stringCompare(a.clientGroupID, b.clientGroupID);
+}
 
 export type ClientsRow = {
   clientGroupID: string;
@@ -48,6 +60,14 @@ CREATE TABLE cvr.clients (
 -- For catchup patches.
 CREATE INDEX client_patch_version ON cvr.clients ("patchVersion");
 `;
+
+export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
+  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  return stringCompare(a.clientID, b.clientID);
+}
 
 export type QueriesRow = {
   clientGroupID: string;
@@ -82,6 +102,14 @@ CREATE TABLE cvr.queries (
 CREATE INDEX queries_patch_version ON cvr.queries ("patchVersion" NULLS FIRST);
 `;
 
+export function compareQueriesRows(a: QueriesRow, b: QueriesRow) {
+  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  return stringCompare(a.queryHash, b.queryHash);
+}
+
 export type DesiresRow = {
   clientGroupID: string;
   clientID: string;
@@ -114,11 +142,23 @@ CREATE TABLE cvr.desires (
 CREATE INDEX desires_patch_version ON cvr.desires ("patchVersion");
 `;
 
+export function compareDesiresRows(a: DesiresRow, b: DesiresRow) {
+  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  const clientIDComp = stringCompare(a.clientID, b.clientID);
+  if (clientIDComp !== 0) {
+    return clientIDComp;
+  }
+  return stringCompare(a.queryHash, b.queryHash);
+}
+
 export type RowsRow = {
   clientGroupID: string;
   schema: string;
   table: string;
-  rowKey: JSONValue;
+  rowKey: JSONObject;
   rowVersion: string;
   patchVersion: string;
   refCounts: {[queryHash: string]: number} | null;
@@ -154,6 +194,25 @@ export function rowRecordToRowsRow(
     patchVersion: versionString(rowRecord.patchVersion),
     refCounts: rowRecord.refCounts,
   };
+}
+
+export function compareRowsRows(a: RowsRow, b: RowsRow) {
+  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
+  if (clientGroupIDComp !== 0) {
+    return clientGroupIDComp;
+  }
+  const schemaComp = stringCompare(a.schema, b.schema);
+  if (schemaComp !== 0) {
+    return schemaComp;
+  }
+  const tableComp = stringCompare(b.table, b.table);
+  if (tableComp !== 0) {
+    return tableComp;
+  }
+  return stringCompare(
+    stringifySorted(a.rowKey as RowKey),
+    stringifySorted(b.rowKey as RowKey),
+  );
 }
 
 const CREATE_CVR_ROWS_TABLE = `
@@ -195,4 +254,8 @@ export async function setupCVRTables(
 ) {
   lc.info?.(`Setting up CVR tables`);
   await db.unsafe(CREATE_CVR_TABLES);
+}
+
+function stringifySorted(r: RowKey) {
+  return stringify(normalizedKeyOrder(r));
 }

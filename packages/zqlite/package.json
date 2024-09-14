@@ -1,5 +1,5 @@
 {
-  "name": "@rocicorp/zqlite",
+  "name": "zqlite",
   "version": "0.0.0",
   "description": "SQLite source provider for ZQL (for use on the server)",
   "private": true,

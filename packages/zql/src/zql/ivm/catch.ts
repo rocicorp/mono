@@ -1,6 +1,7 @@
+import {unreachable} from 'shared/src/asserts.js';
 import type {Change} from './change.js';
-import type {FetchRequest, Input, Output} from './operator.js';
 import type {Node} from './data.js';
+import type {FetchRequest, Input, Output} from './operator.js';
 
 /**
  * Catch is an Output that collects all incoming stream data into arrays. Mainly
@@ -33,19 +34,27 @@ export class Catch implements Output {
 }
 
 export function expandChange(change: Change): Change {
-  if (change.type === 'child') {
-    return {
-      ...change,
-      child: {
-        ...change.child,
-        change: expandChange(change.child.change),
-      },
-    };
+  switch (change.type) {
+    case 'add':
+    case 'remove':
+      return {
+        ...change,
+        node: expandNode(change.node),
+      };
+    case 'edit':
+      // No generators to expand in edit changes.
+      return change;
+    case 'child':
+      return {
+        ...change,
+        child: {
+          ...change.child,
+          change: expandChange(change.child.change),
+        },
+      };
+    default:
+      unreachable(change);
   }
-  return {
-    ...change,
-    node: expandNode(change.node),
-  };
 }
 
 export function expandNode(node: Node): Node {

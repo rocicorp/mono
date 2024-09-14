@@ -1,23 +1,20 @@
 import {ExperimentalNoIndexDiff} from 'replicache';
-import {assert} from 'shared/src/asserts.js';
-import {AST} from '../../../zql/src/zql/ast/ast.js';
-import {Row} from '../../../zql/src/zql/ivm/data.js';
-import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
-import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
-import {Storage} from '../../../zql/src/zql/ivm/operator.js';
-import {Source} from '../../../zql/src/zql/ivm/source.js';
-import {
-  CommitListener,
-  QueryDelegate,
-} from '../../../zql/src/zql/query/query-impl.js';
-import {Schema} from '../../../zql/src/zql/query/schema.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
+import {AST} from 'zql/src/zql/ast/ast.js';
+import {Row} from 'zql/src/zql/ivm/data.js';
+import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
+import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
+import {Storage} from 'zql/src/zql/ivm/operator.js';
+import {editChangesEnabled, Source} from 'zql/src/zql/ivm/source.js';
+import {CommitListener, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
+import {Schema} from 'zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
 export type AddQuery = (ast: AST) => () => void;
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
- * Repliache data and pushes them into IVM and on tells the server about new
+ * Replicache data and pushes them into IVM and on tells the server about new
  * queries.
  */
 export class ZeroContext implements QueryDelegate {
@@ -73,19 +70,47 @@ export class ZeroContext implements QueryDelegate {
         const name = key.slice(ENTITIES_KEY_PREFIX.length, slash);
         const source = this.getSource(name);
 
-        if (diff.op === 'del' || diff.op === 'change') {
-          assert(typeof diff.oldValue === 'object');
-          source.push({
-            type: 'remove',
-            row: diff.oldValue as Row,
-          });
-        }
-        if (diff.op === 'add' || diff.op === 'change') {
-          assert(typeof diff.newValue === 'object');
-          source.push({
-            type: 'add',
-            row: diff.newValue as Row,
-          });
+        switch (diff.op) {
+          case 'del':
+            assert(typeof diff.oldValue === 'object');
+            source.push({
+              type: 'remove',
+              row: diff.oldValue as Row,
+            });
+            break;
+          case 'add':
+            assert(typeof diff.newValue === 'object');
+            source.push({
+              type: 'add',
+              row: diff.newValue as Row,
+            });
+            break;
+          case 'change': {
+            assert(typeof diff.newValue === 'object');
+            assert(typeof diff.oldValue === 'object');
+
+            if (editChangesEnabled()) {
+              // Edit changes are not yet supported everywhere. For now we only
+              // generate them in tests.
+              source.push({
+                type: 'edit',
+                row: diff.newValue as Row,
+                oldRow: diff.oldValue as Row,
+              });
+            } else {
+              source.push({
+                type: 'remove',
+                row: diff.oldValue as Row,
+              });
+              source.push({
+                type: 'add',
+                row: diff.newValue as Row,
+              });
+            }
+            break;
+          }
+          default:
+            unreachable(diff);
         }
       }
     } finally {

@@ -1,7 +1,9 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {Change} from './change.js';
 import {Node, Row} from './data.js';
+import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
 import {FetchRequest, Input, Operator, Output} from './operator.js';
+import {Schema} from './schema.js';
 import {Stream} from './stream.js';
 
 /**
@@ -38,7 +40,7 @@ export class Filter implements Operator {
     this.#input.destroy();
   }
 
-  getSchema() {
+  getSchema(): Schema {
     return this.#input.getSchema();
   }
 
@@ -57,12 +59,23 @@ export class Filter implements Operator {
   push(change: Change) {
     assert(this.#output, 'Output not set');
 
-    const row =
-      change.type === 'add' || change.type === 'remove'
-        ? change.node.row
-        : change.row;
-    if (this.#predicate(row)) {
-      this.#output.push(change);
+    switch (change.type) {
+      case 'add':
+      case 'remove':
+        if (this.#predicate(change.node.row)) {
+          this.#output.push(change);
+        }
+        break;
+      case 'child':
+        if (this.#predicate(change.row)) {
+          this.#output.push(change);
+        }
+        break;
+      case 'edit':
+        maybeSplitAndPushEditChange(change, this.#predicate, this.#output);
+        break;
+      default:
+        unreachable(change);
     }
   }
 }

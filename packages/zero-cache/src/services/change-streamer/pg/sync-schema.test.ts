@@ -1,19 +1,19 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
-  DbFile,
-  expectTables as expectLiteTables,
-  initDB as initLiteDB,
-} from 'zero-cache/src/test/lite.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {
   dropReplicationSlot,
   expectTables,
   getConnectionURI,
   initDB,
   testDBs,
-} from '../../../test/db.js';
-import {replicationSlot} from '../initial-sync.js';
+} from 'zero-cache/src/test/db.js';
+import {
+  DbFile,
+  expectTables as expectLiteTables,
+  initDB as initLiteDB,
+} from 'zero-cache/src/test/lite.js';
+import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {replicationSlot} from './initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 
 const REPLICA_ID = 'sync_schema_test_id';
@@ -90,12 +90,13 @@ describe('replicator/schema/sync-schema', () => {
     await testDBs.drop(upstream);
     await replicaFile.unlink();
   }, 10000);
+  const lc = createSilentLogContext();
 
   for (const c of cases) {
     test(
       c.name,
       async () => {
-        const replica = replicaFile.connect();
+        const replica = replicaFile.connect(lc);
         await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
         initLiteDB(replica, c.replicaSetup, c.replicaPreState);
 
