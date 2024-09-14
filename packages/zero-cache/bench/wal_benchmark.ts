@@ -26,12 +26,11 @@ export function wal_benchmark(opts: Options) {
     .prepare('select id from issue')
     .all<{id: string}>()
     .map(row => row.id);
+  let {maxModified} = db
+    .prepare('select max(modified) as maxModified from issue')
+    .get<{maxModified: number}>();
+  const perturb = db.prepare(`UPDATE issue SET modified=? WHERE id = ?`);
 
-  const perturb = db.prepare(
-    `INSERT INTO issue (id, _0_version) VALUES (?, '')
-         ON CONFLICT DO UPDATE SET modified=EXCLUDED.modified+1
-      `,
-  );
   console.log(`warmup`);
   bench();
 
@@ -46,7 +45,9 @@ export function wal_benchmark(opts: Options) {
 
     const start = performance.now();
     // Perturb random entries in the db.
-    randomEntries(ids, opts.modify).forEach(id => perturb.run(id));
+    randomEntries(ids, opts.modify).forEach(id =>
+      perturb.run(++maxModified, id),
+    );
     const end = performance.now();
 
     console.log(`modify  took ${end - start}ms`);
