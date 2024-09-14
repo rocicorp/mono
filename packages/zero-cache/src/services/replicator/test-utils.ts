@@ -2,15 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {Pgoutput} from 'pg-logical-replication';
 import {assert} from 'shared/src/asserts.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {
-  versionFromLexi,
-  versionToLexi,
-} from 'zero-cache/src/types/lexi-version.js';
 import {RowKey, RowValue} from 'zero-cache/src/types/row-key.js';
 import {h32} from 'zero-cache/src/types/xxhash.js';
 import {Database} from 'zqlite/src/db.js';
 import {
-  Change,
+  DataChange,
   MessageBegin,
   MessageCommit,
 } from '../change-streamer/schema/change.js';
@@ -19,39 +15,22 @@ import {MessageProcessor} from './incremental-sync.js';
 const NOOP = () => {};
 
 export interface FakeReplicator {
-  process(...msgs: Change[]): void;
-
-  processTransaction(
-    finalWatermark: string,
-    ...msgs: (
-      | Pgoutput.MessageInsert
-      | Pgoutput.MessageDelete
-      | Pgoutput.MessageUpdate
-    )[]
-  ): void;
+  processTransaction(finalWatermark: string, ...msgs: DataChange[]): void;
 }
 
 export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
   const messageProcessor = createMessageProcessor(db);
-  let watermark = 123;
   return {
-    process: (...msgs) => {
+    processTransaction: (watermark, ...msgs) => {
+      messageProcessor.processMessage(lc, ['begin', {tag: 'begin'}]);
       for (const msg of msgs) {
-        messageProcessor.processMessage(lc, versionToLexi(watermark++), msg);
+        messageProcessor.processMessage(lc, ['data', msg]);
       }
-    },
-
-    processTransaction: (finalWatermark, ...msgs) => {
-      let watermark = Number(versionFromLexi(finalWatermark)) - msgs.length - 1;
-      messageProcessor.processMessage(lc, versionToLexi(watermark++), {
-        tag: 'begin',
-      });
-      for (const msg of msgs) {
-        messageProcessor.processMessage(lc, versionToLexi(watermark++), msg);
-      }
-      messageProcessor.processMessage(lc, finalWatermark, {
-        tag: 'commit',
-      });
+      messageProcessor.processMessage(lc, [
+        'commit',
+        {tag: 'commit'},
+        {watermark},
+      ]);
     },
   };
 }

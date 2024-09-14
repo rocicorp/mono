@@ -1,6 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {ChangeEntry, Downstream, ErrorType} from './change-streamer.js';
+import {WatermarkedChange} from './change-streamer-service.js';
+import {Downstream, ErrorType} from './change-streamer.js';
 
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
@@ -13,7 +14,7 @@ export class Subscriber {
   readonly id: string;
   readonly #downstream: Subscription<Downstream>;
   #watermark: string;
-  #backlog: ChangeEntry[] | null;
+  #backlog: WatermarkedChange[] | null;
 
   constructor(
     id: string,
@@ -30,8 +31,8 @@ export class Subscriber {
     return this.#watermark;
   }
 
-  send(change: ChangeEntry) {
-    const {watermark} = change;
+  send(change: WatermarkedChange) {
+    const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
         this.#backlog.push(change);
@@ -42,7 +43,7 @@ export class Subscriber {
   }
 
   /** catchup() is called on ChangeEntries loaded from the store. */
-  catchup(change: ChangeEntry) {
+  catchup(change: WatermarkedChange) {
     this.#send(change);
   }
 
@@ -58,11 +59,13 @@ export class Subscriber {
     this.#backlog = null;
   }
 
-  #send(change: ChangeEntry) {
-    const {watermark} = change;
+  #send(change: WatermarkedChange) {
+    const [watermark, downstream] = change;
     if (watermark > this.watermark) {
-      this.#downstream.push(['change', change]);
-      this.#watermark = watermark;
+      this.#downstream.push(downstream);
+      if (downstream[0] === 'commit') {
+        this.#watermark = watermark;
+      }
     }
   }
 

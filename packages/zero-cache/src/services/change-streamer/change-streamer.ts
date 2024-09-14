@@ -1,6 +1,11 @@
 import {Source} from 'zero-cache/src/types/streams.js';
 import {Service} from '../service.js';
-import {Change} from './schema/change.js';
+import {
+  Change,
+  DataChange,
+  MessageBegin,
+  MessageCommit,
+} from './schema/change.js';
 
 /**
  * The ChangeStreamer is the component between replicators ("subscribers")
@@ -101,6 +106,23 @@ export type SubscriptionError = {
   message?: string | undefined;
 };
 
-export type Downstream = ['change', ChangeEntry] | ['error', SubscriptionError];
+export type Begin = ['begin', MessageBegin];
+export type Data = ['data', DataChange];
+export type Commit = ['commit', MessageCommit, {watermark: string}];
+export type Error = ['error', SubscriptionError];
+
+export type DownstreamChange = Begin | Data | Commit;
+
+/**
+ * A stream of transactions, each starting with a {@link MessageBegin},
+ * containing one or more {@link DataChange}s, and ending with a
+ * {@link MessageCommit}. The 'commit' tuple includes a `watermark` that
+ * should be stored with the committed data and used for resuming
+ * a subscription (e.g. in the {@link SubscriberContext}).
+ *
+ * A {@link SubscriptionError} indicates an unrecoverable error that requires
+ * manual intervention (e.g. configuration / operational error).
+ */
+export type Downstream = DownstreamChange | Error;
 
 export interface ChangeStreamerService extends ChangeStreamer, Service {}
