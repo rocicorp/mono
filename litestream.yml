@@ -2,4 +2,5 @@ exec: node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/se
 dbs:
   - path: /data/db/sync-replica.db
     replicas:
-      - url: ${REPLICA_URL}
+      - type: file
+      - path: ${REPLICA_URL}
