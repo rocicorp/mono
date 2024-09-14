@@ -10,7 +10,10 @@ import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {liteTableName} from '../../types/names.js';
 import type {Source} from '../../types/streams.js';
-import {ChangeStreamer} from '../change-streamer/change-streamer.js';
+import {
+  ChangeStreamer,
+  DownstreamChange,
+} from '../change-streamer/change-streamer.js';
 import {Change, MessageCommit} from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
@@ -77,9 +80,7 @@ export class IncrementalSyncer {
             break;
           }
           this.#state.resetBackoff();
-
-          const {watermark, change} = message[1];
-          processor.processMessage(lc, watermark, change);
+          processor.processMessage(lc, message);
         }
         processor.abort(lc);
       } catch (e) {
@@ -177,14 +178,15 @@ export class MessageProcessor {
     this.#fail(lc, err ?? new AbortError());
   }
 
-  processMessage(lc: LogContext, watermark: string, message: Change) {
-    lc = lc.withContext('watermark', watermark);
+  processMessage(lc: LogContext, downstream: DownstreamChange) {
+    const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);
       return;
     }
     try {
-      this.#processMessage(lc, watermark, message);
+      const watermark = type === 'commit' ? downstream[2].watermark : undefined;
+      this.#processMessage(lc, message, watermark);
     } catch (e) {
       if (e instanceof ReplayedTransactionError) {
         lc.info?.(e);
@@ -195,7 +197,7 @@ export class MessageProcessor {
     }
   }
 
-  #processMessage(lc: LogContext, watermark: string, msg: Change) {
+  #processMessage(lc: LogContext, msg: Change, watermark: string | undefined) {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
@@ -227,6 +229,7 @@ export class MessageProcessor {
         // Undef this.#currentTx to allow the assembly of the next transaction.
         this.#currentTx = null;
 
+        assert(watermark);
         const elapsedMs = tx.processCommit(msg, watermark);
         lc.debug?.(`Committed tx (${elapsedMs} ms)`);
 

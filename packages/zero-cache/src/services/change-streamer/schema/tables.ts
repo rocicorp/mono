@@ -17,8 +17,10 @@ export type ChangeLogEntry = {
 
 const CREATE_CHANGE_LOG_TABLE = `
   CREATE TABLE cdc."ChangeLog" (
-    watermark  TEXT PRIMARY KEY,
-    change     JSONB NOT NULL
+    watermark  TEXT,
+    pos        INT8,
+    change     JSONB NOT NULL,
+    PRIMARY KEY (watermark, pos)
   );
 `;
 

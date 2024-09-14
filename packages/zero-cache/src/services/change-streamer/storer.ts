@@ -7,11 +7,17 @@ import {Mode, TransactionPool} from 'zero-cache/src/db/transaction-pool.js';
 import {JSONValue} from 'zero-cache/src/types/bigint-json.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Service} from '../service.js';
-import {ChangeEntry} from './change-streamer.js';
-import {MessageCommit} from './schema/change.js';
+import {WatermarkedChange} from './change-streamer-service.js';
+import {ChangeEntry, Commit} from './change-streamer.js';
 import {Subscriber} from './subscriber.js';
 
-type QueueEntry = ['change', ChangeEntry] | ['subscriber', Subscriber];
+type QueueEntry = ['change', WatermarkedChange] | ['subscriber', Subscriber];
+
+type PendingTransaction = {
+  pool: TransactionPool;
+  preCommitWatermark: string;
+  pos: number;
+};
 
 /**
  * Handles the storage of changes and the catchup of subscribers
@@ -21,21 +27,17 @@ export class Storer implements Service {
   readonly id = 'storer';
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
-  readonly #onCommit: (c: MessageCommit) => void;
+  readonly #onCommit: (c: Commit) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly stopped = resolver<false>();
 
-  constructor(
-    lc: LogContext,
-    db: PostgresDB,
-    onCommit: (c: MessageCommit) => void,
-  ) {
+  constructor(lc: LogContext, db: PostgresDB, onCommit: (c: Commit) => void) {
     this.#lc = lc;
     this.#db = db;
     this.#onCommit = onCommit;
   }
 
-  store(entry: ChangeEntry) {
+  store(entry: WatermarkedChange) {
     void this.#queue.enqueue(['change', entry]);
   }
 
@@ -44,7 +46,7 @@ export class Storer implements Service {
   }
 
   async run() {
-    let tx: TransactionPool | null = null;
+    let tx: PendingTransaction | null = null;
     let next: QueueEntry | false;
 
     const catchupQueue: Subscriber[] = [];
@@ -61,32 +63,43 @@ export class Storer implements Service {
         continue;
       }
       // next[0] === 'change'
-      const {watermark, change} = next[1];
-      const {tag} = change;
+      const [watermark, downstream] = next[1];
+      const [tag, change] = downstream;
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
-        tx = new TransactionPool(
-          this.#lc.withContext('watermark', watermark),
-          Mode.SERIALIZABLE,
-        );
-        void tx.run(this.#db);
+        tx = {
+          pool: new TransactionPool(
+            this.#lc.withContext('watermark', watermark),
+            Mode.SERIALIZABLE,
+          ),
+          preCommitWatermark: watermark,
+          pos: 0,
+        };
+        void tx.pool.run(this.#db);
+      } else {
+        assert(tx, `received ${tag} outside of transaction`);
+        tx.pos++;
       }
 
-      assert(tx, `received ${tag} outside of transaction`);
-      const entry = {watermark, change: change as unknown as JSONValue};
-      tx.process(tx => [
+      const entry = {
+        watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
+        pos: tx.pos,
+        change: change as unknown as JSONValue,
+      };
+
+      tx.pool.process(tx => [
         // Ignore conflicts to take into account transaction replay when an
         // acknowledgement doesn't reach upstream.
         tx`INSERT INTO cdc."ChangeLog" ${tx(entry)} ON CONFLICT DO NOTHING`,
       ]);
 
       if (tag === 'commit') {
-        tx.setDone();
-        await tx.done();
+        tx.pool.setDone();
+        await tx.pool.done();
         tx = null;
 
         // ACK the LSN to the upstream Postgres.
-        this.#onCommit(change);
+        this.#onCommit(downstream);
 
         // Before beginning the next transaction, open a READONLY snapshot to
         // concurrently catchup any queued subscribers.
@@ -122,9 +135,10 @@ export class Storer implements Service {
         let count = 0;
         for await (const entries of tx<ChangeEntry[]>`
           SELECT watermark, change FROM cdc."ChangeLog"
-           WHERE watermark > ${sub.watermark}`.cursor(10000)) {
+           WHERE watermark > ${sub.watermark}
+           ORDER BY watermark, pos`.cursor(10000)) {
           for (const entry of entries) {
-            sub.catchup(entry);
+            sub.catchup(toDownstream(entry));
             count++;
           }
         }
@@ -147,5 +161,17 @@ export class Storer implements Service {
   stop() {
     this.stopped.resolve(false);
     return promiseVoid;
+  }
+}
+
+function toDownstream(entry: ChangeEntry): WatermarkedChange {
+  const {watermark, change} = entry;
+  switch (change.tag) {
+    case 'begin':
+      return [watermark, ['begin', change]];
+    case 'commit':
+      return [watermark, ['commit', change, {watermark}]];
+    default:
+      return [watermark, ['data', change]];
   }
 }

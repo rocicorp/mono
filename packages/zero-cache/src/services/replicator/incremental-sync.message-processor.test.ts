@@ -4,7 +4,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
 import {Database} from 'zqlite/src/db.js';
-import {Change} from '../change-streamer/schema/change.js';
+import {DownstreamChange} from '../change-streamer/change-streamer.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,
@@ -34,7 +34,7 @@ describe('replicator/message-processor', () => {
 
   type Case = {
     name: string;
-    messages: [watermark: string, change: Change][];
+    messages: DownstreamChange[];
     acknowledged: string[];
     expectedVersionChanges: number;
     replicated: Record<string, object[]>;
@@ -47,21 +47,21 @@ describe('replicator/message-processor', () => {
     {
       name: 'malformed replication stream',
       messages: [
-        ['04', messages.begin()],
-        ['05', messages.insert('foo', {id: 123})],
-        ['06', messages.insert('foo', {id: 234})],
-        ['07', messages.commit()],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 123})],
+        ['data', messages.insert('foo', {id: 234})],
+        ['commit', messages.commit(), {watermark: '07'}],
 
         // Induce a failure with a missing 'begin' message.
-        ['08', messages.insert('foo', {id: 456})],
-        ['09', messages.insert('foo', {id: 345})],
-        ['0a', messages.commit()],
+        ['data', messages.insert('foo', {id: 456})],
+        ['data', messages.insert('foo', {id: 345})],
+        ['commit', messages.commit(), {watermark: '0a'}],
 
         // This should be dropped.
-        ['0b', messages.begin()],
-        ['0c', messages.insert('foo', {id: 789})],
-        ['0d', messages.insert('foo', {id: 987})],
-        ['0e', messages.commit()],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 789})],
+        ['data', messages.insert('foo', {id: 987})],
+        ['commit', messages.commit(), {watermark: '0e'}],
       ],
       acknowledged: ['07'],
       expectedVersionChanges: 1,
@@ -76,37 +76,37 @@ describe('replicator/message-processor', () => {
     {
       name: 'transaction replay',
       messages: [
-        ['05', messages.begin()],
-        ['06', messages.insert('foo', {id: 123})],
-        ['08', messages.commit()],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 123})],
+        ['commit', messages.commit(), {watermark: '08'}],
 
-        ['09', messages.begin()],
-        ['0a', messages.insert('foo', {id: 234})],
-        ['0c', messages.commit()],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 234})],
+        ['commit', messages.commit(), {watermark: '0c'}],
 
         // Simulate Postgres resending the first two transactions (e.g. reconnecting after
         // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
-        ['05', messages.begin()],
-        ['06', messages.insert('foo', {id: 123})],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 123})],
         // For good measure, add new inserts that didn't appear in the previous transaction.
         // This would not actually happen, but it allows us to confirm that no mutations
         // are applied.
-        ['07', messages.insert('foo', {id: 456})],
-        ['08', messages.commit()],
+        ['data', messages.insert('foo', {id: 456})],
+        ['commit', messages.commit(), {watermark: '08'}],
 
-        ['09', messages.begin()],
-        ['0a', messages.insert('foo', {id: 234})],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 234})],
         // For good measure, add new inserts that didn't appear in the previous transaction.
         // This would not actually happen, but it allows us to confirm that no mutations
         // are applied.
-        ['0b', messages.insert('foo', {id: 654})],
-        ['0c', messages.commit()],
+        ['data', messages.insert('foo', {id: 654})],
+        ['commit', messages.commit(), {watermark: '0c'}],
 
         // This should succeed.
-        ['0d', messages.begin()],
-        ['0e', messages.insert('foo', {id: 789})],
-        ['0f', messages.insert('foo', {id: 987})],
-        ['0g', messages.commit()],
+        ['begin', messages.begin()],
+        ['data', messages.insert('foo', {id: 789})],
+        ['data', messages.insert('foo', {id: 987})],
+        ['commit', messages.commit(), {watermark: '0g'}],
       ],
       acknowledged: [
         '08',
@@ -141,8 +141,8 @@ describe('replicator/message-processor', () => {
         (_: LogContext, err: unknown) => failures.push(err),
       );
 
-      for (const [watermark, msg] of c.messages) {
-        processor.processMessage(lc, watermark, msg);
+      for (const msg of c.messages) {
+        processor.processMessage(lc, msg);
       }
 
       expect(acknowledgements).toEqual(c.acknowledged);
@@ -163,7 +163,7 @@ describe('replicator/message-processor', () => {
     const processor = createMessageProcessor(replica);
 
     expect(replica.inTransaction).toBe(false);
-    processor.processMessage(lc, '02', {tag: 'begin'});
+    processor.processMessage(lc, ['begin', {tag: 'begin'}]);
     expect(replica.inTransaction).toBe(true);
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);

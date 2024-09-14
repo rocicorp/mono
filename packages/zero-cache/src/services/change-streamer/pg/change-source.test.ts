@@ -11,7 +11,7 @@ import {DbFile} from 'zero-cache/src/test/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
 import {ChangeSource} from '../change-streamer-service.js';
-import {ChangeEntry} from '../change-streamer.js';
+import {DownstreamChange} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 
@@ -22,7 +22,6 @@ describe('change-source/pg', {retry: 3}, () => {
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
   let source: ChangeSource;
-  let watermarks: string[];
 
   beforeEach(async () => {
     lc = createSilentLogContext();
@@ -47,7 +46,6 @@ describe('change-source/pg', {retry: 3}, () => {
       REPLICA_ID,
       replicaDbFile.path,
     );
-    watermarks = [];
   });
 
   afterEach(async () => {
@@ -56,8 +54,10 @@ describe('change-source/pg', {retry: 3}, () => {
     await replicaDbFile.unlink();
   });
 
-  function drainToQueue(sub: Source<ChangeEntry>): Queue<ChangeEntry> {
-    const queue = new Queue<ChangeEntry>();
+  function drainToQueue(
+    sub: Source<DownstreamChange>,
+  ): Queue<DownstreamChange> {
+    const queue = new Queue<DownstreamChange>();
     void (async () => {
       for await (const msg of sub) {
         void queue.enqueue(msg);
@@ -66,14 +66,10 @@ describe('change-source/pg', {retry: 3}, () => {
     return queue;
   }
 
-  async function nextChange(sub: Queue<ChangeEntry>) {
-    const entry = await sub.dequeue();
-    watermarks.push(entry.watermark);
-    return entry.change;
-  }
+  const WATERMARK_REGEX = /[0-9a-z]{2,}/;
 
   test('changes', async () => {
-    const {changes} = source.startStream();
+    const {initialWatermark, changes} = await source.startStream();
     const downstream = drainToQueue(changes);
 
     await upstream.begin(async tx => {
@@ -84,26 +80,40 @@ describe('change-source/pg', {retry: 3}, () => {
         VALUES('datatypes', 123456789, 987654321987654321, 123.456, true)`;
     });
 
-    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'insert',
-      new: {id: 'hello'},
-    });
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'insert',
-      new: {id: 'world'},
-    });
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'insert',
-      new: {
-        id: 'datatypes',
-        int: 123456789,
-        big: 987654321987654321n,
-        flt: 123.456,
-        bool: true,
+    expect(initialWatermark).toMatch(WATERMARK_REGEX);
+    expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {id: 'hello'},
       },
-    });
-    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {id: 'world'},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {
+          id: 'datatypes',
+          int: 123456789,
+          big: 987654321987654321n,
+          flt: 123.456,
+          bool: true,
+        },
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
 
     // Write more upstream changes.
     await upstream.begin(async tx => {
@@ -114,30 +124,41 @@ describe('change-source/pg', {retry: 3}, () => {
       await tx`INSERT INTO foo(id) VALUES ('include-me')`;
     });
 
-    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'delete',
-      key: {id: 'world'},
-    });
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'update',
-      new: {id: 'hello', int: 123},
-    });
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'truncate',
-    });
-    expect(await nextChange(downstream)).toMatchObject({
-      tag: 'insert',
-      new: {id: 'include-me'},
-    });
-    expect(await nextChange(downstream)).toMatchObject({tag: 'commit'});
+    expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'delete',
+        key: {id: 'world'},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'update',
+        new: {id: 'hello', int: 123},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'truncate',
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {id: 'include-me'},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
 
     // Close the stream.
     changes.cancel();
-
-    expect(watermarks).toHaveLength(11);
-    expect(new Set(watermarks).size).toBe(11);
-
-    expect([...watermarks].sort()).toEqual(watermarks);
   });
 });

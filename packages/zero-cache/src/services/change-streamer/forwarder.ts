@@ -1,4 +1,4 @@
-import {ChangeEntry} from './change-streamer.js';
+import {WatermarkedChange} from './change-streamer-service.js';
 import {Subscriber} from './subscriber.js';
 
 export class Forwarder {
@@ -34,12 +34,12 @@ export class Forwarder {
    * two components have an equivalent interpretation of whether a Transaction is
    * currently being streamed.
    */
-  forward(entry: ChangeEntry) {
-    const {change} = entry;
+  forward(entry: WatermarkedChange) {
+    const [type] = entry[1];
     for (const active of this.#active.values()) {
       active.send(entry);
     }
-    switch (change.tag) {
+    switch (type) {
       case 'begin':
         // While in a Transaction, all added subscribers are "queued" so that no
         // messages are forwarded to them. This state corresponds to being queued

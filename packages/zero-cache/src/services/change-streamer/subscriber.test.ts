@@ -9,74 +9,65 @@ describe('change-streamer/subscriber', () => {
     const [sub, stream] = createSubscriber('00');
 
     // Send some messages while it is catching up.
-    sub.send({watermark: '11', change: messages.begin()});
-    sub.send({watermark: '12', change: messages.commit()});
+    sub.send(['11', ['begin', messages.begin()]]);
+    sub.send(['12', ['commit', messages.commit(), {watermark: '12'}]]);
 
     // Send catchup messages.
-    sub.catchup({watermark: '01', change: messages.begin()});
-    sub.catchup({watermark: '02', change: messages.commit()});
+    sub.catchup(['01', ['begin', messages.begin()]]);
+    sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
 
     sub.setCaughtUp();
 
     // Send some messages after catchup.
-    sub.send({watermark: '21', change: messages.begin()});
-    sub.send({watermark: '22', change: messages.commit()});
+    sub.send(['21', ['begin', messages.begin()]]);
+    sub.send(['22', ['commit', messages.commit(), {watermark: '22'}]]);
 
     sub.close();
 
     expect(stream).toMatchInlineSnapshot(`
       [
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "01",
+            "tag": "begin",
           },
         ],
         [
-          "change",
+          "commit",
           {
-            "change": {
-              "tag": "commit",
-            },
+            "tag": "commit",
+          },
+          {
             "watermark": "02",
           },
         ],
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "11",
+            "tag": "begin",
           },
         ],
         [
-          "change",
+          "commit",
           {
-            "change": {
-              "tag": "commit",
-            },
+            "tag": "commit",
+          },
+          {
             "watermark": "12",
           },
         ],
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "21",
+            "tag": "begin",
           },
         ],
         [
-          "change",
+          "commit",
           {
-            "change": {
-              "tag": "commit",
-            },
+            "tag": "commit",
+          },
+          {
             "watermark": "22",
           },
         ],
@@ -90,40 +81,37 @@ describe('change-streamer/subscriber', () => {
     // Technically, catchup should never send any messages if the subscriber
     // is ahead, since the watermark query would return no results. But pretend it
     // does just to ensure that catchup messages are subject to the filter.
-    sub.catchup({watermark: '01', change: messages.begin()});
-    sub.catchup({watermark: '02', change: messages.begin()});
+    sub.catchup(['01', ['begin', messages.begin()]]);
+    sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
     sub.setCaughtUp();
 
     // Still lower than the watermark ...
-    sub.send({watermark: '121', change: messages.begin()});
-    sub.send({watermark: '123', change: messages.begin()});
+    sub.send(['121', ['begin', messages.begin()]]);
+    sub.send(['123', ['commit', messages.commit(), {watermark: '123'}]]);
 
     // These should be sent.
-    sub.send({watermark: '124', change: messages.begin()});
-    sub.send({watermark: '125', change: messages.begin()});
+    sub.send(['124', ['begin', messages.begin()]]);
+    sub.send(['125', ['commit', messages.commit(), {watermark: '125'}]]);
 
     // Replays should be ignored.
-    sub.send({watermark: '124', change: messages.begin()});
-    sub.send({watermark: '125', change: messages.begin()});
+    sub.send(['124', ['begin', messages.begin()]]);
+    sub.send(['125', ['commit', messages.commit(), {watermark: '125'}]]);
 
     sub.close();
     expect(stream).toMatchInlineSnapshot(`
       [
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "124",
+            "tag": "begin",
           },
         ],
         [
-          "change",
+          "commit",
           {
-            "change": {
-              "tag": "begin",
-            },
+            "tag": "commit",
+          },
+          {
             "watermark": "125",
           },
         ],

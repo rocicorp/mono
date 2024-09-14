@@ -15,12 +15,12 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward({watermark: '11', change: messages.begin()});
+    forwarder.forward(['11', ['begin', messages.begin()]]);
     forwarder.add(sub2);
-    forwarder.forward({watermark: '12', change: messages.truncate('issues')});
-    forwarder.forward({watermark: '13', change: messages.commit()});
+    forwarder.forward(['12', ['data', messages.truncate('issues')]]);
+    forwarder.forward(['13', ['commit', messages.commit(), {watermark: '13'}]]);
     forwarder.add(sub3);
-    forwarder.forward({watermark: '14', change: messages.begin()});
+    forwarder.forward(['14', ['begin', messages.begin()]]);
     forwarder.add(sub4);
 
     for (const sub of [sub1, sub2, sub3, sub4]) {
@@ -31,64 +31,55 @@ describe('change-streamer/forwarder', () => {
     expect(stream1).toMatchInlineSnapshot(`
       [
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "11",
+            "tag": "begin",
           },
         ],
         [
-          "change",
+          "data",
           {
-            "change": {
-              "cascade": false,
-              "relations": [
-                {
-                  "columns": [
-                    {
-                      "flags": 1,
-                      "name": "id",
-                      "parser": [Function],
-                      "typeMod": -1,
-                      "typeName": null,
-                      "typeOid": 23,
-                      "typeSchema": null,
-                    },
-                  ],
-                  "keyColumns": [
-                    "id",
-                  ],
-                  "name": "issues",
-                  "relationOid": 1558331249,
-                  "replicaIdentity": "default",
-                  "schema": "public",
-                  "tag": "relation",
-                },
-              ],
-              "restartIdentity": false,
-              "tag": "truncate",
-            },
-            "watermark": "12",
+            "cascade": false,
+            "relations": [
+              {
+                "columns": [
+                  {
+                    "flags": 1,
+                    "name": "id",
+                    "parser": [Function],
+                    "typeMod": -1,
+                    "typeName": null,
+                    "typeOid": 23,
+                    "typeSchema": null,
+                  },
+                ],
+                "keyColumns": [
+                  "id",
+                ],
+                "name": "issues",
+                "relationOid": 1558331249,
+                "replicaIdentity": "default",
+                "schema": "public",
+                "tag": "relation",
+              },
+            ],
+            "restartIdentity": false,
+            "tag": "truncate",
           },
         ],
         [
-          "change",
+          "commit",
           {
-            "change": {
-              "tag": "commit",
-            },
+            "tag": "commit",
+          },
+          {
             "watermark": "13",
           },
         ],
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "14",
+            "tag": "begin",
           },
         ],
       ]
@@ -99,12 +90,9 @@ describe('change-streamer/forwarder', () => {
     expect(stream2).toMatchInlineSnapshot(`
       [
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "14",
+            "tag": "begin",
           },
         ],
       ]
@@ -112,12 +100,9 @@ describe('change-streamer/forwarder', () => {
     expect(stream3).toMatchInlineSnapshot(`
       [
         [
-          "change",
+          "begin",
           {
-            "change": {
-              "tag": "begin",
-            },
-            "watermark": "14",
+            "tag": "begin",
           },
         ],
       ]

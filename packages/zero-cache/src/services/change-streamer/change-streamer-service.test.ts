@@ -12,19 +12,19 @@ import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {initializeStreamer} from './change-streamer-service.js';
 import {
-  ChangeEntry,
   ChangeStreamerService,
+  Commit,
   Downstream,
+  DownstreamChange,
 } from './change-streamer.js';
-import {MessageCommit} from './schema/change.js';
 import {ChangeLogEntry} from './schema/tables.js';
 
 describe('change-streamer/service', {retry: 3}, () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
-  let changes: Subscription<ChangeEntry>;
-  let acks: Queue<MessageCommit>;
+  let changes: Subscription<DownstreamChange>;
+  let acks: Queue<Commit>;
 
   const REPLICA_VERSION = '01';
 
@@ -43,10 +43,12 @@ describe('change-streamer/service', {retry: 3}, () => {
       lc,
       changeDB,
       {
-        startStream: () => ({
-          changes,
-          acks: {push: commit => acks.enqueue(commit)},
-        }),
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes,
+            acks: {push: commit => acks.enqueue(commit)},
+          }),
       },
       replica,
     );
@@ -70,8 +72,8 @@ describe('change-streamer/service', {retry: 3}, () => {
 
   async function nextChange(sub: Queue<Downstream>) {
     const down = await sub.dequeue();
-    assert(down[0] === 'change');
-    return down[1].change;
+    assert(down[0] !== 'error');
+    return down[1];
   }
 
   const messages = new ReplicationMessages({foo: 'id'});
@@ -85,19 +87,14 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     const downstream = drainToQueue(sub);
 
-    changes.push({watermark: '02', change: messages.begin()});
-    changes.push({
-      watermark: '03',
-      change: messages.insert('foo', {id: 'hello'}),
-    });
-    changes.push({
-      watermark: '04',
-      change: messages.insert('foo', {id: 'world'}),
-    });
-    changes.push({
-      watermark: '05',
-      change: messages.commit({extra: 'fields'}),
-    });
+    changes.push(['begin', messages.begin()]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes.push([
+      'commit',
+      messages.commit({extra: 'fields'}),
+      {watermark: '05'},
+    ]);
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
@@ -129,19 +126,14 @@ describe('change-streamer/service', {retry: 3}, () => {
 
   test('subscriber catchup and continuation', async () => {
     // Process some changes upstream.
-    changes.push({watermark: '02', change: messages.begin()});
-    changes.push({
-      watermark: '03',
-      change: messages.insert('foo', {id: 'hello'}),
-    });
-    changes.push({
-      watermark: '04',
-      change: messages.insert('foo', {id: 'world'}),
-    });
-    changes.push({
-      watermark: '05',
-      change: messages.commit({extra: 'stuff'}),
-    });
+    changes.push(['begin', messages.begin()]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes.push([
+      'commit',
+      messages.commit({extra: 'stuff'}),
+      {watermark: '05'},
+    ]);
 
     // Subscribe to the original watermark.
     const sub = streamer.subscribe({
@@ -152,15 +144,13 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
 
     // Process more upstream changes.
-    changes.push({watermark: '06', change: messages.begin()});
-    changes.push({
-      watermark: '07',
-      change: messages.delete('foo', {id: 'world'}),
-    });
-    changes.push({
-      watermark: '08',
-      change: messages.commit({more: 'stuff'}),
-    });
+    changes.push(['begin', messages.begin()]);
+    changes.push(['data', messages.delete('foo', {id: 'world'})]);
+    changes.push([
+      'commit',
+      messages.commit({more: 'stuff'}),
+      {watermark: '08'},
+    ]);
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
@@ -214,18 +204,22 @@ describe('change-streamer/service', {retry: 3}, () => {
     });
     const downstream = drainToQueue(sub);
 
-    changes.push({watermark: '02', change: messages.begin()});
-    changes.push({
-      watermark: '03',
-      change: messages.insert('foo', {
+    changes.push(['begin', messages.begin()]);
+    changes.push([
+      'data',
+      messages.insert('foo', {
         id: 'hello',
         int: 123456789,
         big: 987654321987654321n,
         flt: 123.456,
         bool: true,
       }),
-    });
-    changes.push({watermark: '04', change: messages.commit({extra: 'info'})});
+    ]);
+    changes.push([
+      'commit',
+      messages.commit({extra: 'info'}),
+      {watermark: '04'},
+    ]);
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({

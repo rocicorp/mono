@@ -1,10 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {
   LogicalReplicationService,
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
-import {assertString} from 'shared/src/asserts.js';
+import postgres from 'postgres';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
@@ -12,11 +13,11 @@ import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import {ChangeSource, ChangeStream} from '../change-streamer-service.js';
-import {ChangeEntry} from '../change-streamer.js';
-import {Change, MessageCommit} from '../schema/change.js';
+import {Commit, DownstreamChange} from '../change-streamer.js';
+import {Change} from '../schema/change.js';
 import {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
-import {toLexiVersion} from './lsn.js';
+import {fromLexiVersion, toLexiVersion} from './lsn.js';
 import {initSyncSchema} from './sync-schema.js';
 
 // BigInt support from LogicalReplicationService.
@@ -74,36 +75,45 @@ class PostgresChangeSource implements ChangeSource {
     this.#replicationConfig = replicationConfig;
   }
 
-  startStream(): ChangeStream {
+  async startStream(): Promise<ChangeStream> {
+    // Note: Starting a replication stream at '0/0' defaults to starting at
+    // the slot's `confirmed_flush_lsn`, as detailed in
+    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-START-REPLICATION-SLOT-LOGICAL
     let lastLSN = '0/0';
 
-    const ack = (commit?: MessageCommit) => {
+    const ack = (commit?: Commit) => {
       if (commit) {
-        assertString(commit.commitEndLsn);
-        lastLSN = commit.commitEndLsn;
+        const {watermark} = commit[2];
+        lastLSN = fromLexiVersion(watermark);
       }
       void service.acknowledge(lastLSN);
     };
 
-    const changes = Subscription.create<ChangeEntry>({
+    const changes = Subscription.create<DownstreamChange>({
       cleanup: () => service.stop(),
     });
+
+    // To avoid a race condition when handing off the replication stream
+    // between tasks, query the `confirmed_flush_lsn` for the replication
+    // slot only after the replication stream starts, as that is when it
+    // is guaranteed not to change (i.e. until we ACK a commit).
+    const {promise: confirmedFlushLSN, resolve, reject} = resolver<string>();
 
     const service = new LogicalReplicationService(
       {connectionString: this.#upstreamUri},
       {acknowledge: {auto: false, timeoutSeconds: 0}},
     )
+      .on('start', () => this.getConfirmedFlushLSN().then(resolve, reject))
       .on('heartbeat', (_lsn, _time, respond) => {
         respond && ack();
       })
       .on('data', (lsn, msg) => {
-        const change = messageToChangeEntry(lsn, msg);
+        const change = messageToDownstream(lsn, msg);
         if (change) {
           changes.push(change);
         }
       });
 
-    this.#lc.debug?.('starting upstream replication stream');
     service
       .subscribe(
         new PgoutputPlugin({
@@ -116,22 +126,67 @@ class PostgresChangeSource implements ChangeSource {
       .catch(e => changes.fail(e instanceof Error ? e : new Error(String(e))))
       .finally(() => changes.cancel());
 
-    return {changes, acks: {push: ack}};
+    const lsn = await confirmedFlushLSN;
+    const watermark = toLexiVersion(lsn);
+    this.#lc.info?.(`started replication stream at ${lsn} (${watermark})`);
+
+    return {
+      initialWatermark: watermark,
+      changes,
+      acks: {push: ack},
+    };
+  }
+
+  /**
+   * When a replication slot is created its `confirmed_flush_lsn` is uninitialized, e.g.
+   *
+   * ```
+   *  slot_name | restart_lsn | confirmed_flush_lsn
+   *  -----------+-------------+---------------------
+   *  zero_slot | 8F/38ACB2F8 | 0/1
+   * ```
+   *
+   * Using the greater of the `restart_lsn` and `confirmed_flush_lsn` produces
+   * the desired initial watermark.
+   */
+  async getConfirmedFlushLSN(): Promise<string> {
+    const db = postgres(this.#upstreamUri);
+    const slot = replicationSlot(this.#replicaID);
+    try {
+      const result = await db<{restart: string; confirmed: string}[]>`
+      SELECT restart_lsn as restart, confirmed_flush_lsn as confirmed
+        FROM pg_replication_slots 
+        WHERE slot_name = ${slot}`;
+      if (result.length === 1) {
+        const {restart, confirmed} = result[0];
+        return toLexiVersion(confirmed) > toLexiVersion(restart)
+          ? confirmed
+          : restart;
+      }
+      throw new Error(`Upstream is missing replication slot ${slot}`);
+    } finally {
+      await db.end();
+    }
   }
 }
 
-function messageToChangeEntry(lsn: string, msg: Pgoutput.Message) {
+function messageToDownstream(
+  lsn: string,
+  msg: Pgoutput.Message,
+): DownstreamChange | undefined {
   const change = msg as Change;
   const {tag} = change;
   switch (tag) {
     case 'begin':
+      return ['begin', change];
     case 'insert':
     case 'update':
     case 'delete':
     case 'truncate':
+      return ['data', change];
     case 'commit': {
-      const watermark = toLexiVersion(lsn, tag);
-      return {watermark, change};
+      const watermark = toLexiVersion(lsn);
+      return ['commit', change, {watermark}];
     }
 
     default:

@@ -15,7 +15,6 @@ import {Database} from 'zqlite/src/db.js';
 import {dropReplicationSlot, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {
-  ChangeEntry,
   Downstream,
   SubscriberContext,
 } from '../change-streamer/change-streamer.js';
@@ -59,7 +58,7 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   type Case = {
     name: string;
     setup: string;
-    downstream: ChangeEntry[];
+    downstream: Downstream[];
     data: Record<string, Record<string, unknown>[]>;
   };
 
@@ -81,31 +80,22 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '03', change: issues.begin()},
-        {watermark: '04', change: issues.insert('issues', {issueID: 123})},
-        {
-          watermark: '05',
-          change: issues.insert('issues', {issueID: 456, bool: false}),
-        },
-        {watermark: '06', change: issues.commit()},
+        ['begin', issues.begin()],
+        ['data', issues.insert('issues', {issueID: 123})],
+        ['data', issues.insert('issues', {issueID: 456, bool: false})],
+        ['commit', issues.commit(), {watermark: '06'}],
 
-        {watermark: '07', change: issues.begin()},
-        {
-          watermark: '08',
-          change: issues.insert('issues', {
+        ['begin', issues.begin()],
+        [
+          'data',
+          issues.insert('issues', {
             issueID: 789,
             big: 9223372036854775807n,
           }),
-        },
-        {
-          watermark: '09',
-          change: issues.insert('issues', {issueID: 987, bool: true}),
-        },
-        {
-          watermark: '0a',
-          change: issues.insert('issues', {issueID: 234, flt: 123.456}),
-        },
-        {watermark: '0b', change: issues.commit()},
+        ],
+        ['data', issues.insert('issues', {issueID: 987, bool: true})],
+        ['data', issues.insert('issues', {issueID: 234, flt: 123.456})],
+        ['commit', issues.commit(), {watermark: '0b'}],
       ],
       data: {
         issues: [
@@ -197,34 +187,25 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '02', change: orgIssues.begin()},
-        {
-          watermark: '03',
-          change: orgIssues.insert('issues', {orgID: 1, issueID: 123}),
-        },
-        {
-          watermark: '04',
-          change: orgIssues.insert('issues', {orgID: 1, issueID: 456}),
-        },
-        {
-          watermark: '05',
-          change: orgIssues.insert('issues', {orgID: 2, issueID: 789}),
-        },
-        {watermark: '06', change: orgIssues.commit()},
+        ['begin', orgIssues.begin()],
+        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 123})],
+        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 456})],
+        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 789})],
+        ['commit', orgIssues.commit(), {watermark: '06'}],
 
-        {watermark: '07', change: orgIssues.begin()},
-        {
-          watermark: '08',
-          change: orgIssues.update('issues', {
+        ['begin', orgIssues.begin()],
+        [
+          'data',
+          orgIssues.update('issues', {
             orgID: 1,
             issueID: 456,
             bool: true,
             description: 'foo',
           }),
-        },
-        {
-          watermark: '09',
-          change: orgIssues.update(
+        ],
+        [
+          'data',
+          orgIssues.update(
             'issues',
             {
               orgID: 2,
@@ -234,8 +215,8 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
             },
             {orgID: 1, issueID: 123},
           ),
-        },
-        {watermark: '0a', change: orgIssues.commit()},
+        ],
+        ['commit', orgIssues.commit(), {watermark: '0a'}],
       ],
       data: {
         issues: [
@@ -301,39 +282,18 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '02', change: orgIssues.begin()},
-        {
-          watermark: '03',
-          change: orgIssues.insert('issues', {orgID: 1, issueID: 123}),
-        },
-        {
-          watermark: '04',
-          change: orgIssues.insert('issues', {orgID: 1, issueID: 456}),
-        },
-        {
-          watermark: '05',
-          change: orgIssues.insert('issues', {orgID: 2, issueID: 789}),
-        },
-        {
-          watermark: '06',
-          change: orgIssues.insert('issues', {orgID: 2, issueID: 987}),
-        },
-        {watermark: '07', change: orgIssues.commit()},
+        ['begin', orgIssues.begin()],
+        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 123})],
+        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 456})],
+        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 789})],
+        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 987})],
+        ['commit', orgIssues.commit(), {watermark: '07'}],
 
-        {watermark: '08', change: orgIssues.begin()},
-        {
-          watermark: '09',
-          change: orgIssues.delete('issues', {orgID: 1, issueID: 123}),
-        },
-        {
-          watermark: '0a',
-          change: orgIssues.delete('issues', {orgID: 1, issueID: 456}),
-        },
-        {
-          watermark: '0b',
-          change: orgIssues.delete('issues', {orgID: 2, issueID: 987}),
-        },
-        {watermark: '0c', change: orgIssues.commit()},
+        ['begin', orgIssues.begin()],
+        ['data', orgIssues.delete('issues', {orgID: 1, issueID: 123})],
+        ['data', orgIssues.delete('issues', {orgID: 1, issueID: 456})],
+        ['data', orgIssues.delete('issues', {orgID: 2, issueID: 987})],
+        ['commit', orgIssues.commit(), {watermark: '0c'}],
       ],
       data: {
         issues: [
@@ -375,24 +335,24 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       CREATE TABLE baz(id INTEGER PRIMARY KEY, _0_version TEXT NOT NULL);
       `,
       downstream: [
-        {watermark: '02', change: fooBarBaz.begin()},
-        {watermark: '03', change: fooBarBaz.insert('foo', {id: 1})},
-        {watermark: '04', change: fooBarBaz.insert('foo', {id: 2})},
-        {watermark: '05', change: fooBarBaz.insert('foo', {id: 3})},
-        {watermark: '06', change: fooBarBaz.insert('bar', {id: 4})},
-        {watermark: '07', change: fooBarBaz.insert('bar', {id: 5})},
-        {watermark: '08', change: fooBarBaz.insert('bar', {id: 6})},
-        {watermark: '09', change: fooBarBaz.insert('baz', {id: 7})},
-        {watermark: '0a', change: fooBarBaz.insert('baz', {id: 8})},
-        {watermark: '0b', change: fooBarBaz.insert('baz', {id: 9})},
-        {watermark: '0c', change: fooBarBaz.truncate('foo', 'baz')},
-        {watermark: '0d', change: fooBarBaz.truncate('foo')}, // Redundant. Shouldn't cause problems.
-        {watermark: '0e', change: fooBarBaz.commit()},
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.insert('foo', {id: 1})],
+        ['data', fooBarBaz.insert('foo', {id: 2})],
+        ['data', fooBarBaz.insert('foo', {id: 3})],
+        ['data', fooBarBaz.insert('bar', {id: 4})],
+        ['data', fooBarBaz.insert('bar', {id: 5})],
+        ['data', fooBarBaz.insert('bar', {id: 6})],
+        ['data', fooBarBaz.insert('baz', {id: 7})],
+        ['data', fooBarBaz.insert('baz', {id: 8})],
+        ['data', fooBarBaz.insert('baz', {id: 9})],
+        ['data', fooBarBaz.truncate('foo', 'baz')],
+        ['data', fooBarBaz.truncate('foo')], // Redundant. Shouldn't cause problems.
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
 
-        {watermark: '0f', change: fooBarBaz.begin()},
-        {watermark: '0g', change: fooBarBaz.truncate('foo')},
-        {watermark: '0h', change: fooBarBaz.insert('foo', {id: 101})},
-        {watermark: '0i', change: fooBarBaz.commit()},
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.truncate('foo')],
+        ['data', fooBarBaz.insert('foo', {id: 101})],
+        ['commit', fooBarBaz.commit(), {watermark: '0i'}],
       ],
       data: {
         foo: [{id: 101n, ['_0_version']: '0e'}],
@@ -454,36 +414,27 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       );
       `,
       downstream: [
-        {watermark: '02', change: orgIssues.begin()},
-        {
-          watermark: '03',
-          change: orgIssues.insert('issues', {orgID: 1, issueID: 123}),
-        },
-        {
-          watermark: '04',
-          change: orgIssues.update(
+        ['begin', orgIssues.begin()],
+        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 123})],
+        [
+          'data',
+          orgIssues.update(
             'issues',
             {orgID: 1, issueID: 456},
             {orgID: 1, issueID: 123},
           ),
-        },
-        {
-          watermark: '05',
-          change: orgIssues.insert('issues', {orgID: 2, issueID: 789}),
-        },
-        {
-          watermark: '06',
-          change: orgIssues.delete('issues', {orgID: 2, issueID: 789}),
-        },
-        {
-          watermark: '07',
-          change: orgIssues.update('issues', {
+        ],
+        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 789})],
+        ['data', orgIssues.delete('issues', {orgID: 2, issueID: 789})],
+        [
+          'data',
+          orgIssues.update('issues', {
             orgID: 1,
             issueID: 456,
             description: 'foo',
           }),
-        },
-        {watermark: '08', change: orgIssues.commit()},
+        ],
+        ['commit', orgIssues.commit(), {watermark: '08'}],
       ],
       data: {
         issues: [
@@ -532,8 +483,8 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
       });
 
       for (const change of c.downstream) {
-        downstream.push(['change', change]);
-        if (change.change.tag === 'commit') {
+        downstream.push(change);
+        if (change[0] === 'commit') {
           // Wait for the transaction to be committed to the replica.
           await Promise.race([versionReady.next(), syncing]);
         }
