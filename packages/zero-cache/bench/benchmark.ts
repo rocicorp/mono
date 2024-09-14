@@ -1,18 +1,19 @@
 // create a zql query
 
-import Database from 'better-sqlite3';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {must} from 'shared/src/must.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
 import {Source} from 'zql/src/zql/ivm/source.js';
 import {newQuery, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
+import {Database} from 'zqlite/src/db.js';
 import {TableSource} from 'zqlite/src/table-source.js';
-import {listTables} from '../src/services/replicator/tables/list.js';
+import {listTables} from '../src/db/lite-tables.js';
 import {mapLiteDataTypeToZqlValueType} from '../src/types/lite.js';
 import {schema} from './schema.js';
 
 // load up some data!
 function bench() {
-  const db = new Database('/tmp/sync-replica.db');
+  const db = new Database(createSilentLogContext(), '/tmp/sync-replica.db');
   const sources = new Map<string, Source>();
   const tableSpecs = new Map(listTables(db).map(spec => [spec.name, spec]));
   const host: QueryDelegate = {
