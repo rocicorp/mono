@@ -153,7 +153,9 @@ export function childWorker(module: string, options?: ForkOptions): Worker {
   }
   // Note: It is okay to cast a Processor or ChildProcess as a Worker.
   // The {@link send} method simply restricts the message type for clarity.
-  return wrap(fork(module, {...options, serialization: 'advanced'}));
+  const worker = wrap(fork(module, {...options, serialization: 'advanced'}));
+  process.on('exit', () => worker.kill());
+  return worker;
 }
 
 /**
