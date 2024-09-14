@@ -8,7 +8,7 @@ import {newQuery, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
 import {Database} from 'zqlite/src/db.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import {listTables} from '../src/db/lite-tables.js';
-import {mapLiteDataTypeToZqlValueType} from '../src/types/lite.js';
+import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.js';
 import {schema} from './schema.js';
 
 // load up some data!
@@ -31,7 +31,7 @@ function bench() {
         Object.fromEntries(
           Object.entries(columns).map(([name, {dataType}]) => [
             name,
-            {type: mapLiteDataTypeToZqlValueType(dataType)},
+            mapLiteDataTypeToZqlSchemaValue(dataType),
           ]),
         ),
         [primaryKey[0], ...primaryKey.slice(1)],
