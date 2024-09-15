@@ -890,12 +890,13 @@ test('smokeTest', async () => {
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
 
-    // we don't get called for initial hydration because there's no data.
-    // once for the each transaction
+    // we get called for initial hydration, even though there's no data.
+    // plus once for the each transaction
     // we test multiple changes in a transactions below
-    expect(calls.length).eq(2);
-    expect(calls[0]).toEqual([{id: 'a', value: 1}]);
-    expect(calls[1]).toEqual([
+    expect(calls.length).eq(3);
+    expect(calls[0]).toEqual([]);
+    expect(calls[1]).toEqual([{id: 'a', value: 1}]);
+    expect(calls[2]).toEqual([
       {id: 'a', value: 1},
       {id: 'b', value: 2},
     ]);

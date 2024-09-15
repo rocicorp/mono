@@ -72,6 +72,33 @@ test('basics', () => {
   expect(data).toEqual([{a: 3, b: 'c'}]);
 });
 
+test('hydrate-empty', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  const view = new ArrayView(
+    ms.connect([
+      ['b', 'asc'],
+      ['a', 'asc'],
+    ]),
+  );
+
+  let callCount = 0;
+  let data: unknown[] = [];
+  const listener = (d: Immutable<EntryList>) => {
+    ++callCount;
+    data = deepClone(d) as unknown[];
+  };
+  view.addListener(listener);
+
+  view.hydrate();
+  expect(data).toEqual([]);
+  expect(callCount).toBe(1);
+});
+
 test('tree', () => {
   const ms = new MemorySource(
     'table',

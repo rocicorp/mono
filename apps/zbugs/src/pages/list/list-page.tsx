@@ -8,21 +8,23 @@ export default function ListPage() {
   const z = useZero<Schema>();
 
   const qs = new URLSearchParams(useSearch());
-  const open = qs.get('open') === 'true';
+  const open = qs.get('open');
   const creator = qs.get('creator');
 
   let q = z.query.issue
-    .where('open', open)
     .orderBy('modified', 'desc')
     .limit(100)
     .related('labels');
 
-  if (creator) {
+  if (open !== null) {
+    q = q.where('open', open === 'true');
+  }
+
+  if (creator !== null) {
     q = q.where('creatorID', creator);
   }
 
   const issues = useQuery(q, [open, creator]);
-
   const creators = useQuery(z.query.user);
 
   const addParam = (key: string, value: string) => {
