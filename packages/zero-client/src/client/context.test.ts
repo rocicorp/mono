@@ -6,6 +6,12 @@ import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
 import {AddQuery, ZeroContext} from './context.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
+import {setEditChangesEnabled} from 'zql/src/zql/ivm/source.js';
+
+declare const TESTING: boolean;
+if (TESTING) {
+  setEditChangesEnabled(true);
+}
 
 test('getSource', () => {
   const schemas = {
