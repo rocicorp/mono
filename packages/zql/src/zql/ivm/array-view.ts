@@ -76,8 +76,8 @@ export class ArrayView implements Output {
       throw new Error("Can't hydrate twice");
     }
     this.#hydrated = true;
+    this.#dirty = true;
     for (const node of this.#input.fetch({})) {
-      this.#dirty = true;
       applyChange(this.#view, {type: 'add', node}, this.#schema);
     }
     this.flush();
