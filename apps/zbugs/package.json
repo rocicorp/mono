@@ -1,0 +1,50 @@
+{
+  "name": "zbugs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "preview": "vite preview",
+    "zero": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zbugs/.env"
+  },
+  "dependencies": {
+    "@schickling/fps-meter": "^0.1.2",
+    "nanoid": "^4.0.2",
+    "react": ">=16.0 <19.0",
+    "react-dom": ">=16.0 <19.0",
+    "wouter": "^3.3.5",
+    "zero-client": "0.0.0",
+    "zero-react": "0.0.0"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "@tailwindcss/forms": "^0.5.0",
+    "@types/node": "^18.16.0",
+    "@types/react": "18.2.13",
+    "@types/react-dom": "18.2.6",
+    "@typescript-eslint/eslint-plugin": "^5.16.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.15.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "postcss-preset-env": "^7.4.3",
+    "prettier": "^3.0.3",
+    "tailwindcss": "^3.0.23",
+    "typescript": "^5.5.3",
+    "vite": "^5.2.0"
+  },
+  "eslintConfig": {
+    "extends": [
+      "@rocicorp/eslint-config"
+    ]
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

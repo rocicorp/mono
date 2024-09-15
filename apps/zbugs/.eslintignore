@@ -1,0 +1,10 @@
+node_modules
+.eslintrc.cjs
+dist
+lib
+env.d.ts
+vite.config.ts
+coverage
+out
+tool
+bin
