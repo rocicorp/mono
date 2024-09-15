@@ -2,9 +2,12 @@ import {Ordering, SimpleCondition} from '../ast/ast.js';
 import {Row} from './data.js';
 import {Input} from './operator.js';
 
-declare const TESTING: boolean;
+// zero-cache doesn't understand the `declare` syntax yet, and it includes this
+// file so we enable testing mode manually by calling setEditChangesEnabled()
+// where needed in the tests.
+// declare const TESTING: boolean;
 
-let editChangesEnabledState = TESTING;
+let editChangesEnabledState = false;
 
 export function setEditChangesEnabled(b: boolean): void {
   editChangesEnabledState = b;
