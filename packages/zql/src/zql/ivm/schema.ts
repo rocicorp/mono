@@ -23,8 +23,7 @@ export type SchemaBase = {
  * Information about the nodes output by an operator.
  */
 export type Schema = SchemaBase & {
-  // TODO: Make relationships non optional
-  readonly relationships?: {[key: string]: Schema};
+  readonly relationships: {[key: string]: Schema};
   readonly isHidden: boolean;
   readonly compareRows: (r1: Row, r2: Row) => number;
   readonly sort: Ordering;

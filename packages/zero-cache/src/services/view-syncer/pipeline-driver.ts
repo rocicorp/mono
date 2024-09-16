@@ -333,7 +333,7 @@ class Streamer {
         case 'child': {
           const {child} = change;
           const childSchema = must(
-            schema.relationships?.[child.relationshipName],
+            schema.relationships[child.relationshipName],
           );
 
           yield* this.#streamChanges(queryHash, childSchema, [child.change]);
@@ -363,7 +363,7 @@ class Streamer {
       yield {queryHash, table, rowKey, row: op === 'add' ? row : undefined};
 
       for (const [relationship, children] of Object.entries(relationships)) {
-        const childSchema = must(schema.relationships?.[relationship]);
+        const childSchema = must(schema.relationships[relationship]);
 
         yield* this.#streamNodes(queryHash, childSchema, op, children);
       }

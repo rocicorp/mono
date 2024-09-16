@@ -4,9 +4,9 @@ import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Join} from 'zql/src/zql/ivm/join.js';
 import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
+import {setEditChangesEnabled} from 'zql/src/zql/ivm/source.js';
 import {AddQuery, ZeroContext} from './context.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {setEditChangesEnabled} from 'zql/src/zql/ivm/source.js';
 
 declare const TESTING: boolean;
 if (TESTING) {
@@ -22,6 +22,7 @@ test('getSource', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
+      relationships: {},
     },
     userStates: {
       tableName: 'userStates',
@@ -30,6 +31,7 @@ test('getSource', () => {
         stateCode: {type: 'string'},
       },
       primaryKey: ['userID', 'stateCode'],
+      relationships: {},
     },
   } as const;
 
@@ -74,8 +76,9 @@ test('processChanges', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-    },
-  } as const;
+      relationships: {},
+    } as const,
+  };
 
   const context = new ZeroContext(schemas, null as unknown as AddQuery);
   const out = new Catch(
@@ -128,6 +131,7 @@ test('transactions', () => {
         id: {type: 'string'},
       },
       primaryKey: ['id'],
+      relationships: {},
     },
     flair: {
       tableName: 'flair',
@@ -137,6 +141,7 @@ test('transactions', () => {
         description: {type: 'string'},
       },
       primaryKey: ['id'],
+      relationships: {},
     },
   } as const;
 

@@ -1,7 +1,7 @@
 import type {SchemaBase} from '../ivm/schema.js';
 
 export type Schema = SchemaBase & {
-  readonly relationships?: Record<string, Relationship>;
+  readonly relationships: Record<string, Relationship>;
 };
 
 /**

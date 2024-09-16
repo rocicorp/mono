@@ -156,7 +156,7 @@ class QueryImpl<
       >,
     ) => TSub = q => q as any,
   ) {
-    const related = this.#schema.relationships?.[relationship as string];
+    const related = this.#schema.relationships[relationship as string];
     assert(related, 'Invalid relationship');
     const related1 = related;
     const related2 = related;
