@@ -7,11 +7,7 @@ import {deepClone} from 'shared/src/deep-clone.js';
 export function useQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow>,
->(
-  q: Query<TSchema, TReturn> | undefined,
-  dependencies: readonly unknown[] = [],
-  enabled = true,
-): Smash<TReturn> {
+>(q: Query<TSchema, TReturn> | undefined, enabled = true): Smash<TReturn> {
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>([]);
   const [, setView] = useState<TypedView<Smash<TReturn>> | undefined>(
     undefined,
@@ -33,7 +29,7 @@ export function useQuery<
     return () => {
       //
     };
-  }, dependencies);
+  }, [JSON.stringify(q?.ast)]);
 
   return snapshot;
 }

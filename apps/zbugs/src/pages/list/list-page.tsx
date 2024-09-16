@@ -24,7 +24,7 @@ export default function ListPage() {
     q = q.where('creatorID', creator);
   }
 
-  const issues = useQuery(q, [open, creator]);
+  const issues = useQuery(q);
   const creators = useQuery(z.query.user);
 
   const addParam = (key: string, value: string) => {
