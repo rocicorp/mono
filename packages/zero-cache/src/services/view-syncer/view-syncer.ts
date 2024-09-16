@@ -602,7 +602,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     };
 
     for (const change of changes) {
-      const {queryHash, table, rowKey, row} = change;
+      const {type, queryHash, table, rowKey, row} = change;
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
       let parsedRow = rows.get(rowID);
@@ -613,10 +613,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       parsedRow.refCounts[queryHash] ??= 0;
       parsedRow.refCounts[queryHash] += row ? 1 : -1;
 
-      if (row && !parsedRow.version) {
-        const {version, contents} = contentsAndVersion(row);
-        parsedRow.version = version;
-        parsedRow.contents = contents;
+      switch (type) {
+        case 'add':
+        case 'edit':
+          if (!parsedRow.version) {
+            const {version, contents} = contentsAndVersion(row);
+            parsedRow.version = version;
+            parsedRow.contents = contents;
+          }
+          break;
+
+        default:
+          change.type satisfies 'remove';
+          assert(type === 'remove');
       }
 
       if (rows.size % CURSOR_PAGE_SIZE === 0) {

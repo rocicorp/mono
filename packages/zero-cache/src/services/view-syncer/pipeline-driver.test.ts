@@ -77,97 +77,104 @@ describe('view-syncer/pipeline-driver', () => {
 
     expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
       .toMatchInlineSnapshot(`
-      [
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "closed": false,
-            "id": "3",
+        [
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "closed": false,
+              "id": "3",
+            },
+            "rowKey": {
+              "id": "3",
+            },
+            "table": "issues",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "3",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "closed": true,
+              "id": "2",
+            },
+            "rowKey": {
+              "id": "2",
+            },
+            "table": "issues",
+            "type": "add",
           },
-          "table": "issues",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "closed": true,
-            "id": "2",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "id": "22",
+              "issueID": "2",
+              "upvotes": 20000,
+            },
+            "rowKey": {
+              "id": "22",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "2",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "id": "21",
+              "issueID": "2",
+              "upvotes": 10000,
+            },
+            "rowKey": {
+              "id": "21",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "table": "issues",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "22",
-            "issueID": "2",
-            "upvotes": 20000,
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "id": "20",
+              "issueID": "2",
+              "upvotes": 1,
+            },
+            "rowKey": {
+              "id": "20",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "22",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "closed": false,
+              "id": "1",
+            },
+            "rowKey": {
+              "id": "1",
+            },
+            "table": "issues",
+            "type": "add",
           },
-          "table": "comments",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "21",
-            "issueID": "2",
-            "upvotes": 10000,
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "00",
+              "id": "10",
+              "issueID": "1",
+              "upvotes": 0,
+            },
+            "rowKey": {
+              "id": "10",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "21",
-          },
-          "table": "comments",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "20",
-            "issueID": "2",
-            "upvotes": 1,
-          },
-          "rowKey": {
-            "id": "20",
-          },
-          "table": "comments",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "closed": false,
-            "id": "1",
-          },
-          "rowKey": {
-            "id": "1",
-          },
-          "table": "issues",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "10",
-            "issueID": "1",
-            "upvotes": 0,
-          },
-          "rowKey": {
-            "id": "10",
-          },
-          "table": "comments",
-        },
-      ]
-    `);
+        ]
+      `);
   });
 
   test('insert', () => {
@@ -200,6 +207,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "31",
           },
           "table": "comments",
+          "type": "add",
         },
         {
           "queryHash": "hash1",
@@ -212,6 +220,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "4",
           },
           "table": "issues",
+          "type": "add",
         },
         {
           "queryHash": "hash1",
@@ -225,6 +234,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "41",
           },
           "table": "comments",
+          "type": "add",
         },
       ]
     `);
@@ -250,6 +260,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "21",
           },
           "table": "comments",
+          "type": "remove",
         },
         {
           "queryHash": "hash1",
@@ -258,6 +269,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
+          "type": "remove",
         },
         {
           "queryHash": "hash1",
@@ -266,6 +278,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
+          "type": "remove",
         },
       ]
     `);
@@ -290,6 +303,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
+          "type": "remove",
         },
         {
           "queryHash": "hash1",
@@ -303,6 +317,31 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+
+    replicator.processTransaction(
+      '135',
+      messages.update('comments', {id: '22', upvotes: 10}),
+    );
+
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "134",
+            "id": "22",
+            "issueID": "3",
+            "upvotes": 10,
+          },
+          "rowKey": {
+            "id": "22",
+          },
+          "table": "comments",
+          "type": "edit",
         },
       ]
     `);
@@ -366,6 +405,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "4",
           },
           "table": "issues",
+          "type": "add",
         },
       ]
     `);
@@ -389,6 +429,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "41",
           },
           "table": "comments",
+          "type": "add",
         },
       ]
     `);
@@ -404,6 +445,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "4",
           },
           "table": "issues",
+          "type": "remove",
         },
         {
           "queryHash": "hash1",
@@ -412,6 +454,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "41",
           },
           "table": "comments",
+          "type": "remove",
         },
       ]
     `);

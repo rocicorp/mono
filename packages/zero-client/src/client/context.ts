@@ -5,7 +5,7 @@ import {Row} from 'zql/src/zql/ivm/data.js';
 import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
 import {Storage} from 'zql/src/zql/ivm/operator.js';
-import {editChangesEnabled, Source} from 'zql/src/zql/ivm/source.js';
+import {Source} from 'zql/src/zql/ivm/source.js';
 import {CommitListener, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
 import {Schema} from 'zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
@@ -85,30 +85,19 @@ export class ZeroContext implements QueryDelegate {
               row: diff.newValue as Row,
             });
             break;
-          case 'change': {
+          case 'change':
             assert(typeof diff.newValue === 'object');
             assert(typeof diff.oldValue === 'object');
 
-            if (editChangesEnabled()) {
-              // Edit changes are not yet supported everywhere. For now we only
-              // generate them in tests.
-              source.push({
-                type: 'edit',
-                row: diff.newValue as Row,
-                oldRow: diff.oldValue as Row,
-              });
-            } else {
-              source.push({
-                type: 'remove',
-                row: diff.oldValue as Row,
-              });
-              source.push({
-                type: 'add',
-                row: diff.newValue as Row,
-              });
-            }
+            // Edit changes are not yet supported everywhere. For now we only
+            // generate them in tests.
+            source.push({
+              type: 'edit',
+              row: diff.newValue as Row,
+              oldRow: diff.oldValue as Row,
+            });
+
             break;
-          }
           default:
             unreachable(diff);
         }
