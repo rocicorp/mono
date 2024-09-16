@@ -113,16 +113,16 @@ export class TableSource implements Source {
         compile(
           sql`INSERT INTO ${sql.ident(this.#table)} (${sql.join(
             Object.keys(this.#columns).map(c => sql.ident(c)),
-            sql`, `,
+            sql`,`,
           )}) VALUES (${sql.__dangerous__rawValue(
-            new Array(Object.keys(this.#columns).length).fill('?').join(', '),
+            new Array(Object.keys(this.#columns).length).fill('?').join(','),
           )})`,
         ),
       ),
       delete: db.prepare(
         compile(
           sql`DELETE FROM ${sql.ident(this.#table)} WHERE ${sql.join(
-            this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+            this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
             sql` AND `,
           )}`,
         ),
@@ -134,11 +134,11 @@ export class TableSource implements Source {
               compile(
                 sql`UPDATE ${sql.ident(this.#table)} SET ${sql.join(
                   nonPrimaryKeys(this.#columns, this.#primaryKey).map(
-                    c => sql`${sql.ident(c)} = ?`,
+                    c => sql`${sql.ident(c)}=?`,
                   ),
-                  sql`, `,
+                  sql`,`,
                 )} WHERE ${sql.join(
-                  this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+                  this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
                   sql` AND `,
                 )}`,
               ),
@@ -149,7 +149,7 @@ export class TableSource implements Source {
           sql`SELECT 1 AS "exists" FROM ${sql.ident(
             this.#table,
           )} WHERE ${sql.join(
-            this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+            this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
             sql` AND `,
           )} LIMIT 1`,
         ),
@@ -158,7 +158,7 @@ export class TableSource implements Source {
         .prepare(
           compile(
             sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
-              this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+              this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
               sql` AND`,
             )}`,
           ),
