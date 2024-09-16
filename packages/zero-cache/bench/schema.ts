@@ -1,13 +1,16 @@
-const memberSchema = {
+import {Schema} from 'zql/src/zql/query/schema.js';
+
+const memberSchema: Schema = {
   tableName: 'member',
   columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
   primaryKey: ['id'],
-} as const;
+  relationships: {},
+};
 
-const issueSchema = {
+const issueSchema: Schema = {
   tableName: 'issue',
   columns: {
     id: {type: 'string'},
@@ -51,9 +54,9 @@ const issueSchema = {
       },
     },
   },
-} as const;
+};
 
-const commentSchema = {
+const commentSchema: Schema = {
   tableName: 'comment',
   columns: {
     id: {type: 'string'},
@@ -72,18 +75,19 @@ const commentSchema = {
       },
     },
   },
-} as const;
+};
 
-const labelSchema = {
+const labelSchema: Schema = {
   tableName: 'label',
   columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
   primaryKey: ['id'],
-} as const;
+  relationships: {},
+};
 
-const issueLabelSchema = {
+const issueLabelSchema: Schema = {
   tableName: 'issueLabel',
   columns: {
     id: {type: 'string'},
@@ -92,7 +96,8 @@ const issueLabelSchema = {
   },
   // mutators require an ID field still.
   primaryKey: ['id'],
-} as const;
+  relationships: {},
+};
 
 export const schema = {
   member: memberSchema,
@@ -102,4 +107,5 @@ export const schema = {
   issueLabel: issueLabelSchema,
 } as const;
 
-export type Schema = typeof schema;
+type AppSchema = typeof schema;
+export {AppSchema as Schema};

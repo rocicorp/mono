@@ -78,6 +78,7 @@ test('onOnlineChange callback', async () => {
           val: {type: 'string'},
         },
         primaryKey: ['id'],
+        relationships: {},
       },
     },
     onOnlineChange: online => {
@@ -445,6 +446,7 @@ suite('initConnection', () => {
             value: {type: 'number'},
           },
           primaryKey: ['id'],
+          relationships: {},
         },
       },
     });
@@ -876,6 +878,7 @@ test('smokeTest', async () => {
           },
           primaryKey: ['id'],
           tableName: 'issues',
+          relationships: {},
         },
       },
     });
@@ -1702,6 +1705,7 @@ test('kvStore option', async () => {
           },
           primaryKey: ['id'],
           tableName: 'e',
+          relationships: {},
         },
       },
     });
@@ -1802,6 +1806,7 @@ test('ensure we get the same query object back', () => {
         },
         primaryKey: ['id'],
         tableName: 'issue',
+        relationships: {},
       },
       comment: {
         columns: {
@@ -1811,6 +1816,7 @@ test('ensure we get the same query object back', () => {
         },
         primaryKey: ['id'],
         tableName: 'comment',
+        relationships: {},
       },
     },
   });
@@ -1835,6 +1841,7 @@ test('the type of collection should be inferred from options with parse', () => 
         },
         primaryKey: ['id'],
         tableName: 'issue',
+        relationships: {},
       },
       comment: {
         columns: {
@@ -1844,6 +1851,7 @@ test('the type of collection should be inferred from options with parse', () => 
         },
         primaryKey: ['id'],
         tableName: 'comment',
+        relationships: {},
       },
     },
   });
@@ -1877,6 +1885,7 @@ suite('CRUD', () => {
           },
           primaryKey: ['id'],
           tableName: 'issue',
+          relationships: {},
         },
         comment: {
           columns: {
@@ -1886,6 +1895,7 @@ suite('CRUD', () => {
           },
           primaryKey: ['id'],
           tableName: 'comment',
+          relationships: {},
         },
       },
     });
@@ -1958,6 +1968,7 @@ suite('CRUD', () => {
           },
           primaryKey: ['id'],
           tableName: 'issue',
+          relationships: {},
         },
       },
     });
@@ -1978,6 +1989,7 @@ test('mutate is a function for batching', async () => {
         },
         primaryKey: ['id'],
         tableName: 'issue',
+        relationships: {},
       },
       comment: {
         columns: {
@@ -1987,6 +1999,7 @@ test('mutate is a function for batching', async () => {
         },
         primaryKey: ['id'],
         tableName: 'comment',
+        relationships: {},
       },
     },
   });
@@ -2036,6 +2049,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
         },
         primaryKey: ['id'],
         tableName: 'issue',
+        relationships: {},
       },
       comment: {
         columns: {
@@ -2045,6 +2059,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
         },
         primaryKey: ['id'],
         tableName: 'comment',
+        relationships: {},
       },
     },
   });

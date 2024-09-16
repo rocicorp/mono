@@ -36,6 +36,7 @@ type TestSchema = {
     n: {type: 'number'};
   };
   primaryKey: ['s'];
+  relationships: {};
 };
 
 type TestSchemaWithRelationships = {
@@ -241,7 +242,7 @@ describe('types', () => {
 
 describe('schema structure', () => {
   test('dag', () => {
-    const commentSchema = {
+    const commentSchema: Schema = {
       tableName: 'comment',
       columns: {
         id: {type: 'string'},
@@ -249,9 +250,10 @@ describe('schema structure', () => {
         text: {type: 'string'},
       },
       primaryKey: ['id'],
-    } as const;
+      relationships: {},
+    };
 
-    const issueSchema = {
+    const issueSchema: Schema = {
       tableName: 'issue',
       columns: {
         id: {type: 'string'},
@@ -267,7 +269,7 @@ describe('schema structure', () => {
         },
       },
       primaryKey: ['id'],
-    } as const;
+    };
 
     takeSchema(issueSchema);
   });
