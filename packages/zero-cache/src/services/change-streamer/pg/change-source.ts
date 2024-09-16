@@ -114,6 +114,7 @@ class PostgresChangeSource implements ChangeSource {
         }
       });
 
+    this.#lc.info?.(`starting replication stream`);
     service
       .subscribe(
         new PgoutputPlugin({
@@ -123,12 +124,15 @@ class PostgresChangeSource implements ChangeSource {
         replicationSlot(this.#replicaID),
         lastLSN,
       )
-      .catch(e => changes.fail(e instanceof Error ? e : new Error(String(e))))
+      .catch(e => {
+        reject(e);
+        changes.fail(e instanceof Error ? e : new Error(String(e)));
+      })
       .finally(() => changes.cancel());
 
     const lsn = await confirmedFlushLSN;
     const watermark = toLexiVersion(lsn);
-    this.#lc.info?.(`started replication stream at ${lsn} (${watermark})`);
+    this.#lc.info?.(`replication stream started at ${lsn} (${watermark})`);
 
     return {
       initialWatermark: watermark,
