@@ -36,13 +36,6 @@ export default function ListPage() {
   return (
     <>
       <div>
-        <span className="mr-2">Status:</span>
-        <Link href={addParam('open', 'true')} className="mr-2">
-          Open
-        </Link>
-        <Link href={addParam('open', 'false')}>Closed</Link>
-      </div>
-      <div>
         <span className="mr-2">Creator:</span>
         {Array.from(creators.values()).map(creator => (
           <Link
