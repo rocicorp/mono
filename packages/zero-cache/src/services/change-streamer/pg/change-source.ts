@@ -132,7 +132,7 @@ class PostgresChangeSource implements ChangeSource {
 
     const lsn = await confirmedFlushLSN;
     const watermark = toLexiVersion(lsn);
-    this.#lc.info?.(`replication stream start at ${lsn} (${watermark})`);
+    this.#lc.info?.(`replication stream started at ${lsn} (${watermark})`);
 
     return {
       initialWatermark: watermark,
