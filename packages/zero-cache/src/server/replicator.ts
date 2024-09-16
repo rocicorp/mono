@@ -50,8 +50,6 @@ export default async function runWorker(parent: Worker) {
     replica,
   );
 
-  void runOrExit(lc, changeStreamer);
-
   const replicator = new ReplicatorService(
     lc,
     config.TASK_ID ?? 'z1', // To eventually accommodate multiple zero-caches.
@@ -61,7 +59,7 @@ export default async function runWorker(parent: Worker) {
 
   setUpMessageHandlers(replicator, parent);
 
-  void runOrExit(lc, replicator);
+  void runOrExit(lc, changeStreamer, replicator);
 
   // Signal readiness once the first ReplicaVersionReady notification is received.
   for await (const _ of replicator.subscribe()) {
