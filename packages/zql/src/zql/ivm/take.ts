@@ -441,6 +441,11 @@ export class Take implements Operator {
       }
 
       if (newCmp < 0) {
+        if (this.#limit === 1) {
+          replaceBoundAndForwardChange();
+          return;
+        }
+
         // New row will be in the result but it might not be the bounds any
         // more. We need to find the row before the bounds to determine the new
         // bounds.
