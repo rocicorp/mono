@@ -435,7 +435,8 @@ export class Take implements Operator {
     if (oldCmp === 0) {
       // The new row is the new bound.
       if (newCmp === 0) {
-        replaceBoundAndForwardChange();
+        // no need to update the state since we are keeping the bounds
+        this.#output.push(change);
         return;
       }
 
@@ -471,49 +472,47 @@ export class Take implements Operator {
         return;
       }
 
-      {
-        assert(newCmp > 0);
-        // Find the first item at the old bounds. This will be the new bounds.
-        const newBoundNode = must(
-          first(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'at',
-              },
-              constraint,
-            }),
-          ),
-        );
+      assert(newCmp > 0);
+      // Find the first item at the old bounds. This will be the new bounds.
+      const newBoundNode = must(
+        first(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+          }),
+        ),
+      );
 
-        // The next row is the new row. We can replace the bounds and keep the
-        // edit change.
-        if (compareRows(newBoundNode.row, change.row) === 0) {
-          replaceBoundAndForwardChange();
-          return;
-        }
-
-        // The new row is now outside the bounds, so we need to remove the old
-        // row and add the new bounds row.
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          newBoundNode.row,
-          maxBound,
-        );
-        this.#output.push({
-          type: 'remove',
-          node: {
-            row: change.oldRow,
-            relationships: {},
-          },
-        });
-        this.#output.push({
-          type: 'add',
-          node: newBoundNode,
-        });
+      // The next row is the new row. We can replace the bounds and keep the
+      // edit change.
+      if (compareRows(newBoundNode.row, change.row) === 0) {
+        replaceBoundAndForwardChange();
         return;
       }
+
+      // The new row is now outside the bounds, so we need to remove the old
+      // row and add the new bounds row.
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size,
+        newBoundNode.row,
+        maxBound,
+      );
+      this.#output.push({
+        type: 'remove',
+        node: {
+          row: change.oldRow,
+          relationships: {},
+        },
+      });
+      this.#output.push({
+        type: 'add',
+        node: newBoundNode,
+      });
+      return;
     }
 
     if (oldCmp > 0) {
