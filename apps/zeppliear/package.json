@@ -27,7 +27,7 @@
     "@tailwindcss/forms": "^0.5.0",
     "@tailwindcss/line-clamp": "^0.3.1",
     "@uidotdev/usehooks": "^2.4.1",
-    "classnames": "^2.3.2",
+    "classnames": "^2.5.1",
     "fractional-indexing": "^3.0.1",
     "gzip-loader": "^0.0.1",
     "lodash": "^4.17.21",
