@@ -15,15 +15,9 @@ export default function Root() {
         </div>
         <div>
           <Switch>
-            <Route path="/">
-              <ListPage />
-            </Route>
-            <Route path="/issue/:id">
-              <IssuePage />
-            </Route>
-            <Route>
-              <ErrorPage />
-            </Route>
+            <Route path="/" component={ListPage} />
+            <Route path="/issue/:id" component={IssuePage} />
+            <Route component={ErrorPage} />
           </Switch>
         </div>
       </div>
