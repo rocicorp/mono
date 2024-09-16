@@ -23,11 +23,8 @@ brew install supabase/tap/supabase
 
 ```bash
 cd apps/zbugs/docker
-docker compose up
-supabase start
+docker compose up; supabase start
 ```
-
-Supabase Dash: http://localhost:54323/project/default
 
 ### Run the zero-cache server
 
@@ -36,7 +33,7 @@ Create a `.env` file in the `zbugs` directory:
 ```ini
 # The "upstream" authoritative postgres database
 # In the future we will support other types of upstreams besides PG
-UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
+UPSTREAM_URI = "postgresql://postgres:postgres@localhost:54322/postgres"
 
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
 # keep track of which clients have which data. This is how we know what diff to
@@ -56,6 +53,11 @@ REPLICA_DB_FILE = "/tmp/zbugs-sync-replica.db"
 
 # Logging level for zero-cache service.
 LOG_LEVEL = "debug"
+
+# If you want to enable github auth, create a github app and set these.
+# Otherwise it can be used with vanilla email auth or no auth.
+SUPABASE_AUTH_GITHUB_CLIENT_ID = "CLIENT_ID"
+SUPABASE_AUTH_GITHUB_SECRET = "SECRET"
 ```
 
 Then start the server:
