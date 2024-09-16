@@ -436,8 +436,24 @@ test('pushing values does the correct writes and outputs', () => {
     });
 
     expect(read.all()).toEqual([
-      {a: 9007199254740991, b: 3.456, c: 1},
       {a: 1, b: 2.123, c: 0},
+      {a: 9007199254740991, b: 3.456, c: 1},
+    ]);
+
+    // edit pk should fall back to remove and insert
+    source.push({
+      type: 'edit',
+      oldRow: {a: 1, b: 2.123, c: false},
+      row: {a: 1, b: 3, c: false},
+    });
+    expect(outputted.shift()).toEqual({
+      type: 'edit',
+      oldRow: {a: 1, b: 2.123, c: false},
+      row: {a: 1, b: 3, c: false},
+    });
+    expect(read.all()).toEqual([
+      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 3, c: 0},
     ]);
 
     // non existing old row

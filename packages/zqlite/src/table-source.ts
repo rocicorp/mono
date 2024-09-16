@@ -1,5 +1,6 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.js';
 import type {Ordering, SimpleCondition} from 'zql/src/zql/ast/ast.js';
 import {assertOrderingIncludesPK} from 'zql/src/zql/builder/builder.js';
 import {Change} from 'zql/src/zql/ivm/change.js';
@@ -49,6 +50,7 @@ type Statements = {
   readonly cache: StatementCache;
   readonly insert: Statement;
   readonly delete: Statement;
+  readonly update: Statement;
   readonly checkExists: Statement;
   readonly getRow: Statement;
 };
@@ -125,6 +127,23 @@ export class TableSource implements Source {
           )}`,
         ),
       ),
+      // If all the columns are part of the primary key, we cannot use UPDATE.
+      update:
+        Object.keys(this.#columns).length > this.#primaryKey.length
+          ? db.prepare(
+              compile(
+                sql`UPDATE ${sql.ident(this.#table)} SET ${sql.join(
+                  nonPrimaryKeys(this.#columns, this.#primaryKey).map(
+                    c => sql`${sql.ident(c)} = ?`,
+                  ),
+                  sql`, `,
+                )} WHERE ${sql.join(
+                  this.#primaryKey.map(k => sql`${sql.ident(k)} = ?`),
+                  sql` AND `,
+                )}`,
+              ),
+            )
+          : db.prepare(compile(sql`SELECT 1`)),
       checkExists: db.prepare(
         compile(
           sql`SELECT 1 AS "exists" FROM ${sql.ident(
@@ -349,14 +368,31 @@ export class TableSource implements Source {
       case 'remove':
         this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
         break;
-      case 'edit':
-        this.#stmts.delete.run(
-          ...toSQLiteTypes(this.#primaryKey, change.oldRow),
-        );
-        this.#stmts.insert.run(
-          ...toSQLiteTypes(Object.keys(this.#columns), change.row),
-        );
+      case 'edit': {
+        // If the PK is the same, use UPDATE.
+        if (
+          canUseUpdate(
+            change.oldRow,
+            change.row,
+            this.#columns,
+            this.#primaryKey,
+          )
+        ) {
+          must(this.#stmts.update).run(
+            ...nonPrimaryValues(this.#columns, this.#primaryKey, change.row),
+            ...toSQLiteTypes(this.#primaryKey, change.row),
+          );
+        } else {
+          this.#stmts.delete.run(
+            ...toSQLiteTypes(this.#primaryKey, change.oldRow),
+          );
+          this.#stmts.insert.run(
+            ...toSQLiteTypes(Object.keys(this.#columns), change.row),
+          );
+        }
+
         break;
+      }
       default:
         unreachable(change);
     }
@@ -583,4 +619,33 @@ export class UnsupportedValueError extends Error {
   constructor(msg: string) {
     super(msg);
   }
+}
+
+function canUseUpdate(
+  oldRow: Row,
+  row: Row,
+  columns: Record<string, SchemaValue>,
+  primaryKey: PrimaryKey,
+): boolean {
+  for (const pk of primaryKey) {
+    if (oldRow[pk] !== row[pk]) {
+      return false;
+    }
+  }
+  return Object.keys(columns).length > primaryKey.length;
+}
+
+function nonPrimaryValues(
+  columns: Record<string, SchemaValue>,
+  primaryKey: PrimaryKey,
+  row: Row,
+): Iterable<unknown> {
+  return nonPrimaryKeys(columns, primaryKey).map(c => toSQLiteType(row[c]));
+}
+
+function nonPrimaryKeys(
+  columns: Record<string, SchemaValue>,
+  primaryKey: PrimaryKey,
+) {
+  return Object.keys(columns).filter(c => !primaryKey.includes(c));
 }
