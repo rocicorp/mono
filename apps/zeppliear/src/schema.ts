@@ -5,6 +5,7 @@ const memberSchema = {
     name: {type: 'string'},
   },
   primaryKey: ['id'],
+  relationships: {},
 } as const;
 
 const issueSchema = {
@@ -80,6 +81,7 @@ const labelSchema = {
     name: {type: 'string'},
   },
   primaryKey: ['id'],
+  relationships: {},
 } as const;
 
 const issueLabelSchema = {
@@ -91,6 +93,7 @@ const issueLabelSchema = {
   },
   // mutators require an ID field still.
   primaryKey: ['id'],
+  relationships: {},
 } as const;
 
 export const schema = {
