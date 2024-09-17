@@ -14,6 +14,9 @@ const z = new Zero({
   schemas: schema,
 });
 
+z.query.user.preload();
+z.query.label.preload();
+
 z.query.issue
   .related('creator')
   .related('labels')

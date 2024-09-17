@@ -18,6 +18,7 @@ const issueSchema = {
     created: {type: 'number'},
     creatorID: {type: 'string'},
     description: {type: 'string'},
+    labelIDs: {type: 'string'},
   },
   primaryKey: ['id'],
   relationships: {
