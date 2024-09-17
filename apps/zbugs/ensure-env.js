@@ -5,7 +5,7 @@ import process from 'node:process';
 
 dotenv.config();
 
-if (process.env.SKIP_ENSURE_ENV && process.env.SKIP_ENSURE_ENV === 'true') {
+if (process.env.SKIP_ENSURE_ENV === 'true') {
   console.log(
     'SKIP_ENSURE_ENV was set to "true". Not automatically setting: VITE_SUPA_ANON_KEY, VITE_SUPABASE_URL, UPSTREAM_URI',
   );
