@@ -22,8 +22,8 @@ brew install supabase/tap/supabase
 ### Run the "upstream" Postgres database
 
 ```bash
-cd apps/zbugs/docker
-docker compose up; supabase start
+cd apps/zbugs
+supabase start
 ```
 
 ### Run the zero-cache server
@@ -31,29 +31,6 @@ docker compose up; supabase start
 Create a `.env` file in the `zbugs` directory:
 
 ```ini
-# Set this to tell the script that tries to guess `AUTOMATICALLY_SET`
-# values not to run.
-# SKIP_ENSURE_ENV = "true"
-
-# The "upstream" authoritative postgres database
-# In the future we will support other types of upstreams besides PG
-UPSTREAM_URI = "AUTOMATICALLY_SET"
-
-# Information required to construct a new Supabase client.
-# This will be automatically set based on the output of `supabase status`
-# when starting `zbugs`.
-VITE_SUPABASE_ANON_KEY = "AUTOMATICALLY_SET"
-VITE_SUPABASE_URL = "AUTOMATICALLY_SET"
-
-# A separate Postgres database we use to store CVRs. CVRs (client view records)
-# keep track of which clients have which data. This is how we know what diff to
-# send on reconnect. It can be same database as above, but it makes most sense
-# for it to be a separate "database" in the same postgres "cluster".
-CVR_DB_URI = "postgresql://user:password@127.0.0.1:6435/postgres"
-
-# Yet another Postgres database which we used to store a replication log.
-CHANGE_DB_URI = "postgresql://user:password@127.0.0.1:6435/postgres"
-
 # Uniquely identifies a single instance of the zero-cache service.
 REPLICA_ID = "r1"
 
@@ -95,6 +72,5 @@ rm -rf /tmp/zbugs-sync-replica.db
 ### To clear the upstream postgres database
 
 ```bash
-docker compose down
-docker volume rm -f docker_zbugs_pgdata_sync docker_zbugs_pgdata_upstream
+supabase db reset
 ```
