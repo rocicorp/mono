@@ -56,12 +56,14 @@ export async function runOrExit(
   lc: LogContext,
   ...services: Service[]
 ): Promise<void> {
-  process.once('SIGTERM', () => {
-    for (const svc of services) {
-      lc.info?.(`exiting ${svc.constructor.name} (${svc.id}) for SIGTERM`);
-      void svc.stop();
-    }
-  });
+  for (const signal of ['SIGINT', 'SIGQUIT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      for (const svc of services) {
+        lc.info?.(`exiting ${svc.constructor.name} (${svc.id}) for ${signal}`);
+        void svc.stop();
+      }
+    });
+  }
 
   try {
     await Promise.all(services.map(svc => svc.run()));

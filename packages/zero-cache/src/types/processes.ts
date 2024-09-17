@@ -154,7 +154,14 @@ export function childWorker(module: string, options?: ForkOptions): Worker {
   // Note: It is okay to cast a Processor or ChildProcess as a Worker.
   // The {@link send} method simply restricts the message type for clarity.
   const worker = wrap(fork(module, {...options, serialization: 'advanced'}));
-  process.on('SIGTERM', () => worker.kill('SIGTERM'));
+
+  // Propagate all listenable termination signals to the workers.
+  // Note: https://nodejs.org/api/process.html#process_signal_events
+  // > * 'SIGKILL' cannot have a listener installed, it will unconditionally terminate Node.js on all platforms.
+  // > * 'SIGSTOP' cannot have a listener installed.
+  for (const sig of ['SIGINT', 'SIGQUIT', 'SIGTERM'] as const) {
+    process.on(sig, () => worker.kill(sig));
+  }
   process.on('exit', () => worker.kill());
   return worker;
 }
