@@ -75,12 +75,6 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 
-[auth.external.github]
-enabled = true
-client_id = "env(SUPABASE_AUTH_GITHUB_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_GITHUB_SECRET)"
-redirect_uri = "http://localhost:54321/auth/v1/callback"
-
 [analytics]
 enabled = true
 port = 54327
