@@ -15,8 +15,17 @@ CREATE TABLE issue (
     "open" BOOLEAN NOT NULL,
     "modified" double precision NOT NULL,
     "created" double precision NOT NULL,
-    "creatorID" VARCHAR REFERENCES "user"(id),
-    "description" TEXT
+    "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
+    "description" TEXT NOT NULL,
+    -- This is a denormalized column that contains a comma-separated list of
+    -- label IDs. This is temporary until Zero imlements support for filter-by-
+    -- subquery. It does demonstrate the utility of connecting to existing
+    -- mature databases though: we can use all the neat features of Postgres and
+    -- Zero faithfully replicates whatever they do.
+    --
+    -- NULL here represents no labels. Empty string represents a single label
+    -- with value "".
+    "labelIDs" TEXT
 );
 
 CREATE TABLE comment (
@@ -38,6 +47,54 @@ CREATE TABLE "issueLabel" (
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE
 );
 
+-- We use a trigger to maintain the "labelIDs" column in the issue table.
+-- Add a new column to store labelIDs
+CREATE OR REPLACE FUNCTION update_issue_labelIDs()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'DELETE' OR TG_OP = 'UPDATE' THEN
+        -- Use OLD when the operation is DELETE to access the old issueID
+        UPDATE issue
+        SET "labelIDs" = (
+            SELECT STRING_AGG("labelID", ',')
+            FROM "issueLabel"
+            WHERE "issueID" = OLD."issueID"
+        )
+        WHERE id = OLD."issueID";
+    END IF;
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        -- For INSERT or UPDATE, use NEW to access the current issueID
+        UPDATE issue
+        SET "labelIDs" = (
+            SELECT STRING_AGG("labelID", ',')
+            FROM "issueLabel"
+            WHERE "issueID" = NEW."issueID"
+        )
+        WHERE id = NEW."issueID";
+    END IF;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger for INSERT operation
+CREATE TRIGGER update_labelIDs_on_insert
+AFTER INSERT ON "issueLabel"
+FOR EACH ROW
+EXECUTE FUNCTION update_issue_labelIDs();
+
+-- Trigger for UPDATE operation
+CREATE TRIGGER update_labelIDs_on_update
+AFTER UPDATE ON "issueLabel"
+FOR EACH ROW
+EXECUTE FUNCTION update_issue_labelIDs();
+
+-- Trigger for DELETE operation
+CREATE TRIGGER update_labelIDs_on_delete
+AFTER DELETE ON "issueLabel"
+FOR EACH ROW
+EXECUTE FUNCTION update_issue_labelIDs();
+
 COPY "user"
 FROM
     '/docker-entrypoint-initdb.d/users.csv' WITH CSV HEADER;
@@ -57,6 +114,20 @@ FROM
 COPY "comment"
 FROM
     '/docker-entrypoint-initdb.d/comments.csv' WITH CSV HEADER;
+
+-- We have to manually update the "labelIDs" column in the issue table because
+-- COPY doesn't run triggers.
+UPDATE
+    issue
+SET
+    "labelIDs" = (
+        SELECT
+            STRING_AGG("labelID", ',')
+        FROM
+            "issueLabel"
+        WHERE
+            "issueID" = issue.id
+    );
 
 -- Create the indices on upstream so we can copy to downstream on replication.
 -- We have discussed that, in the future, the indices of the Zero replica
