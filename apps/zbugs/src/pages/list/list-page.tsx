@@ -10,6 +10,13 @@ export default function ListPage() {
   const qs = new URLSearchParams(useSearch());
   const open = qs.get('open');
   const creator = qs.get('creator');
+  const label = qs.get('label');
+
+  // TODO: use q.one()
+  const labelID = useQuery(z.query.label.where('name', label ?? ''))[0]?.id as
+    | string
+    | undefined;
+  console.log(labelID);
 
   let q = z.query.issue
     .orderBy('modified', 'desc')
@@ -24,8 +31,13 @@ export default function ListPage() {
     q = q.where('creatorID', creator);
   }
 
+  if (labelID !== undefined) {
+    q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
+  }
+
   const issues = useQuery(q);
   const creators = useQuery(z.query.user);
+  const labels = useQuery(z.query.label);
 
   const addParam = (key: string, value: string) => {
     const newParams = new URLSearchParams(qs);
@@ -44,6 +56,18 @@ export default function ListPage() {
             className="mr-2"
           >
             {creator.name}
+          </Link>
+        ))}
+      </div>
+      <div>
+        <span className="mr-2">Label:</span>
+        {Array.from(labels.values()).map(label => (
+          <Link
+            key={label.id}
+            href={addParam('label', label.name)}
+            className="mr-2"
+          >
+            {label.name}
           </Link>
         ))}
       </div>
