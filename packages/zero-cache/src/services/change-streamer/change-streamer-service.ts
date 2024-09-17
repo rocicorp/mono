@@ -230,11 +230,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     void this.#storer.run();
 
     while (this.#state.shouldRun()) {
-      const stream = await this.#source.startStream();
-      this.#stream = stream;
-      let preCommitWatermark = oneAfter(stream.initialWatermark);
-
       try {
+        const stream = await this.#source.startStream();
+        this.#stream = stream;
+        let preCommitWatermark = oneAfter(stream.initialWatermark);
+
         for await (const change of stream.changes) {
           this.#state.resetBackoff();
 
@@ -252,7 +252,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       } catch (e) {
         this.#lc.error?.(`Error in Replication Stream.`, e);
       } finally {
-        stream.changes.cancel();
+        this.#stream?.changes.cancel();
         this.#stream = undefined;
       }
 
