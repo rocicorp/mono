@@ -11,16 +11,13 @@ import {Change} from 'zql/src/zql/ivm/change.js';
 import {Node, Row} from 'zql/src/zql/ivm/data.js';
 import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
 import {Schema} from 'zql/src/zql/ivm/schema.js';
-import {
-  editChangesEnabled,
-  Source,
-  SourceChange,
-} from 'zql/src/zql/ivm/source.js';
+import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import {ClientGroupStorage} from './database-storage.js';
 import {SnapshotDiff, Snapshotter} from './snapshotter.js';
 
 export type RowAdd = {
+  readonly type: 'add';
   readonly queryHash: string;
   readonly table: string;
   readonly rowKey: Row;
@@ -28,13 +25,22 @@ export type RowAdd = {
 };
 
 export type RowRemove = {
+  readonly type: 'remove';
   readonly queryHash: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: undefined;
 };
 
-export type RowChange = RowAdd | RowRemove;
+export type RowEdit = {
+  readonly type: 'edit';
+  readonly queryHash: string;
+  readonly table: string;
+  readonly rowKey: Row;
+  readonly row: Row;
+};
+
+export type RowChange = RowAdd | RowRemove | RowEdit;
 
 /** Normalized TableSpec information for faster processing. */
 type NormalizedTableSpec = TableSpec & {
@@ -207,27 +213,18 @@ export class PipelineDriver {
 
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
     for (const {table, prevValue, nextValue} of diff) {
-      if (editChangesEnabled()) {
-        if (prevValue) {
-          if (nextValue) {
-            yield* this.#push(table, {
-              type: 'edit',
-              row: nextValue as Row,
-              oldRow: prevValue as Row,
-            });
-          } else {
-            yield* this.#push(table, {type: 'remove', row: prevValue as Row});
-          }
-        } else if (nextValue) {
-          yield* this.#push(table, {type: 'add', row: nextValue as Row});
-        }
-      } else {
-        if (prevValue) {
+      if (prevValue) {
+        if (nextValue) {
+          yield* this.#push(table, {
+            type: 'edit',
+            row: nextValue as Row,
+            oldRow: prevValue as Row,
+          });
+        } else {
           yield* this.#push(table, {type: 'remove', row: prevValue as Row});
         }
-        if (nextValue) {
-          yield* this.#push(table, {type: 'add', row: nextValue as Row});
-        }
+      } else if (nextValue) {
+        yield* this.#push(table, {type: 'add', row: nextValue as Row});
       }
     }
 
@@ -340,7 +337,9 @@ class Streamer {
           break;
         }
         case 'edit':
-          assert(false, 'edit changes are not yet supported yet');
+          yield* this.#streamNodes(queryHash, schema, type, [
+            {row: change.row, relationships: {}},
+          ]);
           break;
         default:
           unreachable(type);
@@ -351,7 +350,7 @@ class Streamer {
   *#streamNodes(
     queryHash: string,
     schema: Schema,
-    op: 'add' | 'remove',
+    op: 'add' | 'remove' | 'edit',
     nodes: Iterable<Node>,
   ): Iterable<RowChange> {
     const {tableName: table, primaryKey} = schema;
@@ -360,7 +359,13 @@ class Streamer {
       const {relationships, row} = node;
       const rowKey = Object.fromEntries(primaryKey.map(col => [col, row[col]]));
 
-      yield {queryHash, table, rowKey, row: op === 'add' ? row : undefined};
+      yield {
+        type: op,
+        queryHash,
+        table,
+        rowKey,
+        row: op === 'remove' ? undefined : row,
+      } as RowChange;
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships[relationship]);

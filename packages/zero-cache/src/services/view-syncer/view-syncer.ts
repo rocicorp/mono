@@ -1,6 +1,6 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {must} from 'shared/src/must.js';
 import {difference} from 'shared/src/set-utils.js';
@@ -602,22 +602,43 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     };
 
     for (const change of changes) {
-      const {queryHash, table, rowKey, row} = change;
+      const {type, queryHash, table, rowKey, row} = change;
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
       let parsedRow = rows.get(rowID);
+      let rc: number;
       if (!parsedRow) {
         parsedRow = {refCounts: {}};
         rows.set(rowID, parsedRow);
+        rc = 0;
+      } else {
+        rc = parsedRow.refCounts[queryHash];
       }
-      parsedRow.refCounts[queryHash] ??= 0;
-      parsedRow.refCounts[queryHash] += row ? 1 : -1;
 
-      if (row && !parsedRow.version) {
-        const {version, contents} = contentsAndVersion(row);
-        parsedRow.version = version;
-        parsedRow.contents = contents;
+      const updateVersion = (row: Row) => {
+        if (!parsedRow.version) {
+          const {version, contents} = contentsAndVersion(row);
+          parsedRow.version = version;
+          parsedRow.contents = contents;
+        }
+      };
+      switch (type) {
+        case 'add':
+          updateVersion(row);
+          rc++;
+          break;
+        case 'edit':
+          updateVersion(row);
+          // No update to rc.
+          break;
+        case 'remove':
+          rc--;
+          break;
+        default:
+          unreachable(type);
       }
+
+      parsedRow.refCounts[queryHash] = rc;
 
       if (rows.size % CURSOR_PAGE_SIZE === 0) {
         await processBatch();
