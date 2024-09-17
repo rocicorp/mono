@@ -630,7 +630,7 @@ describe('view-syncer/service', () => {
           "clientGroupID": "9876",
           "patchVersion": "01",
           "refCounts": {
-            "query-hash1": 2,
+            "query-hash1": 1,
           },
           "rowKey": {
             "id": "1",
