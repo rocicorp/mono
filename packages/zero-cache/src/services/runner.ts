@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {sleep} from 'shared/src/sleep.js';
 import {Service} from './service.js';
 
 /**
@@ -50,15 +49,25 @@ export class ServiceRunner<S extends Service> {
 }
 
 /**
- * Runs a singleton service, logging an error and exiting the process if the
- * service stops or fails.
+ * Runs the specified services, exiting on SIGTERM, or logging an error and
+ * exiting the process if any of them fail.
  */
-export async function runOrExit(lc: LogContext, svc: Service): Promise<void> {
+export async function runOrExit(
+  lc: LogContext,
+  ...services: Service[]
+): Promise<void> {
+  process.once('SIGTERM', () => {
+    for (const svc of services) {
+      lc.info?.(`exiting ${svc.constructor.name} (${svc.id}) for SIGTERM`);
+      void svc.stop();
+    }
+  });
+
   try {
-    await svc.run();
-  } finally {
-    lc.error?.(`exiting because ${svc.constructor.name} (${svc.id}) stopped`);
-    await sleep(1000); // Allow logs to flush.
+    await Promise.all(services.map(svc => svc.run()));
+    process.exit(0);
+  } catch (e) {
+    lc.error?.(`exiting on error`, e);
     process.exit(-1);
   }
 }

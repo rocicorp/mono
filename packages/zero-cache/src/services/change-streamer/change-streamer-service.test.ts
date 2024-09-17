@@ -1,8 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
@@ -280,5 +281,53 @@ describe('change-streamer/service', {retry: 3}, () => {
       tag: 'commit',
       extra: 'info',
     });
+  });
+
+  test('retry on initial stream failure', async () => {
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const source = {
+      startStream: vi
+        .fn()
+        .mockRejectedValueOnce('error')
+        .mockImplementation(() => {
+          retried(true);
+          return resolver().promise;
+        }),
+    };
+    const replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+
+    const streamer = await initializeStreamer(lc, changeDB, source, replica);
+    void streamer.run();
+
+    expect(await hasRetried).toBe(true);
+  });
+
+  test('retry on change stream error', async () => {
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const source = {
+      startStream: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes,
+            acks: () => {},
+          }),
+        )
+        .mockImplementation(() => {
+          retried(true);
+          return resolver().promise;
+        }),
+    };
+    const replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+
+    const streamer = await initializeStreamer(lc, changeDB, source, replica);
+    void streamer.run();
+
+    changes.fail(new Error('doh'));
+
+    expect(await hasRetried).toBe(true);
   });
 });

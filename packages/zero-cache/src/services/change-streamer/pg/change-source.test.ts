@@ -161,4 +161,17 @@ describe('change-source/pg', {retry: 3}, () => {
     // Close the stream.
     changes.cancel();
   });
+
+  test('error handling', async () => {
+    // Purposely drop the replication slot to test the error case.
+    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
+
+    let err;
+    try {
+      await source.startStream();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).not.toBeUndefined();
+  });
 });
