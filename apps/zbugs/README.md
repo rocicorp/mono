@@ -34,7 +34,7 @@ npm run zero
 
 ### Run the web app
 
-From the `zbugs` directory in another tab:
+From the `zbugs` directory, in another tab:
 
 ```bash
 VITE_PUBLIC_SERVER="http://[::1]:3000" npm run dev
@@ -45,7 +45,7 @@ After you have visited the local website and the sync / replica tables have popu
 ### To clear the SQLite replica db:
 
 ```bash
-rm -rf /tmp/zbugs-sync-replica.db
+rm /tmp/zbugs-sync-replica.db*
 ```
 
 ### To clear the upstream postgres database
