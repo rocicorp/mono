@@ -9,7 +9,7 @@ import {ReplicaState, ReplicaStateNotifier} from './replicator.js';
  * * New subscribers are notified immediately with the latest received
  *   ReplicaState.
  *
- * * Non-latest notifications are discarded is the subscriber is too
+ * * Non-latest notifications are discarded if the subscriber is too
  *   busy to consume them.
  *
  * By encapsulating the state for the first behavior (essentially, whether

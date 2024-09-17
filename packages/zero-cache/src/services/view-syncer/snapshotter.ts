@@ -289,7 +289,7 @@ class Snapshot {
   }
 
   release() {
-    if (this.db.db.inTransaction) {
+    if (this.hasLock) {
       this.db.rollback();
     }
   }
