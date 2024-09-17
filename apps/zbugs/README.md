@@ -10,9 +10,7 @@ This is still early. There are still **many** bugs. Basically you can run this d
 
 We do not yet have any npm packages – Zero is under rapid development and we're building it side-by-side with this demo app. The best way to play with Zero is to just play with the demo app.
 
-First, you will need [Docker](https://docs.docker.com/engine/install/).
-
-Then, from root of monorepo:
+From root of monorepo:
 
 ```bash
 npm install
