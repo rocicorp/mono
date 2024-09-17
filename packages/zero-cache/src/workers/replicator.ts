@@ -1,8 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
 import {
+  ReplicaState,
+  ReplicaStateNotifier,
   Replicator,
-  ReplicaVersionNotifier,
-  ReplicaVersionReady,
 } from 'zero-cache/src/services/replicator/replicator.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import {Worker} from '../types/processes.js';
@@ -24,11 +24,11 @@ export function getStatusFromWorker(replicator: Worker): Promise<unknown> {
   return promise;
 }
 
-type Notification = ['notify', ReplicaVersionReady];
+type Notification = ['notify', ReplicaState];
 
 export function handleSubscriptionsFrom(
   subscriber: Worker,
-  notifier: ReplicaVersionNotifier,
+  notifier: ReplicaStateNotifier,
 ) {
   subscriber.onMessageType('subscribe', async () => {
     const subscription = notifier.subscribe();

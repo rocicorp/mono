@@ -6,25 +6,37 @@ import {ChangeStreamer} from '../change-streamer/change-streamer.js';
 import type {Service} from '../service.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 
-// The version ready payload is simply a signal. All of the information
-// that the consumer needs is retrieved by opening a new snapshot transaction
-// on the replica.
-export type ReplicaVersionReady = NonNullable<unknown>;
+/** See {@link ReplicaStateNotifier.subscribe()}. */
+export type ReplicaState = {
+  readonly state: 'version-ready' | 'maintenance';
+};
 
-export interface ReplicaVersionNotifier {
+export interface ReplicaStateNotifier {
   /**
-   * Creates a cancelable subscription of notifications when the replica is ready to be
-   * read for new data. The first message is sent when the replica is ready (e.g. initialized),
-   * and henceforth when an incremental change has been committed to the replica.
+   * Creates a cancelable subscription of changes in the replica state.
    *
-   * Messages are coalesced if multiple notifications occur before the subscriber consumes
-   * the next message. The messages themselves contain no information; the subscriber queries
-   * the SQLite replica for the latest replicated changes.
+   * A `version-ready` message indicates that the replica is ready to be
+   * read, and henceforth that a _new_ version is ready, i.e. whenever a
+   * change is committed to the replica. The `version-ready` message itself
+   * otherwise contains no other information; the subscriber queries the
+   * replica for the current data.
+   *
+   * A `maintenance` state indicates that the replica should not be read from.
+   * If a subscriber is holding any transaction locks, it should release them
+   * until the next `version-ready` signal.
+   *
+   * Upon subscription, the current state of the replica is sent immediately
+   * if known. If multiple notifications occur before the subscriber
+   * can consume them, all but the last notification are discarded by the
+   * Subscription object (i.e. not buffered). Thus, a subscriber only
+   * ever consumes the current (i.e. known) state of the replica. This avoids
+   * a buildup of "work" if a subscriber is too busy to consume all
+   * notifications.
    */
-  subscribe(): Source<ReplicaVersionReady>;
+  subscribe(): Source<ReplicaState>;
 }
 
-export interface Replicator extends ReplicaVersionNotifier {
+export interface Replicator extends ReplicaStateNotifier {
   /**
    * Returns an opaque message for human-readable consumption. This is
    * purely for ensuring that the Replicator has started at least once to
@@ -64,7 +76,7 @@ export class ReplicatorService implements Replicator, Service {
     return this.#incrementalSyncer.run(this.#lc);
   }
 
-  subscribe(): Source<ReplicaVersionReady> {
+  subscribe(): Source<ReplicaState> {
     return this.#incrementalSyncer.subscribe();
   }
 

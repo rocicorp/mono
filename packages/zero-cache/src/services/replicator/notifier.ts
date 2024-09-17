@@ -1,16 +1,16 @@
 import {EventEmitter} from 'eventemitter3';
 import {Subscription} from '../../types/subscription.js';
-import {ReplicaVersionNotifier, ReplicaVersionReady} from './replicator.js';
+import {ReplicaState, ReplicaStateNotifier} from './replicator.js';
 
 /**
  * Handles the semantics of {@link ReplicatorVersionNotifier.subscribe()}
  * notifications, namely:
  *
- * * New subscribers are notified immediately if the Replicator has already
- *   sent one notification (indicating that the Replica is ready to be read).
+ * * New subscribers are notified immediately with the latest received
+ *   ReplicaState.
  *
- * * Notifications to a subscriber are coalesced is the subscriber is too
- *   busy to receive them.
+ * * Non-latest notifications are discarded if the subscriber is too
+ *   busy to consume them.
  *
  * By encapsulating the state for the first behavior (essentially, whether
  * the first notification has been sent by the Replicator), Notifier objects
@@ -24,34 +24,32 @@ import {ReplicaVersionNotifier, ReplicaVersionReady} from './replicator.js';
  * subscribe and unsubscribe traffic from View Syncers remains within each
  * Syncer Thread.
  */
-export class Notifier implements ReplicaVersionNotifier {
+export class Notifier implements ReplicaStateNotifier {
   readonly #eventEmitter = new EventEmitter();
-  #firstNotificationReceived = false;
+  #lastStateReceived: ReplicaState | undefined;
 
   #newSubscription() {
-    const notify = (payload: ReplicaVersionReady) => subscription.push(payload);
-    const subscription = Subscription.create<ReplicaVersionReady>({
+    const notify = (state: ReplicaState) => subscription.push(state);
+    const subscription = Subscription.create<ReplicaState>({
       coalesce: curr => curr,
       cleanup: () => this.#eventEmitter.off('version', notify),
     });
     return {notify, subscription};
   }
 
-  subscribe(): Subscription<ReplicaVersionReady> {
+  subscribe(): Subscription<ReplicaState> {
     const {notify, subscription} = this.#newSubscription();
     this.#eventEmitter.on('version', notify);
-    if (this.#firstNotificationReceived) {
-      // Per Replicator.subscribe() semantics, once a notification has been
-      // sent, the Replica is ready to be read, and henceforth new
-      // subscribers receive a notification immediately upon subscribe().
-      notify({});
+    if (this.#lastStateReceived) {
+      // Per Replicator.subscribe() semantics, the current state of the
+      // replica, if known, is immediately sent on subscribe.
+      notify(this.#lastStateReceived);
     }
     return subscription;
   }
 
-  // Note: The payload is only used for testing coalesce-behavior.
-  notifySubscribers(payload: ReplicaVersionReady = {}) {
-    this.#firstNotificationReceived = true;
-    this.#eventEmitter.listeners('version').forEach(notify => notify(payload));
+  notifySubscribers(state: ReplicaState = {state: 'version-ready'}) {
+    this.#lastStateReceived = state;
+    this.#eventEmitter.listeners('version').forEach(notify => notify(state));
   }
 }

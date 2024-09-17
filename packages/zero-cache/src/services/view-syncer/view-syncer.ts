@@ -17,7 +17,7 @@ import {Row} from 'zql/src/zql/ivm/data.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import {ReplicaVersionReady} from '../replicator/replicator.js';
+import {ReplicaState} from '../replicator/replicator.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {ActivityBasedService} from '../service.js';
 import {ClientHandler, PokeHandler, RowPatch} from './client-handler.js';
@@ -65,7 +65,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
-  readonly #versionChanges: Subscription<ReplicaVersionReady>;
+  readonly #stateChanges: Subscription<ReplicaState>;
   readonly #keepaliveMs: number;
 
   // Serialize on this lock for:
@@ -75,14 +75,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
   #cvr: CVRSnapshot | undefined;
-  #pipelinesReady = false;
+  #pipelinesSynced = false;
+  #pipelinesPaused = false;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
     db: PostgresDB,
     pipelineDriver: PipelineDriver,
-    versionChanges: Subscription<ReplicaVersionReady>,
+    versionChanges: Subscription<ReplicaState>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
@@ -90,7 +91,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
     this.#pipelines = pipelineDriver;
-    this.#versionChanges = versionChanges;
+    this.#stateChanges = versionChanges;
     this.#keepaliveMs = keepaliveMs;
     this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
@@ -104,34 +105,58 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
+  #pipelinesReady() {
+    return this.#pipelinesSynced && !this.#pipelinesPaused;
+  }
+
   async run(): Promise<void> {
     try {
-      for await (const _ of this.#versionChanges) {
-        if (!this.#pipelines.initialized()) {
-          // On the first version-ready signal, connect to the replica.
-          this.#pipelines.init();
-        }
+      for await (const {state} of this.#stateChanges) {
         await this.#runInLockWithCVR(async cvr => {
-          if (this.#pipelinesReady) {
+          if (state === 'maintenance') {
+            if (this.#pipelines.initialized()) {
+              this.#pipelines.release();
+            }
+            this.#pipelinesPaused = true; // Block access to pipelines until resume.
+            return;
+          }
+
+          if (!this.#pipelines.initialized()) {
+            // On the first version-ready signal, connect to the replica.
+            this.#pipelines.init();
+          }
+
+          if (this.#pipelinesReady()) {
+            // Note: #pipelinesReady() means `paused === false`.
             await this.#advancePipelines(cvr);
             return;
           }
 
-          // Advance the snapshot to the current version. Note that it is
-          // okay not to iterate over the diff because there are no pipelines
-          // to push changes to.
-          const {version} = this.#pipelines.advance();
-          if (version < cvr.version.stateVersion) {
-            this.#lc.debug?.(
-              `replica@${version} is behind cvr@${versionString(cvr.version)}`,
-            );
-            return; // Wait for the next advancement.
-          }
+          this.#pipelinesPaused = false;
 
-          // Initialize the pipelines.
-          this.#hydrateUnchangedQueries(cvr);
-          await this.#syncQueryPipelineSet(cvr);
-          this.#pipelinesReady = true;
+          // Advance the snapshot to the current version.
+          const version = this.#pipelines.advanceWithoutDiff();
+          const cvrVer = versionString(cvr.version);
+
+          if (version < cvr.version.stateVersion) {
+            this.#lc.debug?.(`replica@${version} is behind cvr@${cvrVer}`);
+            // Wait for the next advancement.
+          } else if (
+            version === cvr.version.stateVersion &&
+            this.#pipelinesSynced
+          ) {
+            // This happens when an advance-after-unpause lands on the same
+            // version, which is hopefully the common case. Nothing to do.
+          } else {
+            this.#lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
+            // stateVersion matches the CVR for the first time,
+            // or it advanced beyond the CVR during a maintenance pause.
+            // (Clear and re-)initialize the pipelines.
+            this.#pipelines.clear();
+            this.#hydrateUnchangedQueries(cvr);
+            await this.#syncQueryPipelineSet(cvr);
+            this.#pipelinesSynced = true;
+          }
         });
       }
 
@@ -167,7 +192,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // If #idleToken has changed, this timeout is effectively canceled.
       if (this.#idleToken === idleToken) {
         this.#lc.info?.('shutting down after idle timeout');
-        this.#versionChanges.cancel(); // Note: #versionChanges.active becomes false.
+        this.#stateChanges.cancel(); // Note: #versionChanges.active becomes false.
       }
     }, this.#keepaliveMs);
   }
@@ -182,7 +207,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *         ViewSyncer is shutting down.
    */
   keepalive(): boolean {
-    if (!this.#versionChanges.active) {
+    if (!this.#stateChanges.active) {
       return false;
     }
     if (this.#idleToken) {
@@ -341,7 +366,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr = this.#cvr; // For #syncQueryPipelineSet().
     }
 
-    if (this.#pipelinesReady) {
+    if (this.#pipelinesReady()) {
       await this.#syncQueryPipelineSet(cvr);
     }
   };
@@ -683,7 +708,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // eslint-disable-next-line require-await
   async stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');
-    this.#versionChanges.cancel();
+    this.#stateChanges.cancel();
   }
 
   #cleanup(err?: unknown) {
