@@ -28,27 +28,6 @@ supabase start
 
 ### Run the zero-cache server
 
-Create a `.env` file in the `zbugs` directory:
-
-```ini
-# Uniquely identifies a single instance of the zero-cache service.
-REPLICA_ID = "r1"
-
-# Place to store the SQLite data zero-cache maintains. This can be lost, but if
-# it is, zero-cache will have to re-replicate next time it starts up.
-REPLICA_DB_FILE = "/tmp/zbugs-sync-replica.db"
-
-# Logging level for zero-cache service.
-LOG_LEVEL = "debug"
-
-# If you want to enable github auth, create a github app and set these.
-# Otherwise it can be used with vanilla email auth or no auth.
-SUPABASE_AUTH_GITHUB_CLIENT_ID = ""
-SUPABASE_AUTH_GITHUB_SECRET = ""
-```
-
-Then start the server:
-
 ```bash
 npm run zero
 ```
