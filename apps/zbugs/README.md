@@ -31,9 +31,19 @@ docker compose up; supabase start
 Create a `.env` file in the `zbugs` directory:
 
 ```ini
+# Set this to tell the script that tries to guess `AUTOMATICALLY_SET`
+# values not to run.
+# SKIP_ENSURE_ENV = "true"
+
 # The "upstream" authoritative postgres database
 # In the future we will support other types of upstreams besides PG
-UPSTREAM_URI = "postgresql://postgres:postgres@localhost:54322/postgres"
+UPSTREAM_URI = "AUTOMATICALLY_SET"
+
+# Information required to construct a new Supabase client.
+# This will be automatically set based on the output of `supabase status`
+# when starting `zbugs`.
+VITE_SUPABASE_ANON_KEY = "AUTOMATICALLY_SET"
+VITE_SUPABASE_URL = "AUTOMATICALLY_SET"
 
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
 # keep track of which clients have which data. This is how we know what diff to
@@ -56,8 +66,8 @@ LOG_LEVEL = "debug"
 
 # If you want to enable github auth, create a github app and set these.
 # Otherwise it can be used with vanilla email auth or no auth.
-SUPABASE_AUTH_GITHUB_CLIENT_ID = "CLIENT_ID"
-SUPABASE_AUTH_GITHUB_SECRET = "SECRET"
+SUPABASE_AUTH_GITHUB_CLIENT_ID = ""
+SUPABASE_AUTH_GITHUB_SECRET = ""
 ```
 
 Then start the server:
