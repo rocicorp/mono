@@ -54,12 +54,21 @@ async function main() {
 
   const contents = /*sql*/ `BEGIN;
 ${inserts}
-COMMIT;
 
-SELECT
-    *
-FROM
-    pg_create_logical_replication_slot('zero_slot_r1', 'pgoutput');`;
+-- We have to manually update the "labelIDs" column in the issue table because
+-- COPY doesn't run triggers.
+UPDATE
+    issue
+SET
+    "labelIDs" = (
+        SELECT
+            STRING_AGG("labelID", ',')
+        FROM
+            "issueLabel"
+        WHERE
+            "issueID" = issue.id
+    );
+COMMIT;`;
 
   await fs.writeFile(new URL(`./${outputFile}`, import.meta.url), contents);
   console.log(`All SQL INSERT statements have been written to ${outputFile}`);
