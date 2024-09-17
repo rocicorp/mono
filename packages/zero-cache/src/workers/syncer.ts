@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 import {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
 import {Mutagen} from '../services/mutagen/mutagen.js';
-import {ReplicaVersionReady} from '../services/replicator/replicator.js';
+import {ReplicaState} from '../services/replicator/replicator.js';
 import {ServiceRunner} from '../services/runner.js';
 import {ActivityBasedService, Service} from '../services/service.js';
 import {ViewSyncer} from '../services/view-syncer/view-syncer.js';
@@ -36,7 +36,7 @@ export class Syncer {
     lc: LogContext,
     viewSyncerFactory: (
       id: string,
-      sub: Subscription<ReplicaVersionReady>,
+      sub: Subscription<ReplicaState>,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: (id: string) => Mutagen & Service,
     parent: Worker,

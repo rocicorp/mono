@@ -1,5 +1,5 @@
 import {describe, expect, test, vi} from 'vitest';
-import {ReplicaVersionReady} from 'zero-cache/src/services/replicator/replicator.js';
+import {ReplicaState} from 'zero-cache/src/services/replicator/replicator.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
 import {
@@ -26,7 +26,7 @@ describe('workers/replicator', () => {
   });
 
   test('replicator subscription', async () => {
-    const originalSub = Subscription.create<ReplicaVersionReady>();
+    const originalSub = Subscription.create<ReplicaState>();
 
     const replicator = {
       status: vi.fn(),
@@ -37,8 +37,9 @@ describe('workers/replicator', () => {
 
     void setUpMessageHandlers(replicator, parent);
 
-    originalSub.push({foo: 'bar'});
-    originalSub.push({foo: 'baz'});
+    originalSub.push({state: 'version-ready'});
+    originalSub.push({state: 'version-ready'});
+    originalSub.push({state: 'maintenance'});
 
     const notifications = [];
     const notifier = createNotifierFrom(child);
@@ -46,11 +47,15 @@ describe('workers/replicator', () => {
 
     for await (const msg of notifier.subscribe()) {
       notifications.push(msg);
-      if (notifications.length === 2) {
+      if (notifications.length === 3) {
         break;
       }
     }
 
-    expect(notifications).toEqual([{foo: 'bar'}, {foo: 'baz'}]);
+    expect(notifications).toEqual([
+      {state: 'version-ready'},
+      {state: 'version-ready'},
+      {state: 'maintenance'},
+    ]);
   });
 });

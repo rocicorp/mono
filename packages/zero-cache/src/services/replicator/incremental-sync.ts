@@ -17,7 +17,7 @@ import {
 import {Change, MessageCommit} from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
-import {ReplicaVersionReady} from './replicator.js';
+import {ReplicaState} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
 import {
   ZERO_VERSION_COLUMN_NAME,
@@ -95,7 +95,7 @@ export class IncrementalSyncer {
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  subscribe(): Source<ReplicaVersionReady> {
+  subscribe(): Source<ReplicaState> {
     return this.#notifier.subscribe();
   }
 

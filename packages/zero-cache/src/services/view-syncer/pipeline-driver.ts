@@ -118,6 +118,14 @@ export class PipelineDriver {
     return this.#snapshotter.current().version;
   }
 
+  release() {
+    this.#snapshotter.release();
+  }
+
+  advanceWithoutDiff(): string {
+    return this.#snapshotter.advance().curr.version;
+  }
+
   /**
    * Clears storage used for the pipelines. Call this when the
    * PipelineDriver will no longer be used.
@@ -174,6 +182,14 @@ export class PipelineDriver {
       this.#pipelines.delete(hash);
       input.destroy();
     }
+  }
+
+  /** Removes pipelines for all queries. */
+  clear() {
+    for (const input of this.#pipelines.values()) {
+      input.destroy();
+    }
+    this.#pipelines.clear();
   }
 
   /**
