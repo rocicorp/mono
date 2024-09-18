@@ -798,7 +798,7 @@ test('edit to change the order', () => {
   ]);
 });
 
-test('tree edit', () => {
+test('edit to preserve relationships', () => {
   const labelSchema: Schema = {
     tableName: 'label',
     primaryKey: ['id'],
