@@ -27,6 +27,8 @@ export class ZeroContext implements QueryDelegate {
   readonly #addQuery: AddQuery;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
+  readonly staticQueryParameters = undefined;
+
   constructor(schemas: Record<string, Schema>, addQuery: AddQuery) {
     this.#schemas = schemas;
     this.#addQuery = addQuery;

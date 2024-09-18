@@ -13,7 +13,7 @@ type Options = {
   modify: number;
 };
 
-export function wal_benchmark(opts: Options) {
+export function walBenchmark(opts: Options) {
   const db = new Database(lc, DB_FILE);
   // Start from scratch.
   db.pragma('wal_checkpoint(TRUNCATE)');

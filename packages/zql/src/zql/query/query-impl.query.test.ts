@@ -20,6 +20,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   #commitListeners: Set<CommitListener> = new Set();
 
   addedServerQueries: AST[] = [];
+
   onTransactionCommit(listener: CommitListener): () => void {
     this.#commitListeners.add(listener);
     return () => {

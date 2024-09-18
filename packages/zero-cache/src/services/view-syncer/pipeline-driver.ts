@@ -152,10 +152,14 @@ export class PipelineDriver {
   *addQuery(hash: string, query: AST): Iterable<RowChange> {
     assert(this.initialized());
     assert(!this.#pipelines.has(hash), `query ${hash} already added`);
-    const input = buildPipeline(query, {
-      getSource: name => this.#getSource(name),
-      createStorage: () => this.#createStorage(),
-    });
+    const input = buildPipeline(
+      query,
+      {
+        getSource: name => this.#getSource(name),
+        createStorage: () => this.#createStorage(),
+      },
+      undefined,
+    );
     this.#pipelines.set(hash, input);
 
     const schema = input.getSchema();
