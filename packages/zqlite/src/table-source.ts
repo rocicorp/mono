@@ -333,6 +333,7 @@ export class TableSource implements Source {
         break;
       case 'edit':
         assert(exists(change.oldRow), 'Row not found');
+        fromSQLiteTypes(this.#columns, change.oldRow);
         break;
       default:
         unreachable(change);
