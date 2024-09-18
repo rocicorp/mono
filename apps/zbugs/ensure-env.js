@@ -64,8 +64,6 @@ try {
 
 function updateDatabaseUrl(originalUrl, newDbName) {
   const url = new URL(originalUrl);
-  url.username = 'postgres.pooler-dev';
-  url.port = '54329';
   url.pathname = `/${newDbName}`;
   return url.toString();
 }
