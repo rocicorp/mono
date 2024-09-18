@@ -1,4 +1,4 @@
-import {writeFileSync, readFileSync, existsSync, copyFileSync} from 'node:fs';
+import {writeFileSync, readFileSync} from 'node:fs';
 import dotenv from 'dotenv';
 import {execSync} from 'node:child_process';
 import process from 'node:process';
@@ -13,9 +13,6 @@ if (process.env.SKIP_ENSURE_ENV && process.env.SKIP_ENSURE_ENV === 'true') {
 }
 
 try {
-  if (!existsSync('.env')) {
-    copyFileSync('.env.example', '.env');
-  }
   const envContent = readFileSync('.env', 'utf-8');
 
   const supabaseStatus = JSON.parse(
