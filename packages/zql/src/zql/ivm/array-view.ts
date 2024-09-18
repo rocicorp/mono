@@ -191,15 +191,15 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         };
       } else {
         // Remove
-        {
-          const {pos, found} = binarySearch(
-            view,
-            change.oldRow,
-            schema.compareRows,
-          );
-          assert(found, 'node does not exists');
-          view.splice(pos, 1);
-        }
+        const {pos, found} = binarySearch(
+          view,
+          change.oldRow,
+          schema.compareRows,
+        );
+        assert(found, 'node does not exists');
+        const oldEntry = view[pos];
+        view.splice(pos, 1);
+
         // Insert
         {
           const {pos, found} = binarySearch(
@@ -208,7 +208,10 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
             schema.compareRows,
           );
           assert(!found, 'node already exists');
-          view.splice(pos, 0, change.row);
+          view.splice(pos, 0, {
+            ...oldEntry,
+            ...change.row,
+          });
         }
       }
       break;
