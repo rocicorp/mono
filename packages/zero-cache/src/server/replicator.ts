@@ -57,7 +57,7 @@ export default async function runWorker(parent: Worker) {
     replica,
   );
 
-  setUpMessageHandlers(replicator, parent);
+  setUpMessageHandlers(lc, replicator, parent);
 
   void runOrExit(lc, changeStreamer, replicator);
 
