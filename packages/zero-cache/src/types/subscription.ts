@@ -81,9 +81,9 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   // messages can be added.
   #sentinel: 'canceled' | Error | undefined = undefined;
 
-  #coalesce: ((curr: M, prev: M) => M) | undefined;
-  #consumed: (prev: M) => void;
-  #cleanup: (unconsumed: M[], err?: Error) => void;
+  #coalesce: ((curr: Entry<M>, prev: Entry<M>) => M) | undefined;
+  #consumed: (prev: Entry<M>) => void;
+  #cleanup: (unconsumed: Entry<M>[], err?: Error) => void;
   #publish: (internal: M) => T;
 
   /**
@@ -92,9 +92,30 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
    */
   constructor(options: Options<M> = {}, publish: (m: M) => T) {
     const {coalesce, consumed = () => {}, cleanup = () => {}} = options;
-    this.#coalesce = coalesce;
-    this.#consumed = consumed;
-    this.#cleanup = cleanup;
+
+    this.#coalesce = !coalesce
+      ? undefined
+      : (curr, prev) => {
+          try {
+            return coalesce(curr.value, prev.value);
+          } finally {
+            prev.resolve('coalesced');
+          }
+        };
+
+    this.#consumed = entry => {
+      consumed(entry.value);
+      entry.resolve('consumed');
+    };
+
+    this.#cleanup = (entries, err) => {
+      cleanup(
+        entries.map(e => e.value),
+        err,
+      );
+      entries.forEach(e => e.resolve('unconsumed'));
+    };
+
     this.#publish = publish;
   }
 
@@ -123,8 +144,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       consumer.resolve(entry);
     } else if (this.#coalesce && this.#messages.length) {
       const prev = this.#messages[0];
-      this.#messages[0] = {value: this.#coalesce(value, prev.value), resolve};
-      prev.resolve('coalesced');
+      this.#messages[0] = {value: this.#coalesce(entry, prev), resolve};
     } else {
       this.#messages.push(entry);
     }
@@ -150,10 +170,9 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
       this.#cleanup(
-        this.#messages.map(entry => entry.value),
+        this.#messages,
         sentinel instanceof Error ? sentinel : undefined,
       );
-      this.#messages.forEach(entry => entry.resolve('unconsumed'));
       this.#messages.splice(0);
 
       for (
@@ -173,8 +192,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
     const notifyPrevConsumed = () => {
       if (prev !== undefined) {
-        this.#consumed(prev.value);
-        prev.resolve('consumed');
+        this.#consumed(prev);
         prev = undefined;
       }
     };
