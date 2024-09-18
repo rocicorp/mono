@@ -92,3 +92,14 @@ h1 {
   padding-left: 1.75rem;
   background: transparent url(assets/images/issue-open.svg) no-repeat center left;
 }
+
+
+/* Issue Detail */
+
+.breadcrumb-item {
+  padding-right: 0.25rem;
+}
+
+.breadcrumb-item:last-child {
+  padding-right: 0;
+}
