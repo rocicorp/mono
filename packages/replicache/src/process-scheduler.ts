@@ -40,13 +40,17 @@ export class ProcessScheduler {
     this.#throttleMs = throttleMs;
     this.#abortSignal = abortSignal;
     this.#requestIdle = requestIdle;
-    this.#abortSignal.addEventListener('abort', () => {
-      const abortError = new AbortError('Aborted');
-      this.#runResolver?.reject(abortError);
-      this.#scheduledResolver?.reject(abortError);
-      this.#runResolver = undefined;
-      this.#scheduledResolver = undefined;
-    });
+    this.#abortSignal.addEventListener(
+      'abort',
+      () => {
+        const abortError = new AbortError('Aborted');
+        this.#runResolver?.reject(abortError);
+        this.#scheduledResolver?.reject(abortError);
+        this.#runResolver = undefined;
+        this.#scheduledResolver = undefined;
+      },
+      {once: true},
+    );
   }
 
   schedule(): Promise<void> {
