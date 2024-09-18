@@ -123,7 +123,11 @@ export class PipelineDriver {
   }
 
   advanceWithoutDiff(): string {
-    return this.#snapshotter.advance().curr.version;
+    const {db, version} = this.#snapshotter.advance().curr;
+    for (const table of this.#tables.values()) {
+      table.setDB(db.db);
+    }
+    return version;
   }
 
   /**
