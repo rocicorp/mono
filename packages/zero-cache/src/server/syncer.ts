@@ -14,25 +14,24 @@ import {postgresTypeConfig} from '../types/pg.js';
 import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
-import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
-import {getAppConfig} from '../config/app-config.js';
+import {getZeroConfig} from '../config/zero-config.js';
 
 export default async function runWorker(parent: Worker) {
-  const config = configFromEnv();
+  const config = await getZeroConfig();
 
   // Consider parameterizing these (in main) based on total number of workers.
   const MAX_CVR_CONNECTIONS = 5;
   const MAX_MUTAGEN_CONNECTIONS = 5;
 
-  const lc = createLogContext(config, {worker: 'syncer'});
+  const lc = createLogContext(config.log, {worker: 'syncer'});
 
-  const cvrDB = postgres(config.CVR_DB_URI, {
+  const cvrDB = postgres(config.cvrDbUri, {
     ...postgresTypeConfig(),
     max: MAX_CVR_CONNECTIONS,
   });
 
-  const upstreamDB = postgres(config.UPSTREAM_URI, {
+  const upstreamDB = postgres(config.upstreamUri, {
     ...postgresTypeConfig(),
     max: MAX_MUTAGEN_CONNECTIONS,
   });
@@ -46,7 +45,7 @@ export default async function runWorker(parent: Worker) {
     ),
   ]);
 
-  const tmpDir = config.STORAGE_DB_TMP_DIR ?? tmpdir();
+  const tmpDir = config.storageDbTmpDir ?? tmpdir();
   const operatorStorage = DatabaseStorage.create(
     lc,
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
@@ -59,15 +58,14 @@ export default async function runWorker(parent: Worker) {
       cvrDB,
       new PipelineDriver(
         lc,
-        new Snapshotter(lc, config.REPLICA_DB_FILE),
+        new Snapshotter(lc, config.replicaDbFile),
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,
     );
 
-  const appConfig = await getAppConfig(config.APP_CONFIG_PATH);
   const mutagenFactory = (id: string) =>
-    new MutagenService(lc, id, upstreamDB, appConfig.authorization);
+    new MutagenService(lc, id, upstreamDB, config.authorization ?? {});
 
   new Syncer(lc, viewSyncerFactory, mutagenFactory, parent).run();
 

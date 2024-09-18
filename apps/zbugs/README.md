@@ -30,6 +30,8 @@ docker compose up
 Create a `.env` file in the `zbugs` directory:
 
 ```ini
+#### zero.config.js Variables ####
+
 # The "upstream" authoritative postgres database
 # In the future we will support other types of upstreams besides PG
 UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
@@ -50,8 +52,7 @@ REPLICA_ID = "r1"
 # it is, zero-cache will have to re-replicate next time it starts up.
 REPLICA_DB_FILE = "/tmp/zbugs-sync-replica.db"
 
-# Logging level for zero-cache service.
-LOG_LEVEL = "debug"
+#### ZBugs API Server Variables ####
 
 # The client id for the GitHub app responisble for OAuth
 # https://docs.github.com/en/apps/creating-github-apps
