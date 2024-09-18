@@ -37,11 +37,15 @@ describe('replicator/notifier', () => {
     const sub1 = notifier.subscribe();
     const sub2 = notifier.subscribe();
 
-    notifier.notifySubscribers({state: 'version-ready'});
+    const results1 = notifier.notifySubscribers({state: 'version-ready'});
     await expectSingleMessage(sub1, {state: 'version-ready'});
+    expect(await results1[0]).toEqual('consumed');
 
     notifier.notifySubscribers({state: 'version-ready'});
-    notifier.notifySubscribers({state: 'maintenance'});
+    expect(await results1[1]).toEqual('coalesced');
+
+    const results2 = notifier.notifySubscribers({state: 'maintenance'});
     await expectSingleMessage(sub2, {state: 'maintenance'});
+    expect(await Promise.all(results2)).toEqual(['consumed']);
   });
 });
