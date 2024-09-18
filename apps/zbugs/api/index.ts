@@ -1,14 +1,15 @@
-import {Hono} from 'hono';
-import {handle} from 'hono/vercel';
+// https://vercel.com/templates/other/fastify-serverless-function
+import Fastify from 'fastify';
 
-export const config = {
-  runtime: 'edge',
-};
-
-export const app = new Hono().basePath('/api');
-
-app.get('/', c => {
-  return c.json({message: 'Hello Hono!'});
+export const app = Fastify({
+  logger: true,
 });
 
-export default handle(app);
+app.get('/api', async (req, reply) => {
+  return reply.status(200).send({hello: 'world'});
+});
+
+export default async function handler(req, reply) {
+  await app.ready();
+  app.server.emit('request', req, reply);
+}

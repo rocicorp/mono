@@ -1,10 +1,19 @@
-import {getRequestListener} from '@hono/node-server';
 import react from '@vitejs/plugin-react';
 import {makeDefine} from 'shared/src/build.js';
-import {defineConfig} from 'vite';
+import {defineConfig, ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import {app} from './api/index.js';
+
+async function configureServer(server: ViteDevServer) {
+  await app.ready();
+  server.middlewares.use((req, res, next) => {
+    if (!req.url.startsWith('/api')) {
+      return next();
+    }
+    app.server.emit('request', req, res);
+  });
+}
 
 export default defineConfig({
   plugins: [
@@ -13,16 +22,7 @@ export default defineConfig({
     react(),
     {
       name: 'api-server',
-      configureServer(server) {
-        server.middlewares.use((req, res, next) => {
-          if (!req.url.startsWith('/api')) {
-            return next();
-          }
-          getRequestListener(async request => {
-            return await app.fetch(request, {});
-          })(req, res);
-        });
-      },
+      configureServer,
     },
   ],
   define: makeDefine(),
