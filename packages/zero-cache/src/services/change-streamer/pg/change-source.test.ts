@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -10,6 +11,7 @@ import {
 import {DbFile} from 'zero-cache/src/test/lite.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
+import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import {ChangeSource} from '../change-streamer-service.js';
 import {DownstreamChange} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
@@ -69,6 +71,10 @@ describe('change-source/pg', {retry: 3}, () => {
   const WATERMARK_REGEX = /[0-9a-z]{2,}/;
 
   test('changes', async () => {
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
+
     const {initialWatermark, changes} = await source.startStream();
     const downstream = drainToQueue(changes);
 
@@ -80,7 +86,7 @@ describe('change-source/pg', {retry: 3}, () => {
         VALUES('datatypes', 123456789, 987654321987654321, 123.456, true)`;
     });
 
-    expect(initialWatermark).toMatch(WATERMARK_REGEX);
+    expect(initialWatermark).toEqual(replicaVersion);
     expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
     expect(await downstream.dequeue()).toMatchObject([
       'data',
