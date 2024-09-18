@@ -15,7 +15,7 @@ const configSchema = v.object({
   ),
   ['DATADOG_LOGS_API_KEY']: v.string().optional(),
   ['DATADOG_SERVICE_LABEL']: v.string().optional(),
-  ['APP_CONFIG_PATH']: v.string(),
+  ['APP_CONFIG_PATH']: v.string().optional(),
 });
 
 export type Config = v.Infer<typeof configSchema>;
