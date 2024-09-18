@@ -2,11 +2,11 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import postgres from 'postgres';
-import {sleep} from 'shared/src/sleep.js';
 import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {postgresTypeConfig} from '../types/pg.js';
 import {childWorker, Worker} from '../types/processes.js';
+import {orTimeout} from '../types/timeout.js';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
@@ -47,11 +47,11 @@ const replicator = loadWorker('./src/server/replicator.ts').once(
 );
 
 const numSyncers = Math.max(1, availableParallelism() - 1); // Reserve 1 for the Replicator
-const notifier = createNotifierFrom(replicator);
+const notifier = createNotifierFrom(lc, replicator);
 
 const syncers = Array.from({length: numSyncers}, (_, i) => {
   const syncer = loadWorker('./src/server/syncer.ts', i + 1);
-  handleSubscriptionsFrom(syncer, notifier);
+  handleSubscriptionsFrom(lc, syncer, notifier);
   return syncer;
 });
 
@@ -66,10 +66,10 @@ await initViewSyncerSchema(lc, cvrDB);
 void cvrDB.end();
 
 lc.info?.('waiting for workers to be ready ...');
-if (await Promise.race([allReady, sleep(30_000)])) {
-  lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
-} else {
+if ((await orTimeout(allReady, 30_000)) === 'timed-out') {
   lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
+} else {
+  lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
 
 const workers: Workers = {replicator, syncers};

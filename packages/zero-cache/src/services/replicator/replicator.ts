@@ -9,6 +9,17 @@ import {IncrementalSyncer} from './incremental-sync.js';
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {
   readonly state: 'version-ready' | 'maintenance';
+
+  /**
+   * An optional random integer indicating that the notifier requests
+   * an ACK from all (transitive) subscribers. As the Subscription class
+   * uses the AsyncIterable paradigm to automatically handle ACKs for
+   * in-process communication, this field is primarily for IPC-level
+   * logic to perform additional communication between processes.
+   *
+   * It follows that application logic can largely ignore this field.
+   */
+  readonly ack?: number | undefined;
 };
 
 export interface ReplicaStateNotifier {
