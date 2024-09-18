@@ -17,15 +17,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Set up QEMU for arm64
+      - name: Set up QEMU for amd64
         run: |
           docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
         if: runner.os == 'Linux'
 
-      - name: Set up Docker for arm64
+      - name: Set up Docker for amd64
         uses: docker/setup-qemu-action@v2
         with:
-          platforms: linux/arm64
+          platforms: linux/amd64
 
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
@@ -45,7 +45,7 @@ jobs:
         run: |
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/arm64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE:latest --push .
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE:latest --push .
 
       - name: Deploy to ECS
         uses: imehedi/actions-awscli-v2@latest
