@@ -60,7 +60,12 @@ export const appConfigSchema = v.object({
 export type AppConfig = v.Infer<typeof appConfigSchema>;
 
 let loadedConfig: Promise<AppConfig> | undefined;
-export function getAppConfig(path: string) {
+export function getAppConfig(path: string | undefined): Promise<AppConfig> {
+  if (!path) {
+    return Promise.resolve({
+      authorization: {},
+    });
+  }
   if (loadedConfig) {
     return loadedConfig;
   }
