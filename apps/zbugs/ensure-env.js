@@ -44,26 +44,10 @@ try {
     'UPSTREAM_URI',
     supabaseStatus.DB_URL,
   );
-  updatedEnvContent = updateEnvVariable(
-    updatedEnvContent,
-    'CVR_DB_URI',
-    updateDatabaseUrl(supabaseStatus.DB_URL, 'zero_cvr'),
-  );
-  updatedEnvContent = updateEnvVariable(
-    updatedEnvContent,
-    'CHANGE_DB_URI',
-    updateDatabaseUrl(supabaseStatus.DB_URL, 'zero_changelog'),
-  );
 
   writeFileSync('.env', updatedEnvContent);
 
   console.log('Successfully updated .env file');
 } catch (error) {
   console.error('Error updating .env file:', error.message);
-}
-
-function updateDatabaseUrl(originalUrl, newDbName) {
-  const url = new URL(originalUrl);
-  url.pathname = `/${newDbName}`;
-  return url.toString();
 }
