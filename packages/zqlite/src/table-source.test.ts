@@ -425,8 +425,8 @@ test('pushing values does the correct writes and outputs', () => {
     // edit changes
     source.push({
       type: 'edit',
-      row: {a: 1, b: 2.123, c: false},
-      oldRow: {a: 1, b: 2.123, c: true},
+      row: {a: BigInt(1), b: 2.123, c: false} as unknown as Row,
+      oldRow: {a: BigInt(1), b: 2.123, c: true} as unknown as Row,
     });
 
     expect(outputted.shift()).toEqual({
@@ -464,6 +464,23 @@ test('pushing values does the correct writes and outputs', () => {
         oldRow: {a: 12, b: 2.123, c: true},
       });
     }).toThrow('Row not found');
+
+    // out of bounds
+    expect(() => {
+      source.push({
+        type: 'edit',
+        row: {
+          a: BigInt(Number.MAX_SAFE_INTEGER),
+          b: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+          c: 1,
+        } as unknown as Row,
+        oldRow: {
+          a: BigInt(Number.MAX_SAFE_INTEGER),
+          b: 3.456,
+          c: true,
+        } as unknown as Row,
+      });
+    }).toThrow(UnsupportedValueError);
   }
 });
 

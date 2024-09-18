@@ -5,7 +5,7 @@ import postgres from 'postgres';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
-import {ReplicaVersionReady} from '../services/replicator/replicator.js';
+import {ReplicaState} from '../services/replicator/replicator.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
@@ -51,10 +51,7 @@ export default async function runWorker(parent: Worker) {
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
   );
 
-  const viewSyncerFactory = (
-    id: string,
-    sub: Subscription<ReplicaVersionReady>,
-  ) =>
+  const viewSyncerFactory = (id: string, sub: Subscription<ReplicaState>) =>
     new ViewSyncerService(
       lc,
       id,

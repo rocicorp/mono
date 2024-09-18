@@ -734,3 +734,71 @@ test('tree edit', () => {
     },
   ]);
 });
+
+test('edit to change the order', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  for (const row of [
+    {a: 10, b: 'a'},
+    {a: 20, b: 'b'},
+    {a: 30, b: 'c'},
+  ] as const) {
+    ms.push({row, type: 'add'});
+  }
+
+  const view = new ArrayView(ms.connect([['a', 'asc']]));
+  let data: unknown[] = [];
+  const listener = (d: Immutable<EntryList>) => {
+    data = deepClone(d) as unknown[];
+  };
+  view.addListener(listener);
+  view.hydrate();
+
+  expect(data).toEqual([
+    {a: 10, b: 'a'},
+    {a: 20, b: 'b'},
+    {a: 30, b: 'c'},
+  ]);
+
+  data.length = 0;
+  ms.push({
+    type: 'edit',
+    oldRow: {a: 20, b: 'b'},
+    row: {a: 5, b: 'b2'},
+  });
+  view.flush();
+  expect(data).toEqual([
+    {a: 5, b: 'b2'},
+    {a: 10, b: 'a'},
+    {a: 30, b: 'c'},
+  ]);
+
+  data.length = 0;
+  ms.push({
+    type: 'edit',
+    oldRow: {a: 5, b: 'b2'},
+    row: {a: 4, b: 'b3'},
+  });
+  view.flush();
+  expect(data).toEqual([
+    {a: 4, b: 'b3'},
+    {a: 10, b: 'a'},
+    {a: 30, b: 'c'},
+  ]);
+
+  data.length = 0;
+  ms.push({
+    type: 'edit',
+    oldRow: {a: 4, b: 'b3'},
+    row: {a: 20, b: 'b4'},
+  });
+  view.flush();
+  expect(data).toEqual([
+    {a: 10, b: 'a'},
+    {a: 20, b: 'b4'},
+    {a: 30, b: 'c'},
+  ]);
+});

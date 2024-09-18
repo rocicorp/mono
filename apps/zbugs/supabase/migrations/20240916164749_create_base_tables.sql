@@ -1,9 +1,3 @@
-DROP TABLE IF EXISTS "user",
-"issue",
-"comment",
-"label",
-"issueLabel" CASCADE;
-
 CREATE TABLE "user" (
     "id" VARCHAR PRIMARY KEY,
     "name" VARCHAR NOT NULL
@@ -16,7 +10,7 @@ CREATE TABLE issue (
     "modified" double precision NOT NULL,
     "created" double precision NOT NULL,
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
-    "description" TEXT NOT NULL,
+    "description" TEXT,
     -- This is a denormalized column that contains a comma-separated list of
     -- label IDs. This is temporary until Zero imlements support for filter-by-
     -- subquery. It does demonstrate the utility of connecting to existing
@@ -95,40 +89,6 @@ AFTER DELETE ON "issueLabel"
 FOR EACH ROW
 EXECUTE FUNCTION update_issue_labelIDs();
 
-COPY "user"
-FROM
-    '/docker-entrypoint-initdb.d/users.csv' WITH CSV HEADER;
-
-COPY "label"
-FROM
-    '/docker-entrypoint-initdb.d/labels.csv' WITH CSV HEADER;
-
-COPY "issue"
-FROM
-    '/docker-entrypoint-initdb.d/issues.csv' WITH CSV HEADER;
-
-COPY "issueLabel"
-FROM
-    '/docker-entrypoint-initdb.d/issue_labels.csv' WITH CSV HEADER;
-
-COPY "comment"
-FROM
-    '/docker-entrypoint-initdb.d/comments.csv' WITH CSV HEADER;
-
--- We have to manually update the "labelIDs" column in the issue table because
--- COPY doesn't run triggers.
-UPDATE
-    issue
-SET
-    "labelIDs" = (
-        SELECT
-            STRING_AGG("labelID", ',')
-        FROM
-            "issueLabel"
-        WHERE
-            "issueID" = issue.id
-    );
-
 -- Create the indices on upstream so we can copy to downstream on replication.
 -- We have discussed that, in the future, the indices of the Zero replica
 -- can / should diverge from the indices of the upstream. This is because
@@ -139,19 +99,12 @@ SET
 -- Until then, I think it makes the most sense to copy the indices from upstream
 -- to the replica. The argument in favor of this is that it gives the user a single
 -- place to manage indices and it saves us a step in setting up our demo apps.
-CREATE INDEX issuelabel_issueid_idx ON "issueLabel" ("issueID");
+CREATE INDEX "issuelabel_issueid_idx" ON "issueLabel" ("issueID");
 
-CREATE INDEX issue_modified_idx ON issue (modified);
+CREATE INDEX "issue_modified_idx" ON "issue" ("modified");
 
-CREATE INDEX issue_created_idx ON issue (created);
+CREATE INDEX "issue_created_idx" ON "issue" ("created");
 
-CREATE INDEX issue_open_modified_idx ON issue (open, modified);
+CREATE INDEX "issue_open_modified_idx" ON "issue" ("open", "modified");
 
-CREATE INDEX comment_issueid_idx ON "comment" ("issueID");
-
-SELECT
-    *
-FROM
-    pg_create_logical_replication_slot('zero_slot_r1', 'pgoutput');
-
-VACUUM;
+CREATE INDEX "comment_issueid_idx" ON "comment" ("issueID");
