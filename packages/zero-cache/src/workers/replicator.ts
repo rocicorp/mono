@@ -45,10 +45,11 @@ export function handleSubscriptionsFrom(
   subscriber.onMessageType<NotificationACK>('ackNotify', async msg => {
     assert(msg.ack);
     const resolve = pendingACKs.get(msg.ack);
-    if (!resolve) {
-      lc.error?.('received ack with no resolver', msg);
-    } else {
+    if (resolve) {
       resolve();
+      pendingACKs.delete(msg.ack);
+    } else {
+      lc.error?.('received ack with no resolver', msg);
     }
   });
 
