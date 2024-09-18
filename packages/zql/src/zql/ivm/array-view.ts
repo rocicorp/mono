@@ -177,16 +177,40 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
       break;
     }
     case 'edit': {
-      const {pos, found} = binarySearch(
-        view,
-        change.oldRow,
-        schema.compareRows,
-      );
-      assert(found, 'node does not exists');
-      view[pos] = {
-        ...view[pos],
-        ...change.row,
-      };
+      // If the order changed due to the edit, we need to remove and reinsert.
+      if (schema.compareRows(change.oldRow, change.row) === 0) {
+        const {pos, found} = binarySearch(
+          view,
+          change.oldRow,
+          schema.compareRows,
+        );
+        assert(found, 'node does not exists');
+        view[pos] = {
+          ...view[pos],
+          ...change.row,
+        };
+      } else {
+        // Remove
+        {
+          const {pos, found} = binarySearch(
+            view,
+            change.oldRow,
+            schema.compareRows,
+          );
+          assert(found, 'node does not exists');
+          view.splice(pos, 1);
+        }
+        // Insert
+        {
+          const {pos, found} = binarySearch(
+            view,
+            change.row,
+            schema.compareRows,
+          );
+          assert(!found, 'node already exists');
+          view.splice(pos, 0, change.row);
+        }
+      }
       break;
     }
     default:
