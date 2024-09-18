@@ -1,9 +1,9 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {sleep} from 'shared/src/sleep.js';
 import {describe, expect, test, vi} from 'vitest';
 import {ReplicaState} from 'zero-cache/src/services/replicator/replicator.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
+import {orTimeout} from '../types/timeout.js';
 import {
   createNotifierFrom,
   getStatusFromWorker,
@@ -55,17 +55,17 @@ describe('workers/replicator', () => {
       switch (i) {
         case 0:
           // Expect msg1 to already be 'consumed' because it is not waiting on an ACK.
-          expect(await Promise.race([msg1.result, sleep(5)])).toBe('consumed');
+          expect(await orTimeout(msg1.result, 5)).toBe('consumed');
           break;
         case 1:
           // msg2 is waiting on an ACK, so it should not be consumed until the next
           // iteration of this loop.
-          expect(await Promise.race([msg2.result, sleep(5)])).toBeFalsy();
+          expect(await orTimeout(msg2.result, 5)).toBe('timed-out');
           break;
         case 2:
           // msg2 should be ACK'ed, and msg3 awaiting the ACK.
-          expect(await Promise.race([msg2.result, sleep(5)])).toBe('consumed');
-          expect(await Promise.race([msg3.result, sleep(5)])).toBeFalsy();
+          expect(await orTimeout(msg2.result, 5)).toBe('consumed');
+          expect(await orTimeout(msg3.result, 5)).toBe('timed-out');
           break;
       }
       if (notifications.length === 3) {
