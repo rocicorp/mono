@@ -1,4 +1,4 @@
-import {assert, notImplemented, unreachable} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {Immutable} from 'shared/src/immutable.js';
 import {must} from 'shared/src/must.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
@@ -104,7 +104,7 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
   if (schema.isHidden) {
     switch (change.type) {
       case 'add':
-      case 'remove': {
+      case 'remove':
         for (const [relationship, children] of Object.entries(
           change.node.relationships,
         )) {
@@ -114,9 +114,11 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
           }
         }
         return;
-      }
       case 'edit':
-        notImplemented();
+        // If hidden at this level it means that the hidden row was changed. If
+        // the row was changed in such a way that it would change the
+        // relationships then the edit would have been split into remove and
+        // add.
         return;
       case 'child': {
         const childSchema = must(
