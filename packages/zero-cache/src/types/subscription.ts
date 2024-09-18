@@ -74,9 +74,9 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   }
 
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
-  readonly #consumers: Resolver<IteratorResult<M>>[] = [];
+  readonly #consumers: Resolver<Entry<M> | null>[] = [];
   // Messages waiting to be consumed.
-  readonly #messages: M[] = [];
+  readonly #messages: Entry<M>[] = [];
   // Sentinel value signaling that the subscription is "done" and no more
   // messages can be added.
   #sentinel: 'canceled' | Error | undefined = undefined;
@@ -99,25 +99,36 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   }
 
   /**
-   * Pushes the next message to be consumed. If there is an existing unconsumed message
-   * and the Subscription has a {@link Options.coalesce coalesce} function, the specified
-   * `value` will be coalesced with the pending message.
+   * Pushes the next message to be consumed, and returns a `result` that resolves to the
+   * eventual {@link Result} of the `value`.
    *
-   * If the subscription is in a terminal state, the message is dropped and the method
-   * call is a noop.
+   * If there is an existing unconsumed message and the Subscription has a
+   * {@link Options.coalesce coalesce} function, the specified `value` will be coalesced
+   * with the pending message. In this case, the result of the pending message
+   * is resolved to `coalesced`, regardless of the method implementation.
+   *
+   * If the subscription is in a terminal state, the message is dropped and the
+   * result resolves to `unconsumed`.
    */
-  push(value: M) {
+  push(value: M): PendingResult {
+    const {promise: result, resolve} = resolver<Result>();
+    const entry = {value, resolve};
+
     if (this.#sentinel) {
-      return;
+      entry.resolve('unconsumed');
+      return {result};
     }
     const consumer = this.#consumers.shift();
     if (consumer) {
-      consumer.resolve({value});
+      consumer.resolve(entry);
     } else if (this.#coalesce && this.#messages.length) {
-      this.#messages[0] = this.#coalesce(value, this.#messages[0]);
+      const prev = this.#messages[0];
+      this.#messages[0] = {value: this.#coalesce(value, prev.value), resolve};
+      prev.resolve('coalesced');
     } else {
-      this.#messages.push(value);
+      this.#messages.push(entry);
     }
+    return {result};
   }
 
   /** False if the subscription has been canceled or has failed. */
@@ -139,9 +150,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
       this.#cleanup(
-        [...this.#messages],
+        this.#messages.map(entry => entry.value),
         sentinel instanceof Error ? sentinel : undefined,
       );
+      this.#messages.forEach(entry => entry.resolve('unconsumed'));
       this.#messages.splice(0);
 
       for (
@@ -150,18 +162,19 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         consumer = this.#consumers.shift()
       ) {
         sentinel === 'canceled'
-          ? consumer.resolve({value: undefined, done: true})
+          ? consumer.resolve(null)
           : consumer.reject(sentinel);
       }
     }
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
-    let prev: M | undefined;
+    let prev: Entry<M> | undefined;
 
     const notifyPrevConsumed = () => {
       if (prev !== undefined) {
-        this.#consumed(prev);
+        this.#consumed(prev.value);
+        prev.resolve('consumed');
         prev = undefined;
       }
     };
@@ -170,9 +183,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       next: async () => {
         notifyPrevConsumed();
 
-        const value = this.#messages.shift();
-        if (value !== undefined) {
-          prev = value;
+        const entry = this.#messages.shift();
+        if (entry !== undefined) {
+          prev = entry;
+          const {value} = entry;
           return {value: this.#publish(value)};
         }
         if (this.#sentinel === 'canceled') {
@@ -181,13 +195,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         if (this.#sentinel) {
           return Promise.reject(this.#sentinel);
         }
-        const consumer = resolver<IteratorResult<M>>();
+        const consumer = resolver<Entry<M> | null>();
         this.#consumers.push(consumer);
 
         // Wait for push() (or termination) to resolve the consumer.
         const result = await consumer.promise;
-        prev = result.done ? undefined : result.value;
-        return result.done ? result : {value: this.#publish(result.value)};
+        prev = result ?? undefined;
+        return result
+          ? {value: this.#publish(result.value)}
+          : {value: undefined, done: true};
       },
 
       return: value => {
@@ -236,4 +252,19 @@ type Options<M> = {
    * information is not made available to the AsyncIterator implementation.
    */
   cleanup?: (unconsumed: M[], err?: Error) => void;
+};
+
+/** Post-queueing results of messages. */
+export type Result = 'consumed' | 'coalesced' | 'unconsumed';
+
+/**
+ * {@link Subscription.subscribe()} wraps the `Promise<Result>` in a `PendingResult`
+ * object to avoid forcing all callers to handle the Promise, as most logic does not
+ * need to.
+ */
+export type PendingResult = {result: Promise<Result>};
+
+type Entry<M> = {
+  readonly value: M;
+  readonly resolve: (r: Result) => void;
 };
