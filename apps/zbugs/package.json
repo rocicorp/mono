@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node ./ensure-env.js && vite",
+    "dev": "vite",
     "build": "tsc && vite build",
     "check-types": "tsc --noEmit",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "node ./ensure-env.js && cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zbugs/.env"
+    "zero": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zbugs/.env"
   },
   "dependencies": {
     "@schickling/fps-meter": "^0.1.2",
