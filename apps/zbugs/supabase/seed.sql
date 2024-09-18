@@ -10129,18 +10129,9 @@ INSERT INTO "issueLabel" ("id", "labelID", "issueID") VALUES ('9aAvOa_AsYmu0sMI8
 INSERT INTO "issueLabel" ("id", "labelID", "issueID") VALUES ('Sl0vD4k7af3lhDO-LZkvL', 'HILlWIbqMi6deSaR6rNhd', 'iRNtQBs54QY3paG2NSZb5');
 INSERT INTO "issueLabel" ("id", "labelID", "issueID") VALUES ('qDZLJkVR2N8cY61uzKkZr', 'HILlWIbqMi6deSaR6rNhd', '-UwGISGEIhOk4tbWCxVlj');
 
-
--- We have to manually update the "labelIDs" column in the issue table because
--- COPY doesn't run triggers.
-UPDATE
-    issue
-SET
-    "labelIDs" = (
-        SELECT
-            STRING_AGG("labelID", ',')
-        FROM
-            "issueLabel"
-        WHERE
-            "issueID" = issue.id
-    );
 COMMIT;
+
+SELECT
+    *
+FROM
+    pg_create_logical_replication_slot('zero_slot_r1', 'pgoutput');
