@@ -102,5 +102,5 @@ export function initNewClientChannel(
     }
   };
 
-  signal.addEventListener('abort', () => channelV1.close());
+  signal.addEventListener('abort', () => channelV1.close(), {once: true});
 }

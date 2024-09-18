@@ -17,16 +17,19 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   }
 
   return new Promise((resolve, reject) => {
-    const id = setTimeout(() => {
-      resolve();
-    }, ms);
-
+    let handleAbort: () => void;
     if (signal) {
-      signal.addEventListener('abort', () => {
+      handleAbort = () => {
         clearTimeout(id);
         reject(new AbortError('Aborted'));
-      });
+      };
+      signal.addEventListener('abort', handleAbort, {once: true});
     }
+
+    const id = setTimeout(() => {
+      resolve();
+      signal?.removeEventListener('abort', handleAbort);
+    }, ms);
   });
 }
 
