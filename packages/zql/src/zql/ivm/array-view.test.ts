@@ -1,12 +1,15 @@
-import {deepClone} from 'shared/src/deep-clone.js';
-import {Immutable} from 'shared/src/immutable.js';
+import {unreachable} from 'shared/src/asserts.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import {expect, test} from 'vitest';
-import {ArrayView, EntryList} from './array-view.js';
+import {ArrayView} from './array-view.js';
 import {Change} from './change.js';
+import {Node} from './data.js';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
+import {Input} from './operator.js';
 import {Schema} from './schema.js';
+import {Stream} from './stream.js';
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -26,11 +29,10 @@ test('basics', () => {
 
   let callCount = 0;
   let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
+  const unlisten = view.addListener(entries => {
     ++callCount;
-    data = deepClone(d) as unknown[];
-  };
-  const unlisten = view.addListener(listener);
+    data = [...entries];
+  });
 
   view.hydrate();
   expect(data).toEqual([
@@ -88,11 +90,10 @@ test('hydrate-empty', () => {
 
   let callCount = 0;
   let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
+  view.addListener(entries => {
     ++callCount;
-    data = deepClone(d) as unknown[];
-  };
-  view.addListener(listener);
+    data = [...entries];
+  });
 
   view.hydrate();
   expect(data).toEqual([]);
@@ -140,10 +141,9 @@ test('tree', () => {
 
   const view = new ArrayView(join);
   let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
-    data = deepClone(d) as unknown[];
-  };
-  view.addListener(listener);
+  view.addListener(entries => {
+    data = [...entries];
+  });
 
   view.hydrate();
   expect(data).toEqual([
@@ -428,8 +428,8 @@ test('collapse hidden relationships', () => {
 
   const view = new ArrayView(input);
   let data: unknown[] = [];
-  view.addListener(d => {
-    data = deepClone(d) as unknown[];
+  view.addListener(entries => {
+    data = [...entries];
   });
 
   const changeSansType = {
@@ -560,11 +560,10 @@ test('basic with edit pushes', () => {
 
   let callCount = 0;
   let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
+  const unlisten = view.addListener(entries => {
     ++callCount;
-    data = deepClone(d) as unknown[];
-  };
-  const unlisten = view.addListener(listener);
+    data = [...entries];
+  });
 
   view.hydrate();
   expect(data).toEqual([
@@ -631,10 +630,9 @@ test('tree edit', () => {
 
   const view = new ArrayView(join);
   let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
-    data = deepClone(d) as unknown[];
-  };
-  view.addListener(listener);
+  view.addListener(entries => {
+    data = [...entries];
+  });
 
   view.hydrate();
   expect(data).toEqual([
@@ -751,10 +749,9 @@ test('edit to change the order', () => {
 
   const view = new ArrayView(ms.connect([['a', 'asc']]));
   let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
-    data = deepClone(d) as unknown[];
-  };
-  view.addListener(listener);
+  view.addListener(entries => {
+    data = [...entries];
+  });
   view.hydrate();
 
   expect(data).toEqual([
@@ -763,7 +760,6 @@ test('edit to change the order', () => {
     {a: 30, b: 'c'},
   ]);
 
-  data.length = 0;
   ms.push({
     type: 'edit',
     oldRow: {a: 20, b: 'b'},
@@ -776,12 +772,12 @@ test('edit to change the order', () => {
     {a: 30, b: 'c'},
   ]);
 
-  data.length = 0;
   ms.push({
     type: 'edit',
     oldRow: {a: 5, b: 'b2'},
     row: {a: 4, b: 'b3'},
   });
+
   view.flush();
   expect(data).toEqual([
     {a: 4, b: 'b3'},
@@ -789,7 +785,6 @@ test('edit to change the order', () => {
     {a: 30, b: 'c'},
   ]);
 
-  data.length = 0;
   ms.push({
     type: 'edit',
     oldRow: {a: 4, b: 'b3'},
@@ -801,4 +796,166 @@ test('edit to change the order', () => {
     {a: 20, b: 'b4'},
     {a: 30, b: 'c'},
   ]);
+});
+
+test('tree edit', () => {
+  const labelSchema: Schema = {
+    tableName: 'label',
+    primaryKey: ['id'],
+    columns: {id: {type: 'number'}, name: {type: 'string'}},
+    sort: [['name', 'asc']],
+    isHidden: false,
+    compareRows: (r1, r2) =>
+      stringCompare(r1.name as string, r2.name as string),
+    relationships: {},
+  };
+
+  class DummyInput implements Input {
+    getSchema(): Schema {
+      return {
+        tableName: 'issue',
+        primaryKey: ['id'],
+        columns: {id: {type: 'number'}, title: {type: 'string'}},
+        sort: [['id', 'asc']],
+        isHidden: false,
+        compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+        relationships: {
+          labels: labelSchema,
+        },
+      };
+    }
+    fetch(): Stream<Node> {
+      unreachable();
+    }
+    cleanup(): Stream<Node> {
+      unreachable();
+    }
+    setOutput(): void {}
+    destroy(): void {
+      unreachable();
+    }
+  }
+
+  const input = new DummyInput();
+  const view = new ArrayView(input);
+  view.push({
+    type: 'add',
+    node: {
+      row: {id: 1, title: 'issue1'},
+      relationships: {
+        labels: [
+          {
+            row: {id: 1, name: 'label1'},
+            relationships: {},
+          },
+        ],
+      },
+    },
+  });
+  view.push({
+    type: 'add',
+    node: {
+      row: {id: 2, title: 'issue2'},
+      relationships: {
+        labels: [
+          {
+            row: {id: 2, name: 'label2'},
+            relationships: {},
+          },
+        ],
+      },
+    },
+  });
+  let data: unknown[] = [];
+  view.addListener(entries => {
+    data = [...entries];
+  });
+  view.flush();
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label1",
+          },
+        ],
+        "title": "issue1",
+      },
+      {
+        "id": 2,
+        "labels": [
+          {
+            "id": 2,
+            "name": "label2",
+          },
+        ],
+        "title": "issue2",
+      },
+    ]
+  `);
+
+  view.push({
+    type: 'edit',
+    oldRow: {id: 1, title: 'issue1'},
+    row: {id: 1, title: 'issue1 changed'},
+  });
+  view.flush();
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label1",
+          },
+        ],
+        "title": "issue1 changed",
+      },
+      {
+        "id": 2,
+        "labels": [
+          {
+            "id": 2,
+            "name": "label2",
+          },
+        ],
+        "title": "issue2",
+      },
+    ]
+  `);
+
+  // And now edit to change order
+  view.push({
+    type: 'edit',
+    oldRow: {id: 1, title: 'issue1 changed'},
+    row: {id: 3, title: 'issue1 is now issue3'},
+  });
+  view.flush();
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 2,
+        "labels": [
+          {
+            "id": 2,
+            "name": "label2",
+          },
+        ],
+        "title": "issue2",
+      },
+      {
+        "id": 3,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label1",
+          },
+        ],
+        "title": "issue1 is now issue3",
+      },
+    ]
+  `);
 });
