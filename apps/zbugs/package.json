@@ -11,7 +11,7 @@
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zbugs/.env"
+    "zero": "node --no-warnings --loader ts-node/esm ./zero.config.ts ; cd ../../packages/zero-cache && ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",
@@ -31,6 +31,7 @@
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "wouter": "^3.3.5",
+    "zero-cache": "0.0.0",
     "zero-client": "0.0.0",
     "zero-react": "0.0.0"
   },
@@ -51,6 +52,7 @@
     "postcss-preset-env": "^7.4.3",
     "prettier": "^3.0.3",
     "tailwindcss": "^3.0.23",
+    "ts-node": "^10.9.1",
     "typescript": "^5.5.3",
     "universal-user-agent": "^7.0.2",
     "vite": "^5.2.0",

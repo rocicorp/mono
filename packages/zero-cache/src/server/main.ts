@@ -13,12 +13,12 @@ import {
   ReplicatorMode,
   subscribeTo,
 } from '../workers/replicator.js';
-import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
+import {getZeroConfig} from '../config/zero-config.js';
 
 const startMs = Date.now();
-const config = configFromEnv();
-const lc = createLogContext(config, {worker: 'dispatcher'});
+const config = await getZeroConfig();
+const lc = createLogContext(config.log, {worker: 'dispatcher'});
 
 function logErrorAndExit(err: unknown) {
   lc.error?.(err);
@@ -46,12 +46,12 @@ function loadWorker(
 }
 
 const {promise: changeStreamerReady, resolve} = resolver();
-const changeStreamer = config.CHANGE_STREAMER_URI
+const changeStreamer = config.changeStreamerUri
   ? resolve()
   : loadWorker('./src/server/change-streamer.ts').once('message', resolve);
 
-const numSyncers = config.NUM_SYNC_WORKERS
-  ? Number(config.NUM_SYNC_WORKERS)
+const numSyncers = config.numSyncWorkers
+  ? Number(config.numSyncWorkers)
   : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
     Math.max(1, availableParallelism() - 1);
 
@@ -63,7 +63,7 @@ if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = postgres(config.CVR_DB_URI, {
+  const cvrDB = postgres(config.changeDbUri, {
     ...postgresTypeConfig(),
     onnotice: () => {},
   });
@@ -75,7 +75,7 @@ if (numSyncers) {
 // connect error messages and exponential backoff.
 await changeStreamerReady;
 
-if (config.LITESTREAM) {
+if (config.litestream) {
   const mode: ReplicatorMode = 'backup';
   const replicator = loadWorker('./src/server/replicator.ts', mode, mode).once(
     'message',
@@ -88,7 +88,7 @@ if (config.LITESTREAM) {
 }
 
 if (numSyncers) {
-  const mode: ReplicatorMode = config.LITESTREAM ? 'serving-copy' : 'serving';
+  const mode: ReplicatorMode = config.litestream ? 'serving-copy' : 'serving';
   const replicator = loadWorker('./src/server/replicator.ts', mode, mode).once(
     'message',
     () => subscribeTo(replicator),

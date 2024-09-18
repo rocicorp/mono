@@ -6,17 +6,17 @@ import {initializeChangeSource} from '../services/change-streamer/pg/change-sour
 import {runOrExit} from '../services/runner.js';
 import {postgresTypeConfig} from '../types/pg.js';
 import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
-import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
+import {getZeroConfig} from '../config/zero-config.js';
 
 const MAX_CHANGE_DB_CONNECTIONS = 5;
 
 export default async function runWorker(parent: Worker) {
-  const config = configFromEnv();
-  const lc = createLogContext(config, {worker: 'change-streamer'});
+  const config = await getZeroConfig();
+  const lc = createLogContext(config.log, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
-  const changeDB = postgres(config.CHANGE_DB_URI, {
+  const changeDB = postgres(config.changeDbUri, {
     ...postgresTypeConfig(),
     max: MAX_CHANGE_DB_CONNECTIONS,
   });
@@ -29,9 +29,9 @@ export default async function runWorker(parent: Worker) {
   // Note: This performs initial sync of the replica if necessary.
   const {changeSource, replicationConfig} = await initializeChangeSource(
     lc,
-    config.UPSTREAM_URI,
-    config.REPLICA_ID,
-    config.REPLICA_DB_FILE,
+    config.upstreamUri,
+    config.replicaId,
+    config.replicaDbFile,
   );
 
   const changeStreamer = await initializeStreamer(

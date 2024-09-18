@@ -14,10 +14,10 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
-import {AuthorizationConfig} from '../../config/app-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
+import {AuthorizationConfig} from '../../config/zero-config.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
