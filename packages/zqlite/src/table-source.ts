@@ -50,7 +50,7 @@ type Statements = {
   readonly cache: StatementCache;
   readonly insert: Statement;
   readonly delete: Statement;
-  readonly update: Statement;
+  readonly update: Statement | undefined;
   readonly checkExists: Statement;
   readonly getRow: Statement;
 };
@@ -143,7 +143,7 @@ export class TableSource implements Source {
                 )}`,
               ),
             )
-          : db.prepare(compile(sql`SELECT 1`)),
+          : undefined,
       checkExists: db.prepare(
         compile(
           sql`SELECT 1 AS "exists" FROM ${sql.ident(
