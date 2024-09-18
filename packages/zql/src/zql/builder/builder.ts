@@ -35,8 +35,6 @@ export interface BuilderDelegate {
    * unique storage object for each call.
    */
   createStorage(): Storage;
-
-  staticQueryParameters: StaticQueryParameters | undefined;
 }
 
 /**
@@ -64,13 +62,18 @@ export interface BuilderDelegate {
  * const sink = new MySink(input);
  * ```
  */
-export function buildPipeline(ast: AST, delegate: BuilderDelegate): Input {
-  return buildPipelineInternal(ast, delegate);
+export function buildPipeline(
+  ast: AST,
+  delegate: BuilderDelegate,
+  staticQueryParameters: StaticQueryParameters | undefined,
+): Input {
+  return buildPipelineInternal(ast, delegate, staticQueryParameters);
 }
 
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
+  staticQueryParameters: StaticQueryParameters | undefined,
   partitionKey?: string | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
@@ -87,7 +90,7 @@ function buildPipelineInternal(
       end = new Filter(
         end,
         appliedFilters ? 'push-only' : 'all',
-        createPredicate(condition, delegate.staticQueryParameters),
+        createPredicate(condition, staticQueryParameters),
       );
     }
   }
@@ -102,6 +105,7 @@ function buildPipelineInternal(
       const child = buildPipelineInternal(
         sq.subquery,
         delegate,
+        staticQueryParameters,
         sq.correlation.childField,
       );
       end = new Join({

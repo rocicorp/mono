@@ -76,7 +76,7 @@ class QueryImpl<
   materialize(): TypedView<Smash<TReturn>> {
     const ast = this.#completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const view = new ArrayView(buildPipeline(ast, this.#delegate));
+    const view = new ArrayView(buildPipeline(ast, this.#delegate, undefined));
     const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
       view.flush();
     });
