@@ -1,5 +1,5 @@
 import {EventEmitter} from 'eventemitter3';
-import {Subscription} from '../../types/subscription.js';
+import {PendingResult, Result, Subscription} from '../../types/subscription.js';
 import {ReplicaState, ReplicaStateNotifier} from './replicator.js';
 
 /**
@@ -48,8 +48,13 @@ export class Notifier implements ReplicaStateNotifier {
     return subscription;
   }
 
-  notifySubscribers(state: ReplicaState = {state: 'version-ready'}) {
+  notifySubscribers(
+    state: ReplicaState = {state: 'version-ready'},
+  ): Promise<Result>[] {
     this.#lastStateReceived = state;
-    this.#eventEmitter.listeners('version').forEach(notify => notify(state));
+    return this.#eventEmitter
+      .listeners('version')
+      .map(notify => notify(state) as unknown as PendingResult)
+      .map(pending => pending.result);
   }
 }
