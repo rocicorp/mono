@@ -26,7 +26,6 @@ a {
   text-decoration: inherit;
 }
 
-
 body {
   margin: 0;
   display: flex;
@@ -49,7 +48,6 @@ h1 {
   font-family: inherit;
   cursor: pointer;
 }
-
 
 .primary-cta:focus,
 .primary-cta:focus-visible {
@@ -90,9 +88,9 @@ h1 {
 
 .primary-content .issue-title {
   padding-left: 1.75rem;
-  background: transparent url(assets/images/issue-open.svg) no-repeat center left;
+  background: transparent url(assets/images/issue-open.svg) no-repeat center
+    left;
 }
-
 
 /* Issue Detail */
 

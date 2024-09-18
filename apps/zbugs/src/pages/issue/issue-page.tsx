@@ -1,7 +1,6 @@
 export default function IssuePage() {
   return (
     <div className="issue-detail-container">
-      
       {/* Center column of info */}
       <div className="issue-detail">
         <div className="issue-breadcrumb">
@@ -13,10 +12,7 @@ export default function IssuePage() {
       </div>
 
       {/* Right sidebar */}
-      <div className="issue-sidebar">
-
-      </div>
-
+      <div className="issue-sidebar"></div>
     </div>
   );
 }
