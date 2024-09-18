@@ -1,16 +1,20 @@
 // https://supabase.com/docs/guides/cli/seeding-your-database
-import * as fs from 'node:fs/promises';
+import {promises as fs} from 'node:fs';
+import path from 'node:path';
+import {dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {parse} from 'csv-parse';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const tables = ['user', 'issue', 'comment', 'label', 'issueLabel'];
 const outputFile = 'seed.sql';
 
 async function convertCsvToSql(tableName) {
+  const csvFilePath = path.join(__dirname, 'seed-data', `${tableName}.csv`);
+
   try {
-    const csvContent = await fs.readFile(
-      new URL(`./seed-data/${tableName}.csv`, import.meta.url),
-      'utf-8',
-    );
+    const csvContent = await fs.readFile(csvFilePath, 'utf-8');
     const records = await new Promise((resolve, reject) => {
       parse(
         csvContent,
@@ -49,7 +53,9 @@ async function convertCsvToSql(tableName) {
 
 async function main() {
   const inserts = (
-    await Promise.all(tables.map(table => convertCsvToSql(`${table}`)))
+    await Promise.all(
+      tables.map(async table => await convertCsvToSql(`${table}`)),
+    )
   ).join('\n');
 
   const contents = /*sql*/ `BEGIN;
@@ -61,8 +67,9 @@ SELECT
 FROM
     pg_create_logical_replication_slot('zero_slot_r1', 'pgoutput');`;
 
-  await fs.writeFile(new URL(`./${outputFile}`, import.meta.url), contents);
-  console.log(`All SQL INSERT statements have been written to ${outputFile}`);
+  const outputPath = path.join(__dirname, outputFile);
+  await fs.writeFile(outputPath, contents);
+  console.log(`All SQL INSERT statements have been written to ${outputPath}`);
 }
 
-await main();
+main().catch(console.error);
