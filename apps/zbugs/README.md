@@ -16,7 +16,6 @@ Then, from root of monorepo:
 
 ```bash
 npm install
-brew install supabase/tap/supabase
 ```
 
 ### Run the "upstream" Postgres database
@@ -24,10 +23,7 @@ brew install supabase/tap/supabase
 ```bash
 cd apps/zbugs/docker
 docker compose up
-supabase start
 ```
-
-Supabase Dash: http://localhost:54323/project/default
 
 ### Run the zero-cache server
 
