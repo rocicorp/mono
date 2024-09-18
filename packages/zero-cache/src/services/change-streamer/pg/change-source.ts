@@ -130,42 +130,38 @@ class PostgresChangeSource implements ChangeSource {
       })
       .finally(() => changes.cancel());
 
-    const lsn = await confirmedFlushLSN;
-    const watermark = toLexiVersion(lsn);
-    this.#lc.info?.(`replication stream started at ${lsn} (${watermark})`);
+    // When a replication slot is created, its `confirmed_flush_lsn` is uninitialized, e.g.
+    //
+    // ```
+    //  slot_name | restart_lsn | confirmed_flush_lsn
+    //  -----------+-------------+---------------------
+    //  zero_slot | 8F/38ACB2F8 | 0/1
+    // ```
+    //
+    // However, the `restart_lsn` is _not_ a suitable replacement because it
+    // may be before the `consistent_point` lsn returned by createReplicationSlot
+    // (in initial-sync.ts). Luckily, that `consistent_point` is what we use as
+    // the `replicaVersion` to identify the initial snapshot, so we use the greater
+    // of the confirmed flush lsn (which may be 0/1) and the replica version
+    // (i.e. consistent_point).
+    const confirmedWatermark = toLexiVersion(await confirmedFlushLSN);
+    const {replicaVersion} = this.#replicationConfig;
+    const initialWatermark =
+      confirmedWatermark > replicaVersion ? confirmedWatermark : replicaVersion;
+    this.#lc.info?.(`replication stream started at ${initialWatermark}`);
 
-    return {
-      initialWatermark: watermark,
-      changes,
-      acks: {push: ack},
-    };
+    return {initialWatermark, changes, acks: {push: ack}};
   }
 
-  /**
-   * When a replication slot is created its `confirmed_flush_lsn` is uninitialized, e.g.
-   *
-   * ```
-   *  slot_name | restart_lsn | confirmed_flush_lsn
-   *  -----------+-------------+---------------------
-   *  zero_slot | 8F/38ACB2F8 | 0/1
-   * ```
-   *
-   * Using the greater of the `restart_lsn` and `confirmed_flush_lsn` produces
-   * the desired initial watermark.
-   */
   async getConfirmedFlushLSN(): Promise<string> {
     const db = postgres(this.#upstreamUri);
     const slot = replicationSlot(this.#replicaID);
     try {
-      const result = await db<{restart: string; confirmed: string}[]>`
-      SELECT restart_lsn as restart, confirmed_flush_lsn as confirmed
-        FROM pg_replication_slots 
+      const result = await db<{lsn: string}[]>`
+      SELECT confirmed_flush_lsn as lsn FROM pg_replication_slots 
         WHERE slot_name = ${slot}`;
       if (result.length === 1) {
-        const {restart, confirmed} = result[0];
-        return toLexiVersion(confirmed) > toLexiVersion(restart)
-          ? confirmed
-          : restart;
+        return result[0].lsn;
       }
       throw new Error(`Upstream is missing replication slot ${slot}`);
     } finally {
