@@ -44,71 +44,87 @@ describe('processMutation', () => {
     await testDBs.drop(db);
   });
 
-  test('new client with no last mutation id', async () => {
-    await expectTables(db, {
-      idonly: [],
-      ['zero.clients']: [],
-    });
+  test(
+    'new client with no last mutation id',
+    async () => {
+      await expectTables(db, {
+        idonly: [],
+        ['zero.clients']: [],
+      });
 
-    const error = await processMutation(undefined, db, 'abc', {
-      type: MutationType.CRUD,
-      id: 1,
-      clientID: '123',
-      name: '_zero_crud',
-      args: [
+      const error = await processMutation(
+        undefined,
+        db,
+        'abc',
         {
-          ops: [
+          type: MutationType.CRUD,
+          id: 1,
+          clientID: '123',
+          name: '_zero_crud',
+          args: [
             {
-              op: 'create',
-              entityType: 'idonly',
-              id: {id: '1'},
-              value: {},
+              ops: [
+                {
+                  op: 'create',
+                  entityType: 'idonly',
+                  id: {id: '1'},
+                  value: {},
+                },
+              ],
             },
           ],
+          timestamp: Date.now(),
         },
-      ],
-      timestamp: Date.now(),
-    });
+        {},
+      );
 
-    expect(error).undefined;
+      expect(error).undefined;
 
-    await expectTables(db, {
-      idonly: [{id: '1'}],
-      ['zero.clients']: [
-        {
-          clientGroupID: 'abc',
-          clientID: '123',
-          lastMutationID: 1n,
-          userID: null,
-        },
-      ],
-    });
-  });
+      await expectTables(db, {
+        idonly: [{id: '1'}],
+        ['zero.clients']: [
+          {
+            clientGroupID: 'abc',
+            clientID: '123',
+            lastMutationID: 1n,
+            userID: null,
+          },
+        ],
+      });
+    },
+    {},
+  );
 
   test('next sequential mutation for previously seen client', async () => {
     await db`
       INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
          VALUES ('abc', '123', 2)`;
 
-    const error = await processMutation(undefined, db, 'abc', {
-      type: MutationType.CRUD,
-      id: 3,
-      clientID: '123',
-      name: '_zero_crud',
-      args: [
-        {
-          ops: [
-            {
-              op: 'create',
-              entityType: 'idonly',
-              id: {id: '1'},
-              value: {},
-            },
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    });
+    const error = await processMutation(
+      undefined,
+      db,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 3,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'create',
+                entityType: 'idonly',
+                id: {id: '1'},
+                value: {},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      {},
+    );
 
     expect(error).undefined;
 
@@ -130,25 +146,31 @@ describe('processMutation', () => {
       INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
         VALUES ('abc', '123', 2)`;
 
-    const error = await processMutation(undefined, db, 'abc', {
-      type: MutationType.CRUD,
-      id: 2,
-      clientID: '123',
-      name: '_zero_crud',
-      args: [
-        {
-          ops: [
-            {
-              op: 'create',
-              entityType: 'idonly',
-              id: {id: '1'},
-              value: {},
-            },
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    });
+    const error = await processMutation(
+      undefined,
+      db,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 2,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'create',
+                entityType: 'idonly',
+                id: {id: '1'},
+                value: {},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      {},
+    );
 
     expect(error).undefined;
 
@@ -172,25 +194,31 @@ describe('processMutation', () => {
       INSERT INTO idonly (id) VALUES ('1');
       `.simple();
 
-    const error = await processMutation(undefined, db, 'abc', {
-      type: MutationType.CRUD,
-      id: 2,
-      clientID: '123',
-      name: '_zero_crud',
-      args: [
-        {
-          ops: [
-            {
-              op: 'create',
-              entityType: 'idonly',
-              id: {id: '1'}, // This would result in a duplicate key value if applied.
-              value: {},
-            },
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    });
+    const error = await processMutation(
+      undefined,
+      db,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 2,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'create',
+                entityType: 'idonly',
+                id: {id: '1'}, // This would result in a duplicate key value if applied.
+                value: {},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      {},
+    );
 
     expect(error).undefined;
 
@@ -213,25 +241,31 @@ describe('processMutation', () => {
         VALUES ('abc', '123', 1)`;
 
     await expect(
-      processMutation(undefined, db, 'abc', {
-        type: MutationType.CRUD,
-        id: 3,
-        clientID: '123',
-        name: '_zero_crud',
-        args: [
-          {
-            ops: [
-              {
-                op: 'create',
-                entityType: 'idonly',
-                id: {id: '1'},
-                value: {},
-              },
-            ],
-          },
-        ],
-        timestamp: Date.now(),
-      }),
+      processMutation(
+        undefined,
+        db,
+        'abc',
+        {
+          type: MutationType.CRUD,
+          id: 3,
+          clientID: '123',
+          name: '_zero_crud',
+          args: [
+            {
+              ops: [
+                {
+                  op: 'create',
+                  entityType: 'idonly',
+                  id: {id: '1'},
+                  value: {},
+                },
+              ],
+            },
+          ],
+          timestamp: Date.now(),
+        },
+        {},
+      ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: ["error","InvalidPush","Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."]]`,
     );
@@ -250,58 +284,64 @@ describe('processMutation', () => {
   });
 
   test('process create, set, update, delete all at once', async () => {
-    const error = await processMutation(undefined, db, 'abc', {
-      type: MutationType.CRUD,
-      id: 1,
-      clientID: '123',
-      name: '_zero_crud',
-      args: [
-        {
-          ops: [
-            {
-              op: 'create',
-              entityType: 'id_and_cols',
-              id: {id: '1'},
-              value: {
-                col1: 'create',
-                col2: 'create',
+    const error = await processMutation(
+      undefined,
+      db,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'create',
+                entityType: 'id_and_cols',
+                id: {id: '1'},
+                value: {
+                  col1: 'create',
+                  col2: 'create',
+                },
               },
-            },
-            {
-              op: 'set',
-              entityType: 'id_and_cols',
-              id: {id: '2'},
-              value: {
-                col1: 'set',
-                col2: 'set',
+              {
+                op: 'set',
+                entityType: 'id_and_cols',
+                id: {id: '2'},
+                value: {
+                  col1: 'set',
+                  col2: 'set',
+                },
               },
-            },
-            {
-              op: 'update',
-              entityType: 'id_and_cols',
-              id: {id: '1'},
-              partialValue: {
-                col1: 'update',
+              {
+                op: 'update',
+                entityType: 'id_and_cols',
+                id: {id: '1'},
+                partialValue: {
+                  col1: 'update',
+                },
               },
-            },
-            {
-              op: 'set',
-              entityType: 'id_and_cols',
-              id: {id: '1'},
-              value: {
-                col2: 'set',
+              {
+                op: 'set',
+                entityType: 'id_and_cols',
+                id: {id: '1'},
+                value: {
+                  col2: 'set',
+                },
               },
-            },
-            {
-              op: 'delete',
-              entityType: 'id_and_cols',
-              id: {id: '2'},
-            },
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    } satisfies CRUDMutation);
+              {
+                op: 'delete',
+                entityType: 'id_and_cols',
+                id: {id: '2'},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      } satisfies CRUDMutation,
+      {},
+    );
 
     expect(error).undefined;
 
@@ -325,27 +365,33 @@ describe('processMutation', () => {
   });
 
   test('fk failure', async () => {
-    const error = await processMutation(undefined, db, 'abc', {
-      type: MutationType.CRUD,
-      id: 1,
-      clientID: '123',
-      name: '_zero_crud',
-      args: [
-        {
-          ops: [
-            {
-              op: 'create',
-              entityType: 'fk_ref',
-              id: {id: '1'},
-              value: {
-                ref: '1',
+    const error = await processMutation(
+      undefined,
+      db,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'create',
+                entityType: 'fk_ref',
+                id: {id: '1'},
+                value: {
+                  ref: '1',
+                },
               },
-            },
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    } satisfies CRUDMutation);
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      } satisfies CRUDMutation,
+      {},
+    );
 
     expect(error).toEqual(
       'PostgresError: insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
