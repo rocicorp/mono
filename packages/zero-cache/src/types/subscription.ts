@@ -126,7 +126,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
    * If there is an existing unconsumed message and the Subscription has a
    * {@link Options.coalesce coalesce} function, the specified `value` will be coalesced
    * with the pending message. In this case, the result of the pending message
-   * is resolved to `coalesced`, regardless of the method implementation.
+   * is resolved to `coalesced`, regardless of the `coalesce` function implementation.
    *
    * If the subscription is in a terminal state, the message is dropped and the
    * result resolves to `unconsumed`.
@@ -204,8 +204,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         const entry = this.#messages.shift();
         if (entry !== undefined) {
           prev = entry;
-          const {value} = entry;
-          return {value: this.#publish(value)};
+          return {value: this.#publish(entry.value)};
         }
         if (this.#sentinel === 'canceled') {
           return {value: undefined, done: true};
