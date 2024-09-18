@@ -769,7 +769,6 @@ test('edit to change the order', () => {
     oldRow: {a: 20, b: 'b'},
     row: {a: 5, b: 'b2'},
   });
-  expect(data).toEqual([]);
   view.flush();
   expect(data).toEqual([
     {a: 5, b: 'b2'},
@@ -783,11 +782,23 @@ test('edit to change the order', () => {
     oldRow: {a: 5, b: 'b2'},
     row: {a: 4, b: 'b3'},
   });
-  expect(data).toEqual([]);
   view.flush();
   expect(data).toEqual([
     {a: 4, b: 'b3'},
     {a: 10, b: 'a'},
+    {a: 30, b: 'c'},
+  ]);
+
+  data.length = 0;
+  ms.push({
+    type: 'edit',
+    oldRow: {a: 4, b: 'b3'},
+    row: {a: 20, b: 'b4'},
+  });
+  view.flush();
+  expect(data).toEqual([
+    {a: 10, b: 'a'},
+    {a: 20, b: 'b4'},
     {a: 30, b: 'c'},
   ]);
 });
