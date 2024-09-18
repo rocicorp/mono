@@ -55,7 +55,7 @@ npm run zero
 
 ### Run the web app
 
-From the `zbugs` directory, in another tab:
+In another tab:
 
 ```bash
 VITE_PUBLIC_SERVER="http://[::1]:3000" npm run dev
