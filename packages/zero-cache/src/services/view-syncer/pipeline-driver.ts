@@ -155,6 +155,7 @@ export class PipelineDriver {
     const input = buildPipeline(query, {
       getSource: name => this.#getSource(name),
       createStorage: () => this.#createStorage(),
+      staticQueryParameters: undefined,
     });
     this.#pipelines.set(hash, input);
 

@@ -1,4 +1,4 @@
-import {Ordering, SimpleCondition} from '../ast/ast.js';
+import {Condition, Ordering} from '../ast/ast.js';
 import {Row} from './data.js';
 import {Input} from './operator.js';
 
@@ -55,7 +55,7 @@ export interface Source {
    */
   connect(
     sort: Ordering,
-    optionalFilters?: readonly SimpleCondition[] | undefined,
+    optionalFilters?: readonly Condition[] | undefined,
   ): SourceInput;
 
   /**

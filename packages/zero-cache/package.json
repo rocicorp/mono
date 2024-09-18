@@ -13,7 +13,7 @@
     "local": "node --loader ts-node/esm tool/local.ts",
     "start": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts",
     "bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/bench.ts",
-    "wal_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal_bench.ts"
+    "wal_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal-bench.ts"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",

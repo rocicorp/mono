@@ -10,6 +10,13 @@ import {Skip} from '../ivm/skip.js';
 import {Source} from '../ivm/source.js';
 import {Take} from '../ivm/take.js';
 import {createPredicate} from './filter.js';
+import {Row} from '../ivm/data.js';
+import {JSONValue} from 'shared/src/json.js';
+
+export type StaticQueryParameters = {
+  authData: Record<string, JSONValue>;
+  preMutationRow: Row | undefined;
+};
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
@@ -28,6 +35,8 @@ export interface BuilderDelegate {
    * unique storage object for each call.
    */
   createStorage(): Storage;
+
+  staticQueryParameters: StaticQueryParameters | undefined;
 }
 
 /**
@@ -78,7 +87,7 @@ function buildPipelineInternal(
       end = new Filter(
         end,
         appliedFilters ? 'push-only' : 'all',
-        createPredicate(condition),
+        createPredicate(condition, delegate.staticQueryParameters),
       );
     }
   }

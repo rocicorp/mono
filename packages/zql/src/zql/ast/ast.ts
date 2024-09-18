@@ -68,7 +68,7 @@ export type CorrelatedSubQuery = {
  * ivm1 supports Conjunctions and Disjunctions.
  * We'll support them in the future.
  */
-export type Condition = SimpleCondition;
+export type Condition = SimpleCondition | ParameterizedCondition;
 export type SimpleCondition = {
   type: 'simple';
   op: SimpleOperator;
@@ -85,6 +85,41 @@ export type SimpleCondition = {
    * operator defined and `null != null` in SQL.
    */
   value: string | number | boolean | ReadonlyArray<string | number | boolean>;
+};
+export type ParameterizedCondition = {
+  type: 'parameterized';
+  op: SimpleOperator;
+  field: string;
+  value: Parameter;
+};
+
+/**
+ * A parameter is a value that is not known at the time the query is written
+ * and is resolved at runtime.
+ *
+ * StaticParameters refer to something provided by the caller.
+ * StaticParameters are injected when the query pipeline is built from the AST
+ * and do not change for the life of that pipeline.
+ *
+ * An example StaticParameter is the current authentication data.
+ * When a user is authenticated, queries on the server have access
+ * to the user's authentication data in order to evaluate authorization rules.
+ * Authentication data doesn't change over the life of a query as a change
+ * in auth data would represent a log-in / log-out of the user.
+ *
+ * AncestorParameters refer to rows encountered while running the query.
+ * They are used by subqueries to refer to rows emitted by parent queries.
+ */
+type Parameter = StaticParameter;
+type StaticParameter = {
+  type: 'static';
+  // The "namespace" of the injected parameter.
+  // Write authorization will send the value of a row
+  // prior to the mutation being run (preMutationRow).
+  // Read and write authorization will both send the
+  // current authentication data (authData).
+  anchor: 'authData' | 'preMutationRow';
+  field: string;
 };
 
 export function normalizeAST(ast: AST): Required<AST> {

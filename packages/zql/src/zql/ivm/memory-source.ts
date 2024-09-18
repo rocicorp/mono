@@ -116,7 +116,9 @@ export class MemorySource implements Source {
       output: undefined,
       sort,
       compareRows: makeComparator(sort),
-      optionalFilters: (optionalFilters ?? []).map(f => createPredicate(f)),
+      optionalFilters: (optionalFilters ?? []).map(f =>
+        createPredicate(f, undefined),
+      ),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
