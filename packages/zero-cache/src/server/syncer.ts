@@ -16,6 +16,7 @@ import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
+import {getAppConfig} from '../config/app-config.js';
 
 export default async function runWorker(parent: Worker) {
   const config = configFromEnv();
@@ -64,7 +65,9 @@ export default async function runWorker(parent: Worker) {
       sub,
     );
 
-  const mutagenFactory = (id: string) => new MutagenService(lc, id, upstreamDB);
+  const appConfig = await getAppConfig(config.APP_CONFIG_PATH);
+  const mutagenFactory = (id: string) =>
+    new MutagenService(lc, id, upstreamDB, appConfig.authorization);
 
   new Syncer(lc, viewSyncerFactory, mutagenFactory, parent).run();
 

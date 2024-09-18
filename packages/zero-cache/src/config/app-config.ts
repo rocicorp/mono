@@ -9,6 +9,7 @@
 import {AST} from 'zql/src/zql/ast/ast.js';
 import * as v from 'shared/src/valita.js';
 import {astSchema} from 'zero-protocol';
+import fs from 'node:fs/promises';
 
 type Action = 'read' | 'insert' | 'update' | 'delete';
 type RuleType = 'allow';
@@ -52,8 +53,19 @@ export type AuthorizationConfig = {
   };
 };
 
-export const zeroConfigSchema = v.object({
+export const appConfigSchema = v.object({
   authorization: authorizationConfigSchema,
 });
 
-export type ZeroConfig = v.Infer<typeof zeroConfigSchema>;
+export type AppConfig = v.Infer<typeof appConfigSchema>;
+
+let loadedConfig: Promise<AppConfig> | undefined;
+export function getAppConfig(path: string) {
+  if (loadedConfig) {
+    return loadedConfig;
+  }
+  loadedConfig = fs
+    .readFile(path, 'utf-8')
+    .then(rawContent => v.parse(JSON.parse(rawContent), appConfigSchema));
+  return loadedConfig;
+}

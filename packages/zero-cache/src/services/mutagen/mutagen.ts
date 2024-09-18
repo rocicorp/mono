@@ -15,6 +15,7 @@ import {
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
+import {AuthorizationConfig} from '../../config/app-config.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -29,17 +30,30 @@ export class MutagenService implements Mutagen, Service {
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
   readonly #stopped = resolver();
+  readonly #authorizationConfig: AuthorizationConfig;
 
-  constructor(lc: LogContext, clientGroupID: string, upstream: PostgresDB) {
+  constructor(
+    lc: LogContext,
+    clientGroupID: string,
+    upstream: PostgresDB,
+    authorizationConfig: AuthorizationConfig,
+  ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'Mutagen')
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
+    this.#authorizationConfig = authorizationConfig;
   }
 
   processMutation(mutation: Mutation): Promise<MutationError | undefined> {
-    return processMutation(this.#lc, this.#upstream, this.id, mutation);
+    return processMutation(
+      this.#lc,
+      this.#upstream,
+      this.id,
+      mutation,
+      this.#authorizationConfig,
+    );
   }
 
   run(): Promise<void> {
@@ -57,6 +71,7 @@ export async function processMutation(
   db: PostgresDB,
   clientGroupID: string,
   mutation: Mutation,
+  _authorizationConfig: AuthorizationConfig,
 ): Promise<MutationError | undefined> {
   assert(
     mutation.type === MutationType.CRUD,
