@@ -52,7 +52,7 @@ describe('workers/replicator', () => {
     let i = 0;
     for await (const msg of notifier.subscribe()) {
       notifications.push(msg);
-      switch (i) {
+      switch (i++) {
         case 0:
           // Expect msg1 to already be 'consumed' because it is not waiting on an ACK.
           expect(await orTimeout(msg1.result, 5)).toBe('consumed');

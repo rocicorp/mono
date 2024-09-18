@@ -42,7 +42,7 @@ export function handleSubscriptionsFrom(
 ) {
   const pendingACKs = new Map<number, () => void>();
 
-  subscriber.onMessageType<NotificationACK>('ackNotify', async msg => {
+  subscriber.onMessageType<NotificationACK>('ackNotify', msg => {
     assert(msg.ack);
     const resolve = pendingACKs.get(msg.ack);
     if (resolve) {
