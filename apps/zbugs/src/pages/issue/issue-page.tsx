@@ -1,8 +1,10 @@
-import {useRoute} from 'wouter';
-import {useZero} from '../../domain/schema.js';
-import {useQuery} from 'zero-react/src/use-query.js';
 import {useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
+import {useRoute} from 'wouter';
+import {QueryRowType} from 'zero-client';
+import {useQuery} from 'zero-react/src/use-query.js';
+import {useZero} from '../../domain/schema.js';
+import Markdown from '../../components/markdown.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -10,14 +12,12 @@ export default function IssuePage() {
   const [match, params] = useRoute('/issue/:id');
 
   // todo: one
-  const issue = useQuery(
-    match &&
-      z.query.issue
-        .where('id', params?.id ?? '')
-        .related('creator')
-        .related('labels')
-        .related('comments', c => c.related('creator')),
-  )[0];
+  const q = z.query.issue
+    .where('id', params?.id ?? '')
+    .related('creator')
+    .related('labels')
+    .related('comments', c => c.related('creator'));
+  const issue = useQuery(match && q)[0] as QueryRowType<typeof q> | undefined;
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
@@ -86,9 +86,7 @@ export default function IssuePage() {
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
         {!editing ? (
-          <div style={{whiteSpace: 'break-spaces'}}>
-            {rendering.description}
-          </div>
+          <Markdown>{rendering.description}</Markdown>
         ) : (
           <TextareaAutosize
             style={{color: 'black', width: '600px'}}
@@ -101,7 +99,7 @@ export default function IssuePage() {
             <h2 style={{fontSize: '1.5em', marginTop: '1em'}}>Comments</h2>
             {issue.comments.map(comment => (
               <div key={comment.id} style={{marginBottom: '1em'}}>
-                {comment.body} – {comment.creator[0].name}
+                <Markdown>{comment.body}</Markdown> – {comment.creator[0].name}
               </div>
             ))}
           </div>
