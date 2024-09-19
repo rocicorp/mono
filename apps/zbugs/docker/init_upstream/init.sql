@@ -14,6 +14,7 @@ CREATE TABLE "user" (
 );
 
 CREATE UNIQUE INDEX user_login_idx ON "user" (login);
+CREATE UNIQUE INDEX user_githubid_idx ON "user" ("githubID");
 
 CREATE TABLE issue (
     "id" VARCHAR PRIMARY KEY,

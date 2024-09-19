@@ -58,16 +58,17 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
 
   let userId = nanoid();
   const existingUserId =
-    await sql`SELECT id FROM "user" WHERE "login" = ${userDetails.data.login}`;
+    await sql`SELECT id FROM "user" WHERE "githubID" = ${userDetails.data.id}`;
   if (existingUserId.length > 0) {
     userId = existingUserId[0].id;
   } else {
     await sql`INSERT INTO "user"
-    ("id", "login", "name", "avatar") VALUES (
+    ("id", "login", "name", "avatar", "githubID") VALUES (
       ${userId},
       ${userDetails.data.login},
       ${userDetails.data.name},
-      ${userDetails.data.avatar_url}
+      ${userDetails.data.avatar_url},
+      ${userDetails.data.id}
     )`;
   }
 
