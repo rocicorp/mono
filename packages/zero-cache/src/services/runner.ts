@@ -66,7 +66,11 @@ export async function runOrExit(
   }
 
   try {
-    await Promise.all(services.map(svc => svc.run()));
+    // Exit if any of the services stop.
+    const svc = await Promise.race(
+      services.map(svc => svc.run().then(() => svc)),
+    );
+    lc.info?.(`exiting because ${svc.constructor.name} (${svc.id}) stopped`);
     process.exit(0);
   } catch (e) {
     lc.error?.(`exiting on error`, e);
