@@ -27,14 +27,14 @@ import {TypedView} from './typed-view.js';
 
 export function newQuery<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
+  TReturn extends QueryResultRow = DefaultQueryResultRow<TSchema>,
 >(delegate: QueryDelegate, schema: TSchema): Query<TSchema, TReturn> {
   return new QueryImpl(delegate, schema);
 }
 
 function newQueryWithAST<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow>,
+  TReturn extends QueryResultRow,
 >(delegate: QueryDelegate, schema: TSchema, ast: AST): Query<TSchema, TReturn> {
   return new QueryImpl(delegate, schema, ast);
 }
@@ -47,7 +47,7 @@ export interface QueryDelegate extends BuilderDelegate {
 
 class QueryImpl<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
+  TReturn extends QueryResultRow = DefaultQueryResultRow<TSchema>,
 > implements Query<TSchema, TReturn>
 {
   readonly #ast: AST;
@@ -68,7 +68,7 @@ class QueryImpl<
 
   select<TFields extends Selector<TSchema>[]>(
     ..._fields: TFields
-  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>[]> {
+  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
     return newQueryWithAST(this.#delegate, this.#schema, this.#ast);
   }
@@ -124,19 +124,13 @@ class QueryImpl<
     relationship: TRelationship,
   ): Query<
     TSchema,
-    Array<
-      AddSubselect<
-        Query<
-          PullSchemaForRelationship<TSchema, TRelationship>,
-          Array<
-            DefaultQueryResultRow<
-              PullSchemaForRelationship<TSchema, TRelationship>
-            >
-          >
-        >,
-        TReturn,
-        TRelationship & string
-      >
+    AddSubselect<
+      Query<
+        PullSchemaForRelationship<TSchema, TRelationship>,
+        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
+      >,
+      TReturn,
+      TRelationship & string
     >
   >;
   related<
@@ -148,11 +142,7 @@ class QueryImpl<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        Array<
-          DefaultQueryResultRow<
-            PullSchemaForRelationship<TSchema, TRelationship>
-          >
-        >
+        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
       >,
     ) => TSub = q => q as any,
   ) {
