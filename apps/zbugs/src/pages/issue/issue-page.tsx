@@ -54,15 +54,6 @@ export default function IssuePage() {
           <span className="breadcrumb-item">&rarr;</span>
           <span className="breadcrumb-item">ZB-15</span>
         </div>
-        {!editing ? (
-          <h1>{rendering.title}</h1>
-        ) : (
-          <TextareaAutosize
-            value={rendering.title}
-            style={{color: 'black', width: '600px'}}
-            onChange={e => setEdits({...edits, title: e.target.value})}
-          />
-        )}
         <div>
           {!editing ? (
             <button
@@ -82,6 +73,16 @@ export default function IssuePage() {
             </>
           )}
         </div>
+        {!editing ? (
+          <h1 className="issue-detail-title">{rendering.title}</h1>
+        ) : (
+          <TextareaAutosize
+            value={rendering.title}
+            style={{color: 'black', width: '600px'}}
+            onChange={e => setEdits({...edits, title: e.target.value})}
+          />
+        )}
+
         {/* These comments are actually github markdown which unfortunately has
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
@@ -95,11 +96,12 @@ export default function IssuePage() {
           />
         )}
         {issue.comments.length > 0 ? (
-          <div>
-            <h2 style={{fontSize: '1.5em', marginTop: '1em'}}>Comments</h2>
+          <div className="comments-container">
+            <h2 className="issue-detail-label">Comments</h2>
             {issue.comments.map(comment => (
-              <div key={comment.id} style={{marginBottom: '1em'}}>
-                <Markdown>{comment.body}</Markdown> – {comment.creator[0].name}
+              <div key={comment.id} className="comment-item">
+                <p className="comment-author">{comment.creator[0].name}</p>
+                <Markdown>{comment.body}</Markdown>
               </div>
             ))}
           </div>
@@ -108,16 +110,24 @@ export default function IssuePage() {
 
       {/* Right sidebar */}
       <div className="issue-sidebar">
-        <p>
-          <b className="mr-2">Creator:</b>
-          {issue.creator[0].name}
-        </p>
-        <p>
-          <b className="mr-2">Labels:</b>
+        <div className="sidebar-item">
+          <p className="issue-detail-label">Status</p>
+          <span className="sidebar-button sidebar-status-open">Open</span>
+        </div>
+
+        <div className="sidebar-item">
+          <p className="issue-detail-label">Creator</p>
+          <span className="sidebar-button issue-creator">
+            {issue.creator[0].name}
+          </span>
+        </div>
+
+        <div className="sidebar-item">
+          <p className="issue-detail-label">Labels</p>
           {issue.labels.map(label => (
             <span key={label.id}>{label.name}</span>
           ))}
-        </p>
+        </div>
       </div>
     </div>
   );

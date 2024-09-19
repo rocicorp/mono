@@ -15,10 +15,15 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
+  /* Color */
   --color-text-primary: rgba(255, 255, 255, 0.85);
   --color-text-primary-active: rgba(255, 255, 255, 1);
   --color-primary-cta: rgba(255, 92, 0, 1);
-  --color-nav-selected: rgba(48, 48, 48, 1);
+  --color-nav-selected: rgba(30, 30, 30, 1);
+
+  /* Typography */
+  --typo-label-size: 0.875rem;
+  --typo-label-weight: 800;
 }
 
 a {
@@ -37,6 +42,15 @@ body {
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
+}
+
+.app-container {
+  width: 100vw;
+}
+
+.zero-logo {
+  width: 100%;
+  height: auto;
 }
 
 .primary-cta {
@@ -74,6 +88,7 @@ h1 {
 }
 
 .primary-content {
+  width: 100%;
   padding-left: 16rem;
 }
 
@@ -94,7 +109,87 @@ h1 {
 
 /* Issue Detail */
 
+.issue-detail-container {
+  width: 100%;
+}
+
+.issue-detail {
+  padding-right: 19rem;
+}
+
+.issue-sidebar {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  display: flex;
+  flex-direction: column;
+  width: 16rem;
+}
+
+.sidebar-item {
+  margin-bottom: 2rem;
+}
+
+.sidebar-button {
+  background-color: var(--color-nav-selected);
+  display: block;
+  padding: 0.8175rem;
+  border-radius: 0.5rem;
+}
+
+.sidebar-status-open {
+  padding-left: 2.5rem;
+  background: var(--color-nav-selected) url(assets/images/issue-open.svg)
+    no-repeat 0.8175rem center;
+}
+
+.issue-detail-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 1.5rem 0;
+}
+
+.issue-detail-label {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  margin-bottom: 1rem;
+}
+
+.issue-detail p {
+  word-wrap: break-word;
+  overflow: hidden;
+}
+.issue-detail a {
+  word-break: break-all;
+  overflow: hidden;
+}
+
+.comments-container {
+  margin-top: 4rem;
+}
+
+.comment-item {
+  margin-bottom: 1rem;
+  background-color: var(--color-nav-selected);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.comment-item:last-child {
+  margin-bottom: 0;
+}
+
+.comment-author {
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.label-item {
+}
+
 .breadcrumb-item {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
   padding-right: 0.25rem;
 }
 

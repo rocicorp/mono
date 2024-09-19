@@ -11,7 +11,7 @@ export function Nav() {
   return (
     <div className="flex flex-col gap-8">
       <Link href="/">
-        <img src={logoURL} style={{marginRight: '1px'}} />
+        <img src={logoURL} className="zero-logo" />
       </Link>
       {/* could not figure out how to add this color to tailwind.config.js */}
       <button className="primary-cta">New Issue</button>
