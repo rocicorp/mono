@@ -161,10 +161,10 @@ describe('streams', () => {
       str: 'foo',
       extras: [
         Number.MAX_SAFE_INTEGER,
-        BigInt(Number.MAX_SAFE_INTEGER + 1),
-        BigInt(Number.MAX_SAFE_INTEGER + 2),
-        BigInt(Number.MAX_SAFE_INTEGER + 3),
-        BigInt(Number.MAX_SAFE_INTEGER + 4),
+        BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+        BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+        BigInt(Number.MAX_SAFE_INTEGER) + 4n,
       ],
     } as Message);
 
@@ -175,10 +175,10 @@ describe('streams', () => {
         str: 'foo',
         extras: [
           Number.MAX_SAFE_INTEGER,
-          BigInt(Number.MAX_SAFE_INTEGER + 1),
-          BigInt(Number.MAX_SAFE_INTEGER + 2),
-          BigInt(Number.MAX_SAFE_INTEGER + 3),
-          BigInt(Number.MAX_SAFE_INTEGER + 4),
+          BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+          BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+          BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+          BigInt(Number.MAX_SAFE_INTEGER) + 4n,
         ],
       },
     ]);
