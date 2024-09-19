@@ -52,7 +52,7 @@ export function Nav() {
               setJwt(undefined);
             }}
           >
-            Logout {(jwt as any).name}
+            Logout {(jwt as {name: string}).name}
           </span>
         )}
       </div>
