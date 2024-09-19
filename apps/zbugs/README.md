@@ -52,6 +52,17 @@ REPLICA_DB_FILE = "/tmp/zbugs-sync-replica.db"
 
 # Logging level for zero-cache service.
 LOG_LEVEL = "debug"
+
+# The client id for the GitHub app responisble for OAuth
+# https://docs.github.com/en/apps/creating-github-apps
+GITHUB_CLIENT_ID = ""
+# The secret for the client
+GITHUB_CLIENT_SECRET = ""
+
+# Secret used to sign and verify the JWT
+# Set this to something real if you intend to deploy
+# the app.
+JWT_SECRET = "my-localhost-testing-secret"
 ```
 
 Then start the server:
