@@ -30,7 +30,6 @@ export default defineConfig({
   plugins: [...plugins, inlineWASM()],
   test: {
     include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
-    retry: 3,
     globalSetup: ['./test/pg-container-setup.ts'],
     onConsoleLog(log: string) {
       if (

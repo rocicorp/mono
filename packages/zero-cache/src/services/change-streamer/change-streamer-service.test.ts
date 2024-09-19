@@ -21,7 +21,7 @@ import {
 } from './change-streamer.js';
 import {ChangeLogEntry} from './schema/tables.js';
 
-describe('change-streamer/service', {retry: 3}, () => {
+describe('change-streamer/service', () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
