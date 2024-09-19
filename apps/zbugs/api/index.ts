@@ -42,7 +42,6 @@ fastify.get('/api', async (_req, reply) => {
   return reply.status(200).send({hello: 'world'});
 });
 
-// The service provider redirect the user here after successful login
 fastify.get('/api/login/github/callback', async function (request, reply) {
   const {token} =
     await this.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
@@ -58,15 +57,18 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
   });
 
   let userId = nanoid();
-  const maybeExistingID = await sql`INSERT INTO "user"
+  const existingUserId =
+    await sql`SELECT id FROM "user" WHERE "login" = ${userDetails.data.login}`;
+  if (existingUserId.length > 0) {
+    userId = existingUserId[0].id;
+  } else {
+    await sql`INSERT INTO "user"
     ("id", "login", "name", "avatar") VALUES (
       ${userId},
       ${userDetails.data.login},
       ${userDetails.data.name},
       ${userDetails.data.avatar_url}
-    ) ON CONFLICT ("login") DO NOTHING RETURNING id`;
-  if (maybeExistingID.length > 0) {
-    userId = maybeExistingID[0].id;
+    )`;
   }
 
   const jwtPayload = {
