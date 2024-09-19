@@ -230,6 +230,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     void this.#storer.run();
 
     while (this.#state.shouldRun()) {
+      let err: unknown;
       try {
         const stream = await this.#source.startStream();
         this.#stream = stream;
@@ -250,13 +251,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           this.#forwarder.forward([watermark, change]);
         }
       } catch (e) {
-        this.#lc.error?.(`Error in Replication Stream.`, e);
+        err = e;
       } finally {
         this.#stream?.changes.cancel();
         this.#stream = undefined;
       }
 
-      await this.#state.backoff(this.#lc);
+      await this.#state.backoff(this.#lc, err);
     }
     this.#lc.info?.('ChangeStreamer stopped');
   }
