@@ -1,3 +1,4 @@
+import {PG_ADMIN_SHUTDOWN} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
@@ -5,10 +6,17 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
+import {DatabaseError} from 'pg-protocol';
 import postgres from 'postgres';
+import {AbortError} from 'shared/src/abort-error.js';
+import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {registerPostgresTypeParsers} from 'zero-cache/src/types/pg.js';
+import {
+  PostgresDB,
+  postgresTypeConfig,
+  registerPostgresTypeParsers,
+} from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
@@ -76,97 +84,133 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   async startStream(): Promise<ChangeStream> {
-    // Note: Starting a replication stream at '0/0' defaults to starting at
-    // the slot's `confirmed_flush_lsn`, as detailed in
-    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-START-REPLICATION-SLOT-LOGICAL
-    let lastLSN = '0/0';
+    const db = postgres(this.#upstreamUri, postgresTypeConfig());
+    const slot = replicationSlot(this.#replicaID);
 
-    const ack = (commit?: Commit) => {
-      if (commit) {
-        const {watermark} = commit[2];
-        lastLSN = fromLexiVersion(watermark);
-      }
-      void service.acknowledge(lastLSN);
-    };
+    try {
+      // Note: Starting a replication stream at '0/0' defaults to starting at
+      // the slot's `confirmed_flush_lsn`, as detailed in
+      // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-START-REPLICATION-SLOT-LOGICAL
+      let lastLSN = '0/0';
 
-    const changes = Subscription.create<DownstreamChange>({
-      cleanup: () => service.stop(),
-    });
-
-    // To avoid a race condition when handing off the replication stream
-    // between tasks, query the `confirmed_flush_lsn` for the replication
-    // slot only after the replication stream starts, as that is when it
-    // is guaranteed not to change (i.e. until we ACK a commit).
-    const {promise: confirmedFlushLSN, resolve, reject} = resolver<string>();
-
-    const service = new LogicalReplicationService(
-      {connectionString: this.#upstreamUri},
-      {acknowledge: {auto: false, timeoutSeconds: 0}},
-    )
-      .on('start', () => this.getConfirmedFlushLSN().then(resolve, reject))
-      .on('heartbeat', (_lsn, _time, respond) => {
-        respond && ack();
-      })
-      .on('data', (lsn, msg) => {
-        const change = messageToDownstream(lsn, msg);
-        if (change) {
-          changes.push(change);
+      const ack = (commit?: Commit) => {
+        if (commit) {
+          const {watermark} = commit[2];
+          lastLSN = fromLexiVersion(watermark);
         }
+        void service.acknowledge(lastLSN);
+      };
+
+      const changes = Subscription.create<DownstreamChange>({
+        cleanup: () => service.stop(),
       });
 
-    this.#lc.info?.(`starting replication stream`);
-    service
-      .subscribe(
-        new PgoutputPlugin({
-          protoVersion: 1,
-          publicationNames: this.#replicationConfig.publications,
-        }),
-        replicationSlot(this.#replicaID),
-        lastLSN,
+      // To avoid a race condition when handing off the replication stream
+      // between tasks, query the `confirmed_flush_lsn` for the replication
+      // slot only after the replication stream starts, as that is when it
+      // is guaranteed not to change (i.e. until we ACK a commit).
+      const {promise: confirmedFlushLSN, resolve, reject} = resolver<string>();
+
+      const service = new LogicalReplicationService(
+        {connectionString: this.#upstreamUri},
+        {acknowledge: {auto: false, timeoutSeconds: 0}},
       )
-      .catch(e => {
-        reject(e);
-        changes.fail(e instanceof Error ? e : new Error(String(e)));
-      })
-      .finally(() => changes.cancel());
+        .on('start', () =>
+          this.getConfirmedFlushLSN(db, slot)
+            .then(resolve)
+            .catch(e => reject(translateError(e))),
+        )
+        .on('heartbeat', (_lsn, _time, respond) => {
+          respond && ack();
+        })
+        .on('data', (lsn, msg) => {
+          const change = messageToDownstream(lsn, msg);
+          if (change) {
+            changes.push(change);
+          }
+        });
 
-    // When a replication slot is created, its `confirmed_flush_lsn` is uninitialized, e.g.
-    //
-    // ```
-    //  slot_name | restart_lsn | confirmed_flush_lsn
-    //  -----------+-------------+---------------------
-    //  zero_slot | 8F/38ACB2F8 | 0/1
-    // ```
-    //
-    // However, the `restart_lsn` is _not_ a suitable replacement because it
-    // may be before the `consistent_point` lsn returned by createReplicationSlot
-    // (in initial-sync.ts). Luckily, that `consistent_point` is what we use as
-    // the `replicaVersion` to identify the initial snapshot, so we use the greater
-    // of the confirmed flush lsn (which may be 0/1) and the replica version
-    // (i.e. consistent_point).
-    const confirmedWatermark = toLexiVersion(await confirmedFlushLSN);
-    const {replicaVersion} = this.#replicationConfig;
-    const initialWatermark =
-      confirmedWatermark > replicaVersion ? confirmedWatermark : replicaVersion;
-    this.#lc.info?.(`replication stream started at ${initialWatermark}`);
+      await this.stopExistingReplicationSlotSubscriber(db, slot);
 
-    return {initialWatermark, changes, acks: {push: ack}};
-  }
+      this.#lc.info?.(`starting replication stream @${slot}`);
+      service
+        .subscribe(
+          new PgoutputPlugin({
+            protoVersion: 1,
+            publicationNames: this.#replicationConfig.publications,
+          }),
+          slot,
+          lastLSN,
+        )
+        .catch(e => {
+          const err = translateError(e);
+          reject(err);
+          changes.fail(err);
+        })
+        .finally(() => changes.cancel());
 
-  async getConfirmedFlushLSN(): Promise<string> {
-    const db = postgres(this.#upstreamUri);
-    const slot = replicationSlot(this.#replicaID);
-    try {
-      const result = await db<{lsn: string}[]>`
-      SELECT confirmed_flush_lsn as lsn FROM pg_replication_slots 
-        WHERE slot_name = ${slot}`;
-      if (result.length === 1) {
-        return result[0].lsn;
-      }
-      throw new Error(`Upstream is missing replication slot ${slot}`);
+      // When a replication slot is created, its `confirmed_flush_lsn` is uninitialized, e.g.
+      //
+      // ```
+      //  slot_name | restart_lsn | confirmed_flush_lsn
+      //  -----------+-------------+---------------------
+      //  zero_slot | 8F/38ACB2F8 | 0/1
+      // ```
+      //
+      // However, the `restart_lsn` is _not_ a suitable replacement because it
+      // may be before the `consistent_point` lsn returned by createReplicationSlot
+      // (in initial-sync.ts). Luckily, that `consistent_point` is what we use as
+      // the `replicaVersion` to identify the initial snapshot, so we use the greater
+      // of the confirmed flush lsn (which may be 0/1) and the replica version
+      // (i.e. consistent_point).
+      const confirmedWatermark = toLexiVersion(await confirmedFlushLSN);
+      const {replicaVersion} = this.#replicationConfig;
+      const initialWatermark =
+        confirmedWatermark > replicaVersion
+          ? confirmedWatermark
+          : replicaVersion;
+      this.#lc.info?.(
+        `replication stream@${slot} started at ${initialWatermark}`,
+      );
+
+      return {initialWatermark, changes, acks: {push: ack}};
     } finally {
       await db.end();
     }
+  }
+
+  async stopExistingReplicationSlotSubscriber(
+    db: PostgresDB,
+    slot: string,
+  ): Promise<void> {
+    const result = await db<{pid: string}[]>`
+    SELECT pg_terminate_backend(active_pid), active_pid as pid
+      FROM pg_replication_slots WHERE slot_name = ${slot} and active = true`;
+    if (result.length === 0) {
+      this.#lc.debug?.(`no existing subscriber to replication slot`);
+    } else {
+      const {pid} = result[0];
+      this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
+
+      // This reduces flakiness in which unit tests often fail with
+      // an error when starting the replication stream:
+      //
+      // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
+      //
+      // Presumably, waiting for small interval before connecting to Postgres
+      // would also reduce this occurrence in production.
+      await sleep(5);
+    }
+  }
+
+  async getConfirmedFlushLSN(db: PostgresDB, slot: string): Promise<string> {
+    const result = await db<{lsn: string}[]>`
+      SELECT confirmed_flush_lsn as lsn FROM pg_replication_slots 
+        WHERE slot_name = ${slot}`;
+    if (result.length === 1) {
+      return result[0].lsn;
+    }
+    throw new Error(`Upstream is missing replication slot ${slot}`);
   }
 }
 
@@ -212,4 +256,14 @@ function messageToDownstream(
           throw new Error(`Unexpected message type ${stringify(msg)}`);
       }
   }
+}
+
+function translateError(e: unknown): Error {
+  if (!(e instanceof Error)) {
+    return new Error(String(e));
+  }
+  if (e instanceof DatabaseError && e.code === PG_ADMIN_SHUTDOWN) {
+    return new AbortError(e.message, {cause: e});
+  }
+  return e;
 }

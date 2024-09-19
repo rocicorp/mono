@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
@@ -26,6 +27,7 @@ describe('change-streamer/service', {retry: 3}, () => {
   let streamer: ChangeStreamerService;
   let changes: Subscription<DownstreamChange>;
   let acks: Queue<Commit>;
+  let streamerDone: Promise<void>;
 
   const REPLICA_VERSION = '01';
 
@@ -53,7 +55,7 @@ describe('change-streamer/service', {retry: 3}, () => {
       },
       replica,
     );
-    void streamer.run();
+    streamerDone = streamer.run();
   });
 
   afterEach(async () => {
@@ -329,5 +331,10 @@ describe('change-streamer/service', {retry: 3}, () => {
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('shutdown on AbortError', async () => {
+    changes.fail(new AbortError());
+    await streamerDone;
   });
 });

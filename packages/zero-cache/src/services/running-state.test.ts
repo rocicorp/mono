@@ -1,3 +1,4 @@
+import {AbortError} from 'shared/src/abort-error.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {expect, test, vi} from 'vitest';
 import {RunningState} from './running-state.js';
@@ -46,9 +47,15 @@ test('backoff', () => {
 });
 
 test('cancel backoff on stop', async () => {
-  const state = new RunningState('foo-service', {initialRetryDelay: 10_000});
+  const state = new RunningState('foo-service', {initialRetryDelay: 100_000});
 
   const timeout = state.backoff(lc);
   state.stop(lc);
   await timeout;
+});
+
+test('backoff on AbortError', async () => {
+  const state = new RunningState('foo-service', {initialRetryDelay: 100_000});
+  await state.backoff(lc, new AbortError());
+  expect(state.shouldRun()).toBe(false);
 });
