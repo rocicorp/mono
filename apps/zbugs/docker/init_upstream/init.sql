@@ -6,8 +6,14 @@ DROP TABLE IF EXISTS "user",
 
 CREATE TABLE "user" (
     "id" VARCHAR PRIMARY KEY,
-    "name" VARCHAR NOT NULL
+    "login" VARCHAR NOT NULL,
+    "name" VARCHAR NOT NULL,
+    "avatar" VARCHAR,
+    "role" VARCHAR DEFAULT 'user' NOT NULL,
+    "githubID" INTEGER NOT NULL
 );
+
+CREATE UNIQUE INDEX user_login_idx ON "user" (login);
 
 CREATE TABLE issue (
     "id" VARCHAR PRIMARY KEY,
@@ -16,7 +22,7 @@ CREATE TABLE issue (
     "modified" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
-    "description" TEXT NOT NULL,
+    "description" TEXT DEFAULT '',
     -- This is a denormalized column that contains a comma-separated list of
     -- label IDs. This is temporary until Zero imlements support for filter-by-
     -- subquery. It does demonstrate the utility of connecting to existing

@@ -4,6 +4,7 @@ const userSchema = {
   tableName: 'user',
   columns: {
     id: {type: 'string'},
+    login: {type: 'string'},
     name: {type: 'string'},
   },
   primaryKey: ['id'],
