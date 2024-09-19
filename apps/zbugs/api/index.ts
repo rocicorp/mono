@@ -8,6 +8,7 @@ import postgres from 'postgres';
 import {SignJWT} from 'jose';
 
 import {OAuth2Namespace} from '@fastify/oauth2';
+import {nanoid} from 'nanoid';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -56,16 +57,20 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
     },
   });
 
-  await sql`INSERT INTO "user"
+  let userId = nanoid();
+  const maybeExistingID = await sql`INSERT INTO "user"
     ("id", "login", "name", "avatar") VALUES (
-      ${userDetails.data.id},
+      ${userId},
       ${userDetails.data.login},
       ${userDetails.data.name},
       ${userDetails.data.avatar_url}
-    ) ON CONFLICT ("id") DO NOTHING`;
+    ) ON CONFLICT ("login") DO NOTHING RETURNING id`;
+  if (maybeExistingID.length > 0) {
+    userId = maybeExistingID[0].id;
+  }
 
   const jwtPayload = {
-    sub: userDetails.data.id.toString(),
+    sub: userId,
     iat: Math.floor(Date.now() / 1000),
     name: userDetails.data.login,
   };

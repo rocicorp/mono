@@ -5,7 +5,6 @@ export function getJwt() {
   const jwtCookie = cookies.find(cookie => cookie.trim().startsWith('jwt='));
 
   if (!jwtCookie) {
-    console.log('No jwt cookie found');
     return undefined;
   }
 
@@ -13,11 +12,9 @@ export function getJwt() {
   const payload = decodeJwt(token);
   const currentTime = Math.floor(Date.now() / 1000);
   if (payload.exp && payload.exp < currentTime) {
-    console.log('JWT token has expired');
     return undefined;
   }
 
-  console.log('JWT token found');
   return payload;
 }
 
