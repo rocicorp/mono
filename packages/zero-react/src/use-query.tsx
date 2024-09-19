@@ -6,7 +6,7 @@ import {deepClone} from 'shared/src/deep-clone.js';
 
 export function useQuery<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow>,
+  TReturn extends QueryResultRow,
 >(q: Query<TSchema, TReturn> | undefined | false): Smash<TReturn> {
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>([]);
   const [, setView] = useState<TypedView<Smash<TReturn>> | undefined>(
