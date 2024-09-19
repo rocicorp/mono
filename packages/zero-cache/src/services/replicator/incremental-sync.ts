@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
-import {LogicalReplicationService, Pgoutput} from 'pg-logical-replication';
+import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
@@ -14,7 +14,14 @@ import {
   ChangeStreamer,
   DownstreamChange,
 } from '../change-streamer/change-streamer.js';
-import {Change, MessageCommit} from '../change-streamer/schema/change.js';
+import {
+  Change,
+  MessageCommit,
+  MessageDelete,
+  MessageInsert,
+  MessageTruncate,
+  MessageUpdate,
+} from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
 import {Checkpointer} from './checkpointer.js';
 import {Notifier} from './notifier.js';
@@ -326,7 +333,7 @@ class TransactionProcessor {
    * making the COMMIT/ROLLBACK decision when the commit watermark is guaranteed to be
    * available.
    */
-  processInsert(insert: Pgoutput.MessageInsert) {
+  processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
     const row = {
       ...insert.new,
@@ -352,7 +359,7 @@ class TransactionProcessor {
     logSetOp(this.#db, this.#version, table, key);
   }
 
-  processUpdate(update: Pgoutput.MessageUpdate) {
+  processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
     const row = {
       ...update.new,
@@ -382,7 +389,7 @@ class TransactionProcessor {
     logSetOp(this.#db, this.#version, table, newKey);
   }
 
-  processDelete(del: Pgoutput.MessageDelete) {
+  processDelete(del: MessageDelete) {
     // REPLICA IDENTITY DEFAULT means the `key` must be set.
     // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
     assert(del.relation.replicaIdentity === 'default');
@@ -399,7 +406,7 @@ class TransactionProcessor {
     logDeleteOp(this.#db, this.#version, table, rowKey);
   }
 
-  processTruncate(truncate: Pgoutput.MessageTruncate) {
+  processTruncate(truncate: MessageTruncate) {
     for (const relation of truncate.relations) {
       const table = liteTableName(relation);
       // Update replica data.
