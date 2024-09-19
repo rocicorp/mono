@@ -19,6 +19,7 @@
     "nanoid": "^4.0.2",
     "react": ">=16.0 <19.0",
     "react-dom": ">=16.0 <19.0",
+    "react-textarea-autosize": "^8.5.3",
     "wouter": "^3.3.5",
     "zero-client": "0.0.0",
     "zero-react": "0.0.0"
