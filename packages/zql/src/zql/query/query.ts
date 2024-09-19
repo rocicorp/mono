@@ -17,16 +17,14 @@ export type Context = {
   createStorage: () => Storage;
 };
 
-export type Smash<T extends Array<QueryResultRow>> = Array<
-  T extends Array<infer TRow extends QueryResultRow>
-    ? Collapse<
-        TRow['row'] & {
-          [K in keyof TRow['related']]: TRow['related'][K] extends Array<QueryResultRow>
-            ? Smash<TRow['related'][K]>
-            : undefined;
-        }
-      >
-    : never
+export type Smash<T extends QueryResultRow> = Array<
+  Collapse<
+    T['row'] & {
+      [K in keyof T['related']]: T['related'][K] extends QueryResultRow
+        ? Smash<T['related'][K]>
+        : never;
+    }
+  >
 >;
 
 type Collapse<T> = T extends object ? {[K in keyof T]: T[K]} : T;
@@ -92,32 +90,24 @@ export type QueryRowType<T extends Query<any, any>> =
 export type AddSelections<
   TSchema extends Schema,
   TSelections extends Selector<TSchema>[],
-  TReturn extends Array<QueryResultRow>,
+  TReturn extends QueryResultRow,
 > = {
   row: {
     [K in TSelections[number]]: SchemaValueToTSType<TSchema['columns'][K]>;
   };
-  related: TReturn extends Array<infer TRow extends QueryResultRow>
-    ? TRow['related']
-    : {};
+  related: TReturn['related'];
 };
 
 // Adds TSubquery to TReturn under the alias TAs.
 export type AddSubselect<
   TSubquery extends Query<Schema>,
-  TReturn extends Array<QueryResultRow>,
+  TReturn extends QueryResultRow,
   TAs extends string,
 > = {
-  row: TReturn extends Array<infer TRow extends QueryResultRow>
-    ? TRow['row']
-    : {};
-  related: TReturn extends Array<infer TRow extends QueryResultRow>
-    ? {
-        [K in TAs]: InferSubreturn<TSubquery>;
-      } & TRow['related']
-    : {
-        [K in TAs]: InferSubreturn<TSubquery>;
-      };
+  row: TReturn['row'];
+  related: {
+    [K in TAs]: InferSubreturn<TSubquery>;
+  } & TReturn['related'];
 };
 
 type InferSubreturn<TSubquery> = TSubquery extends Query<
@@ -129,12 +119,11 @@ type InferSubreturn<TSubquery> = TSubquery extends Query<
 
 /**
  * The result of a ZQL query.
- *
  * Represents a tree of entities and subselects.
  */
 export type QueryResultRow = {
-  row: Partial<Row>;
-  related: Record<string, Array<QueryResultRow>> | undefined;
+  row: Row;
+  related: Record<string, QueryResultRow>;
 };
 
 type EmptyQueryResultRow = {
@@ -163,31 +152,25 @@ export type DefaultQueryResultRow<TSchema extends Schema> = {
 
 export interface Query<
   TSchema extends Schema,
-  TReturn extends Array<QueryResultRow> = Array<DefaultQueryResultRow<TSchema>>,
+  TReturn extends QueryResultRow = DefaultQueryResultRow<TSchema>,
 > {
   readonly ast: AST;
 
   select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
-  ): Query<TSchema, Array<AddSelections<TSchema, TFields, TReturn>>>;
+  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>>;
 
   related<TRelationship extends keyof TSchema['relationships']>(
     relationship: TRelationship,
   ): Query<
     TSchema,
-    Array<
-      AddSubselect<
-        Query<
-          PullSchemaForRelationship<TSchema, TRelationship>,
-          Array<
-            DefaultQueryResultRow<
-              PullSchemaForRelationship<TSchema, TRelationship>
-            >
-          >
-        >,
-        TReturn,
-        TRelationship & string
-      >
+    AddSubselect<
+      Query<
+        PullSchemaForRelationship<TSchema, TRelationship>,
+        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
+      >,
+      TReturn,
+      TRelationship & string
     >
   >;
   related<
@@ -199,14 +182,10 @@ export interface Query<
     cb: (
       query: Query<
         PullSchemaForRelationship<TSchema, TRelationship>,
-        Array<
-          DefaultQueryResultRow<
-            PullSchemaForRelationship<TSchema, TRelationship>
-          >
-        >
+        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
       >,
     ) => TSub,
-  ): Query<TSchema, Array<AddSubselect<TSub, TReturn, TRelationship & string>>>;
+  ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship & string>>;
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
