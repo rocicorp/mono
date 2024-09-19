@@ -1,9 +1,8 @@
-import type {WebSocket} from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import {Queue} from 'shared/src/queue.js';
 import * as v from 'shared/src/valita.js';
-import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
-import {BigIntJSON, type JSONObject} from './bigint-json.js';
+import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
+import {BigIntJSON, type JSONValue} from './bigint-json.js';
 import {Subscription} from './subscription.js';
 
 export type Source<T> = AsyncIterable<T> & {
@@ -19,14 +18,19 @@ export type Sink<T> = {
   push(message: T): void;
 };
 
-const ackSchema = v.object({consumedID: v.number()});
+const ackSchema = v.object({ack: v.number()});
 
 type Ack = v.Infer<typeof ackSchema>;
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-type Streamed<T> = T & {_streamID: number};
+type Streamed<T> = {
+  /** Application-level message. */
+  msg: T;
 
-export async function streamOut<T extends JSONObject>(
+  /** ID used for the Ack message. */
+  id: number;
+};
+
+export async function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
@@ -34,12 +38,12 @@ export async function streamOut<T extends JSONObject>(
   const closer = new WebSocketCloser(lc, sink, source);
 
   const acks = new Queue<Ack>();
-  sink.addEventListener('message', (e: {data: string}) => {
+  sink.addEventListener('message', ({data}) => {
     try {
-      if (typeof e.data !== 'string') {
+      if (typeof data !== 'string') {
         throw new Error('Expected string message');
       }
-      void acks.enqueue(v.parse(JSON.parse(e.data), ackSchema));
+      void acks.enqueue(v.parse(JSON.parse(data), ackSchema));
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
       closer.close(e);
@@ -49,16 +53,15 @@ export async function streamOut<T extends JSONObject>(
   lc.info?.('started outbound stream');
   try {
     let nextID = 0;
-    for await (const payload of source) {
-      const streamID = ++nextID;
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      const msg = BigIntJSON.stringify({_streamID: streamID, ...payload});
-      lc.debug?.(`sending`, msg);
-      sink.send(msg);
+    for await (const msg of source) {
+      const id = ++nextID;
+      const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
+      lc.debug?.(`sending`, data);
+      sink.send(data);
 
-      const ack = await acks.dequeue();
-      if (ack.consumedID !== streamID) {
-        throw new Error(`Unexpected ack for ${streamID}: ${ack.consumedID}`);
+      const {ack} = await acks.dequeue();
+      if (ack !== id) {
+        throw new Error(`Unexpected ack for ${id}: ${ack}`);
       }
       lc.debug?.(`received ack`, ack);
     }
@@ -68,25 +71,22 @@ export async function streamOut<T extends JSONObject>(
   }
 }
 
-export function streamIn<T extends JSONObject>(
+export function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
 ): Source<T> {
+  const streamedSchema = v.object({
+    msg: schema,
+    id: v.number(),
+  });
+
   const sink: Subscription<T, Streamed<T>> = new Subscription<T, Streamed<T>>(
     {
-      consumed: msg => {
-        const ack: Ack = {consumedID: msg._streamID};
-        source.send(JSON.stringify(ack));
-      },
+      consumed: ({id}) => source.send(JSON.stringify({ack: id} satisfies Ack)),
       cleanup: () => closer.close(),
     },
-    s => {
-      // Exclude the internal wire-protocol `_streamID` field from the message exposed in the Iterable.
-      const {_streamID, ...m} = s;
-      m satisfies Omit<Streamed<T>, '_streamID'>; // Documents that `m` is of type `T`,
-      return m as unknown as T; // which TypeScript can't yet figure out.
-    },
+    ({msg}) => msg,
   );
 
   const closer = new WebSocketCloser(lc, source, sink, handleMessage);
@@ -100,13 +100,9 @@ export function streamIn<T extends JSONObject>(
     }
     try {
       const value = BigIntJSON.parse(data);
-      // TODO: Make this work with schema.extend({_streamID: v.number()})
-      const msg = v.parse(value, schema, 'passthrough');
-      if (typeof msg['_streamID'] !== 'number') {
-        throw new Error(`No _streamID found in ${BigIntJSON.stringify(msg)}`);
-      }
+      const msg = v.parse(value, streamedSchema, 'passthrough');
       lc.debug?.(`received`, data);
-      sink.push(msg as Streamed<T>);
+      sink.push(msg);
     } catch (e) {
       closer.close(e);
     }
