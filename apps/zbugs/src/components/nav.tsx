@@ -36,6 +36,9 @@ export function Nav() {
           </Link>
         </div>
       </div>
+      <div className="pt-2 flex flex-col gap-2">
+        <a href="/api/login/github">Login</a>
+      </div>
     </div>
   );
 }
