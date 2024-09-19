@@ -103,8 +103,16 @@ h1 {
 
 .primary-content .issue-title {
   padding-left: 1.75rem;
-  background: transparent url(assets/images/issue-open.svg) no-repeat center
+  background: transparent url(assets/icons/issue-open.svg) no-repeat center
     left;
+}
+
+.primary-content .issue-open {
+  background: transparent url(assets/icons/issue-open.svg) no-repeat left center;
+}
+
+.primary-content .issue-closed {
+  background: transparent url(assets/icons/issue-closed.svg) no-repeat left center;
 }
 
 /* Issue Detail */
@@ -139,7 +147,7 @@ h1 {
 
 .sidebar-status-open {
   padding-left: 2.5rem;
-  background: var(--color-nav-selected) url(assets/images/issue-open.svg)
+  background: var(--color-nav-selected) url(assets/icons/issue-open.svg)
     no-repeat 0.8175rem center;
 }
 

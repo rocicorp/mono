@@ -79,7 +79,7 @@ export default function ListPage() {
         <tbody>
           {issues.map(issue => (
             <tr key={issue.id}>
-              <td align="left" className="issue-title">
+              <td align="left" className={`issue-title ${issue.open ? 'issue-open' : 'issue-closed'}`}>
                 <Link href={`/issue/${issue.id}`}>{issue.title}</Link>
               </td>
               <td align="left">
