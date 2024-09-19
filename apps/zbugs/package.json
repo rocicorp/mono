@@ -14,9 +14,12 @@
     "zero": "cd ../../packages/zero-cache && npm run start -- dotenv_config_path=../../apps/zbugs/.env"
   },
   "dependencies": {
+    "@fastify/cookie": "^10.0.0",
+    "@fastify/oauth2": "^8.0.0",
+    "@octokit/core": "^6.1.2",
     "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
-    "fastify": "^4.27.0",
+    "fastify": "^5.0.0",
     "nanoid": "^4.0.2",
     "react": ">=16.0 <19.0",
     "react-dom": ">=16.0 <19.0",
