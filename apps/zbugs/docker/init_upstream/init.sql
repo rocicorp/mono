@@ -13,8 +13,8 @@ CREATE TABLE issue (
     "id" VARCHAR PRIMARY KEY,
     "title" VARCHAR NOT NULL,
     "open" BOOLEAN NOT NULL,
-    "modified" double precision NOT NULL,
-    "created" double precision NOT NULL,
+    "modified" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
+    "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
     "description" TEXT NOT NULL,
     -- This is a denormalized column that contains a comma-separated list of
@@ -46,6 +46,21 @@ CREATE TABLE "issueLabel" (
     "labelID" VARCHAR REFERENCES label(id),
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE
 );
+
+-- last modified function and trigger
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.modified = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_last_modified
+BEFORE UPDATE ON issue
+FOR EACH ROW
+EXECUTE FUNCTION update_modified_column();
+
 
 -- We use a trigger to maintain the "labelIDs" column in the issue table.
 -- Add a new column to store labelIDs
@@ -79,21 +94,20 @@ $$ LANGUAGE plpgsql;
 
 -- Trigger for INSERT operation
 CREATE TRIGGER update_labelIDs_on_insert
-AFTER INSERT ON "issueLabel"
-FOR EACH ROW
-EXECUTE FUNCTION update_issue_labelIDs();
+AFTER
+INSERT
+    ON "issueLabel" FOR EACH ROW EXECUTE FUNCTION update_issue_labelIDs();
 
 -- Trigger for UPDATE operation
 CREATE TRIGGER update_labelIDs_on_update
-AFTER UPDATE ON "issueLabel"
-FOR EACH ROW
-EXECUTE FUNCTION update_issue_labelIDs();
+AFTER
+UPDATE
+    ON "issueLabel" FOR EACH ROW EXECUTE FUNCTION update_issue_labelIDs();
 
 -- Trigger for DELETE operation
 CREATE TRIGGER update_labelIDs_on_delete
-AFTER DELETE ON "issueLabel"
-FOR EACH ROW
-EXECUTE FUNCTION update_issue_labelIDs();
+AFTER
+    DELETE ON "issueLabel" FOR EACH ROW EXECUTE FUNCTION update_issue_labelIDs();
 
 COPY "user"
 FROM

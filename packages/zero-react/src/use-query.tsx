@@ -7,14 +7,14 @@ import {deepClone} from 'shared/src/deep-clone.js';
 export function useQuery<
   TSchema extends Schema,
   TReturn extends Array<QueryResultRow>,
->(q: Query<TSchema, TReturn> | undefined, enabled = true): Smash<TReturn> {
+>(q: Query<TSchema, TReturn> | undefined | false): Smash<TReturn> {
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>([]);
   const [, setView] = useState<TypedView<Smash<TReturn>> | undefined>(
     undefined,
   );
 
   useLayoutEffect(() => {
-    if (enabled && q) {
+    if (q) {
       const view = q.materialize();
       setView(view);
       const unsubscribe = view.addListener(snapshot => {
@@ -29,7 +29,7 @@ export function useQuery<
     return () => {
       //
     };
-  }, [JSON.stringify(q?.ast)]);
+  }, [JSON.stringify(q ? q.ast : null)]);
 
   return snapshot;
 }

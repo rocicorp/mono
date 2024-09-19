@@ -12,6 +12,10 @@ export function useZero<Q extends QueryDefs>(): Zero<Q> {
   return zero as Zero<Q>;
 }
 
+export function createUseZero<Q extends QueryDefs>() {
+  return () => useZero<Q>();
+}
+
 export function ZeroProvider<Q extends QueryDefs>({
   children,
   zero,
