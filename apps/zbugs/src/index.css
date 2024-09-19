@@ -122,7 +122,7 @@ h1 {
 }
 
 .issue-detail {
-  padding-right: 19rem;
+  padding-right: 16rem;
 }
 
 .issue-sidebar {
@@ -131,7 +131,7 @@ h1 {
   right: 2rem;
   display: flex;
   flex-direction: column;
-  width: 16rem;
+  width: 12rem;
 }
 
 .sidebar-item {
@@ -148,6 +148,12 @@ h1 {
 .sidebar-status-open {
   padding-left: 2.5rem;
   background: var(--color-nav-selected) url(assets/icons/issue-open.svg)
+    no-repeat 0.8175rem center;
+}
+
+.sidebar-status-closed {
+  padding-left: 2.5rem;
+  background: var(--color-nav-selected) url(assets/icons/issue-closed.svg)
     no-repeat 0.8175rem center;
 }
 

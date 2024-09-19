@@ -112,7 +112,11 @@ export default function IssuePage() {
       <div className="issue-sidebar">
         <div className="sidebar-item">
           <p className="issue-detail-label">Status</p>
-          <span className="sidebar-button sidebar-status-open">Open</span>
+          {rendering.open ? (
+            <span className="sidebar-button sidebar-status-open">Open</span>
+          ) : (
+            <span className="sidebar-button sidebar-status-closed">Closed</span>
+          )}
         </div>
 
         <div className="sidebar-item">
