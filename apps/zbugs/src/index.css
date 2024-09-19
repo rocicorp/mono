@@ -103,8 +103,7 @@ h1 {
 
 .primary-content .issue-title {
   padding-left: 1.75rem;
-  background: transparent url(assets/icons/issue-open.svg) no-repeat center
-    left;
+  background: transparent url(assets/icons/issue-open.svg) no-repeat center left;
 }
 
 .primary-content .issue-open {
@@ -112,7 +111,8 @@ h1 {
 }
 
 .primary-content .issue-closed {
-  background: transparent url(assets/icons/issue-closed.svg) no-repeat left center;
+  background: transparent url(assets/icons/issue-closed.svg) no-repeat left
+    center;
 }
 
 /* Issue Detail */
