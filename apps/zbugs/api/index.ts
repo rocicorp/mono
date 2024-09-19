@@ -4,6 +4,7 @@ import cookie from '@fastify/cookie';
 import oauthPlugin from '@fastify/oauth2';
 import 'dotenv/config';
 import {Octokit} from '@octokit/core';
+import postgres from 'postgres';
 
 import {OAuth2Namespace} from '@fastify/oauth2';
 
@@ -12,6 +13,8 @@ declare module 'fastify' {
     githubOAuth2: OAuth2Namespace;
   }
 }
+
+const sql = postgres(process.env.UPSTREAM_URI);
 
 export const fastify = Fastify({
   logger: true,
@@ -51,12 +54,19 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });
-  // get user info: https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-the-authenticated-user
-  // 1. Write the user info if it doesn't exist
-  // 2. Write the session to the database
-  // 3. Set the session_id in the cookie
-  // 4. Redirect the user to the dashboard
-  reply.cookie('session_id', 'session_id').send(userDetails);
+
+  await sql`INSERT INTO "user"
+    ("id", "login", "name", "avatar") VALUES (
+      ${userDetails.data.id},
+      ${userDetails.data.login},
+      ${userDetails.data.name},
+      ${userDetails.data.avatar_url}
+    ) ON CONFLICT ("id") DO NOTHING`;
+
+  // 1. mint the JWT
+  // 2. save to cookie
+  // 3. redirect to dashboard
+  reply.cookie('jwt', 'jwt').redirect('/');
 });
 
 export default async function handler(req, reply) {
