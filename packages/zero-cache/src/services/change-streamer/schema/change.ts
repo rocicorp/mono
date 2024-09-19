@@ -15,3 +15,5 @@ export type DataChange =
   | Pgoutput.MessageTruncate;
 
 export type Change = MessageBegin | DataChange | MessageCommit;
+
+export type ChangeTag = Change['tag'];

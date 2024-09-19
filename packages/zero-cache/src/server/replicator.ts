@@ -3,6 +3,7 @@ import {must} from 'shared/src/must.js';
 import {Database} from 'zqlite/src/db.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
 import {initializeChangeSource} from '../services/change-streamer/pg/change-source.js';
+import {NULL_CHECKPOINTER} from '../services/replicator/checkpointer.js';
 import {ReplicatorService} from '../services/replicator/replicator.js';
 import {runOrExit} from '../services/runner.js';
 import {postgresTypeConfig} from '../types/pg.js';
@@ -55,6 +56,9 @@ export default async function runWorker(parent: Worker) {
     config.TASK_ID ?? 'z1', // To eventually accommodate multiple zero-caches.
     changeStreamer,
     replica,
+    // TODO: Run two replicators: one for litestream backup and one for serving requests,
+    //       and use the WALCheckpointer on the serving replica.
+    NULL_CHECKPOINTER,
   );
 
   setUpMessageHandlers(lc, replicator, parent);

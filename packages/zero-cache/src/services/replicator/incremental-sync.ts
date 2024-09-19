@@ -16,6 +16,7 @@ import {
 } from '../change-streamer/change-streamer.js';
 import {Change, MessageCommit} from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
+import {Checkpointer} from './checkpointer.js';
 import {Notifier} from './notifier.js';
 import {ReplicaState} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
@@ -37,15 +38,22 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
   readonly #notifier: Notifier;
+  readonly #checkpointer: Checkpointer;
 
   readonly #state = new RunningState('IncrementalSyncer');
   #service: LogicalReplicationService | undefined;
 
-  constructor(id: string, changeStreamer: ChangeStreamer, replica: Database) {
+  constructor(
+    id: string,
+    changeStreamer: ChangeStreamer,
+    replica: Database,
+    checkpointer: Checkpointer,
+  ) {
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
     this.#notifier = new Notifier();
+    this.#checkpointer = checkpointer;
   }
 
   async run(lc: LogContext) {
@@ -67,7 +75,6 @@ export class IncrementalSyncer {
       const processor = new MessageProcessor(
         this.#replica,
         (_watermark: string) => {}, // TODO: Add ACKs to ChangeStreamer API
-        () => this.#notifier.notifySubscribers(),
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
 
@@ -80,7 +87,12 @@ export class IncrementalSyncer {
             break;
           }
           this.#state.resetBackoff();
-          processor.processMessage(lc, message);
+
+          const committed = processor.processMessage(lc, message);
+          if (committed > 0) {
+            this.#notifier.notifySubscribers({state: 'version-ready'});
+            await this.#checkpointer.maybeCheckpoint(committed, this.#notifier);
+          }
         }
         processor.abort(lc);
       } catch (e) {
@@ -101,6 +113,7 @@ export class IncrementalSyncer {
 
   async stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
+    this.#checkpointer.stop();
     await this.#service?.stop();
   }
 }
@@ -138,22 +151,20 @@ class ReplayedTransactionError extends Error {
 export class MessageProcessor {
   readonly #db: StatementRunner;
   readonly #acknowledge: (watermark: string) => unknown;
-  readonly #notifyVersionChange: () => void;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
   #currentTx: TransactionProcessor | null = null;
+  #pendingChanges = 0;
 
   #failure: Error | undefined;
 
   constructor(
     db: StatementRunner,
     acknowledge: (watermark: string) => unknown,
-    notifyVersionChange: () => void,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
     this.#acknowledge = acknowledge;
-    this.#notifyVersionChange = notifyVersionChange;
     this.#failService = failService;
   }
 
@@ -178,15 +189,16 @@ export class MessageProcessor {
     this.#fail(lc, err ?? new AbortError());
   }
 
-  processMessage(lc: LogContext, downstream: DownstreamChange) {
+  /** @return The number of changes committed. */
+  processMessage(lc: LogContext, downstream: DownstreamChange): number {
     const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);
-      return;
+      return 0;
     }
     try {
       const watermark = type === 'commit' ? downstream[2].watermark : undefined;
-      this.#processMessage(lc, message, watermark);
+      return this.#processMessage(lc, message, watermark);
     } catch (e) {
       if (e instanceof ReplayedTransactionError) {
         lc.info?.(e);
@@ -195,23 +207,45 @@ export class MessageProcessor {
         this.#fail(lc, e);
       }
     }
+    return 0;
   }
 
-  #processMessage(lc: LogContext, msg: Change, watermark: string | undefined) {
+  /** @return The number of changes committed. */
+  #processMessage(
+    lc: LogContext,
+    msg: Change,
+    watermark: string | undefined,
+  ): number {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
       this.#currentTx = new TransactionProcessor(this.#db);
-      return;
+      return (this.#pendingChanges = 0);
     }
+
     // For non-begin messages, there should be a #currentTx set.
-    if (!this.#currentTx) {
+    const tx = this.#currentTx;
+    if (!tx) {
       throw new Error(
         `Received message outside of transaction: ${stringify(msg)}`,
       );
     }
-    const tx = this.#currentTx;
+
+    if (msg.tag === 'commit') {
+      // Undef this.#currentTx to allow the assembly of the next transaction.
+      this.#currentTx = null;
+
+      assert(watermark);
+      const elapsedMs = tx.processCommit(msg, watermark);
+      lc.debug?.(`Committed tx (${elapsedMs} ms)`);
+
+      this.#acknowledge(watermark);
+      return this.#pendingChanges;
+    }
+
+    this.#pendingChanges++;
+
     switch (msg.tag) {
       case 'insert':
         tx.processInsert(msg);
@@ -225,22 +259,12 @@ export class MessageProcessor {
       case 'truncate':
         tx.processTruncate(msg);
         break;
-      case 'commit': {
-        // Undef this.#currentTx to allow the assembly of the next transaction.
-        this.#currentTx = null;
-
-        assert(watermark);
-        const elapsedMs = tx.processCommit(msg, watermark);
-        lc.debug?.(`Committed tx (${elapsedMs} ms)`);
-
-        this.#acknowledge(watermark);
-        this.#notifyVersionChange();
-        break;
-      }
 
       default:
         unreachable(msg);
     }
+
+    return 0;
   }
 }
 

@@ -38,10 +38,9 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
 export function createMessageProcessor(
   db: Database,
   ack: (lsn: string) => void = NOOP,
-  versions: () => void = NOOP,
   failures: (lc: LogContext, err: unknown) => void = NOOP,
 ): MessageProcessor {
-  return new MessageProcessor(new StatementRunner(db), ack, versions, failures);
+  return new MessageProcessor(new StatementRunner(db), ack, failures);
 }
 
 export class ReplicationMessages<
