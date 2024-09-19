@@ -1,22 +1,14 @@
-id,name
-alexhking,"Alexander King"
-arv,"Erik Arvidsson"
-aboodman,"Aaron Boodman"
-tristanls,"Tristan Slominski"
-cesara,"Cesar Alaestante"
-tantaman,"Matt Wonlaw"
-arielpollack,"Ariel Pollack"
-ocooper,"Ofir Cooper"
-grgbkr,"Greg Baker"
-sboodman,"Susan Boodman"
-noamackerman,"noamackerman"
-tom-ka,"tom katz"
-darkgnotic,"Darick Tong"
-rocicorp-reflect-services,"rocicorp-reflect-services"
-jesseditson,"Jesse Ditson"
-phritz,"Fritz Schneider"
-ingar,"Ingar Shu"
-jamischarles,"Jamis Charles"
-linear[bot],"Linear Bot"
-pcorpet,"Pascal Corpet"
-KeKs0r,"Marc Höffl"
+id,login,name,avatar,role,githubID
+0Pa2nb7EDr1AfDVXIp8W3,arv,Erik Arvidsson,https://avatars.githubusercontent.com/u/45845?v=4,crew,45845
+LEi7HLlfEXIZuySPGB21M,darkgnotic,Darick Tong,https://avatars.githubusercontent.com/u/132324914?v=4,crew,132324914
+Z8UVcI3tDI-qWRQiq8N-e,linear[bot],linear[bot],https://avatars.githubusercontent.com/in/20150?v=4,user,44709815
+KmQThHCHAmsWRLr0_uU1B,tantaman,Matt Wonlaw,https://avatars.githubusercontent.com/u/1009003?v=4,crew,1009003
+U5JpbO_DuJsVSdksk839i,aboodman,Aaron Boodman,https://avatars.githubusercontent.com/u/80388?v=4,crew,80388
+OspYF4ZWuV8Wd7Q1UdpPc,cesara,Cesar Alaestante,https://avatars.githubusercontent.com/u/807848?v=4,crew,807848
+Vb53DdMWBV4heMchgdoua,grgbkr,Greg Baker,https://avatars.githubusercontent.com/u/19158916?v=4,crew,19158916
+LbwlTBjAEnspiYgjZVt-i,jesseditson,Jesse Ditson,https://avatars.githubusercontent.com/u/370239?v=4,user,370239
+ksbyih44eYKjA-Y3ms3v6,phritz,Phritz,https://avatars.githubusercontent.com/u/157153?v=4,user,157153
+lM_3fwAalvGIzCMy4o6OU,ingar,Ingar Shu,https://avatars.githubusercontent.com/u/85998?v=4,user,85998
+cjPqu58MEp42qKtNRjM_3,jamischarles,Jamis Charles,https://avatars.githubusercontent.com/u/606014?v=4,user,606014
+vnA6V4xRz9VfNgb_sPRFP,pcorpet,Pascal Corpet,https://avatars.githubusercontent.com/u/7937848?v=4,user,7937848
+dZKoBphZDTi75_7tYKDEW,KeKs0r,Marc Höffl,https://avatars.githubusercontent.com/u/2970814?v=4,user,2970814
