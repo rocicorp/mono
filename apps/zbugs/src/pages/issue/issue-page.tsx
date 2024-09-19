@@ -16,7 +16,7 @@ export default function IssuePage() {
     .where('id', params?.id ?? '')
     .related('creator')
     .related('labels')
-    .related('comments', c => c.related('creator'));
+    .related('comments', c => c.related('creator').orderBy('created', 'asc'));
   const issue = useQuery(match && q)[0] as QueryRowType<typeof q> | undefined;
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
