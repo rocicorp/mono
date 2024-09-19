@@ -1,3 +1,5 @@
+import {URLParams} from 'zero-cache/src/types/url-params.js';
+
 export type ConnectParams = {
   readonly clientID: string;
   readonly clientGroupID: string;
@@ -17,51 +19,16 @@ export function getConnectParams(url: URL):
       params: null;
       error: string;
     } {
-  function getParam(name: string, required: true): string;
-  function getParam(name: string, required: boolean): string | null;
-  function getParam(name: string, required: boolean) {
-    const value = url.searchParams.get(name);
-    if (value === '' || value === null) {
-      if (required) {
-        throw new Error(`invalid querystring - missing ${name}`);
-      }
-      return null;
-    }
-    return value;
-  }
-
-  function getIntegerParam(name: string, required: true): number;
-  function getIntegerParam(name: string, required: boolean): number | null;
-  function getIntegerParam(name: string, required: boolean) {
-    const value = getParam(name, required);
-    if (value === null) {
-      return null;
-    }
-    const int = parseInt(value);
-    if (isNaN(int)) {
-      throw new Error(
-        `invalid querystring parameter ${name}, got: ${value}, url: ${url}`,
-      );
-    }
-    return int;
-  }
-
-  function getBooleanParam(name: string): boolean {
-    const value = getParam(name, false);
-    if (value === null) {
-      return false;
-    }
-    return value === 'true';
-  }
+  const params = new URLParams(url);
 
   try {
-    const clientID = getParam('clientID', true);
-    const clientGroupID = getParam('clientGroupID', true);
-    const baseCookie = getParam('baseCookie', false);
-    const timestamp = getIntegerParam('ts', true);
-    const lmID = getIntegerParam('lmid', true);
-    const wsID = getParam('wsid', false) ?? '';
-    const debugPerf = getBooleanParam('debugPerf');
+    const clientID = params.get('clientID', true);
+    const clientGroupID = params.get('clientGroupID', true);
+    const baseCookie = params.get('baseCookie', false);
+    const timestamp = params.getInteger('ts', true);
+    const lmID = params.getInteger('lmid', true);
+    const wsID = params.get('wsid', false) ?? '';
+    const debugPerf = params.getBoolean('debugPerf');
 
     return {
       params: {
