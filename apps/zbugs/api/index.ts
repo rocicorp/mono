@@ -5,6 +5,7 @@ import oauthPlugin from '@fastify/oauth2';
 import 'dotenv/config';
 import {Octokit} from '@octokit/core';
 import postgres from 'postgres';
+import {SignJWT} from 'jose';
 
 import {OAuth2Namespace} from '@fastify/oauth2';
 
@@ -63,10 +64,22 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
       ${userDetails.data.avatar_url}
     ) ON CONFLICT ("id") DO NOTHING`;
 
-  // 1. mint the JWT
-  // 2. save to cookie
-  // 3. redirect to dashboard
-  reply.cookie('jwt', 'jwt').redirect('/');
+  const jwtPayload = {
+    sub: userDetails.data.id.toString(),
+    iat: Math.floor(Date.now() / 1000),
+    name: userDetails.data.login,
+  };
+
+  const jwt = await new SignJWT(jwtPayload)
+    .setProtectedHeader({alg: 'HS256'})
+    .setExpirationTime('30days')
+    .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+
+  reply
+    .cookie('jwt', jwt, {
+      path: '/',
+    })
+    .redirect('/');
 });
 
 export default async function handler(req, reply) {

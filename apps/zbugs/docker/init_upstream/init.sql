@@ -39,7 +39,7 @@ CREATE TABLE comment (
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
     "created" double precision,
     "body" TEXT NOT NULL,
-    "creatorID" VARCHAR REFERENCES "user"(id)
+    "creatorID" INTEGER REFERENCES "user"(id)
 );
 
 CREATE TABLE label (
