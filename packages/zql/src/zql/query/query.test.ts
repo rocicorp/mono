@@ -134,6 +134,7 @@ describe('types', () => {
     query.related('doesNotExist', q => q);
 
     const query2 = query.related('test', q => q.select('b')).select('s');
+
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
       Array<{
         readonly s: string;
