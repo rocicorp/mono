@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {promiseVoid} from 'shared/src/resolved-promises.js';
 import {
   afterEach,
   beforeEach,
@@ -20,6 +21,7 @@ import {
 } from '../change-streamer/change-streamer.js';
 import {replicationSlot} from '../change-streamer/pg/initial-sync.js';
 import {IncrementalSyncer} from './incremental-sync.js';
+import {Notifier} from './notifier.js';
 import {initChangeLog} from './schema/change-log.js';
 import {initReplicationState} from './schema/replication-state.js';
 import {ReplicationMessages} from './test-utils.js';
@@ -35,6 +37,9 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
   let subscribeFn: MockedFunction<
     (ctx: SubscriberContext) => Subscription<Downstream>
   >;
+  let checkpointFn: MockedFunction<
+    (commits: number, notifier: Notifier) => Promise<void>
+  >;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
@@ -42,10 +47,15 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
     replica = new Database(lc, ':memory:');
     downstream = Subscription.create();
     subscribeFn = vi.fn();
+    checkpointFn = vi.fn();
     syncer = new IncrementalSyncer(
       REPLICA_ID,
       {subscribe: subscribeFn.mockImplementation(() => downstream)},
       replica,
+      {
+        maybeCheckpoint: checkpointFn.mockReturnValue(promiseVoid),
+        stop: vi.fn(),
+      },
     );
   });
 
@@ -482,14 +492,17 @@ describe('replicator/incremental-sync', {retry: 3}, () => {
         initial: true,
       });
 
+      let commits = 0;
       for (const change of c.downstream) {
         downstream.push(change);
         if (change[0] === 'commit') {
           // Wait for the transaction to be committed to the replica.
+          commits++;
           await Promise.race([versionReady.next(), syncing]);
         }
       }
 
+      expect(checkpointFn).toHaveBeenCalledTimes(commits);
       expectTables(replica, c.data, 'bigint');
     });
   }
