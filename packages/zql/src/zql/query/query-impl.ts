@@ -2,7 +2,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {AST, Ordering} from '../ast/ast.js';
 import {BuilderDelegate, buildPipeline} from '../builder/builder.js';
-import {ArrayView} from '../ivm/array-view.js';
+import {ArrayView, Format} from '../ivm/array-view.js';
 import {Row} from '../ivm/data.js';
 import {
   AddSelections,
@@ -25,11 +25,6 @@ import {
   Schema,
 } from './schema.js';
 import {TypedView} from './typed-view.js';
-
-export type Format = {
-  singular: boolean;
-  relationships: Record<string, Format>;
-};
 
 export function newQuery<
   TSchema extends Schema,
@@ -119,7 +114,10 @@ export class QueryImpl<
   materialize(): TypedView<Smash<TReturn>> {
     const ast = this.#completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const view = new ArrayView(buildPipeline(ast, this.#delegate, undefined));
+    const view = new ArrayView(
+      buildPipeline(ast, this.#delegate, undefined),
+      this.#format,
+    );
     const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
       view.flush();
     });

@@ -55,9 +55,21 @@ export function assertNotNull<T>(v: T | null): asserts v is T {
   }
 }
 
-export function assertNotUndefined<T>(v: T | undefined): asserts v is T {
+export function assertUndefined<T>(
+  v: T | undefined,
+  msg = 'Expected undefined value',
+): asserts v is T {
+  if (v !== undefined) {
+    throw new Error(msg);
+  }
+}
+
+export function assertNotUndefined<T>(
+  v: T | undefined,
+  msg = 'Expected non undefined value',
+): asserts v is T {
   if (v === undefined) {
-    throw new Error('Expected non undefined value');
+    throw new Error(msg);
   }
 }
 

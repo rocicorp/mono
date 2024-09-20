@@ -13,7 +13,7 @@ export function useQuery<TSchema extends Schema, TReturn extends QueryType>(
   assert(!queryImpl.singular, 'singular queries not supported yet');
 
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>(
-    [] as unknown as Smash<TReturn>,
+    (queryImpl.singular ? undefined : []) as unknown as Smash<TReturn>,
   );
   const [, setView] = useState<TypedView<Smash<TReturn>> | undefined>(
     undefined,

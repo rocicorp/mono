@@ -1,4 +1,11 @@
-import {assert, notImplemented, unreachable} from 'shared/src/asserts.js';
+import {
+  assert,
+  assertArray,
+  assertObject,
+  assertUndefined,
+  notImplemented,
+  unreachable,
+} from 'shared/src/asserts.js';
 import {Immutable} from 'shared/src/immutable.js';
 import {must} from 'shared/src/must.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
@@ -12,7 +19,12 @@ import {Schema} from './schema.js';
  * immutable. Caller must not modify it. Passed data is valid until next
  * time listener is called.
  */
-export type Listener = (entries: Immutable<EntryList>) => void;
+export type Listener = (entries: Immutable<View>) => void;
+
+export type Format = {
+  singular: boolean;
+  relationships: Record<string, Format>;
+};
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -27,32 +39,40 @@ export type Listener = (entries: Immutable<EntryList>) => void;
  */
 export class ArrayView implements Output {
   readonly #input: Input;
-  readonly #view: EntryList;
   readonly #listeners = new Set<Listener>();
   readonly #schema: Schema;
+  readonly #format: Format;
+
+  // Synthetic "root" entry that has a single "" relationship, so that we can
+  // treat all changes, including the root change, generically.
+  readonly #root: Entry;
 
   onDestroy: (() => void) | undefined;
 
   #hydrated = false;
   #dirty = false;
 
-  constructor(input: Input) {
+  constructor(
+    input: Input,
+    format: Format = {singular: false, relationships: {}},
+  ) {
     this.#input = input;
     this.#schema = input.getSchema();
+    this.#format = format;
     this.#input.setOutput(this);
-    this.#view = [];
+    this.#root = {'': format.singular ? undefined : []};
     assertOrderingIncludesPK(this.#schema.sort, this.#schema.primaryKey);
   }
 
   get data() {
-    return this.#view;
+    return this.#root[''] as View;
   }
 
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
     if (this.#hydrated) {
-      listener(this.#view);
+      listener(this.data);
     }
 
     return () => {
@@ -62,7 +82,7 @@ export class ArrayView implements Output {
 
   #fireListeners() {
     for (const listener of this.#listeners) {
-      listener(this.#view);
+      listener(this.data);
     }
   }
 
@@ -78,14 +98,20 @@ export class ArrayView implements Output {
     this.#hydrated = true;
     this.#dirty = true;
     for (const node of this.#input.fetch({})) {
-      applyChange(this.#view, {type: 'add', node}, this.#schema);
+      applyChange(
+        this.#root,
+        {type: 'add', node},
+        this.#schema,
+        '',
+        this.#format,
+      );
     }
     this.flush();
   }
 
   push(change: Change): void {
     this.#dirty = true;
-    applyChange(this.#view, change, this.#schema);
+    applyChange(this.#root, change, this.#schema, '', this.#format);
   }
 
   flush() {
@@ -97,10 +123,17 @@ export class ArrayView implements Output {
   }
 }
 
+export type View = EntryList | Entry | undefined;
 export type EntryList = Entry[];
-export type Entry = Record<string, Value | EntryList>;
+export type Entry = {[key: string]: Value | View};
 
-function applyChange(view: EntryList, change: Change, schema: Schema) {
+function applyChange(
+  parentEntry: Entry,
+  change: Change,
+  schema: Schema,
+  relationship: string,
+  format: Format,
+) {
   if (schema.isHidden) {
     switch (change.type) {
       case 'add':
@@ -110,7 +143,13 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         )) {
           const childSchema = must(schema.relationships[relationship]);
           for (const node of children) {
-            applyChange(view, {type: change.type, node}, childSchema);
+            applyChange(
+              parentEntry,
+              {type: change.type, node},
+              childSchema,
+              relationship,
+              format,
+            );
           }
         }
         return;
@@ -122,7 +161,13 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
         const childSchema = must(
           schema.relationships[change.child.relationshipName],
         );
-        applyChange(view, change.child.change, childSchema);
+        applyChange(
+          parentEntry,
+          change.child.change,
+          childSchema,
+          relationship,
+          format,
+        );
         return;
       }
       default:
@@ -130,88 +175,131 @@ function applyChange(view: EntryList, change: Change, schema: Schema) {
     }
   }
 
+  const {singular, relationships: childFormats} = format;
   switch (change.type) {
     case 'add': {
       // TODO: Only create a new entry if we need to mutate the existing one.
       const newEntry: Entry = {
         ...change.node.row,
       };
-      const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
-      assert(!found, 'node already exists');
-      view.splice(pos, 0, newEntry);
-
+      if (singular) {
+        assertUndefined(
+          parentEntry[relationship],
+          'single output already exists',
+        );
+        parentEntry[relationship] = newEntry;
+      } else {
+        const view = parentEntry[relationship];
+        assertArray(view);
+        const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
+        assert(!found, 'node already exists');
+        view.splice(pos, 0, newEntry);
+      }
       for (const [relationship, children] of Object.entries(
         change.node.relationships,
       )) {
         // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
         const childSchema = must(schema.relationships[relationship]);
-        const newView: EntryList = [];
+        const childFormat = must(childFormats[relationship]);
+        const newView = childFormat.singular ? undefined : ([] as EntryList);
         newEntry[relationship] = newView;
         for (const node of children) {
-          applyChange(newView, {type: 'add', node}, childSchema);
+          applyChange(
+            newEntry,
+            {type: 'add', node},
+            childSchema,
+            relationship,
+            childFormat,
+          );
         }
       }
       break;
     }
     case 'remove': {
-      const {pos, found} = binarySearch(
-        view,
-        change.node.row,
-        schema.compareRows,
-      );
-      assert(found, 'node does not exist');
-      view.splice(pos, 1);
+      if (singular) {
+        assertObject(parentEntry[relationship]);
+        parentEntry[relationship] = undefined;
+      } else {
+        assertArray(parentEntry[relationship]);
+        const view = parentEntry[relationship];
+        const {pos, found} = binarySearch(
+          view,
+          change.node.row,
+          schema.compareRows,
+        );
+        assert(found, 'node does not exist');
+        view.splice(pos, 1);
+      }
       break;
     }
     case 'child': {
-      const {pos, found} = binarySearch(view, change.row, schema.compareRows);
-      assert(found, 'node does not exist');
+      let existing: Entry;
+      if (singular) {
+        assertObject(parentEntry[relationship]);
+        existing = parentEntry[relationship];
+      } else {
+        assertArray(parentEntry[relationship]);
+        const list = parentEntry[relationship];
+        const {pos, found} = binarySearch(list, change.row, schema.compareRows);
+        assert(found, 'node does not exist');
+        existing = list[pos];
+      }
 
-      const existing = view[pos];
       const childSchema = must(
         schema.relationships[change.child.relationshipName],
       );
-      const existingList = existing[change.child.relationshipName];
-      assert(Array.isArray(existingList));
-      applyChange(existingList, change.child.change, childSchema);
+      applyChange(
+        existing,
+        change.child.change,
+        childSchema,
+        change.child.relationshipName,
+        format,
+      );
       break;
     }
     case 'edit': {
-      // If the order changed due to the edit, we need to remove and reinsert.
-      if (schema.compareRows(change.oldRow, change.row) === 0) {
-        const {pos, found} = binarySearch(
-          view,
-          change.oldRow,
-          schema.compareRows,
-        );
-        assert(found, 'node does not exists');
-        view[pos] = {
-          ...view[pos],
-          ...change.row,
-        };
+      if (singular) {
+        assertObject(parentEntry[relationship]);
+        parentEntry[relationship] = change.row;
       } else {
-        // Remove
-        const {pos, found} = binarySearch(
-          view,
-          change.oldRow,
-          schema.compareRows,
-        );
-        assert(found, 'node does not exists');
-        const oldEntry = view[pos];
-        view.splice(pos, 1);
-
-        // Insert
-        {
+        assertArray(parentEntry[relationship]);
+        const view = parentEntry[relationship];
+        // If the order changed due to the edit, we need to remove and reinsert.
+        if (schema.compareRows(change.oldRow, change.row) === 0) {
           const {pos, found} = binarySearch(
             view,
-            change.row,
+            change.oldRow,
             schema.compareRows,
           );
-          assert(!found, 'node already exists');
-          view.splice(pos, 0, {
-            ...oldEntry,
+          assert(found, 'node does not exists');
+          view[pos] = {
+            ...view[pos],
             ...change.row,
-          });
+          };
+        } else {
+          // Remove
+          const {pos, found} = binarySearch(
+            view,
+            change.oldRow,
+            schema.compareRows,
+          );
+          assert(found, 'node does not exists');
+          const oldEntry = view[pos];
+          view.splice(pos, 1);
+
+          // Insert
+          {
+            const {pos, found} = binarySearch(
+              view,
+              change.row,
+              schema.compareRows,
+            );
+            assert(!found, 'node already exists');
+            view.splice(pos, 0, {
+              ...oldEntry,
+              ...change.row,
+            });
+          }
         }
       }
       break;
