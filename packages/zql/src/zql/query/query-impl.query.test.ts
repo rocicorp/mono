@@ -4,7 +4,12 @@ import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import {Storage} from '../ivm/operator.js';
 import {Source} from '../ivm/source.js';
-import {CommitListener, newQuery, QueryDelegate} from './query-impl.js';
+import {
+  CommitListener,
+  newQuery,
+  QueryDelegate,
+  QueryImpl,
+} from './query-impl.js';
 import {
   commentSchema,
   issueLabelSchema,
@@ -504,6 +509,67 @@ describe('joins and filters', () => {
     queryDelegate.commit();
 
     expect(rows).toEqual([]);
+  });
+
+  test('one', () => {
+    const queryDelegate = new QueryDelegateImpl();
+    addData(queryDelegate);
+
+    const q1 = newQuery(queryDelegate, issueSchema).one();
+    expect((q1 as QueryImpl<never, never>).format).toEqual({
+      singular: true,
+      relationships: {},
+    });
+
+    const q2 = newQuery(queryDelegate, issueSchema)
+      .one()
+      .related('comments', q => q.one());
+    expect((q2 as QueryImpl<never, never>).format).toEqual({
+      singular: true,
+      relationships: {
+        comments: {
+          singular: true,
+          relationships: {},
+        },
+      },
+    });
+
+    const q3 = newQuery(queryDelegate, issueSchema).related('comments', q =>
+      q.one(),
+    );
+    expect((q3 as QueryImpl<never, never>).format).toEqual({
+      singular: false,
+      relationships: {
+        comments: {
+          singular: true,
+          relationships: {},
+        },
+      },
+    });
+
+    const q4 = newQuery(queryDelegate, issueSchema)
+      .related('comments', q =>
+        q
+          .one()
+          .where('id', '1')
+          .limit(20)
+          .orderBy('authorId', 'asc')
+          .select('id'),
+      )
+      .one()
+      .where('closed', false)
+      .limit(100)
+      .orderBy('title', 'desc')
+      .select('id');
+    expect((q4 as QueryImpl<never, never>).format).toEqual({
+      singular: true,
+      relationships: {
+        comments: {
+          singular: true,
+          relationships: {},
+        },
+      },
+    });
   });
 });
 
