@@ -82,7 +82,7 @@ if ((await orTimeout(allReady, 30_000)) === 'timed-out') {
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
 
-const workers: Workers = {changeStreamer, replicator, syncers};
+const workers: Workers = {syncers};
 
 const dispatcher = new Dispatcher(lc, () => workers);
 try {

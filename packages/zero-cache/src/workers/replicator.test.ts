@@ -6,7 +6,6 @@ import {inProcChannel} from '../types/processes.js';
 import {orTimeout} from '../types/timeout.js';
 import {
   createNotifierFrom,
-  getStatusFromWorker,
   setUpMessageHandlers,
   subscribeTo,
 } from './replicator.js';
@@ -14,21 +13,6 @@ import {
 const lc = createSilentLogContext();
 
 describe('workers/replicator', () => {
-  test('replicator status', async () => {
-    const replicator = {
-      status: vi.fn().mockResolvedValue({status: 'yo'}),
-      subscribe: vi.fn(),
-    };
-
-    const [parent, child] = inProcChannel();
-
-    setUpMessageHandlers(lc, replicator, parent);
-
-    // Simulate a status request from the parent.
-    const status = await getStatusFromWorker(child);
-    expect(status).toEqual({status: 'yo'});
-  });
-
   test('replicator subscription', async () => {
     const originalSub = Subscription.create<ReplicaState>();
 
