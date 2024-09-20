@@ -194,11 +194,10 @@ class PostgresChangeSource implements ChangeSource {
   // ```
   //
   // Using the greatest of three values should always yield a correct result:
-  // * `clientWatermark    `: Which may be ahead of `confirmed_flush_lsn` if an ACK was lost,
+  // * `clientWatermark`    : ahead of `confirmed_flush_lsn` if an ACK was lost,
   //                          or if the `confirmed_flush_lsn` was wiped.
-  // * `confirmed_flush_lsn`: Which may be ahead of the `clientWatermark` if the ChangeDB
-  //                          was wiped.
-  // * `restart_lsn        `: If both the `confirmed_flush_lsn` and ChangeDB were wiped.
+  // * `confirmed_flush_lsn`: ahead of the `clientWatermark` if the ChangeDB was wiped.
+  // * `restart_lsn`        : if both the `confirmed_flush_lsn` and ChangeDB were wiped.
   async getNextWatermark(
     db: PostgresDB,
     slot: string,
