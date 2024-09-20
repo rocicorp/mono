@@ -1,3 +1,4 @@
+import {pid} from 'node:process';
 import {must} from 'shared/src/must.js';
 import {Database} from 'zqlite/src/db.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
@@ -24,7 +25,7 @@ export default async function runWorker(parent: Worker) {
 
   const replicator = new ReplicatorService(
     lc,
-    config.TASK_ID ?? 'z1', // To eventually accommodate multiple zero-caches.
+    `replicator-${pid}`,
     changeStreamer,
     replica,
     // TODO: Run two replicators: one for litestream backup and one for serving requests,
