@@ -22,7 +22,7 @@ export default function IssuePage() {
   // todo: one should be in the schema
   const q = z.query.issue
     .where('id', params?.id ?? '')
-    .related('creator')
+    .related('creator', creator => creator.one())
     .related('labels')
     .related('comments', comments =>
       comments
@@ -53,6 +53,12 @@ export default function IssuePage() {
   // a 404 here. We can't put the 404 here now because it would flash until we
   // get data.
   if (!issue) {
+    return null;
+  }
+
+  // TODO: This check goes away once Zero's consistency model is implemented.
+  // The query above should not be able to return an incomplete result.
+  if (!issue.creator) {
     return null;
   }
 
@@ -146,7 +152,7 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Creator</p>
           <button className="sidebar-button issue-creator">
-            {issue.creator[0].name}
+            {issue.creator.name}
           </button>
         </div>
 
