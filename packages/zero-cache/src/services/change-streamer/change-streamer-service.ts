@@ -261,7 +261,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   subscribe(ctx: SubscriberContext): Source<Downstream> {
     const {id, watermark} = ctx;
     const downstream = Subscription.create<Downstream>({
-      cleanup: () => this.#forwarder.remove(id, subscriber),
+      cleanup: () => this.#forwarder.remove(subscriber),
     });
     const subscriber = new Subscriber(id, watermark, downstream);
     if (ctx.replicaVersion !== this.#replicaVersion) {
