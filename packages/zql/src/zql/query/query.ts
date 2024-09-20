@@ -162,12 +162,15 @@ export type DefaultQueryResultRow<TSchema extends Schema> = {
   singular: false;
 };
 
+/** Expands/simplifies */
+type Expand<T> = T extends infer O ? {[K in keyof O]: O[K]} : never;
+
 export interface Query<
   TSchema extends Schema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > {
   select<TFields extends Selector<TSchema>[]>(
-    ...x: TFields
+    ...columnName: Expand<TFields>
   ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>>;
 
   related<TRelationship extends keyof TSchema['relationships']>(
