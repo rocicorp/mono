@@ -264,9 +264,8 @@ describe('change-streamer/storer', () => {
       ]
     `);
 
-    expect(
-      await db`SELECT * FROM cdc."ChangeLog" ORDER BY watermark, pos`,
-    ).toMatchInlineSnapshot(`
+    expect(await db`SELECT * FROM cdc."ChangeLog" ORDER BY watermark, pos`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "change": {
@@ -337,6 +336,97 @@ describe('change-streamer/storer', () => {
           "precommit": "07",
           "watermark": "08",
         },
+      ]
+    `);
+  });
+
+  test('catchup does not include subsequent transactions', async () => {
+    const [sub, _0, stream] = createSubscriber('03');
+
+    // This should be buffered until catchup is complete.
+    sub.send(['0b', ['begin', messages.begin()]]);
+    sub.send([
+      '0c',
+      ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
+    ]);
+
+    // Start a transaction before enqueuing catchup.
+    storer.store(['07', ['begin', messages.begin()]]);
+    // Enqueue catchup before transaction completes.
+    storer.catchup(sub);
+    // Finish the transaction.
+    storer.store([
+      '08',
+      ['commit', messages.commit({extra: 'fields'}), {watermark: '08'}],
+    ]);
+
+    // And finish another the transaction. In reality, these would be
+    // sent by the forwarder, but we skip it in the test to confirm that
+    // catchup doesn't include the next transaction.
+    storer.store(['09', ['begin', messages.begin()]]);
+    storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+
+    // Messages should catchup from after '03' and include '06'
+    // from the pending transaction. '07' and '08' should not be included
+    // in the snapshot used for catchup. We confirm this by sending the '0c'
+    // message and ensuring that that was sent.
+    expect(await drainUntilCommit('0c', stream)).toMatchInlineSnapshot(`
+      [
+        [
+          "begin",
+          {
+            "boo": "dar",
+            "tag": "begin",
+          },
+        ],
+        [
+          "data",
+          {
+            "tag": "update",
+          },
+        ],
+        [
+          "commit",
+          {
+            "boo": "far",
+            "tag": "commit",
+          },
+          {
+            "watermark": "06",
+          },
+        ],
+        [
+          "begin",
+          {
+            "tag": "begin",
+          },
+        ],
+        [
+          "commit",
+          {
+            "extra": "fields",
+            "tag": "commit",
+          },
+          {
+            "watermark": "08",
+          },
+        ],
+        [
+          "begin",
+          {
+            "tag": "begin",
+          },
+        ],
+        [
+          "commit",
+          {
+            "tag": "commit",
+            "waa": "hoo",
+          },
+          {
+            "watermark": "0c",
+          },
+        ],
       ]
     `);
   });

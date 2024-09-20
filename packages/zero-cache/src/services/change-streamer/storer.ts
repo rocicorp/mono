@@ -81,19 +81,12 @@ export class Storer implements Service {
         tx.pos++;
       }
 
-      const entry =
-        tag === 'commit'
-          ? {
-              watermark,
-              pos: tx.pos,
-              change: change as unknown as JSONValue,
-              precommit: tx.preCommitWatermark,
-            }
-          : {
-              watermark: tx.preCommitWatermark,
-              pos: tx.pos,
-              change: change as unknown as JSONValue,
-            };
+      const entry = {
+        watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
+        precommit: tag === 'commit' ? tx.preCommitWatermark : null,
+        pos: tx.pos,
+        change: change as unknown as JSONValue,
+      };
 
       tx.pool.process(tx => [
         // Ignore conflicts to take into account transaction replay when an
