@@ -11,6 +11,7 @@ import {
 } from 'zero-cache/src/test/db.js';
 import {DbFile} from 'zero-cache/src/test/lite.js';
 import {
+  oneAfter,
   versionFromLexi,
   versionToLexi,
 } from 'zero-cache/src/types/lexi-version.js';
@@ -83,7 +84,7 @@ describe('change-source/pg', () => {
       new StatementRunner(replicaDbFile.connect(lc)),
     );
 
-    const {initialWatermark, changes, acks} = await source.startStream();
+    const {initialWatermark, changes, acks} = await source.startStream('00');
     const downstream = drainToQueue(changes);
 
     await upstream.begin(async tx => {
@@ -188,13 +189,81 @@ describe('change-source/pg', () => {
     ]);
   });
 
+  test('start after confirmed flush', async () => {
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
+
+    // Write three transactions, to experiment with different starting points.
+    await upstream`INSERT INTO foo(id) VALUES('hello')`;
+    await upstream`INSERT INTO foo(id) VALUES('world')`;
+    await upstream`INSERT INTO foo(id) VALUES('foobar')`;
+
+    const stream1 = await source.startStream('00');
+    const changes1 = drainToQueue(stream1.changes);
+
+    expect(stream1.initialWatermark).toEqual(replicaVersion);
+    expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    const firstCommit = (await changes1.dequeue()) as Commit;
+    expect(firstCommit).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+
+    expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    const secondCommit = (await changes1.dequeue()) as Commit;
+    expect(secondCommit).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+
+    expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    const thirdCommit = (await changes1.dequeue()) as Commit;
+    expect(thirdCommit).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+
+    stream1.changes.cancel();
+
+    // Starting a new stream should replay at the original position since we did not ACK.
+    const stream2 = await source.startStream('00');
+    const changes2 = drainToQueue(stream2.changes);
+
+    expect(stream2.initialWatermark).toEqual(replicaVersion);
+    expect(await changes2.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await changes2.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await changes2.dequeue()).toEqual(firstCommit);
+
+    stream2.changes.cancel();
+
+    // Still with no ACK, start a stream from after the secondCommit.
+    const stream3 = await source.startStream(secondCommit[2].watermark);
+    const changes3 = drainToQueue(stream3.changes);
+
+    expect(stream3.initialWatermark).toEqual(
+      oneAfter(secondCommit[2].watermark),
+    );
+    expect(await changes3.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await changes3.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await changes3.dequeue()).toEqual(thirdCommit);
+
+    stream3.changes.cancel();
+  });
+
   test('error handling', async () => {
     // Purposely drop the replication slot to test the error case.
     await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
 
     let err;
     try {
-      await source.startStream();
+      await source.startStream('00');
     } catch (e) {
       err = e;
     }
@@ -202,7 +271,7 @@ describe('change-source/pg', () => {
   });
 
   test('abort', async () => {
-    const {changes} = await source.startStream();
+    const {changes} = await source.startStream('00');
 
     const results = await upstream<{pid: number}[]>`
       SELECT active_pid as pid from pg_replication_slots WHERE
@@ -223,10 +292,10 @@ describe('change-source/pg', () => {
   });
 
   test('handoff', {retry: 3}, async () => {
-    const {changes} = await source.startStream();
+    const {changes} = await source.startStream('00');
 
     // Starting another stream should stop the first.
-    const {changes: changes2} = await source.startStream();
+    const {changes: changes2} = await source.startStream('00');
 
     let err;
     try {

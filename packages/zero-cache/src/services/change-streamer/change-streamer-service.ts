@@ -63,10 +63,10 @@ export type ChangeStream = {
 /** Encapsulates an upstream-specific implementation of a stream of Changes. */
 export interface ChangeSource {
   /**
-   * Starts a stream of changes, with a corresponding sink for upstream
-   * acknowledgements.
+   * Starts a stream of changes starting after the specific watermark,
+   * with a corresponding sink for upstream acknowledgements.
    */
-  startStream(): Promise<ChangeStream>;
+  startStream(afterWatermark: string): Promise<ChangeStream>;
 }
 
 /**
@@ -222,7 +222,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     while (this.#state.shouldRun()) {
       let err: unknown;
       try {
-        const stream = await this.#source.startStream();
+        const startAfter = await this.#storer.getLastStoredWatermark();
+        const stream = await this.#source.startStream(
+          startAfter ?? this.#replicaVersion,
+        );
         this.#stream = stream;
         let preCommitWatermark = stream.initialWatermark;
 

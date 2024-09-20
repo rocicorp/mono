@@ -39,8 +39,12 @@ test('LexiVersion sorting', () => {
   // A few explicit tests.
   expect(versionToLexi(35).localeCompare(versionToLexi(36))).toBe(-1);
   expect(versionToLexi(36).localeCompare(versionToLexi(35))).toBe(1);
-  expect(min(versionToLexi(36), versionToLexi(35))).toBe(versionToLexi(35));
-  expect(max(versionToLexi(36), versionToLexi(35))).toBe(versionToLexi(36));
+  expect(min(versionToLexi(36), versionToLexi(35), versionToLexi(37))).toBe(
+    versionToLexi(35),
+  );
+  expect(max(versionToLexi(34), versionToLexi(36), versionToLexi(35))).toBe(
+    versionToLexi(36),
+  );
 
   expect(versionToLexi(1000).localeCompare(versionToLexi(9))).toBe(1);
   expect(min(versionToLexi(1000), versionToLexi(9))).toBe(versionToLexi(9));

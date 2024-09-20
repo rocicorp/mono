@@ -100,7 +100,7 @@ describe('change-streamer/service', () => {
     changes.push([
       'commit',
       messages.commit({extra: 'fields'}),
-      {watermark: '05'},
+      {watermark: '09'},
     ]);
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -139,7 +139,7 @@ describe('change-streamer/service', () => {
     changes.push([
       'commit',
       messages.commit({extra: 'stuff'}),
-      {watermark: '05'},
+      {watermark: '09'},
     ]);
 
     // Subscribe to the original watermark.
@@ -156,7 +156,7 @@ describe('change-streamer/service', () => {
     changes.push([
       'commit',
       messages.commit({more: 'stuff'}),
-      {watermark: '08'},
+      {watermark: '0b'},
     ]);
 
     // Verify that all changes were sent to the subscriber ...
@@ -225,7 +225,7 @@ describe('change-streamer/service', () => {
     changes.push([
       'commit',
       messages.commit({extra: 'info'}),
-      {watermark: '04'},
+      {watermark: '09'},
     ]);
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -312,6 +312,34 @@ describe('change-streamer/service', () => {
     void streamer.run();
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('starting point', async () => {
+    const requests = new Queue<string>();
+    const source = {
+      startStream: vi.fn().mockImplementation(req => {
+        void requests.enqueue(req);
+        return resolver().promise;
+      }),
+    };
+    const replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+    const config = getSubscriptionState(new StatementRunner(replica));
+
+    let streamer = await initializeStreamer(lc, changeDB, source, config);
+    void streamer.run();
+
+    expect(await requests.dequeue()).toBe(REPLICA_VERSION);
+
+    await changeDB`
+      INSERT INTO cdc."ChangeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO cdc."ChangeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+    `.simple();
+
+    streamer = await initializeStreamer(lc, changeDB, source, config);
+    void streamer.run();
+
+    expect(await requests.dequeue()).toBe('04');
   });
 
   test('retry on change stream error', async () => {

@@ -59,6 +59,14 @@ describe('change-streamer/storer', () => {
     return msgs;
   }
 
+  test('last stored watermark', async () => {
+    expect(await storer.getLastStoredWatermark()).toBe('06');
+
+    await db`TRUNCATE TABLE cdc."ChangeLog"`;
+
+    expect(await storer.getLastStoredWatermark()).toBe(null);
+  });
+
   test('no queueing if not in transaction', async () => {
     const [sub, _, stream] = createSubscriber('00');
 

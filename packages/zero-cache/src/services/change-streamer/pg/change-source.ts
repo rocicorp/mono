@@ -12,7 +12,7 @@ import {AbortError} from 'shared/src/abort-error.js';
 import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {oneAfter} from 'zero-cache/src/types/lexi-version.js';
+import {max, oneAfter} from 'zero-cache/src/types/lexi-version.js';
 import {
   PostgresDB,
   postgresTypeConfig,
@@ -86,14 +86,12 @@ class PostgresChangeSource implements ChangeSource {
     this.#replicationConfig = replicationConfig;
   }
 
-  async startStream(): Promise<ChangeStream> {
+  async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = postgres(this.#upstreamUri, postgresTypeConfig());
     const slot = replicationSlot(this.#replicaID);
+    const clientStart = oneAfter(clientWatermark);
 
     try {
-      // Note: Starting a replication stream at '0/0' defaults to starting at
-      // the slot's `confirmed_flush_lsn`, as detailed in
-      // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-START-REPLICATION-SLOT-LOGICAL
       let lastLSN = '0/0';
 
       const ack = (commit?: Commit) => {
@@ -119,7 +117,7 @@ class PostgresChangeSource implements ChangeSource {
         {acknowledge: {auto: false, timeoutSeconds: 0}},
       )
         .on('start', () =>
-          this.getNextWatermark(db, slot)
+          this.getNextWatermark(db, slot, clientStart)
             .then(resolve)
             .catch(e => reject(translateError(e))),
         )
@@ -143,7 +141,7 @@ class PostgresChangeSource implements ChangeSource {
             publicationNames: this.#replicationConfig.publications,
           }),
           slot,
-          lastLSN,
+          fromLexiVersion(clientStart),
         )
         .catch(e => {
           const err = translateError(e);
@@ -187,7 +185,7 @@ class PostgresChangeSource implements ChangeSource {
     }
   }
 
-  // When a replication slot is created, its `confirmed_flush_lsn` is uninitialized, e.g.
+  // Sometimes the `confirmed_flush_lsn` gets wiped, e.g.
   //
   // ```
   //  slot_name | restart_lsn | confirmed_flush_lsn
@@ -195,31 +193,33 @@ class PostgresChangeSource implements ChangeSource {
   //  zero_slot | 8F/38ACB2F8 | 0/1
   // ```
   //
-  // However, the `restart_lsn` is _not_ a suitable replacement because it
-  // may be before the `consistent_point` lsn returned by createReplicationSlot
-  // (in initial-sync.ts). Luckily, that `consistent_point` is what we use as
-  // the `replicaVersion` to identify the initial snapshot, so we use the greater
-  // of the confirmed flush lsn (which may be 0/1) and the replica version
-  // (i.e. consistent_point) + 1.
-  async getNextWatermark(db: PostgresDB, slot: string): Promise<string> {
-    const result = await db<{lsn: string}[]>`
-      SELECT confirmed_flush_lsn as lsn FROM pg_replication_slots 
+  // Using the greatest of three values should always yield a correct result:
+  // * `clientWatermark    `: Which may be ahead of `confirmed_flush_lsn` if an ACK was lost,
+  //                          or if the `confirmed_flush_lsn` was wiped.
+  // * `confirmed_flush_lsn`: Which may be ahead of the `clientWatermark` if the ChangeDB
+  //                          was wiped.
+  // * `restart_lsn        `: If both the `confirmed_flush_lsn` and ChangeDB were wiped.
+  async getNextWatermark(
+    db: PostgresDB,
+    slot: string,
+    clientStart: string,
+  ): Promise<string> {
+    const result = await db<{restart: string; confirmed: string}[]>`
+      SELECT restart_lsn as restart, confirmed_flush_lsn as confirmed FROM pg_replication_slots 
         WHERE slot_name = ${slot}`;
     if (result.length === 0) {
       throw new Error(`Upstream is missing replication slot ${slot}`);
     }
-    const {lsn} = result[0];
+    const {restart, confirmed} = result[0];
+    const confirmedWatermark = toLexiVersion(confirmed);
+    const restartWatermark = toLexiVersion(restart);
 
-    const confirmedWatermark = toLexiVersion(lsn);
-    const {replicaVersion} = this.#replicationConfig;
-
-    if (confirmedWatermark >= replicaVersion) {
-      return confirmedWatermark;
-    }
     this.#lc.info?.(
-      `confirmed_flush_lsn ${lsn} (${confirmedWatermark}) is behind replicaVersion ${replicaVersion}`,
+      `confirmed_flush_lsn:${confirmed}, restart_lsn:${restart}, clientWatermark:${fromLexiVersion(
+        clientStart,
+      )}`,
     );
-    return oneAfter(replicaVersion);
+    return max(confirmedWatermark, restartWatermark, clientStart);
   }
 }
 

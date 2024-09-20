@@ -37,6 +37,13 @@ export class Storer implements Service {
     this.#onCommit = onCommit;
   }
 
+  async getLastStoredWatermark(): Promise<string | null> {
+    const result = await this.#db<
+      {max: string | null}[]
+    >`SELECT MAX(watermark) as max FROM cdc."ChangeLog"`;
+    return result[0].max;
+  }
+
   store(entry: WatermarkedChange) {
     void this.#queue.enqueue(['change', entry]);
   }
