@@ -5,12 +5,16 @@ import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
-import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {
+  getSubscriptionState,
+  initReplicationState,
+} from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {initializeStreamer} from './change-streamer-service.js';
 import {
@@ -53,7 +57,7 @@ describe('change-streamer/service', () => {
             acks: {push: commit => acks.enqueue(commit)},
           }),
       },
-      replica,
+      getSubscriptionState(new StatementRunner(replica)),
     );
     streamerDone = streamer.run();
   });
@@ -299,7 +303,12 @@ describe('change-streamer/service', () => {
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
-    const streamer = await initializeStreamer(lc, changeDB, source, replica);
+    const streamer = await initializeStreamer(
+      lc,
+      changeDB,
+      source,
+      getSubscriptionState(new StatementRunner(replica)),
+    );
     void streamer.run();
 
     expect(await hasRetried).toBe(true);
@@ -325,7 +334,12 @@ describe('change-streamer/service', () => {
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
-    const streamer = await initializeStreamer(lc, changeDB, source, replica);
+    const streamer = await initializeStreamer(
+      lc,
+      changeDB,
+      source,
+      getSubscriptionState(new StatementRunner(replica)),
+    );
     void streamer.run();
 
     changes.fail(new Error('doh'));

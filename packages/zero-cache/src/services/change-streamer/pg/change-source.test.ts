@@ -43,12 +43,14 @@ describe('change-source/pg', () => {
     CREATE PUBLICATION zero_all FOR TABLE foo WHERE (id != 'exclude-me');
     `);
 
-    source = await initializeChangeSource(
-      lc,
-      upstreamURI,
-      REPLICA_ID,
-      replicaDbFile.path,
-    );
+    source = (
+      await initializeChangeSource(
+        lc,
+        upstreamURI,
+        REPLICA_ID,
+        replicaDbFile.path,
+      )
+    ).changeSource;
   });
 
   afterEach(async () => {

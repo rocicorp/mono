@@ -12,6 +12,7 @@ export const STATUS_URL_PATTERN = '/api/system/:version/status';
 export const CONNECT_URL_PATTERN = '/api/sync/:version/connect';
 
 export type Workers = {
+  changeStreamer: Worker;
   replicator: Worker;
   syncers: Worker[];
 };
