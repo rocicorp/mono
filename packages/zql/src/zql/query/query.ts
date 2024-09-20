@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/ban-types */
-import {AST} from '../ast/ast.js';
 import {Row} from '../ivm/data.js';
 import {SchemaValue} from '../ivm/schema.js';
 import {Source} from '../ivm/source.js';
@@ -17,17 +16,15 @@ export type Context = {
   createStorage: () => Storage;
 };
 
-export type Smash<T extends QueryResultRow> = Array<
-  Collapse<
-    T['row'] & {
-      [K in keyof T['related']]: T['related'][K] extends QueryResultRow
-        ? Smash<T['related'][K]>
-        : never;
-    }
-  >
->;
+export type Smash<T extends QueryType> = T['singular'] extends true
+  ? SmashOne<T>
+  : Array<SmashOne<T>>;
 
-type Collapse<T> = T extends object ? {[K in keyof T]: T[K]} : T;
+type SmashOne<T extends QueryType> = T['row'] & {
+  [K in keyof T['related']]: T['related'][K] extends QueryType
+    ? Smash<T['related'][K]>
+    : never;
+};
 
 /**
  * Given a schema value, return the TypeScript type.
@@ -90,24 +87,33 @@ export type QueryRowType<T extends Query<any, any>> =
 export type AddSelections<
   TSchema extends Schema,
   TSelections extends Selector<TSchema>[],
-  TReturn extends QueryResultRow,
+  TReturn extends QueryType,
 > = {
   row: {
     [K in TSelections[number]]: SchemaValueToTSType<TSchema['columns'][K]>;
   };
   related: TReturn['related'];
+  singular: TReturn['singular'];
 };
 
 // Adds TSubquery to TReturn under the alias TAs.
 export type AddSubselect<
   TSubquery extends Query<Schema>,
-  TReturn extends QueryResultRow,
+  TReturn extends QueryType,
   TAs extends string,
 > = {
   row: TReturn['row'];
   related: {
     [K in TAs]: InferSubreturn<TSubquery>;
   } & TReturn['related'];
+  singular: TReturn['singular'];
+};
+
+// Adds singular:true to TReturn.
+export type MakeSingular<TReturn extends QueryType> = {
+  row: TReturn['row'];
+  related: TReturn['related'];
+  singular: true;
 };
 
 type InferSubreturn<TSubquery> = TSubquery extends Query<
@@ -118,12 +124,17 @@ type InferSubreturn<TSubquery> = TSubquery extends Query<
   : EmptyQueryResultRow;
 
 /**
- * The result of a ZQL query.
- * Represents a tree of entities and subselects.
+ * Encodes the internal "type" of the query. This is different than the schema,
+ * and different than the result type. The schema is the input type from the
+ * database of the table the query started from.
+ *
+ * The result type is the output type of the query after the 'row' and 'related'
+ * fields have been smashed down.
  */
-export type QueryResultRow = {
+export type QueryType = {
   row: Row;
-  related: Record<string, QueryResultRow>;
+  related: Record<string, QueryType>;
+  singular: boolean;
 };
 
 type EmptyQueryResultRow = {
@@ -148,14 +159,13 @@ export type DefaultQueryResultRow<TSchema extends Schema> = {
     [K in keyof TSchema['columns']]: SchemaValueToTSType<TSchema['columns'][K]>;
   };
   related: {};
+  singular: false;
 };
 
 export interface Query<
   TSchema extends Schema,
-  TReturn extends QueryResultRow = DefaultQueryResultRow<TSchema>,
+  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > {
-  readonly ast: AST;
-
   select<TFields extends Selector<TSchema>[]>(
     ...x: TFields
   ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>>;
@@ -209,6 +219,8 @@ export interface Query<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn>;
+
+  one(): Query<TSchema, MakeSingular<TReturn>>;
 
   materialize(): TypedView<Smash<TReturn>>;
   preload(): {
