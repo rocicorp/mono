@@ -30,13 +30,22 @@ function fixName(s) {
   return s;
 }
 
-const data = await fetch(jsURL);
-let text = await data.text();
-if (!text.startsWith(header)) {
-  throw new Error('Unexpected header');
+async function downloadOldData(url) {
+  const data = await fetch(url);
+  let text = await data.text();
+  if (!text.startsWith(header)) {
+    throw new Error('Unexpected header');
+  }
+  text = text.slice(header.length);
+  return JSON.parse(text);
 }
-text = text.slice(header.length);
-const json = JSON.parse(text);
+
+if (process.env.BENCHER_API_KEY === undefined) {
+  console.error('Please set BENCHER_API_KEY');
+  process.exit(1);
+}
+
+const json = await downloadOldData(jsURL);
 
 for (const {commit, benches} of json.entries['Bundle Sizes']) {
   const body = {
