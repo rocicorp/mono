@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {
   LexiVersion,
   versionFromLexi,
@@ -8,8 +7,6 @@ import {
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Sink, Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {Database} from 'zqlite/src/db.js';
-import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import {RunningState} from '../running-state.js';
 import {
   ChangeStreamerService,
@@ -32,15 +29,14 @@ export async function initializeStreamer(
   lc: LogContext,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
-  replica: Database,
+  replicationConfig: ReplicationConfig,
 ): Promise<ChangeStreamerService> {
-  const replicationConfig = getSubscriptionState(new StatementRunner(replica));
-
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB);
   await ensureReplicationConfig(lc, changeDB, replicationConfig);
 
-  return new ChangeStreamerImpl(lc, changeDB, replicationConfig, changeSource);
+  const {replicaVersion} = replicationConfig;
+  return new ChangeStreamerImpl(lc, changeDB, replicaVersion, changeSource);
 }
 
 /**
@@ -200,7 +196,7 @@ export interface ChangeSource {
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #replicationConfig: ReplicationConfig;
+  readonly #replicaVersion: string;
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
@@ -211,12 +207,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   constructor(
     lc: LogContext,
     changeDB: PostgresDB,
-    replicationConfig: ReplicationConfig,
+    replicaVersion: string,
     source: ChangeSource,
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
-    this.#replicationConfig = replicationConfig;
+    this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#storer = new Storer(
       lc,
@@ -268,7 +264,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       cleanup: () => this.#forwarder.remove(id, subscriber),
     });
     const subscriber = new Subscriber(id, watermark, downstream);
-    if (ctx.replicaVersion !== this.#replicationConfig.replicaVersion) {
+    if (ctx.replicaVersion !== this.#replicaVersion) {
       subscriber.close(ErrorType.WrongReplicaVersion);
     } else {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
