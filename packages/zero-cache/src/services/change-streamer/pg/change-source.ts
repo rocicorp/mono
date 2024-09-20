@@ -41,7 +41,7 @@ export async function initializeChangeSource(
   upstreamURI: string,
   replicaID: string,
   replicaDbFile: string,
-): Promise<ChangeSource> {
+): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
     'change-streamer',
@@ -53,12 +53,14 @@ export async function initializeChangeSource(
   const replica = new Database(lc, replicaDbFile);
   const replicationConfig = getSubscriptionState(new StatementRunner(replica));
 
-  return new PostgresChangeSource(
+  const changeSource = new PostgresChangeSource(
     lc,
     upstreamURI,
     replicaID,
     replicationConfig,
   );
+
+  return {replicationConfig, changeSource};
 }
 
 /**
