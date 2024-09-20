@@ -49,6 +49,8 @@ h1 {
   width: 100vw;
 }
 
+/* Nav */
+
 .zero-logo {
   width: 100%;
   height: auto;
@@ -88,6 +90,8 @@ h1 {
   background-color: var(--color-nav-selected);
 }
 
+/* Primary Content Panel */
+
 .primary-content {
   width: 100%;
   padding-left: 16rem;
@@ -98,8 +102,12 @@ h1 {
 }
 
 .primary-content td {
-  padding: 1rem 0;
   box-shadow: 0px -1px 0px 0px rgba(62, 62, 62, 0.39) inset;
+}
+
+.primary-content td a {
+  display: block;
+  padding: 1rem 0;
 }
 
 .primary-content .issue-title {
