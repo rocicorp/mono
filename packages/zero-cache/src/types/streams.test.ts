@@ -133,4 +133,54 @@ describe('streams', () => {
     expect(consumed.size()).toBe(0);
     expect(await cleanup).toEqual([{from: 8, to: 10, str: 'voodoo'}]);
   });
+
+  async function drain(num: number): Promise<Message[]> {
+    const drained: Message[] = [];
+    let i = 0;
+    for await (const msg of consumer) {
+      drained.push(msg);
+      if (++i === num) {
+        break;
+      }
+    }
+    return drained;
+  }
+
+  test('passthrough', async () => {
+    producer.push({from: 1, to: 2, str: 'foo', extra: 'bar'} as Message);
+
+    expect(await drain(1)).toEqual([
+      {from: 1, to: 2, str: 'foo', extra: 'bar'},
+    ]);
+  });
+
+  test('bigints', async () => {
+    producer.push({
+      from: 1,
+      to: 2,
+      str: 'foo',
+      extras: [
+        Number.MAX_SAFE_INTEGER,
+        BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+        BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+        BigInt(Number.MAX_SAFE_INTEGER) + 4n,
+      ],
+    } as Message);
+
+    expect(await drain(1)).toEqual([
+      {
+        from: 1,
+        to: 2,
+        str: 'foo',
+        extras: [
+          Number.MAX_SAFE_INTEGER,
+          BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+          BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+          BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+          BigInt(Number.MAX_SAFE_INTEGER) + 4n,
+        ],
+      },
+    ]);
+  });
 });

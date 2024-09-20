@@ -28,7 +28,7 @@ import {ReplicationMessages} from './test-utils.js';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 
-describe('replicator/incremental-sync', {retry: 3}, () => {
+describe('replicator/incremental-sync', () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let replica: Database;

@@ -55,10 +55,7 @@ export interface ChangeStreamer {
 
 export type SubscriberContext = {
   /**
-   * Subscriber id.
-   *
-   * Only one subscription per `id` is maintained. Old subscriptions
-   * with the same `id` will be closed.
+   * Subscriber id. This is only used for debugging.
    */
   id: string;
 

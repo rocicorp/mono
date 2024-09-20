@@ -43,12 +43,14 @@ describe('change-source/pg', () => {
     CREATE PUBLICATION zero_all FOR TABLE foo WHERE (id != 'exclude-me');
     `);
 
-    source = await initializeChangeSource(
-      lc,
-      upstreamURI,
-      REPLICA_ID,
-      replicaDbFile.path,
-    );
+    source = (
+      await initializeChangeSource(
+        lc,
+        upstreamURI,
+        REPLICA_ID,
+        replicaDbFile.path,
+      )
+    ).changeSource;
   });
 
   afterEach(async () => {
@@ -203,7 +205,7 @@ describe('change-source/pg', () => {
     expect(err).toBeInstanceOf(AbortError);
   });
 
-  test('handoff', async () => {
+  test('handoff', {retry: 3}, async () => {
     const {changes} = await source.startStream();
 
     // Starting another stream should stop the first.

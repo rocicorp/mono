@@ -1,7 +1,6 @@
 import {useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
-import {QueryRowType} from 'zero-client';
 import {useQuery} from 'zero-react/src/use-query.js';
 import {useZero} from '../../domain/schema.js';
 import Markdown from '../../components/markdown.js';
@@ -11,13 +10,18 @@ export default function IssuePage() {
 
   const [match, params] = useRoute('/issue/:id');
 
-  // todo: one
+  // todo: one should be in the schema
   const q = z.query.issue
     .where('id', params?.id ?? '')
     .related('creator')
     .related('labels')
-    .related('comments', c => c.related('creator'));
-  const issue = useQuery(match && q)[0] as QueryRowType<typeof q> | undefined;
+    .related('comments', comments =>
+      comments
+        .orderBy('created', 'asc')
+        .related('creator', creator => creator.one()),
+    )
+    .one();
+  const issue = useQuery(match && q);
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
@@ -100,7 +104,7 @@ export default function IssuePage() {
             <h2 className="issue-detail-label">Comments</h2>
             {issue.comments.map(comment => (
               <div key={comment.id} className="comment-item">
-                <p className="comment-author">{comment.creator[0].name}</p>
+                <p className="comment-author">{comment.creator.name}</p>
                 <Markdown>{comment.body}</Markdown>
               </div>
             ))}

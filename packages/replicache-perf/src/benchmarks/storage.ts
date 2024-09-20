@@ -1,5 +1,5 @@
+import type {Benchmark} from '../benchmark.js';
 import {randomString} from '../data.js';
-import type {Benchmark} from '../perf.js';
 
 export function benchmarks(): Benchmark[] {
   return [localStorageRead(), localStorageWrite()];

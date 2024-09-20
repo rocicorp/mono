@@ -1,7 +1,5 @@
-import {deepClone} from 'shared/src/deep-clone.js';
-import {Immutable} from 'shared/src/immutable.js';
 import {expect, test} from 'vitest';
-import {ArrayView, EntryList} from './array-view.js';
+import {ArrayView} from './array-view.js';
 import {Filter} from './filter.js';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
@@ -94,12 +92,14 @@ test('destroy a pipeline from the view', () => {
     hidden: false,
   });
 
-  const view = new ArrayView(join);
-  let data: unknown[] = [];
-  const listener = (d: Immutable<EntryList>) => {
-    data = deepClone(d) as unknown[];
-  };
-  view.addListener(listener);
+  const view = new ArrayView(join, {
+    singular: false,
+    relationships: {stuff: {singular: false, relationships: {}}},
+  });
+  let data: unknown;
+  view.addListener(d => {
+    data = structuredClone(d);
+  });
   view.hydrate();
 
   source1.push({
