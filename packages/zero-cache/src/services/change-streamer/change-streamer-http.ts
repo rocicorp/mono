@@ -48,6 +48,7 @@ export class ChangeStreamerHttpServer implements Service {
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<void> {
     await this.#fastify.register(websocket);
+    this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.addHook('preValidation', this.#checkParams);
     this.#fastify.get(CHANGES_URL_PATTERN, {websocket: true}, this.#subscribe);
 
@@ -62,6 +63,9 @@ export class ChangeStreamerHttpServer implements Service {
 
   // Avoid upgrading to a websocket if the params are bad.
   readonly #checkParams = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (req.url === '/' || req.url.startsWith('/?')) {
+      return; // Health check
+    }
     try {
       getSubscriberContext(req);
     } catch (e) {
