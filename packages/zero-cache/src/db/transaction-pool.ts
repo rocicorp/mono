@@ -104,16 +104,14 @@ export class TransactionPool {
   /**
    * Starts the pool of workers to process Tasks with transactions opened from the
    * specified {@link db}.
-   *
-   * Returns {@link done()}.
    */
-  run(db: PostgresDB): Promise<void> {
+  run(db: PostgresDB): this {
     assert(!this.#db, 'already running');
     this.#db = db;
     for (let i = 0; i < this.#numWorkers; i++) {
       this.#addWorker(db);
     }
-    return this.done();
+    return this;
   }
 
   /**

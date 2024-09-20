@@ -75,7 +75,7 @@ export class Storer implements Service {
           preCommitWatermark: watermark,
           pos: 0,
         };
-        void tx.pool.run(this.#db);
+        tx.pool.run(this.#db);
       } else {
         assert(tx, `received ${tag} outside of transaction`);
         tx.pos++;
@@ -119,7 +119,7 @@ export class Storer implements Service {
       this.#lc.withContext('pool', 'catchup'),
       Mode.READONLY,
     );
-    void reader.run(this.#db);
+    reader.run(this.#db);
 
     // Run in the background. Errors are handled in #catchup() by disconnecting
     // the associated subscriber.
