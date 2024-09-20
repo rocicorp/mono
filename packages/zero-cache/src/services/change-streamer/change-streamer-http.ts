@@ -16,8 +16,10 @@ import {
 
 export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
 
+export const DEFAULT_PORT = 2999;
+
 export type Options = {
-  port: number; // Defaults to 3001.
+  port: number;
 };
 
 export class ChangeStreamerHttpServer implements Service {
@@ -33,7 +35,7 @@ export class ChangeStreamerHttpServer implements Service {
     delegate: ChangeStreamer,
     opts: Partial<Options> = {},
   ) {
-    const {port = 3001} = opts;
+    const {port = DEFAULT_PORT} = opts;
 
     this.#lc = lc.withContext('component', this.id);
     this.#delegate = delegate;
@@ -84,7 +86,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
   readonly #port: number;
 
-  constructor(lc: LogContext, port = 3001) {
+  constructor(lc: LogContext, port = DEFAULT_PORT) {
     this.#lc = lc;
     this.#port = port;
   }
