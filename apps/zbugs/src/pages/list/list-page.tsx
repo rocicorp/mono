@@ -11,10 +11,8 @@ export default function ListPage() {
   const creator = qs.get('creator');
   const label = qs.get('label');
 
-  // TODO: use q.one()
-  const labelID = useQuery(z.query.label.where('name', label ?? ''))[0]?.id as
-    | string
-    | undefined;
+  // TODO: one should be in schema
+  const labelID = useQuery(z.query.label.where('name', label ?? '').one())?.id;
 
   let q = z.query.issue
     .orderBy('modified', 'desc')
