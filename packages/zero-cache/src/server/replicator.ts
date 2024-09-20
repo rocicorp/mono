@@ -19,6 +19,7 @@ export default async function runWorker(parent: Worker) {
   const replica = new Database(lc, config.REPLICA_DB_FILE);
   replica.pragma('journal_mode = WAL');
   replica.pragma(`busy_timeout = ${REPLICA_LOCK_TIMEOUT_MS}`);
+
   const changeStreamer = new ChangeStreamerHttpClient(lc);
 
   const replicator = new ReplicatorService(
