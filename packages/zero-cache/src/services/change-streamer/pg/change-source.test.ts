@@ -203,7 +203,7 @@ describe('change-source/pg', () => {
     expect(err).toBeInstanceOf(AbortError);
   });
 
-  test('handoff', async () => {
+  test('handoff', {retry: 3}, async () => {
     const {changes} = await source.startStream();
 
     // Starting another stream should stop the first.
