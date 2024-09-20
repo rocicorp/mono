@@ -273,10 +273,11 @@ function applyChange(
             schema.compareRows,
           );
           assert(found, 'node does not exists');
-          view[pos] = {
-            ...view[pos],
-            ...change.row,
-          };
+          view[pos] = makeEntryPreserveRelationships(
+            change.row,
+            view[pos],
+            schema.relationships,
+          );
         } else {
           // Remove
           const {pos, found} = binarySearch(
@@ -296,10 +297,15 @@ function applyChange(
               schema.compareRows,
             );
             assert(!found, 'node already exists');
-            view.splice(pos, 0, {
-              ...oldEntry,
-              ...change.row,
-            });
+            view.splice(
+              pos,
+              0,
+              makeEntryPreserveRelationships(
+                change.row,
+                oldEntry,
+                schema.relationships,
+              ),
+            );
           }
         }
       }
@@ -326,4 +332,17 @@ function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
     }
   }
   return {pos: low, found: false};
+}
+
+function makeEntryPreserveRelationships(
+  row: Row,
+  entry: Entry,
+  relationships: {[key: string]: Schema},
+): Entry {
+  const result: Entry = {...row};
+  for (const relationship in relationships) {
+    assert(!(relationship in row), 'Relationship already exists');
+    result[relationship] = entry[relationship];
+  }
+  return result;
 }
