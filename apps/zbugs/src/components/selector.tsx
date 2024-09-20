@@ -5,7 +5,7 @@ type SelectorProps = {
   onClose: () => void;
 };
 
-const Selector: React.FC<SelectorProps> = ({ isOpen, onClose }) => {
+const Selector: React.FC<SelectorProps> = ({isOpen, onClose}) => {
   return (
     <>
       {isOpen && (
