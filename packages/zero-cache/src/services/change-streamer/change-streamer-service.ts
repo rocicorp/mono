@@ -1,9 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {
-  LexiVersion,
-  versionFromLexi,
-  versionToLexi,
-} from 'zero-cache/src/types/lexi-version.js';
+import {oneAfter} from 'zero-cache/src/types/lexi-version.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Sink, Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
@@ -52,9 +48,7 @@ export async function initializeStreamer(
 export type WatermarkedChange = [watermark: string, DownstreamChange];
 
 export type ChangeStream = {
-  /**
-   * The watermark after which the ChangeStream begins (i.e. exclusive).
-   */
+  /** The watermark at which the ChangeStream begins (i.e. inclusive). */
   initialWatermark: string;
 
   changes: Source<DownstreamChange>;
@@ -223,14 +217,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async run() {
-    void this.#storer.run();
+    this.#storer.run().catch(e => this.stop(e));
 
     while (this.#state.shouldRun()) {
       let err: unknown;
       try {
         const stream = await this.#source.startStream();
         this.#stream = stream;
-        let preCommitWatermark = oneAfter(stream.initialWatermark);
+        let preCommitWatermark = stream.initialWatermark;
 
         for await (const change of stream.changes) {
           this.#state.resetBackoff();
@@ -275,13 +269,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     return downstream;
   }
 
-  async stop() {
-    this.#state.stop(this.#lc);
+  async stop(err?: unknown) {
+    this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     await this.#storer.stop();
   }
-}
-
-function oneAfter(watermark: LexiVersion) {
-  return versionToLexi(versionFromLexi(watermark) + 1n);
 }

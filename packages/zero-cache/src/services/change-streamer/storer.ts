@@ -81,11 +81,19 @@ export class Storer implements Service {
         tx.pos++;
       }
 
-      const entry = {
-        watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
-        pos: tx.pos,
-        change: change as unknown as JSONValue,
-      };
+      const entry =
+        tag === 'commit'
+          ? {
+              watermark,
+              pos: tx.pos,
+              change: change as unknown as JSONValue,
+              precommit: tx.preCommitWatermark,
+            }
+          : {
+              watermark: tx.preCommitWatermark,
+              pos: tx.pos,
+              change: change as unknown as JSONValue,
+            };
 
       tx.pool.process(tx => [
         // Ignore conflicts to take into account transaction replay when an
@@ -94,6 +102,26 @@ export class Storer implements Service {
       ]);
 
       if (tag === 'commit') {
+        // Sanity check that there are no records between the preCommitWatermark
+        // and the commit watermark.
+        const {count} = await tx.pool.processReadTask(async db => {
+          assert(tx);
+          const results = await db<{count: number}[]>`
+          SELECT COUNT(*) as count FROM cdc."ChangeLog"
+              WHERE watermark > ${tx.preCommitWatermark} AND
+                    watermark < ${entry.watermark}
+          `;
+          return results[0];
+        });
+        if (count > 0) {
+          const err = new Error(
+            `Unexpected entries between precommit ${tx.preCommitWatermark} and commit ${watermark}`,
+          );
+          tx.pool.fail(err);
+          await tx.pool.done();
+          throw err; // tx.pool.done() throws, but this makes it clearer.
+        }
+
         tx.pool.setDone();
         await tx.pool.done();
         tx = null;

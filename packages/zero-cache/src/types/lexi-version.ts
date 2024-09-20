@@ -59,3 +59,7 @@ export function max(a: LexiVersion, b: LexiVersion): LexiVersion {
 export function min(a: LexiVersion, b: LexiVersion): LexiVersion {
   return a < b ? a : b;
 }
+
+export function oneAfter(version: LexiVersion) {
+  return versionToLexi(versionFromLexi(version) + 1n);
+}

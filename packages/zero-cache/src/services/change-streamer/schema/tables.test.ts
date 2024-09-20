@@ -63,6 +63,7 @@ describe('change-streamer/schema/tables', () => {
           watermark: '184',
           pos: 1n,
           change: {foo: 'bar'},
+          precommit: null,
         },
       ],
     });

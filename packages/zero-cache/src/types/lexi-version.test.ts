@@ -1,5 +1,11 @@
 import {expect, test} from 'vitest';
-import {max, min, versionFromLexi, versionToLexi} from './lexi-version.js';
+import {
+  max,
+  min,
+  oneAfter,
+  versionFromLexi,
+  versionToLexi,
+} from './lexi-version.js';
 
 test('LexiVersion encoding', () => {
   type Case = [number | bigint, string];
@@ -22,6 +28,11 @@ test('LexiVersion encoding', () => {
     expect(versionToLexi(num)).toBe(lexi);
     expect(versionFromLexi(lexi).toString()).toBe(num.toString());
   }
+});
+
+test('oneAfter', () => {
+  expect(oneAfter('2zzz')).toBe('31000');
+  expect(oneAfter('e65gym2kbgwjf668')).toBe('e65gym2kbgwjf669');
 });
 
 test('LexiVersion sorting', () => {

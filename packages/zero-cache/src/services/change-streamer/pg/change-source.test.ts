@@ -10,13 +10,18 @@ import {
   testDBs,
 } from 'zero-cache/src/test/db.js';
 import {DbFile} from 'zero-cache/src/test/lite.js';
+import {
+  versionFromLexi,
+  versionToLexi,
+} from 'zero-cache/src/types/lexi-version.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import {ChangeSource} from '../change-streamer-service.js';
-import {DownstreamChange} from '../change-streamer.js';
+import {Commit, DownstreamChange} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
+import {fromLexiVersion} from './lsn.js';
 
 const REPLICA_ID = 'change_source_test_id';
 
@@ -78,7 +83,7 @@ describe('change-source/pg', () => {
       new StatementRunner(replicaDbFile.connect(lc)),
     );
 
-    const {initialWatermark, changes} = await source.startStream();
+    const {initialWatermark, changes, acks} = await source.startStream();
     const downstream = drainToQueue(changes);
 
     await upstream.begin(async tx => {
@@ -118,11 +123,13 @@ describe('change-source/pg', () => {
         },
       },
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    const firstCommit = (await downstream.dequeue()) as Commit;
+    expect(firstCommit).toMatchObject([
       'commit',
       {tag: 'commit'},
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
+    acks.push(firstCommit);
 
     // Write more upstream changes.
     await upstream.begin(async tx => {
@@ -169,6 +176,16 @@ describe('change-source/pg', () => {
 
     // Close the stream.
     changes.cancel();
+
+    // Verify that the ACK was stored with the replication slot.
+    // Postgres stores 1 + the LSN of the confirmed ACK.
+    const results = await upstream<{confirmed: string}[]>`
+    SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
+        WHERE slot_name = ${replicationSlot(REPLICA_ID)}`;
+    const expected = versionFromLexi(firstCommit[2].watermark) + 1n;
+    expect(results).toEqual([
+      {confirmed: fromLexiVersion(versionToLexi(expected))},
+    ]);
   });
 
   test('error handling', async () => {
