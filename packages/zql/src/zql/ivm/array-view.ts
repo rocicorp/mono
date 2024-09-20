@@ -3,7 +3,6 @@ import {
   assertArray,
   assertObject,
   assertUndefined,
-  notImplemented,
   unreachable,
 } from 'shared/src/asserts.js';
 import {Immutable} from 'shared/src/immutable.js';
@@ -137,7 +136,7 @@ function applyChange(
   if (schema.isHidden) {
     switch (change.type) {
       case 'add':
-      case 'remove': {
+      case 'remove':
         for (const [relationship, children] of Object.entries(
           change.node.relationships,
         )) {
@@ -153,9 +152,11 @@ function applyChange(
           }
         }
         return;
-      }
       case 'edit':
-        notImplemented();
+        // If hidden at this level it means that the hidden row was changed. If
+        // the row was changed in such a way that it would change the
+        // relationships then the edit would have been split into remove and
+        // add.
         return;
       case 'child': {
         const childSchema = must(
@@ -272,10 +273,11 @@ function applyChange(
             schema.compareRows,
           );
           assert(found, 'node does not exists');
-          view[pos] = {
-            ...view[pos],
-            ...change.row,
-          };
+          view[pos] = makeEntryPreserveRelationships(
+            change.row,
+            view[pos],
+            schema.relationships,
+          );
         } else {
           // Remove
           const {pos, found} = binarySearch(
@@ -295,10 +297,15 @@ function applyChange(
               schema.compareRows,
             );
             assert(!found, 'node already exists');
-            view.splice(pos, 0, {
-              ...oldEntry,
-              ...change.row,
-            });
+            view.splice(
+              pos,
+              0,
+              makeEntryPreserveRelationships(
+                change.row,
+                oldEntry,
+                schema.relationships,
+              ),
+            );
           }
         }
       }
@@ -325,4 +332,17 @@ function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
     }
   }
   return {pos: low, found: false};
+}
+
+function makeEntryPreserveRelationships(
+  row: Row,
+  entry: Entry,
+  relationships: {[key: string]: Schema},
+): Entry {
+  const result: Entry = {...row};
+  for (const relationship in relationships) {
+    assert(!(relationship in row), 'Relationship already exists');
+    result[relationship] = entry[relationship];
+  }
+  return result;
 }
