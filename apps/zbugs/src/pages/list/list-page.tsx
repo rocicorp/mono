@@ -89,7 +89,9 @@ export default function ListPage() {
               <td align="right">
                 <div className="issue-taglist">
                   {issue.labels.map(label => (
-                    <span className="label-item">{label.name}</span>
+                    <span key={label.id} className="label-item">
+                      {label.name}
+                    </span>
                   ))}
                 </div>
               </td>

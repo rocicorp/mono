@@ -249,19 +249,25 @@ function applyChange(
       const childSchema = must(
         schema.relationships[change.child.relationshipName],
       );
+      const childFormat = must(
+        format.relationships[change.child.relationshipName],
+      );
       applyChange(
         existing,
         change.child.change,
         childSchema,
         change.child.relationshipName,
-        format,
+        childFormat,
       );
       break;
     }
     case 'edit': {
       if (singular) {
         assertObject(parentEntry[relationship]);
-        parentEntry[relationship] = change.row;
+        parentEntry[relationship] = {
+          ...parentEntry[relationship],
+          ...change.row,
+        };
       } else {
         assertArray(parentEntry[relationship]);
         const view = parentEntry[relationship];
