@@ -57,7 +57,7 @@ describe('db/transaction-pool', () => {
     );
 
     expect(single.isRunning()).toBe(false);
-    void single.run(db);
+    single.run(db);
     expect(single.isRunning()).toBe(true);
 
     single.process(task(`INSERT INTO foo (id) VALUES (1)`));
@@ -91,7 +91,7 @@ describe('db/transaction-pool', () => {
     );
 
     expect(single.isRunning()).toBe(false);
-    void single.run(db);
+    single.run(db);
     expect(single.isRunning()).toBe(true);
 
     // 1 -> 2 -> 3
@@ -129,7 +129,7 @@ describe('db/transaction-pool', () => {
     );
 
     expect(pool.isRunning()).toBe(false);
-    void pool.run(db);
+    pool.run(db);
     expect(pool.isRunning()).toBe(true);
 
     pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
@@ -175,7 +175,7 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.setDone();
 
-    await pool.run(db);
+    await pool.run(db).done();
 
     await expectTables(db, {
       ['public.foo']: [
@@ -211,7 +211,7 @@ describe('db/transaction-pool', () => {
         return task(stmt)(tx);
       };
 
-    const done = pool.run(db);
+    pool.run(db);
 
     pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -235,7 +235,7 @@ describe('db/transaction-pool', () => {
       void canProceed.enqueue(true);
     }
 
-    await done;
+    await pool.done();
 
     await expectTables(db, {
       ['public.foo']: [
@@ -281,7 +281,7 @@ describe('db/transaction-pool', () => {
         return task(stmt)(tx);
       };
 
-    const done = pool.run(db);
+    pool.run(db);
 
     pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -351,7 +351,7 @@ describe('db/transaction-pool', () => {
     await sleep(50);
 
     pool.setDone();
-    await done;
+    await pool.done();
 
     await expectTables(db, {
       ['public.foo']: [
@@ -411,7 +411,10 @@ describe('db/transaction-pool', () => {
     // Set the failure before running.
     pool.fail(new Error('oh nose'));
 
-    const result = await pool.run(db).catch(e => e);
+    const result = await pool
+      .run(db)
+      .done()
+      .catch(e => e);
     expect(result).toBeInstanceOf(Error);
 
     expect(pool.isRunning()).toBe(false);
@@ -439,7 +442,7 @@ describe('db/transaction-pool', () => {
       1,
       3,
     );
-    const done = pool.run(db);
+    pool.run(db);
 
     const readTask = () => async (tx: postgres.TransactionSql) =>
       (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
@@ -448,7 +451,7 @@ describe('db/transaction-pool', () => {
     expect(await pool.processReadTask(readTask())).toEqual([1, 2, 3]);
 
     pool.setDone();
-    await done;
+    await pool.done();
     await expectTables(db, {
       ['public.workers']: [{id: 1}],
       ['public.cleaned']: [{id: 1}],
@@ -472,7 +475,10 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
     pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
 
-    const result = pool.run(db).catch(e => e);
+    const result = pool
+      .run(db)
+      .done()
+      .catch(e => e);
 
     // Set the failure after running.
     pool.fail(new Error('oh nose'));
@@ -505,7 +511,10 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.process(() => Promise.reject(readError));
 
-    const result = await pool.run(db).catch(e => e);
+    const result = await pool
+      .run(db)
+      .done()
+      .catch(e => e);
 
     // Ensure that the error is surfaced.
     expect(result).toBe(readError);
@@ -538,7 +547,10 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'oof')`));
 
-    const result = await pool.run(db).catch(e => e);
+    const result = await pool
+      .run(db)
+      .done()
+      .catch(e => e);
 
     expect(pool.isRunning()).toBe(false);
 
@@ -574,8 +586,7 @@ describe('db/transaction-pool', () => {
         return task(stmt)(tx);
       };
 
-    // Note: run() will `await` its two initial workers.
-    const done = pool.run(db);
+    pool.run(db);
 
     pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
     pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
@@ -606,7 +617,7 @@ describe('db/transaction-pool', () => {
 
     // run() should throw the error even though it may not have come from the
     // two initially started workers.
-    const result = await done.catch(e => e);
+    const result = await pool.done().catch(e => e);
 
     // Ensure that the postgres error is surfaced.
     expect(result).toBeInstanceOf(postgres.PostgresError);
@@ -647,8 +658,8 @@ describe('db/transaction-pool', () => {
     `.simple();
 
     // Run both pools.
-    const leaderDone = leader.run(db);
-    const followerDone = follower.run(db);
+    leader.run(db);
+    follower.run(db);
 
     // Process some writes on follower.
     follower.process(blockingTask(`INSERT INTO foo (id) VALUES (4);`));
@@ -684,7 +695,7 @@ describe('db/transaction-pool', () => {
     follower.setDone();
     leader.setDone();
 
-    await Promise.all([leaderDone, followerDone]);
+    await Promise.all([leader.done(), follower.done()]);
 
     await expectTables(db, {
       ['public.foo']: [
@@ -723,9 +734,10 @@ describe('db/transaction-pool', () => {
     leader.fail(err);
     followers.fail(err);
 
-    const result = await Promise.all([leader.run(db), followers.run(db)]).catch(
-      e => e,
-    );
+    const result = await Promise.all([
+      leader.run(db).done(),
+      followers.run(db).done(),
+    ]).catch(e => e);
 
     expect(result).toBe(err);
   });
@@ -748,7 +760,7 @@ describe('db/transaction-pool', () => {
     `.simple();
 
     // Run the pool.
-    const done = pool.run(db);
+    pool.run(db);
 
     const processed: Promise<number[]>[] = [];
 
@@ -779,7 +791,7 @@ describe('db/transaction-pool', () => {
     }
 
     pool.setDone();
-    await done;
+    await pool.done();
 
     await expectTables(db, {
       ['public.foo']: [
@@ -811,12 +823,12 @@ describe('db/transaction-pool', () => {
     `.simple();
 
     // Run the pool.
-    const done = pool.run(db);
+    pool.run(db);
 
     // Run the readers.
     const {init: importInit, imported} = importSnapshot(await snapshotID);
     const readers = new TransactionPool(lc, Mode.READONLY, importInit);
-    const readersDone = readers.run(db);
+    readers.run(db);
     await imported;
 
     const processed: Promise<number[]>[] = [];
@@ -847,7 +859,7 @@ describe('db/transaction-pool', () => {
 
     pool.setDone();
     readers.setDone();
-    await Promise.all([done, readersDone]);
+    await Promise.all([pool.done(), readers.done()]);
 
     await expectTables(db, {
       ['public.foo']: [
@@ -869,7 +881,7 @@ describe('db/transaction-pool', () => {
     `.simple();
 
     const pool = new TransactionPool(lc, Mode.READONLY);
-    const done = pool.run(db);
+    pool.run(db);
 
     const readTask = () => async (tx: postgres.TransactionSql) =>
       (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
@@ -885,6 +897,6 @@ describe('db/transaction-pool', () => {
     const result = await pool.processReadTask(readTask()).catch(e => e);
     expect(result).toBe(error);
 
-    expect(await done.catch(e => e)).toBe(error);
+    expect(await pool.done().catch(e => e)).toBe(error);
   });
 });

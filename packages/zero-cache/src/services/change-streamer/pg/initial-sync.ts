@@ -274,7 +274,7 @@ function startTableCopyWorkers(
     undefined,
     numWorkers,
   );
-  void tableCopiers.run(db);
+  tableCopiers.run(db);
 
   lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
   return tableCopiers;
