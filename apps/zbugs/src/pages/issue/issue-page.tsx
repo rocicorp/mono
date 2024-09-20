@@ -4,11 +4,20 @@ import {useRoute} from 'wouter';
 import {useQuery} from 'zero-react/src/use-query.js';
 import {useZero} from '../../domain/schema.js';
 import Markdown from '../../components/markdown.js';
+import Selector from '../../components/selector.js';
 
 export default function IssuePage() {
   const z = useZero();
-
+  const [isOpen, setIsOpen] = useState(false);
   const [match, params] = useRoute('/issue/:id');
+
+  // Function to toggle the dropdown state
+  const toggleDropdown = () => {
+    setIsOpen(!isOpen);
+  };
+  const closeSelector = () => {
+    setIsOpen(false);
+  };
 
   // todo: one should be in the schema
   const q = z.query.issue
@@ -117,17 +126,28 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Status</p>
           {rendering.open ? (
-            <span className="sidebar-button sidebar-status-open">Open</span>
+            <button
+              onClick={toggleDropdown}
+              className="sidebar-button button-dropdown sidebar-status-open"
+            >
+              Open
+            </button>
           ) : (
-            <span className="sidebar-button sidebar-status-closed">Closed</span>
+            <button
+              onClick={toggleDropdown}
+              className="sidebar-button button-dropdown sidebar-status-closed"
+            >
+              Closed
+            </button>
           )}
+          <Selector isOpen={isOpen} onClose={closeSelector} />
         </div>
 
         <div className="sidebar-item">
           <p className="issue-detail-label">Creator</p>
-          <span className="sidebar-button issue-creator">
+          <button className="sidebar-button issue-creator">
             {issue.creator[0].name}
-          </span>
+          </button>
         </div>
 
         <div className="sidebar-item">
