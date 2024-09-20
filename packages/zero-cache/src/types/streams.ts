@@ -50,20 +50,19 @@ export async function streamOut<T extends JSONValue>(
     }
   });
 
-  lc.info?.('started outbound stream');
   try {
     let nextID = 0;
     for await (const msg of source) {
       const id = ++nextID;
       const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
-      lc.debug?.(`sending`, data);
+      // Enable for debugging. Otherwise too verbose.
+      // lc.debug?.(`sending`, data);
       sink.send(data);
 
       const {ack} = await acks.dequeue();
       if (ack !== id) {
         throw new Error(`Unexpected ack for ${id}: ${ack}`);
       }
-      lc.debug?.(`received ack`, ack);
     }
     closer.close();
   } catch (e) {
@@ -91,7 +90,6 @@ export function streamIn<T extends JSONValue>(
 
   const closer = new WebSocketCloser(lc, source, sink, handleMessage);
 
-  lc.info?.('started inbound stream');
   function handleMessage(event: MessageEvent) {
     const data = event.data.toString();
     if (closer.closed()) {
@@ -101,7 +99,8 @@ export function streamIn<T extends JSONValue>(
     try {
       const value = BigIntJSON.parse(data);
       const msg = v.parse(value, streamedSchema, 'passthrough');
-      lc.debug?.(`received`, data);
+      // Enable for debugging. Otherwise too verbose.
+      // lc.debug?.(`received`, data);
       sink.push(msg);
     } catch (e) {
       closer.close(e);
