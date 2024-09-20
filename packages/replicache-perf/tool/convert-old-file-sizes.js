@@ -1,11 +1,10 @@
 // Usage:
 //
-// Download the JSON file from the old benchmarking system at
-// https://rocicorp.github.io/mono/bundle-sizes/
+// This download the JSON file from the old benchmarking system at
+// https://rocicorp.github.io/mono/bundle-sizes/ and convert it to the bencher.dev format.
+// Then it uses the Bencher REST API to upload the data.
 //
-// Then run the following command:
-//
-// BENCHER_API_KEY=... node convert-old-file-sizes.js <path-to-json-file>
+// BENCHER_API_KEY=... node convert-old-file-sizes.js
 
 const branch = 'main';
 const testbed = 'localhost';
