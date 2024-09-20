@@ -43,7 +43,21 @@ export default function ListPage() {
 
   return (
     <>
-      <div>
+      <div className="list-view-header-container">
+        <h1 className="list-view-header">
+          Open Issues
+          <span className="issue-count">154</span>
+        </h1>
+      </div>
+      <div className="list-view-filter-container">
+        <span className="filter-label">Filtered by:</span>
+        <span className="label-item">reflect</span>
+        <button className="add-filter">
+          <span className="plus">+</span> Filter
+        </button>
+      </div>
+
+      <div className="filter-block">
         <span className="mr-2">Creator:</span>
         {Array.from(creators.values()).map(creator => (
           <Link
@@ -55,7 +69,7 @@ export default function ListPage() {
           </Link>
         ))}
       </div>
-      <div>
+      <div className="filter-block">
         <span className="mr-2">Label:</span>
         {Array.from(labels.values()).map(label => (
           <Link
@@ -67,10 +81,11 @@ export default function ListPage() {
           </Link>
         ))}
       </div>
+
       <table style={{width: '100%'}}>
         <thead>
           <tr className="header-row">
-            <th className="issue-column">Issue</th>
+            <th className="issue-column">Items</th>
             <th className="label-column">Labels</th>
           </tr>
         </thead>

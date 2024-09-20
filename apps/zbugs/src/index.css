@@ -19,7 +19,9 @@
   --color-background: rgba(0, 0, 0, 1);
   --color-text-primary: rgba(255, 255, 255, 0.85);
   --color-text-primary-active: rgba(255, 255, 255, 1);
+  --color-text-dimmed-label: rgba(255, 255, 255, 0.5);
   --color-primary-cta: rgba(255, 92, 0, 1);
+  --color-primary-cta-dimmed: rgba(255, 92, 0, 0.2);
   --color-light-outline: rgba(62, 62, 62, 0.39);
   --color-row-hover: rgba(62, 62, 62, 0.2);
   --color-nav-selected: rgba(30, 30, 30, 1);
@@ -53,6 +55,11 @@ h1 {
 
 /* Nav */
 
+.nav-container {
+  height: 100%;
+  gap: 2.45rem;
+}
+
 .zero-logo {
   width: 100%;
   height: auto;
@@ -64,7 +71,7 @@ h1 {
   background-color: var(--color-primary-cta);
   padding: 0.4rem 1.2rem;
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: inherit;
   cursor: pointer;
 }
@@ -76,6 +83,7 @@ h1 {
 
 .primary-nav {
   position: fixed;
+  height: calc(100vh - 4rem);
   top: 2rem;
 }
 
@@ -93,11 +101,89 @@ h1 {
   background-color: var(--color-nav-selected);
 }
 
+.fps-meter {
+  display: block;
+  border-radius: 0.5rem;
+  opacity: 0.3;
+  width: 100%;
+  margin-top: auto;
+}
+
+.user-login a {
+  display: block;
+  padding: 0.4rem 1.2rem;
+  border-radius: 0.5rem;
+  text-align: center;
+  border: 1px solid var(--color-light-outline);
+  transition: background-color 0.3s ease;
+}
+
+.user-login a:hover {
+  background-color: var(--color-nav-selected);
+}
+
 /* Primary Content Panel */
 
 .primary-content {
   width: 100%;
   padding-left: 16rem;
+}
+
+.list-view-header-container {
+  display: flex;
+  margin-bottom: 1.5rem;
+}
+
+.list-view-header {
+  font-size: 2rem;
+  font-weight: 400;
+  margin: 0;
+}
+
+.issue-count {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-background);
+  background-color: var(--color-text-primary);
+  border-radius: 2rem;
+  padding: 0.25rem 0.5rem;
+  vertical-align: middle;
+  margin-left: 1rem;
+}
+
+.list-view-filter-container {
+  color: var(--color-text-dimmed-label);
+  box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
+  padding: 1rem 0.5rem 1rem 2rem;
+  background: transparent url(assets/icons/filter.svg) no-repeat 0.5rem center;
+}
+
+.filter-label {
+  margin-right: 0.5rem;
+}
+
+.add-filter {
+  color: var(--color-primary-cta);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-primary-cta-dimmed);
+  padding: 0.25rem 0.5rem 0.25rem;
+  border-radius: 2rem;
+  margin: 0 0.5rem 0 0;
+  line-height: 1.125;
+  transition: background-color 0.3s ease;
+}
+
+.add-filter:hover {
+  background-color: var(--color-primary-cta-dimmed);
+}
+
+.add-filter .plus {
+  vertical-align: 1px;
+}
+
+/* Hiding the old filters for now until we create the new ones */
+.filter-block {
+  display: none;
 }
 
 .primary-content tr.header-row {
@@ -109,6 +195,7 @@ h1 {
 }
 
 .primary-content tr.header-row th {
+  display: none;
   padding-bottom: 1rem;
 }
 
@@ -131,6 +218,10 @@ h1 {
 .primary-content td {
   height: 100%;
   box-shadow: 0px -1px 0px 0px var(--color-light-outline) inset;
+}
+
+.primary-content td:nth-child(-n + 2) {
+  box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
 }
 
 .primary-content td a {

@@ -3,13 +3,14 @@ import logoURL from '../assets/images/logo.svg';
 import {clearJwt, getJwt} from '../jwt.js';
 import {Link} from './link.js';
 import classNames from 'classnames';
+import {FPSMeter} from '@schickling/fps-meter';
 
 export function Nav() {
   const [jwt, setJwt] = useState(() => {
     return getJwt();
   });
   return (
-    <div className="flex flex-col gap-8">
+    <div className="nav-container flex flex-col">
       <Link href="/">
         <img src={logoURL} className="zero-logo" />
       </Link>
@@ -17,7 +18,6 @@ export function Nav() {
       <button className="primary-cta">New Issue</button>
 
       <div className="section-issues">
-        <div className="font-bold">Issues</div>
         <div className="pt-2 flex flex-col gap-2">
           <Link
             href="/"
@@ -51,7 +51,8 @@ export function Nav() {
           </Link>
         </div>
       </div>
-      <div className="pt-2 flex flex-col gap-2">
+      <FPSMeter className="fps-meter" width={192} height={38} />
+      <div className="user-login">
         {jwt === undefined ? (
           <a href="/api/login/github">Login</a>
         ) : (
