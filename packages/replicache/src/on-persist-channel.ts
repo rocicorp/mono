@@ -40,9 +40,7 @@ export function initOnPersistChannel(
     });
   };
 
-  signal.addEventListener('abort', () => {
-    channel.close();
-  });
+  signal.addEventListener('abort', () => channel.close(), {once: true});
 
   return (persistInfo: PersistInfo) => {
     if (signal.aborted) {

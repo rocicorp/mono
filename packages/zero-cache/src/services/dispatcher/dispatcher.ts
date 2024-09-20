@@ -12,6 +12,7 @@ export const STATUS_URL_PATTERN = '/api/system/:version/status';
 export const CONNECT_URL_PATTERN = '/api/sync/:version/connect';
 
 export type Workers = {
+  changeStreamer: Worker;
   replicator: Worker;
   syncers: Worker[];
 };
@@ -30,6 +31,7 @@ export class Dispatcher implements Service {
     this.#workersByHostname = workersByHostname;
     this.#fastify = Fastify();
     this.#fastify.get(STATUS_URL_PATTERN, (req, res) => this.#status(req, res));
+    this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.addHook('onRequest', (req, _, done) => {
       this.#lc?.debug?.(`received request`, req.hostname, req.url);
       done();
@@ -65,7 +67,7 @@ export class Dispatcher implements Service {
   }
 
   async run(): Promise<void> {
-    const address = await this.#fastify.listen({port: 3000});
+    const address = await this.#fastify.listen({host: '0.0.0.0', port: 3000});
     this.#lc.info?.(`Server listening at ${address}`);
   }
 

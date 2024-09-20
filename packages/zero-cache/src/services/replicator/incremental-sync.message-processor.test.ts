@@ -137,12 +137,13 @@ describe('replicator/message-processor', () => {
       const processor = createMessageProcessor(
         replica,
         (lsn: string) => acknowledgements.push(lsn),
-        () => versionChanges++,
         (_: LogContext, err: unknown) => failures.push(err),
       );
 
       for (const msg of c.messages) {
-        processor.processMessage(lc, msg);
+        if (processor.processMessage(lc, msg) > 0) {
+          versionChanges++;
+        }
       }
 
       expect(acknowledgements).toEqual(c.acknowledged);

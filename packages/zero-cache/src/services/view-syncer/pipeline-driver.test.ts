@@ -347,6 +347,49 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('release and resume update', () => {
+    pipelines.init();
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+
+    // Release and resume.
+    pipelines.release();
+    pipelines.advanceWithoutDiff();
+
+    const replicator = fakeReplicator(lc, db);
+    replicator.processTransaction(
+      '134',
+      messages.update('comments', {id: '22', issueID: '3'}),
+    );
+
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "22",
+          },
+          "table": "comments",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "3",
+            "upvotes": 20000,
+          },
+          "rowKey": {
+            "id": "22",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
   test('getRow', () => {
     pipelines.init();
 

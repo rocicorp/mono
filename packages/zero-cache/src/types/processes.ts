@@ -22,6 +22,7 @@ export const MESSAGE_TYPES = {
   status: 'status',
   subscribe: 'subscribe',
   notify: 'notify',
+  ackNotify: 'ackNotify',
   ready: 'ready',
 } as const;
 

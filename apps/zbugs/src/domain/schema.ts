@@ -1,7 +1,10 @@
+import {createUseZero} from 'zero-react/src/use-zero.js';
+
 const userSchema = {
   tableName: 'user',
   columns: {
     id: {type: 'string'},
+    login: {type: 'string'},
     name: {type: 'string'},
   },
   primaryKey: ['id'],
@@ -103,3 +106,4 @@ export const schema = {
 } as const;
 
 export type Schema = typeof schema;
+export const useZero = createUseZero<Schema>();

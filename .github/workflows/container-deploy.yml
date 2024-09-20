@@ -1,0 +1,57 @@
+name: Build and Deploy Zero-Cache to ECS
+
+on:
+  push:
+    branches: [main]
+    # paths:
+    #   - 'packages/zero-cache/**'
+env:
+  # Setting an environment variable with the value of a configuration variable
+  ECR_IMAGE: ${{ vars.ECR_IMAGE }}
+  AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU for amd64
+        run: |
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+        if: runner.os == 'Linux'
+
+      - name: Set up Docker for amd64
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/amd64
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
+      - name: Build and push Docker image
+        run: |
+          docker buildx create --use
+          docker buildx inspect --bootstrap
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE:latest --push .
+
+      - name: Deploy to ECS
+        uses: imehedi/actions-awscli-v2@latest
+        with:
+          args: ecs update-service --cluster roci-zero-service-runner-2 --service zero-service-runner-service --force-new-deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}

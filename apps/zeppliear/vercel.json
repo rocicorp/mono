@@ -1,3 +1,0 @@
-{
-  "buildCommand": "npm run build --prefix=../.. && ./publish-worker-from-vercel.sh"
-}

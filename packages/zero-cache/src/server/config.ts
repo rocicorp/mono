@@ -2,7 +2,6 @@ import * as v from 'shared/src/valita.js';
 
 const configSchema = v.object({
   ['REPLICA_ID']: v.string(),
-  ['TASK_ID']: v.string().optional(),
   ['UPSTREAM_URI']: v.string(),
   ['CVR_DB_URI']: v.string(),
   ['CHANGE_DB_URI']: v.string(),
@@ -15,6 +14,7 @@ const configSchema = v.object({
   ),
   ['DATADOG_LOGS_API_KEY']: v.string().optional(),
   ['DATADOG_SERVICE_LABEL']: v.string().optional(),
+  ['APP_CONFIG_PATH']: v.string().optional(),
 });
 
 export type Config = v.Infer<typeof configSchema>;

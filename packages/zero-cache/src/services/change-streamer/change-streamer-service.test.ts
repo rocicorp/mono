@@ -1,15 +1,20 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {testDBs} from 'zero-cache/src/test/db.js';
 import {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
-import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {
+  getSubscriptionState,
+  initReplicationState,
+} from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {initializeStreamer} from './change-streamer-service.js';
 import {
@@ -20,12 +25,13 @@ import {
 } from './change-streamer.js';
 import {ChangeLogEntry} from './schema/tables.js';
 
-describe('change-streamer/service', {retry: 3}, () => {
+describe('change-streamer/service', () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<DownstreamChange>;
   let acks: Queue<Commit>;
+  let streamerDone: Promise<void>;
 
   const REPLICA_VERSION = '01';
 
@@ -51,9 +57,9 @@ describe('change-streamer/service', {retry: 3}, () => {
             acks: {push: commit => acks.enqueue(commit)},
           }),
       },
-      replica,
+      getSubscriptionState(new StatementRunner(replica)),
     );
-    void streamer.run();
+    streamerDone = streamer.run();
   });
 
   afterEach(async () => {
@@ -297,7 +303,12 @@ describe('change-streamer/service', {retry: 3}, () => {
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
-    const streamer = await initializeStreamer(lc, changeDB, source, replica);
+    const streamer = await initializeStreamer(
+      lc,
+      changeDB,
+      source,
+      getSubscriptionState(new StatementRunner(replica)),
+    );
     void streamer.run();
 
     expect(await hasRetried).toBe(true);
@@ -323,11 +334,21 @@ describe('change-streamer/service', {retry: 3}, () => {
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
-    const streamer = await initializeStreamer(lc, changeDB, source, replica);
+    const streamer = await initializeStreamer(
+      lc,
+      changeDB,
+      source,
+      getSubscriptionState(new StatementRunner(replica)),
+    );
     void streamer.run();
 
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('shutdown on AbortError', async () => {
+    changes.fail(new AbortError());
+    await streamerDone;
   });
 });

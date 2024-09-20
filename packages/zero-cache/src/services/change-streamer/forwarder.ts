@@ -2,8 +2,8 @@ import {WatermarkedChange} from './change-streamer-service.js';
 import {Subscriber} from './subscriber.js';
 
 export class Forwarder {
-  readonly #active = new Map<string, Subscriber>();
-  readonly #queued = new Map<string, Subscriber>();
+  readonly #active = new Set<Subscriber>();
+  readonly #queued = new Set<Subscriber>();
   #inTransaction = false;
 
   /**
@@ -12,21 +12,17 @@ export class Forwarder {
    * currently being streamed.
    */
   add(sub: Subscriber) {
-    this.remove(sub.id);
     if (this.#inTransaction) {
-      this.#queued.set(sub.id, sub);
+      this.#queued.add(sub);
     } else {
-      this.#active.set(sub.id, sub);
+      this.#active.add(sub);
     }
   }
 
-  remove(id: string, instance?: Subscriber) {
-    const sub = this.#active.get(id) ?? this.#queued.get(id);
-    if (sub && (instance ?? sub) === sub) {
-      this.#active.delete(id);
-      this.#queued.delete(id);
-      sub.close();
-    }
+  remove(sub: Subscriber) {
+    this.#active.delete(sub);
+    this.#queued.delete(sub);
+    sub.close();
   }
 
   /**
@@ -54,7 +50,7 @@ export class Forwarder {
         // will be buffered in the backlog until catchup completes.
         this.#inTransaction = false;
         for (const sub of this.#queued.values()) {
-          this.#active.set(sub.id, sub);
+          this.#active.add(sub);
         }
         this.#queued.clear();
         break;

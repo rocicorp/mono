@@ -43,7 +43,7 @@ export class Syncer {
   ) {
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
-    const notifier = createNotifierFrom(parent);
+    const notifier = createNotifierFrom(lc, parent);
     subscribeTo(parent);
 
     this.#lc = lc;

@@ -1,22 +1,18 @@
-import {useZero} from 'zero-react/src/use-zero.js';
 import {useQuery} from 'zero-react/src/use-query.js';
-import {Schema} from '../../domain/schema.js';
+import {useZero} from '../../domain/schema.js';
 import {useSearch} from 'wouter';
 import {Link} from '../../components/link.js';
 
 export default function ListPage() {
-  const z = useZero<Schema>();
+  const z = useZero();
 
   const qs = new URLSearchParams(useSearch());
   const open = qs.get('open');
   const creator = qs.get('creator');
   const label = qs.get('label');
 
-  // TODO: use q.one()
-  const labelID = useQuery(z.query.label.where('name', label ?? ''))[0]?.id as
-    | string
-    | undefined;
-  console.log(labelID);
+  // TODO: one should be in schema
+  const labelID = useQuery(z.query.label.where('name', label ?? '').one())?.id;
 
   let q = z.query.issue
     .orderBy('modified', 'desc')
@@ -82,7 +78,7 @@ export default function ListPage() {
           {issues.map(issue => (
             <tr key={issue.id}>
               <td align="left" className="issue-title">
-                <a href={`/issue/${issue.id}`}>{issue.title}</a>
+                <Link href={`/issue/${issue.id}`}>{issue.title}</Link>
               </td>
               <td align="left">
                 {issue.labels.map(label => label.name).join(', ')}

@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {AbortError} from 'shared/src/abort-error.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
@@ -17,9 +18,9 @@ import {DownstreamChange} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 
-const REPLICA_ID = 'change_streamer_test_id';
+const REPLICA_ID = 'change_source_test_id';
 
-describe('change-source/pg', {retry: 3}, () => {
+describe('change-source/pg', () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
@@ -42,12 +43,14 @@ describe('change-source/pg', {retry: 3}, () => {
     CREATE PUBLICATION zero_all FOR TABLE foo WHERE (id != 'exclude-me');
     `);
 
-    source = await initializeChangeSource(
-      lc,
-      upstreamURI,
-      REPLICA_ID,
-      replicaDbFile.path,
-    );
+    source = (
+      await initializeChangeSource(
+        lc,
+        upstreamURI,
+        REPLICA_ID,
+        replicaDbFile.path,
+      )
+    ).changeSource;
   });
 
   afterEach(async () => {
@@ -179,5 +182,45 @@ describe('change-source/pg', {retry: 3}, () => {
       err = e;
     }
     expect(err).not.toBeUndefined();
+  });
+
+  test('abort', async () => {
+    const {changes} = await source.startStream();
+
+    const results = await upstream<{pid: number}[]>`
+      SELECT active_pid as pid from pg_replication_slots WHERE
+        slot_name = ${replicationSlot(REPLICA_ID)}`;
+    const {pid} = results[0];
+
+    await upstream`SELECT pg_terminate_backend(${pid})`;
+
+    let err;
+    try {
+      for await (const _ of changes) {
+        throw new Error('DatabaseError was not thrown');
+      }
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(AbortError);
+  });
+
+  test('handoff', {retry: 3}, async () => {
+    const {changes} = await source.startStream();
+
+    // Starting another stream should stop the first.
+    const {changes: changes2} = await source.startStream();
+
+    let err;
+    try {
+      for await (const _ of changes) {
+        throw new Error('DatabaseError was not thrown');
+      }
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(AbortError);
+    changes2.cancel();
   });
 });

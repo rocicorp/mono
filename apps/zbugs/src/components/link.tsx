@@ -1,3 +1,4 @@
+import {ReactNode} from 'react';
 import {navigate, useLocationProperty} from 'wouter/use-browser-location';
 
 /**
@@ -9,7 +10,7 @@ export function Link({
   href,
   className,
 }: {
-  children: string;
+  children: ReactNode;
   href: string;
   className?: string | ((active: boolean) => string);
 }) {
