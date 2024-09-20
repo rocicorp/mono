@@ -20,6 +20,16 @@ export function Nav() {
         <div className="font-bold">Issues</div>
         <div className="pt-2 flex flex-col gap-2">
           <Link
+            href="/"
+            className={active =>
+              classNames('nav-item', {
+                'nav-active': active,
+              })
+            }
+          >
+            All
+          </Link>
+          <Link
             href="/?open=true"
             className={active =>
               classNames('nav-item', {

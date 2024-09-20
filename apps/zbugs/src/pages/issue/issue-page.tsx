@@ -54,7 +54,7 @@ export default function IssuePage() {
           <span className="breadcrumb-item">&rarr;</span>
           <span className="breadcrumb-item">ZB-15</span>
         </div>
-        <div>
+        <div className="edit-button">
           {!editing ? (
             <button
               style={{border: '1px outset white'}}
@@ -129,7 +129,9 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Labels</p>
           {issue.labels.map(label => (
-            <span key={label.id}>{label.name}</span>
+            <span className="label-item" key={label.id}>
+              {label.name}
+            </span>
           ))}
         </div>
       </div>
