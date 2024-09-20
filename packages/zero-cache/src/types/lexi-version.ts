@@ -52,10 +52,22 @@ export function versionFromLexi(lexiVersion: LexiVersion): bigint {
   return parseBigInt(base36Version, 36);
 }
 
-export function max(a: LexiVersion, b: LexiVersion): LexiVersion {
-  return a > b ? a : b;
+export function max(a: LexiVersion, ...more: LexiVersion[]): LexiVersion {
+  let winner = a;
+  for (const b of more) {
+    winner = winner > b ? winner : b;
+  }
+  return winner;
 }
 
-export function min(a: LexiVersion, b: LexiVersion): LexiVersion {
-  return a < b ? a : b;
+export function min(a: LexiVersion, ...more: LexiVersion[]): LexiVersion {
+  let winner = a;
+  for (const b of more) {
+    winner = winner < b ? winner : b;
+  }
+  return winner;
+}
+
+export function oneAfter(version: LexiVersion) {
+  return versionToLexi(versionFromLexi(version) + 1n);
 }

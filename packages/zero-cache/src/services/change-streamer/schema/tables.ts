@@ -20,6 +20,7 @@ const CREATE_CHANGE_LOG_TABLE = `
     watermark  TEXT,
     pos        INT8,
     change     JSONB NOT NULL,
+    precommit  TEXT,  -- Only exists on commit entries. Purely for debugging.
     PRIMARY KEY (watermark, pos)
   );
 `;

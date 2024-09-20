@@ -37,6 +37,13 @@ export class Storer implements Service {
     this.#onCommit = onCommit;
   }
 
+  async getLastStoredWatermark(): Promise<string | null> {
+    const result = await this.#db<
+      {max: string | null}[]
+    >`SELECT MAX(watermark) as max FROM cdc."ChangeLog"`;
+    return result[0].max;
+  }
+
   store(entry: WatermarkedChange) {
     void this.#queue.enqueue(['change', entry]);
   }
@@ -83,6 +90,7 @@ export class Storer implements Service {
 
       const entry = {
         watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
+        precommit: tag === 'commit' ? tx.preCommitWatermark : null,
         pos: tx.pos,
         change: change as unknown as JSONValue,
       };
@@ -94,6 +102,26 @@ export class Storer implements Service {
       ]);
 
       if (tag === 'commit') {
+        // Sanity check that there are no records between the preCommitWatermark
+        // and the commit watermark.
+        const {count} = await tx.pool.processReadTask(async db => {
+          assert(tx);
+          const results = await db<{count: number}[]>`
+          SELECT COUNT(*) as count FROM cdc."ChangeLog"
+              WHERE watermark > ${tx.preCommitWatermark} AND
+                    watermark < ${entry.watermark}
+          `;
+          return results[0];
+        });
+        if (count > 0) {
+          const err = new Error(
+            `Unexpected entries between precommit ${tx.preCommitWatermark} and commit ${watermark}`,
+          );
+          tx.pool.fail(err);
+          await tx.pool.done();
+          throw err; // tx.pool.done() throws, but this makes it clearer.
+        }
+
         tx.pool.setDone();
         await tx.pool.done();
         tx = null;
