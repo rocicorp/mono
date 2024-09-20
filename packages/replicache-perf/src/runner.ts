@@ -1,53 +1,55 @@
-/* eslint-env node, es2022 */
-// @ts-check
-
 import {startDevServer} from '@web/dev-server';
 import {esbuildPlugin} from '@web/dev-server-esbuild';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
-import * as fs from 'fs/promises';
 import getPort from 'get-port';
-import * as os from 'os';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import * as playwright from 'playwright';
+import {assert} from 'shared/src/asserts.js';
 import {makeDefine} from 'shared/src/build.js';
-import {fileURLToPath} from 'url';
+import {
+  BencherMetricsFormat,
+  toBencherMetricFormat,
+} from './bencher-metric-format.js';
+import {formatAsBenchmarkJS, formatAsReplicache} from './format.js';
+import {createGithubActionBenchmarkJSONEntries} from './github-action-benchmark.js';
 
-/** @typedef {'chromium' | 'firefox' | 'webkit'} Browser */
+type Format = 'benchmarkJS' | 'json' | 'replicache' | 'bmf';
 
-const allBrowsers = ['chromium', 'firefox', 'webkit'];
+const allBrowsers = ['chromium', 'firefox', 'webkit'] as const;
+type Browser = (typeof allBrowsers)[number];
+
+type BenchmarkMeta = {
+  name: string;
+  group: string;
+};
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 class UnknownValueError extends Error {
   name = 'UNKNOWN_VALUE';
+  value: string;
+  optionName: string;
 
-  /**
-   * @param {string} arg
-   * @param {string} optionName
-   */
-  constructor(arg, optionName) {
+  constructor(arg: string, optionName: string) {
     super(`Unknown format ${arg}`);
     this.value = arg;
     this.optionName = '--' + optionName;
   }
 }
 
-/**
- * @param {string} arg
- */
-function browser(arg) {
+function browser(arg: string) {
   arg = arg.toLowerCase();
   if (!['all', ...allBrowsers].includes(arg)) {
     throw new UnknownValueError(arg, 'browsers');
   }
-  return /** @type {Browser | 'all'} */ (arg);
+  return arg as Browser | 'all';
 }
 
-/**
- * @param {Browser} browser
- */
-function browserName(browser) {
+function browserName(browser: Browser) {
   let name = browser[0].toUpperCase() + browser.slice(1);
   if (name === 'Webkit') {
     name = 'WebKit';
@@ -55,14 +57,11 @@ function browserName(browser) {
   return name;
 }
 
-/**
- * @param {string} arg
- */
-function format(arg) {
-  if (!['benchmarkJS', 'json', 'replicache'].includes(arg)) {
+function format(arg: string): Format {
+  if (!['benchmarkJS', 'json', 'replicache', 'bmf'].includes(arg)) {
     throw new UnknownValueError(arg, 'format');
   }
-  return /** @type {'benchmarkJS' | 'json' | 'replicache'} */ (arg);
+  return arg as Format;
 }
 
 async function main() {
@@ -103,8 +102,9 @@ async function main() {
       name: 'format',
       alias: 'f',
       type: format,
+      defaultValue: 'benchmarkJS',
       description:
-        'Format for text output, either benchmarkJS (default), json or replicache',
+        'Format for text output, either benchmarkJS (default), json, replicache or bmf (Bencher Metrics Format)',
     },
     {
       name: 'devtools',
@@ -118,7 +118,19 @@ async function main() {
       description: 'Show this help message',
     },
   ];
-  const options = commandLineArgs(optionDefinitions);
+
+  type Options = {
+    format: Format;
+    verbose: boolean;
+    browsers: readonly (Browser | 'all')[];
+    groups?: string[];
+    help?: boolean;
+    run?: RegExp;
+    list?: boolean;
+    devtools?: boolean;
+  };
+  const options = commandLineArgs(optionDefinitions) as Options;
+
   if (options.help) {
     console.log(
       commandLineUsage([
@@ -138,6 +150,10 @@ async function main() {
   }
   if (options.format === 'json' && options.browsers.length !== 1) {
     console.error('Exactly one browser may be specified with --format=json');
+    process.exit(1);
+  }
+  if (options.format === 'bmf' && options.browsers.length !== 1) {
+    console.error('Exactly one browser may be specified with --format=bmf');
     process.exit(1);
   }
   if (
@@ -174,19 +190,20 @@ async function main() {
     path.join(os.tmpdir(), 'replicache-playwright-'),
   );
   let first = true;
-  for (const browser of /** @type {Browser[]} */ (options.browsers)) {
+  for (const browser of options.browsers) {
     if (!first) {
       logLine('', options);
     }
     first = false;
+    assert(browser !== 'all');
     const context = await playwright[browser].launchPersistentContext(
       userDataDir,
-      {devtools: options.devtools},
+      {devtools: options.devtools ?? false},
     );
     const page = await context.newPage();
 
     // The perf test should only import out/replicache.
-    page.on('request', (/** @type {{ url: () => string }} */ request) => {
+    page.on('request', request => {
       const path = new URL(request.url()).pathname;
       if (path === '/src/replicache.js') {
         console.error(
@@ -239,12 +256,11 @@ async function main() {
   await server.stop();
 }
 
-/**
- * @param {Browser} browser
- * @param {playwright.Page} page
- * @param {commandLineArgs.CommandLineOptions} options
- */
-async function runInBrowser(browser, page, options) {
+async function runInBrowser(
+  browser: Browser,
+  page: playwright.Page,
+  options: commandLineArgs.CommandLineOptions,
+) {
   async function waitForBenchmarks() {
     await page.waitForFunction('typeof benchmarks !==  "undefined"', null, {
       // There is no need to wait for 30s. Things fail much faster.
@@ -254,8 +270,7 @@ async function runInBrowser(browser, page, options) {
 
   await waitForBenchmarks();
 
-  /** @type {{name: string, group: string}[]} */
-  let benchmarks = await page.evaluate('benchmarks');
+  let benchmarks: BenchmarkMeta[] = await page.evaluate('benchmarks');
   if (options.groups !== undefined) {
     benchmarks = benchmarks.filter(({group}) => options.groups.includes(group));
   }
@@ -283,26 +298,49 @@ async function runInBrowser(browser, page, options) {
     return;
   }
 
-  const jsonEntries = [];
+  const jsonEntries: unknown[] = [];
+
+  let bmf: BencherMetricsFormat = {};
+
   logLine(
     `Running ${benchmarks.length} benchmarks on ${browserName(browser)}...`,
     options,
   );
   for (const benchmark of benchmarks) {
-    const result = await page.evaluate(
-      ({name, group, format}) =>
+    const data = await page.evaluate(
+      ({name, group}) =>
         // @ts-expect-error This function is run in a different global
         // eslint-disable-next-line no-undef
-        runBenchmarkByNameAndGroup(name, group, format),
-      {format: options.format, ...benchmark},
+        runBenchmarkByNameAndGroup(name, group),
+      benchmark,
     );
-    if (result) {
-      if (result.error) {
-        process.stderr.write(result.error + '\n');
-        process.exit(1);
-      } else {
-        jsonEntries.push(...result.jsonEntries);
-        logLine(result.text, options);
+    if (data[0] === 'error') {
+      process.stderr.write(data[1] + '\n');
+      process.exit(1);
+    }
+
+    if (data[0] === 'result') {
+      const result = data[1];
+
+      if (options.format === 'json') {
+        jsonEntries.push(result);
+      } else if (options.format === 'bmf') {
+        bmf = {...bmf, ...toBencherMetricFormat(result)};
+      }
+
+      switch (options.format) {
+        case 'json':
+          jsonEntries.push(...createGithubActionBenchmarkJSONEntries(result));
+          break;
+        case 'bmf':
+          bmf = {...bmf, ...toBencherMetricFormat(result)};
+          break;
+        case 'replicache':
+          logLine(formatAsReplicache(result), options);
+          break;
+        case 'benchmarkJS':
+          logLine(formatAsBenchmarkJS(result), options);
+          break;
       }
     }
     await page.reload();
@@ -310,6 +348,8 @@ async function runInBrowser(browser, page, options) {
   }
   if (options.format === 'json') {
     process.stdout.write(JSON.stringify(jsonEntries, undefined, 2) + '\n');
+  } else if (options.format === 'bmf') {
+    process.stdout.write(JSON.stringify(bmf, undefined, 2) + '\n');
   }
 }
 
@@ -318,17 +358,12 @@ main().catch(err => {
   process.exit(1);
 });
 
-/**
- * @param {string} s
- * @param {commandLineArgs.CommandLineOptions} options
- */
-function logLine(s, options) {
-  if (options.format !== 'json') {
+function logLine(s: string, options: commandLineArgs.CommandLineOptions) {
+  if (options.format !== 'json' && options.format !== 'bmf') {
     process.stdout.write(s + '\n');
   }
 }
 
-/** @param {number} n */
-function wait(n) {
+function wait(n: number) {
   return new Promise(resolve => setTimeout(resolve, n));
 }

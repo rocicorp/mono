@@ -29,11 +29,12 @@ jobs:
 
       # Run benchmark and stores the output to a file
       - name: Run benchmark
+        working-directory: packages/replicache-perf
         run: |
-          node src/runner.js --format=json | tee perf-temp-output.json
+          npm run build
+          node out/runner.js --format=json | tee perf-temp-output.json
           node tool/split-perf.js perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
-        working-directory: packages/replicache-perf
 
       # Run `github-action-benchmark` action
       - name: Store benchmark result

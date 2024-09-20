@@ -14,13 +14,13 @@ import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
 import {assert} from 'shared/src/asserts.js';
 import {deepEqual} from 'shared/src/json.js';
 import {randomUint64} from 'shared/src/random-uint64.js';
+import type {Bencher, Benchmark} from '../benchmark.js';
 import {
   TestDataObject,
   getTmcwData,
   jsonArrayTestData,
   jsonObjectTestData,
 } from '../data.js';
-import type {Bencher, Benchmark} from '../perf.js';
 
 const valSize = 1024;
 

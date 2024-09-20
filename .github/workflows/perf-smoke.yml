@@ -29,6 +29,8 @@ jobs:
         working-directory: packages/replicache-perf
 
       - name: Run benchmark
+        working-directory: packages/replicache-perf
         run: |
-          node packages/replicache-perf/src/runner.js --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
+          npm run build
+          node out/runner.js --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
         shell: bash
