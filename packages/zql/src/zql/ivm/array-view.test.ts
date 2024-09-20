@@ -1,4 +1,4 @@
-import {unreachable} from 'shared/src/asserts.js';
+import {assertArray, unreachable} from 'shared/src/asserts.js';
 import {stringCompare} from 'shared/src/string-compare.js';
 import {expect, test} from 'vitest';
 import {ArrayView} from './array-view.js';
@@ -10,6 +10,7 @@ import {MemoryStorage} from './memory-storage.js';
 import {Input} from './operator.js';
 import {Schema} from './schema.js';
 import {Stream} from './stream.js';
+import {Take} from './take.js';
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -31,6 +32,7 @@ test('basics', () => {
   let data: unknown[] = [];
   const unlisten = view.addListener(entries => {
     ++callCount;
+    assertArray(entries);
     data = [...entries];
   });
 
@@ -74,6 +76,52 @@ test('basics', () => {
   expect(data).toEqual([{a: 3, b: 'c'}]);
 });
 
+test('single-format', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+
+  const view = new ArrayView(
+    ms.connect([
+      ['b', 'asc'],
+      ['a', 'asc'],
+    ]),
+    {singular: true, relationships: {}},
+  );
+
+  let callCount = 0;
+  let data: unknown;
+  const unlisten = view.addListener(d => {
+    ++callCount;
+    data = structuredClone(d);
+  });
+
+  view.hydrate();
+  expect(data).toEqual({a: 1, b: 'a'});
+  expect(callCount).toBe(1);
+
+  // trying to add another element should be an error
+  // pipeline should have been configured with a limit of one
+  expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).toThrow(
+    'single output already exists',
+  );
+
+  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+
+  // no call until flush
+  expect(data).toEqual({a: 1, b: 'a'});
+  expect(callCount).toBe(1);
+  view.flush();
+
+  expect(data).toEqual(undefined);
+  expect(callCount).toBe(2);
+
+  unlisten();
+});
+
 test('hydrate-empty', () => {
   const ms = new MemorySource(
     'table',
@@ -92,6 +140,7 @@ test('hydrate-empty', () => {
   let data: unknown[] = [];
   view.addListener(entries => {
     ++callCount;
+    assertArray(entries);
     data = [...entries];
   });
 
@@ -139,9 +188,13 @@ test('tree', () => {
     hidden: false,
   });
 
-  const view = new ArrayView(join);
+  const view = new ArrayView(join, {
+    singular: false,
+    relationships: {children: {singular: false, relationships: {}}},
+  });
   let data: unknown[] = [];
   view.addListener(entries => {
+    assertArray(entries);
     data = [...entries];
   });
 
@@ -368,7 +421,88 @@ test('tree', () => {
   ]);
 });
 
-test('collapse hidden relationships', () => {
+test('tree-single', () => {
+  const ms = new MemorySource(
+    'table',
+    {id: {type: 'number'}, name: {type: 'string'}},
+    ['id'],
+  );
+  ms.push({
+    type: 'add',
+    row: {id: 1, name: 'foo', childID: 2},
+  });
+  ms.push({
+    type: 'add',
+    row: {id: 2, name: 'foobar', childID: null},
+  });
+
+  const take = new Take(
+    ms.connect([
+      ['name', 'asc'],
+      ['id', 'asc'],
+    ]),
+    new MemoryStorage(),
+    1,
+  );
+
+  const join = new Join({
+    parent: take,
+    child: ms.connect([
+      ['name', 'desc'],
+      ['id', 'desc'],
+    ]),
+    storage: new MemoryStorage(),
+    parentKey: 'childID',
+    childKey: 'id',
+    relationshipName: 'child',
+    hidden: false,
+  });
+
+  const view = new ArrayView(join, {
+    singular: true,
+    relationships: {child: {singular: true, relationships: {}}},
+  });
+  let data: unknown;
+  view.addListener(d => {
+    data = structuredClone(d);
+  });
+
+  view.hydrate();
+  expect(data).toEqual({
+    id: 1,
+    name: 'foo',
+    childID: 2,
+    child: {
+      id: 2,
+      name: 'foobar',
+      childID: null,
+    },
+  });
+
+  // remove the child
+  ms.push({
+    type: 'remove',
+    row: {id: 2, name: 'foobar', childID: null},
+  });
+  view.flush();
+
+  expect(data).toEqual({
+    id: 1,
+    name: 'foo',
+    childID: 2,
+    child: undefined,
+  });
+
+  // remove the parent
+  ms.push({
+    type: 'remove',
+    row: {id: 1, name: 'foo', childID: 2},
+  });
+  view.flush();
+  expect(data).toEqual(undefined);
+});
+
+test('collapse', () => {
   const schema: Schema = {
     tableName: 'issue',
     primaryKey: ['id'],
@@ -426,9 +560,13 @@ test('collapse hidden relationships', () => {
     },
   };
 
-  const view = new ArrayView(input);
+  const view = new ArrayView(input, {
+    singular: false,
+    relationships: {labels: {singular: false, relationships: {}}},
+  });
   let data: unknown[] = [];
   view.addListener(entries => {
+    assertArray(entries);
     data = [...entries];
   });
 
@@ -547,6 +685,121 @@ test('collapse hidden relationships', () => {
   ]);
 });
 
+test('collapse-single', () => {
+  const schema: Schema = {
+    tableName: 'issue',
+    primaryKey: ['id'],
+    columns: {
+      id: {type: 'number'},
+      name: {type: 'string'},
+    },
+    sort: [['id', 'asc']],
+    isHidden: false,
+    compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+    relationships: {
+      labels: {
+        tableName: 'issueLabel',
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        columns: {
+          id: {type: 'number'},
+          issueId: {type: 'number'},
+          labelId: {type: 'number'},
+        },
+        isHidden: true,
+        compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+        relationships: {
+          labels: {
+            tableName: 'label',
+            primaryKey: ['id'],
+            columns: {
+              id: {type: 'number'},
+              name: {type: 'string'},
+            },
+            isHidden: false,
+            sort: [['id', 'asc']],
+            compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
+            relationships: {},
+          },
+        },
+      },
+    },
+  };
+
+  const input = {
+    cleanup() {
+      throw new Error('not implemented');
+    },
+    fetch() {
+      throw new Error('not implemented');
+    },
+    destroy() {},
+    getSchema() {
+      return schema;
+    },
+    setOutput() {},
+    push(change: Change) {
+      view.push(change);
+    },
+  };
+
+  const view = new ArrayView(input, {
+    singular: false,
+    relationships: {labels: {singular: true, relationships: {}}},
+  });
+  let data: unknown;
+  view.addListener(d => {
+    data = structuredClone(d);
+  });
+
+  const changeSansType = {
+    node: {
+      row: {
+        id: 1,
+        name: 'issue',
+      },
+      relationships: {
+        labels: [
+          {
+            row: {
+              id: 1,
+              issueId: 1,
+              labelId: 1,
+            },
+            relationships: {
+              labels: [
+                {
+                  row: {
+                    id: 1,
+                    name: 'label',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  } as const;
+  view.push({
+    type: 'add',
+    ...changeSansType,
+  });
+  view.flush();
+
+  expect(data).toEqual([
+    {
+      id: 1,
+      labels: {
+        id: 1,
+        name: 'label',
+      },
+      name: 'issue',
+    },
+  ]);
+});
+
 test('basic with edit pushes', () => {
   const ms = new MemorySource(
     'table',
@@ -562,6 +815,7 @@ test('basic with edit pushes', () => {
   let data: unknown[] = [];
   const unlisten = view.addListener(entries => {
     ++callCount;
+    assertArray(entries);
     data = [...entries];
   });
 
@@ -628,9 +882,13 @@ test('tree edit', () => {
     hidden: false,
   });
 
-  const view = new ArrayView(join);
+  const view = new ArrayView(join, {
+    singular: false,
+    relationships: {children: {singular: false, relationships: {}}},
+  });
   let data: unknown[] = [];
   view.addListener(entries => {
+    assertArray(entries);
     data = [...entries];
   });
 
@@ -750,6 +1008,7 @@ test('edit to change the order', () => {
   const view = new ArrayView(ms.connect([['a', 'asc']]));
   let data: unknown[] = [];
   view.addListener(entries => {
+    assertArray(entries);
     data = [...entries];
   });
   view.hydrate();
@@ -837,7 +1096,10 @@ test('edit to preserve relationships', () => {
   }
 
   const input = new DummyInput();
-  const view = new ArrayView(input);
+  const view = new ArrayView(input, {
+    singular: false,
+    relationships: {labels: {singular: false, relationships: {}}},
+  });
   view.push({
     type: 'add',
     node: {
@@ -868,6 +1130,7 @@ test('edit to preserve relationships', () => {
   });
   let data: unknown[] = [];
   view.addListener(entries => {
+    assertArray(entries);
     data = [...entries];
   });
   view.flush();
