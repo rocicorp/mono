@@ -73,6 +73,14 @@ describe('change-streamer/http', () => {
     return drained;
   }
 
+  test('health check', async () => {
+    let res = await fetch(`http://localhost:${port}/`);
+    expect(res.ok).toBe(true);
+
+    res = await fetch(`http://localhost:${port}/?foo=bar`);
+    expect(res.ok).toBe(true);
+  });
+
   describe('request bad requests', () => {
     test.each([
       ['no query', `ws://localhost:%PORT%/api/replication/v0/changes`],
