@@ -46,10 +46,7 @@ function loadWorker(module: string, id?: number): Worker {
 }
 
 const {promise: changeStreamerReady, resolve: ready} = resolver();
-const changeStreamer = loadWorker('./src/server/change-streamer.ts').once(
-  'message',
-  ready,
-);
+loadWorker('./src/server/change-streamer.ts').once('message', ready);
 
 const syncers = Array.from({length: numSyncers}, (_, i) =>
   loadWorker('./src/server/syncer.ts', i + 1),
