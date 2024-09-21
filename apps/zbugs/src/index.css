@@ -25,6 +25,11 @@
   --color-light-outline: rgba(62, 62, 62, 0.39);
   --color-row-hover: rgba(62, 62, 62, 0.2);
   --color-nav-selected: rgba(30, 30, 30, 1);
+  --color-modal-background: rgba(18, 18, 18, 0.7);
+  --color-modal-outline: rgba(62, 62, 62, 0.8);
+
+  /* Filters */
+  --filter-backdrop-blur: blur(6.5px);
 
   /* Typography */
   --typo-label-size: 0.875rem;
@@ -151,15 +156,48 @@ h1 {
   margin-left: 1rem;
 }
 
+/* Filtering */
+
 .list-view-filter-container {
-  color: var(--color-text-dimmed-label);
   box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
   padding: 1rem 0.5rem 1rem 2rem;
   background: transparent url(assets/icons/filter.svg) no-repeat 0.5rem center;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .filter-label {
-  margin-right: 0.5rem;
+  color: var(--color-text-dimmed-label);
+  padding: 0.25rem 0;
+  line-height: 1;
+}
+
+.list-view-filter-container .label-item {
+  margin: 0;
+  color: var(--color-text-primary-active);
+  background-color: var(--color-nav-selected);
+}
+
+.add-filter-container {
+  position: relative;
+}
+
+.add-filter-modal {
+  position: absolute;
+  display: flex;
+  gap: 1.5rem;
+  flex-direction: column;
+  width: 16rem;
+  top: 2rem;
+  padding: 1.5rem;
+  background-color: var(--color-modal-background);
+  backdrop-filter: var(--filter-backdrop-blur);
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-modal-outline);
+}
+
+.filter-modal-item {
+  position: relative;
 }
 
 .add-filter {
@@ -169,7 +207,7 @@ h1 {
   padding: 0.25rem 0.5rem 0.25rem;
   border-radius: 2rem;
   margin: 0 0.5rem 0 0;
-  line-height: 1.125;
+  line-height: 1;
   transition: background-color 0.3s ease;
 }
 
@@ -179,6 +217,24 @@ h1 {
 
 .add-filter .plus {
   vertical-align: 1px;
+}
+
+.filter-modal-label {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  margin-bottom: 1rem;
+}
+
+.filter-modal-button.creator-select {
+  background: var(--color-nav-selected) url(assets/icons/avatar-default.svg)
+    no-repeat 0.8175rem center;
+  padding-left: 2.5rem;
+}
+
+.filter-modal-button.label-select {
+  background: var(--color-nav-selected) url(assets/icons/label.svg) no-repeat
+    0.8175rem center;
+  padding-left: 2.5rem;
 }
 
 /* Hiding the old filters for now until we create the new ones */
@@ -279,7 +335,8 @@ h1 {
   margin-bottom: 2rem;
 }
 
-.sidebar-button {
+.sidebar-button,
+.filter-modal-button {
   position: relative;
   background-color: var(--color-nav-selected);
   display: block;
@@ -370,6 +427,7 @@ h1 {
   border-color: var(--color-light-outline);
   border-width: 1px;
   border-radius: 2rem;
+  line-height: 1;
   transition: background-color 0.3s ease;
   margin: 0 0.5rem 0.5rem 0;
 }
