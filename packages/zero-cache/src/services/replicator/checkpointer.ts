@@ -146,6 +146,8 @@ export class WALCheckpointer implements Checkpointer {
     }
 
     if (this.#logSize >= this.#threshold) {
+      const logSize = this.#logSize;
+
       const t0 = Date.now();
       await this.#enterMaintenanceMode(notifier);
       const t1 = Date.now();
@@ -162,7 +164,7 @@ export class WALCheckpointer implements Checkpointer {
       this.#lc.info?.(
         `WAL(busy=${timeout}ms): pre=${t1 - t0}ms checkpoint=${
           t2 - t1
-        }ms post=${t3 - t2}ms`,
+        }ms post=${t3 - t2}ms logSize=${logSize} result`,
         result,
       );
     }

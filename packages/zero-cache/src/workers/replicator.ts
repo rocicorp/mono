@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {rmSync} from 'node:fs';
 import {assert} from 'shared/src/asserts.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
 import {
@@ -7,8 +8,70 @@ import {
   ReplicaStateNotifier,
   Replicator,
 } from 'zero-cache/src/services/replicator/replicator.js';
+import {Database} from 'zqlite/src/db.js';
+import {
+  Checkpointer,
+  NULL_CHECKPOINTER,
+  WALCheckpointer,
+} from '../services/replicator/checkpointer.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import {Worker} from '../types/processes.js';
+
+export type ReplicatorMode = 'serving' | 'serving-copy' | 'backup';
+
+function connect(lc: LogContext, replicaDbFile: string): Database {
+  const replica = new Database(lc, replicaDbFile);
+  replica.pragma('journal_mode = WAL');
+  replica.pragma('synchronous = NORMAL');
+  replica.pragma('optimize = 0x10002');
+
+  // checkpoints are handled by us or by litestream (in 'backup' mode).
+  replica.pragma('wal_autocheckpoint = 0');
+  return replica;
+}
+
+export function setupReplicaAndCheckpointer(
+  lc: LogContext,
+  mode: ReplicatorMode,
+  replicaDbFile: string,
+): {replica: Database; checkpointer: Checkpointer} {
+  lc.info?.(`setting up replicator in ${mode} mode`);
+
+  let replica = connect(lc, replicaDbFile);
+
+  // In 'backup' mode, litestream is replicating the file, and
+  // locks it to perform its backups and checkpoints.
+  if (mode === 'backup') {
+    replica.pragma('busy_timeout = 5000'); // https://litestream.io/tips/#busy-timeout
+    return {replica, checkpointer: NULL_CHECKPOINTER};
+  }
+
+  // In 'serving-copy' mode, the original file is being used for 'backup'
+  // mode, so we make a copy for servicing sync requests.
+  if (mode === 'serving-copy') {
+    const copyLocation = `${replicaDbFile}-serving-copy`;
+    for (const suffix of ['', '-wal', '-shm']) {
+      rmSync(`${copyLocation}${suffix}`, {force: true});
+    }
+
+    const start = Date.now();
+    lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);
+    replica.prepare(`VACUUM INTO ?`).run(copyLocation);
+    lc.info?.(`finished copy (${Date.now() - start} ms)`);
+
+    replica.close();
+    replica = connect(lc, copyLocation);
+  } else if (mode !== 'serving') {
+    throw new Error(`Invalid ReplicaMode ${mode}`);
+  }
+
+  // In 'serving' and 'serving-copy' modes, the WALCheckpointer
+  // manages checkpointing.
+  return {
+    replica,
+    checkpointer: new WALCheckpointer(lc, replica.name, {threshold: 20}),
+  };
+}
 
 export function setUpMessageHandlers(
   lc: LogContext,

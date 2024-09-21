@@ -1,5 +1,10 @@
 import * as v from 'shared/src/valita.js';
 
+const optionalBool = v
+  .string()
+  .optional()
+  .map(v => v !== undefined && (v === '1' || v.toLowerCase() === 'true'));
+
 const configSchema = v.object({
   ['REPLICA_ID']: v.string(),
   ['UPSTREAM_URI']: v.string(),
@@ -15,6 +20,11 @@ const configSchema = v.object({
   ['DATADOG_LOGS_API_KEY']: v.string().optional(),
   ['DATADOG_SERVICE_LABEL']: v.string().optional(),
   ['APP_CONFIG_PATH']: v.string().optional(),
+
+  // Task-orchestration config.
+  ['NUM_SYNC_WORKERS']: v.string().optional(),
+  ['CHANGE_STREAMER_URI']: v.string().optional(),
+  ['LITESTREAM']: optionalBool,
 });
 
 export type Config = v.Infer<typeof configSchema>;

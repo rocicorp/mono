@@ -1,36 +1,42 @@
 import {pid} from 'node:process';
+import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
-import {Database} from 'zqlite/src/db.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
-import {NULL_CHECKPOINTER} from '../services/replicator/checkpointer.js';
 import {ReplicatorService} from '../services/replicator/replicator.js';
 import {runOrExit} from '../services/runner.js';
 import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
-import {setUpMessageHandlers} from '../workers/replicator.js';
+import {
+  ReplicatorMode,
+  setUpMessageHandlers,
+  setupReplicaAndCheckpointer,
+} from '../workers/replicator.js';
 import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
 
-// As recommended by https://litestream.io/tips/#busy-timeout
-const REPLICA_LOCK_TIMEOUT_MS = 5000;
-
-export default async function runWorker(parent: Worker) {
+export default async function runWorker(parent: Worker, ...args: string[]) {
   const config = configFromEnv();
-  const lc = createLogContext(config, {worker: 'replicator'});
+  assert(args.length > 0, `replicator mode not specified`);
 
-  const replica = new Database(lc, config.REPLICA_DB_FILE);
-  replica.pragma('journal_mode = WAL');
-  replica.pragma(`busy_timeout = ${REPLICA_LOCK_TIMEOUT_MS}`);
+  const mode = args[0] as ReplicatorMode;
+  const workerName = `${mode === 'backup' ? 'backup' : 'serving'}-replicator`;
+  const lc = createLogContext(config, {worker: workerName});
 
-  const changeStreamer = new ChangeStreamerHttpClient(lc);
+  const {replica, checkpointer} = setupReplicaAndCheckpointer(
+    lc,
+    mode,
+    config.REPLICA_DB_FILE,
+  );
+
+  const changeStreamer = config.CHANGE_STREAMER_URI
+    ? new ChangeStreamerHttpClient(lc, config.CHANGE_STREAMER_URI)
+    : new ChangeStreamerHttpClient(lc);
 
   const replicator = new ReplicatorService(
     lc,
-    `replicator-${pid}`,
+    `${workerName}-${pid}`,
     changeStreamer,
     replica,
-    // TODO: Run two replicators: one for litestream backup and one for serving requests,
-    //       and use the WALCheckpointer on the serving replica.
-    NULL_CHECKPOINTER,
+    checkpointer,
   );
 
   setUpMessageHandlers(lc, replicator, parent);
@@ -46,5 +52,5 @@ export default async function runWorker(parent: Worker) {
 
 // fork()
 if (!singleProcessMode()) {
-  void runWorker(must(parentWorker));
+  void runWorker(must(parentWorker), ...process.argv.slice(2));
 }
