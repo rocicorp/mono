@@ -133,14 +133,14 @@ export default function IssuePage() {
           <p className="issue-detail-label">Status</p>
           {rendering.open ? (
             <button
-              onClick={toggleDropdown}
+              onMouseDown={toggleDropdown}
               className="sidebar-button button-dropdown sidebar-status-open"
             >
               Open
             </button>
           ) : (
             <button
-              onClick={toggleDropdown}
+              onMouseDown={toggleDropdown}
               className="sidebar-button button-dropdown sidebar-status-closed"
             >
               Closed
