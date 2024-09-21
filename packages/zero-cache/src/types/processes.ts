@@ -1,10 +1,4 @@
-import {
-  ChildProcess,
-  fork,
-  ForkOptions,
-  SendHandle,
-  Serializable,
-} from 'child_process';
+import {ChildProcess, fork, SendHandle, Serializable} from 'child_process';
 import EventEmitter from 'events';
 import path from 'path';
 
@@ -144,17 +138,15 @@ export function singleProcessMode(): boolean {
   return (process.env[SINGLE_PROCESS] ?? '0') !== '0';
 }
 
-export function childWorker(module: string, options?: ForkOptions): Worker {
+export function childWorker(module: string, ...args: string[]): Worker {
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
     void import(path.join('../../', module))
-      .then(({default: runWorker}) => runWorker(parent))
+      .then(({default: runWorker}) => runWorker(parent, ...args))
       .catch(err => child.emit('error', err));
     return child;
   }
-  // Note: It is okay to cast a Processor or ChildProcess as a Worker.
-  // The {@link send} method simply restricts the message type for clarity.
-  const worker = wrap(fork(module, {...options, serialization: 'advanced'}));
+  const worker = wrap(fork(module, args, {serialization: 'advanced'}));
 
   // Propagate all listenable termination signals to the workers.
   // Note: https://nodejs.org/api/process.html#process_signal_events

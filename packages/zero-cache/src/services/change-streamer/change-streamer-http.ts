@@ -88,20 +88,20 @@ export class ChangeStreamerHttpServer implements Service {
 
 export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
-  readonly #port: number;
+  readonly #uri: string;
 
-  constructor(lc: LogContext, port = DEFAULT_PORT) {
+  constructor(lc: LogContext, uriOrPort: string | number = DEFAULT_PORT) {
     this.#lc = lc;
-    this.#port = port;
+    this.#uri =
+      typeof uriOrPort === 'string'
+        ? uriOrPort
+        : `ws://localhost:${uriOrPort}` +
+          CHANGES_URL_PATTERN.replace(':version', 'v0');
   }
 
   subscribe(ctx: SubscriberContext): Source<Downstream> {
     const params = getParams(ctx);
-    const ws = new WebSocket(
-      `ws://localhost:${this.#port}` +
-        CHANGES_URL_PATTERN.replace(':version', 'v0') +
-        `?${params.toString()}`,
-    );
+    const ws = new WebSocket(this.#uri + `?${params.toString()}`);
 
     return streamIn(this.#lc, ws, downstreamSchema) as Source<Downstream>;
   }

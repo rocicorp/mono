@@ -16,4 +16,5 @@ WORKDIR /opt/app/packages/zero-cache
 RUN chmod +x ./restore-litestream-db.sh
 EXPOSE 3000
 ENTRYPOINT ["/bin/sh", "-c"]
+ENV LITESTREAM=1
 CMD ["(./restore-litestream-db.sh || true) && litestream replicate -config /opt/app/litestream.yml"]
