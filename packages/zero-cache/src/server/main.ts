@@ -46,10 +46,7 @@ function loadWorker(module: string, id?: number): Worker {
 }
 
 const {promise: changeStreamerReady, resolve: ready} = resolver();
-const changeStreamer = loadWorker('./src/server/change-streamer.ts').once(
-  'message',
-  ready,
-);
+loadWorker('./src/server/change-streamer.ts').once('message', ready);
 
 const syncers = Array.from({length: numSyncers}, (_, i) =>
   loadWorker('./src/server/syncer.ts', i + 1),
@@ -82,7 +79,7 @@ if ((await orTimeout(allReady, 30_000)) === 'timed-out') {
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
 
-const workers: Workers = {changeStreamer, replicator, syncers};
+const workers: Workers = {syncers};
 
 const dispatcher = new Dispatcher(lc, () => workers);
 try {

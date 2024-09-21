@@ -15,20 +15,7 @@ export function setUpMessageHandlers(
   replicator: Replicator,
   parent: Worker,
 ) {
-  // Respond to status requests from the parent process.
-  parent.onMessageType('status', async () => {
-    const status = await replicator.status();
-    parent.send(['status', status]);
-  });
-
   handleSubscriptionsFrom(lc, parent, replicator);
-}
-
-export function getStatusFromWorker(replicator: Worker): Promise<unknown> {
-  const {promise, resolve} = resolver<unknown>();
-  replicator.onceMessageType('status', resolve);
-  replicator.send(['status', {}]);
-  return promise;
 }
 
 type Notification = ['notify', ReplicaState];

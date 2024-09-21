@@ -1,20 +1,22 @@
 import {LogContext} from '@rocicorp/logger';
-import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
+import Fastify, {FastifyInstance} from 'fastify';
 import {IncomingMessage} from 'http';
 import {h32} from 'zero-cache/src/types/xxhash.js';
-import {getStatusFromWorker} from 'zero-cache/src/workers/replicator.js';
 import {Worker} from '../../types/processes.js';
 import {Service} from '../service.js';
 import {getConnectParams} from './connect-params.js';
 import {installWebSocketHandoff} from './websocket-handoff.js';
 
-export const STATUS_URL_PATTERN = '/api/system/:version/status';
 export const CONNECT_URL_PATTERN = '/api/sync/:version/connect';
 
 export type Workers = {
-  changeStreamer: Worker;
-  replicator: Worker;
   syncers: Worker[];
+};
+
+export const DEFAULT_PORT = 3000;
+
+export type Options = {
+  port: number;
 };
 
 export class Dispatcher implements Service {
@@ -22,28 +24,26 @@ export class Dispatcher implements Service {
   readonly #lc: LogContext;
   readonly #workersByHostname: (hostname: string) => Workers;
   readonly #fastify: FastifyInstance;
+  readonly #port: number;
 
   constructor(
     lc: LogContext,
     workersByHostname: (hostname: string) => Workers,
+    opts: Partial<Options> = {},
   ) {
+    const {port = DEFAULT_PORT} = opts;
+
     this.#lc = lc;
     this.#workersByHostname = workersByHostname;
     this.#fastify = Fastify();
-    this.#fastify.get(STATUS_URL_PATTERN, (req, res) => this.#status(req, res));
     this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.addHook('onRequest', (req, _, done) => {
       this.#lc?.debug?.(`received request`, req.hostname, req.url);
       done();
     });
+    this.#port = port;
 
     installWebSocketHandoff(this.#fastify.server, req => this.#handoff(req));
-  }
-
-  async #status(request: FastifyRequest, reply: FastifyReply) {
-    const {replicator} = this.#workersByHostname(request.hostname);
-    const status = await getStatusFromWorker(replicator);
-    await reply.send(JSON.stringify(status));
   }
 
   #handoff(req: IncomingMessage) {
@@ -67,7 +67,10 @@ export class Dispatcher implements Service {
   }
 
   async run(): Promise<void> {
-    const address = await this.#fastify.listen({host: '0.0.0.0', port: 3000});
+    const address = await this.#fastify.listen({
+      host: '0.0.0.0',
+      port: this.#port,
+    });
     this.#lc.info?.(`Server listening at ${address}`);
   }
 
