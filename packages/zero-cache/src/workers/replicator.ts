@@ -69,7 +69,7 @@ export function setupReplicaAndCheckpointer(
   // manages checkpointing.
   return {
     replica,
-    checkpointer: new WALCheckpointer(lc, replica.name, {threshold: 20}),
+    checkpointer: new WALCheckpointer(lc, replica.name),
   };
 }
 
