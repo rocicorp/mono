@@ -23,7 +23,7 @@ export default async function runWorker(parent: Worker, ...args: string[]) {
 
   const {replica, checkpointer} = setupReplicaAndCheckpointer(
     lc,
-    mode as ReplicatorMode,
+    mode,
     config.REPLICA_DB_FILE,
   );
 
