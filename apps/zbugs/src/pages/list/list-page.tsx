@@ -2,6 +2,7 @@ import {useQuery} from 'zero-react/src/use-query.js';
 import {useZero} from '../../domain/schema.js';
 import {useSearch} from 'wouter';
 import {Link} from '../../components/link.js';
+import Filter from '../../components/filter.js';
 
 export default function ListPage() {
   const z = useZero();
@@ -52,9 +53,7 @@ export default function ListPage() {
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
         <span className="label-item">reflect</span>
-        <button className="add-filter">
-          <span className="plus">+</span> Filter
-        </button>
+        <Filter />
       </div>
 
       <div className="filter-block">
