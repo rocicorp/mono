@@ -5,19 +5,12 @@ import {useQuery} from 'zero-react/src/use-query.js';
 import {useZero} from '../../domain/schema.js';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
+import statusOpen from '../../assets/icons/issue-open.svg';
+import statusClosed from '../../assets/icons/issue-closed.svg';
 
 export default function IssuePage() {
   const z = useZero();
-  const [isOpen, setIsOpen] = useState(false);
   const [match, params] = useRoute('/issue/:id');
-
-  // Function to toggle the dropdown state
-  const toggleDropdown = () => {
-    setIsOpen(!isOpen);
-  };
-  const closeSelector = () => {
-    setIsOpen(false);
-  };
 
   // todo: one should be in the schema
   const q = z.query.issue
@@ -30,7 +23,7 @@ export default function IssuePage() {
         .related('creator', creator => creator.one()),
     )
     .one();
-  const issue = useQuery(match && q);
+  const issue = useQuery(q, match);
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
@@ -131,22 +124,24 @@ export default function IssuePage() {
       <div className="issue-sidebar">
         <div className="sidebar-item">
           <p className="issue-detail-label">Status</p>
-          {rendering.open ? (
-            <button
-              onMouseDown={toggleDropdown}
-              className="sidebar-button button-dropdown sidebar-status-open"
-            >
-              Open
-            </button>
-          ) : (
-            <button
-              onMouseDown={toggleDropdown}
-              className="sidebar-button button-dropdown sidebar-status-closed"
-            >
-              Closed
-            </button>
-          )}
-          <Selector isOpen={isOpen} onClose={closeSelector} />
+          <Selector
+            items={[
+              {
+                text: 'Open',
+                value: true,
+                icon: statusOpen,
+              },
+              {
+                text: 'Closed',
+                value: false,
+                icon: statusClosed,
+              },
+            ]}
+            selectedValue={issue.open}
+            onChange={value =>
+              z.mutate.issue.update({id: issue.id, open: value})
+            }
+          />
         </div>
 
         <div className="sidebar-item">
@@ -159,7 +154,7 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Labels</p>
           {issue.labels.map(label => (
-            <span className="label-item" key={label.id}>
+            <span className="pill label" key={label.id}>
               {label.name}
             </span>
           ))}

@@ -6,6 +6,7 @@ const userSchema = {
     id: {type: 'string'},
     login: {type: 'string'},
     name: {type: 'string'},
+    avatar: {type: 'string'},
   },
   primaryKey: ['id'],
   relationships: {},

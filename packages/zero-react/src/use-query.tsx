@@ -6,7 +6,8 @@ import {deepClone} from 'shared/src/deep-clone.js';
 import {QueryImpl} from 'zql/src/zql/query/query-impl.js';
 
 export function useQuery<TSchema extends Schema, TReturn extends QueryType>(
-  q: Query<TSchema, TReturn> | undefined | false,
+  q: Query<TSchema, TReturn>,
+  enable: boolean = true,
 ): Smash<TReturn> {
   const queryImpl = q as QueryImpl<TSchema, TReturn>;
 
@@ -18,7 +19,7 @@ export function useQuery<TSchema extends Schema, TReturn extends QueryType>(
   );
 
   useLayoutEffect(() => {
-    if (q) {
+    if (enable) {
       const view = q.materialize();
       setView(view);
       const unsubscribe = view.addListener(snapshot => {
@@ -30,10 +31,14 @@ export function useQuery<TSchema extends Schema, TReturn extends QueryType>(
         view.destroy();
       };
     }
+    setSnapshot(
+      (queryImpl.singular ? undefined : []) as unknown as Smash<TReturn>,
+    );
+    setView(undefined);
     return () => {
       //
     };
-  }, [JSON.stringify(q ? (q as QueryImpl<never, never>).ast : null)]);
+  }, [JSON.stringify(enable ? (q as QueryImpl<never, never>).ast : null)]);
 
   return snapshot;
 }

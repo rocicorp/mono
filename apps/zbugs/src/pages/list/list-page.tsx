@@ -2,7 +2,9 @@ import {useQuery} from 'zero-react/src/use-query.js';
 import {useZero} from '../../domain/schema.js';
 import {useSearch} from 'wouter';
 import {Link} from '../../components/link.js';
-import Filter from '../../components/filter.js';
+import Filter, {Selection} from '../../components/filter.js';
+import {navigate} from 'wouter/use-browser-location';
+import classNames from 'classnames';
 
 export default function ListPage() {
   const z = useZero();
@@ -10,11 +12,19 @@ export default function ListPage() {
   const qs = new URLSearchParams(useSearch());
   const open = qs.get('open');
   const creator = qs.get('creator');
-  const label = qs.get('label');
+  const labels = qs.getAll('label');
 
-  // TODO: one should be in schema
-  const labelID = useQuery(z.query.label.where('name', label ?? '').one())?.id;
+  // TODO: this can go away once we have filter-by-subquery, you should be able
+  // to filter by label.name directly.
+  const creatorID = useQuery(
+    z.query.user.where('login', creator ?? '').one(),
+    creator !== null,
+  )?.id;
+  const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
+  console.log({creatorID, labelIDs});
+
+  // TODO: Implement infinite scroll
   let q = z.query.issue
     .orderBy('modified', 'desc')
     .limit(100)
@@ -24,22 +34,38 @@ export default function ListPage() {
     q = q.where('open', open === 'true');
   }
 
-  if (creator !== null) {
-    q = q.where('creatorID', creator);
+  if (creatorID) {
+    q = q.where('creatorID', creatorID);
   }
 
-  if (labelID !== undefined) {
-    q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
+  for (const labelID of labelIDs) {
+    q = q.where('labelIDs', 'LIKE', `%${labelID.id}%`);
   }
 
   const issues = useQuery(q);
-  const creators = useQuery(z.query.user);
-  const labels = useQuery(z.query.label);
 
-  const addParam = (key: string, value: string) => {
+  const addFilter = (
+    key: string,
+    value: string,
+    mode?: 'exclusive' | undefined,
+  ) => {
     const newParams = new URLSearchParams(qs);
-    newParams.set(key, value);
+    newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
     return '?' + newParams.toString();
+  };
+
+  const onDeleteFilter = (index: number) => {
+    const entries = [...new URLSearchParams(qs).entries()];
+    entries.splice(index, 1);
+    navigate('?' + new URLSearchParams(entries).toString());
+  };
+
+  const onFilter = (selection: Selection) => {
+    if ('creator' in selection) {
+      navigate(addFilter('creator', selection.creator, 'exclusive'));
+    } else {
+      navigate(addFilter('label', selection.label));
+    }
   };
 
   return (
@@ -52,33 +78,24 @@ export default function ListPage() {
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
-        <span className="label-item">reflect</span>
-        <Filter />
-      </div>
-
-      <div className="filter-block">
-        <span className="mr-2">Creator:</span>
-        {Array.from(creators.values()).map(creator => (
-          <Link
-            key={creator.id}
-            href={addParam('creator', creator.id)}
-            className="mr-2"
-          >
-            {creator.name}
-          </Link>
-        ))}
-      </div>
-      <div className="filter-block">
-        <span className="mr-2">Label:</span>
-        {Array.from(labels.values()).map(label => (
-          <Link
-            key={label.id}
-            href={addParam('label', label.name)}
-            className="mr-2"
-          >
-            {label.name}
-          </Link>
-        ))}
+        {[...qs.entries()].map(([key, val], idx) => {
+          if (key === 'label' || key === 'creator') {
+            return (
+              <span
+                className={classNames('pill', {
+                  label: key === 'label',
+                  user: key === 'creator',
+                })}
+                onMouseDown={() => onDeleteFilter(idx)}
+                key={idx}
+              >
+                {key}: {val}
+              </span>
+            );
+          }
+          return null;
+        })}
+        <Filter onSelect={onFilter} />
       </div>
 
       <table style={{width: '100%'}}>
@@ -103,9 +120,13 @@ export default function ListPage() {
               <td align="right">
                 <div className="issue-taglist">
                   {issue.labels.map(label => (
-                    <span key={label.id} className="label-item">
+                    <Link
+                      key={label.id}
+                      className="pill label"
+                      href={`/?label=${label.name}`}
+                    >
                       {label.name}
-                    </span>
+                    </Link>
                   ))}
                 </div>
               </td>
