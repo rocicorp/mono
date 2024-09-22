@@ -1,5 +1,5 @@
 import {ReactNode} from 'react';
-import {navigate, useLocationProperty} from 'wouter/use-browser-location';
+import {navigate} from 'wouter/use-browser-location';
 
 /**
  * The Link from wouter uses onClick and there's no way to change it.
@@ -12,7 +12,7 @@ export function Link({
 }: {
   children: ReactNode;
   href: string;
-  className?: string | ((active: boolean) => string);
+  className?: string;
 }) {
   const isPrimary = (e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0) {
@@ -31,14 +31,13 @@ export function Link({
     }
   };
 
-  const currentURL = useLocationProperty(() => location.href);
-  const cn =
-    typeof className === 'function'
-      ? className(currentURL === new URL(href, currentURL).toString())
-      : className;
-
   return (
-    <a href={href} onMouseDown={onMouseDown} onClick={onClick} className={cn}>
+    <a
+      href={href}
+      onMouseDown={onMouseDown}
+      onClick={onClick}
+      className={className}
+    >
       {children}
     </a>
   );

@@ -172,7 +172,7 @@ h1 {
   line-height: 1;
 }
 
-.list-view-filter-container .label-item {
+.list-view-filter-container .pill {
   margin: 0;
   color: var(--color-text-primary-active);
   background-color: var(--color-nav-selected);
@@ -209,9 +209,11 @@ h1 {
   margin: 0 0.5rem 0 0;
   line-height: 1;
   transition: background-color 0.3s ease;
+  position: relative;
 }
 
-.add-filter:hover {
+.add-filter:hover,
+.add-filter.active {
   background-color: var(--color-primary-cta-dimmed);
 }
 
@@ -235,11 +237,6 @@ h1 {
   background: var(--color-nav-selected) url(assets/icons/label.svg) no-repeat
     0.8175rem center;
   padding-left: 2.5rem;
-}
-
-/* Hiding the old filters for now until we create the new ones */
-.filter-block {
-  display: none;
 }
 
 .primary-content tr.header-row {
@@ -280,7 +277,7 @@ h1 {
   box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
 }
 
-.primary-content td a {
+.primary-content td:first-child a {
   display: block;
   height: 100%;
   padding: 1rem 0;
@@ -308,7 +305,7 @@ h1 {
   justify-content: end;
 }
 
-.primary-content .issue-taglist .label-item {
+.primary-content .issue-taglist .pill {
   margin: 0 0 0.5rem 0.5rem;
 }
 
@@ -421,8 +418,8 @@ h1 {
   margin-bottom: 1rem;
 }
 
-.label-item {
-  background: transparent url(assets/icons/label.svg) 0.375rem center no-repeat;
+.pill {
+  background: transparent 0.375rem center no-repeat;
   padding: 0.25rem 0.5rem 0.25rem 1.625rem;
   border-color: var(--color-light-outline);
   border-width: 1px;
@@ -432,11 +429,19 @@ h1 {
   margin: 0 0.5rem 0.5rem 0;
 }
 
-.label-item:last-child {
+.pill.label {
+  background-image: url(assets/icons/label.svg);
+}
+
+.pill.user {
+  background-image: url(assets/icons/avatar-default.svg);
+}
+
+.pill:last-child {
   margin-right: 0;
 }
 
-.label-item:hover {
+.pill:hover {
   background-color: var(--color-nav-selected);
   cursor: pointer;
 }
@@ -451,15 +456,18 @@ h1 {
   padding-right: 0;
 }
 
-.issue-sidebar .selector {
+.selector .dropdown {
   position: absolute;
+  z-index: 1;
   top: 2.3125rem;
   border-radius: 0.5rem;
   width: 100%;
   background-color: var(--color-nav-selected);
+  max-height: 30rem;
+  overflow-y: auto;
 }
 
-.issue-sidebar .selector-status {
+.selector .item {
   display: block;
   text-align: left;
   width: 100%;
@@ -467,18 +475,13 @@ h1 {
   border-radius: 0.5rem;
 }
 
-.issue-sidebar .status-open {
+.selector .item.icon {
   padding-left: 2.5rem;
-  background: var(--color-nav-selected) url(assets/icons/issue-open.svg)
-    no-repeat 0.8175rem center;
+  background-repeat: no-repeat;
+  background-position: 0.8175rem center;
+  background-size: 14px;
 }
 
-.issue-sidebar .status-closed {
-  padding-left: 2.5rem;
-  background: var(--color-nav-selected) url(assets/icons/issue-closed.svg)
-    no-repeat 0.8175rem center;
-}
-
-.issue-sidebar .selector-status:hover {
+.selector .dropdown .item:hover {
   background-color: var(--color-row-hover);
 }
