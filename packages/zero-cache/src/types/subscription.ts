@@ -77,6 +77,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   readonly #consumers: Resolver<Entry<M> | null>[] = [];
   // Messages waiting to be consumed.
   readonly #messages: Entry<M>[] = [];
+  readonly #pipelineEnabled: boolean;
   // Sentinel value signaling that the subscription is "done" and no more
   // messages can be added.
   #sentinel: 'canceled' | Error | undefined = undefined;
@@ -91,7 +92,12 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
    *        of type `M` to the external type `T` exposed via async iteration.
    */
   constructor(options: Options<M> = {}, publish: (m: M) => T) {
-    const {coalesce, consumed = () => {}, cleanup = () => {}} = options;
+    const {
+      coalesce,
+      consumed = () => {},
+      cleanup = () => {},
+      pipeline = coalesce === undefined,
+    } = options;
 
     this.#coalesce = !coalesce
       ? undefined
@@ -117,6 +123,8 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     };
 
     this.#publish = publish;
+
+    this.#pipelineEnabled = pipeline;
   }
 
   /**
@@ -156,6 +164,11 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return this.#sentinel === undefined;
   }
 
+  /** The number messages waiting to be consumed. This is largely for testing. */
+  get queued(): number {
+    return this.#messages.length;
+  }
+
   /** Cancels the subscription, cleans up, and terminates any iteration. */
   cancel() {
     this.#terminate('canceled');
@@ -187,24 +200,23 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     }
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<T> {
-    let prev: Entry<M> | undefined;
+  get pipeline(): AsyncIterable<{value: T; consumed: () => void}> | undefined {
+    return this.#pipelineEnabled
+      ? {[Symbol.asyncIterator]: () => this.#pipeline()}
+      : undefined;
+  }
 
-    const notifyPrevConsumed = () => {
-      if (prev !== undefined) {
-        this.#consumed(prev);
-        prev = undefined;
-      }
-    };
-
+  #pipeline(): AsyncIterator<{value: T; consumed: () => void}> {
     return {
       next: async () => {
-        notifyPrevConsumed();
-
         const entry = this.#messages.shift();
         if (entry !== undefined) {
-          prev = entry;
-          return {value: this.#publish(entry.value)};
+          return {
+            value: {
+              value: this.#publish(entry.value),
+              consumed: () => this.#consumed(entry),
+            },
+          };
         }
         if (this.#sentinel === 'canceled') {
           return {value: undefined, done: true};
@@ -217,14 +229,43 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
         // Wait for push() (or termination) to resolve the consumer.
         const result = await consumer.promise;
-        prev = result ?? undefined;
         return result
-          ? {value: this.#publish(result.value)}
+          ? {
+              value: {
+                value: this.#publish(result.value),
+                consumed: () => this.#consumed(result),
+              },
+            }
           : {value: undefined, done: true};
       },
 
       return: value => {
-        notifyPrevConsumed();
+        this.cancel();
+        return Promise.resolve({value, done: true});
+      },
+    };
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    const delegate = this.#pipeline();
+
+    let prevConsumed = () => {};
+    return {
+      next: async () => {
+        prevConsumed();
+
+        const entry = await delegate.next();
+        if (entry.done) {
+          return entry;
+        }
+
+        const {value, consumed} = entry.value;
+        prevConsumed = consumed;
+        return {value};
+      },
+
+      return: value => {
+        prevConsumed();
 
         this.cancel();
         return Promise.resolve({value, done: true});
@@ -269,6 +310,18 @@ type Options<M> = {
    * information is not made available to the AsyncIterator implementation.
    */
   cleanup?: (unconsumed: M[], err?: Error) => void;
+
+  /**
+   * Enable or disable pipelining when streaming messages over a websocket.
+   *
+   * If unspecified, pipelining is enabled if there is no {@link Options.coalesce coalesce}
+   * method, as pipelining is counter to the semantics of coalescing. However, the
+   * application can explicitly enable pipelining even if there is a coalesce method
+   * by specifying `true` for this option. This assumes that coalescing is either
+   * not important for websocket semantics, or that the receiving end of the websocket
+   * transport performs the desired coalescing.
+   */
+  pipeline?: boolean;
 };
 
 /** Post-queueing results of messages. */
