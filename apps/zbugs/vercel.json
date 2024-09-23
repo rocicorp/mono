@@ -3,6 +3,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api"
+    },
+    {
+      "source": "/issue/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
