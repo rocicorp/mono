@@ -108,7 +108,7 @@ export default function ListPage() {
       <div className="list-view-header-container">
         <h1 className="list-view-header">
           Open Issues
-          <span className="issue-count">154</span>
+          <span className="issue-count">{issues.length}</span>
         </h1>
       </div>
       <div className="list-view-filter-container">
