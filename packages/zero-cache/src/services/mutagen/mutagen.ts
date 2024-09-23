@@ -1,7 +1,9 @@
+import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type postgres from 'postgres';
+import postgres from 'postgres';
 import {assert, unreachable} from 'shared/src/asserts.js';
+import {Mode} from 'zero-cache/src/db/transaction-pool.js';
 import {ErrorKind} from 'zero-protocol';
 import {
   MutationType,
@@ -12,10 +14,10 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
+import {AuthorizationConfig} from '../../config/app-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
-import {AuthorizationConfig} from '../../config/app-config.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -66,12 +68,15 @@ export class MutagenService implements Mutagen, Service {
   }
 }
 
+const MAX_SERIALIZATION_ATTEMPTS = 2;
+
 export async function processMutation(
   lc: LogContext | undefined,
   db: PostgresDB,
   clientGroupID: string,
   mutation: Mutation,
   _authorizationConfig: AuthorizationConfig,
+  onTxStart?: () => void, // for testing
 ): Promise<MutationError | undefined> {
   assert(
     mutation.type === MutationType.CRUD,
@@ -123,11 +128,13 @@ export async function processMutation(
     //    Zero anyway: https://github.com/porsager/postgres/issues/455.
     //
     // Personally I think this simple retry policy is nice.
-    for (const errorMode of [false, true]) {
+    let errorMode = false;
+    for (let i = 0; i < MAX_SERIALIZATION_ATTEMPTS; i++) {
       try {
-        await db.begin(tx =>
-          processMutationWithTx(tx, clientGroupID, mutation, errorMode),
-        );
+        await db.begin(Mode.SERIALIZABLE, tx => {
+          onTxStart?.();
+          return processMutationWithTx(tx, clientGroupID, mutation, errorMode);
+        });
         if (errorMode) {
           lc?.debug?.('Ran mutation successfully in error mode');
         }
@@ -141,9 +148,20 @@ export async function processMutation(
           lc?.error?.('Process mutation error', e);
           throw e;
         }
-
-        lc?.error?.('Got error running mutation, re-running in error mode', e);
+        if (
+          e instanceof postgres.PostgresError &&
+          e.code === PG_SERIALIZATION_FAILURE
+        ) {
+          lc?.info?.(i < MAX_SERIALIZATION_ATTEMPTS ? `Retrying` : '', e);
+          continue; // Retry up to MAX_SERIALIZATION_ATTEMPTS.
+        }
         result = String(e);
+        if (errorMode) {
+          break;
+        }
+        lc?.error?.('Got error running mutation, re-running in error mode', e);
+        errorMode = true;
+        i--;
       }
     }
   } finally {
