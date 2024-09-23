@@ -1,3 +1,4 @@
+import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from 'shared/src/asserts.js';
 import * as valita from 'shared/src/valita.js';
@@ -37,6 +38,7 @@ export class Connection {
 
   readonly #viewSyncer: ViewSyncer;
   readonly #mutagen: Mutagen;
+  readonly #mutationLock = new Lock();
 
   #outboundStream: Source<Downstream> | undefined;
   #closed = false;
@@ -127,12 +129,17 @@ export class Connection {
                 `clientGroupID of connection "${this.#clientGroupID}`,
             ]);
           }
-          for (const mutation of mutations) {
-            const errorDesc = await this.#mutagen.processMutation(mutation);
-            if (errorDesc !== undefined) {
-              this.sendError(['error', ErrorKind.MutationFailed, errorDesc]);
+          // Hold a connection-level lock while processing mutations so that:
+          // 1. Mutations are processed in the order in which they are received and
+          // 2. A single view syncer connection cannot hog multiple upstream connections.
+          await this.#mutationLock.withLock(async () => {
+            for (const mutation of mutations) {
+              const errorDesc = await this.#mutagen.processMutation(mutation);
+              if (errorDesc !== undefined) {
+                this.sendError(['error', ErrorKind.MutationFailed, errorDesc]);
+              }
             }
-          }
+          });
           break;
         }
         case 'pull':

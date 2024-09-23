@@ -1,4 +1,6 @@
+import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {Mode} from 'zero-cache/src/db/transaction-pool.js';
 import {MutationType, type CRUDMutation} from 'zero-protocol';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -405,6 +407,67 @@ describe('processMutation', () => {
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
+  test('retries on serialization error', async () => {
+    const {promise, resolve} = resolver();
+    await db`
+      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
+         VALUES ('abc', '123', 2)`;
+
+    // Start a concurrent mutation that bumps the lmid from 2 => 3.
+    void db.begin(Mode.SERIALIZABLE, async tx => {
+      // Simulate holding a lock on the row.
+      tx`SELECT * FROM zero.clients WHERE "clientGroupID" = 'abc' AND "clientID" = '123'`;
+
+      await promise;
+
+      // Update the row on signal.
+      return tx`
+      UPDATE zero.clients SET "lastMutationID" = 3 WHERE "clientGroupID" = 'abc'`;
+    });
+
+    const error = await processMutation(
+      undefined,
+      db,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 4,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'create',
+                entityType: 'idonly',
+                id: {id: '1'},
+                value: {},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      {},
+      resolve, // Finish the 2 => 3 transaction only after this 3 => 4 transaction begins.
+    );
+
+    expect(error).undefined;
+
+    // 3 => 4 should succeed after internally retrying.
+    await expectTables(db, {
+      idonly: [{id: '1'}],
+      ['zero.clients']: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 4n,
           userID: null,
         },
       ],
