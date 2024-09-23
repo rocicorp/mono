@@ -3,7 +3,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {FastifyInstance} from 'fastify';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import {randInt} from 'shared/src/rand.js';
 import {sleep} from 'shared/src/sleep.js';
@@ -48,7 +47,7 @@ describe('streams', () => {
 
     server = Fastify();
     await server.register(websocket);
-    server.get('/', {websocket: true}, ws => streamOut(lc, must(producer), ws));
+    server.get('/', {websocket: true}, ws => streamOut(lc, producer, ws));
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
