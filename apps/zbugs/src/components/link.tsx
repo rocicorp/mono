@@ -9,10 +9,12 @@ export function Link({
   children,
   href,
   className,
+  title,
 }: {
   children: ReactNode;
   href: string;
   className?: string;
+  title?: string;
 }) {
   const isPrimary = (e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0) {
@@ -34,6 +36,7 @@ export function Link({
   return (
     <a
       href={href}
+      title={title}
       onMouseDown={onMouseDown}
       onClick={onClick}
       className={className}
