@@ -22,7 +22,6 @@ z.query.issue
   .related('labels')
   .related('comments', c => c.limit(10).related('creator'))
   .orderBy('modified', 'desc')
-  .limit(500)
   .preload();
 
 // Exposed so we can mess around in the terminal and add/remove issues
