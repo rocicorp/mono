@@ -3,8 +3,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {FastifyInstance} from 'fastify';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {must} from 'shared/src/must.js';
 import {Queue} from 'shared/src/queue.js';
 import {randInt} from 'shared/src/rand.js';
+import {sleep} from 'shared/src/sleep.js';
 import * as v from 'shared/src/valita.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
@@ -25,40 +27,34 @@ describe('streams', () => {
   let server: FastifyInstance;
   let producer: Subscription<Message>;
   let consumed: Queue<Message>;
-  let cleanup: Promise<Message[]>;
+  let cleanedUp: Promise<Message[]>;
+  let cleanup: (m: Message[]) => void;
+  let port: number;
 
   let ws: WebSocket;
-  let consumer: Source<Message>;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
 
     const {promise, resolve} = resolver<Message[]>();
-    cleanup = promise;
+    cleanedUp = promise;
+    cleanup = resolve;
 
     consumed = new Queue();
     producer = Subscription.create({
       consumed: m => consumed.enqueue(m),
-      coalesce: (curr, prev) => ({
-        from: prev.from,
-        to: curr.to,
-        str: prev.str + curr.str,
-      }),
       cleanup: resolve,
     });
 
     server = Fastify();
     await server.register(websocket);
-    server.get('/', {websocket: true}, ws => streamOut(lc, producer, ws));
+    server.get('/', {websocket: true}, ws => streamOut(lc, must(producer), ws));
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
-    const port = 3000 + Math.floor(randInt(0, 5000));
+    port = 3000 + Math.floor(randInt(0, 5000));
     await server.listen({port});
     lc.info?.(`server running on port ${port}`);
-    ws = new WebSocket(`http://localhost:${port}/`);
-
-    consumer = streamIn(lc, ws, messageSchema);
   });
 
   afterEach(async () => {
@@ -66,10 +62,17 @@ describe('streams', () => {
     await server.close();
   });
 
+  function startReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/`);
+    return streamIn(lc, ws, messageSchema);
+  }
+
   test('one at a time', async () => {
     let num = 0;
 
     producer.push({from: num, to: num + 1, str: 'foo'});
+
+    const consumer = startReceiver();
     for await (const msg of consumer) {
       if (num > 0) {
         expect(await consumed.dequeue()).toEqual({
@@ -88,15 +91,73 @@ describe('streams', () => {
       expect(consumed.size()).toBe(0);
     }
 
-    expect(await cleanup).toEqual([]);
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('pipelined', async () => {
+    producer.push({from: 0, to: 1, str: 'foo'});
+    producer.push({from: 1, to: 2, str: 'bar'});
+    producer.push({from: 2, to: 3, str: 'baz'});
+
+    const consumer = startReceiver() as Subscription<Message>;
+
+    // Pipelining should send all messages even before they are
+    // "consumed" on the receiving end.
+    while (consumer.queued < 3) {
+      await sleep(1);
+    }
+    expect(consumed.size()).toBe(0);
+
+    const timedOut = {from: -1, to: -1, str: ''};
+    let i = 0;
+    for await (const _ of consumer) {
+      switch (i++) {
+        case 0: {
+          expect(await consumed.dequeue(timedOut, 5)).toEqual(timedOut);
+          break;
+        }
+        case 1: {
+          expect(await consumed.dequeue()).toEqual({
+            from: 0,
+            to: 1,
+            str: 'foo',
+          });
+          break;
+        }
+        case 2: {
+          expect(await consumed.dequeue()).toEqual({
+            from: 1,
+            to: 2,
+            str: 'bar',
+          });
+          break;
+        }
+      }
+      if (i === 3) {
+        break;
+      }
+    }
+    expect(await consumed.dequeue()).toEqual({from: 2, to: 3, str: 'baz'});
+    expect(await cleanedUp).toEqual([]);
   });
 
   test('coalesce and cleanup', async () => {
+    producer = Subscription.create({
+      consumed: m => consumed.enqueue(m),
+      coalesce: (curr, prev) => ({
+        from: prev.from,
+        to: curr.to,
+        str: prev.str + curr.str,
+      }),
+      cleanup,
+    });
+
     producer.push({from: 0, to: 1, str: 'foo'});
     producer.push({from: 1, to: 2, str: 'bar'});
     producer.push({from: 2, to: 3, str: 'baz'});
 
     let i = 0;
+    const consumer = startReceiver();
     for await (const msg of consumer) {
       switch (i++) {
         case 0:
@@ -131,10 +192,13 @@ describe('streams', () => {
     }
 
     expect(consumed.size()).toBe(0);
-    expect(await cleanup).toEqual([{from: 8, to: 10, str: 'voodoo'}]);
+    expect(await cleanedUp).toEqual([{from: 8, to: 10, str: 'voodoo'}]);
   });
 
-  async function drain(num: number): Promise<Message[]> {
+  async function drain(
+    num: number,
+    consumer: Source<Message>,
+  ): Promise<Message[]> {
     const drained: Message[] = [];
     let i = 0;
     for await (const msg of consumer) {
@@ -149,7 +213,8 @@ describe('streams', () => {
   test('passthrough', async () => {
     producer.push({from: 1, to: 2, str: 'foo', extra: 'bar'} as Message);
 
-    expect(await drain(1)).toEqual([
+    const consumer = startReceiver();
+    expect(await drain(1, consumer)).toEqual([
       {from: 1, to: 2, str: 'foo', extra: 'bar'},
     ]);
   });
@@ -168,7 +233,8 @@ describe('streams', () => {
       ],
     } as Message);
 
-    expect(await drain(1)).toEqual([
+    const consumer = startReceiver();
+    expect(await drain(1, consumer)).toEqual([
       {
         from: 1,
         to: 2,

@@ -12,6 +12,19 @@ export type Source<T> = AsyncIterable<T> & {
    * from yielding any values.
    */
   cancel: () => void;
+
+  /**
+   * The presence of a `pipeline` iterable allows the usual "consumed-on-iterate" semantics
+   * to be overridden.
+   *
+   * This is suitable for transport layers that serialize messages across processes, such
+   * as the {@link streamTo()} method; pipelining allows the transport to send messages
+   * as they arrive without waiting for the previous message to be acked. This allows the
+   * messages to be streamed to the receiving process where they are presumably queued
+   * and processed without a per-message ack delay. The receiving end is then responsible
+   * for sending acks back asynchronously such that publisher is still be notified.
+   */
+  pipeline?: AsyncIterable<{value: T; consumed: () => void}> | undefined;
 };
 
 export type Sink<T> = {
@@ -52,18 +65,39 @@ export async function streamOut<T extends JSONValue>(
 
   try {
     let nextID = 0;
-    for await (const msg of source) {
-      const id = ++nextID;
-      const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
-      // Enable for debugging. Otherwise too verbose.
-      // lc.debug?.(`sending`, data);
-      sink.send(data);
+    const {pipeline} = source;
+    if (pipeline) {
+      lc.debug?.(`started pipelined outbound stream`);
+      for await (const {value: msg, consumed} of pipeline) {
+        const id = ++nextID;
+        const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
+        // Enable for debugging. Otherwise too verbose.
+        lc.debug?.(`pipelining`, data);
+        sink.send(data);
 
-      const {ack} = await acks.dequeue();
-      if (ack !== id) {
-        throw new Error(`Unexpected ack for ${id}: ${ack}`);
+        void acks.dequeue().then(({ack}) => {
+          lc.debug?.(`received ack`, ack);
+          if (ack !== id) {
+            throw new Error(`Unexpected ack for ${id}: ${ack}`);
+          }
+          consumed();
+        });
+      }
+    } else {
+      for await (const msg of source) {
+        const id = ++nextID;
+        const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
+        // Enable for debugging. Otherwise too verbose.
+        // lc.debug?.(`sending`, data);
+        sink.send(data);
+
+        const {ack} = await acks.dequeue();
+        if (ack !== id) {
+          throw new Error(`Unexpected ack for ${id}: ${ack}`);
+        }
       }
     }
+
     closer.close();
   } catch (e) {
     closer.close(e);

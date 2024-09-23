@@ -1,3 +1,4 @@
+import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {describe, expect, test, vi} from 'vitest';
 import {Result, Subscription} from './subscription.js';
@@ -400,5 +401,72 @@ describe('types/subscription', () => {
     expect(received).toEqual([{foo: 0}, {foo: 1}, {foo: 2}]);
     expect(consumed).toEqual(new Set([0, 1, 2]));
     expect(cleanup).toBeCalledTimes(1);
+  });
+
+  test('pipelining', async () => {
+    const consumed = new Set<number>();
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.add(m),
+    });
+    assert(subscription.pipeline);
+
+    for (let i = 0; i < 5; i++) {
+      const {result} = subscription.push(i);
+      results.push(result);
+    }
+
+    const received: {value: number; consumed: () => void}[] = [];
+    let j = 0;
+    for await (const e of subscription.pipeline) {
+      received.push(e);
+
+      if (j++ === 2) {
+        for (let i = 0; i < j; i++) {
+          expect(consumed.has(i)).toBe(false);
+          received[i].consumed();
+          expect(consumed.has(i)).toBe(true);
+          expect(await results[i]).toBe('consumed');
+        }
+
+        expect(subscription.active).toBe(true);
+        subscription.cancel();
+        expect(subscription.active).toBe(false);
+      }
+    }
+
+    for (let i = 3; i < 5; i++) {
+      expect(await results[i]).toBe('unconsumed');
+    }
+
+    const values = received.map(r => r.value);
+    expect(values).toEqual([0, 1, 2]);
+    expect(consumed).toEqual(new Set(values));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual([3, 4]);
+
+    expect(await subscription.push(6).result).toBe('unconsumed');
+  });
+
+  test('pipeline defaults', () => {
+    const subNoCoalesce = Subscription.create<string>({});
+    expect(subNoCoalesce.pipeline).not.toBeUndefined();
+
+    const subNoPipeline = Subscription.create<string>({pipeline: false});
+    expect(subNoPipeline.pipeline).toBeUndefined();
+
+    const subWithCoalesce = Subscription.create<string>({
+      coalesce: (curr, prev) => `${prev},${curr}`,
+    });
+    expect(subWithCoalesce.pipeline).toBeUndefined();
+
+    const subWithCoalesceAndPipeline = Subscription.create<string>({
+      coalesce: (curr, prev) => `${prev},${curr}`,
+      pipeline: true,
+    });
+    expect(subWithCoalesceAndPipeline.pipeline).not.toBeUndefined();
   });
 });
