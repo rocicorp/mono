@@ -60,7 +60,7 @@ export function Selector<T>({
           icon: closedItem?.icon,
         })}
         style={{
-          backgroundImage: closedItem?.icon && `url(${closedItem?.icon})`,
+          backgroundImage: closedItem?.icon && `url("${closedItem?.icon}")`,
         }}
       >
         {closedItem?.text ?? ''}
@@ -74,7 +74,7 @@ export function Selector<T>({
                 icon: item.icon,
               })}
               style={{
-                backgroundImage: item.icon && `url(${item.icon})`,
+                backgroundImage: item.icon && `url("${item.icon}")`,
               }}
               onMouseDown={() => handleSelect(item.value)}
             >
