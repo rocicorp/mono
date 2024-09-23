@@ -18,11 +18,11 @@ export type Source<T> = AsyncIterable<T> & {
    * to be overridden.
    *
    * This is suitable for transport layers that serialize messages across processes, such
-   * as the {@link streamTo()} method; pipelining allows the transport to send messages
-   * as they arrive without waiting for the previous message to be acked. This allows the
-   * messages to be streamed to the receiving process where they are presumably queued
-   * and processed without a per-message ack delay. The receiving end is then responsible
-   * for sending acks back asynchronously such that publisher is still be notified.
+   * as the {@link streamOut()} method; pipelining allows the transport to send messages
+   * as they arrive without waiting for the previous message to be acked, streaming
+   * them to the receiving process where they are presumably queued and processed without
+   * a per-message ack delay. The receiving end of the transport then responds with acks
+   * asynchronously as the receiving end processes the messages.
    */
   pipeline?: AsyncIterable<{value: T; consumed: () => void}> | undefined;
 };
@@ -72,11 +72,11 @@ export async function streamOut<T extends JSONValue>(
         const id = ++nextID;
         const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
         // Enable for debugging. Otherwise too verbose.
-        lc.debug?.(`pipelining`, data);
+        // lc.debug?.(`pipelining`, data);
         sink.send(data);
 
         void acks.dequeue().then(({ack}) => {
-          lc.debug?.(`received ack`, ack);
+          // lc.debug?.(`received ack`, ack);
           if (ack !== id) {
             throw new Error(`Unexpected ack for ${id}: ${ack}`);
           }
@@ -97,7 +97,6 @@ export async function streamOut<T extends JSONValue>(
         }
       }
     }
-
     closer.close();
   } catch (e) {
     closer.close(e);
