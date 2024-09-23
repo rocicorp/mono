@@ -5,6 +5,9 @@ import {Link} from '../../components/link.js';
 import Filter, {Selection} from '../../components/filter.js';
 import {navigate} from 'wouter/use-browser-location';
 import classNames from 'classnames';
+import {FixedSizeList as List} from 'react-window';
+import {CSSProperties, useRef} from 'react';
+import {useElementSize} from '../../hooks/use-element-size.js';
 
 export default function ListPage() {
   const z = useZero();
@@ -23,10 +26,7 @@ export default function ListPage() {
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
   // TODO: Implement infinite scroll
-  let q = z.query.issue
-    .orderBy('modified', 'desc')
-    .limit(100)
-    .related('labels');
+  let q = z.query.issue.orderBy('modified', 'desc').related('labels');
 
   if (open !== null) {
     q = q.where('open', open === 'true');
@@ -66,6 +66,43 @@ export default function ListPage() {
     }
   };
 
+  const Row = ({index, style}: {index: number; style: CSSProperties}) => {
+    const issue = issues[index];
+    return (
+      <div
+        key={issue.id}
+        className="row"
+        style={{
+          ...style,
+        }}
+      >
+        <Link
+          className={classNames('issue-title', {
+            'issue-closed': !issue.open,
+          })}
+          title={issue.title}
+          href={`/issue/${issue.id}`}
+        >
+          {issue.title}
+        </Link>
+        <div className="issue-taglist">
+          {issue.labels.map(label => (
+            <Link
+              key={label.id}
+              className="pill label"
+              href={`/?label=${label.name}`}
+            >
+              {label.name}
+            </Link>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const size = useElementSize(tableWrapperRef.current);
+
   return (
     <>
       <div className="list-view-header-container">
@@ -96,42 +133,19 @@ export default function ListPage() {
         <Filter onSelect={onFilter} />
       </div>
 
-      <table style={{width: '100%'}}>
-        <thead>
-          <tr className="header-row">
-            <th className="issue-column">Items</th>
-            <th className="label-column">Labels</th>
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map(issue => (
-            <tr key={issue.id}>
-              <td
-                title={issue.title}
-                align="left"
-                className={`issue-title ${
-                  issue.open ? 'issue-open' : 'issue-closed'
-                }`}
-              >
-                <Link href={`/issue/${issue.id}`}>{issue.title}</Link>
-              </td>
-              <td align="right">
-                <div className="issue-taglist">
-                  {issue.labels.map(label => (
-                    <Link
-                      key={label.id}
-                      className="pill label"
-                      href={`/?label=${label.name}`}
-                    >
-                      {label.name}
-                    </Link>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="issue-list" ref={tableWrapperRef}>
+        {size && (
+          <List
+            className="virtual-list"
+            width={size.width}
+            height={size.height}
+            itemSize={56}
+            itemCount={issues.length}
+          >
+            {Row}
+          </List>
+        )}
+      </div>
     </>
   );
 }
