@@ -10,6 +10,6 @@
     "vite.config.ts",
     "zero.config.ts",
     "./api",
-    "./src/domain/schema.ts"
+    "src/domain/schema-shared.ts"
   ]
 }

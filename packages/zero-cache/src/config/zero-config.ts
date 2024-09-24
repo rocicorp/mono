@@ -7,12 +7,12 @@ import {astSchema} from 'zero-protocol';
 import fs from 'node:fs/promises';
 import {must} from 'shared/src/must.js';
 
-export type Action = 'read' | 'insert' | 'update' | 'delete';
+export type Action = 'select' | 'insert' | 'update' | 'delete';
 
 const policySchema = v.array(v.tuple([v.literal('allow'), astSchema]));
 
 const assetSchema = v.object({
-  read: policySchema.optional(),
+  select: policySchema.optional(),
   insert: policySchema.optional(),
   update: policySchema.optional(),
   delete: policySchema.optional(),
