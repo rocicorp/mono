@@ -355,6 +355,19 @@ describe('types', () => {
     >();
   });
 
+  test('where-in', () => {
+    const query = mockQuery as unknown as Query<TestSchema>;
+
+    // @ts-expect-error - `IN` must take an array!
+    query.where('s', 'IN', 'foo');
+
+    query.where('s', 'IN', ['foo', 'bar']);
+    // @ts-expect-error - cannot compare with null
+    query.where('s', '=', null);
+    // @ts-expect-error - cannot compare with undefined
+    query.where('s', '=', undefined);
+  });
+
   test('start', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
     const query2 = query.start({b: true, s: 'foo'});

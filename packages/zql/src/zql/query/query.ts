@@ -200,15 +200,15 @@ export interface Query<
     ) => TSub,
   ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship & string>>;
 
-  where<TSelector extends Selector<TSchema>>(
+  where<TSelector extends Selector<TSchema>, TOperator extends Operator>(
     field: TSelector,
-    op: Operator,
-    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
+    op: TOperator,
+    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>,
   ): Query<TSchema, TReturn>;
 
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
-    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
+    value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>,
   ): Query<TSchema, TReturn>;
 
   start(
