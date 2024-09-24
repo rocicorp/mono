@@ -2,10 +2,10 @@ import process from 'node:process';
 import 'dotenv/config';
 import {defineConfig} from 'zero-cache/src/config/define-config.js';
 import {must} from 'shared/src/must';
+import {Schema, schema} from './src/domain/schema';
 
 type AuthData = {aud: string};
-type TODO = any;
-defineConfig<AuthData, TODO>({
+defineConfig<AuthData, Schema>(schema, () => ({
   upstreamUri: must(process.env.UPSTREAM_URI),
   cvrDbUri: must(process.env.CVR_DB_URI),
   changeDbUri: must(process.env.CHANGE_DB_URI),
@@ -16,4 +16,4 @@ defineConfig<AuthData, TODO>({
   log: {
     level: 'debug',
   },
-});
+}));
