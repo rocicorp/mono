@@ -165,6 +165,13 @@ export type DefaultQueryResultRow<TSchema extends Schema> = {
 /** Expands/simplifies */
 type Expand<T> = T extends infer O ? {[K in keyof O]: O[K]} : never;
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export type Parameter<T, TField extends keyof T, _TReturn = T[TField]> = {
+  type: 'static';
+  anchor: 'authData' | 'preMutationRow';
+  field: TField;
+};
+
 export interface Query<
   TSchema extends Schema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
@@ -209,6 +216,36 @@ export interface Query<
   where<TSelector extends Selector<TSchema>>(
     field: TSelector,
     value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>,
+  ): Query<TSchema, TReturn>;
+
+  where<
+    TSelector extends Selector<TSchema>,
+    TOperator extends Operator,
+    TParamAnchor,
+    TParamField extends keyof TParamAnchor,
+    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+      TSchema,
+      TSelector,
+      TOperator
+    >,
+  >(
+    field: TSelector,
+    op: TOperator,
+    value: Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+  ): Query<TSchema, TReturn>;
+
+  where<
+    TSelector extends Selector<TSchema>,
+    TParamAnchor,
+    TParamField extends keyof TParamAnchor,
+    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+      TSchema,
+      TSelector,
+      '='
+    >,
+  >(
+    field: TSelector,
+    value: Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Query<TSchema, TReturn>;
 
   start(

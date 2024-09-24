@@ -61,7 +61,7 @@ test('basics', () => {
         expect(predicate({foo: a})).toBe(eval(`a ${jsOp} b`));
 
         const parameterizedCondition = {
-          type: 'parameterized',
+          type: 'simple',
           field: 'foo',
           op: op as SimpleOperator,
           value: {type: 'static', anchor: 'authData', field: 'bar'},

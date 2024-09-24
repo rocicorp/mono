@@ -62,24 +62,15 @@ export const simpleConditionSchema = v.object({
     v.number(),
     v.boolean(),
     readonly(v.array(v.union(v.string(), v.number(), v.boolean()))),
+    v.object({
+      type: v.literal('static'),
+      anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
+      field: v.string(),
+    }),
   ),
 });
 
-export const parameterizedConditionSchema = v.object({
-  type: v.literal('parameterized'),
-  op: simpleOperatorSchema,
-  field: selectorSchema,
-  value: v.object({
-    type: v.literal('static'),
-    anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
-    field: v.string(),
-  }),
-});
-
-export const conditionSchema = v.union(
-  simpleConditionSchema,
-  parameterizedConditionSchema,
-);
+export const conditionSchema = simpleConditionSchema;
 
 // Split out so that its inferred type can be checked against
 // Omit<CorrelatedSubQuery, 'correlation'> in ast-type-test.ts.

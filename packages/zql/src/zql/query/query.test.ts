@@ -2,6 +2,7 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {Query} from './query.js';
 import {Schema} from './schema.js';
+import {staticParam} from './query-impl.js';
 
 const mockQuery = {
   select() {
@@ -333,6 +334,18 @@ describe('types', () => {
         b: boolean;
       }>
     >();
+  });
+
+  test('where-parameters', () => {
+    type AuthData = {
+      aud: string;
+    };
+    const query = mockQuery as unknown as Query<TestSchema>;
+
+    query.where('s', '=', staticParam<AuthData, 'aud'>('authData', 'aud'));
+
+    const p = staticParam<AuthData, 'aud'>('authData', 'aud');
+    query.where('b', '=', p);
   });
 
   test('where-optional-op', () => {
