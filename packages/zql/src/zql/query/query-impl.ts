@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {assert} from 'shared/src/asserts.js';
 import {AST, Ordering} from '../ast/ast.js';
@@ -11,6 +12,7 @@ import {
   GetFieldTypeNoNullOrUndefined,
   MakeSingular,
   Operator,
+  Parameter,
   Query,
   QueryType,
   SchemaToRow,
@@ -46,6 +48,17 @@ export type CommitListener = () => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(ast: AST): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
+}
+
+export function staticParam<TAnchor, TField extends keyof TAnchor>(
+  anchorClass: 'authData' | 'preMutationRow',
+  field: TField,
+): Parameter<TAnchor, TField, TAnchor[TField]> {
+  return {
+    type: 'static',
+    anchor: anchorClass,
+    field,
+  };
 }
 
 export abstract class AbstractQuery<
@@ -227,20 +240,19 @@ export abstract class AbstractQuery<
     throw new Error(`Invalid relationship ${relationship as string}`);
   }
 
-  where<TSelector extends Selector<TSchema>>(
-    field: TSelector,
+  where(
+    field: any,
     opOrValue:
       | Operator
-      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
-    value?: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, Operator>,
+      | GetFieldTypeNoNullOrUndefined<any, any, any>
+      | Parameter<any, any, any>,
+    value?:
+      | GetFieldTypeNoNullOrUndefined<any, any, any>
+      | Parameter<any, any, any>,
   ): Query<TSchema, TReturn> {
     let op: Operator;
     if (value === undefined) {
-      value = opOrValue as GetFieldTypeNoNullOrUndefined<
-        TSchema,
-        TSelector,
-        Operator
-      >;
+      value = opOrValue;
       op = '=';
     } else {
       op = opOrValue as Operator;

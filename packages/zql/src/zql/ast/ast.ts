@@ -68,7 +68,7 @@ export type CorrelatedSubQuery = {
  * ivm1 supports Conjunctions and Disjunctions.
  * We'll support them in the future.
  */
-export type Condition = SimpleCondition | ParameterizedCondition;
+export type Condition = SimpleCondition;
 export type SimpleCondition = {
   type: 'simple';
   op: SimpleOperator;
@@ -84,15 +84,13 @@ export type SimpleCondition = {
    * `null` is absent since we do not have an `IS` or `IS NOT`
    * operator defined and `null != null` in SQL.
    */
-  value: string | number | boolean | ReadonlyArray<string | number | boolean>;
+  value:
+    | string
+    | number
+    | boolean
+    | ReadonlyArray<string | number | boolean>
+    | Parameter;
 };
-export type ParameterizedCondition = {
-  type: 'parameterized';
-  op: SimpleOperator;
-  field: string;
-  value: Parameter;
-};
-
 /**
  * A parameter is a value that is not known at the time the query is written
  * and is resolved at runtime.
@@ -110,7 +108,7 @@ export type ParameterizedCondition = {
  * AncestorParameters refer to rows encountered while running the query.
  * They are used by subqueries to refer to rows emitted by parent queries.
  */
-type Parameter = StaticParameter;
+export type Parameter = StaticParameter;
 type StaticParameter = {
   type: 'static';
   // The "namespace" of the injected parameter.
