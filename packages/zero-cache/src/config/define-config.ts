@@ -13,9 +13,8 @@ import type {
 } from './zero-config.js';
 import path from 'node:path';
 import fs from 'node:fs';
-import {newQuery} from 'zql/src/zql/query/query-impl.js';
-import {ConfigZqlContext} from './config-zql-context.js';
 import {AST} from 'zql/src/zql/ast/ast.js';
+import {ConfigQuery} from './config-query.js';
 
 type SchemaDefs = {
   readonly [table: string]: Schema;
@@ -63,9 +62,8 @@ export function defineConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
   definer: (queries: Queries<TSchemas>) => ZeroConfig<TAuthDataShape, TSchemas>,
 ) {
   const queries = {} as Record<string, Query<Schema>>;
-  const context = new ConfigZqlContext();
   for (const [name, schema] of Object.entries(schemas)) {
-    queries[name] = newQuery(context, schema);
+    queries[name] = new ConfigQuery(schema);
   }
 
   const config = definer(queries as Queries<TSchemas>);
