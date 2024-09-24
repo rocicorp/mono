@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {must} from 'shared/src/must.js';
 import {Zero} from 'zero-client';
 import {ZeroProvider} from 'zero-react/src/use-zero.js';
-import {Schema, schema} from './domain/schema.js';
+import {Schema, schema} from './domain/schema-shared.js';
 import './index.css';
 import Root from './root.js';
 

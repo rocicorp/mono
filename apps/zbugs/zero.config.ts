@@ -1,11 +1,11 @@
 import process from 'node:process';
 import 'dotenv/config';
-import {defineConfig} from 'zero-cache/src/config/define-config.js';
+import {defineConfig, Queries} from 'zero-cache/src/config/define-config.js';
 import {must} from 'shared/src/must';
-import {Schema, schema} from './src/domain/schema';
+import {Schema, schema} from './src/domain/schema-shared';
 
 type AuthData = {aud: string};
-defineConfig<AuthData, Schema>(schema, () => ({
+defineConfig<AuthData, Schema>(schema, queries => ({
   upstreamUri: must(process.env.UPSTREAM_URI),
   cvrDbUri: must(process.env.CVR_DB_URI),
   changeDbUri: must(process.env.CHANGE_DB_URI),
@@ -16,4 +16,42 @@ defineConfig<AuthData, Schema>(schema, () => ({
   log: {
     level: 'debug',
   },
+
+  authorization: {
+    user: {
+      // Only the authentication system can
+      // write to the user table.
+      table: {
+        delete: [],
+        insert: [],
+        update: [],
+      },
+    },
+    issue: {
+      row: {
+        delete: [],
+        update: [
+          (authData, row) =>
+            queries.issue
+              .where('id', '=', row.id)
+              .where('creatorID', '=', authData.aud),
+          allowIfCrewMember(queries),
+        ],
+      },
+    },
+    comment: {
+      row: {
+        delete: [],
+        update: [
+          (authData, row) =>
+            queries.comment
+              .where('id', '=', row.id)
+              .where('creatorID', '=', authData.aud),
+        ],
+      },
+    },
+  },
 }));
+
+const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
+  queries.user.where('id', '=', authData.aud).where('role', '=', 'crew');
