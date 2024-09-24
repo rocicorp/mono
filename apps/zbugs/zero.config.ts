@@ -5,6 +5,10 @@ import {must} from 'shared/src/must';
 import {Schema, schema} from './src/domain/schema-shared';
 
 type AuthData = {aud: string};
+
+const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
+  queries.user.where('id', '=', authData.aud).where('role', '=', 'crew');
+
 defineConfig<AuthData, Schema>(schema, queries => ({
   upstreamUri: must(process.env.UPSTREAM_URI),
   cvrDbUri: must(process.env.CVR_DB_URI),
@@ -52,6 +56,3 @@ defineConfig<AuthData, Schema>(schema, queries => ({
     },
   },
 }));
-
-const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
-  queries.user.where('id', '=', authData.aud).where('role', '=', 'crew');

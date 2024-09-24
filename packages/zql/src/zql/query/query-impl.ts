@@ -48,18 +48,16 @@ export interface QueryDelegate extends BuilderDelegate {
   onTransactionCommit(cb: CommitListener): () => void;
 }
 
-export class QueryImpl<
+export abstract class AbstractQuery<
   TSchema extends Schema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > implements Query<TSchema, TReturn>
 {
   readonly #ast: AST;
-  readonly #delegate: QueryDelegate;
   readonly #schema: TSchema;
   readonly #format: Format;
 
   constructor(
-    delegate: QueryDelegate,
     schema: TSchema,
     ast?: AST | undefined,
     format?: Format | undefined,
@@ -68,7 +66,6 @@ export class QueryImpl<
       table: schema.tableName,
     };
     this.#format = format ?? {singular: false, relationships: {}};
-    this.#delegate = delegate;
     this.#schema = schema;
   }
 
@@ -76,29 +73,24 @@ export class QueryImpl<
     return this.#ast;
   }
 
-  get format() {
-    return this.#format;
-  }
-
-  get singular(): TReturn['singular'] {
-    return this.#format.singular;
-  }
-
   select<TFields extends Selector<TSchema>[]>(
     ..._fields: TFields
   ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>> {
     // we return all columns for now so we ignore the selection set and only use it for type inference
-    return newQueryWithDetails(
-      this.#delegate,
-      this.#schema,
-      this.#ast,
-      this.#format,
-    );
+    return this._newQuery(this.#schema, this.#ast, this.#format);
   }
 
+  protected abstract _newQuery<
+    TSchema extends Schema,
+    TReturn extends QueryType,
+  >(
+    schema: TSchema,
+    ast: AST,
+    format: Format | undefined,
+  ): Query<TSchema, TReturn>;
+
   one(): Query<TSchema, MakeSingular<TReturn>> {
-    return newQueryWithDetails(
-      this.#delegate,
+    return this._newQuery(
       this.#schema,
       {
         ...this.#ast,
@@ -109,56 +101,6 @@ export class QueryImpl<
         singular: true,
       },
     );
-  }
-
-  materialize(): TypedView<Smash<TReturn>> {
-    const ast = this.#completeAst();
-    const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const view = new ArrayView(
-      buildPipeline(ast, this.#delegate, undefined),
-      this.#format,
-    );
-    const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
-      view.flush();
-    });
-    view.onDestroy = () => {
-      removeCommitObserver();
-      removeServerQuery();
-    };
-    return view as unknown as TypedView<Smash<TReturn>>;
-  }
-
-  preload(): {
-    cleanup: () => void;
-  } {
-    const ast = this.#completeAst();
-    const unsub = this.#delegate.addServerQuery(ast);
-    return {
-      cleanup: unsub,
-    };
-  }
-
-  #completeAst(): AST {
-    const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
-    if (this.#ast.start) {
-      const {row} = this.#ast.start;
-      const narrowedRow: Row = {};
-      for (const [field] of finalOrderBy) {
-        narrowedRow[field] = row[field];
-      }
-      return {
-        ...this.#ast,
-        start: {
-          ...this.#ast.start,
-          row: narrowedRow,
-        },
-        orderBy: finalOrderBy,
-      };
-    }
-    return {
-      ...this.#ast,
-      orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
-    };
   }
 
   related<TRelationship extends keyof TSchema['relationships']>(
@@ -194,8 +136,7 @@ export class QueryImpl<
     if (isFieldRelationship(related1)) {
       const destSchema = resolveSchema(related1.dest.schema);
       const sq = cb(
-        newQueryWithDetails(
-          this.#delegate,
+        this._newQuery(
           destSchema,
           {
             table: destSchema.tableName,
@@ -204,8 +145,7 @@ export class QueryImpl<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
-      return newQueryWithDetails(
-        this.#delegate,
+      return this._newQuery(
         this.#schema,
         {
           ...this.#ast,
@@ -235,8 +175,7 @@ export class QueryImpl<
       const destSchema = resolveSchema(related2.dest.schema);
       const junctionSchema = resolveSchema(related2.junction.schema);
       const sq = cb(
-        newQueryWithDetails(
-          this.#delegate,
+        this._newQuery(
           destSchema,
           {
             table: destSchema.tableName,
@@ -245,8 +184,7 @@ export class QueryImpl<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
-      return newQueryWithDetails(
-        this.#delegate,
+      return this._newQuery(
         this.#schema,
         {
           ...this.#ast,
@@ -308,8 +246,7 @@ export class QueryImpl<
       op = opOrValue as Operator;
     }
 
-    return newQueryWithDetails(
-      this.#delegate,
+    return this._newQuery(
       this.#schema,
       {
         ...this.#ast,
@@ -331,8 +268,7 @@ export class QueryImpl<
     row: Partial<SchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn> {
-    return newQueryWithDetails(
-      this.#delegate,
+    return this._newQuery(
       this.#schema,
       {
         ...this.#ast,
@@ -353,8 +289,7 @@ export class QueryImpl<
       throw new Error('Limit must be an integer');
     }
 
-    return newQueryWithDetails(
-      this.#delegate,
+    return this._newQuery(
       this.#schema,
       {
         ...this.#ast,
@@ -368,8 +303,7 @@ export class QueryImpl<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TReturn> {
-    return newQueryWithDetails(
-      this.#delegate,
+    return this._newQuery(
       this.#schema,
       {
         ...this.#ast,
@@ -377,6 +311,96 @@ export class QueryImpl<
       },
       this.#format,
     );
+  }
+
+  protected _completeAst(): AST {
+    const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
+    if (this.#ast.start) {
+      const {row} = this.#ast.start;
+      const narrowedRow: Row = {};
+      for (const [field] of finalOrderBy) {
+        narrowedRow[field] = row[field];
+      }
+      return {
+        ...this.#ast,
+        start: {
+          ...this.#ast.start,
+          row: narrowedRow,
+        },
+        orderBy: finalOrderBy,
+      };
+    }
+    return {
+      ...this.#ast,
+      orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
+    };
+  }
+
+  abstract materialize(): TypedView<Smash<TReturn>>;
+  abstract preload(): {
+    cleanup: () => void;
+  };
+}
+
+export class QueryImpl<
+  TSchema extends Schema,
+  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
+> extends AbstractQuery<TSchema, TReturn> {
+  readonly #delegate: QueryDelegate;
+  readonly #format: Format;
+
+  constructor(
+    delegate: QueryDelegate,
+    schema: TSchema,
+    ast?: AST | undefined,
+    format?: Format | undefined,
+  ) {
+    super(schema, ast, format);
+    this.#format = format ?? {singular: false, relationships: {}};
+    this.#delegate = delegate;
+  }
+
+  get format() {
+    return this.#format;
+  }
+
+  get singular(): TReturn['singular'] {
+    return this.#format.singular;
+  }
+
+  protected _newQuery<TSchema extends Schema, TReturn extends QueryType>(
+    schema: TSchema,
+    ast: AST,
+    format: Format | undefined,
+  ): Query<TSchema, TReturn> {
+    return newQueryWithDetails(this.#delegate, schema, ast, format);
+  }
+
+  materialize(): TypedView<Smash<TReturn>> {
+    const ast = this._completeAst();
+    const removeServerQuery = this.#delegate.addServerQuery(ast);
+    const view = new ArrayView(
+      buildPipeline(ast, this.#delegate, undefined),
+      this.#format,
+    );
+    const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
+      view.flush();
+    });
+    view.onDestroy = () => {
+      removeCommitObserver();
+      removeServerQuery();
+    };
+    return view as unknown as TypedView<Smash<TReturn>>;
+  }
+
+  preload(): {
+    cleanup: () => void;
+  } {
+    const ast = this._completeAst();
+    const unsub = this.#delegate.addServerQuery(ast);
+    return {
+      cleanup: unsub,
+    };
   }
 }
 

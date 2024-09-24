@@ -10,6 +10,5 @@
     "transpileOnly": true,
     "esm": true
   },
-  "references": [{"path": "./tsconfig.node.json"}],
   "include": ["src"]
 }

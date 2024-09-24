@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node --no-warnings --loader ts-node/esm ./zero.config.ts ; tsc ; vite build",
     "check-types": "tsc --noEmit",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
