@@ -3,7 +3,13 @@
     "composite": true,
     "module": "ESNext",
     "moduleResolution": "Node",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true
   },
-  "include": ["vite.config.ts", "zero.config.ts", "./api"]
+  "include": [
+    "vite.config.ts",
+    "zero.config.ts",
+    "./api",
+    "./src/domain/schema.ts"
+  ]
 }

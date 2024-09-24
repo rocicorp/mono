@@ -9,9 +9,15 @@ import {Schema} from 'zql/src/zql/query/schema.js';
 import type {ZeroConfig as CompiledZeroConfig} from './zero-config.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import {newQuery} from 'zql/src/zql/query/query-impl.js';
+import {ConfigZqlContext} from './config-zql-context.js';
 
 type SchemaDefs = {
   readonly [table: string]: Schema;
+};
+
+type Queries<TSchemas extends SchemaDefs> = {
+  [K in keyof TSchemas]: Query<TSchemas[K]>;
 };
 
 type InstanceAuthzRule<TAuthDataShape, TSchema extends Schema> = (
@@ -48,8 +54,16 @@ export type ZeroConfig<
 };
 
 export function defineConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
-  config: ZeroConfig<TAuthDataShape, TSchemas>,
+  schemas: TSchemas,
+  definer: (queries: Queries<TSchemas>) => ZeroConfig<TAuthDataShape, TSchemas>,
 ) {
+  const queries = {} as Record<string, Query<Schema>>;
+  const context = new ConfigZqlContext();
+  for (const [name, schema] of Object.entries(schemas)) {
+    queries[name] = newQuery(context, schema);
+  }
+
+  const config = definer(queries as Queries<TSchemas>);
   const compiled = compileConfig(config);
   const serializedConfig = JSON.stringify(compiled, null, 2);
   const dest = path.join(process.cwd(), 'zero.config.json');
