@@ -35,7 +35,9 @@ fastify.register(oauthPlugin, {
   },
   startRedirectPath: '/api/login/github',
   callbackUri: req =>
-    `${req.protocol}://${req.hostname}:${req.port}/api/login/github/callback`,
+    `${req.protocol}://${req.hostname}${
+      req.port != null ? ':' + req.port : ''
+    }/api/login/github/callback`,
 });
 
 fastify.get('/api/login/github/callback', async function (request, reply) {
