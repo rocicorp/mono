@@ -30,10 +30,6 @@ export class ConfigQuery<
     return new ConfigQuery(schema, ast, format);
   }
 
-  get ast() {
-    return this._completeAst();
-  }
-
   materialize(): TypedView<Smash<TReturn>> {
     throw new Error('ConfigQuery cannot be materialized');
   }
