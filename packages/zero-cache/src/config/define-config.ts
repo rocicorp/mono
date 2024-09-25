@@ -15,6 +15,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {AST} from 'zql/src/zql/ast/ast.js';
 import {ConfigQuery} from './config-query.js';
+import {authDataRef, preMutationRowRef} from './refs.js';
 
 type SchemaDefs = {
   readonly [table: string]: Schema;
@@ -44,9 +45,16 @@ type InstanceAssetAuthorization<TAuthDataShape, TSchema extends Schema> = {
 export type AuthorizationConfig<TAuthDataShape, TSchemas extends SchemaDefs> = {
   [K in keyof TSchemas]?: {
     table?: StaticAssetAuthorization<TAuthDataShape>;
-    column?: StaticAssetAuthorization<TAuthDataShape>;
+    column?: {
+      [C in keyof TSchemas[K]['columns']]?: StaticAssetAuthorization<TAuthDataShape>;
+    };
     row?: InstanceAssetAuthorization<TAuthDataShape, TSchemas[K]>;
-    cell?: InstanceAssetAuthorization<TAuthDataShape, TSchemas[K]>;
+    cell?: {
+      [C in keyof TSchemas[K]['columns']]?: InstanceAssetAuthorization<
+        TAuthDataShape,
+        TSchemas[K]
+      >;
+    };
   };
 };
 
@@ -122,13 +130,12 @@ function compileStaticRules<TAuthDataShape>(
   if (!rules) {
     return undefined;
   }
-  // TODO: implement `AuthDataRef` to pass auth data to rules that will inject Parameter references
   return rules.map(
     rule =>
       [
         'allow',
         (
-          rule({} as TAuthDataShape) as unknown as {
+          rule(authDataRef as TAuthDataShape) as unknown as {
             ast: AST;
           }
         ).ast,
@@ -181,9 +188,11 @@ function compileInstanceRules<TAuthDataShape, TSchema extends Schema>(
     rule =>
       [
         'allow',
-        // TODO: implement RowRef to inject Parameter references
         (
-          rule({} as TAuthDataShape, {} as SchemaToRow<TSchema>) as unknown as {
+          rule(
+            authDataRef as TAuthDataShape,
+            preMutationRowRef as SchemaToRow<TSchema>,
+          ) as unknown as {
             ast: AST;
           }
         ).ast,

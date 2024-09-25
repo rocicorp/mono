@@ -1,0 +1,456 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`instance authorization rules 1`] = `
+"{
+  "upstreamUri": "",
+  "cvrDbUri": "",
+  "changeDbUri": "",
+  "replicaDbFile": "",
+  "replicaId": "",
+  "log": {
+    "level": "info"
+  },
+  "authorization": {
+    "issue": {
+      "row": {
+        "update": [
+          [
+            "allow",
+            {
+              "table": "issue",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "preMutationRow",
+                    "field": "id"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "creatorID",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                }
+              ]
+            }
+          ],
+          [
+            "allow",
+            {
+              "table": "user",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "role",
+                  "value": "crew"
+                }
+              ]
+            }
+          ]
+        ]
+      }
+    },
+    "comment": {
+      "row": {
+        "update": [
+          [
+            "allow",
+            {
+              "table": "comment",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "preMutationRow",
+                    "field": "id"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "creatorID",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                }
+              ]
+            }
+          ]
+        ]
+      },
+      "cell": {
+        "creatorID": {
+          "update": [
+            [
+              "allow",
+              {
+                "table": "user",
+                "where": [
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "id",
+                    "value": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": "sub"
+                    }
+                  },
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "role",
+                    "value": "crew"
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    }
+  }
+}"
+`;
+
+exports[`static authorization rules 1`] = `
+"{
+  "upstreamUri": "",
+  "cvrDbUri": "",
+  "changeDbUri": "",
+  "replicaDbFile": "",
+  "replicaId": "",
+  "log": {
+    "level": "info"
+  },
+  "authorization": {
+    "user": {
+      "table": {
+        "select": [
+          [
+            "allow",
+            {
+              "table": "user"
+            }
+          ]
+        ],
+        "insert": [
+          [
+            "allow",
+            {
+              "table": "user"
+            }
+          ]
+        ],
+        "update": [
+          [
+            "allow",
+            {
+              "table": "user"
+            }
+          ]
+        ],
+        "delete": [
+          [
+            "allow",
+            {
+              "table": "user"
+            }
+          ]
+        ]
+      },
+      "column": {
+        "id": {
+          "select": [
+            [
+              "allow",
+              {
+                "table": "user"
+              }
+            ]
+          ],
+          "insert": [
+            [
+              "allow",
+              {
+                "table": "user"
+              }
+            ]
+          ],
+          "update": [
+            [
+              "allow",
+              {
+                "table": "user"
+              }
+            ]
+          ],
+          "delete": [
+            [
+              "allow",
+              {
+                "table": "user"
+              }
+            ]
+          ]
+        }
+      }
+    }
+  }
+}"
+`;
+
+exports[`static authorization rules 2`] = `
+"{
+  "upstreamUri": "",
+  "cvrDbUri": "",
+  "changeDbUri": "",
+  "replicaDbFile": "",
+  "replicaId": "",
+  "log": {
+    "level": "info"
+  },
+  "authorization": {
+    "user": {
+      "table": {
+        "select": [
+          [
+            "allow",
+            {
+              "table": "user",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "role",
+                  "value": "crew"
+                }
+              ]
+            }
+          ]
+        ],
+        "insert": [
+          [
+            "allow",
+            {
+              "table": "user",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "role",
+                  "value": "crew"
+                }
+              ]
+            }
+          ]
+        ],
+        "update": [
+          [
+            "allow",
+            {
+              "table": "user",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "role",
+                  "value": "crew"
+                }
+              ]
+            }
+          ]
+        ],
+        "delete": [
+          [
+            "allow",
+            {
+              "table": "user",
+              "where": [
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "id",
+                  "value": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": "sub"
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "=",
+                  "field": "role",
+                  "value": "crew"
+                }
+              ]
+            }
+          ]
+        ]
+      },
+      "column": {
+        "login": {
+          "select": [
+            [
+              "allow",
+              {
+                "table": "user",
+                "where": [
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "id",
+                    "value": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": "sub"
+                    }
+                  },
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "role",
+                    "value": "crew"
+                  }
+                ]
+              }
+            ]
+          ],
+          "insert": [
+            [
+              "allow",
+              {
+                "table": "user",
+                "where": [
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "id",
+                    "value": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": "sub"
+                    }
+                  },
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "role",
+                    "value": "crew"
+                  }
+                ]
+              }
+            ]
+          ],
+          "update": [
+            [
+              "allow",
+              {
+                "table": "user",
+                "where": [
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "id",
+                    "value": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": "sub"
+                    }
+                  },
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "role",
+                    "value": "crew"
+                  }
+                ]
+              }
+            ]
+          ],
+          "delete": [
+            [
+              "allow",
+              {
+                "table": "user",
+                "where": [
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "id",
+                    "value": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": "sub"
+                    }
+                  },
+                  {
+                    "type": "simple",
+                    "op": "=",
+                    "field": "role",
+                    "value": "crew"
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    }
+  }
+}"
+`;

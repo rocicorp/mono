@@ -4,10 +4,10 @@ import {defineConfig, Queries} from 'zero-cache/src/config/define-config.js';
 import {must} from 'shared/src/must';
 import {Schema, schema} from './src/domain/schema-shared';
 
-type AuthData = {aud: string};
+type AuthData = {sub: string};
 
 const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
-  queries.user.where('id', '=', authData.aud).where('role', '=', 'crew');
+  queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
 defineConfig<AuthData, Schema>(schema, queries => ({
   upstreamUri: must(process.env.UPSTREAM_URI),
@@ -38,7 +38,7 @@ defineConfig<AuthData, Schema>(schema, queries => ({
           (authData, row) =>
             queries.issue
               .where('id', '=', row.id)
-              .where('creatorID', '=', authData.aud),
+              .where('creatorID', '=', authData.sub),
           allowIfCrewMember(queries),
         ],
       },
@@ -50,7 +50,7 @@ defineConfig<AuthData, Schema>(schema, queries => ({
           (authData, row) =>
             queries.comment
               .where('id', '=', row.id)
-              .where('creatorID', '=', authData.aud),
+              .where('creatorID', '=', authData.sub),
         ],
       },
     },
