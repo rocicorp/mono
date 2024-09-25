@@ -16,7 +16,7 @@ declare module 'fastify' {
   }
 }
 
-const sql = postgres(process.env.UPSTREAM_URI);
+const sql = postgres(process.env.UPSTREAM_URI as string);
 
 export const fastify = Fastify({
   logger: true,
@@ -28,14 +28,18 @@ fastify.register(oauthPlugin, {
   name: 'githubOAuth2',
   credentials: {
     client: {
-      id: process.env.GITHUB_CLIENT_ID,
-      secret: process.env.GITHUB_CLIENT_SECRET,
+      id: process.env.GITHUB_CLIENT_ID as string,
+      secret: process.env.GITHUB_CLIENT_SECRET as string,
     },
     auth: oauthPlugin.GITHUB_CONFIGURATION,
   },
   startRedirectPath: '/api/login/github',
   callbackUri: req =>
     `${req.protocol}://${req.hostname}:${req.port}/api/login/github/callback`,
+});
+
+fastify.get('/', async (_req, reply) => {
+  return reply.send({hello: 'world'});
 });
 
 fastify.get('/api', async (_req, reply) => {
