@@ -1,5 +1,5 @@
 // https://vercel.com/templates/other/fastify-serverless-function
-import Fastify from 'fastify';
+import Fastify, {FastifyReply, FastifyRequest} from 'fastify';
 import cookie from '@fastify/cookie';
 import oauthPlugin from '@fastify/oauth2';
 import 'dotenv/config';
@@ -36,14 +36,6 @@ fastify.register(oauthPlugin, {
   startRedirectPath: '/api/login/github',
   callbackUri: req =>
     `${req.protocol}://${req.hostname}:${req.port}/api/login/github/callback`,
-});
-
-fastify.get('/', async (_req, reply) => {
-  return reply.send({hello: 'world'});
-});
-
-fastify.get('/api', async (_req, reply) => {
-  return reply.status(200).send({hello: 'world'});
 });
 
 fastify.get('/api/login/github/callback', async function (request, reply) {
@@ -94,7 +86,10 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
     .redirect('/');
 });
 
-export default async function handler(req, reply) {
+export default async function handler(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
   await fastify.ready();
   fastify.server.emit('request', req, reply);
 }
