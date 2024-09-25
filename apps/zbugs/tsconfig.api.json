@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "Node",
     "allowSyntheticDefaultImports": true,
-    "noEmit": true
+    "outDir": "dist"
   },
-  "include": ["vite.config.ts", "zero.config.ts", "src/domain/schema-shared.ts"]
+  "include": ["./api"]
 }
