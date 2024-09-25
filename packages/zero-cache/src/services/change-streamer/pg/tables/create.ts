@@ -16,9 +16,9 @@ export function createTableStatement(spec: TableSpec): string {
     return parts.join('');
   }
 
-  const defs = Object.entries(spec.columns).map(([name, col]) =>
-    colDef(name, col),
-  );
+  const defs = Object.entries(spec.columns)
+    .sort(([_a, {pos: a}], [_b, {pos: b}]) => a - b)
+    .map(([name, col]) => colDef(name, col));
   if (spec.primaryKey) {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }

@@ -24,21 +24,25 @@ const REPLICA_ID = 'initial_sync_test_id';
 const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
   columns: {
     clientGroupID: {
+      pos: 1,
       characterMaximumLength: null,
       dataType: 'text',
       notNull: true,
     },
     clientID: {
+      pos: 2,
       characterMaximumLength: null,
       dataType: 'text',
       notNull: true,
     },
     lastMutationID: {
+      pos: 3,
       characterMaximumLength: null,
       dataType: 'int8',
       notNull: false,
     },
     userID: {
+      pos: 4,
       characterMaximumLength: null,
       dataType: 'text',
       notNull: false,
@@ -47,27 +51,34 @@ const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
   name: 'clients',
   primaryKey: ['clientGroupID', 'clientID'],
   schema: 'zero',
-  filterConditions: [],
+  publications: {
+    ['zero_data']: {rowFilter: null},
+    ['zero_meta']: {rowFilter: null},
+  },
 } as const;
 
 const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
   columns: {
     clientGroupID: {
+      pos: 1,
       characterMaximumLength: null,
       dataType: 'TEXT',
       notNull: false,
     },
     clientID: {
+      pos: 2,
       characterMaximumLength: null,
       dataType: 'TEXT',
       notNull: false,
     },
     lastMutationID: {
+      pos: 3,
       characterMaximumLength: null,
       dataType: 'INTEGER',
       notNull: false,
     },
     userID: {
+      pos: 4,
       characterMaximumLength: null,
       dataType: 'TEXT',
       notNull: false,
@@ -163,16 +174,19 @@ describe('replicator/initial-sync', () => {
         ['public.issues']: {
           columns: {
             issueID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
             },
             orgID: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
             },
             isAdmin: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'bool',
               notNull: false,
@@ -181,7 +195,7 @@ describe('replicator/initial-sync', () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          filterConditions: [],
+          publications: {['zero_data']: {rowFilter: null}},
         },
       },
       replicatedSchema: {
@@ -189,21 +203,25 @@ describe('replicator/initial-sync', () => {
         ['issues']: {
           columns: {
             issueID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             orgID: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             isAdmin: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'BOOL',
               notNull: false,
             },
             ['_0_version']: {
+              pos: 4,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: true,
@@ -239,16 +257,21 @@ describe('replicator/initial-sync', () => {
         CREATE PUBLICATION zero_custom FOR TABLE users ("userID", handle);
       `,
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        ['zero.clients']: {
+          ...ZERO_CLIENTS_SPEC,
+          publications: {['zero_meta']: {rowFilter: null}},
+        },
         ['public.users']: {
           columns: {
             userID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
             },
             // Note: password is not published
             handle: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'text',
               notNull: false,
@@ -257,7 +280,7 @@ describe('replicator/initial-sync', () => {
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
-          filterConditions: [],
+          publications: {['zero_custom']: {rowFilter: null}},
         },
       },
       replicatedSchema: {
@@ -265,17 +288,20 @@ describe('replicator/initial-sync', () => {
         ['users']: {
           columns: {
             userID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             // Note: password is not published
             handle: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: false,
             },
             ['_0_version']: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: true,
@@ -310,16 +336,21 @@ describe('replicator/initial-sync', () => {
         CREATE PUBLICATION zero_custom2 FOR TABLE users ("userID", handle) WHERE ("userID" > 1000);
       `,
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        ['zero.clients']: {
+          ...ZERO_CLIENTS_SPEC,
+          publications: {['zero_meta']: {rowFilter: null}},
+        },
         ['public.users']: {
           columns: {
             userID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
             },
             // Note: password is not published
             handle: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'text',
               notNull: false,
@@ -328,7 +359,10 @@ describe('replicator/initial-sync', () => {
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
-          filterConditions: ['(("userID" % 2) = 0)', '("userID" > 1000)'],
+          publications: {
+            ['zero_custom']: {rowFilter: '(("userID" % 2) = 0)'},
+            ['zero_custom2']: {rowFilter: '("userID" > 1000)'},
+          },
         },
       },
       replicatedSchema: {
@@ -336,17 +370,20 @@ describe('replicator/initial-sync', () => {
         ['users']: {
           columns: {
             userID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             // Note: password is not published
             handle: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: false,
             },
             ['_0_version']: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: true,
@@ -390,21 +427,25 @@ describe('replicator/initial-sync', () => {
         ['public.issues']: {
           columns: {
             issueID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
             },
             orgID: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'int4',
               notNull: true,
             },
             other: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'text',
               notNull: false,
             },
             isAdmin: {
+              pos: 4,
               characterMaximumLength: null,
               dataType: 'bool',
               notNull: false,
@@ -413,7 +454,7 @@ describe('replicator/initial-sync', () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          filterConditions: [],
+          publications: {['zero_data']: {rowFilter: null}},
         },
       },
       replicatedSchema: {
@@ -421,21 +462,31 @@ describe('replicator/initial-sync', () => {
         ['issues']: {
           columns: {
             issueID: {
+              pos: 1,
               characterMaximumLength: null,
               dataType: 'INTEGER',
               notNull: false,
             },
             orgID: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'INTEGER',
               notNull: false,
             },
+            other: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: false,
+            },
             isAdmin: {
+              pos: 4,
               characterMaximumLength: null,
               dataType: 'BOOL',
               notNull: false,
             },
             ['_0_version']: {
+              pos: 5,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: true,

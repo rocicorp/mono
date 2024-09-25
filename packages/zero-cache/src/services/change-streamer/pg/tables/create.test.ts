@@ -26,11 +26,13 @@ describe('tables/create', () => {
         name: 'clients',
         columns: {
           clientID: {
+            pos: 1,
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
           },
           lastMutationID: {
+            pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
@@ -49,11 +51,13 @@ describe('tables/create', () => {
         name: 'clients',
         columns: {
           clientID: {
+            pos: 1,
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
           },
           lastMutationID: {
+            pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
@@ -66,11 +70,13 @@ describe('tables/create', () => {
         name: 'clients',
         columns: {
           clientID: {
+            pos: 1,
             dataType: 'varchar(180)',
             characterMaximumLength: null,
             notNull: true,
           },
           lastMutationID: {
+            pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
@@ -86,11 +92,13 @@ describe('tables/create', () => {
         name: 'zero.clients',
         columns: {
           clientID: {
+            pos: 1,
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
           },
           lastMutationID: {
+            pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
@@ -109,11 +117,13 @@ describe('tables/create', () => {
         name: 'zero.clients',
         columns: {
           clientID: {
+            pos: 1,
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
           },
           lastMutationID: {
+            pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
@@ -126,11 +136,13 @@ describe('tables/create', () => {
         name: 'zero.clients',
         columns: {
           clientID: {
+            pos: 1,
             dataType: 'varchar(180)',
             characterMaximumLength: null,
             notNull: true,
           },
           lastMutationID: {
+            pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
@@ -146,46 +158,55 @@ describe('tables/create', () => {
         name: 'users',
         columns: {
           ['user_id']: {
+            pos: 1,
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
           },
           handle: {
+            pos: 2,
             characterMaximumLength: 40,
             dataType: 'varchar',
             notNull: false,
           },
           address: {
+            pos: 3,
             characterMaximumLength: null,
             dataType: 'text[]',
             notNull: false,
           },
           ['timez']: {
+            pos: 4,
             dataType: 'timestamptz[]',
             characterMaximumLength: null,
             notNull: false,
           },
           ['bigint_array']: {
+            pos: 5,
             characterMaximumLength: null,
             dataType: 'int8[]',
             notNull: false,
           },
           ['bool_array']: {
+            pos: 6,
             characterMaximumLength: null,
             dataType: 'bool[]',
             notNull: false,
           },
           ['real_array']: {
+            pos: 7,
             characterMaximumLength: null,
             dataType: 'float4[]',
             notNull: false,
           },
           ['int_array']: {
+            pos: 8,
             dataType: 'int4[]',
             characterMaximumLength: null,
             notNull: false,
           },
           ['json_val']: {
+            pos: 9,
             dataType: 'jsonb',
             characterMaximumLength: null,
             notNull: false,
@@ -211,46 +232,55 @@ describe('tables/create', () => {
         name: 'users',
         columns: {
           ['user_id']: {
+            pos: 1,
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
           },
           handle: {
+            pos: 2,
             characterMaximumLength: 40,
             dataType: 'varchar',
             notNull: false,
           },
           address: {
+            pos: 3,
             characterMaximumLength: null,
             dataType: 'text[]',
             notNull: false,
           },
           ['timez']: {
+            pos: 4,
             dataType: 'timestamptz[]',
             characterMaximumLength: null,
             notNull: false,
           },
           ['bigint_array']: {
+            pos: 5,
             characterMaximumLength: null,
             dataType: 'int8[]',
             notNull: false,
           },
           ['bool_array']: {
+            pos: 6,
             characterMaximumLength: null,
             dataType: 'bool[]',
             notNull: false,
           },
           ['real_array']: {
+            pos: 7,
             characterMaximumLength: null,
             dataType: 'float4[]',
             notNull: false,
           },
           ['int_array']: {
+            pos: 8,
             dataType: 'int4[]',
             characterMaximumLength: null,
             notNull: false,
           },
           ['json_val']: {
+            pos: 9,
             dataType: 'jsonb',
             characterMaximumLength: null,
             notNull: false,
@@ -263,46 +293,55 @@ describe('tables/create', () => {
         name: 'users',
         columns: {
           ['user_id']: {
+            pos: 1,
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
           },
           handle: {
+            pos: 2,
             characterMaximumLength: null,
             dataType: 'varchar(40)',
             notNull: false,
           },
           address: {
+            pos: 3,
             characterMaximumLength: null,
             dataType: 'text[]',
             notNull: false,
           },
           ['timez']: {
+            pos: 4,
             dataType: 'timestamptz[]',
             characterMaximumLength: null,
             notNull: false,
           },
           ['bigint_array']: {
+            pos: 5,
             characterMaximumLength: null,
             dataType: 'int8[]',
             notNull: false,
           },
           ['bool_array']: {
+            pos: 6,
             characterMaximumLength: null,
             dataType: 'bool[]',
             notNull: false,
           },
           ['real_array']: {
+            pos: 7,
             characterMaximumLength: null,
             dataType: 'float4[]',
             notNull: false,
           },
           ['int_array']: {
+            pos: 8,
             dataType: 'int4[]',
             characterMaximumLength: null,
             notNull: false,
           },
           ['json_val']: {
+            pos: 9,
             dataType: 'jsonb',
             characterMaximumLength: null,
             notNull: false,
@@ -339,7 +378,10 @@ describe('tables/create', () => {
         const published = await getPublicationInfo(db);
         expect(published.tables).toEqual(
           expect.arrayContaining([
-            {...(c.dstTableSpec ?? c.srcTableSpec), filterConditions: []},
+            {
+              ...(c.dstTableSpec ?? c.srcTableSpec),
+              publications: {['zero_all']: {rowFilter: null}},
+            },
           ]),
         );
       });

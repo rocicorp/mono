@@ -31,11 +31,13 @@ describe('tables/list', () => {
           name: 'zero.clients',
           columns: {
             clientID: {
+              pos: 1,
               dataType: 'VARCHAR (180)',
               characterMaximumLength: null,
               notNull: false,
             },
             lastMutationID: {
+              pos: 2,
               dataType: 'BIGINT',
               characterMaximumLength: null,
               notNull: false,
@@ -66,46 +68,55 @@ describe('tables/list', () => {
           name: 'users',
           columns: {
             ['user_id']: {
+              pos: 1,
               dataType: 'INTEGER',
               characterMaximumLength: null,
               notNull: false,
             },
             handle: {
+              pos: 2,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: false,
             },
             address: {
+              pos: 3,
               characterMaximumLength: null,
               dataType: 'text[]',
               notNull: false,
             },
             ['timez']: {
+              pos: 4,
               dataType: 'TIMESTAMPTZ[]',
               characterMaximumLength: null,
               notNull: false,
             },
             ['bigint_array']: {
+              pos: 5,
               characterMaximumLength: null,
               dataType: 'BIGINT[]',
               notNull: false,
             },
             ['bool_array']: {
+              pos: 6,
               characterMaximumLength: null,
               dataType: 'BOOL[]',
               notNull: false,
             },
             ['real_array']: {
+              pos: 7,
               characterMaximumLength: null,
               dataType: 'REAL[]',
               notNull: false,
             },
             ['int_array']: {
+              pos: 8,
               dataType: 'INTEGER[]',
               characterMaximumLength: null,
               notNull: false,
             },
             ['json_val']: {
+              pos: 9,
               dataType: 'JSONB',
               characterMaximumLength: null,
               notNull: false,
@@ -132,21 +143,25 @@ describe('tables/list', () => {
           name: 'issues',
           columns: {
             ['issue_id']: {
+              pos: 1,
               dataType: 'INTEGER',
               characterMaximumLength: null,
               notNull: false,
             },
             ['description']: {
+              pos: 2,
               dataType: 'TEXT',
               characterMaximumLength: null,
               notNull: false,
             },
             ['org_id']: {
+              pos: 3,
               dataType: 'INTEGER',
               characterMaximumLength: null,
               notNull: true,
             },
             ['component_id']: {
+              pos: 4,
               dataType: 'INTEGER',
               characterMaximumLength: null,
               notNull: false,

@@ -1,29 +1,72 @@
 import type postgres from 'postgres';
-import {assert} from 'shared/src/asserts.js';
 import {equals} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
-import type {
-  FilteredTableSpec,
-  IndexSpec,
-  MutableIndexSpec,
-} from 'zero-cache/src/types/specs.js';
+import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
 
-const publishedColumnsSchema = v.array(
-  v.object({
-    schema: v.string(),
-    table: v.string(),
-    pos: v.number(),
-    name: v.string(),
-    type: v.string(),
-    typeID: v.number(),
-    maxLen: v.number(),
-    arrayDims: v.number(),
-    keyPos: v.number().nullable(),
-    notNull: v.boolean(),
-    rowFilter: v.string().nullable(),
-    pubname: v.string(),
-  }),
-);
+/** The publication prefix used for tables replicated to zero. */
+export const ZERO_PUB_PREFIX = 'zero_';
+
+function publishedTableQuery(pubPrefix = ZERO_PUB_PREFIX) {
+  return `
+WITH published_columns AS (SELECT 
+  nspname AS "schema", 
+  pc.relname AS "name", 
+  attnum AS "pos", 
+  attname AS "col", 
+  pt.typname AS "type", 
+  atttypid AS "typeID", 
+  NULLIF(atttypmod, -1) AS "maxLen", 
+  attndims "arrayDims", 
+  attnotnull AS "notNull",
+  NULLIF(ARRAY_POSITION(conkey, attnum), -1) AS "keyPos", 
+  pb.rowfilter as "rowFilter",
+  pb.pubname as "publication"
+FROM pg_attribute
+JOIN pg_class pc ON pc.oid = attrelid
+JOIN pg_namespace pns ON pns.oid = relnamespace
+JOIN pg_type pt ON atttypid = pt.oid
+JOIN pg_publication_tables as pb ON 
+  pb.schemaname = nspname AND 
+  pb.tablename = pc.relname AND
+  attname = ANY(pb.attnames)
+LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
+LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
+WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
+ORDER BY nspname, pc.relname)
+
+SELECT json_build_object(
+  'schema', "schema", 
+  'name', "name", 
+  'columns', json_object_agg(
+    DISTINCT
+    col,
+    jsonb_build_object(
+      'pos', "pos",
+      'dataType', CASE WHEN "arrayDims" = 0 
+                       THEN "type" 
+                       ELSE substring("type" from 2) || repeat('[]', "arrayDims") END,
+      -- https://stackoverflow.com/a/52376230
+      'characterMaximumLength', CASE WHEN "typeID" = 1043 OR "typeID" = 1042 
+                                     THEN "maxLen" - 4 
+                                     ELSE "maxLen" END,
+      'notNull', "notNull"
+    )
+  ),
+  'primaryKey', ARRAY( SELECT json_object_keys(
+    json_strip_nulls(
+      json_object_agg(
+        DISTINCT "col", "keyPos" ORDER BY "keyPos"
+      )
+    )
+  )),
+  'publications', json_object_agg(
+    DISTINCT 
+    "publication", 
+    jsonb_build_object('rowFilter', "rowFilter")
+  )
+) AS "table" FROM published_columns GROUP BY "schema", "name";
+  `;
+}
 
 const publicationSchema = v.object({
   pubname: v.string(),
@@ -43,9 +86,6 @@ export type PublicationInfo = {
   readonly indices: IndexSpec[];
 };
 
-/** The publication prefix used for tables replicated to zero. */
-export const ZERO_PUB_PREFIX = 'zero_';
-
 /**
  * Retrieves all tables and columns published under any PUBLICATION
  * whose name starts with the specified `pubPrefix` (e.g. "zero_").
@@ -55,142 +95,64 @@ export async function getPublicationInfo(
   pubPrefix = ZERO_PUB_PREFIX,
 ): Promise<PublicationInfo> {
   const result = await sql.unsafe(`
+  SELECT 
+    schemaname AS "schema",
+    tablename AS "table", 
+    json_object_agg(pubname, attnames) AS "publications"
+    FROM pg_publication_tables 
+    WHERE STARTS_WITH(pubname, '${pubPrefix}')
+    GROUP BY schemaname, tablename;
+
   SELECT ${Object.keys(publicationSchema.shape).join(',')} FROM pg_publication
     WHERE STARTS_WITH(pubname, '${pubPrefix}')
     ORDER BY pubname;
 
-  SELECT 
-    nspname AS schema, 
-    pc.relname AS table, 
-    attnum AS pos, 
-    attname AS name, 
-    pt.typname AS type, 
-    atttypid AS "typeID", 
-    atttypmod AS "maxLen", 
-    attndims "arrayDims", 
-    ARRAY_POSITION(conkey, attnum) AS "keyPos",
-    attnotnull as "notNull",
-    pb.rowfilter as "rowFilter",
-    pb.pubname
-  FROM pg_attribute
-  JOIN pg_class pc ON pc.oid = attrelid
-  JOIN pg_namespace pns ON pns.oid = relnamespace
-  JOIN pg_type pt ON atttypid = pt.oid
-  JOIN pg_publication_tables as pb ON 
-    pb.schemaname = nspname AND 
-    pb.tablename = pc.relname AND
-    attname = ANY(pb.attnames)
-  LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
-  LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-  WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
-  ORDER BY nspname, pc.relname, pb.pubname, attnum;
-  `); // Sort by [schema, table, publication, column] to process tables in multiple publications consecutively.
+  ${publishedTableQuery(pubPrefix)};
+`);
 
-  const publications = v.parse(result[0], publicationsResultSchema);
-  const columns = v.parse(result[1], publishedColumnsSchema);
-
-  // For convenience when building the table spec. The returned TableSpec type is readonly.
-  type Writeable<T> = {-readonly [P in keyof T]: Writeable<T[P]>};
-
-  const tables: Writeable<FilteredTableSpec>[] = [];
-  let table: Writeable<FilteredTableSpec> | undefined;
-  let pubname: string | undefined;
-
-  // Check the new table against the last added table (columns are processed in <table, publication> order):
-  // 1. to ensure that a table is always published with the same set of columns
-  // 2. to collect all filter conditions for which a row may be published
-  function addOrCoalesce(t: Writeable<FilteredTableSpec>) {
-    const last = tables.at(-1);
-    if (t.schema !== last?.schema || t.name !== last?.name) {
-      tables.push(t);
-      return;
-    }
-    const lastColumns = new Set(Object.keys(last.columns));
-    const nextColumns = new Set(Object.keys(t.columns));
-    if (!equals(lastColumns, nextColumns)) {
-      throw new Error(
-        `Table ${t.name} is exported with different columns: [${[
-          ...lastColumns,
-        ]}] vs [${[...nextColumns]}]`,
-      );
-    }
-    if (last.filterConditions.length === 0 || t.filterConditions.length === 0) {
-      last.filterConditions.splice(0); // unconditional
-    } else {
-      last.filterConditions.push(...t.filterConditions); // OR all conditions
-    }
+  // The first query is used to check that tables in multiple publications
+  // always publish the same set of columns.
+  const publishedColumns = result[0] as {
+    schema: string;
+    table: string;
+    publications: Record<string, string[]>;
+  }[];
+  for (const {table, publications} of publishedColumns) {
+    let expected: Set<string>;
+    Object.entries(publications).forEach(([_, columns], i) => {
+      const cols = new Set(columns);
+      if (i === 0) {
+        expected = cols;
+      } else if (!equals(expected, cols)) {
+        throw new Error(
+          `Table ${table} is exported with different columns: [${[
+            ...expected,
+          ]}] vs [${[...cols]}]`,
+        );
+      }
+    });
   }
 
-  columns.forEach(col => {
-    if (
-      col.schema !== table?.schema ||
-      col.table !== table?.name ||
-      col.pubname !== pubname
-    ) {
-      if (table) {
-        addOrCoalesce(table);
-      }
-      // New table
-      pubname = col.pubname;
-      table = {
-        schema: col.schema,
-        name: col.table,
-        columns: {},
-        primaryKey: [],
-        filterConditions: col.rowFilter ? [col.rowFilter] : [],
-      };
-    }
+  const publications = v.parse(result[1], publicationsResultSchema);
+  const tables = (result[2] as {table: FilteredTableSpec}[]).map(
+    ({table}) => table,
+  );
 
-    // https://stackoverflow.com/a/52376230
-    const maxLen =
-      col.maxLen < 0
-        ? null
-        : col.typeID === 1043 || col.typeID === 1042
-        ? col.maxLen - 4
-        : col.maxLen;
-
-    table.columns[col.name] = {
-      dataType: col.arrayDims
-        ? `${col.type.substring(1)}${'[]'.repeat(col.arrayDims)}`
-        : col.type,
-      characterMaximumLength: maxLen,
-      notNull: col.notNull,
-    };
-    if (col.keyPos) {
-      while (table.primaryKey.length < col.keyPos) {
-        table.primaryKey.push('');
-      }
-      table.primaryKey[col.keyPos - 1] = col.name;
-    }
-  });
-
-  if (table) {
-    addOrCoalesce(table);
-  }
-
-  // Sanity check that the primary keys are filled in.
-  Object.values(tables).forEach(table => {
-    assert(
-      table.primaryKey.indexOf('') < 0,
-      `Invalid primary key for ${JSON.stringify(table)}`,
-    );
-  });
-
-  const indices: IndexSpec[] = [];
   if (tables.length === 0) {
     return {
       publications,
       tables,
-      indices,
+      indices: [],
     };
   }
 
-  const indexDefinitionsQuery = sql`SELECT
-      pg_indexes.schemaname,
-      pg_indexes.tablename,
-      pg_indexes.indexname,
-      pg_attribute.attname as col,
-      pg_index.indisunique as isunique
+  const indexDefinitionsQuery = sql<{index: IndexSpec}[]>`
+  WITH indexed_columns AS (SELECT
+      pg_indexes.schemaname as "schemaName",
+      pg_indexes.tablename as "tableName",
+      pg_indexes.indexname as "name",
+      pg_attribute.attname as "col",
+      pg_index.indisunique as "unique"
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
     JOIN pg_class ON
@@ -200,44 +162,29 @@ export async function getPublicationInfo(
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pg_class.oid
     JOIN pg_index ON pg_index.indexrelid = pg_class.oid
     WHERE
-      (pg_indexes.schemaname, pg_indexes.tablename) IN (${sql`${tables.map(
-        (t, i) =>
-          i === tables.length - 1
-            ? sql`(${t.schema}, ${t.name})`
-            : sql`(${t.schema}, ${t.name}),`,
-      )}`})
+      (pg_indexes.schemaname, pg_indexes.tablename) IN ${sql(
+        tables.map(t => sql([t.schema, t.name])),
+      )}
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
     ORDER BY
       pg_indexes.schemaname,
       pg_indexes.tablename,
       pg_indexes.indexname,
-      pg_attribute.attnum ASC;`;
+      pg_attribute.attnum ASC)
+  
+    SELECT json_build_object(
+      'schemaName', "schemaName",
+      'tableName', "tableName",
+      'name', "name",
+      'unique', "unique",
+      'columns', json_agg("col")
+    ) AS index FROM indexed_columns 
+      GROUP BY "schemaName", "tableName", "name", "unique";
+  `;
 
   const indexDefinitions = await indexDefinitionsQuery;
-  let index: MutableIndexSpec | undefined;
-  indexDefinitions.forEach(row => {
-    if (
-      row.schemaname !== index?.schemaName ||
-      row.tablename !== index?.tableName ||
-      row.indexname !== index?.name
-    ) {
-      if (index) {
-        indices.push(index);
-      }
-      index = {
-        schemaName: row.schemaname,
-        tableName: row.tablename,
-        name: row.indexname,
-        unique: row.isunique,
-        columns: [],
-      };
-    }
-    index!.columns.push(row.col);
-  });
-  if (index) {
-    indices.push(index!);
-  }
+  const indices = indexDefinitions.map(r => r.index);
 
   return {
     publications,
