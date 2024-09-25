@@ -43,11 +43,11 @@ export type RowEdit = {
 export type RowChange = RowAdd | RowRemove | RowEdit;
 
 /** Normalized TableSpec information for faster processing. */
-type NormalizedTableSpec = TableSpec & {
+export type NormalizedTableSpec = TableSpec & {
   readonly boolColumns: Set<string>;
 };
 
-function normalize(tableSpec: TableSpec): NormalizedTableSpec {
+export function normalize(tableSpec: TableSpec): NormalizedTableSpec {
   const {primaryKey, columns} = tableSpec;
   return {
     ...tableSpec,

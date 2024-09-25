@@ -10,6 +10,7 @@ import {must} from 'shared/src/must.js';
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
 const policySchema = v.array(v.tuple([v.literal('allow'), astSchema]));
+export type Policy = v.Infer<typeof policySchema>;
 
 const assetSchema = v.object({
   select: policySchema.optional(),

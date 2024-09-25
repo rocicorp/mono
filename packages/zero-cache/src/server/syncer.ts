@@ -66,7 +66,7 @@ export default async function runWorker(parent: Worker) {
     );
 
   const mutagenFactory = (id: string) =>
-    new MutagenService(lc, id, upstreamDB, config.authorization ?? {});
+    new MutagenService(lc, id, upstreamDB, config);
 
   new Syncer(lc, viewSyncerFactory, mutagenFactory, parent).run();
 

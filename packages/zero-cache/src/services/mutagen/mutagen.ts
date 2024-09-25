@@ -14,10 +14,12 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
-import type {AuthorizationConfig} from '../../config/zero-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
+import type {ZeroConfig} from '../../config/zero-config.js';
+import {Database} from 'zqlite/src/db.js';
+import {WriteAuthorizationFailed, WriteAuthorizer} from './write-authorizer.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -32,20 +34,30 @@ export class MutagenService implements Mutagen, Service {
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
   readonly #stopped = resolver();
-  readonly #authorizationConfig: AuthorizationConfig;
+  readonly #replica: Database;
+  readonly #writeAuthorizer: WriteAuthorizer;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
     upstream: PostgresDB,
-    authorizationConfig: AuthorizationConfig,
+    config: ZeroConfig,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'Mutagen')
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
-    this.#authorizationConfig = authorizationConfig;
+    this.#replica = new Database(this.#lc, config.replicaDbFile, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    this.#writeAuthorizer = new WriteAuthorizer(
+      this.#lc,
+      config,
+      this.#replica,
+      clientGroupID,
+    );
   }
 
   processMutation(mutation: Mutation): Promise<MutationError | undefined> {
@@ -54,7 +66,7 @@ export class MutagenService implements Mutagen, Service {
       this.#upstream,
       this.id,
       mutation,
-      this.#authorizationConfig,
+      this.#writeAuthorizer,
     );
   }
 
@@ -75,7 +87,7 @@ export async function processMutation(
   db: PostgresDB,
   clientGroupID: string,
   mutation: Mutation,
-  _authorizationConfig: AuthorizationConfig,
+  writeAuthorizer: WriteAuthorizer,
   onTxStart?: () => void, // for testing
 ): Promise<MutationError | undefined> {
   assert(
@@ -133,7 +145,13 @@ export async function processMutation(
       try {
         await db.begin(Mode.SERIALIZABLE, tx => {
           onTxStart?.();
-          return processMutationWithTx(tx, clientGroupID, mutation, errorMode);
+          return processMutationWithTx(
+            tx,
+            clientGroupID,
+            mutation,
+            errorMode,
+            writeAuthorizer,
+          );
         });
         if (errorMode) {
           lc?.debug?.('Ran mutation successfully in error mode');
@@ -141,6 +159,10 @@ export async function processMutation(
         break;
       } catch (e) {
         if (e instanceof MutationAlreadyProcessedError) {
+          lc?.debug?.(e.message);
+          return undefined;
+        }
+        if (e instanceof WriteAuthorizationFailed) {
           lc?.debug?.(e.message);
           return undefined;
         }
@@ -175,6 +197,7 @@ async function processMutationWithTx(
   clientGroupID: string,
   mutation: CRUDMutation,
   errorMode: boolean,
+  authorizer: WriteAuthorizer,
 ) {
   const queryPromises: Promise<unknown>[] = [
     incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
@@ -186,15 +209,35 @@ async function processMutationWithTx(
     for (const op of ops) {
       switch (op.op) {
         case 'create':
+          if (!authorizer.canInsert(op)) {
+            throw new WriteAuthorizationFailed(
+              'Write policy failed for insert',
+            );
+          }
           queryPromises.push(getCreateSQL(tx, op).execute());
           break;
         case 'set':
+          if (!authorizer.canUpsert(op)) {
+            throw new WriteAuthorizationFailed(
+              'Write policy failed for insert',
+            );
+          }
           queryPromises.push(getSetSQL(tx, op).execute());
           break;
         case 'update':
+          if (!authorizer.canUpdate(op)) {
+            throw new WriteAuthorizationFailed(
+              'Write policy failed for update',
+            );
+          }
           queryPromises.push(getUpdateSQL(tx, op).execute());
           break;
         case 'delete':
+          if (!authorizer.canDelete(op)) {
+            throw new WriteAuthorizationFailed(
+              'Write policy failed for update',
+            );
+          }
           queryPromises.push(getDeleteSQL(tx, op).execute());
           break;
         default:
