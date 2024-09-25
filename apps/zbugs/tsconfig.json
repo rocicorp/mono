@@ -5,6 +5,11 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
+  "ts-node": {
+    "experimentalSpecifierResolution": "node",
+    "transpileOnly": true,
+    "esm": true
+  },
   "references": [{"path": "./tsconfig.node.json"}],
   "include": ["src"]
 }

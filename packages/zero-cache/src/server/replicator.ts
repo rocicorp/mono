@@ -10,25 +10,25 @@ import {
   setUpMessageHandlers,
   setupReplicaAndCheckpointer,
 } from '../workers/replicator.js';
-import {configFromEnv} from './config.js';
 import {createLogContext} from './logging.js';
+import {getZeroConfig} from '../config/zero-config.js';
 
 export default async function runWorker(parent: Worker, ...args: string[]) {
-  const config = configFromEnv();
+  const config = await getZeroConfig();
   assert(args.length > 0, `replicator mode not specified`);
 
   const mode = args[0] as ReplicatorMode;
   const workerName = `${mode === 'backup' ? 'backup' : 'serving'}-replicator`;
-  const lc = createLogContext(config, {worker: workerName});
+  const lc = createLogContext(config.log, {worker: workerName});
 
   const {replica, checkpointer} = setupReplicaAndCheckpointer(
     lc,
     mode,
-    config.REPLICA_DB_FILE,
+    config.replicaDbFile,
   );
 
-  const changeStreamer = config.CHANGE_STREAMER_URI
-    ? new ChangeStreamerHttpClient(lc, config.CHANGE_STREAMER_URI)
+  const changeStreamer = config.changeStreamerUri
+    ? new ChangeStreamerHttpClient(lc, config.changeStreamerUri)
     : new ChangeStreamerHttpClient(lc);
 
   const replicator = new ReplicatorService(
