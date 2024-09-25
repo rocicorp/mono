@@ -46,6 +46,7 @@ export function listTables(db: Database): TableSpec[] {
     }
 
     table.columns[col.name] = {
+      pos: Object.keys(table.columns).length + 1,
       dataType: col.type,
       characterMaximumLength: null,
       notNull: col.notNull !== 0,

@@ -1,4 +1,5 @@
 export type ColumnSpec = {
+  readonly pos: number;
   readonly dataType: string;
   readonly characterMaximumLength: number | null;
   readonly notNull: boolean;
@@ -12,7 +13,7 @@ export type TableSpec = {
 };
 
 export type FilteredTableSpec = TableSpec & {
-  readonly filterConditions: string[];
+  readonly publications: Readonly<Record<string, {rowFilter: string | null}>>;
 };
 
 export type IndexSpec = {

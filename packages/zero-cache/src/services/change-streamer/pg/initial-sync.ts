@@ -32,6 +32,7 @@ import {
 } from './tables/published.js';
 
 const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
+  pos: Number.MAX_SAFE_INTEGER, // i.e. last
   characterMaximumLength: null,
   dataType: 'TEXT',
   notNull: true,
@@ -288,15 +289,16 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
       name: liteTableName(t),
       columns: {
         ...Object.fromEntries(
-          Object.entries(t.columns).map(([col, spec]) => [
+          Object.entries(t.columns).map(([col, {pos, dataType}]) => [
             col,
             {
-              dataType: mapPostgresToLiteDataType(spec.dataType),
+              pos,
+              dataType: mapPostgresToLiteDataType(dataType),
               characterMaximumLength: null,
               // Omit constraints from upstream columns, as they may change without our knowledge.
               // Instead, simply rely on upstream enforcing all column constraints.
               notNull: false,
-            },
+            } satisfies ColumnSpec,
           ]),
         ),
         [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
@@ -345,11 +347,14 @@ async function copy(
       .fill('?')
       .join(',')})`,
   );
+  const filterConditions = Object.values(table.publications)
+    .map(({rowFilter}) => rowFilter)
+    .filter(f => !!f); // remove nulls
   const selectStmt =
     `SELECT ${selectColumns} FROM ${ident(table.schema)}.${ident(table.name)}` +
-    (table.filterConditions.length === 0
+    (filterConditions.length === 0
       ? ''
-      : ` WHERE ${table.filterConditions.join(' OR ')}`);
+      : ` WHERE ${filterConditions.join(' OR ')}`);
 
   const cursor = from.unsafe(selectStmt).cursor(BATCH_SIZE);
   for await (const rows of cursor) {
