@@ -25,7 +25,14 @@ import type {Row} from 'zql/src/zql/ivm/data.js';
 import type {JWTPayload} from 'jose';
 import type {JSONValue} from 'shared/src/json.js';
 
-export class WriteAuthorizer {
+export interface WriteAuthorizer {
+  canInsert(authData: JWTPayload, op: CreateOp): boolean;
+  canUpdate(authData: JWTPayload, op: UpdateOp): boolean;
+  canDelete(authData: JWTPayload, op: DeleteOp): boolean;
+  canUpsert(authData: JWTPayload, op: SetOp): boolean;
+}
+
+export class WriteAuthorizerImpl {
   readonly #authorizationConfig: AuthorizationConfig;
   readonly #replica: Database;
   readonly #builderDelegate: BuilderDelegate;

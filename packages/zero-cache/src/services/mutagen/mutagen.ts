@@ -19,7 +19,11 @@ import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import type {ZeroConfig} from '../../config/zero-config.js';
 import {Database} from 'zqlite/src/db.js';
-import {WriteAuthorizationFailed, WriteAuthorizer} from './write-authorizer.js';
+import {
+  WriteAuthorizationFailed,
+  WriteAuthorizerImpl,
+  type WriteAuthorizer,
+} from './write-authorizer.js';
 import type {JWTPayload} from 'jose';
 
 // An error encountered processing a mutation.
@@ -56,7 +60,7 @@ export class MutagenService implements Mutagen, Service {
       readonly: true,
       fileMustExist: true,
     });
-    this.#writeAuthorizer = new WriteAuthorizer(
+    this.#writeAuthorizer = new WriteAuthorizerImpl(
       this.#lc,
       config,
       this.#replica,
