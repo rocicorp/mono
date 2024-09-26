@@ -1,0 +1,15 @@
+.commentItem {
+  margin-bottom: 1rem;
+  background-color: var(--color-nav-selected);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.commentItem:last-child {
+  margin-bottom: 0;
+}
+
+.commentAuthor {
+  font-weight: 700;
+  margin-bottom: 1rem;
+}

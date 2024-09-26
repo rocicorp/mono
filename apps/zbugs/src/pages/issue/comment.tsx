@@ -1,6 +1,7 @@
 import {useZero} from '../../domain/schema.js';
 import {useQuery} from 'zero-react/src/use-query.js';
 import Markdown from '../../components/markdown.js';
+import style from './comment.module.css';
 
 export default function Comment({id}: {id: string}) {
   const z = useZero();
@@ -15,8 +16,8 @@ export default function Comment({id}: {id: string}) {
   }
 
   return (
-    <div className="comment-item">
-      <p className="comment-author">
+    <div className={style.commentItem}>
+      <p className={style.commentAuthor}>
         <img
           src={comment.creator.avatar}
           width="40"
