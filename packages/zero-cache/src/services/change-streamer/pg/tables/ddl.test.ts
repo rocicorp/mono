@@ -52,8 +52,9 @@ describe('change-source/tables/ddl', () => {
       })
       .on('data', (_lsn, msg) => void messages.enqueue(msg));
 
-    // Hack for setting the `messages 'true'` plugin option
+    // Hack for setting the `messages 'true'` plugin option until
     // pg-logical-replication supports it.
+    // (Pending review: https://github.com/kibae/pg-logical-replication/pull/36)
     const MESSAGES_TRUE_OPTION_HACK = `', messages 'true`;
 
     void service.subscribe(
