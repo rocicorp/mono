@@ -6,7 +6,11 @@ import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
 /** The publication prefix used for tables replicated to zero. */
 export const ZERO_PUB_PREFIX = 'zero_';
 
-function publishedTableQuery(pubPrefix = ZERO_PUB_PREFIX) {
+type PublishedTableQueryResult = {
+  table: FilteredTableSpec;
+};
+
+export function publishedTableQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
   return `
 WITH published_columns AS (SELECT 
   nspname AS "schema", 
@@ -29,6 +33,7 @@ JOIN pg_publication_tables as pb ON
   pb.schemaname = nspname AND 
   pb.tablename = pc.relname AND
   attname = ANY(pb.attnames)
+${join}
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
 WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
@@ -64,7 +69,51 @@ SELECT json_build_object(
     "publication", 
     jsonb_build_object('rowFilter', "rowFilter")
   )
-) AS "table" FROM published_columns GROUP BY "schema", "name";
+) AS "table" FROM published_columns GROUP BY "schema", "name"
+  `;
+}
+
+type IndexDefinitionsQueryResult = {
+  index: IndexSpec;
+};
+
+export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
+  return `
+  WITH indexed_columns AS (SELECT
+      pg_indexes.schemaname as "schemaName",
+      pg_indexes.tablename as "tableName",
+      pg_indexes.indexname as "name",
+      pg_attribute.attname as "col",
+      pg_index.indisunique as "unique"
+    FROM pg_indexes
+    JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
+    JOIN pg_class ON
+      pg_class.relname = pg_indexes.indexname
+      AND pg_class.relnamespace = pg_namespace.oid
+    JOIN pg_attribute ON pg_attribute.attrelid = pg_class.oid
+    JOIN pg_publication_tables as pb ON 
+      pb.schemaname = pg_indexes.schemaname AND 
+      pb.tablename = pg_indexes.tablename
+    ${join}
+    LEFT JOIN pg_constraint ON pg_constraint.conindid = pg_class.oid
+    JOIN pg_index ON pg_index.indexrelid = pg_class.oid
+    WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
+      AND pg_constraint.contype is distinct from 'p'
+      AND pg_constraint.contype is distinct from 'f'
+    ORDER BY
+      pg_indexes.schemaname,
+      pg_indexes.tablename,
+      pg_indexes.indexname,
+      pg_attribute.attnum ASC)
+  
+    SELECT json_build_object(
+      'schemaName', "schemaName",
+      'tableName', "tableName",
+      'name', "name",
+      'unique', "unique",
+      'columns', json_agg("col")
+    ) AS index FROM indexed_columns 
+      GROUP BY "schemaName", "tableName", "name", "unique"
   `;
 }
 
@@ -108,6 +157,8 @@ export async function getPublicationInfo(
     ORDER BY pubname;
 
   ${publishedTableQuery(pubPrefix)};
+
+  ${indexDefinitionsQuery(pubPrefix)};
 `);
 
   // The first query is used to check that tables in multiple publications
@@ -133,62 +184,11 @@ export async function getPublicationInfo(
     });
   }
 
-  const publications = v.parse(result[1], publicationsResultSchema);
-  const tables = (result[2] as {table: FilteredTableSpec}[]).map(
-    ({table}) => table,
-  );
-
-  if (tables.length === 0) {
-    return {
-      publications,
-      tables,
-      indices: [],
-    };
-  }
-
-  const indexDefinitionsQuery = sql<{index: IndexSpec}[]>`
-  WITH indexed_columns AS (SELECT
-      pg_indexes.schemaname as "schemaName",
-      pg_indexes.tablename as "tableName",
-      pg_indexes.indexname as "name",
-      pg_attribute.attname as "col",
-      pg_index.indisunique as "unique"
-    FROM pg_indexes
-    JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
-    JOIN pg_class ON
-      pg_class.relname = pg_indexes.indexname
-      AND pg_class.relnamespace = pg_namespace.oid
-    JOIN pg_attribute ON pg_attribute.attrelid = pg_class.oid
-    LEFT JOIN pg_constraint ON pg_constraint.conindid = pg_class.oid
-    JOIN pg_index ON pg_index.indexrelid = pg_class.oid
-    WHERE
-      (pg_indexes.schemaname, pg_indexes.tablename) IN ${sql(
-        tables.map(t => sql([t.schema, t.name])),
-      )}
-      AND pg_constraint.contype is distinct from 'p'
-      AND pg_constraint.contype is distinct from 'f'
-    ORDER BY
-      pg_indexes.schemaname,
-      pg_indexes.tablename,
-      pg_indexes.indexname,
-      pg_attribute.attnum ASC)
-  
-    SELECT json_build_object(
-      'schemaName', "schemaName",
-      'tableName', "tableName",
-      'name', "name",
-      'unique', "unique",
-      'columns', json_agg("col")
-    ) AS index FROM indexed_columns 
-      GROUP BY "schemaName", "tableName", "name", "unique";
-  `;
-
-  const indexDefinitions = await indexDefinitionsQuery;
-  const indices = indexDefinitions.map(r => r.index);
-
   return {
-    publications,
-    tables,
-    indices,
+    publications: v.parse(result[1], publicationsResultSchema),
+    tables: (result[2] as PublishedTableQueryResult[]).map(({table}) => table),
+    indices: (result[3] as IndexDefinitionsQueryResult[]).map(
+      ({index}) => index,
+    ),
   };
 }

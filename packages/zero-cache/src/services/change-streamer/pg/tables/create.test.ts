@@ -376,14 +376,12 @@ describe('tables/create', () => {
         await db.unsafe(createStatement);
 
         const published = await getPublicationInfo(db);
-        expect(published.tables).toEqual(
-          expect.arrayContaining([
-            {
-              ...(c.dstTableSpec ?? c.srcTableSpec),
-              publications: {['zero_all']: {rowFilter: null}},
-            },
-          ]),
-        );
+        expect(published.tables).toEqual([
+          {
+            ...(c.dstTableSpec ?? c.srcTableSpec),
+            publications: {['zero_all']: {rowFilter: null}},
+          },
+        ]);
       });
     }
   });
