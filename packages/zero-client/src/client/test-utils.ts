@@ -4,23 +4,23 @@ import {assert} from 'shared/src/asserts.js';
 import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import type {SinonFakeTimers} from 'sinon';
 import {
-  ConnectedMessage,
-  Downstream,
+  type ConnectedMessage,
+  type Downstream,
   ErrorKind,
-  ErrorMessage,
-  PokeStartBody,
-  PokeStartMessage,
-  PongMessage,
-  PullResponseBody,
-  PullResponseMessage,
+  type ErrorMessage,
+  type PokeStartBody,
+  type PokeStartMessage,
+  type PongMessage,
+  type PullResponseBody,
+  type PullResponseMessage,
   upstreamSchema,
 } from 'zero-protocol';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
   ConnectionState,
-  SchemaDefs,
-  TestingContext,
+  type SchemaDefs,
+  type TestingContext,
   Zero,
   createLogOptionsSymbol,
   exposedToTestingSymbol,

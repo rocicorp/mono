@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from 'shared/src/asserts.js';
 import {
   assertJSONValue,
-  JSONObject as SafeJSONObject,
+  type JSONObject as SafeJSONObject,
 } from 'shared/src/json.js';
 import * as v from 'shared/src/valita.js';
 import type {Downstream, EntitiesPatchOp, PokePartBody} from 'zero-protocol';
@@ -10,16 +10,16 @@ import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {JSONObject, JSONValue} from '../../types/bigint-json.js';
 import type {Subscription} from '../../types/subscription.js';
 import {
-  ClientPatch,
+  type ClientPatch,
   cmpVersions,
   cookieToVersion,
-  DelQueryPatch,
-  NullableCVRVersion,
-  PutQueryPatch,
-  RowID,
+  type CVRVersion,
+  type DelQueryPatch,
+  type NullableCVRVersion,
+  type PutQueryPatch,
+  type RowID,
   versionToCookie,
   versionToNullableCookie,
-  type CVRVersion,
 } from './schema/types.js';
 
 export type PutRowPatch = {

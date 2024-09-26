@@ -8,10 +8,10 @@ import {WriteTransactionImpl} from '../transactions.js';
 import type {MutatorDefs} from '../types.js';
 import {
   Commit,
-  LocalMeta,
-  LocalMetaDD31,
-  LocalMetaSDD,
-  Meta,
+  type LocalMeta,
+  type LocalMetaDD31,
+  type LocalMetaSDD,
+  type Meta,
   assertLocalMetaDD31,
   commitFromHash,
   isLocalMetaDD31,

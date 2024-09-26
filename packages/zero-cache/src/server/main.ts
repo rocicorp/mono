@@ -2,19 +2,19 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import postgres from 'postgres';
-import {Dispatcher, Workers} from '../services/dispatcher/dispatcher.js';
+import {getZeroConfig} from '../config/zero-config.js';
+import {Dispatcher, type Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {childWorker, Worker} from '../types/processes.js';
+import {childWorker, type Worker} from '../types/processes.js';
 import {orTimeout} from '../types/timeout.js';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
-  ReplicatorMode,
+  type ReplicatorMode,
   subscribeTo,
 } from '../workers/replicator.js';
 import {createLogContext} from './logging.js';
-import {getZeroConfig} from '../config/zero-config.js';
 
 const startMs = Date.now();
 const config = await getZeroConfig();

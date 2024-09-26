@@ -4,8 +4,8 @@ import {navigator} from 'shared/src/navigator.js';
 import {sleep} from 'shared/src/sleep.js';
 import {nanoid} from '../util/nanoid.js';
 import {
-  HTTPString,
-  WSString,
+  type HTTPString,
+  type WSString,
   assertHTTPString,
   assertWSString,
   toWSString,

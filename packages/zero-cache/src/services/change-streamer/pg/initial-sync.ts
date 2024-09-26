@@ -11,7 +11,7 @@ import {
   mapPostgresToLiteDataType,
 } from 'zero-cache/src/types/lite.js';
 import {liteTableName} from 'zero-cache/src/types/names.js';
-import {PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
+import {type PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
 import type {
   ColumnSpec,
   FilteredTableSpec,
@@ -27,7 +27,7 @@ import {toLexiVersion} from './lsn.js';
 import {createTableStatement} from './tables/create.js';
 import {
   getPublicationInfo,
-  PublicationInfo,
+  type PublicationInfo,
   ZERO_PUB_PREFIX,
 } from './tables/published.js';
 

@@ -1,7 +1,11 @@
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
 import WebSocket from 'ws';
-import {MESSAGE_TYPES, Receiver, Sender} from '../../types/processes.js';
+import {
+  MESSAGE_TYPES,
+  type Receiver,
+  type Sender,
+} from '../../types/processes.js';
 
 export type WebSocketHandoff<P> = (message: IncomingMessage) => {
   payload: P;

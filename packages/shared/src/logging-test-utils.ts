@@ -1,4 +1,9 @@
-import {Context, LogContext, LogLevel, LogSink} from '@rocicorp/logger';
+import {
+  type Context,
+  LogContext,
+  type LogLevel,
+  type LogSink,
+} from '@rocicorp/logger';
 
 export class TestLogSink implements LogSink {
   messages: [LogLevel, Context | undefined, unknown[]][] = [];

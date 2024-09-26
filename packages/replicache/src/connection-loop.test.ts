@@ -3,10 +3,10 @@ import {expect} from 'chai';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {promiseTrue} from 'shared/src/resolved-promises.js';
 import {sleep} from 'shared/src/sleep.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
   ConnectionLoop,
-  ConnectionLoopDelegate,
+  type ConnectionLoopDelegate,
   DEBOUNCE_DELAY_MS,
   MAX_DELAY_MS,
   MIN_DELAY_MS,

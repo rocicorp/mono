@@ -16,7 +16,7 @@ import {decodeIndexKey} from './db/index.js';
 import type {ScanOptions} from './db/scan.js';
 import type {DiffComputationConfig, DiffsMap} from './sync/diff.js';
 import {
-  ReadTransaction,
+  type ReadTransaction,
   SubscriptionTransactionWrapper,
 } from './transactions.js';
 import type {QueryInternal} from './types.js';

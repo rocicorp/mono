@@ -1,6 +1,10 @@
 import {EventEmitter} from 'eventemitter3';
-import {PendingResult, Result, Subscription} from '../../types/subscription.js';
-import {ReplicaState, ReplicaStateNotifier} from './replicator.js';
+import {
+  type PendingResult,
+  type Result,
+  Subscription,
+} from '../../types/subscription.js';
+import type {ReplicaState, ReplicaStateNotifier} from './replicator.js';
 
 /**
  * Handles the semantics of {@link ReplicatorVersionNotifier.subscribe()}

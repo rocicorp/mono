@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
 import {Catch, expandNode} from '../catch.js';
-import {Node, Row, Value} from '../data.js';
-import {FetchRequest, Input, Output, Start} from '../operator.js';
-import {SchemaValue} from '../schema.js';
-import {Source, SourceChange} from '../source.js';
+import type {Node, Row, Value} from '../data.js';
+import type {FetchRequest, Input, Output, Start} from '../operator.js';
+import type {SchemaValue} from '../schema.js';
+import type {Source, SourceChange} from '../source.js';
 
 type SourceFactory = (
   name: string,
@@ -859,7 +859,10 @@ const cases = {
 
   'per-output-sorts': (createSource: SourceFactory) => {
     const sort1 = [['a', 'asc']] as const;
-    const sort2 = [['b', 'asc'], ['a', 'asc']] as const;
+    const sort2 = [
+      ['b', 'asc'],
+      ['a', 'asc'],
+    ] as const;
     const ms = createSource(
       'table',
       {

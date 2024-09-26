@@ -1,4 +1,4 @@
-import {Hash, parse as parseHash} from '../hash.js';
+import {type Hash, parse as parseHash} from '../hash.js';
 
 export function chunkDataKey(hash: Hash): string {
   return `c/${hash}/d`;

@@ -4,7 +4,11 @@ import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
-import {LocalMetaDD31, LocalMetaSDD, assertLocalMetaDD31} from './db/commit.js';
+import {
+  type LocalMetaDD31,
+  type LocalMetaSDD,
+  assertLocalMetaDD31,
+} from './db/commit.js';
 import {ChainBuilder} from './db/test-helpers.js';
 import {FormatVersion} from './format-version.js';
 import {assertHash, newRandomHash} from './hash.js';

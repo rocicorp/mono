@@ -3,20 +3,20 @@ import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import type {EntityID} from 'zero-protocol/src/entity.js';
 import {
-  CRUDMutationArg,
-  CRUDOp,
-  CRUDOpKind,
+  type CRUDMutationArg,
+  type CRUDOp,
+  type CRUDOpKind,
   CRUD_MUTATION_NAME,
-  CreateOp,
-  DeleteOp,
-  SetOp,
-  UpdateOp,
+  type CreateOp,
+  type DeleteOp,
+  type SetOp,
+  type UpdateOp,
 } from 'zero-protocol/src/push.js';
+import type {Row} from 'zql/src/zql/ivm/data.js';
+import type {SchemaToRow} from 'zql/src/zql/query/query.js';
 import {toEntitiesKey} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {SchemaDefs} from './zero.js';
-import {Row} from 'zql/src/zql/ivm/data.js';
-import {SchemaToRow} from 'zql/src/zql/query/query.js';
 
 export type Parse<E extends Row> = (v: ReadonlyJSONObject) => E;
 

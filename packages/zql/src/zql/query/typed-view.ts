@@ -1,4 +1,4 @@
-import {Immutable} from 'shared/src/immutable.js';
+import type {Immutable} from 'shared/src/immutable.js';
 
 export type Listener<T> = (data: Immutable<T>) => void;
 

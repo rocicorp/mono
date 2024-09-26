@@ -1,23 +1,28 @@
 import BTree from 'btree';
 import {assert, unreachable} from 'shared/src/asserts.js';
-import {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
+import type {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
 import {createPredicate} from '../builder/filter.js';
-import {Change} from './change.js';
+import type {Change} from './change.js';
 import {
-  Comparator,
+  type Comparator,
   compareValues,
   makeComparator,
-  Node,
-  Row,
-  Value,
+  type Node,
+  type Row,
+  type Value,
   valuesEqual,
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
-import {Constraint, FetchRequest, Input, Output} from './operator.js';
-import {PrimaryKey, Schema, SchemaValue} from './schema.js';
-import {Source, SourceChange, SourceChangeEdit, SourceInput} from './source.js';
-import {Stream} from './stream.js';
+import type {Constraint, FetchRequest, Input, Output} from './operator.js';
+import type {PrimaryKey, Schema, SchemaValue} from './schema.js';
+import type {
+  Source,
+  SourceChange,
+  SourceChangeEdit,
+  SourceInput,
+} from './source.js';
+import type {Stream} from './stream.js';
 
 export type Overlay = {
   outputIndex: number;

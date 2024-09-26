@@ -5,7 +5,7 @@ import {
   chunkMetaKey,
   chunkRefCountKey,
   headKey,
-  Key,
+  type Key,
   KeyType,
   parse,
 } from './key.js';

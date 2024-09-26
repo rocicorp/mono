@@ -1,18 +1,18 @@
 import {greaterThan} from 'compare-utf8';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {IndexKey, encodeIndexScanKey} from './db/index.js';
+import {type IndexKey, encodeIndexScanKey} from './db/index.js';
 import type {IterableUnion} from './iterable-union.js';
 import {
-  KeyTypeForScanOptions,
-  ScanIndexOptions,
-  ScanOptionIndexedStartKey,
-  ScanOptions,
+  type KeyTypeForScanOptions,
+  type ScanIndexOptions,
+  type ScanOptionIndexedStartKey,
+  type ScanOptions,
   isScanIndexOptions,
   normalizeScanOptionIndexedStartKey,
 } from './scan-options.js';
-import {Closed, throwIfClosed} from './transaction-closed-error.js';
-import {EntryForOptions, fromKeyForNonIndexScan} from './transactions.js';
+import {type Closed, throwIfClosed} from './transaction-closed-error.js';
+import {type EntryForOptions, fromKeyForNonIndexScan} from './transactions.js';
 
 type ScanKey = string | IndexKey;
 

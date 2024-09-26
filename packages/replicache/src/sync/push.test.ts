@@ -12,9 +12,9 @@ import type {ClientGroupID} from './ids.js';
 import {
   PUSH_VERSION_DD31,
   PUSH_VERSION_SDD,
-  PushRequest,
-  PushRequestV0,
-  PushRequestV1,
+  type PushRequest,
+  type PushRequestV0,
+  type PushRequestV1,
   push,
 } from './push.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';

@@ -11,9 +11,9 @@ import {TestStore} from '../dag/test-store.js';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
-  IndexRecord,
-  LocalMetaDD31,
-  SnapshotMetaDD31,
+  type IndexRecord,
+  type LocalMetaDD31,
+  type SnapshotMetaDD31,
   baseSnapshotHashFromHash,
   newLocalDD31,
   newSnapshotDD31,
@@ -21,14 +21,19 @@ import {
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
-import {Hash, assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {
-  ClientGroupMap,
+  type Hash,
+  assertHash,
+  fakeHash,
+  makeNewFakeHashFunction,
+} from '../hash.js';
+import {
+  type ClientGroupMap,
   setClientGroup,
   setClientGroups,
 } from '../persist/client-groups.js';
 import {
-  ClientV6,
+  type ClientV6,
   assertClientV6,
   getClient,
   setClient,

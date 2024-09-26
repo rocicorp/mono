@@ -7,11 +7,15 @@ import type {BTreeRead} from '../btree/read.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';
 import type {Chunk} from '../dag/chunk.js';
-import {Write as DagWrite, Store, mustGetHeadHash} from '../dag/store.js';
+import {
+  type Write as DagWrite,
+  type Store,
+  mustGetHeadHash,
+} from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
-import {Hash, emptyHash} from '../hash.js';
+import {type Hash, emptyHash} from '../hash.js';
 import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 import {addSyncSnapshot} from '../sync/test-helpers.js';
@@ -21,15 +25,15 @@ import {
   withWriteNoImplicitCommit,
 } from '../with-transactions.js';
 import {
-  ChunkIndexDefinition,
+  type ChunkIndexDefinition,
   Commit,
   DEFAULT_HEAD_NAME,
-  IndexRecord,
-  LocalMeta,
-  Meta,
+  type IndexRecord,
+  type LocalMeta,
+  type Meta,
   MetaType,
-  SnapshotMetaDD31,
-  SnapshotMetaSDD,
+  type SnapshotMetaDD31,
+  type SnapshotMetaSDD,
   assertIndexChangeCommit,
   assertLocalCommitDD31,
   assertLocalCommitSDD,

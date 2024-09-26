@@ -6,8 +6,8 @@ import type {Read, Store, Write} from '../dag/store.js';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
-  LocalMetaDD31,
-  Meta,
+  type LocalMetaDD31,
+  type Meta,
   assertSnapshotCommitDD31,
   baseSnapshotFromCommit,
   commitFromHash,
@@ -22,7 +22,11 @@ import type {Hash} from '../hash.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {MutatorDefs} from '../types.js';
 import {withRead, withWrite} from '../with-transactions.js';
-import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
+import {
+  type ClientGroup,
+  getClientGroup,
+  setClientGroup,
+} from './client-groups.js';
 import {
   assertClientV6,
   assertHasClientState,

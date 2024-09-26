@@ -4,14 +4,14 @@ import {hasOwn} from 'shared/src/has-own.js';
 import * as valita from 'shared/src/valita.js';
 import {emptyDataNode} from '../btree/node.js';
 import {BTreeRead} from '../btree/read.js';
-import {FrozenCookie, compareCookies} from '../cookies.js';
-import {toRefs, type Refs} from '../dag/chunk.js';
+import {type FrozenCookie, compareCookies} from '../cookies.js';
+import {type Refs, toRefs} from '../dag/chunk.js';
 import type {Read, Store, Write} from '../dag/store.js';
 import {
-  ChunkIndexDefinition,
+  type ChunkIndexDefinition,
   Commit,
-  IndexRecord,
-  SnapshotMetaDD31,
+  type IndexRecord,
+  type SnapshotMetaDD31,
   assertSnapshotCommitDD31,
   baseSnapshotFromHash,
   chunkIndexDefinitionEqualIgnoreName,
@@ -21,17 +21,17 @@ import {
 } from '../db/commit.js';
 import {createIndexBTree} from '../db/write.js';
 import type {FormatVersion} from '../format-version.js';
-import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import {Hash, hashSchema} from '../hash.js';
-import {IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
+import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
+import {type Hash, hashSchema} from '../hash.js';
+import {type IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
 import {
-  clientGroupIDSchema,
   type ClientGroupID,
   type ClientID,
+  clientGroupIDSchema,
 } from '../sync/ids.js';
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
-  ClientGroup,
+  type ClientGroup,
   getClientGroup,
   getClientGroups,
   mutatorNamesEqual,

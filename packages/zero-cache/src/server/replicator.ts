@@ -1,17 +1,21 @@
 import {pid} from 'node:process';
 import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
+import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
 import {ReplicatorService} from '../services/replicator/replicator.js';
 import {runOrExit} from '../services/runner.js';
-import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
 import {
-  ReplicatorMode,
+  parentWorker,
+  singleProcessMode,
+  type Worker,
+} from '../types/processes.js';
+import {
+  type ReplicatorMode,
   setUpMessageHandlers,
   setupReplicaAndCheckpointer,
 } from '../workers/replicator.js';
 import {createLogContext} from './logging.js';
-import {getZeroConfig} from '../config/zero-config.js';
 
 export default async function runWorker(parent: Worker, ...args: string[]) {
   const config = await getZeroConfig();

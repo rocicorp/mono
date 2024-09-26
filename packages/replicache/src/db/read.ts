@@ -6,7 +6,7 @@ import type {Hash} from '../hash.js';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
-  Meta,
+  type Meta,
   commitFromHash,
   commitFromHead,
 } from './commit.js';

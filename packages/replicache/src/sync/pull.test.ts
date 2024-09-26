@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertObject, assertString} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Cookie, FrozenCookie} from '../cookies.js';
@@ -29,7 +30,7 @@ import {
   isVersionNotSupportedResponse,
 } from '../error-responses.js';
 import {FormatVersion} from '../format-version.js';
-import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
+import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {
   assertPullResponseV0,
   assertPullResponseV1,
@@ -46,7 +47,6 @@ import type {
   PullerResultV0,
   PullerResultV1,
 } from '../puller.js';
-import {stringCompare} from 'shared/src/string-compare.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {
   withRead,
@@ -55,14 +55,14 @@ import {
 } from '../with-transactions.js';
 import type {DiffsMap} from './diff.js';
 import {
-  BeginPullResponseV0,
-  BeginPullResponseV1,
+  type BeginPullResponseV0,
+  type BeginPullResponseV1,
   HandlePullResponseResultType,
-  MaybeEndPullResultV0,
+  type MaybeEndPullResultV0,
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
-  PullRequestV0,
-  PullRequestV1,
+  type PullRequestV0,
+  type PullRequestV1,
   beginPullV0,
   beginPullV1,
   handlePullResponseV1,

@@ -6,15 +6,20 @@ import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
-import {FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import {Hash, emptyHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
+import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
+import {
+  type Hash,
+  emptyHash,
+  fakeHash,
+  makeNewFakeHashFunction,
+} from '../hash.js';
 import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
-  DataNode,
-  Diff,
-  Entry,
-  InternalNode,
+  type DataNode,
+  type Diff,
+  type Entry,
+  type InternalNode,
   NODE_ENTRIES,
   NODE_LEVEL,
   findLeaf,

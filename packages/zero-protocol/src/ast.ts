@@ -7,7 +7,7 @@
  */
 
 import * as v from 'shared/src/valita.js';
-import {CorrelatedSubQuery} from 'zql/src/zql/ast/ast.js';
+import type {CorrelatedSubQuery} from 'zql/src/zql/ast/ast.js';
 
 function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
   return t as v.Type<Readonly<T>>;

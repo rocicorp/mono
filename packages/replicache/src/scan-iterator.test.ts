@@ -3,9 +3,9 @@ import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import type {IndexKey} from './db/index.js';
 import {
-  Entry,
-  GetIndexScanIterator,
-  GetScanIterator,
+  type Entry,
+  type GetIndexScanIterator,
+  type GetScanIterator,
   fromKeyForIndexScan,
   makeScanResult,
 } from './scan-iterator.js';

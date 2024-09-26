@@ -1,11 +1,11 @@
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/src/client';
+import {TEST_LICENSE_KEY} from '@rocicorp/licensing/out/client';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import {randomUint64} from 'shared/src/random-uint64.js';
 import * as sinon from 'sinon';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
@@ -18,7 +18,7 @@ import {
   teardownForTest as teardownIDBDatabasesStoreForTest,
 } from './persist/idb-databases-store-db-name.js';
 import type {PullResponseV1} from './puller.js';
-import {ReplicacheImpl, ReplicacheImplOptions} from './replicache-impl.js';
+import {ReplicacheImpl, type ReplicacheImplOptions} from './replicache-impl.js';
 import type {ReplicacheOptions} from './replicache-options.js';
 import {
   Replicache,

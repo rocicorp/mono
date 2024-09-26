@@ -1,10 +1,10 @@
 import {assert, unreachable} from 'shared/src/asserts.js';
-import {Change} from './change.js';
-import {Node, Row} from './data.js';
+import type {Change} from './change.js';
+import type {Node, Row} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
-import {FetchRequest, Input, Operator, Output} from './operator.js';
-import {Schema} from './schema.js';
-import {Stream} from './stream.js';
+import type {FetchRequest, Input, Operator, Output} from './operator.js';
+import type {Schema} from './schema.js';
+import type {Stream} from './stream.js';
 
 /**
  * Apply filter to all data flowing through, or just pushes. Pipeline builder

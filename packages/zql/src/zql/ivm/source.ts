@@ -1,6 +1,6 @@
-import {Condition, Ordering} from '../ast/ast.js';
-import {Row} from './data.js';
-import {Input} from './operator.js';
+import type {Condition, Ordering} from '../ast/ast.js';
+import type {Row} from './data.js';
+import type {Input} from './operator.js';
 
 export type SourceChangeAdd = {
   type: 'add';

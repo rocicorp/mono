@@ -3,11 +3,14 @@ import {ident} from 'pg-format';
 import {assert} from 'shared/src/asserts.js';
 import * as v from 'shared/src/valita.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {jsonObjectSchema, JSONValue} from 'zero-cache/src/types/bigint-json.js';
+import {
+  jsonObjectSchema,
+  type JSONValue,
+} from 'zero-cache/src/types/bigint-json.js';
 import {
   normalizedKeyOrder,
-  RowKey,
-  RowValue,
+  type RowKey,
+  type RowValue,
 } from 'zero-cache/src/types/row-key.js';
 import {Database} from 'zqlite/src/db.js';
 import {

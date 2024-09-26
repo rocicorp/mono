@@ -1,12 +1,12 @@
 import {expect} from 'chai';
 import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {Hash, assertHash, fakeHash} from '../hash.js';
+import {type Hash, assertHash, fakeHash} from '../hash.js';
 import type {ClientGroupID} from '../sync/ids.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
-  ClientGroup,
-  ClientGroupMap,
+  type ClientGroup,
+  type ClientGroupMap,
   clientGroupHasPendingMutations,
   deleteClientGroup,
   disableClientGroup,

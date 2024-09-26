@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import {must} from 'shared/src/must.js';
-import {Bound} from '../ivm/skip.js';
+import type {Bound} from '../ivm/skip.js';
 
 /**
  * As in SQL you can have multiple orderings. We don't currently

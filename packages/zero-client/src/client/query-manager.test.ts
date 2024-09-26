@@ -1,18 +1,18 @@
 import {
-  DeepReadonly,
-  IndexKey,
-  ReadonlyJSONValue,
-  ScanNoIndexOptions,
-  ScanResult,
   makeScanResult,
+  type DeepReadonly,
+  type IndexKey,
+  type ReadonlyJSONValue,
   type ReadTransaction,
   type ScanIndexOptions,
+  type ScanNoIndexOptions,
   type ScanOptions,
+  type ScanResult,
 } from 'replicache';
 import {expect, test, vi} from 'vitest';
 import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import {QueryManager} from './query-manager.js';
-import {AST} from 'zql/src/zql/ast/ast.js';
 
 test('add', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();

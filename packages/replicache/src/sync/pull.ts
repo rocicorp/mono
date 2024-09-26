@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
-import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
+import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {diff} from '../btree/diff.js';
 import {BTreeRead} from '../btree/read.js';
-import {compareCookies, Cookie} from '../cookies.js';
+import {compareCookies, type Cookie} from '../cookies.js';
 import type {Store} from '../dag/store.js';
 import {
   assertSnapshotMetaDD31,
@@ -13,10 +13,10 @@ import {
   commitFromHash,
   commitIsLocalDD31,
   DEFAULT_HEAD_NAME,
-  LocalMeta,
-  LocalMetaSDD,
+  type LocalMeta,
+  type LocalMetaSDD,
   localMutations as localMutations_1,
-  Meta,
+  type Meta,
   snapshotMetaParts,
 } from '../db/commit.js';
 import {
@@ -27,12 +27,12 @@ import {
 } from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
 import {FormatVersion} from '../format-version.js';
-import {deepFreeze, FrozenJSONValue} from '../frozen-json.js';
+import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
 import {
   assertPullerResultV0,
   assertPullerResultV1,
 } from '../get-default-puller.js';
-import {emptyHash, Hash} from '../hash.js';
+import {emptyHash, type Hash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {
   Puller,
@@ -44,14 +44,18 @@ import type {
   PullResponseV0,
   PullResponseV1,
 } from '../puller.js';
+import {ReportError} from '../replicache.js';
 import {toError} from '../to-error.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {addDiffsForIndexes, DiffComputationConfig, DiffsMap} from './diff.js';
+import {
+  addDiffsForIndexes,
+  type DiffComputationConfig,
+  DiffsMap,
+} from './diff.js';
 import type {ClientGroupID, ClientID} from './ids.js';
 import * as patch from './patch.js';
 import {PullError} from './pull-error.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
-import {ReportError} from '../replicache.js';
 
 export const PULL_VERSION_SDD = 0;
 export const PULL_VERSION_DD31 = 1;

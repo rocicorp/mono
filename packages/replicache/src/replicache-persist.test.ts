@@ -24,7 +24,7 @@ import {assertHash, newRandomHash} from './hash.js';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
 import {
-  ClientGroup,
+  type ClientGroup,
   deleteClientGroup,
   getClientGroup,
 } from './persist/client-groups.js';

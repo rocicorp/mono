@@ -1,17 +1,16 @@
 import {assert} from 'shared/src/asserts.js';
+import type {JSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
-import type {Ordering} from '../ast/ast.js';
-import {AST} from '../ast/ast.js';
+import type {AST, Ordering} from '../ast/ast.js';
+import type {Row} from '../ivm/data.js';
 import {Filter} from '../ivm/filter.js';
 import {Join} from '../ivm/join.js';
-import {Input, Storage} from '../ivm/operator.js';
-import {PrimaryKey} from '../ivm/schema.js';
+import type {Input, Storage} from '../ivm/operator.js';
+import type {PrimaryKey} from '../ivm/schema.js';
 import {Skip} from '../ivm/skip.js';
-import {Source} from '../ivm/source.js';
+import type {Source} from '../ivm/source.js';
 import {Take} from '../ivm/take.js';
 import {createPredicate} from './filter.js';
-import {Row} from '../ivm/data.js';
-import {JSONValue} from 'shared/src/json.js';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;

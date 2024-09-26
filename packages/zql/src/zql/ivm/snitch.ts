@@ -3,7 +3,7 @@ import type {Change} from './change.js';
 import type {Node, Row} from './data.js';
 import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {Schema} from './schema.js';
-import {Stream} from './stream.js';
+import type {Stream} from './stream.js';
 
 /**
  * Snitch is an Operator that records all messages it receives. Useful for

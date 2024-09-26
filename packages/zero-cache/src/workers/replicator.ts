@@ -3,19 +3,19 @@ import {resolver} from '@rocicorp/resolver';
 import {rmSync} from 'node:fs';
 import {assert} from 'shared/src/asserts.js';
 import {promiseVoid} from 'shared/src/resolved-promises.js';
-import {
+import type {
   ReplicaState,
   ReplicaStateNotifier,
   Replicator,
 } from 'zero-cache/src/services/replicator/replicator.js';
 import {Database} from 'zqlite/src/db.js';
 import {
-  Checkpointer,
+  type Checkpointer as Checkpoint,
   NULL_CHECKPOINTER,
   WALCheckpointer,
 } from '../services/replicator/checkpointer.js';
 import {Notifier} from '../services/replicator/notifier.js';
-import {Worker} from '../types/processes.js';
+import type {Worker} from '../types/processes.js';
 
 export type ReplicatorMode = 'serving' | 'serving-copy' | 'backup';
 
@@ -34,7 +34,7 @@ export function setupReplicaAndCheckpointer(
   lc: LogContext,
   mode: ReplicatorMode,
   replicaDbFile: string,
-): {replica: Database; checkpointer: Checkpointer} {
+): {replica: Database; checkpointer: Checkpoint} {
   lc.info?.(`setting up replicator in ${mode} mode`);
 
   let replica = connect(lc, replicaDbFile);

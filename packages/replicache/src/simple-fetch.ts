@@ -1,4 +1,4 @@
-import type {FetchResponse} from '@rocicorp/licensing/src/client';
+import type {FetchResponse} from '@rocicorp/licensing/out/client';
 
 // mustSimpleFetch throws on non-2xx responses.
 export async function mustSimpleFetch(

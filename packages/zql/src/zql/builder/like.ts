@@ -1,5 +1,5 @@
 import {assertString} from 'shared/src/asserts.js';
-import {NonNullValue, SimplePredicate} from './filter.js';
+import type {NonNullValue, SimplePredicate} from './filter.js';
 
 export function getLikePredicate(
   pattern: NonNullValue,

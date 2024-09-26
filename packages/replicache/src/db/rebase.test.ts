@@ -11,12 +11,12 @@ import type {WriteTransaction} from '../transactions.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   Commit,
-  LocalMeta,
-  LocalMetaDD31,
-  LocalMetaSDD,
-  Meta,
-  SnapshotMetaDD31,
-  SnapshotMetaSDD,
+  type LocalMeta,
+  type LocalMetaDD31,
+  type LocalMetaSDD,
+  type Meta,
+  type SnapshotMetaDD31,
+  type SnapshotMetaSDD,
   assertLocalCommitDD31,
   commitFromHead,
   commitIsLocal,

@@ -2,9 +2,9 @@ import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {Database} from 'zqlite/src/db.js';
 import type {Source} from '../../types/streams.js';
-import {ChangeStreamer} from '../change-streamer/change-streamer.js';
+import type {ChangeStreamer} from '../change-streamer/change-streamer.js';
 import type {Service} from '../service.js';
-import {Checkpointer} from './checkpointer.js';
+import type {Checkpointer} from './checkpointer.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */

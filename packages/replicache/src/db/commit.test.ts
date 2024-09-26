@@ -1,16 +1,16 @@
 import {expect} from 'chai';
-import {Chunk, Refs, toRefs} from '../dag/chunk.js';
+import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
-import {Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
+import {type Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead} from '../with-transactions.js';
 import {
-  ChunkIndexDefinition,
+  type ChunkIndexDefinition,
   Commit,
-  CommitData,
-  IndexChangeMetaSDD,
-  Meta,
+  type CommitData,
+  type IndexChangeMetaSDD,
+  type Meta,
   MetaType,
   baseSnapshotFromHash,
   chunkIndexDefinitionEqualIgnoreName,

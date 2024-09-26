@@ -4,13 +4,13 @@ import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import type {Hash} from '../hash.js';
 import {getSizeOfValue} from '../size-of-value.js';
-import {Chunk, ChunkHasher, Refs, createChunk} from './chunk.js';
+import {Chunk, type ChunkHasher, type Refs, createChunk} from './chunk.js';
 import {
-  HeadChange,
-  RefCountUpdatesDelegate,
+  type HeadChange,
+  type RefCountUpdatesDelegate,
   computeRefCountUpdates,
 } from './gc.js';
-import {Read, Store, Write, mustGetChunk} from './store.js';
+import {type Read, type Store, type Write, mustGetChunk} from './store.js';
 
 /**
  * Dag Store which lazily loads values from a source store and then caches

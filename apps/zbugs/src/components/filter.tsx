@@ -1,11 +1,11 @@
-import {useEffect, useState} from 'react';
-import {Schema, useZero} from '../domain/schema.js';
-import {useQuery} from 'zero-react/src/use-query.js';
-import Selector from './selector.js';
-import avatarIcon from '../assets/icons/avatar-default.svg';
-import {SchemaToRow} from 'zero-client';
-import labelIcon from '../assets/icons/label.svg';
 import classNames from 'classnames';
+import {useEffect, useState} from 'react';
+import type {SchemaToRow} from 'zero-client';
+import {useQuery} from 'zero-react/src/use-query.js';
+import avatarIcon from '../assets/icons/avatar-default.svg';
+import labelIcon from '../assets/icons/label.svg';
+import {type Schema, useZero} from '../domain/schema.js';
+import Selector from './selector.js';
 
 export type Selection = {creator: string} | {label: string};
 

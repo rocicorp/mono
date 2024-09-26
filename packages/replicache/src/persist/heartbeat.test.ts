@@ -1,9 +1,9 @@
-import {LogContext, LogSink} from '@rocicorp/logger';
+import {LogContext, type LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
 import * as sinon from 'sinon';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -12,7 +12,11 @@ import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js'
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
 import {withRead} from '../with-transactions.js';
 import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
-import {ClientMap, ClientStateNotFoundError, getClients} from './clients.js';
+import {
+  type ClientMap,
+  ClientStateNotFoundError,
+  getClients,
+} from './clients.js';
 import {
   HEARTBEAT_INTERVAL,
   latestHeartbeatUpdate,

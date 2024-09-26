@@ -1,14 +1,14 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assert, assertNotUndefined} from 'shared/src/asserts.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {BTreeRead} from '../btree/read.js';
 import type {Read, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {
   Commit,
-  SnapshotMetaDD31,
-  SnapshotMetaSDD,
+  type SnapshotMetaDD31,
+  type SnapshotMetaSDD,
   commitFromHash,
   commitIsSnapshot,
   fromChunk,
@@ -20,15 +20,19 @@ import {assertHash, fakeHash, newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {ClientGroup, getClientGroup, setClientGroup} from './client-groups.js';
+import {
+  type ClientGroup,
+  getClientGroup,
+  setClientGroup,
+} from './client-groups.js';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
 import {
   CLIENTS_HEAD_NAME,
-  ClientV5,
+  type ClientV5,
   FIND_MATCHING_CLIENT_TYPE_FORK,
   FIND_MATCHING_CLIENT_TYPE_HEAD,
   FIND_MATCHING_CLIENT_TYPE_NEW,
-  FindMatchingClientResult,
+  type FindMatchingClientResult,
   assertClientV6,
   findMatchingClient,
   getClient,

@@ -5,7 +5,7 @@ import {
   promiseVoid,
 } from 'shared/src/resolved-promises.js';
 import {
-  FrozenJSONValue,
+  type FrozenJSONValue,
   deepFreeze,
   deepFreezeAllowUndefined,
 } from '../frozen-json.js';

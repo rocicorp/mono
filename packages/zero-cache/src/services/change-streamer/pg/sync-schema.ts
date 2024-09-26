@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 
 import {
   runSchemaMigrations,
-  VersionMigrationMap,
+  type VersionMigrationMap,
 } from 'zero-cache/src/db/migration-lite.js';
 import {initialSync} from './initial-sync.js';
 

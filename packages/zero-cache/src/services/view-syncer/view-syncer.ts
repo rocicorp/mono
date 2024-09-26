@@ -5,7 +5,7 @@ import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {must} from 'shared/src/must.js';
 import {difference} from 'shared/src/set-utils.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {rowIDHash, RowKey} from 'zero-cache/src/types/row-key.js';
+import {rowIDHash, type RowKey} from 'zero-cache/src/types/row-key.js';
 import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
@@ -13,25 +13,29 @@ import type {
   InitConnectionMessage,
 } from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';
-import {Row} from 'zql/src/zql/ivm/data.js';
+import type {Row} from 'zql/src/zql/ivm/data.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import {ReplicaState} from '../replicator/replicator.js';
+import type {ReplicaState} from '../replicator/replicator.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
 import type {ActivityBasedService} from '../service.js';
-import {ClientHandler, PokeHandler, RowPatch} from './client-handler.js';
+import {
+  ClientHandler,
+  type PokeHandler,
+  type RowPatch,
+} from './client-handler.js';
 import {CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
-  RowUpdate,
   type CVRSnapshot,
+  type RowUpdate,
 } from './cvr.js';
-import {PipelineDriver, RowChange} from './pipeline-driver.js';
+import {PipelineDriver, type RowChange} from './pipeline-driver.js';
 import {
   cmpVersions,
-  RowID,
+  type RowID,
   versionFromString,
   versionString,
   versionToCookie,

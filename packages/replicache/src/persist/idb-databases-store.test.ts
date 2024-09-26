@@ -1,7 +1,10 @@
 import {expect} from 'chai';
 import * as sinon from 'sinon';
 import {TestMemStore} from '../kv/test-mem-store.js';
-import {IDBDatabasesStore, IndexedDBDatabase} from './idb-databases-store.js';
+import {
+  IDBDatabasesStore,
+  type IndexedDBDatabase,
+} from './idb-databases-store.js';
 
 teardown(() => {
   sinon.restore();

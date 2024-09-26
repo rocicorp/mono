@@ -2,7 +2,7 @@ import postgres from 'postgres';
 import {assert, assertString} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {afterAll, expect} from 'vitest';
-import {PostgresDB, postgresTypeConfig} from '../types/pg.js';
+import {type PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
 // Set by ./test/pg-container-setup.ts
 assertString(process.env.PG_CONTAINER_CONNECTION_URI);

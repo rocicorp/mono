@@ -1,6 +1,6 @@
 import {expect} from 'chai';
-import {fakeHash, Hash} from '../hash.js';
-import {computeRefCountUpdates, RefCountUpdatesDelegate} from './gc.js';
+import {fakeHash, type Hash} from '../hash.js';
+import {computeRefCountUpdates, type RefCountUpdatesDelegate} from './gc.js';
 
 function createGraph(args: {
   graph: Record<string, string[]>;

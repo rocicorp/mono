@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {fakeHash} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {getLatestGCUpdate, initClientGroupGC} from './client-group-gc.js';
 import {
-  ClientGroup,
-  ClientGroupMap,
+  type ClientGroup,
+  type ClientGroupMap,
   getClientGroups,
   setClientGroup,
   setClientGroups,

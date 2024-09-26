@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeWrite} from '../btree/write.js';
 import {TestStore} from '../dag/test-store.js';
 import {FormatVersion} from '../format-version.js';
 import {deepFreeze} from '../frozen-json.js';
-import {stringCompare} from 'shared/src/string-compare.js';
 import {withWrite} from '../with-transactions.js';
 import {
-  IndexKey,
+  type IndexKey,
   IndexOperation,
   KEY_SEPARATOR,
   KEY_VERSION_0,

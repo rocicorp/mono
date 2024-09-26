@@ -5,13 +5,13 @@ import {
   assertUndefined,
   unreachable,
 } from 'shared/src/asserts.js';
-import {Immutable} from 'shared/src/immutable.js';
+import type {Immutable} from 'shared/src/immutable.js';
 import {must} from 'shared/src/must.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
-import {Change} from './change.js';
-import {Comparator, Row, Value} from './data.js';
-import {Input, Output} from './operator.js';
-import {Schema} from './schema.js';
+import type {Change} from './change.js';
+import type {Comparator, Row, Value} from './data.js';
+import type {Input, Output} from './operator.js';
+import type {Schema} from './schema.js';
 
 /**
  * Called when the view changes. The received data should be considered

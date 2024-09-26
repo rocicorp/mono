@@ -8,7 +8,7 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "importsNotUsedAsValues": "error",
+    "verbatimModuleSyntax": true,
     "esModuleInterop": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -20,7 +20,6 @@
     "types": [],
     "resolveJsonModule": true,
     "incremental": true,
-    "ignoreDeprecations": "5.0",
     "skipLibCheck": true,
     "baseUrl": "./packages/",
     "paths": {

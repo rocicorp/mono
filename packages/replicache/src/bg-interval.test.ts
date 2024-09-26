@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
-import sinon, {SinonFakeTimers, useFakeTimers} from 'sinon';
+import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {initBgIntervalProcess} from './bg-interval.js';
 
 let clock: SinonFakeTimers;

@@ -5,14 +5,14 @@ import * as valita from 'shared/src/valita.js';
 import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import WebSocket from 'ws';
 import {
-  ConnectedMessage,
-  Downstream,
+  type ConnectedMessage,
+  type Downstream,
   ErrorKind,
-  ErrorMessage,
-  PongMessage,
+  type ErrorMessage,
+  type PongMessage,
   upstreamSchema,
 } from 'zero-protocol';
-import {ConnectParams} from '../services/dispatcher/connect-params.js';
+import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {
   SyncContext,

@@ -1,10 +1,10 @@
 import {
   consoleLogSink,
-  TeeLogSink,
   LogContext,
+  TeeLogSink,
+  type Context,
   type LogLevel,
   type LogSink,
-  Context,
 } from '@rocicorp/logger';
 
 /**

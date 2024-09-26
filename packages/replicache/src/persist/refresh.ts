@@ -5,7 +5,7 @@ import type {Store} from '../dag/store.js';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
-  SnapshotMetaDD31,
+  type SnapshotMetaDD31,
   assertSnapshotCommitDD31,
   baseSnapshotFromCommit,
   baseSnapshotFromHash,
@@ -18,20 +18,24 @@ import {
 import {rebaseMutationAndPutCommit} from '../db/rebase.js';
 import type {FormatVersion} from '../format-version.js';
 import type {Hash} from '../hash.js';
-import {DiffComputationConfig, DiffsMap, diffCommits} from '../sync/diff.js';
+import {
+  type DiffComputationConfig,
+  DiffsMap,
+  diffCommits,
+} from '../sync/diff.js';
 import type {ClientID} from '../sync/ids.js';
 import type {MutatorDefs} from '../types.js';
 import {withRead, withWrite} from '../with-transactions.js';
 import {
   ClientStateNotFoundError,
-  ClientV6,
+  type ClientV6,
   assertClientV6,
   getClientGroupForClient,
   mustGetClient,
   setClient,
 } from './clients.js';
 import {
-  ChunkWithSize,
+  type ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.js';
 
