@@ -178,7 +178,7 @@ export class WriteAuthorizerImpl {
   #getPreMutationRow(op: SetOp | UpdateOp | DeleteOp) {
     return this.#statementCache.use(
       compile(sql`SELECT * FROM ${sql.ident(op.entityType)} WHERE id = ?`),
-      stmt => stmt.statement.get<Row | undefined>(op.id),
+      stmt => stmt.statement.get<Row | undefined>(op.id.id),
     );
   }
 

@@ -22,6 +22,10 @@ export class ConfigQuery<
     super(schema, ast, format);
   }
 
+  get ast() {
+    return this._completeAst();
+  }
+
   protected _newQuery<TSchema extends Schema, TReturn extends QueryType>(
     schema: TSchema,
     ast: AST,
