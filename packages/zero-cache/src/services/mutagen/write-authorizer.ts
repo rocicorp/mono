@@ -70,10 +70,23 @@ export class WriteAuthorizer {
     return this.#canDo('delete', authData, op);
   }
 
-  canUpsert(_authData: JWTPayload, _op: SetOp) {
-    // if exists, canUpdate
-    // else canInsert
-    return true;
+  canUpsert(authData: JWTPayload, op: SetOp) {
+    const preMutationRow = this.#getPreMutationRow(op);
+    if (preMutationRow) {
+      return this.canUpdate(authData, {
+        op: 'update',
+        entityType: op.entityType,
+        id: op.id,
+        partialValue: op.value,
+      });
+    }
+
+    return this.canInsert(authData, {
+      op: 'create',
+      entityType: op.entityType,
+      id: op.id,
+      value: op.value,
+    });
   }
 
   #getSource(tableName: string) {
@@ -132,10 +145,7 @@ export class WriteAuthorizer {
 
     let preMutationRow: Row | undefined;
     if (op.op !== 'create') {
-      preMutationRow = this.#statementCache.use(
-        compile(sql`SELECT * FROM ${sql.ident(op.entityType)} WHERE id = ?`),
-        stmt => stmt.statement.get<Row>(op.id),
-      );
+      preMutationRow = this.#getPreMutationRow(op);
     }
 
     const rowRules = rules.row;
@@ -156,6 +166,13 @@ export class WriteAuthorizer {
     }
 
     return true;
+  }
+
+  #getPreMutationRow(op: SetOp | UpdateOp | DeleteOp) {
+    return this.#statementCache.use(
+      compile(sql`SELECT * FROM ${sql.ident(op.entityType)} WHERE id = ?`),
+      stmt => stmt.statement.get<Row | undefined>(op.id),
+    );
   }
 
   #passesPolicy(
