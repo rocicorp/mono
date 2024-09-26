@@ -108,7 +108,7 @@ export default function IssuePage() {
           <div className="comments-container">
             <h2 className="issue-detail-label">Comments</h2>
             {issue.comments.map(comment => (
-              <Comment key={comment.id} id={comment.id} />
+              <Comment key={comment.id} id={comment.id} issueID={issue.id} />
             ))}
           </div>
         ) : null}
