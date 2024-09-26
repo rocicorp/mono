@@ -17,6 +17,7 @@ const z = new Zero({
   logLevel: 'info',
   server: import.meta.env.VITE_PUBLIC_SERVER,
   userID: 'anon',
+  auth: 'sfsdf',
   schemas: schema,
   hiddenTabDisconnectDelay: hiddenTabDisconnectDelayMinutes * 60 * 1000,
 });

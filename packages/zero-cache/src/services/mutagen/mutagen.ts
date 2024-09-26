@@ -20,13 +20,17 @@ import type {Service} from '../service.js';
 import type {ZeroConfig} from '../../config/zero-config.js';
 import {Database} from 'zqlite/src/db.js';
 import {WriteAuthorizationFailed, WriteAuthorizer} from './write-authorizer.js';
+import type {JWTPayload} from 'jose';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
 export type MutationError = string;
 
 export interface Mutagen {
-  processMutation(mutation: Mutation): Promise<MutationError | undefined>;
+  processMutation(
+    mutation: Mutation,
+    authData: JWTPayload,
+  ): Promise<MutationError | undefined>;
 }
 
 export class MutagenService implements Mutagen, Service {
@@ -60,9 +64,13 @@ export class MutagenService implements Mutagen, Service {
     );
   }
 
-  processMutation(mutation: Mutation): Promise<MutationError | undefined> {
+  processMutation(
+    mutation: Mutation,
+    authData: JWTPayload,
+  ): Promise<MutationError | undefined> {
     return processMutation(
       this.#lc,
+      authData,
       this.#upstream,
       this.id,
       mutation,
@@ -84,6 +92,7 @@ const MAX_SERIALIZATION_ATTEMPTS = 2;
 
 export async function processMutation(
   lc: LogContext | undefined,
+  authData: JWTPayload,
   db: PostgresDB,
   clientGroupID: string,
   mutation: Mutation,
@@ -147,6 +156,7 @@ export async function processMutation(
           onTxStart?.();
           return processMutationWithTx(
             tx,
+            authData,
             clientGroupID,
             mutation,
             errorMode,
@@ -194,6 +204,7 @@ export async function processMutation(
 
 async function processMutationWithTx(
   tx: PostgresTransaction,
+  authData: JWTPayload,
   clientGroupID: string,
   mutation: CRUDMutation,
   errorMode: boolean,
@@ -209,7 +220,7 @@ async function processMutationWithTx(
     for (const op of ops) {
       switch (op.op) {
         case 'create':
-          if (!authorizer.canInsert(op)) {
+          if (!authorizer.canInsert(authData, op)) {
             throw new WriteAuthorizationFailed(
               'Write policy failed for insert',
             );
@@ -217,7 +228,7 @@ async function processMutationWithTx(
           queryPromises.push(getCreateSQL(tx, op).execute());
           break;
         case 'set':
-          if (!authorizer.canUpsert(op)) {
+          if (!authorizer.canUpsert(authData, op)) {
             throw new WriteAuthorizationFailed(
               'Write policy failed for insert',
             );
@@ -225,7 +236,7 @@ async function processMutationWithTx(
           queryPromises.push(getSetSQL(tx, op).execute());
           break;
         case 'update':
-          if (!authorizer.canUpdate(op)) {
+          if (!authorizer.canUpdate(authData, op)) {
             throw new WriteAuthorizationFailed(
               'Write policy failed for update',
             );
@@ -233,7 +244,7 @@ async function processMutationWithTx(
           queryPromises.push(getUpdateSQL(tx, op).execute());
           break;
         case 'delete':
-          if (!authorizer.canDelete(op)) {
+          if (!authorizer.canDelete(authData, op)) {
             throw new WriteAuthorizationFailed(
               'Write policy failed for update',
             );

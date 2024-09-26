@@ -20,6 +20,7 @@ import type {
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
+import type {JWTPayload} from 'jose';
 
 /**
  * Represents a connection between the client and server.
@@ -39,18 +40,21 @@ export class Connection {
   readonly #viewSyncer: ViewSyncer;
   readonly #mutagen: Mutagen;
   readonly #mutationLock = new Lock();
+  readonly #authData: JWTPayload;
 
   #outboundStream: Source<Downstream> | undefined;
   #closed = false;
 
   constructor(
     lc: LogContext,
+    authData: JWTPayload,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     connectParams: ConnectParams,
     ws: WebSocket,
     onClose: () => void,
   ) {
+    this.#authData = authData;
     this.#ws = ws;
     const {clientGroupID, clientID, wsID, baseCookie} = connectParams;
     this.#clientGroupID = clientGroupID;
@@ -134,7 +138,10 @@ export class Connection {
           // 2. A single view syncer connection cannot hog multiple upstream connections.
           await this.#mutationLock.withLock(async () => {
             for (const mutation of mutations) {
-              const errorDesc = await this.#mutagen.processMutation(mutation);
+              const errorDesc = await this.#mutagen.processMutation(
+                mutation,
+                this.#authData,
+              );
               if (errorDesc !== undefined) {
                 this.sendError(['error', ErrorKind.MutationFailed, errorDesc]);
               }

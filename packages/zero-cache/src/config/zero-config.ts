@@ -50,6 +50,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
   numSyncWorkers: v.number().optional(),
   changeStreamerUri: v.string().optional(),
   litestream: v.boolean().optional(),
+  jwtSecret: v.string().optional(),
 
   log: logConfigSchema,
 });

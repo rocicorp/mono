@@ -19,6 +19,7 @@ defineConfig<AuthData, Schema>(schema, queries => ({
 
   replicaId: must(process.env.REPLICA_ID),
   replicaDbFile: must(process.env.REPLICA_DB_FILE),
+  jwtSecret: must(process.env.JWT_SECRET),
 
   log: {
     level: 'debug',

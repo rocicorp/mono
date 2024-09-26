@@ -12,6 +12,9 @@ import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
+import {jwtVerify, type JWTPayload} from 'jose';
+import type {ZeroConfig} from '../config/zero-config.js';
+import assert from 'assert';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -31,9 +34,11 @@ export class Syncer {
   readonly #connections = new Map<string, Connection>();
   readonly #parent: Worker;
   readonly #wss: WebSocket.Server;
+  #jwtSecretBytes: Uint8Array | undefined | null;
 
   constructor(
     lc: LogContext,
+    config: ZeroConfig,
     viewSyncerFactory: (
       id: string,
       sub: Subscription<ReplicaState>,
@@ -56,17 +61,35 @@ export class Syncer {
     this.#parent = parent;
     this.#wss = new WebSocket.Server({noServer: true});
 
+    if (config.jwtSecret) {
+      this.#jwtSecretBytes = new TextEncoder().encode(config.jwtSecret);
+    } else {
+      this.#jwtSecretBytes = null;
+    }
+
     installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
   }
 
-  readonly #createConnection = (ws: WebSocket, params: ConnectParams) => {
-    const {clientID, clientGroupID} = params;
+  readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    const {clientID, clientGroupID, auth} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
       existing.close();
     }
+
+    let decodedToken: JWTPayload | undefined = undefined;
+    if (auth) {
+      // decode the token
+      // if it's invalid, close the connection
+      const secretBytes = this.#jwtSecretBytes;
+      assert(secretBytes);
+      // TODO: test that this fails with an invalid token
+      decodedToken = (await jwtVerify(auth, secretBytes)).payload;
+    }
+
     const connection = new Connection(
       this.#lc,
+      decodedToken ?? {},
       this.#viewSyncers.getService(clientGroupID),
       this.#mutagens.getService(clientGroupID),
       params,

@@ -1,15 +1,14 @@
 import {Database} from 'zqlite/src/db.js';
-import {
+import type {
   AuthorizationConfig,
   Policy,
   ZeroConfig,
 } from '../../config/zero-config.js';
-import {CreateOp, DeleteOp, SetOp, UpdateOp} from 'zero-protocol';
-import {BuilderDelegate, buildPipeline} from 'zql/src/zql/builder/builder.js';
-import {
-  NormalizedTableSpec,
-  normalize,
-} from '../view-syncer/pipeline-driver.js';
+import type {CreateOp, DeleteOp, SetOp, UpdateOp} from 'zero-protocol';
+import type {BuilderDelegate} from 'zql/src/zql/builder/builder.js';
+import {buildPipeline} from 'zql/src/zql/builder/builder.js';
+import type {NormalizedTableSpec} from '../view-syncer/pipeline-driver.js';
+import {normalize} from '../view-syncer/pipeline-driver.js';
 import {listTables} from '../../db/lite-tables.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import {assert} from 'shared/src/asserts.js';
@@ -22,7 +21,9 @@ import {pid} from 'node:process';
 import {randInt} from 'shared/src/rand.js';
 import {StatementCache} from 'zqlite/src/internal/statement-cache.js';
 import {sql, compile} from 'zqlite/src/internal/sql.js';
-import {Row} from 'zql/src/zql/ivm/data.js';
+import type {Row} from 'zql/src/zql/ivm/data.js';
+import type {JWTPayload} from 'jose';
+import type {JSONValue} from 'shared/src/json.js';
 
 export class WriteAuthorizer {
   readonly #authorizationConfig: AuthorizationConfig;
@@ -57,19 +58,19 @@ export class WriteAuthorizer {
     this.#statementCache = new StatementCache(replica);
   }
 
-  canInsert(op: CreateOp) {
-    return this.#canDo('insert', op);
+  canInsert(authData: JWTPayload, op: CreateOp) {
+    return this.#canDo('insert', authData, op);
   }
 
-  canUpdate(op: UpdateOp) {
-    return this.#canDo('update', op);
+  canUpdate(authData: JWTPayload, op: UpdateOp) {
+    return this.#canDo('update', authData, op);
   }
 
-  canDelete(op: DeleteOp) {
-    return this.#canDo('delete', op);
+  canDelete(authData: JWTPayload, op: DeleteOp) {
+    return this.#canDo('delete', authData, op);
   }
 
-  canUpsert(_op: SetOp) {
+  canUpsert(_authData: JWTPayload, _op: SetOp) {
     // if exists, canUpdate
     // else canInsert
     return true;
@@ -102,21 +103,28 @@ export class WriteAuthorizer {
     return source;
   }
 
-  #canDo<A extends keyof ActionOpMap>(action: A, op: ActionOpMap[A]) {
+  #canDo<A extends keyof ActionOpMap>(
+    action: A,
+    authData: JWTPayload,
+    op: ActionOpMap[A],
+  ) {
     const rules = this.#authorizationConfig[op.entityType];
     if (!rules) {
       return true;
     }
 
     const tableRules = rules.table;
-    if (tableRules && !this.#passesPolicy(tableRules[action], undefined)) {
+    if (
+      tableRules &&
+      !this.#passesPolicy(tableRules[action], authData, undefined)
+    ) {
       return false;
     }
 
     const columnRules = rules.column;
     if (columnRules) {
       for (const rule of Object.values(columnRules)) {
-        if (!this.#passesPolicy(rule[action], undefined)) {
+        if (!this.#passesPolicy(rule[action], authData, undefined)) {
           return false;
         }
       }
@@ -131,14 +139,17 @@ export class WriteAuthorizer {
     }
 
     const rowRules = rules.row;
-    if (rowRules && !this.#passesPolicy(rowRules[action], preMutationRow)) {
+    if (
+      rowRules &&
+      !this.#passesPolicy(rowRules[action], authData, preMutationRow)
+    ) {
       return false;
     }
 
     const cellRules = rules.cell;
     if (cellRules) {
       for (const rule of Object.values(cellRules)) {
-        if (!this.#passesPolicy(rule[action], preMutationRow)) {
+        if (!this.#passesPolicy(rule[action], authData, preMutationRow)) {
           return false;
         }
       }
@@ -147,14 +158,18 @@ export class WriteAuthorizer {
     return true;
   }
 
-  #passesPolicy(policy: Policy | undefined, preMutationRow: Row | undefined) {
+  #passesPolicy(
+    policy: Policy | undefined,
+    authData: JWTPayload,
+    preMutationRow: Row | undefined,
+  ) {
     if (!policy) {
       return true;
     }
 
     for (const [_, rule] of policy) {
       const input = buildPipeline(rule, this.#builderDelegate, {
-        authData: {},
+        authData: authData as Record<string, JSONValue>,
         preMutationRow,
       });
       try {

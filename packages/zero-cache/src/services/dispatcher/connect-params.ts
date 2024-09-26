@@ -1,3 +1,4 @@
+import type {IncomingHttpHeaders} from 'node:http2';
 import {URLParams} from 'zero-cache/src/types/url-params.js';
 
 export type ConnectParams = {
@@ -8,9 +9,13 @@ export type ConnectParams = {
   readonly lmID: number;
   readonly wsID: string;
   readonly debugPerf: boolean;
+  readonly auth: string | undefined;
 };
 
-export function getConnectParams(url: URL):
+export function getConnectParams(
+  url: URL,
+  headers: IncomingHttpHeaders,
+):
   | {
       params: ConnectParams;
       error: null;
@@ -30,6 +35,7 @@ export function getConnectParams(url: URL):
     const wsID = params.get('wsid', false) ?? '';
     const debugPerf = params.getBoolean('debugPerf');
 
+    const maybeAuthToken = headers['sec-websocket-protocol'];
     return {
       params: {
         clientID,
@@ -39,6 +45,7 @@ export function getConnectParams(url: URL):
         lmID,
         wsID,
         debugPerf,
+        auth: maybeAuthToken ? decodeURIComponent(maybeAuthToken) : undefined,
       },
       error: null,
     };
