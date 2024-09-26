@@ -8,7 +8,9 @@ import type {TypedView} from 'zql/src/zql/query/typed-view.js';
 export function useQuery<TSchema extends Schema, TReturn extends QueryType>(
   q: Query<TSchema, TReturn>,
   enable: boolean = true,
-): Smash<TReturn> {
+): TReturn['singular'] extends true
+  ? Smash<TReturn> | undefined
+  : Smash<TReturn> {
   const queryImpl = q as QueryImpl<TSchema, TReturn>;
 
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>(
