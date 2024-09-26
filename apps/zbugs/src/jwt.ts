@@ -1,14 +1,10 @@
 import {decodeJwt} from 'jose';
 
 export function getJwt() {
-  const cookies = document.cookie.split(';');
-  const jwtCookie = cookies.find(cookie => cookie.trim().startsWith('jwt='));
-
-  if (!jwtCookie) {
+  const token = getRawJwt();
+  if (!token) {
     return undefined;
   }
-
-  const token = jwtCookie.split('=')[1].trim();
   const payload = decodeJwt(token);
   const currentTime = Math.floor(Date.now() / 1000);
   if (payload.exp && payload.exp < currentTime) {
@@ -16,6 +12,17 @@ export function getJwt() {
   }
 
   return payload;
+}
+
+export function getRawJwt() {
+  const cookies = document.cookie.split(';');
+  const jwtCookie = cookies.find(cookie => cookie.trim().startsWith('jwt='));
+
+  if (!jwtCookie) {
+    return undefined;
+  }
+
+  return jwtCookie.split('=')[1].trim();
 }
 
 export function clearJwt() {
