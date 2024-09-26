@@ -7,6 +7,7 @@ import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
+import Comment from './comment.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -17,11 +18,7 @@ export default function IssuePage() {
     .where('id', params?.id ?? '')
     .related('creator', creator => creator.one())
     .related('labels')
-    .related('comments', comments =>
-      comments
-        .orderBy('created', 'asc')
-        .related('creator', creator => creator.one()),
-    )
+    .related('comments')
     .one();
   const issue = useQuery(q, match);
 
@@ -111,10 +108,7 @@ export default function IssuePage() {
           <div className="comments-container">
             <h2 className="issue-detail-label">Comments</h2>
             {issue.comments.map(comment => (
-              <div key={comment.id} className="comment-item">
-                <p className="comment-author">{comment.creator.name}</p>
-                <Markdown>{comment.body}</Markdown>
-              </div>
+              <Comment key={comment.id} id={comment.id} />
             ))}
           </div>
         ) : null}
