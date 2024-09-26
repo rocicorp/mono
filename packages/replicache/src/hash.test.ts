@@ -1,7 +1,7 @@
 import {expect} from 'chai';
 import * as valita from 'shared/src/valita.js';
 import {
-  Hash,
+  type Hash,
   STRING_LENGTH,
   emptyHash,
   fakeHash,

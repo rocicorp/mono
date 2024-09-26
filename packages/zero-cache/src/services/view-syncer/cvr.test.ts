@@ -4,29 +4,29 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {CVRStore} from './cvr-store.js';
 
+import {unreachable} from 'shared/src/asserts.js';
 import {expect} from 'vitest';
 import type {PatchToVersion} from './client-handler.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
-  CVRSnapshot,
+  type CVRSnapshot,
   CVRUpdater,
 } from './cvr.js';
 import {
-  ClientsRow,
+  type ClientsRow,
   compareClientsRows,
   compareDesiresRows,
   compareInstancesRows,
   compareQueriesRows,
   compareRowsRows,
-  DesiresRow,
-  InstancesRow,
-  QueriesRow,
-  RowsRow,
+  type DesiresRow,
+  type InstancesRow,
+  type QueriesRow,
+  type RowsRow,
   setupCVRTables,
 } from './schema/cvr.js';
 import type {CVRVersion, RowID} from './schema/types.js';
-import {unreachable} from 'shared/src/asserts.js';
 
 describe('view-syncer/cvr', () => {
   type DBState = {

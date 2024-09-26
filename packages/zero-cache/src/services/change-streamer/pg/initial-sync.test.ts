@@ -8,7 +8,7 @@ import {
   testDBs,
 } from 'zero-cache/src/test/db.js';
 import {expectTables, initDB as initLiteDB} from 'zero-cache/src/test/lite.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
 import type {
   FilteredTableSpec,
   IndexSpec,

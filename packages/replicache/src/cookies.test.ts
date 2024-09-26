@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {compareCookies, Cookie} from './cookies.js';
+import {compareCookies, type Cookie} from './cookies.js';
 
 test('compareCookies', () => {
   const t = (a: Cookie, b: Cookie, expected: number) => {

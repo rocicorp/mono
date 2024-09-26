@@ -1,44 +1,45 @@
-import {LogContext, LogLevel} from '@rocicorp/logger';
-import {Resolver, resolver} from '@rocicorp/resolver';
+import {LogContext, type LogLevel} from '@rocicorp/logger';
+import {type Resolver, resolver} from '@rocicorp/resolver';
 import type {ExperimentalNoIndexDiff, MutatorDefs} from 'replicache';
 import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
 import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
 import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
 import {
   ReplicacheImpl,
-  ReplicacheImplOptions,
+  type ReplicacheImplOptions,
 } from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
+import {SubscriptionsManagerImpl} from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
 import type {UpdateNeededReason as ReplicacheUpdateNeededReason} from 'replicache/src/types.js';
 import {assert} from 'shared/src/asserts.js';
-import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument, getLocation} from 'shared/src/browser-env.js';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {must} from 'shared/src/must.js';
 import {navigator} from 'shared/src/navigator.js';
 import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import * as valita from 'shared/src/valita.js';
 import {
-  CRUDMutation,
-  CRUDMutationArg,
+  type CRUDMutation,
+  type CRUDMutationArg,
   CRUD_MUTATION_NAME,
-  ConnectedMessage,
-  CustomMutation,
-  Downstream,
+  type ConnectedMessage,
+  type CustomMutation,
+  type Downstream,
   ErrorKind,
+  type ErrorMessage,
   MutationType,
-  NullableVersion,
-  PingMessage,
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
-  PushMessage,
+  type NullableVersion,
+  type PingMessage,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
+  type PushMessage,
   downstreamSchema,
   nullableVersionSchema,
-  type ErrorMessage,
 } from 'zero-protocol';
 import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.js';
 import type {
@@ -46,27 +47,28 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from 'zero-protocol/src/pull.js';
-import {ZeroContext} from './context.js';
-import {Query} from 'zql/src/zql/query/query.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
+import type {Query} from 'zql/src/zql/query/query.js';
+import type {Schema} from 'zql/src/zql/query/schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
+import {ZeroContext} from './context.js';
 import {
-  MakeCRUDMutate,
-  WithCRUD,
+  type MakeCRUDMutate,
+  type WithCRUD,
   makeCRUDMutate,
   makeCRUDMutator,
 } from './crud.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
-import {toWSString, type HTTPString, type WSString} from './http-string.js';
+import {type HTTPString, type WSString, toWSString} from './http-string.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {LogOptions, createLogOptions} from './log-options.js';
+import {type LogOptions, createLogOptions} from './log-options.js';
 import {
   DID_NOT_CONNECT_VALUE,
-  DisconnectReason,
+  type DisconnectReason,
   MetricManager,
   REPORT_INTERVAL_MS,
-  Series,
+  type Series,
   getLastConnectErrorValue,
 } from './metrics.js';
 import type {ZeroOptions} from './options.js';
@@ -76,8 +78,6 @@ import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
-import {Schema} from 'zql/src/zql/query/schema.js';
-import {SubscriptionsManagerImpl} from 'replicache/src/subscriptions.js';
 
 export type SchemaDefs = {
   readonly [table: string]: Schema;

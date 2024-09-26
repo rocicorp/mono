@@ -1,9 +1,9 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
-import {Change} from 'zql/src/zql/ivm/change.js';
-import {makeComparator, Row, Value} from 'zql/src/zql/ivm/data.js';
-import {SchemaValue} from 'zql/src/zql/ivm/schema.js';
+import type {Change} from 'zql/src/zql/ivm/change.js';
+import {makeComparator, type Row, type Value} from 'zql/src/zql/ivm/data.js';
+import type {SchemaValue} from 'zql/src/zql/ivm/schema.js';
 import {runCases} from 'zql/src/zql/ivm/test/source-cases.js';
 import {Database} from 'zqlite/src/db.js';
 import {compile, sql} from './internal/sql.js';

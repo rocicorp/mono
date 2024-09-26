@@ -3,19 +3,20 @@
  * These types represent the shape that their config must adhere to
  * so we can compile it to a JSON ZeroConfig.
  */
-import {Query, SchemaToRow} from 'zql/src/zql/query/query.js';
-import {Action, ZeroConfigSansAuthorization} from './zero-config.js';
-import {Schema} from 'zql/src/zql/query/schema.js';
-import type {
-  ZeroConfig as CompiledZeroConfig,
-  AssetAuthorization as CompiledAssetAuthorization,
-  AuthorizationConfig as CompiledAuthorizationConfig,
-} from './zero-config.js';
-import path from 'node:path';
 import fs from 'node:fs';
-import {AST} from 'zql/src/zql/ast/ast.js';
+import path from 'node:path';
+import type {AST} from 'zql/src/zql/ast/ast.js';
+import type {Query, SchemaToRow} from 'zql/src/zql/query/query.js';
+import type {Schema} from 'zql/src/zql/query/schema.js';
 import {ConfigQuery} from './config-query.js';
 import {authDataRef, preMutationRowRef} from './refs.js';
+import type {
+  Action,
+  AssetAuthorization as CompiledAssetAuthorization,
+  AuthorizationConfig as CompiledAuthorizationConfig,
+  ZeroConfig as CompiledZeroConfig,
+  ZeroConfigSansAuthorization,
+} from './zero-config.js';
 
 type SchemaDefs = {
   readonly [table: string]: Schema;

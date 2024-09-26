@@ -3,7 +3,7 @@ import * as valita from 'shared/src/valita.js';
 import {toRefs} from '../dag/chunk.js';
 import type {Read, Write} from '../dag/store.js';
 import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
-import {Hash, hashSchema} from '../hash.js';
+import {type Hash, hashSchema} from '../hash.js';
 import {indexDefinitionsEqual, indexDefinitionsSchema} from '../index-defs.js';
 import type {ClientGroupID} from '../sync/ids.js';
 

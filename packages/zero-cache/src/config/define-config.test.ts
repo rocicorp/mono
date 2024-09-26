@@ -1,7 +1,7 @@
-import {vi, test, expect, beforeEach, MockInstance} from 'vitest';
 import fs from 'fs';
-import {defineConfig, Queries} from './define-config.js';
 import {afterEach} from 'node:test';
+import {beforeEach, expect, type MockInstance, test, vi} from 'vitest';
+import {defineConfig, type Queries} from './define-config.js';
 
 type AuthData = {sub: string};
 

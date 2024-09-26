@@ -10,7 +10,7 @@ import {TestStore} from '../dag/test-store.js';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
-  Meta,
+  type Meta,
   assertLocalMetaDD31,
   assertSnapshotCommitDD31,
   baseSnapshotFromHash,
@@ -22,23 +22,23 @@ import {
   getChunkSnapshot,
 } from '../db/test-helpers.js';
 import {FormatVersion} from '../format-version.js';
-import {Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
+import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
 import type {MutatorDefs} from '../types.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {
   CLIENT_GROUPS_HEAD_NAME,
-  ClientGroup,
+  type ClientGroup,
   getClientGroup,
   setClientGroup,
 } from './client-groups.js';
 import {
   CLIENTS_HEAD_NAME,
-  Client,
-  ClientMap,
+  type Client,
+  type ClientMap,
   ClientStateNotFoundError,
-  ClientV6,
+  type ClientV6,
   assertClientV6,
   getClients,
   initClientV6,

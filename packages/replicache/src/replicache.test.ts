@@ -2,11 +2,11 @@ import {
   LicenseStatus,
   PROD_LICENSE_SERVER_URL,
   TEST_LICENSE_KEY,
-} from '@rocicorp/licensing/src/client';
+} from '@rocicorp/licensing/out/client';
 import {
   LICENSE_ACTIVE_PATH,
   LICENSE_STATUS_PATH,
-} from '@rocicorp/licensing/src/server/api-types.js';
+} from '@rocicorp/licensing/out/server/api-types.js';
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';

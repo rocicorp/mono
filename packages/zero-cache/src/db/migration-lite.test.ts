@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Database as Db} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import type {Database as Db} from 'zqlite/src/db.js';
 import {DbFile} from '../test/lite.js';
 import {
-  SchemaVersions,
-  VersionMigrationMap,
+  type SchemaVersions,
+  type VersionMigrationMap,
   getSchemaVersions,
   runSchemaMigrations,
 } from './migration-lite.js';

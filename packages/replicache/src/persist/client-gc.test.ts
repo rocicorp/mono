@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {assertNotUndefined} from 'shared/src/asserts.js';
-import {SinonFakeTimers, useFakeTimers} from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {newRandomHash} from '../hash.js';
@@ -13,7 +13,7 @@ import {
   initClientGC,
 } from './client-gc.js';
 import {makeClientV4, setClientsForTesting} from './clients-test-helpers.js';
-import {ClientMap, getClients, setClient} from './clients.js';
+import {type ClientMap, getClients, setClient} from './clients.js';
 
 let clock: SinonFakeTimers;
 const START_TIME = 0;

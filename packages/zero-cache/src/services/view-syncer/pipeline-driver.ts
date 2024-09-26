@@ -3,18 +3,18 @@ import {assert, unreachable} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {listTables} from 'zero-cache/src/db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from 'zero-cache/src/types/lite.js';
-import {RowKey} from 'zero-cache/src/types/row-key.js';
-import {TableSpec} from 'zero-cache/src/types/specs.js';
-import {AST} from 'zql/src/zql/ast/ast.js';
+import type {RowKey} from 'zero-cache/src/types/row-key.js';
+import type {TableSpec} from 'zero-cache/src/types/specs.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import {buildPipeline} from 'zql/src/zql/builder/builder.js';
-import {Change} from 'zql/src/zql/ivm/change.js';
-import {Node, Row} from 'zql/src/zql/ivm/data.js';
-import {Input, Storage} from 'zql/src/zql/ivm/operator.js';
-import {Schema} from 'zql/src/zql/ivm/schema.js';
-import {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
+import type {Change} from 'zql/src/zql/ivm/change.js';
+import type {Node, Row} from 'zql/src/zql/ivm/data.js';
+import type {Input, Storage} from 'zql/src/zql/ivm/operator.js';
+import type {Schema} from 'zql/src/zql/ivm/schema.js';
+import type {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
 import {TableSource} from 'zqlite/src/table-source.js';
-import {ClientGroupStorage} from './database-storage.js';
-import {SnapshotDiff, Snapshotter} from './snapshotter.js';
+import type {ClientGroupStorage} from './database-storage.js';
+import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
 
 export type RowAdd = {
   readonly type: 'add';

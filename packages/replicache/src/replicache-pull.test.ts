@@ -3,7 +3,7 @@ import {expect} from 'chai';
 import * as sinon from 'sinon';
 import type {VersionNotSupportedResponse} from './error-responses.js';
 import {getDefaultPuller} from './get-default-puller.js';
-import {Hash, emptyHash} from './hash.js';
+import {type Hash, emptyHash} from './hash.js';
 import type {Puller} from './puller.js';
 import {httpStatusUnauthorized} from './replicache.js';
 import {

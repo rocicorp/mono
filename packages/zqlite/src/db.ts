@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database, {
-  RunResult,
-  Statement as SQLite3Statement,
+  type RunResult,
+  type Statement as SQLite3Statement,
 } from 'better-sqlite3';
 
 export class Database {

@@ -1,13 +1,13 @@
 import {assert} from 'shared/src/asserts.js';
-import {JSONValue} from 'shared/src/json.js';
+import type {JSONValue} from 'shared/src/json.js';
 import {expect, suite, test} from 'vitest';
-import {Ordering} from '../ast/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
-import {Node, Row} from './data.js';
+import type {Node, Row} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import {PrimaryKey, SchemaValue} from './schema.js';
-import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
+import type {PrimaryKey, SchemaValue} from './schema.js';
+import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
 import {Take} from './take.js';
 
 suite('take with no partition', () => {

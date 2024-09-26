@@ -1,13 +1,17 @@
 import postgres from 'postgres';
 import {must} from 'shared/src/must.js';
+import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
 import {initializeChangeSource} from '../services/change-streamer/pg/change-source.js';
 import {runOrExit} from '../services/runner.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
+import {
+  parentWorker,
+  singleProcessMode,
+  type Worker,
+} from '../types/processes.js';
 import {createLogContext} from './logging.js';
-import {getZeroConfig} from '../config/zero-config.js';
 
 const MAX_CHANGE_DB_CONNECTIONS = 5;
 

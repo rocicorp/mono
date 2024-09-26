@@ -12,7 +12,7 @@ import {
   expectTables as expectLiteTables,
   initDB as initLiteDB,
 } from 'zero-cache/src/test/lite.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {replicationSlot} from './initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 

@@ -7,19 +7,19 @@ import {
   beforeEach,
   describe,
   expect,
-  MockedFunction,
+  type MockedFunction,
   test,
   vi,
 } from 'vitest';
 import WebSocket from 'ws';
-import {Source} from 'zero-cache/src/types/streams.js';
+import type {Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
 } from './change-streamer-http.js';
-import {
+import type {
   ChangeStreamer,
   Downstream,
   SubscriberContext,

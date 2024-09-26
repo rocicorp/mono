@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {
-  RowKey,
+  type RowKey,
   normalizedKeyOrder,
   rowIDHash,
   rowKeyString,

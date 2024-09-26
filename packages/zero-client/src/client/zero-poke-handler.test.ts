@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
-  MockInstance,
+  type MockInstance,
   afterEach,
   beforeEach,
   expect,
@@ -9,8 +9,8 @@ import {
   test,
   vi,
 } from 'vitest';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
-import {AST} from 'zql/src/zql/ast/ast.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use

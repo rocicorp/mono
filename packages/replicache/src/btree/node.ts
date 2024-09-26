@@ -7,8 +7,8 @@ import {
 } from 'shared/src/asserts.js';
 import {joinIterables} from 'shared/src/iterables.js';
 import {
-  JSONValue,
-  ReadonlyJSONValue,
+  type JSONValue,
+  type ReadonlyJSONValue,
   assertJSONValue,
 } from 'shared/src/json.js';
 import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
@@ -16,12 +16,12 @@ import {skipBTreeNodeAsserts} from '../config.js';
 import type {IndexKey} from '../db/index.js';
 import {FormatVersion} from '../format-version.js';
 import {
-  assertDeepFrozen,
-  deepFreeze,
   type FrozenJSONValue,
   type FrozenTag,
+  assertDeepFrozen,
+  deepFreeze,
 } from '../frozen-json.js';
-import {Hash, emptyHash, newRandomHash} from '../hash.js';
+import {type Hash, emptyHash, newRandomHash} from '../hash.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
 

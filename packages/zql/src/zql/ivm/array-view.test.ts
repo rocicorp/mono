@@ -2,12 +2,12 @@ import {assertArray, notImplemented, unreachable} from 'shared/src/asserts.js';
 import {stringCompare} from 'shared/src/string-compare.js';
 import {expect, test} from 'vitest';
 import {ArrayView} from './array-view.js';
-import {Change} from './change.js';
+import type {Change} from './change.js';
 import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import {Input} from './operator.js';
-import {Schema} from './schema.js';
+import type {Input} from './operator.js';
+import type {Schema} from './schema.js';
 import {Take} from './take.js';
 
 test('basics', () => {

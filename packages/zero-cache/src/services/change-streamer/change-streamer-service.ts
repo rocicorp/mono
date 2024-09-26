@@ -1,20 +1,23 @@
 import {LogContext} from '@rocicorp/logger';
 import {oneAfter} from 'zero-cache/src/types/lexi-version.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {Sink, Source} from 'zero-cache/src/types/streams.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {Sink, Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {RunningState} from '../running-state.js';
 import {
-  ChangeStreamerService,
-  Commit,
-  Downstream,
-  DownstreamChange,
+  type ChangeStreamerService,
+  type Commit,
+  type Downstream,
+  type DownstreamChange,
   ErrorType,
-  SubscriberContext,
+  type SubscriberContext,
 } from './change-streamer.js';
 import {Forwarder} from './forwarder.js';
 import {initChangeStreamerSchema} from './schema/init.js';
-import {ensureReplicationConfig, ReplicationConfig} from './schema/tables.js';
+import {
+  ensureReplicationConfig,
+  type ReplicationConfig,
+} from './schema/tables.js';
 import {Storer} from './storer.js';
 import {Subscriber} from './subscriber.js';
 

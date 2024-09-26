@@ -11,7 +11,7 @@ import {
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {PrimaryKey, Schema, SchemaValue} from './schema.js';
-import {PushMessage, Snitch, SnitchMessage} from './snitch.js';
+import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
 
 suite('fetch one:many', () => {
   const base = {

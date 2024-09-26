@@ -1,7 +1,7 @@
-import {expect, test} from 'vitest';
-import {CachedStatement, StatementCache} from './statement-cache.js';
-import {Database} from 'zqlite/src/db.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {expect, test} from 'vitest';
+import {Database} from 'zqlite/src/db.js';
+import {type CachedStatement, StatementCache} from './statement-cache.js';
 
 test('Same sql results in same statement instance. The same instance is not outstanding twice.', () => {
   const db = new Database(createSilentLogContext(), ':memory:');

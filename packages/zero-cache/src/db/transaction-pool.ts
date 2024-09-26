@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Resolver, resolver} from '@rocicorp/resolver';
+import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {Queue} from 'shared/src/queue.js';

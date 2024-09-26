@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {Source} from 'zero-cache/src/types/streams.js';
+import type {Source} from 'zero-cache/src/types/streams.js';
 import {Notifier} from './notifier.js';
-import {ReplicaState} from './replicator.js';
+import type {ReplicaState} from './replicator.js';
 
 describe('replicator/notifier', () => {
   let notifier: Notifier;

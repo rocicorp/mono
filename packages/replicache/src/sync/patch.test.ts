@@ -9,13 +9,13 @@ import {
   readIndexesForWrite,
 } from '../db/write.js';
 import {FormatVersion} from '../format-version.js';
+import {deepFreeze} from '../frozen-json.js';
 import {
-  PatchOperationInternal,
+  type PatchOperationInternal,
   assertPatchOperations,
 } from '../patch-operation.js';
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
-import {deepFreeze} from '../frozen-json.js';
 
 suite('patch', () => {
   const t = (formatVersion: FormatVersion) => {

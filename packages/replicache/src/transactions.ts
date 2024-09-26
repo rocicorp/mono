@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {greaterThan} from 'compare-utf8';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
-import {IndexKey, decodeIndexKey} from './db/index.js';
+import {type IndexKey, decodeIndexKey} from './db/index.js';
 import type {Read} from './db/read.js';
 import type {Write} from './db/write.js';
 import {deepFreeze} from './frozen-json.js';
@@ -9,10 +9,10 @@ import type {IndexDefinition} from './index-defs.js';
 import type {ScanResult} from './scan-iterator.js';
 import {ScanResultImpl, fromKeyForIndexScanInternal} from './scan-iterator.js';
 import {
-  KeyTypeForScanOptions,
-  ScanIndexOptions,
-  ScanNoIndexOptions,
-  ScanOptions,
+  type KeyTypeForScanOptions,
+  type ScanIndexOptions,
+  type ScanNoIndexOptions,
+  type ScanOptions,
   isScanIndexOptions,
   toDbScanOptions,
 } from './scan-options.js';

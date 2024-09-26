@@ -8,7 +8,7 @@ import type {
 } from 'zero-protocol';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {Subscription} from '../../types/subscription.js';
-import {ClientHandler, Patch, ensureSafeJSON} from './client-handler.js';
+import {ClientHandler, type Patch, ensureSafeJSON} from './client-handler.js';
 
 describe('view-syncer/client-handler', () => {
   test('poke handler', () => {

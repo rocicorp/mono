@@ -1,4 +1,4 @@
-import {WatermarkedChange} from './change-streamer-service.js';
+import type {WatermarkedChange} from './change-streamer-service.js';
 import {Subscriber} from './subscriber.js';
 
 export class Forwarder {

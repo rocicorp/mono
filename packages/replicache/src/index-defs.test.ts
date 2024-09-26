@@ -1,8 +1,8 @@
 import {expect} from 'chai';
 import {
-  IndexDefinition,
+  type IndexDefinition,
   indexDefinitionEqual,
-  IndexDefinitions,
+  type IndexDefinitions,
   indexDefinitionsEqual,
 } from './index-defs.js';
 

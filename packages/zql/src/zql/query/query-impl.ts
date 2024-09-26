@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {assert} from 'shared/src/asserts.js';
-import {AST, Ordering} from '../ast/ast.js';
-import {BuilderDelegate, buildPipeline} from '../builder/builder.js';
-import {ArrayView, Format} from '../ivm/array-view.js';
-import {Row} from '../ivm/data.js';
-import {
+import type {AST, Ordering} from '../ast/ast.js';
+import {type BuilderDelegate, buildPipeline} from '../builder/builder.js';
+import {ArrayView, type Format} from '../ivm/array-view.js';
+import type {Row} from '../ivm/data.js';
+import type {
   AddSelections,
   AddSubselect,
   DefaultQueryResultRow,
@@ -22,11 +22,11 @@ import {
 import {
   isFieldRelationship,
   isJunctionRelationship,
-  Lazy,
-  PullSchemaForRelationship,
-  Schema,
+  type Lazy,
+  type PullSchemaForRelationship,
+  type Schema,
 } from './schema.js';
-import {TypedView} from './typed-view.js';
+import type {TypedView} from './typed-view.js';
 
 export function newQuery<
   TSchema extends Schema,

@@ -1,6 +1,6 @@
-import {EditChange} from './change.js';
-import {Row} from './data.js';
-import {Output} from './operator.js';
+import type {EditChange} from './change.js';
+import type {Row} from './data.js';
+import type {Output} from './operator.js';
 
 /**
  * This takes an {@linkcode EditChange} and a predicate that determines if a row

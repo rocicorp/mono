@@ -1,9 +1,8 @@
 import {assert} from 'shared/src/asserts.js';
-import {SimpleOperator, Condition} from '../ast/ast.js';
-import {Row, Value} from '../ivm/data.js';
+import type {Condition, Parameter, SimpleOperator} from '../ast/ast.js';
+import type {Row, Value} from '../ivm/data.js';
+import type {StaticQueryParameters} from './builder.js';
 import {getLikePredicate} from './like.js';
-import {StaticQueryParameters} from './builder.js';
-import {Parameter} from '../ast/ast.js';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
 export type SimplePredicate = (rhs: NonNullValue) => boolean;

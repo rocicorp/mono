@@ -1,4 +1,4 @@
-import {SendHandle} from 'child_process';
+import type {SendHandle} from 'child_process';
 import {describe, expect, test, vi} from 'vitest';
 import {inProcChannel} from './processes.js';
 

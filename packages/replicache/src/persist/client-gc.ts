@@ -3,7 +3,7 @@ import {initBgIntervalProcess} from '../bg-interval.js';
 import type {Store} from '../dag/store.js';
 import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
-import {ClientMap, getClients, setClients} from './clients.js';
+import {type ClientMap, getClients, setClients} from './clients.js';
 
 /**
  * The maximum time a client can be inactive before it is garbage collected.

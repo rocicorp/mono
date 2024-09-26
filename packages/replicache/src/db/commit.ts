@@ -9,16 +9,16 @@ import {
 } from 'shared/src/asserts.js';
 import {assertJSONValue} from 'shared/src/json.js';
 import {skipCommitDataAsserts} from '../config.js';
-import {FrozenCookie, compareCookies} from '../cookies.js';
-import {toRefs, type Chunk, type CreateChunk, type Refs} from '../dag/chunk.js';
-import {MustGetChunk, Read, mustGetHeadHash} from '../dag/store.js';
+import {type FrozenCookie, compareCookies} from '../cookies.js';
+import {type Chunk, type CreateChunk, type Refs, toRefs} from '../dag/chunk.js';
+import {type MustGetChunk, type Read, mustGetHeadHash} from '../dag/store.js';
 import {
-  FrozenTag,
+  type FrozenJSONValue,
+  type FrozenTag,
   assertDeepFrozen,
   deepFreeze,
-  type FrozenJSONValue,
 } from '../frozen-json.js';
-import {Hash, assertHash} from '../hash.js';
+import {type Hash, assertHash} from '../hash.js';
 import type {IndexDefinition} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 

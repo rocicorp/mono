@@ -1,14 +1,22 @@
 import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
-import Fastify, {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
 import * as v from 'shared/src/valita.js';
 import WebSocket from 'ws';
 import {jsonValueSchema} from 'zero-cache/src/types/bigint-json.js';
-import {Source, streamIn, streamOut} from 'zero-cache/src/types/streams.js';
+import {
+  type Source,
+  streamIn,
+  streamOut,
+} from 'zero-cache/src/types/streams.js';
 import {URLParams} from 'zero-cache/src/types/url-params.js';
 import {RunningState} from '../running-state.js';
-import {Service} from '../service.js';
-import {
+import type {Service} from '../service.js';
+import type {
   ChangeStreamer,
   Downstream,
   SubscriberContext,

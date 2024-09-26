@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {AST, normalizeAST} from './ast.js';
+import {type AST, normalizeAST} from './ast.js';
 
 test('fields are placed into correct positions', () => {
   function normalizeAndStringify(ast: AST) {

@@ -2,7 +2,12 @@ import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
-import {assertHash, fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
+import {
+  assertHash,
+  fakeHash,
+  type Hash,
+  makeNewFakeHashFunction,
+} from '../hash.js';
 import type {Read, Store} from '../kv/store.js';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {
@@ -11,7 +16,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from '../with-transactions.js';
-import {Chunk, createChunk, Refs, toRefs} from './chunk.js';
+import {Chunk, createChunk, type Refs, toRefs} from './chunk.js';
 import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
 import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.js';
 import {ChunkNotFoundError} from './store.js';

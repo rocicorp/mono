@@ -6,7 +6,7 @@ import {
   beforeEach,
   describe,
   expect,
-  MockedFunction,
+  type MockedFunction,
   test,
   vi,
 } from 'vitest';
@@ -15,7 +15,7 @@ import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {dropReplicationSlot, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {
+import type {
   Downstream,
   SubscriberContext,
 } from '../change-streamer/change-streamer.js';

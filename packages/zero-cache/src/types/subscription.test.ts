@@ -1,7 +1,7 @@
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';
 import {describe, expect, test, vi} from 'vitest';
-import {Result, Subscription} from './subscription.js';
+import {type Result, Subscription} from './subscription.js';
 
 describe('types/subscription', () => {
   test('cancel', async () => {

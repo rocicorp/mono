@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
-import {PostgresDB, typeNameByOID} from '../types/pg.js';
+import {type PostgresDB, typeNameByOID} from '../types/pg.js';
 import type {RowKey, RowKeyType} from '../types/row-key.js';
 
 /**

@@ -7,9 +7,9 @@ import type {NormalizedValue, Row} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import {Input} from './operator.js';
+import type {Input} from './operator.js';
 import type {PrimaryKey, SchemaValue} from './schema.js';
-import {Snitch, SnitchMessage} from './snitch.js';
+import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 
 suite('sibling relationships tests with issues, comments, and owners', () => {

@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {Service} from './service.js';
+import type {Service} from './service.js';
 
 /**
  * Manages the creation and lifecycle of objects that implement

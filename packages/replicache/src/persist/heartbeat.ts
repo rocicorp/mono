@@ -4,7 +4,7 @@ import type {Store} from '../dag/store.js';
 import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
 import {
-  ClientMap,
+  type ClientMap,
   ClientStateNotFoundError,
   getClients,
   setClients,

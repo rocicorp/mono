@@ -2,8 +2,8 @@ import {compareUTF8} from 'compare-utf8';
 import {describe, expect, test} from 'vitest';
 import {parse, stringify} from './bigint-json.js';
 import {
-  InvalidationFilterSpec,
-  InvalidationTag,
+  type InvalidationFilterSpec,
+  type InvalidationTag,
   invalidationHash,
   normalizeFilterSpec,
   parseFilterSpec,

@@ -8,12 +8,12 @@ import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {ErrorKind, initConnectionMessageSchema} from 'zero-protocol';
 import {
-  Mutation,
+  type Mutation,
   MutationType,
   pushMessageSchema,
 } from 'zero-protocol/src/push.js';
 import type {NullableVersion} from 'zero-protocol/src/version.js';
-import {AST} from 'zql/src/zql/ast/ast.js';
+import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
@@ -34,7 +34,7 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-  SchemaDefs,
+  type SchemaDefs,
   createSocket,
   serverAheadReloadReason,
 } from './zero.js';

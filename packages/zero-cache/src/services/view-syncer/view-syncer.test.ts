@@ -14,7 +14,7 @@ import {Database} from 'zqlite/src/db.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
-import {ReplicaState} from '../replicator/replicator.js';
+import type {ReplicaState} from '../replicator/replicator.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {
   initReplicationState,
@@ -24,14 +24,14 @@ import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
 import {CVRStore} from './cvr-store.js';
 import {CVRQueryDrivenUpdater} from './cvr.js';
 import {
-  ClientGroupStorage,
+  type ClientGroupStorage,
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from './database-storage.js';
 import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
-import {SyncContext, ViewSyncerService} from './view-syncer.js';
+import {type SyncContext, ViewSyncerService} from './view-syncer.js';
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',

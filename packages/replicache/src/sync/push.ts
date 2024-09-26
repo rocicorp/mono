@@ -6,8 +6,8 @@ import * as valita from 'shared/src/valita.js';
 import type {Store} from '../dag/store.js';
 import {
   DEFAULT_HEAD_NAME,
-  LocalMetaDD31,
-  LocalMetaSDD,
+  type LocalMetaDD31,
+  type LocalMetaSDD,
   commitIsLocalDD31,
   commitIsLocalSDD,
   localMutations,
@@ -15,19 +15,19 @@ import {
 import type {FrozenJSONValue} from '../frozen-json.js';
 import {
   PushError,
-  Pusher,
-  PusherResult,
+  type Pusher,
+  type PusherResult,
   assertPusherResult,
 } from '../pusher.js';
+import {ReportError} from '../replicache.js';
 import {toError} from '../to-error.js';
 import {withRead} from '../with-transactions.js';
 import {
-  clientGroupIDSchema,
-  clientIDSchema,
   type ClientGroupID,
   type ClientID,
+  clientGroupIDSchema,
+  clientIDSchema,
 } from './ids.js';
-import {ReportError} from '../replicache.js';
 
 export const PUSH_VERSION_SDD = 0;
 export const PUSH_VERSION_DD31 = 1;

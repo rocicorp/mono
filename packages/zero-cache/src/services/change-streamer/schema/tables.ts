@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {equals} from 'shared/src/set-utils.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {Change} from './change.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {Change} from './change.js';
 
 export const PG_SCHEMA = 'cdc';
 

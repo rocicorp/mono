@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {
-  CVRVersion,
+  type CVRVersion,
   cmpVersions,
   cookieToVersion,
   oneAfter,

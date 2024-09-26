@@ -1,6 +1,6 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test, vi} from 'vitest';
-import {ReplicaState} from 'zero-cache/src/services/replicator/replicator.js';
+import type {ReplicaState} from 'zero-cache/src/services/replicator/replicator.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
 import {orTimeout} from '../types/timeout.js';

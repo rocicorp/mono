@@ -8,16 +8,16 @@ import type {FrozenCookie} from '../cookies.js';
 import type {Write as DagWrite} from '../dag/store.js';
 import {FormatVersion} from '../format-version.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
-import {Hash, emptyHash} from '../hash.js';
+import {type Hash, emptyHash} from '../hash.js';
 import {lazy} from '../lazy.js';
 import type {DiffComputationConfig} from '../sync/diff.js';
 import {DiffsMap} from '../sync/diff.js';
 import type {ClientID} from '../sync/ids.js';
 import {
   Commit,
-  Meta as CommitMeta,
-  IndexRecord,
-  Meta,
+  type Meta as CommitMeta,
+  type IndexRecord,
+  type Meta,
   MetaType,
   baseSnapshotHashFromHash,
   commitFromHash,

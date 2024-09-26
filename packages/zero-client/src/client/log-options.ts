@@ -5,7 +5,7 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
-import {DatadogLogSink, DatadogLogSinkOptions} from 'datadog';
+import {DatadogLogSink, type DatadogLogSinkOptions} from 'datadog';
 import {version} from './version.js';
 
 class LevelFilterLogSink implements LogSink {

@@ -14,7 +14,7 @@ import {
   clientGroupHasPendingMutations,
   getClientGroups,
 } from './client-groups.js';
-import {ClientMap, getClients} from './clients.js';
+import {type ClientMap, getClients} from './clients.js';
 import type {IndexedDBDatabase} from './idb-databases-store.js';
 import {IDBDatabasesStore} from './idb-databases-store.js';
 

@@ -1,4 +1,4 @@
-import {Schema} from 'zql/src/zql/query/schema.js';
+import type {Schema} from 'zql/src/zql/query/schema.js';
 
 const memberSchema: Schema = {
   tableName: 'member',
@@ -108,4 +108,4 @@ export const schema = {
 } as const;
 
 type AppSchema = typeof schema;
-export {AppSchema as Schema};
+export type {AppSchema as Schema};

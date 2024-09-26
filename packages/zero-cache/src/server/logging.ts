@@ -1,7 +1,7 @@
 import {LogContext, TeeLogSink, consoleLogSink} from '@rocicorp/logger';
 import {DatadogLogSink} from 'datadog/src/datadog-log-sink.js';
 import {pid} from 'node:process';
-import {LogConfig} from '../config/zero-config.js';
+import type {LogConfig} from '../config/zero-config.js';
 
 const DATADOG_SOURCE = 'zeroWorker';
 

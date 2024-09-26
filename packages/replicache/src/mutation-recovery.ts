@@ -7,8 +7,8 @@ import {StoreImpl} from './dag/store-impl.js';
 import type {Store} from './dag/store.js';
 import {DEFAULT_HEAD_NAME} from './db/commit.js';
 import {
-  ClientStateNotFoundResponse,
-  VersionNotSupportedResponse,
+  type ClientStateNotFoundResponse,
+  type VersionNotSupportedResponse,
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
@@ -20,15 +20,15 @@ import {assertHash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
 import {
-  ClientGroup,
-  ClientGroupMap,
+  type ClientGroup,
+  type ClientGroupMap,
   getClientGroups,
   disableClientGroup as persistDisableClientGroup,
   setClientGroups,
 } from './persist/client-groups.js';
 import {
-  Client,
-  ClientMap,
+  type Client,
+  type ClientMap,
   assertClientV4,
   getClients,
   setClients,

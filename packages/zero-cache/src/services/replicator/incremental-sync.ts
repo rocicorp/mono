@@ -10,11 +10,11 @@ import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {liteTableName} from '../../types/names.js';
 import type {Source} from '../../types/streams.js';
-import {
+import type {
   ChangeStreamer,
   DownstreamChange,
 } from '../change-streamer/change-streamer.js';
-import {
+import type {
   Change,
   MessageCommit,
   MessageDelete,
@@ -23,9 +23,9 @@ import {
   MessageUpdate,
 } from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
-import {Checkpointer} from './checkpointer.js';
+import type {Checkpointer} from './checkpointer.js';
 import {Notifier} from './notifier.js';
-import {ReplicaState} from './replicator.js';
+import type {ReplicaState} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
 import {
   ZERO_VERSION_COLUMN_NAME,

@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from 'zero-cache/src/test/db.js';
-import {PublicationInfo, getPublicationInfo} from './published.js';
+import {type PublicationInfo, getPublicationInfo} from './published.js';
 
 describe('tables/published', () => {
   type Case = {

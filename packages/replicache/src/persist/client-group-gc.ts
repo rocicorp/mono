@@ -3,7 +3,7 @@ import {initBgIntervalProcess} from '../bg-interval.js';
 import type {Store} from '../dag/store.js';
 import {withWrite} from '../with-transactions.js';
 import {
-  ClientGroupMap,
+  type ClientGroupMap,
   clientGroupHasPendingMutations,
   getClientGroups,
   setClientGroups,

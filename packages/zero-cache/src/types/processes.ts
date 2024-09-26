@@ -1,4 +1,9 @@
-import {ChildProcess, fork, SendHandle, Serializable} from 'child_process';
+import {
+  ChildProcess,
+  fork,
+  type SendHandle,
+  type Serializable,
+} from 'child_process';
 import EventEmitter from 'events';
 import path from 'path';
 

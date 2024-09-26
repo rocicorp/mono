@@ -3,7 +3,7 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {sleep} from 'shared/src/sleep.js';
 import {describe, expect, test} from 'vitest';
 import {ServiceRunner} from './runner.js';
-import {Service} from './service.js';
+import type {Service} from './service.js';
 
 describe('services/runner', () => {
   class TestService implements Service {

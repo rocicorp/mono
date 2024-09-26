@@ -1,4 +1,4 @@
-import {Ordering} from '../ast/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import type {Row} from './data.js';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null';

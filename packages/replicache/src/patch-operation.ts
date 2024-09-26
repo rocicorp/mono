@@ -1,7 +1,7 @@
 import {assertArray, assertObject, assertString} from 'shared/src/asserts.js';
 import {
-  ReadonlyJSONObject,
-  ReadonlyJSONValue,
+  type ReadonlyJSONObject,
+  type ReadonlyJSONValue,
   assertJSONObject,
   assertJSONValue,
 } from 'shared/src/json.js';

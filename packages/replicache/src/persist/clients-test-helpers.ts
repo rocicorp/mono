@@ -4,8 +4,8 @@ import {emptyDataNode} from '../btree/node.js';
 import {Chunk} from '../dag/chunk.js';
 import type {Store} from '../dag/store.js';
 import {
-  CommitData,
-  SnapshotMetaSDD,
+  type CommitData,
+  type SnapshotMetaSDD,
   baseSnapshotFromHash,
   getRefs,
   newSnapshotCommitDataSDD,
@@ -16,12 +16,12 @@ import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
 import {
-  Client,
-  ClientMap,
-  ClientMapDD31,
-  ClientV4,
-  ClientV5,
-  ClientV6,
+  type Client,
+  type ClientMap,
+  type ClientMapDD31,
+  type ClientV4,
+  type ClientV5,
+  type ClientV6,
   getClients,
   initClientV6,
   isClientV4,

@@ -4,13 +4,13 @@ import {
   LicenseStatus,
   PROD_LICENSE_SERVER_URL,
   TEST_LICENSE_KEY,
-} from '@rocicorp/licensing/src/client';
+} from '@rocicorp/licensing/out/client';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
-import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {getDocument} from 'shared/src/browser-env.js';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import type {MaybePromise} from 'shared/src/types.js';
 import {initBgIntervalProcess} from './bg-interval.js';
@@ -19,12 +19,12 @@ import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
 import {assertCookie, type Cookie} from './cookies.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
-import {ChunkNotFoundError, mustGetHeadHash, Store} from './dag/store.js';
+import {ChunkNotFoundError, mustGetHeadHash, type Store} from './dag/store.js';
 import {
   baseSnapshotFromHash,
   DEFAULT_HEAD_NAME,
   isLocalMetaDD31,
-  LocalMeta,
+  type LocalMeta,
 } from './db/commit.js';
 import {readFromDefaultHead} from './db/read.js';
 import {rebaseMutationAndCommit} from './db/rebase.js';
@@ -32,13 +32,13 @@ import {newWriteLocal} from './db/write.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
-  VersionNotSupportedResponse,
+  type VersionNotSupportedResponse,
 } from './error-responses.js';
 import {FormatVersion} from './format-version.js';
 import {deepFreeze} from './frozen-json.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
-import {assertHash, emptyHash, Hash, newRandomHash} from './hash.js';
+import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {StoreProvider} from './kv/store.js';
@@ -47,10 +47,13 @@ import {MutationRecovery} from './mutation-recovery.js';
 import {initNewClientChannel} from './new-client-channel.js';
 import {
   initOnPersistChannel,
-  OnPersist,
-  PersistInfo,
+  type OnPersist,
+  type PersistInfo,
 } from './on-persist-channel.js';
-import {PendingMutation, pendingMutationsForAPI} from './pending-mutations.js';
+import {
+  type PendingMutation,
+  pendingMutationsForAPI,
+} from './pending-mutations.js';
 import {
   CLIENT_MAX_INACTIVE_TIME,
   GC_INTERVAL,
@@ -59,7 +62,7 @@ import {
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
 import {
-  ClientMap,
+  type ClientMap,
   ClientStateNotFoundError,
   initClientV6,
   hasClientState as persistHasClientState,
@@ -73,14 +76,14 @@ import {
 import {HEARTBEAT_INTERVAL, startHeartbeats} from './persist/heartbeat.js';
 import {
   IDBDatabasesStore,
-  IndexedDBDatabase,
+  type IndexedDBDatabase,
 } from './persist/idb-databases-store.js';
 import {makeClientID} from './persist/make-client-id.js';
 import {persistDD31} from './persist/persist.js';
 import {refresh} from './persist/refresh.js';
 import {ProcessScheduler} from './process-scheduler.js';
 import type {Puller} from './puller.js';
-import {Pusher, PushError} from './pusher.js';
+import {type Pusher, PushError} from './pusher.js';
 import type {ReplicacheOptions} from './replicache-options.js';
 import {
   getKVStoreProvider,
@@ -91,14 +94,14 @@ import {
 import {setIntervalWithSignal} from './set-interval-with-signal.js';
 import {mustSimpleFetch} from './simple-fetch.js';
 import {
-  SubscribeOptions,
+  type SubscribeOptions,
   SubscriptionImpl,
-  SubscriptionsManager,
+  type SubscriptionsManager,
   SubscriptionsManagerImpl,
-  WatchCallback,
-  WatchCallbackForOptions,
-  WatchNoIndexCallback,
-  WatchOptions,
+  type WatchCallback,
+  type WatchCallbackForOptions,
+  type WatchNoIndexCallback,
+  type WatchOptions,
   WatchSubscription,
 } from './subscriptions.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';

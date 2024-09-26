@@ -1,7 +1,8 @@
 import {expect} from 'chai';
 import {assert} from 'shared/src/asserts.js';
-import {JSONObject, assertJSONObject} from 'shared/src/json.js';
+import {type JSONObject, assertJSONObject} from 'shared/src/json.js';
 import {randomUint64} from 'shared/src/random-uint64.js';
+import {stringCompare} from 'shared/src/string-compare.js';
 import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
@@ -26,19 +27,18 @@ import {
 } from './persist/clients.js';
 import type {PullResponseV0, PullResponseV1} from './puller.js';
 import type {PushResponse} from './pusher.js';
-import {stringCompare} from 'shared/src/string-compare.js';
 import type {ClientID} from './sync/ids.js';
 import {
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
-  PullRequestV0,
-  PullRequestV1,
+  type PullRequestV0,
+  type PullRequestV1,
 } from './sync/pull.js';
 import {
   PUSH_VERSION_DD31,
   PUSH_VERSION_SDD,
-  PushRequestV0,
-  PushRequestV1,
+  type PushRequestV0,
+  type PushRequestV1,
   assertPushRequestV1,
 } from './sync/push.js';
 import {

@@ -1,7 +1,7 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
 import {Database} from 'zqlite/src/db.js';
-import {TableSpec} from '../types/specs.js';
+import type {TableSpec} from '../types/specs.js';
 import {listTables} from './lite-tables.js';
 
 describe('tables/list', () => {

@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import Fastify, {FastifyInstance} from 'fastify';
+import Fastify, {type FastifyInstance} from 'fastify';
 import {IncomingMessage} from 'http';
 import {h32} from 'zero-cache/src/types/xxhash.js';
-import {Worker} from '../../types/processes.js';
-import {Service} from '../service.js';
+import type {Worker} from '../../types/processes.js';
+import type {Service} from '../service.js';
 import {getConnectParams} from './connect-params.js';
 import {installWebSocketHandoff} from './websocket-handoff.js';
 

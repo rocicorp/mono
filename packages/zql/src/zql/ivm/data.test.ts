@@ -1,14 +1,14 @@
+import {compareUTF8} from 'compare-utf8';
+import fc from 'fast-check';
 import {expect, test} from 'vitest';
+import type {Ordering} from '../ast/ast.js';
 import {
-  Row,
+  type Row,
   compareValues,
   makeComparator,
   normalizeUndefined,
   valuesEqual,
 } from './data.js';
-import fc from 'fast-check';
-import {compareUTF8} from 'compare-utf8';
-import type {Ordering} from '../ast/ast.js';
 
 test('normalizeUndefined', () => {
   fc.assert(

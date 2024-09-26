@@ -4,18 +4,22 @@ import {pid} from 'node:process';
 import postgres from 'postgres';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
+import {getZeroConfig} from '../config/zero-config.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
-import {ReplicaState} from '../services/replicator/replicator.js';
+import type {ReplicaState} from '../services/replicator/replicator.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
 import {postgresTypeConfig} from '../types/pg.js';
-import {parentWorker, singleProcessMode, Worker} from '../types/processes.js';
+import {
+  parentWorker,
+  singleProcessMode,
+  type Worker,
+} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
 import {createLogContext} from './logging.js';
-import {getZeroConfig} from '../config/zero-config.js';
 
 export default async function runWorker(parent: Worker) {
   const config = await getZeroConfig();

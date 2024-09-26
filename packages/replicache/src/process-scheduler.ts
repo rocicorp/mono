@@ -1,4 +1,4 @@
-import {Resolver, resolver} from '@rocicorp/resolver';
+import {type Resolver, resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
 import {assert} from 'shared/src/asserts.js';
 import {sleep} from 'shared/src/sleep.js';

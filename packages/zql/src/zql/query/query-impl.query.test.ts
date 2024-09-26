@@ -1,13 +1,14 @@
 import {deepClone} from 'shared/src/deep-clone.js';
 import {describe, expect, test} from 'vitest';
+import type {AST} from '../ast/ast.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
-import {Storage} from '../ivm/operator.js';
-import {Source} from '../ivm/source.js';
+import type {Storage} from '../ivm/operator.js';
+import type {Source} from '../ivm/source.js';
 import {
-  CommitListener,
+  type CommitListener,
   newQuery,
-  QueryDelegate,
+  type QueryDelegate,
   QueryImpl,
 } from './query-impl.js';
 import {
@@ -18,7 +19,6 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
-import {AST} from '../ast/ast.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();

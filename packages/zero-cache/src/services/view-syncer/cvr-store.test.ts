@@ -1,11 +1,11 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from 'zero-cache/src/test/db.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {CVRStore} from './cvr-store.js';
-import {CVRSnapshot} from './cvr.js';
-import {RowsRow, setupCVRTables} from './schema/cvr.js';
-import {CVRVersion} from './schema/types.js';
+import type {CVRSnapshot} from './cvr.js';
+import {type RowsRow, setupCVRTables} from './schema/cvr.js';
+import type {CVRVersion} from './schema/types.js';
 
 describe('view-syncer/cvr-store', () => {
   const lc = createSilentLogContext();

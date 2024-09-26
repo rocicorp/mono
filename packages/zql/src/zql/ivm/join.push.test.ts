@@ -8,7 +8,7 @@ import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {PrimaryKey, SchemaValue} from './schema.js';
-import {Snitch, SnitchMessage} from './snitch.js';
+import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 
 suite('push one:many', () => {

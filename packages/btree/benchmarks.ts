@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 /* eslint-disable */
-import BTree, {IMap} from './b+tree.js';
+import BTree from './b+tree.js';
 import SortedArray from './sorted-array.js';
 // Note: The `bintrees` package also includes a `BinTree` type which turned
 // out to be an unbalanced binary tree. It is faster than `RBTree` for

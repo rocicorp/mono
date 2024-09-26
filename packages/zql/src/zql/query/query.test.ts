@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
-import {Query} from './query.js';
-import {Schema} from './schema.js';
 import {staticParam} from './query-impl.js';
+import type {Query} from './query.js';
+import type {Schema} from './schema.js';
 
 const mockQuery = {
   select() {

@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/ban-types */
-import {Row} from '../ivm/data.js';
-import {SchemaValue} from '../ivm/schema.js';
-import {Source} from '../ivm/source.js';
-import {PullSchemaForRelationship, Schema} from './schema.js';
-import {TypedView} from './typed-view.js';
+import type {Row} from '../ivm/data.js';
+import type {SchemaValue} from '../ivm/schema.js';
+import type {Source} from '../ivm/source.js';
+import type {PullSchemaForRelationship, Schema} from './schema.js';
+import type {TypedView} from './typed-view.js';
 
 /**
  * The type that can be passed into `select()`. A selector

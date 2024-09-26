@@ -1,14 +1,12 @@
 // https://vercel.com/templates/other/fastify-serverless-function
-import Fastify, {FastifyReply, FastifyRequest} from 'fastify';
 import cookie from '@fastify/cookie';
-import oauthPlugin from '@fastify/oauth2';
-import 'dotenv/config';
+import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import postgres from 'postgres';
+import 'dotenv/config';
+import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import {SignJWT} from 'jose';
-
-import {OAuth2Namespace} from '@fastify/oauth2';
 import {nanoid} from 'nanoid';
+import postgres from 'postgres';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -31,6 +29,8 @@ fastify.register(oauthPlugin, {
       id: process.env.GITHUB_CLIENT_ID as string,
       secret: process.env.GITHUB_CLIENT_SECRET as string,
     },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore Not clear why this is not working when type checking with tsconfig.node.ts
     auth: oauthPlugin.GITHUB_CONFIGURATION,
   },
   startRedirectPath: '/api/login/github',

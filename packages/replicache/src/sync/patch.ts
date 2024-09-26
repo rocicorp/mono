@@ -1,9 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Write} from '../db/write.js';
-import {FrozenJSONObject, FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import type {PatchOperationInternal} from '../patch-operation.js';
 import {assertObject} from 'shared/src/asserts.js';
 import type {ReadonlyJSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
+import type {Write} from '../db/write.js';
+import {
+  type FrozenJSONObject,
+  type FrozenJSONValue,
+  deepFreeze,
+} from '../frozen-json.js';
+import type {PatchOperationInternal} from '../patch-operation.js';
 
 export async function apply(
   lc: LogContext,

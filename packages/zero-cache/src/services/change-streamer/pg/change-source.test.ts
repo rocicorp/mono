@@ -15,11 +15,11 @@ import {
   versionFromLexi,
   versionToLexi,
 } from 'zero-cache/src/types/lexi-version.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {Source} from 'zero-cache/src/types/streams.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {Source} from 'zero-cache/src/types/streams.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
-import {ChangeSource} from '../change-streamer-service.js';
-import {Commit, DownstreamChange} from '../change-streamer.js';
+import type {ChangeSource} from '../change-streamer-service.js';
+import type {Commit, DownstreamChange} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';

@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {newQuery, QueryDelegate, QueryImpl} from './query-impl.js';
+import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
 import {issueSchema} from './test/testSchemas.js';
 
 const mockDelegate = {} as QueryDelegate;

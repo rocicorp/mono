@@ -4,8 +4,8 @@ import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../test/db.js';
 import {
-  SchemaVersions,
-  VersionMigrationMap,
+  type SchemaVersions,
+  type VersionMigrationMap,
   getSchemaVersions,
   runSchemaMigrations,
 } from './migration.js';

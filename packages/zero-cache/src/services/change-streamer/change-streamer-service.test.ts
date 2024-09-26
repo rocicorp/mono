@@ -7,8 +7,8 @@ import {Queue} from 'shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {testDBs} from 'zero-cache/src/test/db.js';
-import {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {Source} from 'zero-cache/src/types/streams.js';
+import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+import type {Source} from 'zero-cache/src/types/streams.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {
@@ -17,13 +17,13 @@ import {
 } from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {initializeStreamer} from './change-streamer-service.js';
-import {
+import type {
   ChangeStreamerService,
   Commit,
   Downstream,
   DownstreamChange,
 } from './change-streamer.js';
-import {ChangeLogEntry} from './schema/tables.js';
+import type {ChangeLogEntry} from './schema/tables.js';
 
 describe('change-streamer/service', () => {
   let lc: LogContext;

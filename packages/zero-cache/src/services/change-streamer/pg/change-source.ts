@@ -14,17 +14,17 @@ import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {max, oneAfter} from 'zero-cache/src/types/lexi-version.js';
 import {
-  PostgresDB,
+  type PostgresDB,
   postgresTypeConfig,
   registerPostgresTypeParsers,
 } from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
-import {ChangeSource, ChangeStream} from '../change-streamer-service.js';
-import {Commit, DownstreamChange} from '../change-streamer.js';
-import {Change} from '../schema/change.js';
-import {ReplicationConfig} from '../schema/tables.js';
+import type {ChangeSource, ChangeStream} from '../change-streamer-service.js';
+import type {Commit, DownstreamChange} from '../change-streamer.js';
+import type {Change} from '../schema/change.js';
+import type {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
 import {initSyncSchema} from './sync-schema.js';

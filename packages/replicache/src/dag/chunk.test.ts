@@ -1,8 +1,8 @@
 import {expect} from 'chai';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
-import {fakeHash, Hash, makeNewFakeHashFunction} from '../hash.js';
-import {Chunk, createChunk, Refs, toRefs} from './chunk.js';
+import {fakeHash, type Hash, makeNewFakeHashFunction} from '../hash.js';
+import {Chunk, createChunk, type Refs, toRefs} from './chunk.js';
 
 test('round trip', () => {
   const chunkHasher = makeNewFakeHashFunction();

@@ -1,7 +1,7 @@
 import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import Fastify, {FastifyInstance} from 'fastify';
+import Fastify, {type FastifyInstance} from 'fastify';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {Queue} from 'shared/src/queue.js';
 import {randInt} from 'shared/src/rand.js';
@@ -9,7 +9,7 @@ import {sleep} from 'shared/src/sleep.js';
 import * as v from 'shared/src/valita.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
-import {Source, streamIn, streamOut} from './streams.js';
+import {type Source, streamIn, streamOut} from './streams.js';
 import {Subscription} from './subscription.js';
 
 const messageSchema = v.object({

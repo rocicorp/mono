@@ -1,8 +1,11 @@
-import process from 'node:process';
 import 'dotenv/config';
-import {defineConfig, Queries} from 'zero-cache/src/config/define-config.js';
-import {must} from 'shared/src/must';
-import {Schema, schema} from './src/domain/schema-shared';
+import process from 'node:process';
+import {must} from 'shared/src/must.js';
+import {
+  defineConfig,
+  type Queries,
+} from 'zero-cache/src/config/define-config.js';
+import {type Schema, schema} from './src/domain/schema-shared.js';
 
 type AuthData = {sub: string};
 

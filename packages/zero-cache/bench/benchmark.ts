@@ -3,8 +3,8 @@
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {must} from 'shared/src/must.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
-import {Source} from 'zql/src/zql/ivm/source.js';
-import {newQuery, QueryDelegate} from 'zql/src/zql/query/query-impl.js';
+import type {Source} from 'zql/src/zql/ivm/source.js';
+import {newQuery, type QueryDelegate} from 'zql/src/zql/query/query-impl.js';
 import {Database} from 'zqlite/src/db.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import {listTables} from '../src/db/lite-tables.js';

@@ -4,7 +4,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {expectTables} from 'zero-cache/src/test/lite.js';
 import {Database} from 'zqlite/src/db.js';
-import {DownstreamChange} from '../change-streamer/change-streamer.js';
+import type {DownstreamChange} from '../change-streamer/change-streamer.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,

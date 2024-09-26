@@ -1,14 +1,14 @@
-import {JSONValue} from 'shared/src/json.js';
+import type {JSONValue} from 'shared/src/json.js';
 import {describe, expect, suite, test} from 'vitest';
-import {Ordering} from '../ast/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
-import {Change} from './change.js';
-import {Row, Value} from './data.js';
+import type {Change} from './change.js';
+import type {Row, Value} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import {PrimaryKey, SchemaValue} from './schema.js';
-import {Snitch, SnitchMessage} from './snitch.js';
-import {SourceChange} from './source.js';
+import type {PrimaryKey, SchemaValue} from './schema.js';
+import {Snitch, type SnitchMessage} from './snitch.js';
+import type {SourceChange} from './source.js';
 import {Take} from './take.js';
 
 suite('take with no partition', () => {

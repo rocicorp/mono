@@ -1,7 +1,7 @@
-import {QueryDefs} from 'zero-client';
-import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
-import {Database} from 'zqlite/src/db.js';
 import {LogContext} from '@rocicorp/logger';
+import type {QueryDefs} from 'zero-client';
+import {Database} from 'zqlite/src/db.js';
+import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
 
 export function newSqliteZero<QD extends QueryDefs>(
   lc: LogContext,

@@ -1,12 +1,12 @@
 import {describe, expect, test} from 'vitest';
-import {Ordering} from '../ast/ast.js';
+import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';
-import {Row} from './data.js';
+import type {Row} from './data.js';
 import {compareRowsTest} from './data.test.js';
 import {
   generateWithOverlayInner,
   MemorySource,
-  Overlay,
+  type Overlay,
   overlayForConstraintForTest,
   overlayForStartAtForTest,
 } from './memory-source.js';

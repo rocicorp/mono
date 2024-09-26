@@ -1,7 +1,7 @@
-import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
-import {SchemaDefs, Zero} from 'zero-client/src/client/zero.js';
-import {test} from 'vitest';
 import {LogContext} from '@rocicorp/logger';
+import {test} from 'vitest';
+import {type SchemaDefs, Zero} from 'zero-client/src/client/zero.js';
+import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
 
 type CreateZeroFunction = <SD extends SchemaDefs>(
   lc: LogContext,

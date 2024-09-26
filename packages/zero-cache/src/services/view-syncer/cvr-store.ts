@@ -1,39 +1,39 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {MaybeRow, PendingQuery} from 'postgres';
+import type {MaybeRow, PendingQuery} from 'postgres';
 import {assert} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
-import {deepEqual, ReadonlyJSONValue} from 'shared/src/json.js';
+import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
 import {astSchema} from 'zero-protocol';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {versionToLexi} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
-import {Patch, PatchToVersion} from './client-handler.js';
+import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVR, CVRSnapshot} from './cvr.js';
 import {
-  rowRecordToRowsRow,
-  RowsRow,
-  rowsRowToRowRecord,
   type ClientsRow,
   type DesiresRow,
   type InstancesRow,
   type QueriesRow,
+  rowRecordToRowsRow,
+  type RowsRow,
+  rowsRowToRowRecord,
 } from './schema/cvr.js';
 import {
-  ClientQueryRecord,
-  ClientRecord,
+  type ClientQueryRecord,
+  type ClientRecord,
   cmpVersions,
-  InternalQueryRecord,
-  NullableCVRVersion,
-  QueryPatch,
-  versionFromString,
-  versionString,
   type CVRVersion,
+  type InternalQueryRecord,
+  type NullableCVRVersion,
+  type QueryPatch,
   type QueryRecord,
   type RowID,
   type RowRecord,
+  versionFromString,
+  versionString,
 } from './schema/types.js';
 
 type NotNull<T> = T extends null ? never : T;

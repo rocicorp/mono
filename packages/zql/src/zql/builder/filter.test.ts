@@ -1,6 +1,6 @@
-import {expect, test} from 'vitest';
-import {SimpleCondition, SimpleOperator} from '../ast/ast.js';
 import fc from 'fast-check';
+import {expect, test} from 'vitest';
+import type {SimpleCondition, SimpleOperator} from '../ast/ast.js';
 import {createPredicate} from './filter.js';
 import {cases} from './like.test.js';
 

@@ -2,7 +2,7 @@ import {expect} from 'chai';
 import type {Store} from '../dag/store.js';
 import {
   Commit,
-  SnapshotMeta,
+  type SnapshotMeta,
   commitFromHead,
   commitIsSnapshot,
 } from '../db/commit.js';

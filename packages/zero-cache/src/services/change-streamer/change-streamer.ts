@@ -1,6 +1,6 @@
-import {Source} from 'zero-cache/src/types/streams.js';
-import {Service} from '../service.js';
-import {
+import type {Source} from 'zero-cache/src/types/streams.js';
+import type {Service} from '../service.js';
+import type {
   Change,
   DataChange,
   MessageBegin,

@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
-import {newQuery, QueryDelegate} from './query-impl.js';
-import {issueSchema} from './test/testSchemas.js';
+import {newQuery, type QueryDelegate} from './query-impl.js';
 import {QueryDelegateImpl} from './query-impl.query.test.js';
+import {issueSchema} from './test/testSchemas.js';
 
 function addData(queryDelegate: QueryDelegate) {
   queryDelegate

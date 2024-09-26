@@ -1,11 +1,11 @@
 import {describe, expect, test} from 'vitest';
 import {Catch} from './catch.js';
-import {Change} from './change.js';
-import {Row} from './data.js';
+import type {Change} from './change.js';
+import type {Row} from './data.js';
 import {MemorySource} from './memory-source.js';
-import {Start} from './operator.js';
-import {Bound, Skip} from './skip.js';
-import {SourceChange} from './source.js';
+import type {Start} from './operator.js';
+import {type Bound, Skip} from './skip.js';
+import type {SourceChange} from './source.js';
 
 test('fetch', () => {
   const cases: {

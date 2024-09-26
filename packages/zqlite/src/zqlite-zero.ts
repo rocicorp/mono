@@ -1,29 +1,26 @@
-import type {ZQLiteZeroOptions} from './options.js';
-import {
-  BaseCRUDMutate,
-  EntityCRUDMutate,
-  makeBatchCRUDMutate,
-  MakeCRUDMutate,
-  Update,
-} from 'zero-client/src/client/crud.js';
-import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
-import type {Database} from 'zqlite/src/db.js';
-import type {EntityID} from 'zero-protocol/src/entity.js';
-import {
-  SchemaDefs,
-  MakeEntityQueriesFromQueryDefs,
-} from 'zero-client/src/client/zero.js';
 import {ZeroContext} from 'zero-client/src/client/context.js';
-import {Query} from 'zero-client/src/mod.js';
-import {Schema} from 'zql/src/zql/query/schema.js';
+import {
+  type BaseCRUDMutate,
+  type EntityCRUDMutate,
+  makeBatchCRUDMutate,
+  type MakeCRUDMutate,
+  type Update,
+} from 'zero-client/src/client/crud.js';
+import * as zeroJs from 'zero-client/src/client/zero.js';
+import type {Query} from 'zero-client/src/mod.js';
+import type {EntityID} from 'zero-protocol/src/entity.js';
+import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
+import type {Row} from 'zql/src/zql/ivm/data.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
-import {Row} from 'zql/src/zql/ivm/data.js';
+import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {Database} from 'zqlite/src/db.js';
+import type {ZQLiteZeroOptions} from './options.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
-export class ZQLiteZero<SD extends SchemaDefs> {
+export class ZQLiteZero<SD extends zeroJs.SchemaDefs> {
   readonly zeroContext: ZeroContext;
-  readonly query: MakeEntityQueriesFromQueryDefs<SD>;
+  readonly query: zeroJs.MakeEntityQueriesFromQueryDefs<SD>;
   readonly mutate: MakeCRUDMutate<SD>;
   db: Database;
 
@@ -35,17 +32,17 @@ export class ZQLiteZero<SD extends SchemaDefs> {
     this.mutate = this.#makeCRUDMutate<SD>(schemas, db);
   }
 
-  #registerQueries(schemas: SD): MakeEntityQueriesFromQueryDefs<SD> {
+  #registerQueries(schemas: SD): zeroJs.MakeEntityQueriesFromQueryDefs<SD> {
     const rv = {} as Record<string, Query<Schema>>;
     const context = this.zeroContext;
     // Not using parse yet
     for (const [name, schema] of Object.entries(schemas)) {
       rv[name] = newQuery(context, schema);
     }
-    return rv as MakeEntityQueriesFromQueryDefs<SD>;
+    return rv as zeroJs.MakeEntityQueriesFromQueryDefs<SD>;
   }
 
-  #makeCRUDMutate<QD extends SchemaDefs>(
+  #makeCRUDMutate<QD extends zeroJs.SchemaDefs>(
     schemas: QD,
     db: Database,
   ): MakeCRUDMutate<QD> {
