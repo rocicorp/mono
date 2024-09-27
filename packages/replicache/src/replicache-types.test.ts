@@ -1,6 +1,5 @@
 /* eslint-disable require-await */
 
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/out/client';
 import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import type {IndexKey} from './db/index.js';
@@ -18,7 +17,6 @@ function expectType<T>(_: T) {
 // Only used for type checking
 test.skip('mutator optional args [type checking only]', async () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction, x: number) => {
@@ -74,7 +72,6 @@ test.skip('mutator optional args [type checking only]', async () => {
 // Only used for type checking
 test.skip('Test partial JSONObject [type checking only]', async () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction, todo: Partial<Todo>) => {
@@ -100,7 +97,6 @@ test.skip('Test partial JSONObject [type checking only]', async () => {
 // Only used for type checking
 test.skip('Test register param [type checking only]', () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction) => {
@@ -136,7 +132,6 @@ test.skip('Test register param [type checking only]', () => {
   /* eslint-enable prefer-destructuring */
 
   new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'test-types',
     mutators: {
       // @ts-expect-error Type '(tx: WriteTransaction, a: string, b: number) =>
@@ -152,7 +147,6 @@ test.skip('Test register param [type checking only]', () => {
 // Only used for type checking
 test.skip('Key type for scans [type checking only]', async () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'test-types',
   });
 
@@ -206,7 +200,6 @@ test.skip('mut [type checking only]', async () => {
   type ToRecord<T> = {[P in keyof T]: T[P]};
 
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'type-checking-only',
     mutators: {
       a: (tx: WriteTransaction) => {
@@ -317,7 +310,6 @@ test.skip('mut [type checking only]', async () => {
 
   {
     const rep = new Replicache({
-      licenseKey: TEST_LICENSE_KEY,
       name: 'type-checking-only',
       mutators: {},
     });
@@ -327,7 +319,6 @@ test.skip('mut [type checking only]', async () => {
 
   {
     const rep = new Replicache({
-      licenseKey: TEST_LICENSE_KEY,
       name: 'type-checking-only',
     });
     // @ts-expect-error Property 'abc' does not exist on type 'MakeMutators<{}>'.ts(2339)
@@ -336,7 +327,6 @@ test.skip('mut [type checking only]', async () => {
 
   {
     const rep = new Replicache({
-      licenseKey: TEST_LICENSE_KEY,
       name: 'type-checking-only',
     });
     // @ts-expect-error Property 'abc' does not exist on type 'MakeMutators<{}>'.ts(2339)
@@ -347,7 +337,6 @@ test.skip('mut [type checking only]', async () => {
 // Only used for type checking
 test.skip('scan with index [type checking only]', async () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'scan-with-index',
   });
 
@@ -372,7 +361,6 @@ test.skip('scan with index [type checking only]', async () => {
 // Only used for type checking
 test.skip('scan without index [type checking only]', async () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'scan-with-index',
   });
 
@@ -392,7 +380,6 @@ test.skip('scan without index [type checking only]', async () => {
 // Only used for type checking
 test.skip('mutator return read only [type checking only]', async () => {
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction, x: {y: number}) => {
@@ -420,7 +407,6 @@ test.skip('mutator return read only [type checking only]', async () => {
 test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: (tx: WriteTransaction, x: ReadonlyJSONObject) => {
         use(tx);
@@ -434,7 +420,6 @@ test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
 test.skip('Parameterized get [type checking only]', async () => {
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         const p: {x: string} | undefined = await tx.get<{x: string}>('x');
@@ -451,7 +436,6 @@ test.skip('Parameterized get [type checking only]', async () => {
 test.skip('Parameterized get invalid types [type checking only]', async () => {
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
@@ -471,7 +455,6 @@ test.skip('Parameterized get deep read only object/array [type checking only]', 
   type T = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         const v = await tx.get<T>('x');
@@ -498,7 +481,6 @@ test.skip('Parameterized scan.values [type checking only]', async () => {
   type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
@@ -540,7 +522,6 @@ test.skip('Parameterized index scan.values [type checking only]', async () => {
   type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>({indexName: 'x'})) {
@@ -581,7 +562,6 @@ test.skip('Parameterized scan.values invalid types [type checking only]', async 
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
@@ -634,7 +614,6 @@ test.skip('Parameterized scan.values deep read only object/array [type checking 
   type V = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
@@ -699,7 +678,6 @@ test.skip('Parameterized scan.entries [type checking only]', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>().entries()) {
@@ -735,7 +713,6 @@ test.skip('Parameterized index scan.entries [type checking only]', async () => {
   type EntryDeepV = readonly [IndexKey, DeepReadonly<{x: number}>];
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>({indexName: 'x'}).entries()) {
@@ -762,7 +739,6 @@ test.skip('Parameterized scan.entries invalid types [type checking only]', async
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>().entries()) {
@@ -801,7 +777,6 @@ test.skip('Parameterized scan.entries deep read only object/array [type checking
   type V = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>().entries()) {

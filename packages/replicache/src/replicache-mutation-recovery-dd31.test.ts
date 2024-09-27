@@ -1580,13 +1580,7 @@ suite('DD31', () => {
   });
 
   test('mutation recovery is invoked on 5 minute interval', async () => {
-    const rep = await replicacheForTesting(
-      'mutation-recovery-startup-dd31-4',
-      undefined,
-      {
-        enableLicensing: false,
-      },
-    );
+    const rep = await replicacheForTesting('mutation-recovery-startup-dd31-4');
     expect(rep.recoverMutationsFake.callCount).to.equal(1);
     await clock.tickAsync(5 * 60 * 1000);
     expect(rep.recoverMutationsFake.callCount).to.equal(2);

@@ -1,13 +1,12 @@
 import {resolver} from '@rocicorp/resolver';
 import {dropIDBStoreWithMemFallback} from 'replicache/src/kv/idb-store-with-mem-fallback.js';
-import {
+import type {
   IndexDefinitions,
   JSONValue,
   MutatorDefs,
   PatchOperation,
   ReadTransaction,
   ReplicacheOptions,
-  TEST_LICENSE_KEY,
   WriteTransaction,
 } from 'replicache/src/mod.js';
 import {ReplicacheImpl} from 'replicache/src/replicache-impl.js';
@@ -16,7 +15,7 @@ import {deepEqual} from 'shared/src/json.js';
 import {randomUint64} from 'shared/src/random-uint64.js';
 import type {Bencher, Benchmark} from '../benchmark.js';
 import {
-  TestDataObject,
+  type TestDataObject,
   getTmcwData,
   jsonArrayTestData,
   jsonObjectTestData,
@@ -325,10 +324,8 @@ class ReplicachePerfTest<MD extends MutatorDefs> extends ReplicacheImpl<MD> {
     super(
       {
         ...options,
-        licenseKey: TEST_LICENSE_KEY,
       },
       {
-        enableLicensing: false,
         enableMutationRecovery: false,
         enableScheduledRefresh: false,
         enableScheduledPersist: false,

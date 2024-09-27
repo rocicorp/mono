@@ -1,4 +1,3 @@
-export {TEST_LICENSE_KEY} from '@rocicorp/licensing/out/client';
 export {consoleLogSink} from '@rocicorp/logger';
 export type {LogLevel, LogSink} from '@rocicorp/logger';
 export type {
@@ -94,6 +93,7 @@ export type {
   PushRequestV0,
   PushRequestV1,
 } from './sync/push.js';
+export {TEST_LICENSE_KEY} from './test-license-key.js';
 export {TransactionClosedError} from './transaction-closed-error.js';
 export type {
   CreateIndexDefinition,
