@@ -84,6 +84,8 @@ export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
   // However, the latter does not get updated when a column in a table is
   // renamed.
   //
+  // https://www.postgresql.org/message-id/5860814f-c91d-4ab0-b771-ded90d7b9c55%40www.fastmail.com
+  //
   // To address this, the pg_attribute rows are looked up for the index's
   // table rather than the index itself, using the pg_index.indkey array
   // to determine the set and order of columns to include.
