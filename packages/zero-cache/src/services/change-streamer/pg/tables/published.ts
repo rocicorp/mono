@@ -80,25 +80,39 @@ type IndexDefinitionsQueryResult = {
 };
 
 export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
+  // Note: pg_attribute contains column names for tables and for indexes.
+  // However, the latter does not get updated when a column in a table is
+  // renamed.
+  //
+  // https://www.postgresql.org/message-id/5860814f-c91d-4ab0-b771-ded90d7b9c55%40www.fastmail.com
+  //
+  // To address this, the pg_attribute rows are looked up for the index's
+  // table rather than the index itself, using the pg_index.indkey array
+  // to determine the set and order of columns to include.
   return `
   WITH indexed_columns AS (SELECT
       pg_indexes.schemaname as "schemaName",
       pg_indexes.tablename as "tableName",
       pg_indexes.indexname as "name",
-      pg_attribute.attname as "col",
+      index_column.name as "col",
       pg_index.indisunique as "unique"
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
     JOIN pg_class pc ON
       pc.relname = pg_indexes.indexname
       AND pc.relnamespace = pg_namespace.oid
-    JOIN pg_attribute ON pg_attribute.attrelid = pc.oid
     JOIN pg_publication_tables as pb ON 
       pb.schemaname = pg_indexes.schemaname AND 
       pb.tablename = pg_indexes.tablename
+    JOIN pg_index ON pg_index.indexrelid = pc.oid
+    JOIN LATERAL (
+      SELECT pg_attribute.attname as name, col.index_pos as pos
+        FROM UNNEST(pg_index.indkey) WITH ORDINALITY as col(table_pos, index_pos)
+        JOIN pg_attribute ON col.table_pos = pg_attribute.attnum
+        WHERE pg_attribute.attrelid = pg_index.indrelid
+    ) AS index_column ON true
     ${join}
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
-    JOIN pg_index ON pg_index.indexrelid = pc.oid
     WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
@@ -106,7 +120,7 @@ export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
       pg_indexes.schemaname,
       pg_indexes.tablename,
       pg_indexes.indexname,
-      pg_attribute.attnum ASC),
+      index_column.pos ASC),
   
     indexes AS (SELECT json_build_object(
       'schemaName', "schemaName",
