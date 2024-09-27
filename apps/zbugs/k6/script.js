@@ -11,8 +11,8 @@ export const options = {
   scenarios: {
     ui: {
       executor: 'shared-iterations',
-      vus: 2,
-      iterations: 2,
+      vus: 10,
+      iterations: 10,
       options: {
         browser: {
           type: 'chromium',
@@ -41,8 +41,6 @@ export default async function () {
     console.info('got through');
 
     const delay = 0.2;
-
-    await sleep(Math.round() * 10);
 
     for (let i = 0; i < 10; i++) {
       // We disconnect the socket after a certain amount of time in the
