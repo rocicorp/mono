@@ -8,6 +8,8 @@ import Selector from '../../components/selector.js';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import Comment from './comment.js';
+import {useKeypress} from '../../hooks/use-keypress.js';
+import {navigate} from 'wouter/use-browser-location';
 
 export default function IssuePage() {
   const z = useZero();
@@ -38,6 +40,16 @@ export default function IssuePage() {
     setEditing(null);
     setEdits({});
   };
+
+  const next = useQuery(
+    z.query.issue.orderBy('modified', 'desc').start(issue).one(),
+    issue !== undefined,
+  );
+  useKeypress('j', () => {
+    if (next) {
+      navigate(`/issue/${next.id}`);
+    }
+  });
 
   useEffect(() => {
     const listener = (e: {shiftKey: boolean}) => {
