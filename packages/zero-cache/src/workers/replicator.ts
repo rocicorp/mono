@@ -42,7 +42,11 @@ export function setupReplicaAndCheckpointer(
   // In 'backup' mode, litestream is replicating the file, and
   // locks it to perform its backups and checkpoints.
   if (mode === 'backup') {
-    replica.pragma('busy_timeout = 5000'); // https://litestream.io/tips/#busy-timeout
+    // The official docs recommend a 5 second timeout
+    // (https://litestream.io/tips/#busy-timeout), but since this is
+    // an isolated backup replica, we can wait longer to achieve
+    // higher write throughput.
+    replica.pragma('busy_timeout = 10000');
     return {replica, checkpointer: NULL_CHECKPOINTER};
   }
 
