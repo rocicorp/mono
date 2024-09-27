@@ -7,11 +7,18 @@ import {type Schema, schema} from './domain/schema.js';
 import './index.css';
 import Root from './root.js';
 
+const qs = new URLSearchParams(location.search);
+const hiddenTabDisconnectDelayMinutes = qs.get('keepalive') ? 60 : 5;
+console.info(
+  `Hidden tab disconnect delay: ${hiddenTabDisconnectDelayMinutes} minutes`,
+);
+
 const z = new Zero({
   logLevel: 'info',
   server: import.meta.env.VITE_PUBLIC_SERVER,
   userID: 'anon',
   schemas: schema,
+  hiddenTabDisconnectDelay: hiddenTabDisconnectDelayMinutes * 60 * 1000,
 });
 
 z.query.user.preload();
