@@ -30,14 +30,12 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "@rocicorp/rails": "^0.10.0",
     "@types/sinon": "^10.0.11",
-    "@types/xxhashjs": "^0.2.4",
     "datadog": "0.0.0",
     "esbuild": "^0.20.2",
     "playwright": "^1.43.1",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "typescript": "^5.5.3",
-    "xxhashjs": "^0.2.2",
     "zero-protocol": "0.0.0"
   },
   "files": [
