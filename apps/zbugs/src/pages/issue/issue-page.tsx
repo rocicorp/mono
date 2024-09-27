@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {useQuery} from 'zero-react/src/use-query.js';
@@ -38,6 +38,19 @@ export default function IssuePage() {
     setEditing(null);
     setEdits({});
   };
+
+  useEffect(() => {
+    const listener = (e: {shiftKey: boolean}) => {
+      if (issue && e.shiftKey) {
+        const match = issue.title.match(/Issue (\d+)/);
+        const prev = match ? parseInt(match[1]) : 0;
+        const next = prev + 1;
+        z.mutate.issue.update({id: issue.id, title: `Issue ${next}`});
+      }
+    };
+    window.addEventListener('mousemove', listener);
+    return () => window.removeEventListener('mousemove', listener);
+  }, [issue]);
 
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
