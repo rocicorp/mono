@@ -108,8 +108,7 @@ export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
     JOIN LATERAL (
       SELECT pg_attribute.attname as name, col.index_pos as pos
         FROM UNNEST(pg_index.indkey) WITH ORDINALITY as col(table_pos, index_pos)
-        JOIN pg_attribute ON col.table_pos = pg_attribute.attnum
-        WHERE pg_attribute.attrelid = pg_index.indrelid
+        JOIN pg_attribute ON attrelid = pg_index.indrelid AND attnum = col.table_pos
     ) AS index_column ON true
     ${join}
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
