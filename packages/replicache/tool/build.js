@@ -1,9 +1,10 @@
 // @ts-check
 
 import * as esbuild from 'esbuild';
-import {writeFile} from 'fs/promises';
-import * as path from 'path';
-import {fileURLToPath} from 'url';
+import {writeFile} from 'node:fs/promises';
+import * as path from 'node:path';
+import process from 'node:process';
+import {fileURLToPath} from 'node:url';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
 import {readPackageJSON} from './read-package-json.js';
 
