@@ -1,5 +1,5 @@
+import {h64} from 'shared/src/xxhash.js';
 import {stringify, type JSONValue} from './bigint-json.js';
-import {h64} from './xxhash.js';
 
 export type ColumnType = {readonly typeOid: number};
 export type RowKeyType = Readonly<Record<string, ColumnType>>;

@@ -1,6 +1,6 @@
 import type {ClientID} from 'replicache';
 import {must} from 'shared/src/must.js';
-import xxh from 'xxhashjs';
+import {h64} from 'shared/src/xxhash.js';
 import type {ChangeDesiredQueriesMessage, QueriesPatch} from 'zero-protocol';
 import {normalizeAST, type AST} from 'zql/src/zql/ast/ast.js';
 import type {ReadTransaction} from '../mod.js';
@@ -91,5 +91,5 @@ export class QueryManager {
 type QueryHash = string;
 
 function hash(normalized: AST): QueryHash {
-  return xxh.h64(0).update(JSON.stringify(normalized)).digest().toString(36);
+  return h64(JSON.stringify(normalized)).toString(36);
 }
