@@ -33,7 +33,13 @@ describe('change-source/tables/ddl', () => {
 
     CREATE TABLE pub.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
     CREATE TABLE pub.boo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+    CREATE TABLE pub.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+
     CREATE TABLE private.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+    CREATE TABLE private.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+
+    CREATE INDEX foo_custom_index ON pub.foo (description, name);
+    CREATE INDEX yoo_custom_index ON pub.yoo (description, name);
     
     CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA pub;
     `);
@@ -203,6 +209,13 @@ describe('change-source/tables/ddl', () => {
             {
               schemaName: 'pub',
               tableName: 'foo',
+              name: 'foo_custom_index',
+              columns: ['description', 'name'],
+              unique: false,
+            },
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
               name: 'foo_name_key',
               columns: ['name'],
               unique: true,
@@ -252,6 +265,13 @@ describe('change-source/tables/ddl', () => {
             publications: {['zero_all']: {rowFilter: null}},
           },
           indexes: [
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
+              name: 'foo_custom_index',
+              columns: ['description', 'name'],
+              unique: false,
+            },
             {
               schemaName: 'pub',
               tableName: 'foo',
@@ -308,6 +328,13 @@ describe('change-source/tables/ddl', () => {
             {
               schemaName: 'pub',
               tableName: 'foo',
+              name: 'foo_custom_index',
+              columns: ['description', 'handle'],
+              unique: false,
+            },
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
               name: 'foo_name_key',
               columns: ['handle'],
               unique: true,
@@ -345,6 +372,7 @@ describe('change-source/tables/ddl', () => {
             publications: {['zero_all']: {rowFilter: null}},
           },
           indexes: [
+            // Note: foo_custom_index is dropped because it depended on the columns.
             {
               schemaName: 'pub',
               tableName: 'foo',
@@ -356,7 +384,52 @@ describe('change-source/tables/ddl', () => {
         },
       },
     ],
-  ])('%s', async (_name, query, event) => {
+    [
+      'drop table',
+      `DROP TABLE pub.foo, pub.yoo`,
+      {
+        type: 'ddl',
+        event: {
+          tag: 'DROP TABLE',
+          context: {query: `DROP TABLE pub.foo, pub.yoo`},
+          tables: [
+            {
+              schema: 'pub',
+              objectIdentity: 'pub.yoo',
+            },
+            {
+              schema: 'pub',
+              objectIdentity: 'pub.foo',
+            },
+          ],
+        },
+      },
+    ],
+
+    [
+      'drop index',
+      `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
+      {
+        type: 'ddl',
+        event: {
+          tag: 'DROP INDEX',
+          context: {
+            query: `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
+          },
+          indexes: [
+            {
+              schema: 'pub',
+              objectIdentity: 'pub.yoo_custom_index',
+            },
+            {
+              schema: 'pub',
+              objectIdentity: 'pub.foo_custom_index',
+            },
+          ],
+        },
+      },
+    ],
+  ])('%s', async (name, query, event) => {
     await upstream.begin(async tx => {
       await tx`INSERT INTO pub.boo(id) VALUES('1')`;
       await tx.unsafe(query);
@@ -365,7 +438,14 @@ describe('change-source/tables/ddl', () => {
     // in the "private" schema.
     await upstream.begin(async tx => {
       await tx`INSERT INTO pub.boo(id) VALUES('2')`;
-      await tx.unsafe(query.replaceAll('pub.', 'private.'));
+
+      // DROP TABLE and DROP INDEX will send all events regardless of whether
+      // the tables were published, since we cannot determine if they were
+      // published after they have been dropped. So only test
+      // the "not-published" behavior for the other events.
+      if (name !== 'drop table' && name !== 'drop index') {
+        await tx.unsafe(query.replaceAll('pub.', 'private.'));
+      }
     });
 
     const messages = await drainReplicationMessages(8);
