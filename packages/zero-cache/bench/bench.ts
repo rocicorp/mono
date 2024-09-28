@@ -1,3 +1,3 @@
 import {bench} from './benchmark.js';
 
-bench();
+bench({dbFile: '/tmp/bench/zbugs-sync-replica.db'});
