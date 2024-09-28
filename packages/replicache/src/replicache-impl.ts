@@ -1,10 +1,3 @@
-import {
-  getLicenseStatus,
-  licenseActive,
-  LicenseStatus,
-  PROD_LICENSE_SERVER_URL,
-  TEST_LICENSE_KEY,
-} from '@rocicorp/licensing/out/client';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from 'shared/src/abort-error.js';
@@ -13,7 +6,6 @@ import {getDocument} from 'shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
 import type {MaybePromise} from 'shared/src/types.js';
-import {initBgIntervalProcess} from './bg-interval.js';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
 import {assertCookie, type Cookie} from './cookies.js';
@@ -92,7 +84,6 @@ import {
   ReportError,
 } from './replicache.js';
 import {setIntervalWithSignal} from './set-interval-with-signal.js';
-import {mustSimpleFetch} from './simple-fetch.js';
 import {
   type SubscribeOptions,
   SubscriptionImpl,
@@ -153,8 +144,6 @@ const REFRESH_THROTTLE_MS = 500;
 const LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 100 * 2 ** 20; // 100 MB
 
 const RECOVER_MUTATIONS_INTERVAL_MS = 5 * 60 * 1000; // 5 mins
-const LICENSE_ACTIVE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const TEST_LICENSE_KEY_TTL_MS = 5 * 60 * 1000;
 
 const noop = () => {
   // noop
@@ -174,12 +163,6 @@ const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
 ) => new SubscriptionsManagerImpl(queryInternal, lc);
 
 export interface ReplicacheImplOptions {
-  /**
-   * Defaults to true.
-   * Does not use a symbol because it is used by reflect.
-   */
-  enableLicensing?: boolean | undefined;
-
   /**
    * Defaults to true.
    */
@@ -265,14 +248,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #ready: Promise<void>;
   readonly #profileIDPromise: Promise<string>;
   readonly #clientGroupIDPromise: Promise<string>;
-  readonly licenseCheckPromise: Promise<boolean>;
-
-  /* The license is active if we have sent at least one license active ping
-   * (and we will continue to). We do not send license active pings when
-   * for the TEST_LICENSE_KEY.
-   */
-  readonly licenseActivePromise: Promise<boolean>;
-  #testLicenseKeyTimeout: ReturnType<typeof setTimeout> | null = null;
   readonly #mutatorRegistry: MutatorDefs = {};
 
   /**
@@ -312,8 +287,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   pusher: Pusher;
 
-  readonly #licenseKey: string | undefined;
-
   readonly memdag: LazyStore;
   readonly perdag: Store;
   readonly #idbDatabases: IDBDatabasesStore;
@@ -338,8 +311,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     REFRESH_THROTTLE_MS,
     this.#closeAbortController.signal,
   );
-
-  readonly #enableLicensing: boolean;
 
   /**
    * The options used to control the {@link pull} and push request behavior. This
@@ -430,13 +401,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       requestOptions = {},
       puller,
       pusher,
-      licenseKey,
       indexes = {},
       clientMaxAgeMs = CLIENT_MAX_INACTIVE_TIME,
     } = options;
     const {
       enableMutationRecovery = true,
-      enableLicensing = true,
       enableScheduledPersist = true,
       enableScheduledRefresh = true,
       enablePullAndPushInOpen = true,
@@ -453,7 +422,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.puller = puller ?? getDefaultPuller(this);
     this.pusher = pusher ?? getDefaultPusher(this);
 
-    this.#enableLicensing = enableLicensing;
     this.#enableScheduledPersist = enableScheduledPersist;
     this.#enableScheduledRefresh = enableScheduledRefresh;
     this.#enablePullAndPushInOpen = enablePullAndPushInOpen;
@@ -487,12 +455,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     // we call the Open RPC.
     const readyResolver = resolver<void>();
     this.#ready = readyResolver.promise;
-
-    this.#licenseKey = licenseKey;
-    const licenseCheckResolver = resolver<boolean>();
-    this.licenseCheckPromise = licenseCheckResolver.promise;
-    const licenseActiveResolver = resolver<boolean>();
-    this.licenseActivePromise = licenseActiveResolver.promise;
 
     const {minDelayMs = MIN_DELAY_MS, maxDelayMs = MAX_DELAY_MS} =
       requestOptions;
@@ -548,8 +510,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
-      licenseCheckResolver.resolve,
-      licenseActiveResolver.resolve,
     );
   }
 
@@ -560,8 +520,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
     resolveReady: () => void,
-    resolveLicenseCheck: (valid: boolean) => void,
-    resolveLicenseActive: (active: boolean) => void,
   ): Promise<void> {
     const {clientID} = this;
     // If we are currently closing a Replicache instance with the same name,
@@ -586,8 +544,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
-
-    await this.#licenseCheck(resolveLicenseCheck);
 
     if (this.#enablePullAndPushInOpen) {
       this.pull().catch(noop);
@@ -648,8 +604,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       'visibilitychange',
       this.#onVisibilityChange,
     );
-
-    await this.#startLicenseActive(resolveLicenseActive, this.#lc, signal);
   }
 
   #onVisibilityChange = async () => {
@@ -674,133 +628,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#clientStateNotFoundOnClient(clientID);
     }
     return !hasClientState;
-  }
-
-  async #licenseCheck(
-    resolveLicenseCheck: (valid: boolean) => void,
-  ): Promise<void> {
-    if (!this.#enableLicensing) {
-      resolveLicenseCheck(true);
-      return;
-    }
-    if (!this.#licenseKey) {
-      await this.#licenseInvalid(
-        this.#lc,
-        `license key ReplicacheOptions.licenseKey is not set`,
-        true /* disable replicache */,
-        resolveLicenseCheck,
-      );
-      return;
-    }
-    this.#lc.debug?.(`Replicache license key: ${this.#licenseKey}`);
-    if (this.#licenseKey === TEST_LICENSE_KEY) {
-      this.#lc.info?.(
-        `Skipping license check for TEST_LICENSE_KEY. ` +
-          `You may ONLY use this key for automated (e.g., unit/CI) testing. ` +
-          // TODO(phritz) maybe use a more specific URL
-          `See https://replicache.dev for more information.`,
-      );
-      resolveLicenseCheck(true);
-
-      this.#testLicenseKeyTimeout = setTimeout(async () => {
-        await this.#licenseInvalid(
-          this.#lc,
-          'Test key expired',
-          true,
-          resolveLicenseCheck,
-        );
-      }, TEST_LICENSE_KEY_TTL_MS);
-
-      return;
-    }
-    try {
-      const resp = await getLicenseStatus(
-        mustSimpleFetch,
-        PROD_LICENSE_SERVER_URL,
-        this.#licenseKey,
-        this.#lc,
-      );
-      if (resp.pleaseUpdate) {
-        this.#lc.error?.(
-          `You are using an old version of Replicache that uses deprecated licensing features. ` +
-            `Please update Replicache else it may stop working.`,
-        );
-      }
-      if (resp.status === LicenseStatus.Valid) {
-        this.#lc.debug?.(`License is valid.`);
-      } else {
-        await this.#licenseInvalid(
-          this.#lc,
-          `status: ${resp.status}`,
-          resp.disable,
-          resolveLicenseCheck,
-        );
-        return;
-      }
-    } catch (err) {
-      this.#lc.error?.(`Error checking license: ${err}`);
-      // Note: on error we fall through to assuming the license is valid.
-    }
-    resolveLicenseCheck(true);
-  }
-
-  async #licenseInvalid(
-    lc: LogContext,
-    reason: string,
-    disable: boolean,
-    resolveLicenseCheck: (valid: boolean) => void,
-  ): Promise<void> {
-    lc.error?.(
-      `** REPLICACHE LICENSE NOT VALID ** Replicache license key '${
-        this.#licenseKey
-      }' is not valid (${reason}). ` +
-        `Please run 'npx replicache get-license' to get a license key or contact hello@replicache.dev for help.`,
-    );
-    if (disable) {
-      await this.close();
-      lc.error?.(`** REPLICACHE DISABLED **`);
-    }
-    resolveLicenseCheck(false);
-    return;
-  }
-
-  async #startLicenseActive(
-    resolveLicenseActive: (valid: boolean) => void,
-    lc: LogContext,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (
-      !this.#enableLicensing ||
-      !this.#licenseKey ||
-      this.#licenseKey === TEST_LICENSE_KEY
-    ) {
-      resolveLicenseActive(false);
-      return;
-    }
-
-    const markActive = async () => {
-      try {
-        await licenseActive(
-          mustSimpleFetch,
-          PROD_LICENSE_SERVER_URL,
-          this.#licenseKey as string,
-          await this.profileID,
-          lc,
-        );
-      } catch (err) {
-        this.#lc.info?.(`Error sending license active ping: ${err}`);
-      }
-    };
-    await markActive();
-    resolveLicenseActive(true);
-
-    initBgIntervalProcess(
-      'LicenseActive',
-      markActive,
-      () => LICENSE_ACTIVE_INTERVAL_MS,
-      lc,
-      signal,
-    );
   }
 
   /**
@@ -883,10 +710,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#pushConnectionLoop.close();
 
     this.subscriptions.clear();
-
-    if (this.#testLicenseKeyTimeout) {
-      clearTimeout(this.#testLicenseKeyTimeout);
-    }
 
     await Promise.all(closingPromises);
     closingInstances.delete(this.name);

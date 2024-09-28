@@ -1,4 +1,3 @@
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/out/client';
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
@@ -76,14 +75,6 @@ export class ReplicacheTest<
 
   recoverMutations(): Promise<boolean> {
     return this.#impl.recoverMutations();
-  }
-
-  licenseActive(): Promise<boolean> {
-    return this.#impl.licenseActivePromise;
-  }
-
-  licenseValid(): Promise<boolean> {
-    return this.#impl.licenseCheckPromise;
   }
 
   get perdag() {
@@ -191,7 +182,6 @@ export async function replicacheForTesting<
     pullURL,
     pushDelay = 60_000, // Large to prevent interfering
     pushURL,
-    licenseKey,
     onClientStateNotFound = () => {
       throw new Error(
         'Unexpected call to onClientStateNotFound. Did you forget to pass it as an option?',
@@ -208,7 +198,6 @@ export async function replicacheForTesting<
       pushDelay,
       pushURL,
       name: useUniqueName ? `${randomUint64().toString(36)}:${name}` : name,
-      licenseKey: licenseKey ?? TEST_LICENSE_KEY,
       ...rest,
     },
     implOptions,
@@ -392,7 +381,6 @@ export function waitForSync(rep: {
 }
 
 export const disableAllBackgroundProcesses = {
-  enableLicensing: false,
   enableMutationRecovery: false,
   enableScheduledRefresh: false,
   enableScheduledPersist: false,

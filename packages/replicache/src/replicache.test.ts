@@ -1,12 +1,3 @@
-import {
-  LicenseStatus,
-  PROD_LICENSE_SERVER_URL,
-  TEST_LICENSE_KEY,
-} from '@rocicorp/licensing/out/client';
-import {
-  LICENSE_ACTIVE_PATH,
-  LICENSE_STATUS_PATH,
-} from '@rocicorp/licensing/out/server/api-types.js';
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
@@ -57,17 +48,12 @@ initReplicacheTesting();
 
 test('name is required', () => {
   expect(
-    () =>
-      new Replicache({
-        licenseKey: TEST_LICENSE_KEY,
-      } as ReplicacheOptions<Record<string, never>>),
+    () => new Replicache({} as ReplicacheOptions<Record<string, never>>),
   ).to.throw(/name.*required/);
 });
 
 test('name cannot be empty', () => {
-  expect(
-    () => new Replicache({licenseKey: TEST_LICENSE_KEY, name: ''}),
-  ).to.throw(/name.*must be non-empty/);
+  expect(() => new Replicache({name: ''})).to.throw(/name.*must be non-empty/);
 });
 
 test('cookie', async () => {
@@ -1076,7 +1062,7 @@ test('logLevel', async () => {
 
   rep = await replicacheForTesting('log-level', {logLevel: 'info'});
   await rep.query(() => 42);
-  expect(info.callCount).to.be.greaterThan(0);
+  expect(info.callCount).to.equal(0);
   expect(debug.callCount).to.equal(0);
   await rep.close();
 
@@ -1087,7 +1073,7 @@ test('logLevel', async () => {
   rep = await replicacheForTesting('log-level', {logLevel: 'debug'});
 
   await rep.query(() => 42);
-  expect(info.callCount).to.be.greaterThan(0);
+  expect(info.callCount).to.be.equal(0);
   expect(debug.callCount).to.be.greaterThan(0);
 
   expect(
@@ -1168,7 +1154,7 @@ test('logSinks length 1', async () => {
     logSinks: [logSink],
   });
   await rep.query(() => 42);
-  expect(logCounts.info).to.be.greaterThan(0);
+  expect(logCounts.info).to.be.equal(0);
   expect(logCounts.debug).to.equal(0);
   expectNoLogsToConsole();
   await rep.close();
@@ -1179,7 +1165,7 @@ test('logSinks length 1', async () => {
     logSinks: [logSink],
   });
   await rep.query(() => 42);
-  expect(logCounts.info).to.be.greaterThan(0);
+  expect(logCounts.info).to.be.equal(0);
   expect(logCounts.debug).to.be.greaterThan(0);
   expectNoLogsToConsole();
   await rep.close();
@@ -1218,7 +1204,7 @@ test('logSinks length 3', async () => {
   });
   await rep.query(() => 42);
   for (const counts of logCounts) {
-    expect(counts.info).to.be.greaterThan(0);
+    expect(counts.info).to.be.equal(0);
     expect(counts.debug).to.equal(0);
   }
   expectNoLogsToConsole();
@@ -1231,8 +1217,8 @@ test('logSinks length 3', async () => {
   });
   await rep.query(() => 42);
   for (const counts of logCounts) {
-    expect(counts.info).to.be.greaterThan(0);
-    expect(counts.info).to.be.greaterThan(0);
+    expect(counts.info).to.be.equal(0);
+    expect(counts.info).to.be.equal(0);
   }
   expectNoLogsToConsole();
   await rep.close();
@@ -1590,7 +1576,6 @@ test('clientID', async () => {
   expect(clientID3).to.not.equal(clientID);
 
   const rep4 = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'clientID4',
     pullInterval: null,
   });
@@ -1613,7 +1598,6 @@ test('profileID', async () => {
   expect(profileID2).to.equal(profileID);
 
   const rep3 = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name: 'clientID3',
   });
   const profileID3 = await rep3.profileID;
@@ -1844,270 +1828,23 @@ test('online', async () => {
   expect(log).to.deep.equal([false, true]);
 });
 
-type LicenseKeyCheckTestCase = {
-  licenseKey: string;
-  enableLicensing?: boolean; // default true
-  mockFetchParams: object | undefined;
-  expectValid: boolean;
-  expectDisable: boolean;
-  expectFetchCalled: boolean;
-  expectDisableAfter?: number;
-};
-
-// TODO(phritz) ick, export these urls from the licensing client.
-const statusUrlMatcher = new RegExp(
-  `${PROD_LICENSE_SERVER_URL}${LICENSE_STATUS_PATH.slice(1)}`,
-);
-const activeUrlMatcher = new RegExp(
-  `${PROD_LICENSE_SERVER_URL}${LICENSE_ACTIVE_PATH.slice(1)}`,
-);
-
-async function licenseKeyCheckTest(tc: LicenseKeyCheckTestCase) {
-  const consoleErrorStub = sinon.stub(console, 'error');
-  const name = 'license-key-test';
-  fetchMock.reset();
-  fetchMock.post(activeUrlMatcher, 200);
-  if (tc.expectFetchCalled) {
-    fetchMock.postOnce(statusUrlMatcher, tc.mockFetchParams);
-  }
-  fetchMock.catch();
-
-  const rep = await replicacheForTesting(
-    name,
-    {licenseKey: tc.licenseKey},
-    tc.enableLicensing !== undefined
-      ? {enableLicensing: tc.enableLicensing}
-      : undefined,
-  );
-
-  expect(await rep.licenseValid()).to.equal(tc.expectValid);
-  if (tc.expectDisable) {
-    expect(rep.closed).to.be.true;
-    expect(consoleErrorStub.lastCall.args[1]).to.match(/REPLICACHE DISABLED/);
-  } else {
-    expect(rep.closed).to.be.false;
-
-    if (tc.expectDisableAfter !== undefined) {
-      await clock.tickAsync(tc.expectDisableAfter);
-      expect(rep.closed).to.be.true;
-    }
-  }
-  if (!tc.expectValid) {
-    expect(consoleErrorStub.getCall(0).args[1]).to.match(
-      /REPLICACHE LICENSE NOT VALID/,
-    );
-  }
-  expect(fetchMock.called(statusUrlMatcher)).to.equal(tc.expectFetchCalled);
-
-  await rep.close();
-}
-
-test('empty licensing key is not valid and does not send status check', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: '',
-    mockFetchParams: undefined,
-    expectValid: false,
-    expectDisable: true,
-    expectFetchCalled: false,
-  });
-});
-
-test('test licensing key is valid and does not send status check', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: TEST_LICENSE_KEY,
-    mockFetchParams: undefined,
-    expectValid: true,
-    expectDisable: false,
-    expectFetchCalled: false,
-    expectDisableAfter: 5 * 60 * 1000,
-  });
-});
-
-test('test when internal option enableLicensing is false any key is valid and does not send status check', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: 'any-random-key',
-    enableLicensing: false,
-    mockFetchParams: undefined,
-    expectValid: true,
-    expectDisable: false,
-    expectFetchCalled: false,
-  });
-});
-
-test('licensing key is valid if check returns valid', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: 'l123validkey',
-    mockFetchParams: {
-      body: {
-        status: LicenseStatus.Valid,
-        disable: false,
-        pleaseUpdate: false,
-      },
-    },
-    expectValid: true,
-    expectDisable: false,
-    expectFetchCalled: true,
-  });
-});
-
-test('licensing key is not valid if check returns invalid', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: 'l123keyreturnsINVALID',
-    mockFetchParams: {
-      body: {
-        status: LicenseStatus.Invalid,
-        disable: false,
-        pleaseUpdate: false,
-      },
-    },
-    expectValid: false,
-    expectDisable: false,
-    expectFetchCalled: true,
-  });
-});
-
-test('Replicache is disabled if check returns disable', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: 'l123keyreturnsINVALID',
-    mockFetchParams: {
-      body: {
-        status: LicenseStatus.Invalid,
-        disable: true,
-        pleaseUpdate: false,
-      },
-    },
-    expectValid: false,
-    expectDisable: true,
-    expectFetchCalled: true,
-  });
-});
-
-test('licensing key is valid if check throws', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: 'l123keythrows',
-    mockFetchParams: {
-      throws: new Error('kaboom (this is a fake error in a test)'),
-    },
-    expectValid: true,
-    expectDisable: false,
-    expectFetchCalled: true,
-  });
-});
-
-test('licensing key is valid if check returns non-200', async () => {
-  await licenseKeyCheckTest({
-    licenseKey: 'lkeyreturns500',
-    mockFetchParams: {
-      status: 500,
-    },
-    expectValid: true,
-    expectDisable: false,
-    expectFetchCalled: true,
-  });
-});
-
-type LicenseActiveTestCase = {
-  licenseKey: string | undefined;
-  enableLicensing?: boolean; // default true
-  mockFetchParams: object | undefined;
-  expectActive: boolean;
-  expectFetchCalled: boolean;
-};
-
-async function licenseActiveTest(tc: LicenseActiveTestCase) {
-  // Silence console.error
-  sinon.stub(console, 'error');
-  // TODO: assert we are getting the correct logs
-
-  fetchMock.reset();
-  fetchMock.post(
-    statusUrlMatcher,
-    '{"status": "VALID", "disable": false, "pleaseUpdate": false}',
-  );
-  if (tc.expectFetchCalled) {
-    fetchMock.postOnce(activeUrlMatcher, tc.mockFetchParams);
-  }
-  fetchMock.catch();
-  const rep = await replicacheForTesting(
-    'license-active-test',
-    {licenseKey: tc.licenseKey},
-    tc.enableLicensing !== undefined
-      ? {enableLicensing: tc.enableLicensing}
-      : undefined,
-  );
-  const licenseActive = await rep.licenseActive();
-  expect(licenseActive).to.equal(tc.expectActive);
-  expect(fetchMock.called(activeUrlMatcher)).to.equal(tc.expectFetchCalled);
-  if (tc.expectFetchCalled && fetchMock.called(activeUrlMatcher)) {
-    const got = JSON.parse(fetchMock.lastCall(activeUrlMatcher)[1].body);
-    const {licenseKey, profileID} = got;
-    expect(licenseKey).to.equal(tc.licenseKey);
-    expect(profileID).to.equal(await rep.profileID);
-  }
-  // TODO(phritz) Should we test that it gets called repeatedly?
-  await rep.close();
-}
-
-test('no licensing key is not active and does not send active pings', async () => {
-  await licenseActiveTest({
-    licenseKey: undefined,
-    mockFetchParams: undefined,
-    expectActive: false,
-    expectFetchCalled: false,
-  });
-});
-
-test('test licensing key is not active and does not send active pings', async () => {
-  await licenseActiveTest({
-    licenseKey: TEST_LICENSE_KEY,
-    mockFetchParams: undefined,
-    expectActive: false,
-    expectFetchCalled: false,
-  });
-});
-
-test('test when internal option enableLicensing is false any licensing key is not active and does not send active pings', async () => {
-  await licenseActiveTest({
-    licenseKey: 'any-random-key',
-    enableLicensing: false,
-    mockFetchParams: undefined,
-    expectActive: false,
-    expectFetchCalled: false,
-  });
-});
-
-test('a non-empty, non-test licensing key is active and does send active pings', async () => {
-  await licenseActiveTest({
-    licenseKey: 'l123validkey',
-    mockFetchParams: {
-      status: 200,
-      body: '{}',
-    },
-    expectActive: true,
-    expectFetchCalled: true,
-  });
-});
-
 test('overlapping open/close', async () => {
   const pullInterval = 60_000;
   const name = 'overlapping-open-close';
 
   const rep = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name,
     pullInterval,
   });
   const p = rep.close();
 
   const rep2 = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name,
     pullInterval,
   });
   const p2 = rep2.close();
 
   const rep3 = new Replicache({
-    licenseKey: TEST_LICENSE_KEY,
     name,
     pullInterval,
   });
@@ -2119,14 +1856,12 @@ test('overlapping open/close', async () => {
 
   {
     const rep = new Replicache({
-      licenseKey: TEST_LICENSE_KEY,
       name,
       pullInterval,
     });
     await rep.clientGroupID;
     const p = rep.close();
     const rep2 = new Replicache({
-      licenseKey: TEST_LICENSE_KEY,
       name,
       pullInterval,
     });
@@ -2625,14 +2360,13 @@ test('concurrent puts and gets', async () => {
 });
 
 test('Invalid name', () => {
-  expect(
-    () => new ReplicacheTest({name: '', licenseKey: TEST_LICENSE_KEY}),
-  ).to.throw('name is required and must be non-empty');
+  expect(() => new ReplicacheTest({name: ''})).to.throw(
+    'name is required and must be non-empty',
+  );
   expect(
     () =>
       new Replicache({
         name: 1 as unknown as string,
-        licenseKey: TEST_LICENSE_KEY,
       }),
   ).to.throw('name is required and must be non-empty');
 
@@ -2640,7 +2374,6 @@ test('Invalid name', () => {
     () =>
       new ReplicacheTest({
         name: true as unknown as string,
-        licenseKey: TEST_LICENSE_KEY,
       }),
   ).to.throw(TypeError);
 });

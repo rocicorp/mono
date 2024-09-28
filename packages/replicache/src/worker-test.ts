@@ -1,6 +1,5 @@
 // This test file is loaded by worker.test.ts
 
-import {TEST_LICENSE_KEY} from '@rocicorp/licensing/out/client';
 import {expect} from 'chai';
 import type {JSONValue} from 'shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
@@ -23,7 +22,6 @@ async function testGetHasScanOnEmptyDB(name: string) {
   const rep = new ReplicacheTest({
     pushDelay: 60_000, // Large to prevent interfering
     name,
-    licenseKey: TEST_LICENSE_KEY,
     mutators: {
       testMut: async (
         tx: WriteTransaction,

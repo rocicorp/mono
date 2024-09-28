@@ -395,7 +395,6 @@ export class Zero<QD extends SchemaDefs> {
       kvStore,
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
-      enableLicensing: false,
       makeSubscriptionsManager: (queryInternal, lc) =>
         new SubscriptionsManagerImpl(queryInternal, lc),
       enableClientGroupForking: false,

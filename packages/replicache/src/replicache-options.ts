@@ -196,16 +196,10 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
   pusher?: Pusher | undefined;
 
   /**
-   * The license key for Replicache. This parameter is required for Replicache to
-   * function. See https://replicache.dev for how to acquire a license key.
-   *
-   * YOU SHOULD PASS TEST_LICENSE_KEY IN AUTOMATED TESTS. It disables license
-   * checks for several minutes. If you pass a normal license key in tests, each test
-   * that instantiates Replicache will attempt to perform a license check against
-   * Replicache's licensing server, potentially increasing your monthly active browser
-   * profile count, slowing the test down, and spamming Replicache's servers.
+   * @deprecated Replicache no longer uses a license key. This option is now
+   * ignored and will be removed in a future release.
    */
-  licenseKey: string;
+  licenseKey?: string | undefined;
 
   /**
    * Allows providing a custom implementation of the underlying storage layer.
