@@ -1,6 +1,7 @@
 import {OID} from '@postgresql-typed/oids';
+import {LogContext} from '@rocicorp/logger';
 import pg from 'pg';
-import postgres from 'postgres';
+import postgres, {type Notice, type PostgresType} from 'postgres';
 import array from 'postgres-array';
 import {BigIntJSON, type JSONValue} from './bigint-json.js';
 
@@ -43,6 +44,38 @@ export type PostgresTransaction = postgres.TransactionSql<{
   bigint: bigint;
   json: JSONValue;
 }>;
+
+export function pgClient(
+  lc: LogContext,
+  connectionURI: string,
+  options?: postgres.Options<{
+    bigint: PostgresType<bigint>;
+    json: PostgresType<JSONValue>;
+  }>,
+): PostgresDB {
+  const onnotice = (n: Notice) => {
+    switch (n.severity) {
+      case 'NOTICE':
+        return;
+      case 'DEBUG':
+        lc.debug?.(n);
+        return;
+      case 'WARNING':
+      case 'EXCEPTION':
+        lc.error?.(n);
+        return;
+      case 'LOG':
+      case 'INFO':
+      default:
+        lc.info?.(n);
+    }
+  };
+  return postgres(connectionURI, {
+    ...postgresTypeConfig(),
+    onnotice,
+    ...options,
+  });
+}
 
 export const typeNameByOID: Record<number, string> = Object.fromEntries(
   Object.entries(OID).map(([name, oid]) => [

@@ -11,7 +11,7 @@ import {
   mapPostgresToLiteDataType,
 } from 'zero-cache/src/types/lite.js';
 import {liteTableName} from 'zero-cache/src/types/names.js';
-import {type PostgresDB, postgresTypeConfig} from 'zero-cache/src/types/pg.js';
+import {pgClient, type PostgresDB} from 'zero-cache/src/types/pg.js';
 import type {
   ColumnSpec,
   FilteredTableSpec,
@@ -50,11 +50,10 @@ export async function initialSync(
   tx: Database,
   upstreamURI: string,
 ) {
-  const upstreamDB = postgres(upstreamURI, {
-    ...postgresTypeConfig(),
+  const upstreamDB = pgClient(lc, upstreamURI, {
     max: MAX_WORKERS,
   });
-  const replicationSession = postgres(upstreamURI, {
+  const replicationSession = pgClient(lc, upstreamURI, {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     fetch_types: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
