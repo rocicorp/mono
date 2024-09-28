@@ -24,6 +24,9 @@ onmessage = async (e: MessageEvent) => {
   }
 };
 
+// Tell the main thread that we're ready to receive messages.
+postMessage('ready');
+
 async function testBasics(userID: string) {
   console.log('testBasics', WebSocket, version);
 
