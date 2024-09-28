@@ -178,6 +178,7 @@ export async function processMutation(
         }
         if (e instanceof WriteAuthorizationFailed) {
           lc?.debug?.(e.message);
+          // throw e;
           return undefined;
         }
         if (e instanceof ErrorForClient || errorMode) {
