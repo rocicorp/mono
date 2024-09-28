@@ -31,6 +31,10 @@ class Reader {
     this.#begin.run();
     return this;
   }
+
+  close() {
+    this.#db.close();
+  }
 }
 
 export function walBenchmark(opts: Options) {
@@ -82,6 +86,10 @@ export function walBenchmark(opts: Options) {
     reader1.relock();
     reader2.relock();
   }
+
+  reader1.close();
+  reader2.close();
+  db.close();
 }
 
 function randomEntries(source: string[], count: number): string[] {
