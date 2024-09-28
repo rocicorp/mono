@@ -54,9 +54,10 @@ export function pgClient(
   }>,
 ): PostgresDB {
   const onnotice = (n: Notice) => {
+    // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
     switch (n.severity) {
       case 'NOTICE':
-        return;
+        return; // silenced
       case 'DEBUG':
         lc.debug?.(n);
         return;
