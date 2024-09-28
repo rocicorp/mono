@@ -35,12 +35,34 @@ const createIndexEventSchema = triggerEvent.extend({
 
 export type CreateIndexEvent = v.Infer<typeof createIndexEventSchema>;
 
-// TODO:
-// const dropTagSchema = v.union(v.literal('DROP TABLE'), v.literal('DROP INDEX'));
+const dropTableTagSchema = v.literal('DROP TABLE');
+const dropIndexTagSchema = v.literal('DROP INDEX');
+
+const identifier = v.object({
+  schema: v.string(),
+  // `object_identity` field, as defined in
+  // https://www.postgresql.org/docs/current/functions-event-triggers.html#PG-EVENT-TRIGGER-SQL-DROP-FUNCTIONS
+  objectIdentity: v.string(),
+});
+
+const dropTableEventSchema = triggerEvent.extend({
+  tag: dropTableTagSchema,
+  tables: v.array(identifier),
+});
+
+const dropIndexEventSchema = triggerEvent.extend({
+  tag: dropIndexTagSchema,
+  indexes: v.array(identifier),
+});
 
 export const ddlEventSchema = v.object({
   type: v.literal('ddl'),
-  event: v.union(createOrAlterTableEventSchema, createIndexEventSchema),
+  event: v.union(
+    createOrAlterTableEventSchema,
+    createIndexEventSchema,
+    dropTableEventSchema,
+    dropIndexEventSchema,
+  ),
 });
 
 export type DdlEvent = v.Infer<typeof ddlEventSchema>;
@@ -179,6 +201,48 @@ $$ LANGUAGE plpgsql;
   `;
 }
 
+const DROP_EVENT_TRIGGERS = `
+CREATE OR REPLACE FUNCTION zero.replicate_drop_event(tag TEXT, type TEXT, dropped TEXT)
+RETURNS void
+AS $$
+DECLARE
+  event text;
+BEGIN
+  SELECT json_build_object(
+    'type', 'ddl',
+    'event', json_build_object(
+      'context', zero.get_trigger_context(),
+      'tag', tag,
+      dropped, json_agg(json_build_object(
+        'schema', schema_name,
+        'objectIdentity', object_identity
+      ))
+    )
+  ) FROM pg_event_trigger_dropped_objects() 
+    WHERE object_type = type
+    INTO event;
+
+  PERFORM pg_logical_emit_message(true, 'zero', event);
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION zero.replicate_drop_table()
+RETURNS event_trigger
+AS $$
+BEGIN
+  PERFORM zero.replicate_drop_event('DROP TABLE', 'table', 'tables');
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION zero.replicate_drop_index()
+RETURNS event_trigger
+AS $$
+BEGIN
+  PERFORM zero.replicate_drop_event('DROP INDEX', 'index', 'indexes');
+END
+$$ LANGUAGE plpgsql;
+`;
+
 export function createEventTriggerStatements(pubPrefix = ZERO_PUB_PREFIX) {
   return [
     COMMON_TRIGGER_FUNCTIONS,
@@ -196,5 +260,18 @@ export function createEventTriggerStatements(pubPrefix = ZERO_PUB_PREFIX) {
       ON ddl_command_end
       WHEN TAG IN ('CREATE INDEX')
       EXECUTE PROCEDURE zero.replicate_create_index()`,
+
+    DROP_EVENT_TRIGGERS,
+    `DROP EVENT TRIGGER IF EXISTS zero_replicate_drop_table`,
+    `CREATE EVENT TRIGGER zero_replicate_drop_table
+      ON sql_drop
+      WHEN TAG IN ('DROP TABLE')
+      EXECUTE PROCEDURE zero.replicate_drop_table()`,
+
+    `DROP EVENT TRIGGER IF EXISTS zero_replicate_drop_index`,
+    `CREATE EVENT TRIGGER zero_replicate_drop_index
+        ON sql_drop
+        WHEN TAG IN ('DROP INDEX')
+        EXECUTE PROCEDURE zero.replicate_drop_index()`,
   ].join(';\n');
 }
