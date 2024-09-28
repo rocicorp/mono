@@ -14,7 +14,7 @@ assert(
 
 class TestDBs {
   readonly #sql = postgres(CONNECTION_URI, {
-    onnotice: () => {},
+    onnotice: n => n.severity !== 'NOTICE' && console.log(n),
     ...postgresTypeConfig(),
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
@@ -33,7 +33,7 @@ class TestDBs {
       username,
       password: pass ?? undefined,
       database,
-      onnotice: () => {},
+      onnotice: n => n.severity !== 'NOTICE' && console.log(n),
       ...postgresTypeConfig(),
     });
     this.#dbs[database] = db;

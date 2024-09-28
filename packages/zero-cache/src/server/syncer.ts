@@ -1,7 +1,6 @@
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import postgres from 'postgres';
 import {must} from 'shared/src/must.js';
 import {randInt} from 'shared/src/rand.js';
 import {getZeroConfig} from '../config/zero-config.js';
@@ -11,7 +10,7 @@ import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
-import {postgresTypeConfig} from '../types/pg.js';
+import {pgClient} from '../types/pg.js';
 import {
   parentWorker,
   singleProcessMode,
@@ -30,13 +29,11 @@ export default async function runWorker(parent: Worker) {
 
   const lc = createLogContext(config.log, {worker: 'syncer'});
 
-  const cvrDB = postgres(config.cvrDbUri, {
-    ...postgresTypeConfig(),
+  const cvrDB = pgClient(lc, config.cvrDbUri, {
     max: MAX_CVR_CONNECTIONS,
   });
 
-  const upstreamDB = postgres(config.upstreamUri, {
-    ...postgresTypeConfig(),
+  const upstreamDB = pgClient(lc, config.upstreamUri, {
     max: MAX_MUTAGEN_CONNECTIONS,
   });
 

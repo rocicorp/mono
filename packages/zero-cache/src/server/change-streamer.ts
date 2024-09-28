@@ -1,11 +1,10 @@
-import postgres from 'postgres';
 import {must} from 'shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
 import {initializeChangeSource} from '../services/change-streamer/pg/change-source.js';
 import {runOrExit} from '../services/runner.js';
-import {postgresTypeConfig} from '../types/pg.js';
+import {pgClient} from '../types/pg.js';
 import {
   parentWorker,
   singleProcessMode,
@@ -20,8 +19,7 @@ export default async function runWorker(parent: Worker) {
   const lc = createLogContext(config.log, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
-  const changeDB = postgres(config.changeDbUri, {
-    ...postgresTypeConfig(),
+  const changeDB = pgClient(lc, config.changeDbUri, {
     max: MAX_CHANGE_DB_CONNECTIONS,
   });
   void Promise.allSettled(
