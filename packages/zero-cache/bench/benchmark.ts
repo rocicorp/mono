@@ -1,7 +1,7 @@
 // create a zql query
 
+import {assert} from 'shared/src/asserts.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {must} from 'shared/src/must.js';
 import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
 import type {Source} from 'zql/src/zql/ivm/source.js';
 import {newQuery, type QueryDelegate} from 'zql/src/zql/query/query-impl.js';
@@ -11,9 +11,14 @@ import {listTables} from '../src/db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.js';
 import {schema} from './schema.js';
 
+type Options = {
+  dbFile: string;
+};
+
 // load up some data!
-export function bench() {
-  const db = new Database(createSilentLogContext(), '/tmp/sync-replica.db');
+export function bench(opts: Options) {
+  const {dbFile} = opts;
+  const db = new Database(createSilentLogContext(), dbFile);
   const sources = new Map<string, Source>();
   const tableSpecs = new Map(listTables(db).map(spec => [spec.name, spec]));
   const host: QueryDelegate = {
@@ -22,7 +27,8 @@ export function bench() {
       if (source) {
         return source;
       }
-      const tableSpec = must(tableSpecs.get(name));
+      const tableSpec = tableSpecs.get(name);
+      assert(tableSpec, `Missing tableSpec for ${name}`);
       const {columns, primaryKey} = tableSpec;
 
       source = new TableSource(
@@ -63,5 +69,5 @@ export function bench() {
   const start = performance.now();
   view.hydrate();
   const end = performance.now();
-  console.log(`hydrate took ${end - start}ms`);
+  console.log(`hydrate\ttook ${end - start}ms`);
 }

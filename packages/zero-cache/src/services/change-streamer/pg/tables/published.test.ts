@@ -734,6 +734,147 @@ describe('tables/published', () => {
         ],
       },
     },
+    {
+      name: 'compound indices',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.foo (
+        id INTEGER PRIMARY KEY,
+        a INTEGER,
+        b INTEGER
+      );
+      CREATE INDEX foo_a_b ON test.foo (a, b);
+      CREATE INDEX foo_b_a ON test.foo (b, a);
+      CREATE PUBLICATION zero_data FOR TABLE test.foo;
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'foo',
+            columns: {
+              ['id']: {
+                pos: 1,
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: true,
+              },
+              ['a']: {
+                pos: 2,
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+              ['b']: {
+                pos: 3,
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+            },
+            primaryKey: ['id'],
+            publications: {['zero_data']: {rowFilter: null}},
+          },
+        ],
+        indices: [
+          {
+            schemaName: 'test',
+            tableName: 'foo',
+            name: 'foo_a_b',
+            columns: ['a', 'b'],
+            unique: false,
+          },
+          {
+            schemaName: 'test',
+            tableName: 'foo',
+            name: 'foo_b_a',
+            columns: ['b', 'a'],
+            unique: false,
+          },
+        ],
+      },
+    },
+    {
+      name: 'indices after column rename',
+      setupQuery: `
+      CREATE SCHEMA test;
+      CREATE TABLE test.foo (
+        id INTEGER PRIMARY KEY,
+        a INTEGER,
+        b INTEGER
+      );
+      CREATE INDEX foo_a_b ON test.foo (a, b);
+      CREATE INDEX foo_b_a ON test.foo (b, a);
+      CREATE PUBLICATION zero_data FOR TABLE test.foo;
+
+      ALTER TABLE test.foo RENAME a to az;
+      ALTER TABLE test.foo RENAME b to bz;
+      `,
+      expectedResult: {
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [
+          {
+            schema: 'test',
+            name: 'foo',
+            columns: {
+              ['id']: {
+                pos: 1,
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: true,
+              },
+              ['az']: {
+                pos: 2,
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+              ['bz']: {
+                pos: 3,
+                dataType: 'int4',
+                characterMaximumLength: null,
+                notNull: false,
+              },
+            },
+            primaryKey: ['id'],
+            publications: {['zero_data']: {rowFilter: null}},
+          },
+        ],
+        indices: [
+          {
+            schemaName: 'test',
+            tableName: 'foo',
+            name: 'foo_a_b',
+            columns: ['az', 'bz'],
+            unique: false,
+          },
+          {
+            schemaName: 'test',
+            tableName: 'foo',
+            name: 'foo_b_a',
+            columns: ['bz', 'az'],
+            unique: false,
+          },
+        ],
+      },
+    },
   ];
 
   let db: postgres.Sql;

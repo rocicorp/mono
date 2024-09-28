@@ -1,11 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
-import postgres from 'postgres';
 import {getZeroConfig} from '../config/zero-config.js';
 import {Dispatcher, type Workers} from '../services/dispatcher/dispatcher.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
-import {postgresTypeConfig} from '../types/pg.js';
+import {pgClient} from '../types/pg.js';
 import {childWorker, type Worker} from '../types/processes.js';
 import {orTimeout} from '../types/timeout.js';
 import {
@@ -63,10 +62,7 @@ if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = postgres(config.changeDbUri, {
-    ...postgresTypeConfig(),
-    onnotice: () => {},
-  });
+  const cvrDB = pgClient(lc, config.changeDbUri);
   await initViewSyncerSchema(lc, cvrDB);
   void cvrDB.end();
 }

@@ -13,7 +13,8 @@
     "local": "node --loader ts-node/esm tool/local.ts",
     "start": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts",
     "bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/bench.ts",
-    "wal_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal-bench.ts"
+    "wal_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal-bench.ts",
+    "wal2_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal2-bench.ts"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
@@ -31,7 +32,7 @@
     "json-custom-numbers": "^3.1.1",
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",
-    "pg-logical-replication": "^2.0.5",
+    "pg-logical-replication": "^2.0.7",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
     "xxhash-wasm": "^1.0.2",
