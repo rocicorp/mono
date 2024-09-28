@@ -1,109 +1,200 @@
 import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
+import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
 import {
   indexDefinitionsQuery,
   publishedTableQuery,
   ZERO_PUB_PREFIX,
 } from './published.js';
 
-const createOrAlterTagSchema = v.union(
+const triggerEvent = v.object({
+  context: v.object({query: v.string()}).rest(v.string()),
+});
+
+const createOrAlterTableTagSchema = v.union(
   v.literal('CREATE TABLE'),
   v.literal('ALTER TABLE'),
-  v.literal('CREATE INDEX'),
 );
 
-const dropTagSchema = v.union(v.literal('DROP TABLE'), v.literal('DROP INDEX'));
+const createIndexTagSchema = v.literal('CREATE INDEX');
 
-const createOrAlterSchema = v.object({
-  tag: createOrAlterTagSchema,
-  query: v.string(),
-  table: v.array(jsonObjectSchema), // FilteredTableSpec[]
-  indexes: v.array(jsonObjectSchema), // IndexSpec[]
-  renamedColumns: v.array(v.number()), // 1-indexed column pos
+const createOrAlterTableEventSchema = triggerEvent.extend({
+  tag: createOrAlterTableTagSchema,
+  table: jsonObjectSchema.map(t => t as FilteredTableSpec), // TODO: Define FilteredTableSpec schema.
+  indexes: v.array(jsonObjectSchema.map(t => t as IndexSpec)), // TODO: Define IndexSpec schema.
 });
 
-const dropSchema = v.object({
-  tag: dropTagSchema,
-  query: v.string(),
-  // TODO: Define schema and collect data from sql_drop() events.
+export type CreateOrAlterTableEvent = v.Infer<
+  typeof createOrAlterTableEventSchema
+>;
+
+const createIndexEventSchema = triggerEvent.extend({
+  tag: createIndexTagSchema,
+  index: jsonObjectSchema.map(t => t as IndexSpec), // TODO: Define IndexSpec schema.
 });
 
-export const ddlMessageSchema = v.object({
+export type CreateIndexEvent = v.Infer<typeof createIndexEventSchema>;
+
+// TODO:
+// const dropTagSchema = v.union(v.literal('DROP TABLE'), v.literal('DROP INDEX'));
+
+export const ddlEventSchema = v.object({
   type: v.literal('ddl'),
-  msg: v.union(createOrAlterSchema, dropSchema),
+  event: v.union(createOrAlterTableEventSchema, createIndexEventSchema),
 });
 
-export type DdlMessage = v.Infer<typeof ddlMessageSchema>;
+export type DdlEvent = v.Infer<typeof ddlEventSchema>;
 
-export function replicateCreateOrAlterEvent(pubPrefix: string) {
+export const errorEventSchema = v.object({
+  type: v.literal('error'),
+  event: triggerEvent.extend({message: v.string()}).rest(v.string()),
+});
+
+export type ErrorEvent = v.Infer<typeof errorEventSchema>;
+
+const COMMON_TRIGGER_FUNCTIONS = `
+CREATE OR REPLACE FUNCTION zero.get_trigger_context()
+RETURNS record
+AS $$
+DECLARE
+  result record;
+BEGIN
+  SELECT current_query() AS "query" into result;
+  RETURN result;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION zero.emit_error(message TEXT)
+RETURNS void
+AS $$
+DECLARE
+  event text;
+BEGIN
+  SELECT json_build_object(
+    'type', 'error',
+    'event', json_build_object(
+      'context', zero.get_trigger_context(),
+      'message', message
+    )
+  ) into event;
+
+  PERFORM pg_logical_emit_message(true, 'zero', event);
+END
+$$ LANGUAGE plpgsql;
+`;
+
+export function replicateCreateOrAlterTable(pubPrefix: string) {
   return `
-CREATE OR REPLACE FUNCTION zero.replicate_create_or_alter_event()
+CREATE OR REPLACE FUNCTION zero.replicate_create_or_alter_table()
 RETURNS event_trigger
-LANGUAGE plpgsql
 AS $$
 DECLARE
   tag text;
-  query text;
   tables record;
   indexes record;
-  renamed_columns json;
-  replication_message text;
+  event text;
 BEGIN 
+  SELECT command_tag FROM pg_event_trigger_ddl_commands() INTO tag;
+  IF LENGTH(tag) = 0  -- should be impossible
+  THEN
+    RAISE EXCEPTION 'missing command_tag from pg_event_trigger_ddl_commands() for %', query;
+  END IF;
+
   ${publishedTableQuery(
     pubPrefix,
     `JOIN pg_event_trigger_ddl_commands() ddl ON ddl.objid = pc.oid`,
   )} INTO tables;
 
+  IF json_array_length(tables.tables) = 0
+  THEN RETURN; END IF;  -- not a table published by "pubPrefix"
+
+  IF json_array_length(tables.tables) > 1
+  THEN
+    PERFORM zero.emit_error(
+      FORMAT('unexpected number of tables for "%s": %s',
+        tag, json_array_length(tables.tables))
+    );
+    RETURN;
+  END IF;
+
+  ${indexDefinitionsQuery(
+    pubPrefix,
+    `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pg_index.indrelid`,
+  )} INTO indexes;
+  
+  SELECT json_build_object(
+    'type', 'ddl',
+    'event', json_build_object(
+      'context', zero.get_trigger_context(),
+      'tag', tag,
+      'table', tables.tables -> 0,
+      'indexes', indexes.indexes
+    )
+  ) INTO event;
+
+  PERFORM pg_logical_emit_message(true, 'zero', event);
+END 
+$$ LANGUAGE plpgsql;
+  `;
+}
+
+export function replicateCreateIndex(pubPrefix: string) {
+  return `
+CREATE OR REPLACE FUNCTION zero.replicate_create_index()
+RETURNS event_trigger
+AS $$
+DECLARE
+  indexes record;
+  event text;
+BEGIN 
   ${indexDefinitionsQuery(
     pubPrefix,
     `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pc.oid`,
   )} INTO indexes;
-  
-  IF json_array_length(tables.tables)   = 0 AND 
-     json_array_length(indexes.indexes) = 0
+
+  IF json_array_length(indexes.indexes) = 0
+  THEN RETURN; END IF;  -- not an index published by "pubPrefix"
+
+  IF json_array_length(indexes.indexes) > 1
   THEN
-    -- not a table published by "pubPrefix"
+    PERFORM zero.emit_error(
+      FORMAT('unexpected number of indexes for "CREATE INDEX": %s', 
+        json_array_length(indexes.indexes))
+    );
     RETURN;
   END IF;
-
-  SELECT COALESCE(json_agg(objsubid), '[]'::json)
-    FROM pg_event_trigger_ddl_commands()
-    WHERE object_type = 'table column'
-    INTO renamed_columns;
-
-  SELECT current_query() INTO query;
-
-  SELECT command_tag FROM pg_event_trigger_ddl_commands() INTO tag;
-
-  IF LENGTH(tag) = 0
-  THEN
-    -- should be impossible
-    RAISE EXCEPTION 'missing command_tag from pg_event_trigger_ddl_commands() for %', query;
-  END IF;
-
+  
   SELECT json_build_object(
     'type', 'ddl',
-    'msg', json_build_object(
-      'tag', tag,
-      'query', query,
-      'tables', tables.tables,
-      'indexes', indexes.indexes,
-      'renamedColumns', renamed_columns
+    'event', json_build_object(
+      'context', zero.get_trigger_context(),
+      'tag', 'CREATE INDEX',
+      'index', indexes.indexes -> 0
     )
-  ) INTO replication_message;
+  ) INTO event;
 
-  PERFORM pg_logical_emit_message(true, 'zero', replication_message);
-END $$
+  PERFORM pg_logical_emit_message(true, 'zero', event);
+END
+$$ LANGUAGE plpgsql;
   `;
 }
 
 export function createEventTriggerStatements(pubPrefix = ZERO_PUB_PREFIX) {
   return [
-    replicateCreateOrAlterEvent(pubPrefix),
-    `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_or_alter`,
-    `CREATE EVENT TRIGGER zero_replicate_create_or_alter
+    COMMON_TRIGGER_FUNCTIONS,
+
+    replicateCreateOrAlterTable(pubPrefix),
+    `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_or_alter_table`,
+    `CREATE EVENT TRIGGER zero_replicate_create_or_alter_table
       ON ddl_command_end
-      WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE', 'CREATE INDEX')
-      EXECUTE PROCEDURE zero.replicate_create_or_alter_event()`,
+      WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE')
+      EXECUTE PROCEDURE zero.replicate_create_or_alter_table()`,
+
+    replicateCreateIndex(pubPrefix),
+    `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_index`,
+    `CREATE EVENT TRIGGER zero_replicate_create_index
+      ON ddl_command_end
+      WHEN TAG IN ('CREATE INDEX')
+      EXECUTE PROCEDURE zero.replicate_create_index()`,
   ].join(';\n');
 }
