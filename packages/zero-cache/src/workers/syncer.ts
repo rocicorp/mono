@@ -12,6 +12,10 @@ import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
+import {jwtVerify, type JWTPayload} from 'jose';
+import type {ZeroConfig} from '../config/zero-config.js';
+import assert from 'assert';
+import {must} from 'shared/src/must.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -31,9 +35,11 @@ export class Syncer {
   readonly #connections = new Map<string, Connection>();
   readonly #parent: Worker;
   readonly #wss: WebSocket.Server;
+  #jwtSecretBytes: Uint8Array | undefined;
 
   constructor(
     lc: LogContext,
+    config: ZeroConfig,
     viewSyncerFactory: (
       id: string,
       sub: Subscription<ReplicaState>,
@@ -56,17 +62,32 @@ export class Syncer {
     this.#parent = parent;
     this.#wss = new WebSocket.Server({noServer: true});
 
+    if (config.jwtSecret) {
+      this.#jwtSecretBytes = new TextEncoder().encode(config.jwtSecret);
+    }
+
     installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
   }
 
-  readonly #createConnection = (ws: WebSocket, params: ConnectParams) => {
-    const {clientID, clientGroupID} = params;
+  readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    const {clientID, clientGroupID, auth, userID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
       existing.close();
     }
+
+    let decodedToken: JWTPayload | undefined;
+    if (auth) {
+      decodedToken = await decodeAndCheckToken(
+        auth,
+        this.#jwtSecretBytes,
+        userID,
+      );
+    }
+
     const connection = new Connection(
       this.#lc,
+      decodedToken ?? {},
       this.#viewSyncers.getService(clientGroupID),
       this.#mutagens.getService(clientGroupID),
       params,
@@ -85,4 +106,22 @@ export class Syncer {
   stop() {
     this.#wss.close();
   }
+}
+
+export async function decodeAndCheckToken(
+  auth: string,
+  secret: Uint8Array | undefined,
+  userID: string,
+) {
+  assert(
+    secret,
+    'JWT secret was not set in `zero.config.ts`. Set this to the secret that you use to sign JWTs.',
+  );
+  const decodedToken = (await jwtVerify(auth, secret)).payload;
+  must(decodedToken, 'Failed to verify JWT');
+  assert(
+    decodedToken.sub === userID,
+    'JWT subject does not match the userID that Zero was constructed with.',
+  );
+  return decodedToken;
 }

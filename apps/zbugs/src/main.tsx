@@ -6,6 +6,10 @@ import {ZeroProvider} from 'zero-react/src/use-zero.js';
 import {type Schema, schema} from './domain/schema.js';
 import './index.css';
 import Root from './root.js';
+import {getJwt, getRawJwt} from './jwt.js';
+
+const jwt = getJwt();
+const encodedJwt = getRawJwt();
 
 const qs = new URLSearchParams(location.search);
 const hiddenTabDisconnectDelayMinutes = qs.get('keepalive') ? 60 : 5;
@@ -16,7 +20,8 @@ console.info(
 const z = new Zero({
   logLevel: 'info',
   server: import.meta.env.VITE_PUBLIC_SERVER,
-  userID: 'anon',
+  userID: jwt?.sub ?? 'anon',
+  auth: encodedJwt,
   schemas: schema,
   hiddenTabDisconnectDelay: hiddenTabDisconnectDelayMinutes * 60 * 1000,
 });

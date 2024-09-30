@@ -20,6 +20,7 @@ import type {
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
+import type {JWTPayload} from 'jose';
 
 /**
  * Represents a connection between the client and server.
@@ -45,6 +46,7 @@ export class Connection {
 
   constructor(
     lc: LogContext,
+    _authData: JWTPayload,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     connectParams: ConnectParams,

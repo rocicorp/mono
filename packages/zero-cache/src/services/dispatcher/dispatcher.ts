@@ -50,6 +50,7 @@ export class Dispatcher implements Service {
     const {headers, url} = req;
     const {params, error} = getConnectParams(
       new URL(url ?? '', 'http://unused/'),
+      headers,
     );
     if (error !== null) {
       throw new Error(error);
