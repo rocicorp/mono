@@ -15,6 +15,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "declaration": true,
+    "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
     "preserveSymlinks": true,

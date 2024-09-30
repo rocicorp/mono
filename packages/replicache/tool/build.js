@@ -6,7 +6,6 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
-import {readPackageJSON} from './read-package-json.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const perf = process.argv.includes('--perf');
@@ -91,13 +90,8 @@ async function buildCLI() {
   });
 }
 
-async function isRocicorpPackage() {
-  const packageJSON = await readPackageJSON();
-  return packageJSON.name.startsWith('@rocicorp/');
-}
-
 if (perf) {
-  await buildMJS({mode: 'release'});
+  // await buildMJS({mode: 'release'});
 } else if (forBundleSizeDashboard) {
   // Bundle external modules for the bundle size dashboard
   const external = ['node:*'];
@@ -108,9 +102,6 @@ if (perf) {
     buildCLI(),
   ]);
 } else {
-  let opts = {};
-  if (debug || (await isRocicorpPackage())) {
-    opts = {minify: false};
-  }
-  await Promise.all([buildMJS(opts), buildCLI()]);
+  await buildCLI();
+  await buildReplicache({minify: false, ext: 'js', mode: 'unknown'});
 }
