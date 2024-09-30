@@ -102,11 +102,21 @@ export async function initialSync(
 }
 
 async function checkUpstreamConfig(upstreamDB: PostgresDB) {
-  // Check upstream wal_level
-  const {wal_level: walLevel} = (await upstreamDB`SHOW wal_level`)[0];
+  const {walLevel, version} = (
+    await upstreamDB<{walLevel: string; version: number}[]>`
+      SELECT current_setting('wal_level') as "walLevel", 
+             current_setting('server_version_num') as "version";
+  `
+  )[0];
+
   if (walLevel !== 'logical') {
     throw new Error(
       `Postgres must be configured with "wal_level = logical" (currently: "${walLevel})`,
+    );
+  }
+  if (version < 150000) {
+    throw new Error(
+      `Must be running Postgres 15 or higher (currently: "${version}")`,
     );
   }
 }
