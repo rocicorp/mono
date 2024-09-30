@@ -10,6 +10,7 @@ import statusClosed from '../../assets/icons/issue-closed.svg';
 import Comment from './comment.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {navigate} from 'wouter/use-browser-location';
+import CommentComposer from './comment-composer.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -20,7 +21,7 @@ export default function IssuePage() {
     .where('id', params?.id ?? '')
     .related('creator', creator => creator.one())
     .related('labels')
-    .related('comments')
+    .related('comments', q => q.orderBy('created', 'asc'))
     .one();
   const issue = useQuery(q, match);
 
@@ -135,6 +136,7 @@ export default function IssuePage() {
             {issue.comments.map(comment => (
               <Comment key={comment.id} id={comment.id} issueID={issue.id} />
             ))}
+            <CommentComposer issueID={issue.id} />
           </div>
         ) : null}
       </div>
