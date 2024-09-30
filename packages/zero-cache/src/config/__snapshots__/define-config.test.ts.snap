@@ -39,6 +39,12 @@ exports[`instance authorization rules 1`] = `
                     "field": "sub"
                   }
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ],
@@ -63,6 +69,12 @@ exports[`instance authorization rules 1`] = `
                   "field": "role",
                   "value": "crew"
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ]
@@ -97,6 +109,12 @@ exports[`instance authorization rules 1`] = `
                     "field": "sub"
                   }
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ]
@@ -126,6 +144,12 @@ exports[`instance authorization rules 1`] = `
                     "field": "role",
                     "value": "crew"
                   }
+                ],
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
                 ]
               }
             ]
@@ -154,7 +178,13 @@ exports[`static authorization rules 1`] = `
           [
             "allow",
             {
-              "table": "user"
+              "table": "user",
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
+              ]
             }
           ]
         ],
@@ -162,7 +192,13 @@ exports[`static authorization rules 1`] = `
           [
             "allow",
             {
-              "table": "user"
+              "table": "user",
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
+              ]
             }
           ]
         ],
@@ -170,7 +206,13 @@ exports[`static authorization rules 1`] = `
           [
             "allow",
             {
-              "table": "user"
+              "table": "user",
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
+              ]
             }
           ]
         ],
@@ -178,7 +220,13 @@ exports[`static authorization rules 1`] = `
           [
             "allow",
             {
-              "table": "user"
+              "table": "user",
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
+              ]
             }
           ]
         ]
@@ -189,7 +237,13 @@ exports[`static authorization rules 1`] = `
             [
               "allow",
               {
-                "table": "user"
+                "table": "user",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ]
               }
             ]
           ],
@@ -197,7 +251,13 @@ exports[`static authorization rules 1`] = `
             [
               "allow",
               {
-                "table": "user"
+                "table": "user",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ]
               }
             ]
           ],
@@ -205,7 +265,13 @@ exports[`static authorization rules 1`] = `
             [
               "allow",
               {
-                "table": "user"
+                "table": "user",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ]
               }
             ]
           ],
@@ -213,7 +279,13 @@ exports[`static authorization rules 1`] = `
             [
               "allow",
               {
-                "table": "user"
+                "table": "user",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ]
               }
             ]
           ]
@@ -259,6 +331,12 @@ exports[`static authorization rules 2`] = `
                   "field": "role",
                   "value": "crew"
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ]
@@ -285,6 +363,12 @@ exports[`static authorization rules 2`] = `
                   "field": "role",
                   "value": "crew"
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ]
@@ -311,6 +395,12 @@ exports[`static authorization rules 2`] = `
                   "field": "role",
                   "value": "crew"
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ]
@@ -337,6 +427,12 @@ exports[`static authorization rules 2`] = `
                   "field": "role",
                   "value": "crew"
                 }
+              ],
+              "orderBy": [
+                [
+                  "id",
+                  "asc"
+                ]
               ]
             }
           ]
@@ -366,6 +462,12 @@ exports[`static authorization rules 2`] = `
                     "field": "role",
                     "value": "crew"
                   }
+                ],
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
                 ]
               }
             ]
@@ -392,6 +494,12 @@ exports[`static authorization rules 2`] = `
                     "field": "role",
                     "value": "crew"
                   }
+                ],
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
                 ]
               }
             ]
@@ -418,6 +526,12 @@ exports[`static authorization rules 2`] = `
                     "field": "role",
                     "value": "crew"
                   }
+                ],
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
                 ]
               }
             ]
@@ -444,6 +558,12 @@ exports[`static authorization rules 2`] = `
                     "field": "role",
                     "value": "crew"
                   }
+                ],
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
                 ]
               }
             ]

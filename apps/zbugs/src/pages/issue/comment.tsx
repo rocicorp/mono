@@ -4,6 +4,7 @@ import Markdown from '../../components/markdown.js';
 import style from './comment.module.css';
 import {useState} from 'react';
 import CommentComposer from './comment-composer.js';
+import {useLogin} from '../../hooks/use-login.js';
 
 export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const z = useZero();
@@ -13,14 +14,13 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
     .one();
   const comment = useQuery(q);
   const [editing, setEditing] = useState(false);
+  const login = useLogin();
 
   if (!comment) {
     return null;
   }
 
-  const edit = () => {
-    setEditing(true);
-  };
+  const edit = () => setEditing(true);
 
   return (
     <div className={style.commentItem}>
@@ -44,7 +44,11 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       ) : (
         <Markdown>{comment.body}</Markdown>
       )}
-      <div>{editing ? null : <a onClick={edit}>Edit</a>}</div>
+      <div>
+        {editing || comment.creatorID !== login.loginState?.userID ? null : (
+          <a onClick={edit}>Edit</a>
+        )}
+      </div>
     </div>
   );
 }
