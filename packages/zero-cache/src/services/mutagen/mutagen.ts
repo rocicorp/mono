@@ -14,17 +14,23 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
-import type {AuthorizationConfig} from '../../config/zero-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
+import type {ZeroConfig} from '../../config/zero-config.js';
+import {Database} from 'zqlite/src/db.js';
+import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import type {JWTPayload} from 'jose';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
 export type MutationError = string;
 
 export interface Mutagen {
-  processMutation(mutation: Mutation): Promise<MutationError | undefined>;
+  processMutation(
+    mutation: Mutation,
+    authData: JWTPayload,
+  ): Promise<MutationError | undefined>;
 }
 
 export class MutagenService implements Mutagen, Service {
@@ -32,29 +38,43 @@ export class MutagenService implements Mutagen, Service {
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
   readonly #stopped = resolver();
-  readonly #authorizationConfig: AuthorizationConfig;
+  readonly #replica: Database;
+  readonly #writeAuthorizer: WriteAuthorizer;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
     upstream: PostgresDB,
-    authorizationConfig: AuthorizationConfig,
+    config: ZeroConfig,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'Mutagen')
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
-    this.#authorizationConfig = authorizationConfig;
+    this.#replica = new Database(this.#lc, config.replicaDbFile, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    this.#writeAuthorizer = new WriteAuthorizerImpl(
+      this.#lc,
+      config,
+      this.#replica,
+      clientGroupID,
+    );
   }
 
-  processMutation(mutation: Mutation): Promise<MutationError | undefined> {
+  processMutation(
+    mutation: Mutation,
+    authData: JWTPayload,
+  ): Promise<MutationError | undefined> {
     return processMutation(
       this.#lc,
+      authData,
       this.#upstream,
       this.id,
       mutation,
-      this.#authorizationConfig,
+      this.#writeAuthorizer,
     );
   }
 
@@ -72,10 +92,11 @@ const MAX_SERIALIZATION_ATTEMPTS = 2;
 
 export async function processMutation(
   lc: LogContext | undefined,
+  authData: JWTPayload,
   db: PostgresDB,
   clientGroupID: string,
   mutation: Mutation,
-  _authorizationConfig: AuthorizationConfig,
+  writeAuthorizer: WriteAuthorizer,
   onTxStart?: () => void, // for testing
 ): Promise<MutationError | undefined> {
   assert(
@@ -133,7 +154,14 @@ export async function processMutation(
       try {
         await db.begin(Mode.SERIALIZABLE, tx => {
           onTxStart?.();
-          return processMutationWithTx(tx, clientGroupID, mutation, errorMode);
+          return processMutationWithTx(
+            tx,
+            authData,
+            clientGroupID,
+            mutation,
+            errorMode,
+            writeAuthorizer,
+          );
         });
         if (errorMode) {
           lc?.debug?.('Ran mutation successfully in error mode');
@@ -172,9 +200,11 @@ export async function processMutation(
 
 async function processMutationWithTx(
   tx: PostgresTransaction,
+  authData: JWTPayload,
   clientGroupID: string,
   mutation: CRUDMutation,
   errorMode: boolean,
+  authorizer: WriteAuthorizer,
 ) {
   const queryPromises: Promise<unknown>[] = [
     incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
@@ -186,15 +216,30 @@ async function processMutationWithTx(
     for (const op of ops) {
       switch (op.op) {
         case 'create':
+          if (!authorizer.canInsert(authData, op)) {
+            // We return if the authorizer fails since
+            // if any write in the transaction fails, the entire set of
+            // write in the transaction is aborted.
+            return;
+          }
           queryPromises.push(getCreateSQL(tx, op).execute());
           break;
         case 'set':
+          if (!authorizer.canUpsert(authData, op)) {
+            return;
+          }
           queryPromises.push(getSetSQL(tx, op).execute());
           break;
         case 'update':
+          if (!authorizer.canUpdate(authData, op)) {
+            return;
+          }
           queryPromises.push(getUpdateSQL(tx, op).execute());
           break;
         case 'delete':
+          if (!authorizer.canDelete(authData, op)) {
+            return;
+          }
           queryPromises.push(getDeleteSQL(tx, op).execute());
           break;
         default:
