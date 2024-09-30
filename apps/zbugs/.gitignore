@@ -24,3 +24,7 @@ secrets*.json
 *.sln
 *.sw?
 zero.config.json
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
