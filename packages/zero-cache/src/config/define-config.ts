@@ -14,7 +14,8 @@ import type {
   Action,
   AssetAuthorization as CompiledAssetAuthorization,
   AuthorizationConfig as CompiledAuthorizationConfig,
-  ZeroConfig as CompiledZeroConfig,
+  ZeroConfigType as CompiledZeroConfig,
+  EnvRef,
   ZeroConfigSansAuthorization,
 } from './zero-config.js';
 
@@ -66,6 +67,10 @@ export type ZeroConfig<
   authorization?: AuthorizationConfig<TAuthDataShape, TSchemas>;
 };
 
+export function runtimeEnv(key: string): EnvRef {
+  return {tag: 'env', name: key};
+}
+
 export function defineConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
   schemas: TSchemas,
   definer: (queries: Queries<TSchemas>) => ZeroConfig<TAuthDataShape, TSchemas>,
@@ -87,7 +92,6 @@ function compileConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
 ): CompiledZeroConfig {
   return {
     ...config,
-    // To be completed in a follow up PR
     authorization: compileAuthorization(config.authorization),
   };
 }

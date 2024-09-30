@@ -17,7 +17,7 @@ import {
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
-import type {ZeroConfig} from '../../config/zero-config.js';
+import {type ZeroConfig} from '../../config/zero-config.js';
 import {Database} from 'zqlite/src/db.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import type {JWTPayload} from 'jose';

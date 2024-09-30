@@ -1,8 +1,7 @@
 import 'dotenv/config';
-import process from 'node:process';
-import {must} from 'shared/src/must.js';
 import {
   defineConfig,
+  runtimeEnv,
   type Queries,
 } from 'zero-cache/src/config/define-config.js';
 import {type Schema, schema} from './src/domain/schema-shared.js';
@@ -13,13 +12,14 @@ const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
   queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
 defineConfig<AuthData, Schema>(schema, queries => ({
-  upstreamUri: must(process.env.UPSTREAM_URI),
-  cvrDbUri: must(process.env.CVR_DB_URI),
-  changeDbUri: must(process.env.CHANGE_DB_URI),
+  upstreamUri: runtimeEnv('UPSTREAM_URI'),
+  cvrDbUri: runtimeEnv('CVR_DB_URI'),
+  changeDbUri: runtimeEnv('CHANGE_DB_URI'),
 
-  replicaId: must(process.env.REPLICA_ID),
-  replicaDbFile: must(process.env.REPLICA_DB_FILE),
-  jwtSecret: must(process.env.JWT_SECRET),
+  replicaId: runtimeEnv('REPLICA_ID'),
+  replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
+  jwtSecret: runtimeEnv('JWT_SECRET'),
+  litestream: runtimeEnv('LITESTREAM'),
 
   log: {
     level: 'debug',
