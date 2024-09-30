@@ -24,11 +24,11 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.2.2",
     "@rocicorp/resolver": "^1.0.2",
-    "zqlite": "0.0.0",
     "compare-utf8": "^0.1.1",
     "datadog": "0.0.0",
     "eventemitter3": "^5.0.1",
     "fastify": "^5.0.0",
+    "jose": "^5.9.3",
     "json-custom-numbers": "^3.1.1",
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",
@@ -37,7 +37,8 @@
     "postgres-array": "^3.0.2",
     "xxhash-wasm": "^1.0.2",
     "zero-protocol": "0.0.0",
-    "zql": "0.0.0"
+    "zql": "0.0.0",
+    "zqlite": "0.0.0"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
