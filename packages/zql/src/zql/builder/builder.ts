@@ -1,7 +1,13 @@
 import {assert} from 'shared/src/asserts.js';
 import type {JSONValue} from 'shared/src/json.js';
 import {must} from 'shared/src/must.js';
-import type {AST, Ordering} from '../ast/ast.js';
+import type {
+  AST,
+  LiteralValue,
+  Ordering,
+  Parameter,
+  ValuePosition,
+} from '../ast/ast.js';
 import type {Row} from '../ivm/data.js';
 import {Filter} from '../ivm/filter.js';
 import {Join} from '../ivm/join.js';
@@ -66,7 +72,54 @@ export function buildPipeline(
   delegate: BuilderDelegate,
   staticQueryParameters: StaticQueryParameters | undefined,
 ): Input {
-  return buildPipelineInternal(ast, delegate, staticQueryParameters);
+  return buildPipelineInternal(
+    bindStaticParameters(ast, staticQueryParameters),
+    delegate,
+    staticQueryParameters,
+  );
+}
+
+export function bindStaticParameters(
+  ast: AST,
+  staticQueryParameters: StaticQueryParameters | undefined,
+) {
+  const visit = (node: AST): AST => {
+    if (node.where) {
+      return {
+        ...node,
+        where: node.where.map(condition => ({
+          ...condition,
+          value: bindValue(condition.value),
+        })),
+        related: node.related?.map(sq => ({
+          ...sq,
+          subquery: visit(sq.subquery),
+        })),
+      };
+    }
+    return node;
+  };
+
+  const bindValue = (value: ValuePosition): LiteralValue => {
+    if (isParameter(value)) {
+      const anchor = must(
+        staticQueryParameters,
+        'Static query params do not exist',
+      )[value.anchor];
+      assert(anchor !== undefined, `Missing parameter: ${value.anchor}`);
+      return must(
+        anchor[value.field],
+        `field ${value.field} does not exist in ${value.anchor}`,
+      ) as LiteralValue;
+    }
+    return value;
+  };
+
+  return visit(ast);
+}
+
+function isParameter(value: unknown): value is Parameter {
+  return typeof value === 'object' && value !== null && 'type' in value;
 }
 
 function buildPipelineInternal(
@@ -89,7 +142,7 @@ function buildPipelineInternal(
       end = new Filter(
         end,
         appliedFilters ? 'push-only' : 'all',
-        createPredicate(condition, staticQueryParameters),
+        createPredicate(condition),
       );
     }
   }
