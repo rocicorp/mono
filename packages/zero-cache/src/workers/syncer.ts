@@ -13,7 +13,7 @@ import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
 import {jwtVerify, type JWTPayload} from 'jose';
-import type {ZeroConfig} from '../config/zero-config.js';
+import {type ZeroConfig} from '../config/zero-config.js';
 import assert from 'assert';
 import {must} from 'shared/src/must.js';
 
