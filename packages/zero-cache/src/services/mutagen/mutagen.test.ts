@@ -5,6 +5,26 @@ import {MutationType, type CRUDMutation} from 'zero-protocol';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';
+import type {WriteAuthorizer} from './write-authorizer.js';
+
+class MockWriteAuthorizer implements WriteAuthorizer {
+  canInsert() {
+    return true;
+  }
+
+  canUpdate() {
+    return true;
+  }
+
+  canDelete() {
+    return true;
+  }
+
+  canUpsert() {
+    return true;
+  }
+}
+const mockWriteAuthorizer = new MockWriteAuthorizer();
 
 async function createTables(db: PostgresDB) {
   await db.unsafe(`
@@ -56,6 +76,7 @@ describe('processMutation', () => {
 
       const error = await processMutation(
         undefined,
+        {},
         db,
         'abc',
         {
@@ -77,7 +98,7 @@ describe('processMutation', () => {
           ],
           timestamp: Date.now(),
         },
-        {},
+        mockWriteAuthorizer,
       );
 
       expect(error).undefined;
@@ -104,6 +125,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
+      {},
       db,
       'abc',
       {
@@ -125,7 +147,7 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       },
-      {},
+      mockWriteAuthorizer,
     );
 
     expect(error).undefined;
@@ -150,6 +172,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
+      {},
       db,
       'abc',
       {
@@ -171,7 +194,7 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       },
-      {},
+      mockWriteAuthorizer,
     );
 
     expect(error).undefined;
@@ -198,6 +221,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
+      {},
       db,
       'abc',
       {
@@ -219,7 +243,7 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       },
-      {},
+      mockWriteAuthorizer,
     );
 
     expect(error).undefined;
@@ -245,6 +269,7 @@ describe('processMutation', () => {
     await expect(
       processMutation(
         undefined,
+        {},
         db,
         'abc',
         {
@@ -266,7 +291,7 @@ describe('processMutation', () => {
           ],
           timestamp: Date.now(),
         },
-        {},
+        mockWriteAuthorizer,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: ["error","InvalidPush","Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."]]`,
@@ -288,6 +313,7 @@ describe('processMutation', () => {
   test('process create, set, update, delete all at once', async () => {
     const error = await processMutation(
       undefined,
+      {},
       db,
       'abc',
       {
@@ -342,7 +368,7 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       } satisfies CRUDMutation,
-      {},
+      mockWriteAuthorizer,
     );
 
     expect(error).undefined;
@@ -369,6 +395,7 @@ describe('processMutation', () => {
   test('fk failure', async () => {
     const error = await processMutation(
       undefined,
+      {},
       db,
       'abc',
       {
@@ -392,7 +419,7 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       } satisfies CRUDMutation,
-      {},
+      mockWriteAuthorizer,
     );
 
     expect(error).toEqual(
@@ -433,6 +460,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
+      {},
       db,
       'abc',
       {
@@ -454,7 +482,7 @@ describe('processMutation', () => {
         ],
         timestamp: Date.now(),
       },
-      {},
+      mockWriteAuthorizer,
       resolve, // Finish the 2 => 3 transaction only after this 3 => 4 transaction begins.
     );
 

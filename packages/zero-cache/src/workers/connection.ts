@@ -40,13 +40,14 @@ export class Connection {
   readonly #viewSyncer: ViewSyncer;
   readonly #mutagen: Mutagen;
   readonly #mutationLock = new Lock();
+  readonly #authData: JWTPayload;
 
   #outboundStream: Source<Downstream> | undefined;
   #closed = false;
 
   constructor(
     lc: LogContext,
-    _authData: JWTPayload,
+    authData: JWTPayload,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     connectParams: ConnectParams,
@@ -54,6 +55,7 @@ export class Connection {
     onClose: () => void,
   ) {
     this.#ws = ws;
+    this.#authData = authData;
     const {clientGroupID, clientID, wsID, baseCookie} = connectParams;
     this.#clientGroupID = clientGroupID;
     this.#syncContext = {clientID, wsID, baseCookie};
@@ -136,7 +138,10 @@ export class Connection {
           // 2. A single view syncer connection cannot hog multiple upstream connections.
           await this.#mutationLock.withLock(async () => {
             for (const mutation of mutations) {
-              const errorDesc = await this.#mutagen.processMutation(mutation);
+              const errorDesc = await this.#mutagen.processMutation(
+                mutation,
+                this.#authData,
+              );
               if (errorDesc !== undefined) {
                 this.sendError(['error', ErrorKind.MutationFailed, errorDesc]);
               }
