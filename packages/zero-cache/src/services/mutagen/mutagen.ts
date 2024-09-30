@@ -19,11 +19,7 @@ import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import type {ZeroConfig} from '../../config/zero-config.js';
 import {Database} from 'zqlite/src/db.js';
-import {
-  WriteAuthorizationFailed,
-  WriteAuthorizerImpl,
-  type WriteAuthorizer,
-} from './write-authorizer.js';
+import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import type {JWTPayload} from 'jose';
 
 // An error encountered processing a mutation.
@@ -176,11 +172,6 @@ export async function processMutation(
           lc?.debug?.(e.message);
           return undefined;
         }
-        if (e instanceof WriteAuthorizationFailed) {
-          lc?.debug?.(e.message);
-          // throw e;
-          return undefined;
-        }
         if (e instanceof ErrorForClient || errorMode) {
           lc?.error?.('Process mutation error', e);
           throw e;
@@ -226,33 +217,28 @@ async function processMutationWithTx(
       switch (op.op) {
         case 'create':
           if (!authorizer.canInsert(authData, op)) {
-            throw new WriteAuthorizationFailed(
-              'Write policy failed for insert',
-            );
+            // We return if the authorizer fails since
+            // if any write in the transaction fails, the entire set of
+            // write in the transaction is aborted.
+            return;
           }
           queryPromises.push(getCreateSQL(tx, op).execute());
           break;
         case 'set':
           if (!authorizer.canUpsert(authData, op)) {
-            throw new WriteAuthorizationFailed(
-              'Write policy failed for insert',
-            );
+            return;
           }
           queryPromises.push(getSetSQL(tx, op).execute());
           break;
         case 'update':
           if (!authorizer.canUpdate(authData, op)) {
-            throw new WriteAuthorizationFailed(
-              'Write policy failed for update',
-            );
+            return;
           }
           queryPromises.push(getUpdateSQL(tx, op).execute());
           break;
         case 'delete':
           if (!authorizer.canDelete(authData, op)) {
-            throw new WriteAuthorizationFailed(
-              'Write policy failed for update',
-            );
+            return;
           }
           queryPromises.push(getDeleteSQL(tx, op).execute());
           break;
