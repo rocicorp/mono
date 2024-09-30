@@ -1,16 +1,13 @@
-import {useState} from 'react';
 import logoURL from '../assets/images/logo.svg';
-import {clearJwt, getJwt} from '../jwt.js';
 import {Link} from './link.js';
 import classNames from 'classnames';
 import {FPSMeter} from '@schickling/fps-meter';
 import {useSearch} from 'wouter';
+import {useLogin} from '../hooks/use-login.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
-  const [jwt, setJwt] = useState(() => {
-    return getJwt();
-  });
+  const login = useLogin();
 
   const addOpenParam = (open: boolean | undefined) => {
     const newParams = new URLSearchParams(qs);
@@ -60,17 +57,11 @@ export function Nav() {
       </div>
       <FPSMeter className="fps-meter" width={192} height={38} />
       <div className="user-login">
-        {jwt === undefined ? (
+        {login.loginState === undefined ? (
           <a href="/api/login/github">Login</a>
         ) : (
-          <span
-            className="cursor-pointer"
-            onClick={() => {
-              clearJwt();
-              setJwt(undefined);
-            }}
-          >
-            Logout {(jwt as {name: string}).name}
+          <span className="cursor-pointer" onClick={login.setLoggedOut}>
+            Logout {login.loginState?.login}
           </span>
         )}
       </div>
