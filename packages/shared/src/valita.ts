@@ -168,20 +168,26 @@ export function test<T>(
 /**
  * Shallowly marks the schema as readonly.
  */
-export function readonly<T extends v.Type>(t: T) {
+export function readonly<T extends v.Type>(t: T): v.Type<Readonly<v.Infer<T>>> {
   return t as v.Type<Readonly<v.Infer<T>>>;
 }
 
 export function readonlyObject<T extends Record<string, v.Type | v.Optional>>(
   t: T,
-) {
-  return readonly(v.object(t));
+): v.ObjectType<Readonly<T>, undefined> {
+  return v.object(t);
 }
 
-export function readonlyArray<T extends v.Type>(t: T) {
-  return readonly(v.array(t));
+export function readonlyArray<T extends v.Type>(
+  t: T,
+): v.Type<
+  readonly [...Readonly<T extends v.Type<unknown> ? v.Infer<T>[] : []>]
+> {
+  return v.array(t);
 }
 
-export function readonlyRecord<T extends v.Type>(t: T) {
-  return readonly(v.record(t));
+export function readonlyRecord<T extends v.Type>(
+  t: T,
+): v.Type<Readonly<Record<string, v.Infer<T>>>> {
+  return v.record(t);
 }
