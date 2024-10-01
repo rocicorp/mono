@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useZero} from '../../domain/schema.js';
+import {useZero} from '../../hooks/use-zero.js';
 import {nanoid} from 'zero-client/src/util/nanoid.js';
 
 export default function CommentComposer({
