@@ -8,7 +8,7 @@ import {
 } from './published.js';
 
 // Sent in the 'version' tag of "ddl" event messages. This is used to ensure
-// that the message constructed in the in the upstream Trigger is compatible
+// that the message constructed in the upstream Trigger function is compatible
 // with the code processing it in the zero-cache.
 //
 // Increment this when changing the format of the contents of the "ddl" events.
