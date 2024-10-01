@@ -58,12 +58,12 @@ export type {
   WriteTransaction,
 } from 'replicache';
 export type {
-  Query,
   DefaultQueryResultRow as EmptyQueryResultRow,
+  Query,
+  QueryReturnType,
+  QueryRowType,
   SchemaToRow,
   Smash,
-  QueryRowType,
-  QueryReturnType,
 } from 'zql/src/zql/query/query.js';
 export type {Schema} from 'zql/src/zql/query/schema.js';
 export type {ZeroOptions} from './client/options.js';

@@ -157,7 +157,8 @@ export interface MakeSubscriptionsManager {
   (queryInternal: QueryInternal, lc: LogContext): SubscriptionsManager;
 }
 
-const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
+// TODO: Remove this. This abstraction is no longer needed.
+export const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
   queryInternal,
   lc,
 ) => new SubscriptionsManagerImpl(queryInternal, lc);

@@ -9,7 +9,6 @@ import {makeDefine, sharedOptions} from '../../shared/src/build.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const perf = process.argv.includes('--perf');
-const debug = process.argv.includes('--debug');
 // You can then visualize the metafile at https://esbuild.github.io/analyze/
 const metafile = process.argv.includes('--metafile');
 
