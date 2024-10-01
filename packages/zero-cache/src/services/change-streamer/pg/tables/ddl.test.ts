@@ -90,6 +90,7 @@ describe('change-source/tables/ddl', () => {
       `CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           context: {
             query: `CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))`,
@@ -155,6 +156,7 @@ describe('change-source/tables/ddl', () => {
       `CREATE INDEX foo_name_index on pub.foo (name, id)`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'CREATE INDEX',
           context: {query: `CREATE INDEX foo_name_index on pub.foo (name, id)`},
@@ -173,6 +175,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD bar text`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo ADD bar text'},
@@ -236,6 +239,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD username TEXT UNIQUE`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo ADD username TEXT UNIQUE'},
@@ -306,6 +310,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: `ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'`},
@@ -369,6 +374,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {
@@ -427,6 +433,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo RENAME name to handle`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo RENAME name to handle'},
@@ -483,6 +490,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo drop description`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo drop description'},
@@ -526,6 +534,7 @@ describe('change-source/tables/ddl', () => {
       `DROP TABLE pub.foo, pub.yoo`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'DROP TABLE',
           context: {query: `DROP TABLE pub.foo, pub.yoo`},
@@ -548,6 +557,7 @@ describe('change-source/tables/ddl', () => {
       `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'DROP INDEX',
           context: {
@@ -667,6 +677,7 @@ describe('change-source/tables/ddl', () => {
     let msg = messages[1] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddl',
+      version: 1,
       event: {
         tag: 'ALTER TABLE',
         // Top level query may not provide any information about the actual DDL command.
@@ -677,6 +688,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[4] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddl',
+      version: 1,
       event: {
         tag: 'ALTER TABLE',
         // A compound top level query may contain more than one DDL command.
@@ -688,6 +700,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[5] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddl',
+      version: 1,
       event: {
         tag: 'ALTER TABLE',
         // A compound top level query may contain more than one DDL command.
