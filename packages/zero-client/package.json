@@ -15,8 +15,8 @@
     "bench": "vitest bench",
     "test:watch": "vitest",
     "check-types": "tsc --noEmit",
-    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build": "rm -rf out && node tool/build.js && npm run build-dts ",
+    "build-dts": "rm -rf out/.dts/ && tsc --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
+    "build": "rm -rf out && node tool/build.js && npm run build-dts",
     "prepack": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
