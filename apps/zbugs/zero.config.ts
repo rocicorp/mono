@@ -11,6 +11,13 @@ type AuthData = {sub: string};
 const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
   queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
+// TODO:
+// 1. The double lambda is annoying
+// 2. We need `querify` so we can just check the authData without having to read the DB
+// E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
+const allowIfLoggedIn = (queries: Queries<Schema>) => (authData: AuthData) =>
+  queries.user.where('id', '=', authData.sub);
+
 defineConfig<AuthData, Schema>(schema, queries => ({
   upstreamUri: runtimeEnv('UPSTREAM_URI'),
   cvrDbUri: runtimeEnv('CVR_DB_URI'),
@@ -38,6 +45,7 @@ defineConfig<AuthData, Schema>(schema, queries => ({
     issue: {
       row: {
         delete: [],
+        insert: [allowIfLoggedIn(queries)],
         update: [
           (authData, row) =>
             queries.issue
@@ -50,6 +58,7 @@ defineConfig<AuthData, Schema>(schema, queries => ({
     comment: {
       row: {
         delete: [],
+        insert: [allowIfLoggedIn(queries)],
         update: [
           (authData, row) =>
             queries.comment
