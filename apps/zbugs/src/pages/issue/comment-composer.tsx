@@ -44,8 +44,8 @@ export default function CommentComposer({
         onChange={textAreaChange}
         style={{width: '100%', height: '100%', background: 'grey'}}
       />
-      <button onClick={save}>{id ? 'Save' : 'Comment'}</button>{' '}
-      {id ? <button onClick={onDone}>Cancel</button> : null}
+      <button onMouseDown={save}>{id ? 'Save' : 'Comment'}</button>{' '}
+      {id ? <button onMouseDown={onDone}>Cancel</button> : null}
     </>
   );
 }

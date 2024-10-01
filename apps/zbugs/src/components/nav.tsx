@@ -60,9 +60,9 @@ export function Nav() {
         {login.loginState === undefined ? (
           <a href="/api/login/github">Login</a>
         ) : (
-          <span className="cursor-pointer" onClick={login.setLoggedOut}>
+          <button onMouseDown={login.logout}>
             Logout {login.loginState?.login}
-          </span>
+          </button>
         )}
       </div>
     </div>

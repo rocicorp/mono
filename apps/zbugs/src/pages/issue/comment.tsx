@@ -46,7 +46,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       )}
       <div>
         {editing || comment.creatorID !== login.loginState?.userID ? null : (
-          <a onClick={edit}>Edit</a>
+          <button onMouseDown={edit}>Edit</button>
         )}
       </div>
     </div>
