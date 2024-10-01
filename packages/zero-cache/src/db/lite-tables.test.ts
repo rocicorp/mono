@@ -89,7 +89,7 @@ describe('tables/list', () => {
               notNull: false,
               dflt: null,
             },
-            ['bigint']: {
+            bigint: {
               pos: 4,
               characterMaximumLength: null,
               dataType: 'BIGINT',
