@@ -7,6 +7,7 @@ type ColumnInfo = {
   name: string;
   type: string;
   notNull: number;
+  dflt: string | null;
   keyPos: number;
 };
 
@@ -19,6 +20,7 @@ export function listTables(db: Database): TableSpec[] {
         p.name as name, 
         p.type as type, 
         p."notnull" as "notNull",
+        p.dflt_value as "dflt",
         p.pk as keyPos 
       FROM sqlite_master as m 
       LEFT JOIN pragma_table_info(m.name) as p 
@@ -50,6 +52,7 @@ export function listTables(db: Database): TableSpec[] {
       dataType: col.type,
       characterMaximumLength: null,
       notNull: col.notNull !== 0,
+      dflt: col.dflt,
     };
     if (col.keyPos) {
       while (table.primaryKey.length < col.keyPos) {

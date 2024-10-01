@@ -6,17 +6,10 @@ import {
   Mode,
   TransactionPool,
 } from 'zero-cache/src/db/transaction-pool.js';
-import {
-  liteValues,
-  mapPostgresToLiteDataType,
-} from 'zero-cache/src/types/lite.js';
+import {liteValues} from 'zero-cache/src/types/lite.js';
 import {liteTableName} from 'zero-cache/src/types/names.js';
 import {pgClient, type PostgresDB} from 'zero-cache/src/types/pg.js';
-import type {
-  ColumnSpec,
-  FilteredTableSpec,
-  IndexSpec,
-} from 'zero-cache/src/types/specs.js';
+import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
 import {Database} from 'zqlite/src/db.js';
 import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
@@ -25,18 +18,12 @@ import {
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
 import {createTableStatement} from './tables/create.js';
+import {checkDataTypeSupported, mapPostgresToLite} from './tables/lite.js';
 import {
   getPublicationInfo,
   type PublicationInfo,
   ZERO_PUB_PREFIX,
 } from './tables/published.js';
-
-const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
-  pos: Number.MAX_SAFE_INTEGER, // i.e. last
-  characterMaximumLength: null,
-  dataType: 'TEXT',
-  notNull: true,
-};
 
 export function replicationSlot(replicaID: string): string {
   return `zero_slot_${replicaID}`;
@@ -124,7 +111,6 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
 function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: postgres.Sql,
-  restrictToLiteDataTypes = true, // TODO: Remove this option
 ): Promise<PublicationInfo> {
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
@@ -211,9 +197,7 @@ function ensurePublishedTables(
             `Column "${col}" in table "${table.name}" has invalid characters.`,
           );
         }
-        if (restrictToLiteDataTypes) {
-          mapPostgresToLiteDataType(spec.dataType); // Throws on unsupported datatypes
-        }
+        checkDataTypeSupported(spec.dataType);
       }
     });
 
@@ -292,27 +276,7 @@ function startTableCopyWorkers(
 
 function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
   for (const t of tables) {
-    const liteTable = {
-      ...t,
-      schema: '', // SQLite does not support schemas
-      name: liteTableName(t),
-      columns: {
-        ...Object.fromEntries(
-          Object.entries(t.columns).map(([col, {pos, dataType}]) => [
-            col,
-            {
-              pos,
-              dataType: mapPostgresToLiteDataType(dataType),
-              characterMaximumLength: null,
-              // Omit constraints from upstream columns, as they may change without our knowledge.
-              // Instead, simply rely on upstream enforcing all column constraints.
-              notNull: false,
-            } satisfies ColumnSpec,
-          ]),
-        ),
-        [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
-      },
-    };
+    const liteTable = mapPostgresToLite(t);
     tx.exec(createTableStatement(liteTable));
   }
 }

@@ -13,6 +13,9 @@ export function createTableStatement(spec: TableSpec): string {
     if (colSpec.notNull) {
       parts.push(' NOT NULL');
     }
+    if (colSpec.dflt) {
+      parts.push(` DEFAULT ${colSpec.dflt}`);
+    }
     return parts.join('');
   }
 
