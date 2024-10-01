@@ -35,8 +35,11 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
   type SchemaDefs,
+  type UpdateNeededReason,
   createSocket,
+  onClientStateNotFoundServerReason,
   serverAheadReloadReason,
+  updateNeededReloadReason,
 } from './zero.js';
 
 let clock: sinon.SinonFakeTimers;
@@ -1096,7 +1099,7 @@ test('Disconnect on error', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
-  await r.triggerError(ErrorKind.ClientNotFound, 'client not found');
+  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
@@ -1106,7 +1109,7 @@ test('No backoff on errors', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
   const step = async (delta: number, message: string) => {
-    await r.triggerError(ErrorKind.ClientNotFound, message);
+    await r.triggerError(ErrorKind.InvalidMessage, message);
     expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
     await clock.tickAsync(delta - 1);
@@ -1250,13 +1253,13 @@ test('socketOrigin', async () => {
 
 test('Logs errors in connect', async () => {
   const r = zeroForTest({});
-  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
+  await r.triggerError(ErrorKind.InvalidMessage, 'bad-message');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
 
   const index = r.testLogSink.messages.findIndex(
     ([level, _context, args]) =>
-      level === 'error' && args.find(arg => /client-id-a/.test(String(arg))),
+      level === 'error' && args.find(arg => /bad-message/.test(String(arg))),
   );
 
   expect(index).to.not.equal(-1);
@@ -1308,7 +1311,7 @@ async function testWaitsForConnection(
 
   const log: ('resolved' | 'rejected')[] = [];
 
-  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
+  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   fn(r).then(
@@ -1324,7 +1327,7 @@ async function testWaitsForConnection(
   await clock.tickAsync(RUN_LOOP_INTERVAL_MS);
   expect(r.connectionState).to.equal(ConnectionState.Connecting);
 
-  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
+  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   await tickAFewTimes(clock);
   expect(log).to.deep.equal(['rejected']);
 }
@@ -1355,23 +1358,90 @@ test('puller waits for connection', async () => {
   });
 });
 
-test('Protocol mismatch', async () => {
-  const fake = sinon.fake();
-  const r = zeroForTest();
-  r.onUpdateNeeded = fake;
+test('VersionNotSupported default handler', async () => {
+  const storage: Record<string, string> = {};
+  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(resolve);
+  const r = zeroForTest(undefined, false);
+  r.reload = fake;
 
-  await r.triggerError(ErrorKind.VersionNotSupported, 'prot mismatch');
+  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   expect(fake.calledOnce).true;
-  expect(fake.firstCall.args).deep.equal([
-    {type: ErrorKind.VersionNotSupported},
-  ]);
 
-  fake.resetHistory();
-  r.onUpdateNeeded = null;
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
+    updateNeededReloadReason({type: 'VersionNotSupported'}),
+  );
+});
+
+test('VersionNotSupported custom onUpdateNeeded handler', async () => {
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake((_reason: UpdateNeededReason) => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.onUpdateNeeded = fake;
+
+  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-  expect(fake.called).false;
+
+  expect(fake.calledOnce).true;
+});
+
+test('VersionNotSupported null onUpdateNeeded handler', async () => {
+  const r = zeroForTest();
+  r.onUpdateNeeded = null;
+
+  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+});
+
+test('ClientNotFound default handler', async () => {
+  const storage: Record<string, string> = {};
+  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(() => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.reload = fake;
+
+  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await promise;
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  expect(fake.calledOnce).true;
+
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
+    onClientStateNotFoundServerReason('server test message'),
+  );
+});
+
+test('ClientNotFound custom onClientStateNotFound handler', async () => {
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(() => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.onClientStateNotFound = fake;
+
+  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await promise;
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  expect(fake.calledOnce).true;
+});
+
+test('ClientNotFound null handler', async () => {
+  const r = zeroForTest();
+  r.onClientStateNotFound = null;
+
+  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
 test('server ahead', async () => {

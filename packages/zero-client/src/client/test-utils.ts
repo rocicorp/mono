@@ -190,6 +190,7 @@ let testZeroCounter = 0;
 
 export function zeroForTest<QD extends SchemaDefs>(
   options: Partial<ZeroOptions<QD>> = {},
+  errorOnUpdateNeeded = true,
 ): TestZero<QD> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
@@ -207,9 +208,11 @@ export function zeroForTest<QD extends SchemaDefs>(
   });
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.
-  r.onUpdateNeeded = () => {
-    throw new Error('Unexpected update needed');
-  };
+  if (errorOnUpdateNeeded) {
+    r.onUpdateNeeded = () => {
+      throw new Error('Unexpected update needed');
+    };
+  }
 
   // Keep track of all instances so we can close them in teardown.
   testZeroInstances.add(r as TestZero<SchemaDefs>);
