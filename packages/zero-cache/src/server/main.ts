@@ -27,12 +27,17 @@ function logErrorAndExit(err: unknown) {
 const ready: Promise<void>[] = [];
 
 function loadWorker(
-  module: string,
+  modulePath: string,
   id?: string | number,
   ...args: string[]
 ): Worker {
-  const worker = childWorker(module, ...args);
-  const name = path.basename(module, '.ts') + (id ? ` (${id})` : '');
+  // modulePath is relative to this file
+  const ext = path.extname(import.meta.url);
+  // modulePath is .ts. If we have been compiled, it should be changed to .js
+  modulePath = modulePath.replace(/\.ts$/, ext);
+  const absModulePath = new URL(modulePath, import.meta.url).pathname;
+  const worker = childWorker(absModulePath, ...args);
+  const name = path.basename(absModulePath, ext) + (id ? ` (${id})` : '');
   const {promise, resolve} = resolver();
   ready.push(promise);
 
@@ -47,7 +52,7 @@ function loadWorker(
 const {promise: changeStreamerReady, resolve} = resolver();
 const changeStreamer = config.changeStreamerUri
   ? resolve()
-  : loadWorker('./src/server/change-streamer.ts').once('message', resolve);
+  : loadWorker('./change-streamer.ts').once('message', resolve);
 
 const numSyncers = config.numSyncWorkers
   ? Number(config.numSyncWorkers)
@@ -55,7 +60,7 @@ const numSyncers = config.numSyncWorkers
     Math.max(1, availableParallelism() - 1);
 
 const syncers = Array.from({length: numSyncers}, (_, i) =>
-  loadWorker('./src/server/syncer.ts', i + 1),
+  loadWorker('./syncer.ts', i + 1),
 );
 
 if (numSyncers) {
@@ -73,7 +78,7 @@ await changeStreamerReady;
 
 if (config.litestream) {
   const mode: ReplicatorMode = 'backup';
-  const replicator = loadWorker('./src/server/replicator.ts', mode, mode).once(
+  const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
     () => subscribeTo(replicator),
   );
@@ -85,7 +90,7 @@ if (config.litestream) {
 
 if (numSyncers) {
   const mode: ReplicatorMode = config.litestream ? 'serving-copy' : 'serving';
-  const replicator = loadWorker('./src/server/replicator.ts', mode, mode).once(
+  const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
     () => subscribeTo(replicator),
   );
