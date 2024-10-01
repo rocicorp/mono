@@ -60,10 +60,6 @@ const numSyncers = config.numSyncWorkers
   : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
     Math.max(1, availableParallelism() - 1);
 
-const syncers = Array.from({length: numSyncers}, (_, i) =>
-  loadWorker('./syncer.ts', i + 1),
-);
-
 if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
@@ -81,7 +77,7 @@ if (config.litestream) {
   const mode: ReplicatorMode = 'backup';
   const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
-    () => subscribeTo(replicator),
+    () => subscribeTo(lc, replicator),
   );
   const notifier = createNotifierFrom(lc, replicator);
   if (changeStreamer) {
@@ -89,13 +85,17 @@ if (config.litestream) {
   }
 }
 
+const syncers: Worker[] = [];
 if (numSyncers) {
   const mode: ReplicatorMode = config.litestream ? 'serving-copy' : 'serving';
   const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
-    () => subscribeTo(replicator),
+    () => subscribeTo(lc, replicator),
   );
   const notifier = createNotifierFrom(lc, replicator);
+  for (let i = 0; i < numSyncers; i++) {
+    syncers.push(loadWorker('./syncer.ts', i + 1));
+  }
   syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
 }
 

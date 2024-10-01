@@ -142,6 +142,6 @@ export function createNotifierFrom(_lc: LogContext, source: Worker): Notifier {
   return notifier;
 }
 
-export function subscribeTo(source: Worker) {
+export function subscribeTo(_lc: LogContext, source: Worker) {
   source.send(['subscribe', {}]);
 }

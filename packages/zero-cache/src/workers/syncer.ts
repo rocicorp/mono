@@ -1,6 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
+import assert from 'assert';
+import {jwtVerify, type JWTPayload} from 'jose';
+import {must} from 'shared/src/must.js';
 import {MessagePort} from 'worker_threads';
 import WebSocket from 'ws';
+import {type ZeroConfig} from '../config/zero-config.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
@@ -12,10 +16,6 @@ import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
-import {jwtVerify, type JWTPayload} from 'jose';
-import {type ZeroConfig} from '../config/zero-config.js';
-import assert from 'assert';
-import {must} from 'shared/src/must.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -50,7 +50,7 @@ export class Syncer {
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
-    subscribeTo(parent);
+    subscribeTo(lc, parent);
 
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
