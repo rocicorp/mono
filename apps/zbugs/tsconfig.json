@@ -5,10 +5,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "ts-node": {
-    "experimentalSpecifierResolution": "node",
-    "transpileOnly": true,
-    "esm": true
-  },
   "include": ["src"]
 }

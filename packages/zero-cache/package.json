@@ -10,11 +10,11 @@
     "format": "prettier --write *",
     "check-format": "prettier --check *",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "local": "node --loader ts-node/esm tool/local.ts",
-    "start": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts",
-    "bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/bench.ts",
-    "wal_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal-bench.ts",
-    "wal2_bench": "node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./bench/wal2-bench.ts"
+    "local": "tsx tool/local.ts",
+    "start": "tsx ./src/server/main.ts",
+    "bench": "tsx ./bench/bench.ts",
+    "wal_bench": "tsx ./bench/wal-bench.ts",
+    "wal2_bench": "tsx ./bench/wal2-bench.ts"
   },
   "dependencies": {
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
@@ -54,7 +54,7 @@
     "dotenv": "^16.4.5",
     "rollup-plugin-dts": "^6.1.1",
     "shared": "0.0.0",
-    "ts-node": "^10.9.1",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.3",
     "vitest": "^2.0.3"
   },

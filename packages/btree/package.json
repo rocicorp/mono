@@ -51,6 +51,7 @@
     "collections": "^5.1.11",
     "functional-red-black-tree": "^1.0.1",
     "mersenne-twister": "^1.1.0",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.3"
   }
 }
