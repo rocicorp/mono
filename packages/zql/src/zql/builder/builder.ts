@@ -17,6 +17,7 @@ import {Skip} from '../ivm/skip.js';
 import type {Source} from '../ivm/source.js';
 import {Take} from '../ivm/take.js';
 import {createPredicate} from './filter.js';
+import {MissingParameterError} from './error.js';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -107,10 +108,12 @@ export function bindStaticParameters(
         'Static query params do not exist',
       )[value.anchor];
       assert(anchor !== undefined, `Missing parameter: ${value.anchor}`);
-      return must(
-        anchor[value.field],
-        `field ${value.field} does not exist in ${value.anchor}`,
-      ) as LiteralValue;
+      const resolvedValue = anchor[value.field];
+      // eslint-disable-next-line eqeqeq
+      if (resolvedValue == null) {
+        throw new MissingParameterError();
+      }
+      return resolvedValue as LiteralValue;
     }
     return value;
   };
