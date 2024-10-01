@@ -1,4 +1,5 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env -S npx tsx
+
 /* eslint-disable */
 import BTree from './b+tree.js';
 import SortedArray from './sorted-array.js';
@@ -6,14 +7,13 @@ import SortedArray from './sorted-array.js';
 // out to be an unbalanced binary tree. It is faster than `RBTree` for
 // randomized data, but it becomes extremely slow when filled with sorted
 // data, so it's not usually a good choice.
-// @ts-ignore
 import {RBTree} from 'bintrees';
 // @ts-ignore
-const SortedSet = require('collections/sorted-set'); // Bad type definition: missing 'length'
+import SortedSet from 'collections/sorted-set'; // Bad type definition: missing 'length'
 // @ts-ignore
-const SortedMap = require('collections/sorted-map'); // No type definitions available
+import SortedMap from 'collections/sorted-map'; // No type definitions available
 // @ts-ignore
-const functionalTree = require('functional-red-black-tree'); // No type definitions available
+import functionalTree from 'functional-red-black-tree'; // No type definitions available
 
 class Timer {
   start = Date.now();

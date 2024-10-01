@@ -5,7 +5,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --require 'dotenv/config' --loader ts-node/esm ./src/bin/start.ts",
     "format": "prettier --write 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
     "check-types": "tsc --noEmit",
