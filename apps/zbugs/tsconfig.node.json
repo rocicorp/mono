@@ -13,7 +13,7 @@
   "include": [
     "vite.config.ts",
     "zero.config.ts",
-    "src/domain/schema-shared.ts",
+    "src/domain/schema.ts",
     "api/index.ts"
   ]
 }
