@@ -2,10 +2,10 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import * as v from 'shared/src/valita.js';
-import {astSchema} from 'zero-protocol';
 import fs from 'node:fs/promises';
 import {must} from 'shared/src/must.js';
+import * as v from 'shared/src/valita.js';
+import {astSchema} from 'zero-protocol';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
@@ -87,12 +87,18 @@ export const zeroConfigSchema = zeroConfigSchemaSansAuthorization.extend({
 export type ZeroConfigType = v.Infer<typeof zeroConfigSchema>;
 
 let loadedConfig: Promise<ZeroConfig> | undefined;
-export function getZeroConfig() {
+
+export function getZeroConfig(): Promise<ZeroConfig> {
   if (loadedConfig) {
     return loadedConfig;
   }
+  const zeroConfigPath = process.env['ZERO_CONFIG_PATH'];
+  if (!zeroConfigPath) {
+    // TODO: Use a specific error type and report it to the user in a nicer way.
+    return Promise.reject(new Error('ZERO_CONFIG_PATH is not set'));
+  }
   loadedConfig = fs
-    .readFile(must(process.env['ZERO_CONFIG_PATH']), 'utf-8')
+    .readFile(zeroConfigPath, 'utf-8')
     .then(
       rawContent =>
         new ZeroConfig(v.parse(JSON.parse(rawContent), zeroConfigSchema)),
