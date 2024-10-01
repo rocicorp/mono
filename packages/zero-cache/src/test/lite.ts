@@ -1,10 +1,10 @@
-import {Database} from 'zqlite/src/db.js';
-import {unlink} from 'fs/promises';
-import {tmpdir} from 'os';
+import {LogContext} from '@rocicorp/logger';
+import {unlink} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {ident} from 'pg-format';
 import {randInt} from 'shared/src/rand.js';
 import {expect} from 'vitest';
-import {LogContext} from '@rocicorp/logger';
+import {Database} from 'zqlite/src/db.js';
 
 export class DbFile {
   readonly path;
