@@ -24,6 +24,7 @@ import {mapLiteDataTypeToZqlSchemaValue} from '../../types/lite.js';
 import {DatabaseStorage} from '../view-syncer/database-storage.js';
 import type {NormalizedTableSpec} from '../view-syncer/pipeline-driver.js';
 import {normalize} from '../view-syncer/pipeline-driver.js';
+import {MissingParameterError} from '../../../../zql/src/zql/builder/error.js';
 
 export interface WriteAuthorizer {
   canInsert(authData: JWTPayload, op: CreateOp): boolean;
@@ -201,19 +202,38 @@ export class WriteAuthorizerImpl {
     }
 
     for (const [_, rule] of policy) {
-      const input = buildPipeline(rule, this.#builderDelegate, {
-        authData: authData as Record<string, JSONValue>,
-        preMutationRow,
-      });
       try {
-        const res = input.fetch({});
-        for (const _ of res) {
-          // if any row is returned at all, the
-          // rule passes.
-          return true;
+        const input = buildPipeline(rule, this.#builderDelegate, {
+          authData: authData as Record<string, JSONValue>,
+          preMutationRow,
+        });
+        try {
+          const res = input.fetch({});
+          for (const _ of res) {
+            // if any row is returned at all, the
+            // rule passes.
+            return true;
+          }
+        } finally {
+          input.destroy();
         }
-      } finally {
-        input.destroy();
+      } catch (e) {
+        if (!(e instanceof MissingParameterError)) {
+          throw e;
+        }
+
+        // Authorization rules may refer to parameters
+        // that are missing due to the current login context not having
+        // those values. E.g., referring to a claim that user does not have.
+        // In that case, the rule is not applicable. This is ok since
+        // all rules can only `allow` or `skip`. If we supported
+        // `deny` rules this would not work.
+        //
+        // The way to support `deny` would be to allow `null` and `undefined`
+        // into ZQL pipelines. Right now `where` clauses cannot take `null`
+        // or `undefined` values for two reasons:
+        // 1. We do not have `IS` and `IS NOT` operators in ZQL yet.
+        // 2. Our predicates do not compare `NULL` and `UNDEFINED` the same way SQL would.
       }
     }
 
@@ -227,9 +247,3 @@ type ActionOpMap = {
   update: UpdateOp;
   delete: DeleteOp;
 };
-
-export class WriteAuthorizationFailed extends Error {
-  constructor(message: string) {
-    super(message);
-  }
-}
