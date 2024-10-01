@@ -3,9 +3,9 @@ import {
   fork,
   type SendHandle,
   type Serializable,
-} from 'child_process';
-import EventEmitter from 'events';
-import path from 'path';
+} from 'node:child_process';
+import EventEmitter from 'node:events';
+import path from 'node:path';
 
 /**
  * Central registry of message type names, which are used to identify

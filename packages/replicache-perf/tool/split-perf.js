@@ -1,5 +1,5 @@
-import {readFile, writeFile} from 'fs/promises';
-import {argv} from 'process';
+import {readFile, writeFile} from 'node:fs/promises';
+import {argv} from 'node:process';
 
 if (argv.length !== 5) {
   console.error(
