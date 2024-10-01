@@ -95,7 +95,7 @@ describe('change-source/pg', () => {
         VALUES('datatypes', 123456789, 987654321987654321, 123.456, true)`;
     });
 
-    expect(initialWatermark).toEqual(replicaVersion);
+    expect(initialWatermark).toEqual(oneAfter(replicaVersion));
     expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
     expect(await downstream.dequeue()).toMatchObject([
       'data',
@@ -202,7 +202,7 @@ describe('change-source/pg', () => {
     const stream1 = await source.startStream('00');
     const changes1 = drainToQueue(stream1.changes);
 
-    expect(stream1.initialWatermark).toEqual(replicaVersion);
+    expect(stream1.initialWatermark).toEqual(oneAfter(replicaVersion));
     expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
     expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
     const firstCommit = (await changes1.dequeue()) as Commit;
@@ -236,7 +236,7 @@ describe('change-source/pg', () => {
     const stream2 = await source.startStream('00');
     const changes2 = drainToQueue(stream2.changes);
 
-    expect(stream2.initialWatermark).toEqual(replicaVersion);
+    expect(stream2.initialWatermark).toEqual(oneAfter(replicaVersion));
     expect(await changes2.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
     expect(await changes2.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
     expect(await changes2.dequeue()).toEqual(firstCommit);
