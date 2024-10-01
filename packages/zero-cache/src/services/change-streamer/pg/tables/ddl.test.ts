@@ -586,7 +586,7 @@ describe('change-source/tables/ddl', () => {
     });
 
     const messages = await drainReplicationMessages(8);
-    expect(messages).toMatchObject([
+    expect(messages.slice(0, 5)).toMatchObject([
       {tag: 'begin'},
       {tag: 'relation'},
       {tag: 'insert'},
@@ -598,15 +598,30 @@ describe('change-source/tables/ddl', () => {
         transactional: true,
       },
       {tag: 'commit'},
-
-      // There should be no "zero" message emitted in the second transaction
-      {tag: 'begin'},
-      {tag: 'insert'},
-      {tag: 'commit'},
     ]);
 
     const {content} = messages[3] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(content))).toEqual(event);
+
+    // Depending on how busy Postgres is, the remaining messages will either
+    // be:
+    //
+    // {tag: 'begin'},
+    // {tag: 'insert'},
+    // {tag: 'commit'},
+    //
+    // or:
+    //
+    // {tag: 'begin'},
+    // {tag: 'relation'},
+    // {tag: 'insert'},
+    // {tag: 'commit'},
+    //
+    // the latter happening when Postgres loses some state and resends
+    // the relation from messages[2]. What we want to verify is that
+    // no `tag: 'message'` message arrives, as the schema changes
+    // in the 'private' schema should not result in schema updates.
+    expect(messages.slice(5).find(m => m.tag === 'message')).toBeUndefined();
   });
 
   test('postgres documentation: current_query() is unreliable', async () => {
