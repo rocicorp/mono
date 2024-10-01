@@ -17,13 +17,13 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
-import {createTableStatement} from './tables/create.js';
-import {checkDataTypeSupported, mapPostgresToLite} from './tables/lite.js';
+import {createTableStatement} from './schema/create.js';
+import {checkDataTypeSupported, mapPostgresToLite} from './schema/lite.js';
 import {
   getPublicationInfo,
   type PublicationInfo,
   ZERO_PUB_PREFIX,
-} from './tables/published.js';
+} from './schema/published.js';
 
 export function replicationSlot(replicaID: string): string {
   return `zero_slot_${replicaID}`;
