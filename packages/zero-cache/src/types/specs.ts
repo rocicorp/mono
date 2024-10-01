@@ -3,6 +3,7 @@ export type ColumnSpec = {
   readonly dataType: string;
   readonly characterMaximumLength: number | null;
   readonly notNull: boolean;
+  readonly dflt: string | null;
 };
 
 export type TableSpec = {

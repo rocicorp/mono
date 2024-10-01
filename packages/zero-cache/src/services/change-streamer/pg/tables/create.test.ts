@@ -7,6 +7,7 @@ import {testDBs} from 'zero-cache/src/test/db.js';
 import type {TableSpec} from 'zero-cache/src/types/specs.js';
 import {Database} from 'zqlite/src/db.js';
 import {createTableStatement} from './create.js';
+import {mapPostgresToLite} from './lite.js';
 import {getPublicationInfo} from './published.js';
 
 describe('tables/create', () => {
@@ -30,12 +31,14 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            dflt: null,
           },
           lastMutationID: {
             pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
         },
         primaryKey: ['clientID'],
@@ -55,12 +58,14 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            dflt: null,
           },
           lastMutationID: {
             pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
         },
         primaryKey: ['clientID'],
@@ -71,14 +76,23 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar(180)',
+            dataType: 'TEXT',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8',
+            dataType: 'INTEGER',
             characterMaximumLength: null,
+            notNull: true,
+            dflt: null,
+          },
+          ['_0_version']: {
+            pos: 3,
+            dataType: 'TEXT',
+            characterMaximumLength: null,
+            dflt: null,
             notNull: true,
           },
         },
@@ -88,7 +102,7 @@ describe('tables/create', () => {
     {
       name: 'table name with dot',
       srcTableSpec: {
-        schema: '',
+        schema: 'public',
         name: 'zero.clients',
         columns: {
           clientID: {
@@ -96,18 +110,20 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            dflt: null,
           },
           lastMutationID: {
             pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
         },
         primaryKey: ['clientID'],
       },
       createStatement: `
-      CREATE TABLE "zero.clients" (
+      CREATE TABLE "public"."zero.clients" (
         "clientID" varchar(180) NOT NULL,
         "lastMutationID" int8 NOT NULL,
         PRIMARY KEY ("clientID")
@@ -121,12 +137,14 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            dflt: null,
           },
           lastMutationID: {
             pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
         },
         primaryKey: ['clientID'],
@@ -137,22 +155,31 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar(180)',
+            dataType: 'TEXT',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8',
+            dataType: 'INTEGER',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
+          },
+          ['_0_version']: {
+            characterMaximumLength: null,
+            dataType: 'TEXT',
+            dflt: null,
+            notNull: true,
+            pos: 3,
           },
         },
         primaryKey: ['clientID'],
       },
     },
     {
-      name: 'types and array types and defaults',
+      name: 'types and defaults',
       srcTableSpec: {
         schema: 'public',
         name: 'users',
@@ -162,54 +189,35 @@ describe('tables/create', () => {
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
           handle: {
             pos: 2,
             characterMaximumLength: 40,
             dataType: 'varchar',
             notNull: false,
+            dflt: null,
           },
-          address: {
+          rank: {
             pos: 3,
             characterMaximumLength: null,
-            dataType: 'text[]',
+            dataType: 'int8',
             notNull: false,
+            dflt: '1',
           },
-          ['timez']: {
+          admin: {
             pos: 4,
-            dataType: 'timestamptz[]',
+            dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
+            dflt: 'false',
           },
-          ['bigint_array']: {
+          bigint: {
             pos: 5,
             characterMaximumLength: null,
-            dataType: 'int8[]',
+            dataType: 'int8',
             notNull: false,
-          },
-          ['bool_array']: {
-            pos: 6,
-            characterMaximumLength: null,
-            dataType: 'bool[]',
-            notNull: false,
-          },
-          ['real_array']: {
-            pos: 7,
-            characterMaximumLength: null,
-            dataType: 'float4[]',
-            notNull: false,
-          },
-          ['int_array']: {
-            pos: 8,
-            dataType: 'int4[]',
-            characterMaximumLength: null,
-            notNull: false,
-          },
-          ['json_val']: {
-            pos: 9,
-            dataType: 'jsonb',
-            characterMaximumLength: null,
-            notNull: false,
+            dflt: "'2147483648'::bigint",
           },
         },
         primaryKey: ['user_id'],
@@ -218,13 +226,9 @@ describe('tables/create', () => {
       CREATE TABLE "public"."users" (
          "user_id" int4 NOT NULL,
          "handle" varchar(40),
-         "address" text[],
-         "timez" timestamptz[],
-         "bigint_array" int8[],
-         "bool_array" bool[],
-         "real_array" float4[],
-         "int_array" int4[],
-         "json_val" jsonb,
+         "rank" int8 DEFAULT 1,
+         "admin" bool DEFAULT false,
+         "bigint" int8 DEFAULT '2147483648'::bigint,
          PRIMARY KEY ("user_id")
       );`,
       dstTableSpec: {
@@ -236,54 +240,35 @@ describe('tables/create', () => {
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
           handle: {
             pos: 2,
             characterMaximumLength: 40,
             dataType: 'varchar',
             notNull: false,
+            dflt: null,
           },
-          address: {
+          rank: {
             pos: 3,
             characterMaximumLength: null,
-            dataType: 'text[]',
+            dataType: 'int8',
             notNull: false,
+            dflt: '1',
           },
-          ['timez']: {
+          admin: {
             pos: 4,
-            dataType: 'timestamptz[]',
+            dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
+            dflt: 'false',
           },
-          ['bigint_array']: {
+          bigint: {
             pos: 5,
             characterMaximumLength: null,
-            dataType: 'int8[]',
+            dataType: 'int8',
             notNull: false,
-          },
-          ['bool_array']: {
-            pos: 6,
-            characterMaximumLength: null,
-            dataType: 'bool[]',
-            notNull: false,
-          },
-          ['real_array']: {
-            pos: 7,
-            characterMaximumLength: null,
-            dataType: 'float4[]',
-            notNull: false,
-          },
-          ['int_array']: {
-            pos: 8,
-            dataType: 'int4[]',
-            characterMaximumLength: null,
-            notNull: false,
-          },
-          ['json_val']: {
-            pos: 9,
-            dataType: 'jsonb',
-            characterMaximumLength: null,
-            notNull: false,
+            dflt: "'2147483648'::bigint",
           },
         },
         primaryKey: ['user_id'],
@@ -294,57 +279,45 @@ describe('tables/create', () => {
         columns: {
           ['user_id']: {
             pos: 1,
-            dataType: 'int4',
+            dataType: 'INTEGER',
             characterMaximumLength: null,
             notNull: true,
+            dflt: null,
           },
           handle: {
             pos: 2,
             characterMaximumLength: null,
-            dataType: 'varchar(40)',
+            dataType: 'TEXT',
             notNull: false,
+            dflt: null,
           },
-          address: {
+          rank: {
             pos: 3,
             characterMaximumLength: null,
-            dataType: 'text[]',
+            dataType: 'INTEGER',
             notNull: false,
+            dflt: '1',
           },
-          ['timez']: {
+          admin: {
             pos: 4,
-            dataType: 'timestamptz[]',
+            dataType: 'BOOL',
             characterMaximumLength: null,
             notNull: false,
+            dflt: '0',
           },
-          ['bigint_array']: {
+          bigint: {
             pos: 5,
             characterMaximumLength: null,
-            dataType: 'int8[]',
+            dataType: 'INTEGER',
             notNull: false,
+            dflt: "'2147483648'",
           },
-          ['bool_array']: {
+          ['_0_version']: {
+            characterMaximumLength: null,
+            dataType: 'TEXT',
+            dflt: null,
+            notNull: true,
             pos: 6,
-            characterMaximumLength: null,
-            dataType: 'bool[]',
-            notNull: false,
-          },
-          ['real_array']: {
-            pos: 7,
-            characterMaximumLength: null,
-            dataType: 'float4[]',
-            notNull: false,
-          },
-          ['int_array']: {
-            pos: 8,
-            dataType: 'int4[]',
-            characterMaximumLength: null,
-            notNull: false,
-          },
-          ['json_val']: {
-            pos: 9,
-            dataType: 'jsonb',
-            characterMaximumLength: null,
-            notNull: false,
           },
         },
         primaryKey: ['user_id'],
@@ -394,15 +367,11 @@ describe('tables/create', () => {
     });
 
     for (const c of cases) {
-      test(c.name, async () => {
-        db.exec(
-          createTableStatement({
-            ...c.srcTableSpec,
-            schema: '',
-          }),
-        );
+      test(c.name, () => {
+        const liteTableSpec = mapPostgresToLite(c.srcTableSpec);
+        db.exec(createTableStatement(liteTableSpec));
 
-        const tables = await listTables(db);
+        const tables = listTables(db);
         expect(tables).toEqual(expect.arrayContaining([c.liteTableSpec]));
       });
     }

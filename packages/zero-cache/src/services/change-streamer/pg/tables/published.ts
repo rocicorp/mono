@@ -22,6 +22,7 @@ WITH published_columns AS (SELECT
   NULLIF(atttypmod, -1) AS "maxLen", 
   attndims "arrayDims", 
   attnotnull AS "notNull",
+  pg_get_expr(pd.adbin, pd.adrelid) as "dflt",
   NULLIF(ARRAY_POSITION(conkey, attnum), -1) AS "keyPos", 
   pb.rowfilter as "rowFilter",
   pb.pubname as "publication"
@@ -54,7 +55,8 @@ tables AS (SELECT json_build_object(
       'characterMaximumLength', CASE WHEN "typeID" = 1043 OR "typeID" = 1042 
                                      THEN "maxLen" - 4 
                                      ELSE "maxLen" END,
-      'notNull', "notNull"
+      'notNull', "notNull",
+      'dflt', "dflt"
     )
   ),
   'primaryKey', ARRAY( SELECT json_object_keys(

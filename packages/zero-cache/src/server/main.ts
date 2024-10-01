@@ -18,6 +18,7 @@ import {createLogContext} from './logging.js';
 const startMs = Date.now();
 const config = await getZeroConfig();
 const lc = createLogContext(config.log, {worker: 'dispatcher'});
+lc.info?.('loaded config', config);
 
 function logErrorAndExit(err: unknown) {
   lc.error?.(err);
