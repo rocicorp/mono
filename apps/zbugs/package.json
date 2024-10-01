@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsx ./zero.config.ts ; tsc ; vite build",
+    "build": "tsx ./zero.config.ts && tsc && vite build",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "tsx ./zero.config.ts ; cd ../../packages/zero-cache ; ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start -- dotenv_config_path=../../apps/zbugs/.env"
+    "zero": "tsx ./zero.config.ts && cd ../../packages/zero-cache && ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start -- dotenv_config_path=../../apps/zbugs/.env"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",
