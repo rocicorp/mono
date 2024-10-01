@@ -23,14 +23,10 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
-    "@rollup/plugin-node-resolve": "^15.2.3",
     "@types/semver": "^7.5.1",
     "@vitest/browser": "^2.0.3",
     "fast-check": "^3.18.0",
     "pkg-up": "^5.0.0",
-    "rollup-plugin-dts": "^6.1.1",
-    "rollup-plugin-tsconfig-paths": "^1.5.2",
-    "rollup": "^4.19.1",
     "typescript": "^5.5.3",
     "vite-tsconfig-paths": "^4.3.2",
     "vitest": "^2.0.3"
