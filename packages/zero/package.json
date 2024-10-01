@@ -1,0 +1,37 @@
+{
+  "name": "@rocicorp/zero",
+  "version": "0.0.1",
+  "scripts": {
+    "build": "rm -rf out && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node tool/build.js",
+    "check-types": "tsc"
+  },
+  "dependencies": {
+    "replicache": "15.2.1"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "esbuild": "^0.20.2",
+    "tsc-alias": "^1.8.10",
+    "typescript": "^5.5.3",
+    "zero-client": "0.0.0"
+  },
+  "type": "module",
+  "main": "out/zero.js",
+  "module": "out/zero.js",
+  "types": "out/zero-client/src/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./out/zero-client/src/mod.d.ts",
+      "default": "./out/zero.js"
+    }
+  },
+  "files": [
+    "out",
+    "!*.tsbuildinfo"
+  ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
