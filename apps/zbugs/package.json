@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node --no-warnings --loader ts-node/esm ./zero.config.ts ; tsc ; vite build",
+    "build": "tsx ./zero.config.ts ; tsc ; vite build",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "format": "prettier --write './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "node --no-warnings --loader ts-node/esm ./zero.config.ts ; cd ../../packages/zero-cache ; ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start -- dotenv_config_path=../../apps/zbugs/.env"
+    "zero": "tsx ./zero.config.ts ; cd ../../packages/zero-cache ; ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start -- dotenv_config_path=../../apps/zbugs/.env"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",
@@ -19,6 +19,7 @@
     "@octokit/core": "^6.1.2",
     "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
+    "dotenv": "^16.4.5",
     "fastify": "^5.0.0",
     "jose": "^5.9.3",
     "nanoid": "^4.0.2",
@@ -53,7 +54,7 @@
     "postcss-preset-env": "^7.4.3",
     "prettier": "^3.0.3",
     "tailwindcss": "^3.0.23",
-    "ts-node": "^10.9.1",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.3",
     "universal-user-agent": "^7.0.2",
     "vite": "^5.2.0",

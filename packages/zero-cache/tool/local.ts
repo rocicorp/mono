@@ -12,6 +12,7 @@
  * ```
  */
 
+import 'dotenv/config';
 import {
   LogicalReplicationService,
   PgoutputPlugin,

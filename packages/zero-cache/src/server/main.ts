@@ -1,4 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
+import 'dotenv/config';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';

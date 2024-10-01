@@ -1,4 +1,4 @@
-exec: node --require 'dotenv/config' --no-warnings --loader ts-node/esm ./src/server/main.ts
+exec: npx tsx ./src/server/main.ts
 dbs:
   - path: /data/db/sync-replica.db
     replicas:

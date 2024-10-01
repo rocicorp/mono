@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import {walBenchmark} from './wal-benchmark.js';
 
 walBenchmark({
