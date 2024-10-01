@@ -14,7 +14,7 @@ import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
 import type {UpdateNeededReason as ReplicacheUpdateNeededReason} from 'replicache/src/types.js';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {getDocument, getLocation} from 'shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {must} from 'shared/src/must.js';
@@ -170,15 +170,35 @@ export type UpdateNeededReason =
   // does not support
   | {type: 'VersionNotSupported'};
 
-export function serverAheadReloadReason(kind: string) {
-  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
-}
-
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
 ): UpdateNeededReason {
   return {type: reason.type};
 }
+
+export function updateNeededReloadReason(reason: UpdateNeededReason) {
+  const {type} = reason;
+  switch (type) {
+    case 'NewClientGroup':
+      return "This client could not sync with a newer client. This is probably due to another tab loading a newer incompatible version of the app's code.";
+      break;
+    case 'VersionNotSupported':
+      return "The server no longer supports this client's protocol version.";
+      break;
+    default:
+      unreachable(type);
+  }
+}
+
+export function serverAheadReloadReason(kind: string) {
+  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
+}
+
+export function onClientStateNotFoundServerReason(serverErrMsg: string) {
+  return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
+}
+const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
+  'The local persistent state needed to synchronize this client has been garbage collected.';
 
 const enum PingResult {
   TimedOut = 0,
@@ -226,7 +246,8 @@ export class Zero<QD extends SchemaDefs> {
    */
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
 
-  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
+  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = null;
+  #onClientStateNotFound: ((reason?: string) => void) | null = null;
   readonly #jurisdiction: 'eu' | undefined;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -273,6 +294,26 @@ export class Zero<QD extends SchemaDefs> {
       (reason => {
         callback(convertOnUpdateNeededReason(reason));
       });
+  }
+
+  /**
+   * `onClientStateNotFound` is called when this client will no longer be able
+   * to sync due to missing synchronization state.  This can be because:
+   * - the local persistent synchronization state has been garbage collected.
+   *   This can happen if the client has no pending mutations and has not been
+   *   used for a while.
+   * - the zero-cache fails to find the synchronization state of this client.
+   *
+   * The default behavior is to reload the page (using `location.reload()`). Set
+   * this to `null` or provide your own function to prevent the page from
+   * reloading automatically.
+   */
+  get onClientStateNotFound(): (() => void) | null {
+    return this.#onClientStateNotFound;
+  }
+  set onClientStateNotFound(value: (() => void) | null) {
+    this.#onClientStateNotFound = value;
+    this.#rep.onClientStateNotFound = value;
   }
 
   #connectResolver = resolver<void>();
@@ -408,7 +449,6 @@ export class Zero<QD extends SchemaDefs> {
     }
 
     rep.getAuth = this.#getAuthToken;
-    this.#onUpdateNeeded = rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
@@ -417,6 +457,20 @@ export class Zero<QD extends SchemaDefs> {
       {clientID: rep.clientID},
       logOptions.logSink,
     );
+    this.onUpdateNeeded = (reason: UpdateNeededReason) => {
+      reloadWithReason(
+        this.#lc,
+        this.#reload,
+        updateNeededReloadReason(reason),
+      );
+    };
+    this.onClientStateNotFound = (reason?: string) => {
+      reloadWithReason(
+        this.#lc,
+        this.#reload,
+        reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
+      );
+    };
 
     this.mutate = makeCRUDMutate<QD>(schemas, rep.mutate);
 
@@ -675,27 +729,27 @@ export class Zero<QD extends SchemaDefs> {
     downMessage: ErrorMessage,
   ): Promise<void> {
     const [, kind, message] = downMessage;
-
-    if (kind === ErrorKind.VersionNotSupported) {
-      this.onUpdateNeeded?.({type: kind});
-    }
-
-    if (
-      kind === 'InvalidConnectionRequestLastMutationID' ||
-      kind === 'InvalidConnectionRequestBaseCookie'
-    ) {
-      await dropDatabase(this.#rep.idbName);
-      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
-    }
+    lc.info?.(`${kind}: ${message}}`);
 
     const error = new ServerError(kind, message);
-
-    lc.info?.(`${kind}: ${message}}`);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this.#connectResolver.reject(error);
     this.#disconnect(lc, {server: kind});
+
+    if (kind === ErrorKind.VersionNotSupported) {
+      this.onUpdateNeeded?.({type: kind});
+    } else if (kind === ErrorKind.ClientNotFound) {
+      await this.#rep.disableClientGroup();
+      this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
+    } else if (
+      kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
+      kind === ErrorKind.InvalidConnectionRequestBaseCookie
+    ) {
+      await dropDatabase(this.#rep.idbName);
+      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
+    }
   }
 
   async #handleConnectedMessage(
