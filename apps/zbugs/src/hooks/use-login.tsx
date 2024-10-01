@@ -2,7 +2,7 @@ import {createContext, useContext, useState} from 'react';
 import {clearJwt, getJwt, getRawJwt} from '../jwt.js';
 
 export type LoginContext = {
-  setLoggedOut: () => void;
+  logout: () => void;
   loginState: LoginState | undefined;
 };
 
@@ -14,6 +14,7 @@ export type LoginState = {
 
 const loginContext = createContext<LoginContext | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useLogin() {
   const state = useContext(loginContext);
   if (state === undefined) {
@@ -38,7 +39,7 @@ export function LoginProvider({children}: {children: React.ReactNode}) {
   return (
     <loginContext.Provider
       value={{
-        setLoggedOut: () => {
+        logout: () => {
           clearJwt();
           setLoginState(undefined);
         },
