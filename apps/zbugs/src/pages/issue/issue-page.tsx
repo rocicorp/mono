@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {useQuery} from 'zero-react/src/use-query.js';
-import {useZero} from '../../domain/schema.js';
+import {useZero} from '../../hooks/use-zero.js';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
 import statusOpen from '../../assets/icons/issue-open.svg';

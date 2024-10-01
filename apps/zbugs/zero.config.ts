@@ -4,7 +4,7 @@ import {
   runtimeEnv,
   type Queries,
 } from 'zero-cache/src/config/define-config.js';
-import {type Schema, schema} from './src/domain/schema-shared.js';
+import {type Schema, schema} from './src/domain/schema.js';
 
 type AuthData = {sub: string};
 

@@ -6,7 +6,7 @@ import {navigate} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
-import {useZero} from '../../domain/schema.js';
+import {useZero} from '../../hooks/use-zero.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
 
 export default function ListPage() {
