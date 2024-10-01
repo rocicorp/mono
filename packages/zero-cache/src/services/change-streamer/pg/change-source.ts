@@ -217,7 +217,11 @@ class PostgresChangeSource implements ChangeSource {
         clientStart,
       )}`,
     );
-    return max(confirmedWatermark, oneAfter(restartWatermark), clientStart);
+    return max(
+      oneAfter(confirmedWatermark),
+      oneAfter(restartWatermark),
+      clientStart,
+    );
   }
 }
 
