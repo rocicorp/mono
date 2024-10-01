@@ -1,9 +1,9 @@
 // @ts-check
 
 import * as esbuild from 'esbuild';
-import * as path from 'path';
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {makeDefine, sharedOptions} from 'shared/src/build.js';
-import {fileURLToPath} from 'url';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -1,6 +1,6 @@
 // @ts-check
 
-import {readFile} from 'fs/promises';
+import {readFile} from 'node:fs/promises';
 
 /**
  * @typedef  {{

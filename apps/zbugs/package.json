@@ -11,7 +11,7 @@
     "check-format": "prettier --check './**/*.{js,jsx,json,ts,tsx,html,css,md}'",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "node --no-warnings --loader ts-node/esm ./zero.config.ts ; cd ../../packages/zero-cache && ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start"
+    "zero": "node --no-warnings --loader ts-node/esm ./zero.config.ts ; cd ../../packages/zero-cache ; ZERO_CONFIG_PATH=\"../../apps/zbugs/zero.config.json\" npm run start -- dotenv_config_path=../../apps/zbugs/.env"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",

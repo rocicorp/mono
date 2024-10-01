@@ -34,25 +34,44 @@ const authorizationConfigSchema = v.record(
 
 export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
 
-const logConfigSchema = v.object({
-  level: v.union(v.literal('debug'), v.literal('info'), v.literal('error')),
-  datadogLogsApiKey: v.string().optional(),
-  datadogServiceLabel: v.string().optional(),
+const envRefSchema = v.object({
+  tag: v.literal('env'),
+  name: v.string(),
 });
-export type LogConfig = v.Infer<typeof logConfigSchema>;
+export type EnvRef = v.Infer<typeof envRefSchema>;
+const stringLiteral = v.string();
+const numberLiteral = v.number();
+const booleanLiteral = v.boolean();
+
+const logConfigSchema = v.object({
+  level: v.union(
+    envRefSchema,
+    v.union(v.literal('debug'), v.literal('info'), v.literal('error')),
+  ),
+  datadogLogsApiKey: v.union(envRefSchema, stringLiteral).optional(),
+  datadogServiceLabel: v.union(envRefSchema, stringLiteral).optional(),
+});
+type LogConfigType = v.Infer<typeof logConfigSchema>;
+const configValueSchema = v.union(
+  envRefSchema,
+  stringLiteral,
+  booleanLiteral,
+  numberLiteral,
+);
+type ConfigValue = v.Infer<typeof configValueSchema>;
 
 const zeroConfigSchemaSansAuthorization = v.object({
-  upstreamUri: v.string(),
-  cvrDbUri: v.string(),
-  changeDbUri: v.string(),
-  replicaId: v.string(),
-  taskId: v.string().optional(),
-  replicaDbFile: v.string(),
-  storageDbTmpDir: v.string().optional(),
-  numSyncWorkers: v.number().optional(),
-  changeStreamerUri: v.string().optional(),
-  litestream: v.boolean().optional(),
-  jwtSecret: v.string().optional(),
+  upstreamUri: v.union(envRefSchema, stringLiteral),
+  cvrDbUri: v.union(envRefSchema, stringLiteral),
+  changeDbUri: v.union(envRefSchema, stringLiteral),
+  replicaId: v.union(envRefSchema, stringLiteral),
+  taskId: v.union(envRefSchema, stringLiteral).optional(),
+  replicaDbFile: v.union(envRefSchema, stringLiteral),
+  storageDbTmpDir: v.union(envRefSchema, stringLiteral).optional(),
+  numSyncWorkers: v.union(envRefSchema, numberLiteral).optional(),
+  changeStreamerUri: v.union(envRefSchema, stringLiteral).optional(),
+  litestream: v.union(envRefSchema, booleanLiteral).optional(),
+  jwtSecret: v.union(envRefSchema, stringLiteral).optional(),
 
   log: logConfigSchema,
 });
@@ -65,7 +84,7 @@ export const zeroConfigSchema = zeroConfigSchemaSansAuthorization.extend({
   authorization: authorizationConfigSchema.optional(),
 });
 
-export type ZeroConfig = v.Infer<typeof zeroConfigSchema>;
+export type ZeroConfigType = v.Infer<typeof zeroConfigSchema>;
 
 let loadedConfig: Promise<ZeroConfig> | undefined;
 export function getZeroConfig() {
@@ -74,6 +93,105 @@ export function getZeroConfig() {
   }
   loadedConfig = fs
     .readFile(must(process.env['ZERO_CONFIG_PATH']), 'utf-8')
-    .then(rawContent => v.parse(JSON.parse(rawContent), zeroConfigSchema));
+    .then(
+      rawContent =>
+        new ZeroConfig(v.parse(JSON.parse(rawContent), zeroConfigSchema)),
+    );
   return loadedConfig;
+}
+
+export class ZeroConfig {
+  readonly #config: ZeroConfigType;
+  readonly #log: LogConfig;
+  constructor(config: ZeroConfigType) {
+    this.#config = config;
+    this.#log = new LogConfig(config.log);
+  }
+
+  get upstreamUri() {
+    return mustResolveValue(this.#config.upstreamUri);
+  }
+
+  get cvrDbUri() {
+    return mustResolveValue(this.#config.cvrDbUri);
+  }
+
+  get changeDbUri() {
+    return mustResolveValue(this.#config.changeDbUri);
+  }
+
+  get replicaId() {
+    return mustResolveValue(this.#config.replicaId);
+  }
+
+  get taskId() {
+    return resolveValue(this.#config.taskId);
+  }
+
+  get replicaDbFile() {
+    return mustResolveValue(this.#config.replicaDbFile);
+  }
+
+  get storageDbTmpDir() {
+    return resolveValue(this.#config.storageDbTmpDir);
+  }
+
+  get numSyncWorkers() {
+    return resolveValue(this.#config.numSyncWorkers);
+  }
+
+  get changeStreamerUri() {
+    return resolveValue(this.#config.changeStreamerUri);
+  }
+
+  get litestream() {
+    return resolveValue(this.#config.litestream);
+  }
+
+  get jwtSecret() {
+    return resolveValue(this.#config.jwtSecret);
+  }
+
+  get log() {
+    return this.#log;
+  }
+
+  get authorization() {
+    return this.#config.authorization;
+  }
+}
+
+export class LogConfig {
+  readonly #config: LogConfigType;
+  constructor(config: LogConfigType) {
+    this.#config = config;
+  }
+
+  get level() {
+    return mustResolveValue(this.#config.level);
+  }
+
+  get datadogLogsApiKey() {
+    return resolveValue(this.#config.datadogLogsApiKey);
+  }
+
+  get datadogServiceLabel() {
+    return resolveValue(this.#config.datadogServiceLabel);
+  }
+}
+
+function resolveValue<T extends ConfigValue>(
+  value: T | undefined,
+): Exclude<T, EnvRef> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'object' && value.tag === 'env') {
+    return process.env[value.name] as Exclude<T, EnvRef>;
+  }
+  return value as Exclude<T, EnvRef>;
+}
+
+function mustResolveValue<T extends ConfigValue>(value: T | undefined) {
+  return must(resolveValue(value));
 }

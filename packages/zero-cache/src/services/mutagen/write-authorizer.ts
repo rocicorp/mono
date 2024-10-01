@@ -1,29 +1,29 @@
+import {LogContext} from '@rocicorp/logger';
+import type {JWTPayload} from 'jose';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {pid} from 'node:process';
+import {assert} from 'shared/src/asserts.js';
+import type {JSONValue} from 'shared/src/json.js';
+import {randInt} from 'shared/src/rand.js';
+import type {CreateOp, DeleteOp, SetOp, UpdateOp} from 'zero-protocol';
+import type {BuilderDelegate} from 'zql/src/zql/builder/builder.js';
+import {buildPipeline} from 'zql/src/zql/builder/builder.js';
+import type {Row} from 'zql/src/zql/ivm/data.js';
 import {Database} from 'zqlite/src/db.js';
+import {compile, sql} from 'zqlite/src/internal/sql.js';
+import {StatementCache} from 'zqlite/src/internal/statement-cache.js';
+import {TableSource} from 'zqlite/src/table-source.js';
 import type {
   AuthorizationConfig,
   Policy,
   ZeroConfig,
 } from '../../config/zero-config.js';
-import type {CreateOp, DeleteOp, SetOp, UpdateOp} from 'zero-protocol';
-import type {BuilderDelegate} from 'zql/src/zql/builder/builder.js';
-import {buildPipeline} from 'zql/src/zql/builder/builder.js';
-import type {NormalizedTableSpec} from '../view-syncer/pipeline-driver.js';
-import {normalize} from '../view-syncer/pipeline-driver.js';
 import {listTables} from '../../db/lite-tables.js';
-import {TableSource} from 'zqlite/src/table-source.js';
-import {assert} from 'shared/src/asserts.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../../types/lite.js';
 import {DatabaseStorage} from '../view-syncer/database-storage.js';
-import {LogContext} from '@rocicorp/logger';
-import path from 'path';
-import {tmpdir} from 'node:os';
-import {pid} from 'node:process';
-import {randInt} from 'shared/src/rand.js';
-import {StatementCache} from 'zqlite/src/internal/statement-cache.js';
-import {sql, compile} from 'zqlite/src/internal/sql.js';
-import type {Row} from 'zql/src/zql/ivm/data.js';
-import type {JWTPayload} from 'jose';
-import type {JSONValue} from 'shared/src/json.js';
+import type {NormalizedTableSpec} from '../view-syncer/pipeline-driver.js';
+import {normalize} from '../view-syncer/pipeline-driver.js';
 
 export interface WriteAuthorizer {
   canInsert(authData: JWTPayload, op: CreateOp): boolean;
