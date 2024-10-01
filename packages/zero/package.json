@@ -2,8 +2,11 @@
   "name": "@rocicorp/zero",
   "version": "0.0.1",
   "scripts": {
-    "build": "rm -rf out && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node tool/build.js",
-    "check-types": "tsc"
+    "build": "rm -rf out && npm run build-client && npm run build-server",
+    "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
+    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json",
+    "check-types": "tsc --noEmit",
+    "start": "node out/zero/src/server/main.js"
   },
   "dependencies": {
     "replicache": "15.2.1"
@@ -14,6 +17,11 @@
     "esbuild": "^0.20.2",
     "tsc-alias": "^1.8.10",
     "typescript": "^5.5.3",
+    "zero-cache": "0.0.0",
+    "zero-client": "0.0.0"
+  },
+  "peerDependencies": {
+    "zero-cache": "0.0.0",
     "zero-client": "0.0.0"
   },
   "type": "module",
@@ -24,6 +32,10 @@
     ".": {
       "types": "./out/zero-client/src/mod.d.ts",
       "default": "./out/zero.js"
+    },
+    "./server": {
+      "types": "./out/zero/src/server/main.d.ts",
+      "default": "./out/zero/src/server/main.js"
     }
   },
   "files": [

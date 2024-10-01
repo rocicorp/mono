@@ -1,6 +1,7 @@
 // @ts-check
 
 import * as esbuild from 'esbuild';
+import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
 import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.js';
@@ -15,12 +16,19 @@ function basePath(...parts) {
   return path.join(dirname, '..', ...parts);
 }
 
-const external = await getExternalFromPackageJSON(import.meta.url);
+const external = [
+  ...(await getExternalFromPackageJSON(import.meta.url)),
+  'node:*',
+  ...builtinModules,
+  // better-sqlite3 is installed using a preinstall script.
+  'better-sqlite3',
+];
 
-async function buildZeroClient() {
+async function buildZero() {
   const define = makeDefine('unknown');
   const entryPoints = {
     zero: basePath('src', 'zero.ts'),
+    // server: basePath('src', 'server.ts'),
   };
   await esbuild.build({
     ...sharedOptions(false, false),
@@ -34,4 +42,4 @@ async function buildZeroClient() {
   });
 }
 
-await buildZeroClient();
+await buildZero();
