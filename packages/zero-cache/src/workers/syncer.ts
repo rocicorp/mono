@@ -3,7 +3,7 @@ import assert from 'assert';
 import {jwtVerify, type JWTPayload} from 'jose';
 import {must} from 'shared/src/must.js';
 import {MessagePort} from 'worker_threads';
-import WebSocket from 'ws';
+import {WebSocketServer, type WebSocket} from 'ws';
 import {type ZeroConfig} from '../config/zero-config.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
@@ -34,7 +34,7 @@ export class Syncer {
   readonly #mutagens: ServiceRunner<Mutagen & Service>;
   readonly #connections = new Map<string, Connection>();
   readonly #parent: Worker;
-  readonly #wss: WebSocket.Server;
+  readonly #wss: WebSocketServer;
   #jwtSecretBytes: Uint8Array | undefined;
 
   constructor(
@@ -60,7 +60,7 @@ export class Syncer {
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);
     this.#parent = parent;
-    this.#wss = new WebSocket.Server({noServer: true});
+    this.#wss = new WebSocketServer({noServer: true});
 
     if (config.jwtSecret) {
       this.#jwtSecretBytes = new TextEncoder().encode(config.jwtSecret);
