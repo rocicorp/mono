@@ -100,6 +100,16 @@ const configValueSchema = v.union(
 );
 type ConfigValue = v.Infer<typeof configValueSchema>;
 
+const rateLimitConfigSchema = v.object({
+  // Limits to `max` transactions per `windowMs` milliseconds.
+  // This uses a sliding window algorithm to track number of transactions in the current window.
+  mutationTransactions: v.object({
+    algorithm: v.literal('sliding-window'),
+    windowMs: v.union(envRefSchema, numberLiteral),
+    max: v.union(envRefSchema, numberLiteral),
+  }),
+});
+
 const zeroConfigSchemaSansAuthorization = v.object({
   upstreamUri: configStringValueSchema,
   cvrDbUri: configStringValueSchema,
@@ -115,6 +125,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
   log: logConfigSchema,
 
   shard: shardConfigSchema.optional(),
+  rateLimit: rateLimitConfigSchema.optional(),
 });
 
 export type ZeroConfigSansAuthorization = v.Infer<
