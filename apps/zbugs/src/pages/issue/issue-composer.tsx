@@ -2,6 +2,8 @@ import {useRef, useState} from 'react';
 
 import CloseIcon from '../../assets/icons/close.svg?react';
 import Modal from '../../components/modal.js';
+import {useZero} from '../../hooks/use-zero.js';
+import {nanoid} from 'zero-client/src/util/nanoid.js';
 
 interface Props {
   onDismiss?: () => void;
@@ -12,9 +14,21 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
   const ref = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>();
+  const z = useZero();
 
-  const handleSubmit = async () => {
-    // ..
+  const handleSubmit = () => {
+    z.mutate.issue.create({
+      id: nanoid(),
+      title,
+      description: description ?? '',
+      created: Date.now(),
+      creatorID: z.userID,
+      modified: Date.now(),
+      open: true,
+      labelIDs: '',
+    });
+    reset();
+    onDismiss?.();
   };
 
   const reset = () => {
@@ -24,7 +38,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
 
   const handleClickCloseBtn = () => {
     reset();
-    if (onDismiss) onDismiss();
+    onDismiss?.();
   };
 
   const body = (
