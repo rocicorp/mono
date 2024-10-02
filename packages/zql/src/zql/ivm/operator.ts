@@ -1,7 +1,7 @@
 import type {JSONValue} from 'shared/src/json.js';
 import type {Change} from './change.js';
 import type {Node, Row, Value} from './data.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
 /**
@@ -9,11 +9,11 @@ import type {Stream} from './stream.js';
  */
 export interface Input {
   /** The schema of the data this input returns. */
-  getSchema(): Schema;
+  getSchema(): TableSchema;
 
   /**
    * Fetch data. May modify the data in place.
-   * Returns nodes sorted in order of {@linkcode Schema.compareRows}.
+   * Returns nodes sorted in order of {@linkcode TableSchema.compareRows}.
    */
   fetch(req: FetchRequest): Stream<Node>;
 

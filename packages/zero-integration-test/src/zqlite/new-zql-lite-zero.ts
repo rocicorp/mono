@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
-import type {QueryDefs} from 'zero-client';
+import type {Schema} from 'zero-client';
 import {Database} from 'zqlite/src/db.js';
 import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
 
-export function newSqliteZero<QD extends QueryDefs>(
+export function newSqliteZero<S extends Schema>(
   lc: LogContext,
-  schemas: QD,
-): ZQLiteZero<QD> {
+  schema: S,
+): ZQLiteZero<S> {
   {
     const db = new Database(lc, ':memory:');
     const z = new ZQLiteZero({
-      schemas,
+      schema,
       db,
     });
     if (!db) {

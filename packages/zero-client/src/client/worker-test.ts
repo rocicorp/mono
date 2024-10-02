@@ -37,15 +37,18 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    schemas: {
-      e: {
-        tableName: 'e',
-        columns: {
-          id: {type: 'string'},
-          value: {type: 'number'},
+    schema: {
+      version: 1,
+      tables: {
+        e: {
+          tableName: 'e',
+          columns: {
+            id: {type: 'string'},
+            value: {type: 'number'},
+          },
+          primaryKey: ['id'],
+          relationships: {},
         },
-        primaryKey: ['id'],
-        relationships: {},
       },
     },
   });

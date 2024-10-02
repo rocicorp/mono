@@ -1,14 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
-import {type QueryDefs, Zero} from 'zero-client';
+import {Zero} from 'zero-client';
+import type {Schema} from 'zero-client/src/client/zero.js';
 import {nanoid} from 'zero-client/src/util/nanoid.js';
 
-export function newZero<QD extends QueryDefs>(
-  _lc: LogContext,
-  schemas: QD,
-): Zero<QD> {
+export function newZero<S extends Schema>(_lc: LogContext, schema: S): Zero<S> {
   const z = new Zero({
     userID: 'user-' + nanoid(),
-    schemas,
+    schema,
   });
   return z;
 }

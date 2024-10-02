@@ -1,12 +1,12 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {KVStoreProvider} from 'replicache';
 import type {MaybePromise} from 'shared/src/types.js';
-import type {SchemaDefs} from './zero.js';
+import type {Schema} from './zero.js';
 
 /**
  * Configuration for [[Zero]].
  */
-export interface ZeroOptions<SD extends SchemaDefs> {
+export interface ZeroOptions<S extends Schema> {
   /**
    * Server to connect to, for example "https://myapp-myteam.zero.ms/".
    */
@@ -45,12 +45,6 @@ export interface ZeroOptions<SD extends SchemaDefs> {
   jurisdiction?: 'eu' | undefined;
 
   /**
-   * The schema version of the data understood by this application. This enables
-   * versioning of mutators and the client view.
-   */
-  schemaVersion?: string | undefined;
-
-  /**
    * Determines the level of detail at which Zero logs messages about
    * its operation. Messages are logged to the `console`.
    *
@@ -64,10 +58,10 @@ export interface ZeroOptions<SD extends SchemaDefs> {
   logLevel?: LogLevel | undefined;
 
   /**
-   * This defines the schemas of the tables used in Zero and
-   * their relationships to one another.
+   * This defines the schema of the tables used in Zero and their relationships
+   * to one another.
    */
-  schemas?: SD | undefined;
+  schema: S;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes

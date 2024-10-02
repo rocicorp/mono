@@ -8,7 +8,7 @@ import {
   type Row,
 } from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 import {first, take, type Stream} from './stream.js';
 
 type Args = {
@@ -37,7 +37,7 @@ export class Join implements Input {
   readonly #parentKey: string;
   readonly #childKey: string;
   readonly #relationshipName: string;
-  readonly #schema: Schema;
+  readonly #schema: TableSchema;
 
   #output: Output | null = null;
 
@@ -87,7 +87,7 @@ export class Join implements Input {
     this.#output = output;
   }
 
-  getSchema(): Schema {
+  getSchema(): TableSchema {
     return this.#schema;
   }
 

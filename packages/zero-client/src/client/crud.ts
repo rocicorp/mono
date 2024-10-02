@@ -16,7 +16,7 @@ import type {Row} from 'zql/src/zql/ivm/data.js';
 import type {SchemaToRow} from 'zql/src/zql/query/query.js';
 import {toEntitiesKey} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
-import type {SchemaDefs} from './zero.js';
+import type {Schema} from './zero.js';
 
 export type Parse<E extends Row> = (v: ReadonlyJSONObject) => E;
 
@@ -35,15 +35,14 @@ export type EntityCRUDMutate<E extends Row> = {
 /**
  * This is the type of the generated mutate.<name> object.
  */
-export type MakeCRUDMutate<SD extends SchemaDefs> = BaseCRUDMutate<SD> &
-  CRUDBatch<SD>;
+export type MakeCRUDMutate<S extends Schema> = BaseCRUDMutate<S> & CRUDBatch<S>;
 
-export type BaseCRUDMutate<QD extends SchemaDefs> = {
-  [K in keyof QD]: EntityCRUDMutate<SchemaToRow<QD[K]>>;
+export type BaseCRUDMutate<S extends Schema> = {
+  [K in keyof S['tables']]: EntityCRUDMutate<SchemaToRow<S['tables'][K]>>;
 };
 
-export type CRUDBatch<QD extends SchemaDefs> = <R>(
-  body: (m: BaseCRUDMutate<QD>) => MaybePromise<R>,
+export type CRUDBatch<S extends Schema> = <R>(
+  body: (m: BaseCRUDMutate<S>) => MaybePromise<R>,
 ) => Promise<R>;
 
 type ZeroCRUDMutate = {
@@ -55,14 +54,14 @@ type ZeroCRUDMutate = {
  * queries are `issue` and `label`, then this object will have `issue` and
  * `label` properties.
  */
-export function makeCRUDMutate<QD extends SchemaDefs>(
-  schemas: QD,
+export function makeCRUDMutate<S extends Schema>(
+  schema: S,
   repMutate: ZeroCRUDMutate,
-): MakeCRUDMutate<QD> {
+): MakeCRUDMutate<S> {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
   let inBatch = false;
 
-  const mutate = async <R>(body: (m: BaseCRUDMutate<QD>) => R): Promise<R> => {
+  const mutate = async <R>(body: (m: BaseCRUDMutate<S>) => R): Promise<R> => {
     if (inBatch) {
       throw new Error('Cannot call mutate inside a batch');
     }
@@ -71,11 +70,11 @@ export function makeCRUDMutate<QD extends SchemaDefs>(
     try {
       const ops: CRUDOp[] = [];
       const m = {} as Record<string, unknown>;
-      for (const name of Object.keys(schemas)) {
+      for (const name of Object.keys(schema.tables)) {
         m[name] = makeBatchCRUDMutate(name, ops);
       }
 
-      const rv = await body(m as BaseCRUDMutate<QD>);
+      const rv = await body(m as BaseCRUDMutate<S>);
       await zeroCRUD({ops});
       return rv;
     } finally {
@@ -89,11 +88,11 @@ export function makeCRUDMutate<QD extends SchemaDefs>(
     }
   };
 
-  for (const name of Object.keys(schemas)) {
+  for (const name of Object.keys(schema.tables)) {
     (mutate as unknown as Record<string, EntityCRUDMutate<Row>>)[name] =
       makeEntityCRUDMutate(name, zeroCRUD, assertNotInBatch);
   }
-  return mutate as MakeCRUDMutate<QD>;
+  return mutate as MakeCRUDMutate<S>;
 }
 
 /**
@@ -197,9 +196,7 @@ export type CRUDMutator = (
   crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
-export function makeCRUDMutator<QD extends SchemaDefs>(
-  _schemas: QD,
-): CRUDMutator {
+export function makeCRUDMutator<S extends Schema>(_schemas: S): CRUDMutator {
   return async function zeroCRUDMutator(
     tx: WriteTransaction,
     crudArg: CRUDMutationArg,

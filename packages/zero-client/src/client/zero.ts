@@ -48,7 +48,7 @@ import type {
 } from 'zero-protocol/src/pull.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
 import type {Query} from 'zql/src/zql/query/query.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
@@ -78,14 +78,15 @@ import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 
-export type SchemaDefs = {
-  readonly [table: string]: Schema;
+export type Schema = {
+  readonly version: number;
+  readonly tables: {readonly [table: string]: TableSchema};
 };
 
 export type NoRelations = Record<string, never>;
 
-export type MakeEntityQueriesFromQueryDefs<SD extends SchemaDefs> = {
-  readonly [K in keyof SD]: Query<SD[K]>;
+export type MakeEntityQueriesFromSchema<S extends Schema> = {
+  readonly [K in keyof S['tables']]: Query<S['tables'][K]>;
 };
 
 declare const TESTING: boolean;
@@ -113,7 +114,7 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<QD extends SchemaDefs>(z: Zero<QD>): TestZero {
+function asTestZero<S extends Schema>(z: Zero<S>): TestZero {
   return z as TestZero;
 }
 
@@ -213,12 +214,12 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 
 export function getInternalReplicacheImplForTesting<
   MD extends MutatorDefs,
-  QD extends SchemaDefs,
->(z: Zero<QD>): ReplicacheImpl<MD> {
+  S extends Schema,
+>(z: Zero<S>): ReplicacheImpl<MD> {
   return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
-export class Zero<QD extends SchemaDefs> {
+export class Zero<S extends Schema> {
   readonly version = version;
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
@@ -361,9 +362,9 @@ export class Zero<QD extends SchemaDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<QD>;
+  readonly #options: ZeroOptions<S>;
 
-  readonly query: MakeEntityQueriesFromQueryDefs<QD>;
+  readonly query: MakeEntityQueriesFromSchema<S>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -376,14 +377,14 @@ export class Zero<QD extends SchemaDefs> {
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<QD>) {
+  constructor(options: ZeroOptions<S>) {
     const {
       userID,
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
-      schemas = {} as QD,
+      schema,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -414,18 +415,17 @@ export class Zero<QD extends SchemaDefs> {
     const logOptions = this.#logOptions;
 
     const replicacheMutators = {
-      ['_zero_crud']: makeCRUDMutator(schemas),
+      ['_zero_crud']: makeCRUDMutator(schema),
     };
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      schemaVersion: options.schemaVersion,
+      schemaVersion: schema.version.toString(),
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
       name: `zero-${userID}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
-      // TODO: Do we need these?
       pushDelay: 0,
       requestOptions: {
         maxDelayMs: 0,
@@ -469,13 +469,13 @@ export class Zero<QD extends SchemaDefs> {
       );
     };
 
-    this.mutate = makeCRUDMutate<QD>(schemas, rep.mutate);
+    this.mutate = makeCRUDMutate<S>(schema, rep.mutate);
 
     this.#queryManager = new QueryManager(rep.clientID, msg =>
       this.#sendChangeDesiredQueries(msg),
     );
 
-    this.#zeroContext = new ZeroContext(schemas, ast =>
+    this.#zeroContext = new ZeroContext(schema.tables, ast =>
       this.#queryManager.add(ast),
     );
 
@@ -487,7 +487,7 @@ export class Zero<QD extends SchemaDefs> {
       },
     );
 
-    this.query = this.#registerQueries(schemas);
+    this.query = this.#registerQueries(schema);
 
     reportReloadReason(this.#lc);
 
@@ -604,7 +604,7 @@ export class Zero<QD extends SchemaDefs> {
    * The function form of `mutate` is not allowed to be called inside another
    * `mutate` function. Doing so will throw an error.
    */
-  readonly mutate: MakeCRUDMutate<QD>;
+  readonly mutate: MakeCRUDMutate<S>;
 
   /**
    * Whether this Zero instance has been closed. Once a Zero instance has
@@ -886,6 +886,7 @@ export class Zero<QD extends SchemaDefs> {
       this.#connectCookie,
       this.clientID,
       await this.clientGroupID,
+      this.#options.schema.version,
       this.userID,
       this.#rep.auth,
       this.#jurisdiction,
@@ -1101,7 +1102,8 @@ export class Zero<QD extends SchemaDefs> {
           clientGroupID: req.clientGroupID,
           mutations: [zeroM],
           pushVersion: req.pushVersion,
-          schemaVersion: req.schemaVersion,
+          // Zero schema versions are always numbers.
+          schemaVersion: parseInt(req.schemaVersion),
           requestID,
         },
       ];
@@ -1508,15 +1510,15 @@ export class Zero<QD extends SchemaDefs> {
     // }
   }
 
-  #registerQueries(queryDefs: QD): MakeEntityQueriesFromQueryDefs<QD> {
-    const rv = {} as Record<string, Query<Schema>>;
+  #registerQueries(schema: S): MakeEntityQueriesFromSchema<S> {
+    const rv = {} as Record<string, Query<TableSchema>>;
     const context = this.#zeroContext;
     // Not using parse yet
-    for (const [name, schema] of Object.entries(queryDefs)) {
-      rv[name] = newQuery(context, schema);
+    for (const [name, table] of Object.entries(schema.tables)) {
+      rv[name] = newQuery(context, table);
     }
 
-    return rv as MakeEntityQueriesFromQueryDefs<QD>;
+    return rv as MakeEntityQueriesFromSchema<S>;
   }
 }
 
@@ -1525,6 +1527,7 @@ export function createSocket(
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,
+  schemaVersion: number,
   userID: string,
   auth: string | undefined,
   jurisdiction: 'eu' | undefined,
@@ -1539,6 +1542,7 @@ export function createSocket(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
+  searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   if (jurisdiction !== undefined) {
     searchParams.set('jurisdiction', jurisdiction);
