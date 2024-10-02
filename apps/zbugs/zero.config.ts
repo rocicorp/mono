@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import {defineConfig, runtimeEnv} from 'zero-cache/src/config/define-config.js';
-import {type Schema, schema} from './src/domain/schema.js';
+import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the decoded JWT */
 type AuthData = {
@@ -37,11 +37,13 @@ defineConfig<AuthData, Schema>(schema, queries => {
     cvrDbUri: runtimeEnv('CVR_DB_URI'),
     changeDbUri: runtimeEnv('CHANGE_DB_URI'),
 
-    replicaId: runtimeEnv('REPLICA_ID'),
     replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
     jwtSecret: runtimeEnv('JWT_SECRET'),
     litestream: runtimeEnv('LITESTREAM'),
-
+    shard: {
+      id: runtimeEnv('SHARD_ID'),
+      publications: runtimeEnv('PUBLICATIONS'),
+    },
     log: {
       level: 'debug',
     },

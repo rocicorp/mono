@@ -163,6 +163,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
             },
           ],
           orderBy: [
+            ['shardID', 'asc'],
             ['clientGroupID', 'asc'],
             ['clientID', 'asc'],
           ],

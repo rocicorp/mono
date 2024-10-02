@@ -43,37 +43,78 @@ const stringLiteral = v.string();
 const numberLiteral = v.number();
 const booleanLiteral = v.boolean();
 
+const configStringValueSchema = v.union(envRefSchema, stringLiteral);
+
+/**
+ * Configures the view of the upstream database replicated to this zero-cache.
+ */
+const shardConfigSchema = v.object({
+  /**
+   * Unique identifier for the zero-cache shard. This is used to partition
+   * shardable tables such as `zero.clients`, as well as reserve a name for
+   * the replication slot.
+   *
+   * The shard `id` value is written to the `shardID` column when updating
+   * the `lastMutationID` for clients in the `zero.clients` table.
+   *
+   * Defaults to "0".
+   */
+  id: configStringValueSchema,
+
+  /**
+   * Optional (comma-separated) list of of Postgres `PUBLICATION`s that the
+   * shard subscribes to. All publication names must begin with the prefix
+   * `"zero_"`, and all tables must be in the `"public"` Postgres schema.
+   *
+   * If unspecified, zero will create and use a `"zero_public"` publication that
+   * publishes all tables in the `"public"` schema.
+   *
+   * ```sql
+   * CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;
+   * ```
+   *
+   * Note that once a shard has begun syncing data, this list of publications
+   * cannot be changed, and zero-cache will refuse to start if a specified
+   * value differs from what it originally synced.
+   *
+   * To use a different set of publications, a new shard should be created.
+   */
+  publications: configStringValueSchema,
+});
+type ShardConfigType = v.Infer<typeof shardConfigSchema>;
+
 const logConfigSchema = v.object({
   level: v.union(
     envRefSchema,
     v.union(v.literal('debug'), v.literal('info'), v.literal('error')),
   ),
-  datadogLogsApiKey: v.union(envRefSchema, stringLiteral).optional(),
-  datadogServiceLabel: v.union(envRefSchema, stringLiteral).optional(),
+  datadogLogsApiKey: configStringValueSchema.optional(),
+  datadogServiceLabel: configStringValueSchema.optional(),
 });
 type LogConfigType = v.Infer<typeof logConfigSchema>;
+
 const configValueSchema = v.union(
-  envRefSchema,
-  stringLiteral,
+  configStringValueSchema,
   booleanLiteral,
   numberLiteral,
 );
 type ConfigValue = v.Infer<typeof configValueSchema>;
 
 const zeroConfigSchemaSansAuthorization = v.object({
-  upstreamUri: v.union(envRefSchema, stringLiteral),
-  cvrDbUri: v.union(envRefSchema, stringLiteral),
-  changeDbUri: v.union(envRefSchema, stringLiteral),
-  replicaId: v.union(envRefSchema, stringLiteral),
-  taskId: v.union(envRefSchema, stringLiteral).optional(),
-  replicaDbFile: v.union(envRefSchema, stringLiteral),
-  storageDbTmpDir: v.union(envRefSchema, stringLiteral).optional(),
+  upstreamUri: configStringValueSchema,
+  cvrDbUri: configStringValueSchema,
+  changeDbUri: configStringValueSchema,
+  taskId: configStringValueSchema.optional(),
+  replicaDbFile: configStringValueSchema,
+  storageDbTmpDir: configStringValueSchema.optional(),
   numSyncWorkers: v.union(envRefSchema, numberLiteral).optional(),
-  changeStreamerUri: v.union(envRefSchema, stringLiteral).optional(),
+  changeStreamerUri: configStringValueSchema.optional(),
   litestream: v.union(envRefSchema, booleanLiteral).optional(),
-  jwtSecret: v.union(envRefSchema, stringLiteral).optional(),
+  jwtSecret: configStringValueSchema.optional(),
 
   log: logConfigSchema,
+
+  shard: shardConfigSchema.optional(),
 });
 
 export type ZeroConfigSansAuthorization = v.Infer<
@@ -109,9 +150,11 @@ export function getZeroConfig(): Promise<ZeroConfig> {
 export class ZeroConfig {
   readonly #config: ZeroConfigType;
   readonly #log: LogConfig;
+  readonly #shard: ShardConfig;
   constructor(config: ZeroConfigType) {
     this.#config = config;
     this.#log = new LogConfig(config.log);
+    this.#shard = new ShardConfig(config.shard);
   }
 
   get upstreamUri() {
@@ -124,10 +167,6 @@ export class ZeroConfig {
 
   get changeDbUri() {
     return mustResolveValue(this.#config.changeDbUri);
-  }
-
-  get replicaId() {
-    return mustResolveValue(this.#config.replicaId);
   }
 
   get taskId() {
@@ -158,6 +197,10 @@ export class ZeroConfig {
     return resolveValue(this.#config.jwtSecret);
   }
 
+  get shard() {
+    return this.#shard;
+  }
+
   get log() {
     return this.#log;
   }
@@ -183,6 +226,19 @@ export class LogConfig {
 
   get datadogServiceLabel() {
     return resolveValue(this.#config.datadogServiceLabel);
+  }
+}
+
+const DEFAULT_SHARD_ID = '0';
+
+export class ShardConfig {
+  readonly id: string;
+  readonly publications: readonly string[];
+
+  constructor(config: ShardConfigType | undefined) {
+    this.id = resolveValue(config?.id) ?? DEFAULT_SHARD_ID;
+    const p = resolveValue(config?.publications);
+    this.publications = p ? p.split(',') : [];
   }
 }
 
