@@ -34,7 +34,7 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-  type SchemaDefs,
+  type Schema,
   type UpdateNeededReason,
   createSocket,
   onClientStateNotFoundServerReason,
@@ -73,15 +73,18 @@ test('onOnlineChange callback', async () => {
 
   const r = zeroForTest({
     logLevel: 'debug',
-    schemas: {
-      foo: {
-        tableName: 'foo',
-        columns: {
-          id: {type: 'string'},
-          val: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        foo: {
+          tableName: 'foo',
+          columns: {
+            id: {type: 'string'},
+            val: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          relationships: {},
         },
-        primaryKey: ['id'],
-        relationships: {},
       },
     },
     onOnlineChange: online => {
@@ -282,6 +285,7 @@ suite('createSocket', () => {
     expectedURL: string,
     expectedProtocol = '',
   ) => {
+    const schemaVersion = 3;
     test(expectedURL, () => {
       sinon.stub(performance, 'now').returns(now);
       const mockSocket = createSocket(
@@ -289,6 +293,7 @@ suite('createSocket', () => {
         baseCookie,
         clientID,
         'testClientGroupID',
+        schemaVersion,
         userID,
         auth,
         jurisdiction,
@@ -312,7 +317,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -325,7 +330,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -338,7 +343,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -351,7 +356,7 @@ suite('createSocket', () => {
     123,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -364,7 +369,7 @@ suite('createSocket', () => {
     123,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -377,7 +382,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -391,7 +396,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -405,7 +410,7 @@ suite('createSocket', () => {
     0,
     true,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
     'auth%20with%20%5B%5D',
   );
 
@@ -419,7 +424,7 @@ suite('createSocket', () => {
     0,
     false,
     456,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 
@@ -441,15 +446,18 @@ suite('initConnection', () => {
 
   test('sends desired queries patch', async () => {
     const r = zeroForTest({
-      schemas: {
-        e: {
-          tableName: 'e',
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            tableName: 'e',
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            relationships: {},
           },
-          primaryKey: ['id'],
-          relationships: {},
         },
       },
     });
@@ -525,6 +533,7 @@ test('pusher sends one mutation per push message', async () => {
         expect(msg[1].clientGroupID).to.equal(
           clientGroupID ?? (await r.clientGroupID),
         );
+        expect(msg[1].schemaVersion).to.equal(1);
         expect(msg[1].mutations).to.have.lengthOf(1);
         expect(msg[1].requestID).to.equal(requestID);
       }
@@ -873,15 +882,18 @@ test('smokeTest', async () => {
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
       ...serverOptions,
-      schemas: {
-        issues: {
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
+      schema: {
+        version: 1,
+        tables: {
+          issues: {
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issues',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issues',
-          relationships: {},
         },
       },
     });
@@ -1176,7 +1188,7 @@ function expectInitConnectionMessage(message: string) {
   ).not.toBeUndefined();
 }
 
-function expectLogMessages(r: TestZero<SchemaDefs>) {
+function expectLogMessages(r: TestZero<Schema>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1305,7 +1317,7 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<SchemaDefs>) => Promise<unknown>,
+  fn: (r: TestZero<Schema>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
@@ -1482,7 +1494,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<SchemaDefs>,
+      r: TestZero<Schema>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1757,8 +1769,8 @@ test('kvStore option', async () => {
     value: number;
   };
 
-  const t = async (
-    kvStore: ZeroOptions<Record<string, never>>['kvStore'],
+  const t = async <S extends Schema>(
+    kvStore: ZeroOptions<S>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: E[],
@@ -1767,15 +1779,18 @@ test('kvStore option', async () => {
       server: null,
       userID,
       kvStore,
-      schemas: {
-        e: {
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            tableName: 'e',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'e',
-          relationships: {},
         },
       },
     });
@@ -1868,25 +1883,28 @@ test('Zero close should stop timeout, close delayed', async () => {
 
 test('ensure we get the same query object back', () => {
   const z = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });
@@ -1903,25 +1921,28 @@ test('ensure we get the same query object back', () => {
 
 test('the type of collection should be inferred from options with parse', () => {
   const r = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });
@@ -1947,25 +1968,28 @@ suite('CRUD', () => {
   };
   const makeZero = () =>
     zeroForTest({
-      schemas: {
-        issue: {
-          columns: {
-            id: {type: 'string'},
-            title: {type: 'string'},
+      schema: {
+        version: 1,
+        tables: {
+          issue: {
+            columns: {
+              id: {type: 'string'},
+              title: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issue',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issue',
-          relationships: {},
-        },
-        comment: {
-          columns: {
-            id: {type: 'string'},
-            issueID: {type: 'string'},
-            text: {type: 'string'},
+          comment: {
+            columns: {
+              id: {type: 'string'},
+              issueID: {type: 'string'},
+              text: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'comment',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'comment',
-          relationships: {},
         },
       },
     });
@@ -2030,15 +2054,18 @@ suite('CRUD', () => {
 
   test('do not expose _zero_crud', () => {
     const z = zeroForTest({
-      schemas: {
-        issue: {
-          columns: {
-            id: {type: 'string'},
-            title: {type: 'string'},
+      schema: {
+        version: 1,
+        tables: {
+          issue: {
+            columns: {
+              id: {type: 'string'},
+              title: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issue',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issue',
-          relationships: {},
         },
       },
     });
@@ -2051,25 +2078,28 @@ suite('CRUD', () => {
 
 test('mutate is a function for batching', async () => {
   const z = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });
@@ -2111,25 +2141,28 @@ test('mutate is a function for batching', async () => {
 
 test('calling mutate on the non batch version should throw inside a batch', async () => {
   const z = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });

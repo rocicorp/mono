@@ -10,7 +10,7 @@ import type {
   CommitListener,
   QueryDelegate,
 } from 'zql/src/zql/query/query-impl.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
 export type AddQuery = (ast: AST) => () => void;
@@ -26,14 +26,14 @@ export class ZeroContext implements QueryDelegate {
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
   readonly #sources = new Map<string, MemorySource>();
-  readonly #schemas: Record<string, Schema>;
+  readonly #tables: Record<string, TableSchema>;
   readonly #addQuery: AddQuery;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
   readonly staticQueryParameters = undefined;
 
-  constructor(schemas: Record<string, Schema>, addQuery: AddQuery) {
-    this.#schemas = schemas;
+  constructor(tables: Record<string, TableSchema>, addQuery: AddQuery) {
+    this.#tables = tables;
     this.#addQuery = addQuery;
   }
 
@@ -42,7 +42,7 @@ export class ZeroContext implements QueryDelegate {
     if (source !== undefined) {
       return source;
     }
-    const schema = this.#schemas[name] as Schema | undefined;
+    const schema = this.#tables[name] as TableSchema | undefined;
     if (!schema) {
       throw new Error(`No schema found for table ${name}`);
     }

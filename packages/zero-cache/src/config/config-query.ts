@@ -7,15 +7,15 @@ import type {
   QueryType,
   Smash,
 } from 'zql/src/zql/query/query.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import type {TypedView} from 'zql/src/zql/query/typed-view.js';
 
 export class ConfigQuery<
-  TSchema extends Schema,
-  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
-> extends AbstractQuery<TSchema, TReturn> {
+  TTableSchema extends TableSchema,
+  TReturn extends QueryType = DefaultQueryResultRow<TTableSchema>,
+> extends AbstractQuery<TTableSchema, TReturn> {
   constructor(
-    schema: TSchema,
+    schema: TTableSchema,
     ast?: AST | undefined,
     format?: Format | undefined,
   ) {
@@ -26,7 +26,7 @@ export class ConfigQuery<
     return this._completeAst();
   }
 
-  protected _newQuery<TSchema extends Schema, TReturn extends QueryType>(
+  protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
     schema: TSchema,
     ast: AST,
     format: Format | undefined,

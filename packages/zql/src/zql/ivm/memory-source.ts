@@ -15,7 +15,7 @@ import {
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Constraint, FetchRequest, Input, Output} from './operator.js';
-import type {PrimaryKey, Schema, SchemaValue} from './schema.js';
+import type {PrimaryKey, TableSchema, SchemaValue} from './schema.js';
 import type {
   Source,
   SourceChange,
@@ -87,7 +87,7 @@ export class MemorySource implements Source {
     };
   }
 
-  #getSchema(connection: Connection): Schema {
+  #getSchema(connection: Connection): TableSchema {
     return {
       tableName: this.#tableName,
       columns: this.#columns,

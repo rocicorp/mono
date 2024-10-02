@@ -24,7 +24,7 @@ import type {
 } from 'zql/src/zql/ivm/operator.js';
 import type {
   PrimaryKey,
-  Schema,
+  TableSchema,
   SchemaValue,
   ValueType,
 } from 'zql/src/zql/ivm/schema.js';
@@ -169,7 +169,7 @@ export class TableSource implements Source {
     return stmts;
   }
 
-  #getSchema(connection: Connection): Schema {
+  #getSchema(connection: Connection): TableSchema {
     return {
       tableName: this.#table,
       columns: this.#columns,

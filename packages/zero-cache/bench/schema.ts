@@ -1,6 +1,6 @@
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 
-const memberSchema: Schema = {
+const memberSchema: TableSchema = {
   tableName: 'member',
   columns: {
     id: {type: 'string'},
@@ -10,7 +10,7 @@ const memberSchema: Schema = {
   relationships: {},
 };
 
-const issueSchema: Schema = {
+const issueSchema: TableSchema = {
   tableName: 'issue',
   columns: {
     id: {type: 'string'},
@@ -56,7 +56,7 @@ const issueSchema: Schema = {
   },
 };
 
-const commentSchema: Schema = {
+const commentSchema: TableSchema = {
   tableName: 'comment',
   columns: {
     id: {type: 'string'},
@@ -77,7 +77,7 @@ const commentSchema: Schema = {
   },
 };
 
-const labelSchema: Schema = {
+const labelSchema: TableSchema = {
   tableName: 'label',
   columns: {
     id: {type: 'string'},
@@ -87,7 +87,7 @@ const labelSchema: Schema = {
   relationships: {},
 };
 
-const issueLabelSchema: Schema = {
+const issueLabelSchema: TableSchema = {
   tableName: 'issueLabel',
   columns: {
     id: {type: 'string'},

@@ -24,18 +24,21 @@ import {
   isJunctionRelationship,
   type Lazy,
   type PullSchemaForRelationship,
-  type Schema,
+  type TableSchema,
 } from './schema.js';
 import type {TypedView} from './typed-view.js';
 
 export function newQuery<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
->(delegate: QueryDelegate, schema: TSchema): Query<TSchema, TReturn> {
-  return new QueryImpl(delegate, schema);
+>(delegate: QueryDelegate, tableSchema: TSchema): Query<TSchema, TReturn> {
+  return new QueryImpl(delegate, tableSchema);
 }
 
-function newQueryWithDetails<TSchema extends Schema, TReturn extends QueryType>(
+function newQueryWithDetails<
+  TSchema extends TableSchema,
+  TReturn extends QueryType,
+>(
   delegate: QueryDelegate,
   schema: TSchema,
   ast: AST,
@@ -62,7 +65,7 @@ export function staticParam<TAnchor, TField extends keyof TAnchor>(
 }
 
 export abstract class AbstractQuery<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > implements Query<TSchema, TReturn>
 {
@@ -94,7 +97,7 @@ export abstract class AbstractQuery<
   }
 
   protected abstract _newQuery<
-    TSchema extends Schema,
+    TSchema extends TableSchema,
     TReturn extends QueryType,
   >(
     schema: TSchema,
@@ -355,7 +358,7 @@ export abstract class AbstractQuery<
 }
 
 export class QueryImpl<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > extends AbstractQuery<TSchema, TReturn> {
   readonly #delegate: QueryDelegate;
@@ -380,7 +383,7 @@ export class QueryImpl<
     return this.#format.singular;
   }
 
-  protected _newQuery<TSchema extends Schema, TReturn extends QueryType>(
+  protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
     schema: TSchema,
     ast: AST,
     format: Format | undefined,
@@ -416,7 +419,9 @@ export class QueryImpl<
   }
 }
 
-function resolveSchema(maybeSchema: Schema | Lazy<Schema>): Schema {
+function resolveSchema(
+  maybeSchema: TableSchema | Lazy<TableSchema>,
+): TableSchema {
   if (typeof maybeSchema === 'function') {
     return maybeSchema();
   }
@@ -425,7 +430,7 @@ function resolveSchema(maybeSchema: Schema | Lazy<Schema>): Schema {
 }
 
 function addPrimaryKeys(
-  schema: Schema,
+  schema: TableSchema,
   orderBy: Ordering | undefined,
 ): Ordering {
   orderBy = orderBy ?? [];
@@ -446,7 +451,7 @@ function addPrimaryKeys(
   ];
 }
 
-function addPrimaryKeysToAst(schema: Schema, ast: AST): AST {
+function addPrimaryKeysToAst(schema: TableSchema, ast: AST): AST {
   return {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),

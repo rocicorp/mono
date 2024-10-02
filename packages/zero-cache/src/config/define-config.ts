@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {Query, SchemaToRow} from 'zql/src/zql/query/query.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import {ConfigQuery} from './config-query.js';
 import {authDataRef, preMutationRowRef} from './refs.js';
 import type {
@@ -19,42 +19,43 @@ import type {
   ZeroConfigSansAuthorization,
 } from './zero-config.js';
 
-type SchemaDefs = {
-  readonly [table: string]: Schema;
+type Schema = {
+  readonly version: number;
+  readonly tables: {readonly [table: string]: TableSchema};
 };
 
-export type Queries<TSchemas extends SchemaDefs> = {
-  [K in keyof TSchemas]: Query<TSchemas[K]>;
+export type Queries<TSchema extends Schema> = {
+  [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
 };
 
-type InstanceAuthzRule<TAuthDataShape, TSchema extends Schema> = (
+type InstanceAuthzRule<TAuthDataShape, TSchema extends TableSchema> = (
   authData: TAuthDataShape,
   row: SchemaToRow<TSchema>,
-) => Query<Schema>;
+) => Query<TableSchema>;
 
 type StaticAuthzRule<TAuthDataShape> = (
   authData: TAuthDataShape,
-) => Query<Schema>;
+) => Query<TableSchema>;
 
 type StaticAssetAuthorization<TAuthDataShape> = {
   [K in Action]?: StaticAuthzRule<TAuthDataShape>[];
 };
 
-type InstanceAssetAuthorization<TAuthDataShape, TSchema extends Schema> = {
+type InstanceAssetAuthorization<TAuthDataShape, TSchema extends TableSchema> = {
   [K in Action]?: InstanceAuthzRule<TAuthDataShape, TSchema>[];
 };
 
-export type AuthorizationConfig<TAuthDataShape, TSchemas extends SchemaDefs> = {
-  [K in keyof TSchemas]?: {
+export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
+  [K in keyof TSchema['tables']]?: {
     table?: StaticAssetAuthorization<TAuthDataShape>;
     column?: {
-      [C in keyof TSchemas[K]['columns']]?: StaticAssetAuthorization<TAuthDataShape>;
+      [C in keyof TSchema['tables'][K]['columns']]?: StaticAssetAuthorization<TAuthDataShape>;
     };
-    row?: InstanceAssetAuthorization<TAuthDataShape, TSchemas[K]>;
+    row?: InstanceAssetAuthorization<TAuthDataShape, TSchema['tables'][K]>;
     cell?: {
-      [C in keyof TSchemas[K]['columns']]?: InstanceAssetAuthorization<
+      [C in keyof TSchema['tables'][K]['columns']]?: InstanceAssetAuthorization<
         TAuthDataShape,
-        TSchemas[K]
+        TSchema['tables'][K]
       >;
     };
   };
@@ -62,33 +63,33 @@ export type AuthorizationConfig<TAuthDataShape, TSchemas extends SchemaDefs> = {
 
 export type ZeroConfig<
   TAuthDataShape,
-  TSchemas extends SchemaDefs,
+  TSchema extends Schema,
 > = ZeroConfigSansAuthorization & {
-  authorization?: AuthorizationConfig<TAuthDataShape, TSchemas>;
+  authorization?: AuthorizationConfig<TAuthDataShape, TSchema>;
 };
 
 export function runtimeEnv(key: string): EnvRef {
   return {tag: 'env', name: key};
 }
 
-export function defineConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
-  schemas: TSchemas,
-  definer: (queries: Queries<TSchemas>) => ZeroConfig<TAuthDataShape, TSchemas>,
+export function defineConfig<TAuthDataShape, TSchema extends Schema>(
+  schema: TSchema,
+  definer: (queries: Queries<TSchema>) => ZeroConfig<TAuthDataShape, TSchema>,
 ) {
-  const queries = {} as Record<string, Query<Schema>>;
-  for (const [name, schema] of Object.entries(schemas)) {
-    queries[name] = new ConfigQuery(schema);
+  const queries = {} as Record<string, Query<TableSchema>>;
+  for (const [name, tableSchema] of Object.entries(schema.tables)) {
+    queries[name] = new ConfigQuery(tableSchema);
   }
 
-  const config = definer(queries as Queries<TSchemas>);
+  const config = definer(queries as Queries<TSchema>);
   const compiled = compileConfig(config);
   const serializedConfig = JSON.stringify(compiled, null, 2);
   const dest = path.join(process.cwd(), 'zero.config.json');
   return fs.writeFileSync(dest, serializedConfig);
 }
 
-function compileConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
-  config: ZeroConfig<TAuthDataShape, TSchemas>,
+function compileConfig<TAuthDataShape, TSchema extends Schema>(
+  config: ZeroConfig<TAuthDataShape, TSchema>,
 ): CompiledZeroConfig {
   return {
     ...config,
@@ -96,8 +97,8 @@ function compileConfig<TAuthDataShape, TSchemas extends SchemaDefs>(
   };
 }
 
-function compileAuthorization<TAuthDataShape, TSchemas extends SchemaDefs>(
-  authz: AuthorizationConfig<TAuthDataShape, TSchemas> | undefined,
+function compileAuthorization<TAuthDataShape, TSchema extends Schema>(
+  authz: AuthorizationConfig<TAuthDataShape, TSchema> | undefined,
 ): CompiledAuthorizationConfig | undefined {
   if (!authz) {
     return undefined;
@@ -168,7 +169,7 @@ function compileColumnConfig<TAuthDataShape>(
   return ret;
 }
 
-function compileRowConfig<TAuthDataShape, TSchema extends Schema>(
+function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
   rowRules: InstanceAssetAuthorization<TAuthDataShape, TSchema> | undefined,
 ): CompiledAssetAuthorization | undefined {
   if (!rowRules) {
@@ -182,7 +183,7 @@ function compileRowConfig<TAuthDataShape, TSchema extends Schema>(
   };
 }
 
-function compileInstanceRules<TAuthDataShape, TSchema extends Schema>(
+function compileInstanceRules<TAuthDataShape, TSchema extends TableSchema>(
   rules: InstanceAuthzRule<TAuthDataShape, TSchema>[] | undefined,
 ): ['allow', AST][] | undefined {
   if (!rules) {
@@ -205,7 +206,7 @@ function compileInstanceRules<TAuthDataShape, TSchema extends Schema>(
   );
 }
 
-function compileCellConfig<TAuthDataShape, TSchema extends Schema>(
+function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
   cellRules:
     | Record<string, InstanceAssetAuthorization<TAuthDataShape, TSchema>>
     | undefined,

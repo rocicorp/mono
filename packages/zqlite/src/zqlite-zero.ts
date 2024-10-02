@@ -12,45 +12,43 @@ import type {EntityID} from 'zero-protocol/src/entity.js';
 import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
 import type {Row} from 'zql/src/zql/ivm/data.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import type {Database} from 'zqlite/src/db.js';
 import type {ZQLiteZeroOptions} from './options.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
-export class ZQLiteZero<SD extends zeroJs.SchemaDefs> {
+export class ZQLiteZero<S extends zeroJs.Schema> {
   readonly zeroContext: ZeroContext;
-  readonly query: zeroJs.MakeEntityQueriesFromQueryDefs<SD>;
-  readonly mutate: MakeCRUDMutate<SD>;
+  readonly query: zeroJs.MakeEntityQueriesFromSchema<S>;
+  readonly mutate: MakeCRUDMutate<S>;
   db: Database;
 
-  constructor(options: ZQLiteZeroOptions<SD>) {
-    const {schemas = {} as SD, db} = options;
+  constructor(options: ZQLiteZeroOptions<S>) {
+    const {schema, db} = options;
     this.db = db;
     this.zeroContext = {} as TODO;
-    this.query = this.#registerQueries(schemas);
-    this.mutate = this.#makeCRUDMutate<SD>(schemas, db);
+    this.query = this.#registerQueries(schema);
+    this.mutate = this.#makeCRUDMutate<S>(schema, db);
   }
 
-  #registerQueries(schemas: SD): zeroJs.MakeEntityQueriesFromQueryDefs<SD> {
-    const rv = {} as Record<string, Query<Schema>>;
+  #registerQueries(schema: S): zeroJs.MakeEntityQueriesFromSchema<S> {
+    const rv = {} as Record<string, Query<TableSchema>>;
     const context = this.zeroContext;
     // Not using parse yet
-    for (const [name, schema] of Object.entries(schemas)) {
-      rv[name] = newQuery(context, schema);
+    for (const [name, table] of Object.entries(schema.tables)) {
+      rv[name] = newQuery(context, table);
     }
-    return rv as zeroJs.MakeEntityQueriesFromQueryDefs<SD>;
+    return rv as zeroJs.MakeEntityQueriesFromSchema<S>;
   }
 
-  #makeCRUDMutate<QD extends zeroJs.SchemaDefs>(
-    schemas: QD,
+  #makeCRUDMutate<S extends zeroJs.Schema>(
+    schema: S,
     db: Database,
-  ): MakeCRUDMutate<QD> {
+  ): MakeCRUDMutate<S> {
     let inBatch = false;
 
-    const mutate = async <R>(
-      body: (m: BaseCRUDMutate<QD>) => R,
-    ): Promise<R> => {
+    const mutate = async <R>(body: (m: BaseCRUDMutate<S>) => R): Promise<R> => {
       if (inBatch) {
         throw new Error('Cannot call mutate inside a batch');
       }
@@ -59,11 +57,11 @@ export class ZQLiteZero<SD extends zeroJs.SchemaDefs> {
       try {
         const ops: CRUDOp[] = [];
         const m = {} as Record<string, unknown>;
-        for (const name of Object.keys(schemas)) {
+        for (const name of Object.keys(schema.tables)) {
           m[name] = makeBatchCRUDMutate(name, ops);
         }
 
-        const rv = await body(m as BaseCRUDMutate<QD>);
+        const rv = await body(m as BaseCRUDMutate<S>);
         return rv;
       } finally {
         inBatch = false;
@@ -78,11 +76,11 @@ export class ZQLiteZero<SD extends zeroJs.SchemaDefs> {
       }
     };
 
-    for (const name of Object.keys(schemas)) {
+    for (const name of Object.keys(schema.tables)) {
       (mutate as unknown as Record<string, EntityCRUDMutate<Row>>)[name] =
         this.makeEntityCRUDMutate(name, db, assertNotInBatch);
     }
-    return mutate as MakeCRUDMutate<QD>;
+    return mutate as MakeCRUDMutate<S>;
   }
 
   makeEntityCRUDMutate<E extends Row>(

@@ -14,7 +14,7 @@ export type SchemaValue = {
 
 export type PrimaryKey = readonly [string, ...string[]];
 
-export type SchemaBase = {
+export type TableSchemaBase = {
   readonly tableName: string;
   readonly primaryKey: PrimaryKey;
   readonly columns: Record<string, SchemaValue>;
@@ -22,8 +22,8 @@ export type SchemaBase = {
 /**
  * Information about the nodes output by an operator.
  */
-export type Schema = SchemaBase & {
-  readonly relationships: {[key: string]: Schema};
+export type TableSchema = TableSchemaBase & {
+  readonly relationships: {[key: string]: TableSchema};
   readonly isHidden: boolean;
   readonly compareRows: (r1: Row, r2: Row) => number;
   readonly sort: Ordering;

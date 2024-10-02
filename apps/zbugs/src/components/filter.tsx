@@ -112,7 +112,7 @@ export default function Filter({onSelect}: Props) {
 }
 
 // TODO: export a nicer named version of SchemaToRow.
-function preloadAvatar(user: SchemaToRow<Schema['user']>) {
+function preloadAvatar(user: SchemaToRow<Schema['tables']['user']>) {
   return new Promise<[string, string]>((res, rej) => {
     fetch(user.avatar)
       .then(response => response.blob())

@@ -10,7 +10,7 @@ import {buildPipeline} from 'zql/src/zql/builder/builder.js';
 import type {Change} from 'zql/src/zql/ivm/change.js';
 import type {Node, Row} from 'zql/src/zql/ivm/data.js';
 import type {Input, Storage} from 'zql/src/zql/ivm/operator.js';
-import type {Schema} from 'zql/src/zql/ivm/schema.js';
+import type {TableSchema} from 'zql/src/zql/ivm/schema.js';
 import type {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import type {ClientGroupStorage} from './database-storage.js';
@@ -322,11 +322,15 @@ export class PipelineDriver {
 class Streamer {
   readonly #changes: [
     hash: string,
-    schema: Schema,
+    schema: TableSchema,
     changes: Iterable<Change>,
   ][] = [];
 
-  accumulate(hash: string, schema: Schema, changes: Iterable<Change>): this {
+  accumulate(
+    hash: string,
+    schema: TableSchema,
+    changes: Iterable<Change>,
+  ): this {
     this.#changes.push([hash, schema, changes]);
     return this;
   }
@@ -339,7 +343,7 @@ class Streamer {
 
   *#streamChanges(
     queryHash: string,
-    schema: Schema,
+    schema: TableSchema,
     changes: Iterable<Change>,
   ): Iterable<RowChange> {
     for (const change of changes) {
@@ -373,7 +377,7 @@ class Streamer {
 
   *#streamNodes(
     queryHash: string,
-    schema: Schema,
+    schema: TableSchema,
     op: 'add' | 'remove' | 'edit',
     nodes: Iterable<Node>,
   ): Iterable<RowChange> {

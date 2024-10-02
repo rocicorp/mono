@@ -85,7 +85,7 @@ export const pushBodySchema = v.object({
   clientGroupID: v.string(),
   mutations: v.array(mutationSchema),
   pushVersion: v.number(),
-  schemaVersion: v.string(),
+  schemaVersion: v.number(),
   timestamp: v.number(),
   requestID: v.string(),
 });

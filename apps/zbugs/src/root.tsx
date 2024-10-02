@@ -24,7 +24,7 @@ export default function Root() {
       server: import.meta.env.VITE_PUBLIC_SERVER,
       userID: login.loginState?.userID ?? 'anon',
       auth: login.loginState?.token,
-      schemas: schema,
+      schema,
       hiddenTabDisconnectDelay: hiddenTabDisconnectDelayMinutes * 60 * 1000,
     });
 

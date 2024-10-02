@@ -2,14 +2,14 @@
 import type {Row} from '../ivm/data.js';
 import type {SchemaValue} from '../ivm/schema.js';
 import type {Source} from '../ivm/source.js';
-import type {PullSchemaForRelationship, Schema} from './schema.js';
+import type {PullSchemaForRelationship, TableSchema} from './schema.js';
 import type {TypedView} from './typed-view.js';
 
 /**
  * The type that can be passed into `select()`. A selector
  * references a field on an row.
  */
-export type Selector<E extends Schema> = keyof E['columns'];
+export type Selector<E extends TableSchema> = keyof E['columns'];
 
 export type Context = {
   getSource: (name: string) => Source;
@@ -45,7 +45,7 @@ type SchemaValueToTSType<T extends SchemaValue> =
   | (T extends {optional: true} ? undefined : never);
 
 export type GetFieldTypeNoNullOrUndefined<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
   TOperator extends Operator,
 > = TOperator extends 'IN' | 'NOT IN'
@@ -55,12 +55,12 @@ export type GetFieldTypeNoNullOrUndefined<
     >[]
   : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null | undefined>;
 
-export type SchemaToRow<T extends Schema> = {
+export type SchemaToRow<T extends TableSchema> = {
   [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
 };
 
-export type QueryReturnType<T extends Query<Schema>> = T extends Query<
-  Schema,
+export type QueryReturnType<T extends Query<TableSchema>> = T extends Query<
+  TableSchema,
   infer TReturn
 >
   ? Smash<TReturn>
@@ -85,7 +85,7 @@ export type QueryRowType<T extends Query<any, any>> =
  * `.select('foo')` would add `foo` to `TReturn`.
  */
 export type AddSelections<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TSelections extends Selector<TSchema>[],
   TReturn extends QueryType,
 > = {
@@ -98,7 +98,7 @@ export type AddSelections<
 
 // Adds TSubquery to TReturn under the alias TAs.
 export type AddSubselect<
-  TSubquery extends Query<Schema>,
+  TSubquery extends Query<TableSchema>,
   TReturn extends QueryType,
   TAs extends string,
 > = {
@@ -117,7 +117,7 @@ export type MakeSingular<TReturn extends QueryType> = {
 };
 
 type InferSubreturn<TSubquery> = TSubquery extends Query<
-  Schema,
+  TableSchema,
   infer TSubreturn
 >
   ? TSubreturn
@@ -154,7 +154,7 @@ export type Operator =
   | 'LIKE'
   | 'ILIKE';
 
-export type DefaultQueryResultRow<TSchema extends Schema> = {
+export type DefaultQueryResultRow<TSchema extends TableSchema> = {
   row: {
     [K in keyof TSchema['columns']]: SchemaValueToTSType<TSchema['columns'][K]>;
   };
@@ -173,7 +173,7 @@ export type Parameter<T, TField extends keyof T, _TReturn = T[TField]> = {
 };
 
 export interface Query<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > {
   select<TFields extends Selector<TSchema>[]>(

@@ -2,13 +2,13 @@ import {useLayoutEffect, useState} from 'react';
 import {deepClone} from 'shared/src/deep-clone.js';
 import {QueryImpl} from 'zql/src/zql/query/query-impl.js';
 import type {Query, QueryType, Smash} from 'zql/src/zql/query/query.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import type {TypedView} from 'zql/src/zql/query/typed-view.js';
 
-export function useQuery<TSchema extends Schema, TReturn extends QueryType>(
-  q: Query<TSchema, TReturn>,
-  enable: boolean = true,
-): Smash<TReturn> {
+export function useQuery<
+  TSchema extends TableSchema,
+  TReturn extends QueryType,
+>(q: Query<TSchema, TReturn>, enable: boolean = true): Smash<TReturn> {
   const queryImpl = q as QueryImpl<TSchema, TReturn>;
 
   const [snapshot, setSnapshot] = useState<Smash<TReturn>>(

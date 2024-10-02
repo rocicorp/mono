@@ -3,7 +3,7 @@ import type {AddChange, Change, ChildChange, RemoveChange} from './change.js';
 import type {Comparator, Node, Row} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
 import type {FetchRequest, Input, Operator, Output, Start} from './operator.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
 export type Bound = {
@@ -29,7 +29,7 @@ export class Skip implements Operator {
     this.#input.setOutput(this);
   }
 
-  getSchema(): Schema {
+  getSchema(): TableSchema {
     return this.#input.getSchema();
   }
 

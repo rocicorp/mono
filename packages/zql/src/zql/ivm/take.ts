@@ -11,7 +11,7 @@ import type {
   Output,
   Storage,
 } from './operator.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 import {first, take, type Stream} from './stream.js';
 
 const MAX_BOUND_KEY = 'maxBound';
@@ -66,7 +66,7 @@ export class Take implements Operator {
     this.#output = output;
   }
 
-  getSchema(): Schema {
+  getSchema(): TableSchema {
     return this.#input.getSchema();
   }
 
