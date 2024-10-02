@@ -7,6 +7,14 @@ import {
   ZERO_PUB_PREFIX,
 } from './published.js';
 
+// Sent in the 'version' tag of "ddl" event messages. This is used to ensure
+// that the message constructed in the upstream Trigger function is compatible
+// with the code processing it in the zero-cache.
+//
+// Increment this when changing the format of the contents of the "ddl" events.
+// This will allow old / incompatible code to detect the change and abort.
+export const PROTOCOL_VERSION = 1;
+
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
 });
@@ -57,6 +65,7 @@ const dropIndexEventSchema = triggerEvent.extend({
 
 export const ddlEventSchema = v.object({
   type: v.literal('ddl'),
+  version: v.literal(PROTOCOL_VERSION),
   event: v.union(
     createOrAlterTableEventSchema,
     createIndexEventSchema,
@@ -146,6 +155,7 @@ BEGIN
   
   SELECT json_build_object(
     'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
     'event', json_build_object(
       'context', zero.get_trigger_context(),
       'tag', tag,
@@ -188,6 +198,7 @@ BEGIN
   
   SELECT json_build_object(
     'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
     'event', json_build_object(
       'context', zero.get_trigger_context(),
       'tag', 'CREATE INDEX',
@@ -210,6 +221,7 @@ DECLARE
 BEGIN
   SELECT json_build_object(
     'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
     'event', json_build_object(
       'context', zero.get_trigger_context(),
       'tag', tag,
