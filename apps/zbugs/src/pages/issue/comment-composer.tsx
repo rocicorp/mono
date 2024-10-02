@@ -48,7 +48,13 @@ export default function CommentComposer({
       <textarea
         value={currentBody}
         onChange={textAreaChange}
-        style={{width: '100%', height: '100%', background: 'grey'}}
+        style={{
+          width: '100%',
+          height: '100%',
+          background: 'white',
+          color: 'black',
+          borderRadius: '0.3rem',
+        }}
       />
       <button onMouseDown={save}>{id ? 'Save' : 'Comment'}</button>{' '}
       {id ? <button onMouseDown={onDone}>Cancel</button> : null}

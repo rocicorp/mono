@@ -117,7 +117,6 @@ export default function IssuePage() {
             onChange={e => setEdits({...edits, title: e.target.value})}
           />
         )}
-
         {/* These comments are actually github markdown which unfortunately has
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
@@ -136,9 +135,14 @@ export default function IssuePage() {
             {issue.comments.map(comment => (
               <Comment key={comment.id} id={comment.id} issueID={issue.id} />
             ))}
-            <CommentComposer issueID={issue.id} />
           </div>
         ) : null}
+        <br />
+        {z.userID === 'anon' ? (
+          <a href="/api/login/github">Login to comment</a>
+        ) : (
+          <CommentComposer issueID={issue.id} />
+        )}
       </div>
 
       {/* Right sidebar */}

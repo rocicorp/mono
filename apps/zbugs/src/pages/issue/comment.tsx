@@ -21,15 +21,20 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   }
 
   const edit = () => setEditing(true);
+  const remove = () => z.mutate.comment.delete({id});
 
   return (
     <div className={style.commentItem}>
       <p className={style.commentAuthor}>
         <img
           src={comment.creator.avatar}
-          width="40"
-          height="40"
-          style={{borderRadius: '50%', display: 'inline-block'}}
+          style={{
+            width: '2rem',
+            height: '2rem',
+            borderRadius: '50%',
+            display: 'inline-block',
+            marginRight: '0.3rem',
+          }}
           alt={comment.creator.name}
         />{' '}
         {comment.creator.login}
@@ -44,11 +49,12 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       ) : (
         <Markdown>{comment.body}</Markdown>
       )}
-      <div>
-        {editing || comment.creatorID !== login.loginState?.userID ? null : (
+      {editing || comment.creatorID !== login.loginState?.userID ? null : (
+        <div className={style.commentActions}>
           <button onMouseDown={edit}>Edit</button>
-        )}
-      </div>
+          <button onMouseDown={remove}>Delete</button>
+        </div>
+      )}
     </div>
   );
 }
