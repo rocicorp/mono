@@ -424,7 +424,7 @@ suite('createSocket', () => {
     0,
     false,
     456,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 
