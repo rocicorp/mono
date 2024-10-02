@@ -71,7 +71,7 @@ export function initReplicationState(
     INSERT INTO "_zero.ReplicationConfig" 
        (replicaVersion, publications) VALUES (?, ?)
     `,
-  ).run(watermark, JSON.stringify(publications));
+  ).run(watermark, JSON.stringify(publications.sort()));
   db.prepare(
     `
     INSERT INTO "_zero.ReplicationState" 

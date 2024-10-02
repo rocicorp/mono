@@ -1,6 +1,7 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {Mode} from 'zero-cache/src/db/transaction-pool.js';
@@ -14,13 +15,12 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
+import {Database} from 'zqlite/src/db.js';
+import {type ZeroConfig} from '../../config/zero-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
-import {type ZeroConfig} from '../../config/zero-config.js';
-import {Database} from 'zqlite/src/db.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
-import type {JWTPayload} from 'jose';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -37,12 +37,14 @@ export class MutagenService implements Mutagen, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
+  readonly #shardID: string;
   readonly #stopped = resolver();
   readonly #replica: Database;
   readonly #writeAuthorizer: WriteAuthorizer;
 
   constructor(
     lc: LogContext,
+    shardID: string,
     clientGroupID: string,
     upstream: PostgresDB,
     config: ZeroConfig,
@@ -52,6 +54,7 @@ export class MutagenService implements Mutagen, Service {
       .withContext('component', 'Mutagen')
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
+    this.#shardID = shardID;
     this.#replica = new Database(this.#lc, config.replicaDbFile, {
       readonly: true,
       fileMustExist: true,
@@ -72,6 +75,7 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       authData,
       this.#upstream,
+      this.#shardID,
       this.id,
       mutation,
       this.#writeAuthorizer,
@@ -94,6 +98,7 @@ export async function processMutation(
   lc: LogContext | undefined,
   authData: JWTPayload,
   db: PostgresDB,
+  shardID: string,
   clientGroupID: string,
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
@@ -157,6 +162,7 @@ export async function processMutation(
           return processMutationWithTx(
             tx,
             authData,
+            shardID,
             clientGroupID,
             mutation,
             errorMode,
@@ -201,6 +207,7 @@ export async function processMutation(
 async function processMutationWithTx(
   tx: PostgresTransaction,
   authData: JWTPayload,
+  shardID: string,
   clientGroupID: string,
   mutation: CRUDMutation,
   errorMode: boolean,
@@ -252,7 +259,13 @@ async function processMutationWithTx(
   // Confirm the mutation even though it may have been blocked by the authorizer.
   // Authorizer blocking a mutation is not an error but the correct result of the mutation.
   tasks.unshift(() =>
-    incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
+    incrementLastMutationID(
+      tx,
+      shardID,
+      clientGroupID,
+      mutation.clientID,
+      mutation.id,
+    ),
   );
 
   // Note: An error thrown from any Promise aborts the entire transaction.
@@ -318,14 +331,15 @@ function getDeleteSQL(
 
 async function incrementLastMutationID(
   tx: PostgresTransaction,
+  shardID: string,
   clientGroupID: string,
   clientID: string,
   receivedMutationID: number,
 ) {
   const [{lastMutationID}] = await tx<{lastMutationID: bigint}[]>`
-    INSERT INTO zero.clients as current ("clientGroupID", "clientID", "lastMutationID")
-    VALUES (${clientGroupID}, ${clientID}, ${1})
-    ON CONFLICT ("clientGroupID", "clientID")
+    INSERT INTO zero.clients as current ("shardID", "clientGroupID", "clientID", "lastMutationID")
+    VALUES (${shardID}, ${clientGroupID}, ${clientID}, ${1})
+    ON CONFLICT ("shardID", "clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
     RETURNING "lastMutationID"
   `;

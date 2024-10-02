@@ -555,7 +555,7 @@ describe('tables/published', () => {
       CREATE PUBLICATION zero_tables FOR TABLE test.issues, TABLE test.users (user_id, handle);
 
       CREATE SCHEMA zero;
-      CREATE PUBLICATION zero_meta FOR TABLES IN SCHEMA zero;
+      CREATE PUBLICATION _zero_meta FOR TABLES IN SCHEMA zero;
 
       CREATE TABLE zero.clients (
         "clientID" VARCHAR (180) PRIMARY KEY,
@@ -565,7 +565,7 @@ describe('tables/published', () => {
       expectedResult: {
         publications: [
           {
-            pubname: 'zero_meta',
+            pubname: '_zero_meta',
             pubinsert: true,
             pubupdate: true,
             pubdelete: true,
@@ -658,7 +658,7 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['clientID'],
-            publications: {['zero_meta']: {rowFilter: null}},
+            publications: {['_zero_meta']: {rowFilter: null}},
           },
         ],
         indices: [],
@@ -970,16 +970,29 @@ describe('tables/published', () => {
     test(c.name, async () => {
       await db.unsafe(c.setupQuery);
 
-      try {
-        const tables = await getPublicationInfo(db);
-        expect(tables).toEqual(c.expectedResult);
-      } catch (e) {
-        if (c.expectedError) {
-          expect(c.expectedError).toMatch(String(e));
-        } else {
-          throw e;
+      // Make sure both lookup methods work (e.g. name prefix and list membership)
+      for (const restrictions of [
+        undefined,
+        [
+          'zero_all',
+          'zero_data',
+          'zero_one',
+          'zero_two',
+          'zero_keys',
+          '_zero_meta',
+          'zero_tables',
+        ],
+      ])
+        try {
+          const tables = await getPublicationInfo(db, restrictions);
+          expect(tables).toEqual(c.expectedResult);
+        } catch (e) {
+          if (c.expectedError) {
+            expect(c.expectedError).toMatch(String(e));
+          } else {
+            throw e;
+          }
         }
-      }
     });
   }
 });

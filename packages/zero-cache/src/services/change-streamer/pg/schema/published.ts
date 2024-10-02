@@ -1,16 +1,25 @@
+import {literal} from 'pg-format';
 import type postgres from 'postgres';
 import {equals} from 'shared/src/set-utils.js';
 import * as v from 'shared/src/valita.js';
 import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
-
-/** The publication prefix used for tables replicated to zero. */
-export const ZERO_PUB_PREFIX = 'zero_';
+import {APP_PUBLICATION_PREFIX, INTERNAL_PUBLICATION_PREFIX} from './zero.js';
 
 type PublishedTableQueryResult = {
   tables: FilteredTableSpec[];
 };
 
-export function publishedTableQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
+function restrictTo(publications: string[] | undefined) {
+  return publications !== undefined
+    ? `pb.pubname IN (${literal(publications)})`
+    : `( STARTS_WITH(pb.pubname, ${literal(APP_PUBLICATION_PREFIX)})
+      OR STARTS_WITH(pb.pubname, ${literal(INTERNAL_PUBLICATION_PREFIX)}) )`;
+}
+
+export function publishedTableQuery(
+  publications: string[] | undefined,
+  join = '',
+) {
   return `
 WITH published_columns AS (SELECT 
   nspname AS "schema", 
@@ -37,7 +46,7 @@ JOIN pg_publication_tables as pb ON
 ${join}
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
+WHERE ${restrictTo(publications)}
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
@@ -81,7 +90,10 @@ type IndexDefinitionsQueryResult = {
   indexes: IndexSpec[];
 };
 
-export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
+export function indexDefinitionsQuery(
+  publications: string[] | undefined,
+  join = '',
+) {
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
   // renamed.
@@ -114,7 +126,7 @@ export function indexDefinitionsQuery(pubPrefix = ZERO_PUB_PREFIX, join = '') {
     ) AS index_column ON true
     ${join}
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
-    WHERE STARTS_WITH(pb.pubname, '${pubPrefix}')
+    WHERE ${restrictTo(publications)}
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
     ORDER BY
@@ -155,29 +167,32 @@ export type PublicationInfo = {
 };
 
 /**
- * Retrieves all tables and columns published under any PUBLICATION
- * whose name starts with the specified `pubPrefix` (e.g. "zero_").
+ * Retrieves published tables and columns. By default, includes all
+ * publications that start with "zero_" or "_zero_", but this can be
+ * overridden by specifying a specific set of `publications`.
  */
 export async function getPublicationInfo(
   sql: postgres.Sql,
-  pubPrefix = ZERO_PUB_PREFIX,
+  publications?: string[],
 ): Promise<PublicationInfo> {
   const result = await sql.unsafe(`
   SELECT 
     schemaname AS "schema",
     tablename AS "table", 
     json_object_agg(pubname, attnames) AS "publications"
-    FROM pg_publication_tables 
-    WHERE STARTS_WITH(pubname, '${pubPrefix}')
+    FROM pg_publication_tables pb
+    WHERE ${restrictTo(publications)}
     GROUP BY schemaname, tablename;
 
-  SELECT ${Object.keys(publicationSchema.shape).join(',')} FROM pg_publication
-    WHERE STARTS_WITH(pubname, '${pubPrefix}')
+  SELECT ${Object.keys(publicationSchema.shape).join(
+    ',',
+  )} FROM pg_publication pb
+    WHERE ${restrictTo(publications)}
     ORDER BY pubname;
 
-  ${publishedTableQuery(pubPrefix)};
+  ${publishedTableQuery(publications)};
 
-  ${indexDefinitionsQuery(pubPrefix)};
+  ${indexDefinitionsQuery(publications)};
 `);
 
   // The first query is used to check that tables in multiple publications

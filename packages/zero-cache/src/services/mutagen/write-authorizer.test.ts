@@ -1,19 +1,18 @@
-import {beforeEach, describe, expect, test} from 'vitest';
-import {WriteAuthorizerImpl} from './write-authorizer.js';
 import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {beforeEach, describe, expect, test} from 'vitest';
+import {Database} from 'zqlite/src/db.js';
 import {
   ZeroConfig,
   type Rule,
   type ZeroConfigType,
 } from '../../config/zero-config.js';
-import {Database} from 'zqlite/src/db.js';
+import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const lc = createSilentLogContext();
 const baseConfig: ZeroConfigType = {
   upstreamUri: 'upstream',
   cvrDbUri: 'cvr',
   changeDbUri: 'change',
-  replicaId: 'replica',
   replicaDbFile: 'replica',
   log: {level: 'debug'},
 };

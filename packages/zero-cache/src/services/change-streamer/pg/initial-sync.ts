@@ -19,21 +19,19 @@ import {
 import {toLexiVersion} from './lsn.js';
 import {createTableStatement} from './schema/create.js';
 import {checkDataTypeSupported, mapPostgresToLite} from './schema/lite.js';
-import {
-  getPublicationInfo,
-  type PublicationInfo,
-  ZERO_PUB_PREFIX,
-} from './schema/published.js';
+import {type PublicationInfo} from './schema/published.js';
+import {setupTablesAndReplication} from './schema/zero.js';
+import type {ShardConfig} from './shard-config.js';
 
-export function replicationSlot(replicaID: string): string {
-  return `zero_slot_${replicaID}`;
+export function replicationSlot(shardID: string): string {
+  return `zero_${shardID}`;
 }
 
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
 
 export async function initialSync(
   lc: LogContext,
-  replicaID: string,
+  shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
 ) {
@@ -50,6 +48,7 @@ export async function initialSync(
     const {publications, tables, indices} = await ensurePublishedTables(
       lc,
       upstreamDB,
+      shard,
     );
     const pubNames = publications.map(p => p.pubname);
     lc.info?.(`Upstream is setup with publications [${pubNames}]`);
@@ -60,7 +59,7 @@ export async function initialSync(
     const {database, host} = upstreamDB.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
     const {snapshot_name: snapshot, consistent_point: lsn} =
-      await createReplicationSlot(lc, replicaID, replicationSession);
+      await createReplicationSlot(lc, shard.id, replicationSession);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const copiers = startTableCopyWorkers(
@@ -110,23 +109,15 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
 
 function ensurePublishedTables(
   lc: LogContext,
-  upstreamDB: postgres.Sql,
+  upstreamDB: PostgresDB,
+  shard: ShardConfig,
 ): Promise<PublicationInfo> {
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
   return upstreamDB.begin(async tx => {
-    const published = await getPublicationInfo(tx, ZERO_PUB_PREFIX);
-    if (
-      published.tables.find(
-        table => table.schema === 'zero' && table.name === 'clients',
-      )
-    ) {
-      // upstream is already set up for replication.
-      return published;
-    }
-
-    // Verify that any manually configured publications export the proper events.
+    const published = await setupTablesAndReplication(tx, shard);
+    // Verify that all publications export the proper events.
     published.publications.forEach(pub => {
       if (
         !pub.pubinsert ||
@@ -139,40 +130,9 @@ function ensurePublishedTables(
           `PUBLICATION ${pub.pubname} must publish insert, update, delete, and truncate`,
         );
       }
-      if (pub.pubname === `${ZERO_PUB_PREFIX}metadata`) {
-        throw new Error(
-          `PUBLICATION name ${ZERO_PUB_PREFIX}metadata is reserved for internal use`,
-        );
-      }
     });
 
-    let dataPublication = '';
-    if (published.publications.length === 0) {
-      // If there are no custom zero_* publications, set one up to publish all tables.
-      dataPublication = `CREATE PUBLICATION ${ZERO_PUB_PREFIX}data FOR TABLES IN SCHEMA zero, public;`;
-    }
-
-    // Send everything as a single batch.
-    await tx.unsafe(
-      `
-    CREATE SCHEMA IF NOT EXISTS zero;
-    CREATE TABLE zero.clients (
-      "clientGroupID"  TEXT   NOT NULL,
-      "clientID"       TEXT   NOT NULL,
-      "lastMutationID" BIGINT,
-      "userID"         TEXT,
-      PRIMARY KEY("clientGroupID", "clientID")
-    );
-    CREATE PUBLICATION "${ZERO_PUB_PREFIX}meta" FOR TABLES IN SCHEMA zero;
-    ${dataPublication}
-    `,
-    );
-
-    const newPublished = await getPublicationInfo(tx, ZERO_PUB_PREFIX);
-    newPublished.tables.forEach(table => {
-      if (table.schema === '_zero') {
-        throw new Error(`Schema "_zero" is reserved for internal use`);
-      }
+    published.tables.forEach(table => {
       if (!['public', 'zero'].includes(table.schema)) {
         // This may be relaxed in the future. We would need a plan for support in the AST first.
         throw new Error('Only the default "public" schema is supported.');
@@ -201,7 +161,7 @@ function ensurePublishedTables(
       }
     });
 
-    return newPublished;
+    return published;
   });
 }
 
@@ -217,13 +177,13 @@ type ReplicationSlot = {
 
 async function createReplicationSlot(
   lc: LogContext,
-  replicaID: string,
+  shardID: string,
   session: postgres.Sql,
 ): Promise<ReplicationSlot> {
   // Note: The replication connection does not support the extended query protocol,
   //       so all commands must be sent using sql.unsafe(). This is technically safe
   //       because all placeholder values are under our control (i.e. "slotName").
-  const slotName = replicationSlot(replicaID);
+  const slotName = replicationSlot(shardID);
   const slots = await session.unsafe(
     `SELECT * FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
   );

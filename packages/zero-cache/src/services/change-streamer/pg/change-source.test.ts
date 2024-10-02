@@ -24,11 +24,12 @@ import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
 
-const REPLICA_ID = 'change_source_test_id';
+const SHARD_ID = 'change_source_test_id';
 
 describe('change-source/pg', () => {
   let lc: LogContext;
   let upstream: PostgresDB;
+  let upstreamURI: string;
   let replicaDbFile: DbFile;
   let source: ChangeSource;
 
@@ -37,7 +38,7 @@ describe('change-source/pg', () => {
     upstream = await testDBs.create('change_source_pg_test_upstream');
     replicaDbFile = new DbFile('change_source_pg_test_replica');
 
-    const upstreamURI = getConnectionURI(upstream);
+    upstreamURI = getConnectionURI(upstream);
     await upstream.unsafe(`
     CREATE TABLE foo(
       id TEXT PRIMARY KEY,
@@ -53,14 +54,14 @@ describe('change-source/pg', () => {
       await initializeChangeSource(
         lc,
         upstreamURI,
-        REPLICA_ID,
+        {id: SHARD_ID, publications: ['zero_all']},
         replicaDbFile.path,
       )
     ).changeSource;
   });
 
   afterEach(async () => {
-    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
+    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
     await testDBs.drop(upstream);
     await replicaDbFile.unlink();
   });
@@ -79,7 +80,7 @@ describe('change-source/pg', () => {
 
   const WATERMARK_REGEX = /[0-9a-z]{2,}/;
 
-  test('changes', async () => {
+  test('filtered changes and acks', async () => {
     const {replicaVersion} = getSubscriptionState(
       new StatementRunner(replicaDbFile.connect(lc)),
     );
@@ -93,6 +94,10 @@ describe('change-source/pg', () => {
       await tx`
       INSERT INTO foo(id, int, big, flt, bool) 
         VALUES('datatypes', 123456789, 987654321987654321, 123.456, true)`;
+      // zero.schemaVersions
+      await tx`
+      UPDATE zero."schemaVersions" SET "maxSupportedVersion" = 2;
+      `;
     });
 
     expect(initialWatermark).toEqual(oneAfter(replicaVersion));
@@ -124,6 +129,13 @@ describe('change-source/pg', () => {
         },
       },
     ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'update',
+        new: {minSupportedVersion: 1, maxSupportedVersion: 2},
+      },
+    ]);
     const firstCommit = (await downstream.dequeue()) as Commit;
     expect(firstCommit).toMatchObject([
       'commit',
@@ -137,8 +149,15 @@ describe('change-source/pg', () => {
       await tx`DELETE FROM foo WHERE id = 'world'`;
       await tx`UPDATE foo SET int = 123 WHERE id = 'hello';`;
       await tx`TRUNCATE foo`;
+      // Should be excluded by zero_all.
       await tx`INSERT INTO foo(id) VALUES ('exclude-me')`;
       await tx`INSERT INTO foo(id) VALUES ('include-me')`;
+      // zero.clients change that should not be included in _zero_{SHARD_ID}_client.
+      await tx`INSERT INTO zero.clients("shardID", "clientGroupID", "clientID", "lastMutationID")
+                  VALUES ('different-shard', 'boo', 'far', 12)`;
+      // zero.clients change that should be included in _zero_{SHARD_ID}_client.
+      await tx`INSERT INTO zero.clients("shardID", "clientGroupID", "clientID", "lastMutationID")
+                  VALUES (${SHARD_ID}, 'foo', 'bar', 23)`;
     });
 
     expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
@@ -169,6 +188,19 @@ describe('change-source/pg', () => {
         new: {id: 'include-me'},
       },
     ]);
+    // Only zero.client updates for this SHARD_ID are replicated.
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {
+          shardID: SHARD_ID,
+          clientGroupID: 'foo',
+          clientID: 'bar',
+          lastMutationID: 23n,
+        },
+      },
+    ]);
     expect(await downstream.dequeue()).toMatchObject([
       'commit',
       {tag: 'commit'},
@@ -182,7 +214,7 @@ describe('change-source/pg', () => {
     // Postgres stores 1 + the LSN of the confirmed ACK.
     const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
-        WHERE slot_name = ${replicationSlot(REPLICA_ID)}`;
+        WHERE slot_name = ${replicationSlot(SHARD_ID)}`;
     const expected = versionFromLexi(firstCommit[2].watermark) + 1n;
     expect(results).toEqual([
       {confirmed: fromLexiVersion(versionToLexi(expected))},
@@ -259,7 +291,7 @@ describe('change-source/pg', () => {
 
   test('error handling', async () => {
     // Purposely drop the replication slot to test the error case.
-    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
+    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
 
     let err;
     try {
@@ -275,7 +307,7 @@ describe('change-source/pg', () => {
 
     const results = await upstream<{pid: number}[]>`
       SELECT active_pid as pid from pg_replication_slots WHERE
-        slot_name = ${replicationSlot(REPLICA_ID)}`;
+        slot_name = ${replicationSlot(SHARD_ID)}`;
     const {pid} = results[0];
 
     await upstream`SELECT pg_terminate_backend(${pid})`;
@@ -308,5 +340,22 @@ describe('change-source/pg', () => {
 
     expect(err).toBeInstanceOf(AbortError);
     changes2.cancel();
+  });
+
+  test('error on wrong publications', async () => {
+    let err;
+    try {
+      await initializeChangeSource(
+        lc,
+        upstreamURI,
+        {id: SHARD_ID, publications: ['zero_different_publication']},
+        replicaDbFile.path,
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchInlineSnapshot(
+      `[Error: Invalid ShardConfig. Requested publications [zero_different_publication] do not match synced publications: [zero_all]]`,
+    );
   });
 });

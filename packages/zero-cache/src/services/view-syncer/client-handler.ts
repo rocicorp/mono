@@ -190,6 +190,7 @@ export class ClientHandler {
       const {clientGroupID, clientID, lastMutationID} = v.parse(
         row,
         lmidRowSchema,
+        'passthrough',
       );
       if (clientGroupID !== this.#clientGroupID) {
         this.#lc.error?.(
@@ -211,7 +212,6 @@ const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
-  userID: v.string().nullable().optional(),
 });
 
 function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {

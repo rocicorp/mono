@@ -46,11 +46,12 @@ async function createTables(db: PostgresDB) {
       );
       CREATE SCHEMA zero;
       CREATE TABLE zero.clients (
+        "shardID"        TEXT NOT NULL,
         "clientGroupID"  TEXT NOT NULL,
         "clientID"       TEXT NOT NULL,
         "lastMutationID" BIGINT,
         "userID"         TEXT,
-        PRIMARY KEY ("clientGroupID", "clientID")
+        PRIMARY KEY ("shardID", "clientGroupID", "clientID")
       );
     `);
 }
@@ -78,6 +79,7 @@ describe('processMutation', () => {
         undefined,
         {},
         db,
+        '0',
         'abc',
         {
           type: MutationType.CRUD,
@@ -107,6 +109,7 @@ describe('processMutation', () => {
         idonly: [{id: '1'}],
         ['zero.clients']: [
           {
+            shardID: '0',
             clientGroupID: 'abc',
             clientID: '123',
             lastMutationID: 1n,
@@ -120,13 +123,14 @@ describe('processMutation', () => {
 
   test('next sequential mutation for previously seen client', async () => {
     await db`
-      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
-         VALUES ('abc', '123', 2)`;
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
+         VALUES ('0', 'abc', '123', 2)`;
 
     const error = await processMutation(
       undefined,
       {},
       db,
+      '0',
       'abc',
       {
         type: MutationType.CRUD,
@@ -156,6 +160,7 @@ describe('processMutation', () => {
       idonly: [{id: '1'}],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 3n,
@@ -167,13 +172,14 @@ describe('processMutation', () => {
 
   test('old mutations are skipped', async () => {
     await db`
-      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('abc', '123', 2)`;
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('0', 'abc', '123', 2)`;
 
     const error = await processMutation(
       undefined,
       {},
       db,
+      '0',
       'abc',
       {
         type: MutationType.CRUD,
@@ -203,6 +209,7 @@ describe('processMutation', () => {
       idonly: [],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 2n,
@@ -214,8 +221,8 @@ describe('processMutation', () => {
 
   test('old mutations that would have errored are skipped', async () => {
     await db`
-      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID")
-        VALUES ('abc', '123', 2);
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID")
+        VALUES ('0', 'abc', '123', 2);
       INSERT INTO idonly (id) VALUES ('1');
       `.simple();
 
@@ -223,6 +230,7 @@ describe('processMutation', () => {
       undefined,
       {},
       db,
+      '0',
       'abc',
       {
         type: MutationType.CRUD,
@@ -252,6 +260,7 @@ describe('processMutation', () => {
       idonly: [{id: '1'}],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 2n,
@@ -263,14 +272,15 @@ describe('processMutation', () => {
 
   test('mutation id too far in the future throws', async () => {
     await db`
-      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('abc', '123', 1)`;
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('0', 'abc', '123', 1)`;
 
     await expect(
       processMutation(
         undefined,
         {},
         db,
+        '0',
         'abc',
         {
           type: MutationType.CRUD,
@@ -301,6 +311,7 @@ describe('processMutation', () => {
       idonly: [],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -315,6 +326,7 @@ describe('processMutation', () => {
       undefined,
       {},
       db,
+      '0',
       'abc',
       {
         type: MutationType.CRUD,
@@ -383,6 +395,7 @@ describe('processMutation', () => {
       ],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -397,6 +410,7 @@ describe('processMutation', () => {
       undefined,
       {},
       db,
+      '0',
       'abc',
       {
         type: MutationType.CRUD,
@@ -431,6 +445,7 @@ describe('processMutation', () => {
       ['fk_ref']: [],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -443,8 +458,8 @@ describe('processMutation', () => {
   test('retries on serialization error', async () => {
     const {promise, resolve} = resolver();
     await db`
-      INSERT INTO zero.clients ("clientGroupID", "clientID", "lastMutationID") 
-         VALUES ('abc', '123', 2)`;
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
+         VALUES ('0', 'abc', '123', 2)`;
 
     // Start a concurrent mutation that bumps the lmid from 2 => 3.
     void db.begin(Mode.SERIALIZABLE, async tx => {
@@ -462,6 +477,7 @@ describe('processMutation', () => {
       undefined,
       {},
       db,
+      '0',
       'abc',
       {
         type: MutationType.CRUD,
@@ -493,6 +509,7 @@ describe('processMutation', () => {
       idonly: [{id: '1'}],
       ['zero.clients']: [
         {
+          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 4n,

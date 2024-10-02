@@ -8,14 +8,15 @@ import {
 } from 'pg-logical-replication';
 import {DatabaseError} from 'pg-protocol';
 import {AbortError} from 'shared/src/abort-error.js';
+import {deepEqual} from 'shared/src/json.js';
 import {sleep} from 'shared/src/sleep.js';
 import {StatementRunner} from 'zero-cache/src/db/statements.js';
 import {stringify} from 'zero-cache/src/types/bigint-json.js';
 import {max, oneAfter} from 'zero-cache/src/types/lexi-version.js';
 import {
   pgClient,
-  type PostgresDB,
   registerPostgresTypeParsers,
+  type PostgresDB,
 } from 'zero-cache/src/types/pg.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {Database} from 'zqlite/src/db.js';
@@ -26,6 +27,8 @@ import type {Change} from '../schema/change.js';
 import type {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
+import {INTERNAL_PUBLICATION_PREFIX} from './schema/zero.js';
+import type {ShardConfig} from './shard-config.js';
 import {initSyncSchema} from './sync-schema.js';
 
 // BigInt support from LogicalReplicationService.
@@ -39,13 +42,13 @@ registerPostgresTypeParsers();
 export async function initializeChangeSource(
   lc: LogContext,
   upstreamURI: string,
-  replicaID: string,
+  shard: ShardConfig,
   replicaDbFile: string,
 ): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
     'change-streamer',
-    replicaID,
+    shard,
     replicaDbFile,
     upstreamURI,
   );
@@ -53,10 +56,23 @@ export async function initializeChangeSource(
   const replica = new Database(lc, replicaDbFile);
   const replicationConfig = getSubscriptionState(new StatementRunner(replica));
 
+  if (shard.publications.length) {
+    // Verify that the publications match what has been synced.
+    const requested = [...shard.publications].sort();
+    const replicated = replicationConfig.publications
+      .filter(p => !p.startsWith(INTERNAL_PUBLICATION_PREFIX))
+      .sort();
+    if (!deepEqual(requested, replicated)) {
+      throw new Error(
+        `Invalid ShardConfig. Requested publications [${requested}] do not match synced publications: [${replicated}]`,
+      );
+    }
+  }
+
   const changeSource = new PostgresChangeSource(
     lc,
     upstreamURI,
-    replicaID,
+    shard.id,
     replicationConfig,
   );
 
@@ -70,24 +86,24 @@ export async function initializeChangeSource(
 class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
-  readonly #replicaID: string;
+  readonly #shardID: string;
   readonly #replicationConfig: ReplicationConfig;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
-    replicaID: string,
+    shardID: string,
     replicationConfig: ReplicationConfig,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
-    this.#replicaID = replicaID;
+    this.#shardID = shardID;
     this.#replicationConfig = replicationConfig;
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = pgClient(this.#lc, this.#upstreamUri);
-    const slot = replicationSlot(this.#replicaID);
+    const slot = replicationSlot(this.#shardID);
     const clientStart = oneAfter(clientWatermark);
 
     try {
