@@ -2,7 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import {Server} from 'node:http';
 import {randInt} from 'shared/src/rand.js';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
-import WebSocket from 'ws';
+import {WebSocket, WebSocketServer, type RawData} from 'ws';
 import {inProcChannel} from 'zero-cache/src/types/processes.js';
 import {
   installWebSocketHandoff,
@@ -12,13 +12,13 @@ import {
 describe('dispatcher/websocket-handoff', () => {
   let port: number;
   let server: Server;
-  let wss: WebSocket.Server;
+  let wss: WebSocketServer;
 
   beforeAll(() => {
     port = randInt(10000, 20000);
     server = new Server();
     server.listen(port);
-    wss = new WebSocket.Server({noServer: true});
+    wss = new WebSocketServer({noServer: true});
   });
 
   afterEach(() => {
@@ -49,11 +49,13 @@ describe('dispatcher/websocket-handoff', () => {
       parent,
     );
 
-    const {promise: reply, resolve} = resolver<unknown>();
+    const {promise: reply, resolve} = resolver<RawData>();
     const ws = new WebSocket(`ws://localhost:${port}/`);
     ws.on('open', () => ws.send('hello'));
     ws.on('message', msg => resolve(msg));
 
-    expect(await reply).toBe('Received "hello" and payload {"foo":"boo"}');
+    expect(String(await reply)).toBe(
+      'Received "hello" and payload {"foo":"boo"}',
+    );
   });
 });
