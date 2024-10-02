@@ -9,7 +9,6 @@ import {
   type ReplicacheImplOptions,
 } from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import {SubscriptionsManagerImpl} from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
@@ -436,8 +435,6 @@ export class Zero<QD extends SchemaDefs> {
       kvStore,
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
-      makeSubscriptionsManager: (queryInternal, lc) =>
-        new SubscriptionsManagerImpl(queryInternal, lc),
       enableClientGroupForking: false,
     };
 
