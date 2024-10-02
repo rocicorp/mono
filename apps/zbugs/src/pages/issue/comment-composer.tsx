@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {useZero} from '../../hooks/use-zero.js';
 import {nanoid} from 'zero-client/src/util/nanoid.js';
+import {useLogin} from '../../hooks/use-login.js';
 
 export default function CommentComposer({
   id,
@@ -14,6 +15,7 @@ export default function CommentComposer({
   onDone?: (() => void) | undefined;
 }) {
   const z = useZero();
+  const login = useLogin();
   const [currentBody, setCurrentBody] = useState(body ?? '');
   const save = () => {
     setCurrentBody(body ?? '');
@@ -36,6 +38,10 @@ export default function CommentComposer({
   const textAreaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentBody(e.target.value);
   };
+
+  if (!login.loginState) {
+    return null;
+  }
 
   return (
     <>
