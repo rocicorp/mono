@@ -206,50 +206,57 @@ async function processMutationWithTx(
   errorMode: boolean,
   authorizer: WriteAuthorizer,
 ) {
-  const queryPromises: Promise<unknown>[] = [
-    incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
-  ];
+  const tasks: (() => Promise<unknown>)[] = [];
 
   if (!errorMode) {
     const {ops} = mutation.args[0];
 
-    for (const op of ops) {
+    for (const [i, op] of ops.entries()) {
+      if (tasks.length !== i) {
+        // Some mutation was not allowed. No need to visit the rest.
+        break;
+      }
       switch (op.op) {
         case 'create':
-          if (!authorizer.canInsert(authData, op)) {
-            // We return if the authorizer fails since
-            // if any write in the transaction fails, the entire set of
-            // write in the transaction is aborted.
-            return;
+          if (authorizer.canInsert(authData, op)) {
+            tasks.push(() => getCreateSQL(tx, op).execute());
           }
-          queryPromises.push(getCreateSQL(tx, op).execute());
           break;
         case 'set':
-          if (!authorizer.canUpsert(authData, op)) {
-            return;
+          if (authorizer.canUpsert(authData, op)) {
+            tasks.push(() => getSetSQL(tx, op).execute());
           }
-          queryPromises.push(getSetSQL(tx, op).execute());
           break;
         case 'update':
-          if (!authorizer.canUpdate(authData, op)) {
-            return;
+          if (authorizer.canUpdate(authData, op)) {
+            tasks.push(() => getUpdateSQL(tx, op).execute());
           }
-          queryPromises.push(getUpdateSQL(tx, op).execute());
           break;
         case 'delete':
-          if (!authorizer.canDelete(authData, op)) {
-            return;
+          if (authorizer.canDelete(authData, op)) {
+            tasks.push(() => getDeleteSQL(tx, op).execute());
           }
-          queryPromises.push(getDeleteSQL(tx, op).execute());
           break;
         default:
           unreachable(op);
       }
     }
+
+    // If not all mutations are allowed, don't do any of them.
+    // This is to prevent partial application of mutations.
+    if (tasks.length < ops.length) {
+      tasks.length = 0; // Clear all tasks.
+    }
   }
 
+  // Confirm the mutation even though it may have been blocked by the authorizer.
+  // Authorizer blocking a mutation is not an error but the correct result of the mutation.
+  tasks.unshift(() =>
+    incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
+  );
+
   // Note: An error thrown from any Promise aborts the entire transaction.
-  await Promise.all(queryPromises);
+  await Promise.all(tasks.map(task => task()));
 }
 
 export function getCreateSQL(
