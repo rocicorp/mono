@@ -46,7 +46,7 @@ export function setupReplicaAndCheckpointer(
     // (https://litestream.io/tips/#busy-timeout), but since this is
     // an isolated backup replica, we can wait longer to achieve
     // higher write throughput.
-    replica.pragma('busy_timeout = 10000');
+    replica.pragma('busy_timeout = 60000');
     return {replica, checkpointer: NULL_CHECKPOINTER};
   }
 
