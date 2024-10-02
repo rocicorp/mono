@@ -3,5 +3,5 @@ dbs:
   - path: /data/db/sync-replica.db
     replicas:
       - url: ${REPLICA_URL}
-  - checkpoint-interval: 10s
-  - max-checkpoint-page-count: 4000
+    checkpoint-interval: 10s
+    max-checkpoint-page-count: 4000
