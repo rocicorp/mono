@@ -40,6 +40,7 @@ export class WriteAuthorizerImpl {
   readonly #tableSpecs: Map<string, NormalizedTableSpec>;
   readonly #tables = new Map<string, TableSource>();
   readonly #statementCache: StatementCache;
+  readonly #lc: LogContext;
 
   constructor(
     lc: LogContext,
@@ -47,6 +48,7 @@ export class WriteAuthorizerImpl {
     replica: Database,
     cgID: string,
   ) {
+    this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#authorizationConfig = config.authorization ?? {};
     this.#replica = replica;
     const tmpDir = config.storageDbTmpDir ?? tmpdir();
@@ -66,15 +68,15 @@ export class WriteAuthorizerImpl {
   }
 
   canInsert(authData: JWTPayload, op: CreateOp) {
-    return this.#canDo('insert', authData, op);
+    return this.#timedCanDo('insert', authData, op);
   }
 
   canUpdate(authData: JWTPayload, op: UpdateOp) {
-    return this.#canDo('update', authData, op);
+    return this.#timedCanDo('update', authData, op);
   }
 
   canDelete(authData: JWTPayload, op: DeleteOp) {
-    return this.#canDo('delete', authData, op);
+    return this.#timedCanDo('delete', authData, op);
   }
 
   canUpsert(authData: JWTPayload, op: SetOp) {
@@ -121,6 +123,29 @@ export class WriteAuthorizerImpl {
     this.#tables.set(tableName, source);
 
     return source;
+  }
+
+  #timedCanDo<A extends keyof ActionOpMap>(
+    action: A,
+    authData: JWTPayload,
+    op: ActionOpMap[A],
+  ) {
+    const start = performance.now();
+    try {
+      const ret = this.#canDo(action, authData, op);
+      return ret;
+    } finally {
+      this.#lc.info?.(
+        'action:',
+        action,
+        'duration:',
+        performance.now() - start,
+        'entityType:',
+        op.entityType,
+        'id:',
+        op.id,
+      );
+    }
   }
 
   /**
