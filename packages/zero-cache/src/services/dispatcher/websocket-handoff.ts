@@ -1,6 +1,6 @@
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
-import WebSocket from 'ws';
+import type {WebSocket, WebSocketServer} from 'ws';
 import {
   MESSAGE_TYPES,
   type Receiver,
@@ -43,7 +43,7 @@ export function installWebSocketHandoff<P>(
 }
 
 export function installWebSocketReceiver<P>(
-  server: WebSocket.Server,
+  server: WebSocketServer,
   receive: WebSocketReceiver<P>,
   sender: Sender,
 ) {
@@ -61,7 +61,7 @@ export function installWebSocketReceiver<P>(
 // Contains the subset of http.IncomingRequest passed from the main thread
 // to the syncer thread to hand off the upgrade of the request to a WebSocket.
 // This is specific to the handoff receiver implementation
-// WebSocket.Server.handleUpgrade(), which takes the http.IncomingMessage type but only
+// WebSocketServer.handleUpgrade(), which takes the http.IncomingMessage type but only
 // inspects the "headers" and "method" fields. It is the solution recommended
 // by the author of the 'ws' library:
 // https://github.com/websockets/ws/issues/154#issuecomment-304511349
