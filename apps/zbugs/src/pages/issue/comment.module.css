@@ -13,3 +13,14 @@
   font-weight: 700;
   margin-bottom: 1rem;
 }
+
+.commentActions {
+  margin-top: 1rem;
+}
+
+.commentActions button {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 0.75px;
+  margin-right: 0.5rem;
+}

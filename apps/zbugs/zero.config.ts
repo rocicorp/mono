@@ -1,71 +1,74 @@
 import 'dotenv/config';
-import {
-  defineConfig,
-  runtimeEnv,
-  type Queries,
-} from 'zero-cache/src/config/define-config.js';
+import {defineConfig, runtimeEnv} from 'zero-cache/src/config/define-config.js';
 import {type Schema, schema} from './src/domain/schema.js';
 
-type AuthData = {sub: string};
+/** The contents of the decoded JWT */
+type AuthData = {
+  // The logged in userID.
+  sub: string;
+};
 
-const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
-  queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
+defineConfig<AuthData, Schema>(schema, queries => {
+  // TODO: We need `querify` so we can just check the authData without having to
+  // read the DB E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
+  const allowIfLoggedIn = (authData: AuthData) =>
+    queries.user.where('id', '=', authData.sub);
 
-// TODO:
-// 1. The double lambda is annoying
-// 2. We need `querify` so we can just check the authData without having to read the DB
-// E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
-const allowIfLoggedIn = (queries: Queries<Schema>) => (authData: AuthData) =>
-  queries.user.where('id', '=', authData.sub);
+  const allowIfCreatorOf =
+    (table: 'issue' | 'comment') => (authData: AuthData, row: {id: string}) => {
+      // Sigh, TypeScript
+      // Why can't I treat these generically?
+      if (table === 'issue') {
+        return queries[table]
+          .where('id', row.id)
+          .where('creatorID', '=', authData.sub);
+      } else {
+        return queries[table]
+          .where('id', row.id)
+          .where('creatorID', '=', authData.sub);
+      }
+    };
 
-defineConfig<AuthData, Schema>(schema, queries => ({
-  upstreamUri: runtimeEnv('UPSTREAM_URI'),
-  cvrDbUri: runtimeEnv('CVR_DB_URI'),
-  changeDbUri: runtimeEnv('CHANGE_DB_URI'),
+  const allowIfCrewMember = (authData: AuthData) =>
+    queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
-  replicaId: runtimeEnv('REPLICA_ID'),
-  replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
-  jwtSecret: runtimeEnv('JWT_SECRET'),
-  litestream: runtimeEnv('LITESTREAM'),
+  return {
+    upstreamUri: runtimeEnv('UPSTREAM_URI'),
+    cvrDbUri: runtimeEnv('CVR_DB_URI'),
+    changeDbUri: runtimeEnv('CHANGE_DB_URI'),
 
-  log: {
-    level: 'debug',
-  },
+    replicaId: runtimeEnv('REPLICA_ID'),
+    replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
+    jwtSecret: runtimeEnv('JWT_SECRET'),
+    litestream: runtimeEnv('LITESTREAM'),
 
-  authorization: {
-    user: {
-      // Only the authentication system can
-      // write to the user table.
-      table: {
-        delete: [],
-        insert: [],
-        update: [],
+    log: {
+      level: 'debug',
+    },
+
+    authorization: {
+      user: {
+        // Only the authentication system can write to the user table.
+        table: {
+          insert: [],
+          update: [],
+          delete: [],
+        },
+      },
+      issue: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: [allowIfCreatorOf('issue'), allowIfCrewMember],
+          delete: [allowIfCreatorOf('issue'), allowIfCrewMember],
+        },
+      },
+      comment: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: [allowIfCreatorOf('comment'), allowIfCrewMember],
+          delete: [allowIfCreatorOf('comment'), allowIfCrewMember],
+        },
       },
     },
-    issue: {
-      row: {
-        delete: [],
-        insert: [allowIfLoggedIn(queries)],
-        update: [
-          (authData, row) =>
-            queries.issue
-              .where('id', '=', row.id)
-              .where('creatorID', '=', authData.sub),
-          allowIfCrewMember(queries),
-        ],
-      },
-    },
-    comment: {
-      row: {
-        delete: [],
-        insert: [allowIfLoggedIn(queries)],
-        update: [
-          (authData, row) =>
-            queries.comment
-              .where('id', '=', row.id)
-              .where('creatorID', '=', authData.sub),
-        ],
-      },
-    },
-  },
-}));
+  };
+});
