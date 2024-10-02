@@ -109,6 +109,7 @@ const rateLimitConfigSchema = v.object({
     max: v.union(envRefSchema, numberLiteral),
   }),
 });
+type RateLimitConfigType = v.Infer<typeof rateLimitConfigSchema>;
 
 const zeroConfigSchemaSansAuthorization = v.object({
   upstreamUri: configStringValueSchema,
@@ -162,10 +163,15 @@ export class ZeroConfig {
   readonly #config: ZeroConfigType;
   readonly #log: LogConfig;
   readonly #shard: ShardConfig;
+  readonly #rateLimit: RateLimitConfig | undefined;
+
   constructor(config: ZeroConfigType) {
     this.#config = config;
     this.#log = new LogConfig(config.log);
     this.#shard = new ShardConfig(config.shard);
+    if (config.rateLimit) {
+      this.#rateLimit = new RateLimitConfig(config.rateLimit);
+    }
   }
 
   get upstreamUri() {
@@ -216,8 +222,40 @@ export class ZeroConfig {
     return this.#log;
   }
 
+  get rateLimit() {
+    return this.#rateLimit;
+  }
+
   get authorization() {
     return this.#config.authorization;
+  }
+}
+
+export class RateLimitConfig {
+  readonly #mutationTransactions: MutationTransactionLimits;
+  constructor(config: RateLimitConfigType) {
+    this.#mutationTransactions = new MutationTransactionLimits(
+      config.mutationTransactions,
+    );
+  }
+
+  get mutationTransactions() {
+    return this.#mutationTransactions;
+  }
+}
+
+export class MutationTransactionLimits {
+  readonly #config: RateLimitConfigType['mutationTransactions'];
+  constructor(config: RateLimitConfigType['mutationTransactions']) {
+    this.#config = config;
+  }
+
+  get windowMs() {
+    return mustResolveValue(this.#config.windowMs);
+  }
+
+  get max() {
+    return mustResolveValue(this.#config.max);
   }
 }
 
