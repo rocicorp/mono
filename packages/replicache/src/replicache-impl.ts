@@ -153,14 +153,10 @@ const updateNeededReasonNewClientGroup: UpdateNeededReason = {
   type: 'NewClientGroup',
 } as const;
 
+/** @deprecated Not used any more */
 export interface MakeSubscriptionsManager {
   (queryInternal: QueryInternal, lc: LogContext): SubscriptionsManager;
 }
-
-const defaultMakeSubscriptionsManager: MakeSubscriptionsManager = (
-  queryInternal,
-  lc,
-) => new SubscriptionsManagerImpl(queryInternal, lc);
 
 export interface ReplicacheImplOptions {
   /**
@@ -184,9 +180,9 @@ export interface ReplicacheImplOptions {
   enablePullAndPushInOpen?: boolean | undefined;
 
   /**
-   * Default is `defaultMakeSubscriptionsManager`.
+   * @deprecated Not used anymore.
    */
-  makeSubscriptionsManager?: MakeSubscriptionsManager | undefined;
+  makeSubscriptionsManager?: unknown;
 
   /**
    * Default is `true`.  If `false` if an exact match client group
@@ -409,7 +405,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableScheduledPersist = true,
       enableScheduledRefresh = true,
       enablePullAndPushInOpen = true,
-      makeSubscriptionsManager = defaultMakeSubscriptionsManager,
       enableClientGroupForking = true,
     } = implOptions;
     this.auth = auth ?? '';
@@ -432,7 +427,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       'replicache version': version,
     });
 
-    this.subscriptions = makeSubscriptionsManager(
+    this.subscriptions = new SubscriptionsManagerImpl(
       this.#queryInternal,
       this.#lc,
     );
