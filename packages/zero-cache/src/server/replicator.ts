@@ -3,6 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
+import {NULL_CHECKPOINTER} from '../services/replicator/checkpointer.js';
 import {ReplicatorService} from '../services/replicator/replicator.js';
 import {runOrExit} from '../services/runner.js';
 import {
@@ -13,7 +14,7 @@ import {
 import {
   type ReplicatorMode,
   setUpMessageHandlers,
-  setupReplicaAndCheckpointer,
+  setupReplica,
 } from '../workers/replicator.js';
 import {createLogContext} from './logging.js';
 
@@ -25,11 +26,7 @@ export default async function runWorker(parent: Worker, ...args: string[]) {
   const workerName = `${mode === 'backup' ? 'backup' : 'serving'}-replicator`;
   const lc = createLogContext(config.log, {worker: workerName});
 
-  const {replica, checkpointer} = setupReplicaAndCheckpointer(
-    lc,
-    mode,
-    config.replicaDbFile,
-  );
+  const replica = setupReplica(lc, mode, config.replicaDbFile);
 
   const changeStreamer = config.changeStreamerUri
     ? new ChangeStreamerHttpClient(lc, config.changeStreamerUri)
@@ -40,7 +37,7 @@ export default async function runWorker(parent: Worker, ...args: string[]) {
     `${workerName}-${pid}`,
     changeStreamer,
     replica,
-    checkpointer,
+    NULL_CHECKPOINTER, // TODO: Get rid of the Checkpointer stuff; no longer be needed with wal2.
   );
 
   setUpMessageHandlers(lc, replicator, parent);
