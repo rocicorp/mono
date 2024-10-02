@@ -21,6 +21,7 @@ import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -41,6 +42,7 @@ export class MutagenService implements Mutagen, Service {
   readonly #stopped = resolver();
   readonly #replica: Database;
   readonly #writeAuthorizer: WriteAuthorizer;
+  readonly #limiter: SlidingWindowLimiter | undefined;
 
   constructor(
     lc: LogContext,
@@ -65,12 +67,22 @@ export class MutagenService implements Mutagen, Service {
       this.#replica,
       clientGroupID,
     );
+
+    if (config.rateLimit) {
+      this.#limiter = new SlidingWindowLimiter(
+        config.rateLimit.mutationTransactions.windowMs,
+        config.rateLimit.mutationTransactions.max,
+      );
+    }
   }
 
   processMutation(
     mutation: Mutation,
     authData: JWTPayload,
   ): Promise<MutationError | undefined> {
+    if (this.#limiter?.canDo() === false) {
+      return Promise.resolve('Rate limit exceeded');
+    }
     return processMutation(
       this.#lc,
       authData,
