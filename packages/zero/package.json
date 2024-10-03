@@ -55,12 +55,12 @@
       "default": "./out/zero.js"
     },
     "./react": {
-      "types": "./out/zero/src/react.d.ts",
-      "default": "./out/zero/src/react.js"
+      "types": "./out/zero-react/src/mod.d.ts",
+      "default": "./out/react.js"
     },
     "./server": {
-      "types": "./out/zero/src/server/main.d.ts",
-      "default": "./out/zero/src/server/main.js"
+      "types": "./out/zero-cache/src/server/main.d.ts",
+      "default": "./out/zero-cache/src/server/main.js"
     }
   },
   "bin": {
