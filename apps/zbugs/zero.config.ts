@@ -65,7 +65,6 @@ defineConfig<AuthData, Schema>(schema, queries => {
       issue: {
         row: {
           insert: [allowIfLoggedIn],
-          update: [allowIfIssueCreator, allowIfAdmin],
           delete: [allowIfIssueCreator, allowIfAdmin],
         },
       },
