@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {useQuery} from 'zero-react/src/use-query.js';
-import {useZero} from '../../domain/schema.js';
+import {useZero} from '../../hooks/use-zero.js';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -10,6 +10,7 @@ import statusClosed from '../../assets/icons/issue-closed.svg';
 import Comment from './comment.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {navigate} from 'wouter/use-browser-location';
+import CommentComposer from './comment-composer.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -20,7 +21,7 @@ export default function IssuePage() {
     .where('id', params?.id ?? '')
     .related('creator', creator => creator.one())
     .related('labels')
-    .related('comments')
+    .related('comments', q => q.orderBy('created', 'asc'))
     .one();
   const issue = useQuery(q, match);
 
@@ -34,6 +35,14 @@ export default function IssuePage() {
     z.mutate.issue.update({id: editing.id, ...edits});
     setEditing(null);
     setEdits({});
+  };
+
+  const remove = () => {
+    // TODO: Implement undo - https://github.com/rocicorp/undo
+    if (confirm('Really delete?')) {
+      z.mutate.issue.delete({id: issue.id});
+    }
+    navigate('/');
   };
 
   const cancel = () => {
@@ -90,12 +99,20 @@ export default function IssuePage() {
         </div>
         <div className="edit-button">
           {!editing ? (
-            <button
-              style={{border: '1px outset white'}}
-              onMouseDown={() => setEditing(issue)}
-            >
-              Edit
-            </button>
+            <>
+              <button
+                style={{border: '1px outset white', marginRight: '0.5rem'}}
+                onMouseDown={() => setEditing(issue)}
+              >
+                Edit
+              </button>
+              <button
+                style={{border: '1px outset white'}}
+                onMouseDown={() => remove()}
+              >
+                Delete
+              </button>
+            </>
           ) : (
             <>
               <button style={{border: '1px outset white'}} onMouseDown={save}>
@@ -116,7 +133,6 @@ export default function IssuePage() {
             onChange={e => setEdits({...edits, title: e.target.value})}
           />
         )}
-
         {/* These comments are actually github markdown which unfortunately has
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
@@ -137,6 +153,12 @@ export default function IssuePage() {
             ))}
           </div>
         ) : null}
+        <br />
+        {z.userID === 'anon' ? (
+          <a href="/api/login/github">Login to comment</a>
+        ) : (
+          <CommentComposer issueID={issue.id} />
+        )}
       </div>
 
       {/* Right sidebar */}

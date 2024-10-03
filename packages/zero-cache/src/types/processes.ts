@@ -3,9 +3,8 @@ import {
   fork,
   type SendHandle,
   type Serializable,
-} from 'child_process';
-import EventEmitter from 'events';
-import path from 'path';
+} from 'node:child_process';
+import EventEmitter from 'node:events';
 
 /**
  * Central registry of message type names, which are used to identify
@@ -146,7 +145,7 @@ export function singleProcessMode(): boolean {
 export function childWorker(module: string, ...args: string[]): Worker {
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
-    void import(path.join('../../', module))
+    void import(module)
       .then(({default: runWorker}) => runWorker(parent, ...args))
       .catch(err => child.emit('error', err));
     return child;

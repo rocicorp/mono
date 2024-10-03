@@ -31,7 +31,7 @@ describe('workers/replicator', () => {
 
     const notifications = [];
     const notifier = createNotifierFrom(lc, child);
-    subscribeTo(child);
+    subscribeTo(lc, child);
 
     let i = 0;
     for await (const msg of notifier.subscribe()) {

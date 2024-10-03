@@ -54,8 +54,10 @@ REPLICA_DB_FILE = "/tmp/zbugs-sync-replica.db"
 
 #### ZBugs API Server Variables ####
 
-# The client id for the GitHub app responisble for OAuth
+# The client id for the GitHub OAuth app responisble for OAuth:
 # https://docs.github.com/en/apps/creating-github-apps
+# Rocicorp team, see:
+# https://docs.google.com/document/d/1aGHaB0L15SY67wkXQMsST80uHh4-IooTUVzKcUlzjdk/edit#bookmark=id.bb6lqbetv2lm
 GITHUB_CLIENT_ID = ""
 # The secret for the client
 GITHUB_CLIENT_SECRET = ""

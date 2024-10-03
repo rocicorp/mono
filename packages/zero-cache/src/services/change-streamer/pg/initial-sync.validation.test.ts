@@ -5,7 +5,7 @@ import type {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {Database} from 'zqlite/src/db.js';
 import {initialSync} from './initial-sync.js';
 
-const REPLICA_ID = 'initial_sync_validation_test_id';
+const SHARD_ID = 'initial_sync_validation_test_id';
 
 describe('replicator/initial-sync-validation', () => {
   let upstream: PostgresDB;
@@ -23,6 +23,7 @@ describe('replicator/initial-sync-validation', () => {
   type InvalidUpstreamCase = {
     error: string;
     setupUpstreamQuery?: string;
+    requestedPublications?: string[];
     upstream?: Record<string, object[]>;
   };
 
@@ -43,7 +44,7 @@ describe('replicator/initial-sync-validation', () => {
       `,
     },
     {
-      error: 'Schema "_zero" is reserved for internal use',
+      error: 'Only the default "public" schema is supported',
       setupUpstreamQuery: `
         CREATE SCHEMA _zero;
         CREATE TABLE _zero.is_not_allowed(
@@ -52,6 +53,7 @@ describe('replicator/initial-sync-validation', () => {
         );
         CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA _zero;
         `,
+      requestedPublications: ['zero_foo'],
     },
     {
       error: 'Only the default "public" schema is supported',
@@ -60,6 +62,7 @@ describe('replicator/initial-sync-validation', () => {
         CREATE TABLE unsupported.issues ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
         CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA unsupported;
       `,
+      requestedPublications: ['zero_foo'],
     },
     {
       error: 'Table "table/with/slashes" has invalid characters',
@@ -95,7 +98,7 @@ describe('replicator/initial-sync-validation', () => {
 
       const result = await initialSync(
         createSilentLogContext(),
-        REPLICA_ID,
+        {id: SHARD_ID, publications: c.requestedPublications ?? []},
         replica,
         getConnectionURI(upstream),
       ).catch(e => e);

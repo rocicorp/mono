@@ -34,9 +34,12 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-  type SchemaDefs,
+  type Schema,
+  type UpdateNeededReason,
   createSocket,
+  onClientStateNotFoundServerReason,
   serverAheadReloadReason,
+  updateNeededReloadReason,
 } from './zero.js';
 
 let clock: sinon.SinonFakeTimers;
@@ -70,15 +73,18 @@ test('onOnlineChange callback', async () => {
 
   const r = zeroForTest({
     logLevel: 'debug',
-    schemas: {
-      foo: {
-        tableName: 'foo',
-        columns: {
-          id: {type: 'string'},
-          val: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        foo: {
+          tableName: 'foo',
+          columns: {
+            id: {type: 'string'},
+            val: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          relationships: {},
         },
-        primaryKey: ['id'],
-        relationships: {},
       },
     },
     onOnlineChange: online => {
@@ -279,6 +285,7 @@ suite('createSocket', () => {
     expectedURL: string,
     expectedProtocol = '',
   ) => {
+    const schemaVersion = 3;
     test(expectedURL, () => {
       sinon.stub(performance, 'now').returns(now);
       const mockSocket = createSocket(
@@ -286,6 +293,7 @@ suite('createSocket', () => {
         baseCookie,
         clientID,
         'testClientGroupID',
+        schemaVersion,
         userID,
         auth,
         jurisdiction,
@@ -309,7 +317,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -322,7 +330,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -335,7 +343,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -348,7 +356,7 @@ suite('createSocket', () => {
     123,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -361,7 +369,7 @@ suite('createSocket', () => {
     123,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -374,7 +382,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -388,7 +396,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
     'auth%20with%20%5B%5D',
   );
 
@@ -402,7 +410,7 @@ suite('createSocket', () => {
     0,
     true,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
     'auth%20with%20%5B%5D',
   );
 
@@ -416,7 +424,7 @@ suite('createSocket', () => {
     0,
     false,
     456,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 
@@ -438,15 +446,18 @@ suite('initConnection', () => {
 
   test('sends desired queries patch', async () => {
     const r = zeroForTest({
-      schemas: {
-        e: {
-          tableName: 'e',
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            tableName: 'e',
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            relationships: {},
           },
-          primaryKey: ['id'],
-          relationships: {},
         },
       },
     });
@@ -522,6 +533,7 @@ test('pusher sends one mutation per push message', async () => {
         expect(msg[1].clientGroupID).to.equal(
           clientGroupID ?? (await r.clientGroupID),
         );
+        expect(msg[1].schemaVersion).to.equal(1);
         expect(msg[1].mutations).to.have.lengthOf(1);
         expect(msg[1].requestID).to.equal(requestID);
       }
@@ -870,15 +882,18 @@ test('smokeTest', async () => {
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
       ...serverOptions,
-      schemas: {
-        issues: {
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
+      schema: {
+        version: 1,
+        tables: {
+          issues: {
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issues',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issues',
-          relationships: {},
         },
       },
     });
@@ -1096,7 +1111,7 @@ test('Disconnect on error', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionState).to.equal(ConnectionState.Connected);
-  await r.triggerError(ErrorKind.ClientNotFound, 'client not found');
+  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
@@ -1106,7 +1121,7 @@ test('No backoff on errors', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Connected);
 
   const step = async (delta: number, message: string) => {
-    await r.triggerError(ErrorKind.ClientNotFound, message);
+    await r.triggerError(ErrorKind.InvalidMessage, message);
     expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
     await clock.tickAsync(delta - 1);
@@ -1173,7 +1188,7 @@ function expectInitConnectionMessage(message: string) {
   ).not.toBeUndefined();
 }
 
-function expectLogMessages(r: TestZero<SchemaDefs>) {
+function expectLogMessages(r: TestZero<Schema>) {
   return expect(
     r.testLogSink.messages.flatMap(([level, _context, msg]) =>
       level === 'debug' ? msg : [],
@@ -1250,13 +1265,13 @@ test('socketOrigin', async () => {
 
 test('Logs errors in connect', async () => {
   const r = zeroForTest({});
-  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
+  await r.triggerError(ErrorKind.InvalidMessage, 'bad-message');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
   await clock.tickAsync(0);
 
   const index = r.testLogSink.messages.findIndex(
     ([level, _context, args]) =>
-      level === 'error' && args.find(arg => /client-id-a/.test(String(arg))),
+      level === 'error' && args.find(arg => /bad-message/.test(String(arg))),
   );
 
   expect(index).to.not.equal(-1);
@@ -1302,13 +1317,13 @@ test('New connection logs', async () => {
 });
 
 async function testWaitsForConnection(
-  fn: (r: TestZero<SchemaDefs>) => Promise<unknown>,
+  fn: (r: TestZero<Schema>) => Promise<unknown>,
 ) {
   const r = zeroForTest();
 
   const log: ('resolved' | 'rejected')[] = [];
 
-  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
+  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   fn(r).then(
@@ -1324,7 +1339,7 @@ async function testWaitsForConnection(
   await clock.tickAsync(RUN_LOOP_INTERVAL_MS);
   expect(r.connectionState).to.equal(ConnectionState.Connecting);
 
-  await r.triggerError(ErrorKind.ClientNotFound, 'client-id-a');
+  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   await tickAFewTimes(clock);
   expect(log).to.deep.equal(['rejected']);
 }
@@ -1355,23 +1370,90 @@ test('puller waits for connection', async () => {
   });
 });
 
-test('Protocol mismatch', async () => {
-  const fake = sinon.fake();
-  const r = zeroForTest();
-  r.onUpdateNeeded = fake;
+test('VersionNotSupported default handler', async () => {
+  const storage: Record<string, string> = {};
+  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(resolve);
+  const r = zeroForTest(undefined, false);
+  r.reload = fake;
 
-  await r.triggerError(ErrorKind.VersionNotSupported, 'prot mismatch');
+  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   expect(fake.calledOnce).true;
-  expect(fake.firstCall.args).deep.equal([
-    {type: ErrorKind.VersionNotSupported},
-  ]);
 
-  fake.resetHistory();
-  r.onUpdateNeeded = null;
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
+    updateNeededReloadReason({type: 'VersionNotSupported'}),
+  );
+});
+
+test('VersionNotSupported custom onUpdateNeeded handler', async () => {
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake((_reason: UpdateNeededReason) => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.onUpdateNeeded = fake;
+
+  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
-  expect(fake.called).false;
+
+  expect(fake.calledOnce).true;
+});
+
+test('VersionNotSupported null onUpdateNeeded handler', async () => {
+  const r = zeroForTest();
+  r.onUpdateNeeded = null;
+
+  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+});
+
+test('ClientNotFound default handler', async () => {
+  const storage: Record<string, string> = {};
+  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(() => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.reload = fake;
+
+  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await promise;
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  expect(fake.calledOnce).true;
+
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
+    onClientStateNotFoundServerReason('server test message'),
+  );
+});
+
+test('ClientNotFound custom onClientStateNotFound handler', async () => {
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(() => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.onClientStateNotFound = fake;
+
+  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await promise;
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  expect(fake.calledOnce).true;
+});
+
+test('ClientNotFound null handler', async () => {
+  const r = zeroForTest();
+  r.onClientStateNotFound = null;
+
+  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
 test('server ahead', async () => {
@@ -1412,7 +1494,7 @@ suite('Disconnect on hide', () => {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
     test: (
-      r: TestZero<SchemaDefs>,
+      r: TestZero<Schema>,
       changeVisibilityState: (
         newVisibilityState: DocumentVisibilityState,
       ) => void,
@@ -1687,8 +1769,8 @@ test('kvStore option', async () => {
     value: number;
   };
 
-  const t = async (
-    kvStore: ZeroOptions<Record<string, never>>['kvStore'],
+  const t = async <S extends Schema>(
+    kvStore: ZeroOptions<S>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: E[],
@@ -1697,15 +1779,18 @@ test('kvStore option', async () => {
       server: null,
       userID,
       kvStore,
-      schemas: {
-        e: {
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            tableName: 'e',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'e',
-          relationships: {},
         },
       },
     });
@@ -1798,25 +1883,28 @@ test('Zero close should stop timeout, close delayed', async () => {
 
 test('ensure we get the same query object back', () => {
   const z = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });
@@ -1833,25 +1921,28 @@ test('ensure we get the same query object back', () => {
 
 test('the type of collection should be inferred from options with parse', () => {
   const r = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });
@@ -1877,25 +1968,28 @@ suite('CRUD', () => {
   };
   const makeZero = () =>
     zeroForTest({
-      schemas: {
-        issue: {
-          columns: {
-            id: {type: 'string'},
-            title: {type: 'string'},
+      schema: {
+        version: 1,
+        tables: {
+          issue: {
+            columns: {
+              id: {type: 'string'},
+              title: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issue',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issue',
-          relationships: {},
-        },
-        comment: {
-          columns: {
-            id: {type: 'string'},
-            issueID: {type: 'string'},
-            text: {type: 'string'},
+          comment: {
+            columns: {
+              id: {type: 'string'},
+              issueID: {type: 'string'},
+              text: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'comment',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'comment',
-          relationships: {},
         },
       },
     });
@@ -1960,15 +2054,18 @@ suite('CRUD', () => {
 
   test('do not expose _zero_crud', () => {
     const z = zeroForTest({
-      schemas: {
-        issue: {
-          columns: {
-            id: {type: 'string'},
-            title: {type: 'string'},
+      schema: {
+        version: 1,
+        tables: {
+          issue: {
+            columns: {
+              id: {type: 'string'},
+              title: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issue',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issue',
-          relationships: {},
         },
       },
     });
@@ -1981,25 +2078,28 @@ suite('CRUD', () => {
 
 test('mutate is a function for batching', async () => {
   const z = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });
@@ -2041,25 +2141,28 @@ test('mutate is a function for batching', async () => {
 
 test('calling mutate on the non batch version should throw inside a batch', async () => {
   const z = zeroForTest({
-    schemas: {
-      issue: {
-        columns: {
-          id: {type: 'string'},
-          title: {type: 'string'},
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            id: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'issue',
-        relationships: {},
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          text: {type: 'string'},
+        comment: {
+          columns: {
+            id: {type: 'string'},
+            issueID: {type: 'string'},
+            text: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'comment',
+          relationships: {},
         },
-        primaryKey: ['id'],
-        tableName: 'comment',
-        relationships: {},
       },
     },
   });

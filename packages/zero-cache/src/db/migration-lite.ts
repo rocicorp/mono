@@ -44,7 +44,6 @@ export async function runSchemaMigrations(
   );
   const db = new Database(log, dbPath);
   db.pragma('foreign_keys = OFF');
-  db.pragma('journal_mode = WAL');
 
   try {
     const versionMigrations = sorted(versionMigrationMap);

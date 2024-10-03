@@ -45,6 +45,7 @@ const EXPECTED_LMIDS_AST: AST = {
     },
   ],
   orderBy: [
+    ['shardID', 'asc'],
     ['clientGroupID', 'asc'],
     ['clientID', 'asc'],
   ],
@@ -79,12 +80,13 @@ describe('view-syncer/service', () => {
     replica.pragma('busy_timeout = 1');
     replica.exec(`
     CREATE TABLE "zero.clients" (
+      "shardID"        TEXT,
       "clientGroupID"  TEXT,
       "clientID"       TEXT,
       "lastMutationID" INTEGER,
       "userID"         TEXT,
       _0_version       TEXT NOT NULL,
-      PRIMARY KEY ("clientGroupID", "clientID")
+      PRIMARY KEY ("shardID", "clientGroupID", "clientID")
     );
     CREATE TABLE issues (
       id text PRIMARY KEY,
@@ -100,8 +102,8 @@ describe('view-syncer/service', () => {
       _0_version TEXT NOT NULL
     );
 
-    INSERT INTO "zero.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
-                      VALUES ('9876', 'foo', 42, '00');
+    INSERT INTO "zero.clients" ("shardID", "clientGroupID", "clientID", "lastMutationID", _0_version)
+                      VALUES ('0', '9876', 'foo', 42, '00');
 
     INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '00');
     INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '00');
@@ -447,6 +449,7 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "clientGroupID": "9876",
             "clientID": "foo",
+            "shardID": "0",
           },
           "rowVersion": "00",
           "schema": "",
@@ -575,6 +578,7 @@ describe('view-syncer/service', () => {
         lmids: 1,
       },
       rowKey: {
+        shardID: '0',
         clientGroupID: '9876',
         clientID: 'foo',
       },

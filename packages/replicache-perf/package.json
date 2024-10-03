@@ -6,7 +6,7 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "node tool/build.js",
-    "perf": "npm run build && node src/runner.js"
+    "perf": "npm run build && node out/runner.js"
   },
   "type": "module",
   "dependencies": {

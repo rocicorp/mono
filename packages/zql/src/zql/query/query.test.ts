@@ -2,7 +2,7 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {staticParam} from './query-impl.js';
 import type {Query} from './query.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 
 const mockQuery = {
   select() {
@@ -392,7 +392,7 @@ describe('types', () => {
 
 describe('schema structure', () => {
   test('dag', () => {
-    const commentSchema: Schema = {
+    const commentSchema: TableSchema = {
       tableName: 'comment',
       columns: {
         id: {type: 'string'},
@@ -403,7 +403,7 @@ describe('schema structure', () => {
       relationships: {},
     };
 
-    const issueSchema: Schema = {
+    const issueSchema: TableSchema = {
       tableName: 'issue',
       columns: {
         id: {type: 'string'},
@@ -474,6 +474,6 @@ describe('schema structure', () => {
   });
 });
 
-function takeSchema(x: Schema) {
+function takeSchema(x: TableSchema) {
   return x;
 }

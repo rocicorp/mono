@@ -1,4 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
+import 'dotenv/config';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
@@ -27,12 +28,17 @@ function logErrorAndExit(err: unknown) {
 const ready: Promise<void>[] = [];
 
 function loadWorker(
-  module: string,
+  modulePath: string,
   id?: string | number,
   ...args: string[]
 ): Worker {
-  const worker = childWorker(module, ...args);
-  const name = path.basename(module, '.ts') + (id ? ` (${id})` : '');
+  // modulePath is relative to this file
+  const ext = path.extname(import.meta.url);
+  // modulePath is .ts. If we have been compiled, it should be changed to .js
+  modulePath = modulePath.replace(/\.ts$/, ext);
+  const absModulePath = new URL(modulePath, import.meta.url).pathname;
+  const worker = childWorker(absModulePath, ...args);
+  const name = path.basename(absModulePath, ext) + (id ? ` (${id})` : '');
   const {promise, resolve} = resolver();
   ready.push(promise);
 
@@ -47,22 +53,18 @@ function loadWorker(
 const {promise: changeStreamerReady, resolve} = resolver();
 const changeStreamer = config.changeStreamerUri
   ? resolve()
-  : loadWorker('./src/server/change-streamer.ts').once('message', resolve);
+  : loadWorker('./change-streamer.ts').once('message', resolve);
 
 const numSyncers = config.numSyncWorkers
   ? Number(config.numSyncWorkers)
   : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
     Math.max(1, availableParallelism() - 1);
 
-const syncers = Array.from({length: numSyncers}, (_, i) =>
-  loadWorker('./src/server/syncer.ts', i + 1),
-);
-
 if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = pgClient(lc, config.changeDbUri);
+  const cvrDB = pgClient(lc, config.cvrDbUri);
   await initViewSyncerSchema(lc, cvrDB);
   void cvrDB.end();
 }
@@ -73,9 +75,9 @@ await changeStreamerReady;
 
 if (config.litestream) {
   const mode: ReplicatorMode = 'backup';
-  const replicator = loadWorker('./src/server/replicator.ts', mode, mode).once(
+  const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
-    () => subscribeTo(replicator),
+    () => subscribeTo(lc, replicator),
   );
   const notifier = createNotifierFrom(lc, replicator);
   if (changeStreamer) {
@@ -83,13 +85,17 @@ if (config.litestream) {
   }
 }
 
+const syncers: Worker[] = [];
 if (numSyncers) {
   const mode: ReplicatorMode = config.litestream ? 'serving-copy' : 'serving';
-  const replicator = loadWorker('./src/server/replicator.ts', mode, mode).once(
+  const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
-    () => subscribeTo(replicator),
+    () => subscribeTo(lc, replicator),
   );
   const notifier = createNotifierFrom(lc, replicator);
+  for (let i = 0; i < numSyncers; i++) {
+    syncers.push(loadWorker('./syncer.ts', i + 1));
+  }
   syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
 }
 

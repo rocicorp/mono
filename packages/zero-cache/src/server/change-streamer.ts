@@ -32,7 +32,7 @@ export default async function runWorker(parent: Worker) {
   const {changeSource, replicationConfig} = await initializeChangeSource(
     lc,
     config.upstreamUri,
-    config.replicaId,
+    config.shard,
     config.replicaDbFile,
   );
 

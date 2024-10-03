@@ -513,6 +513,7 @@ describe('view-syncer/cvr', () => {
               },
             ],
             orderBy: [
+              ['shardID', 'asc'],
               ['clientGroupID', 'asc'],
               ['clientID', 'asc'],
             ],
@@ -602,6 +603,7 @@ describe('view-syncer/cvr', () => {
               },
             ],
             orderBy: [
+              ['shardID', 'asc'],
               ['clientGroupID', 'asc'],
               ['clientID', 'asc'],
             ],

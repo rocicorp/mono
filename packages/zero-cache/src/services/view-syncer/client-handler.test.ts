@@ -69,9 +69,11 @@ describe('view-syncer/client-handler', () => {
             rowKey: {clientID: 'bar'},
           },
           contents: {
+            shardID: '0',
             clientGroupID: 'g1',
             clientID: 'bar',
             lastMutationID: 321n,
+            userID: 'ignored',
           },
         },
       });

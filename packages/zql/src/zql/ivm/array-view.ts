@@ -11,7 +11,7 @@ import {assertOrderingIncludesPK} from '../builder/builder.js';
 import type {Change} from './change.js';
 import type {Comparator, Row, Value} from './data.js';
 import type {Input, Output} from './operator.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 
 /**
  * Called when the view changes. The received data should be considered
@@ -39,7 +39,7 @@ export type Format = {
 export class ArrayView implements Output {
   readonly #input: Input;
   readonly #listeners = new Set<Listener>();
-  readonly #schema: Schema;
+  readonly #schema: TableSchema;
   readonly #format: Format;
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
@@ -129,7 +129,7 @@ export type Entry = {[key: string]: Value | View};
 function applyChange(
   parentEntry: Entry,
   change: Change,
-  schema: Schema,
+  schema: TableSchema,
   relationship: string,
   format: Format,
 ) {
@@ -343,7 +343,7 @@ function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
 function makeEntryPreserveRelationships(
   row: Row,
   entry: Entry,
-  relationships: {[key: string]: Schema},
+  relationships: {[key: string]: TableSchema},
 ): Entry {
   const result: Entry = {...row};
   for (const relationship in relationships) {

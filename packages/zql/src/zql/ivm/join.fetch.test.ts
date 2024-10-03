@@ -10,7 +10,7 @@ import {
 } from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKey, Schema, SchemaValue} from './schema.js';
+import type {PrimaryKey, TableSchema, SchemaValue} from './schema.js';
 import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
 
 suite('fetch one:many', () => {
@@ -787,7 +787,7 @@ function fetchTest(t: FetchTest) {
       // left-to-right.
       const finalJoin = joins[0];
 
-      let expectedSchema: Schema | undefined;
+      let expectedSchema: TableSchema | undefined;
       for (let i = sources.length - 1; i >= 0; i--) {
         const schema = sources[i].snitch.getSchema();
         if (expectedSchema) {

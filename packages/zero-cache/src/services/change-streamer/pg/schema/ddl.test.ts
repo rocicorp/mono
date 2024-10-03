@@ -90,6 +90,7 @@ describe('change-source/tables/ddl', () => {
       `CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           context: {
             query: `CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))`,
@@ -103,18 +104,21 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: true,
+                dflt: null,
                 pos: 1,
               },
               a: {
                 characterMaximumLength: null,
                 dataType: 'int4',
                 notNull: false,
+                dflt: null,
                 pos: 2,
               },
               b: {
                 characterMaximumLength: null,
                 dataType: 'int8',
                 notNull: false,
+                dflt: null,
                 pos: 3,
               },
             },
@@ -152,6 +156,7 @@ describe('change-source/tables/ddl', () => {
       `CREATE INDEX foo_name_index on pub.foo (name, id)`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'CREATE INDEX',
           context: {query: `CREATE INDEX foo_name_index on pub.foo (name, id)`},
@@ -170,6 +175,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD bar text`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo ADD bar text'},
@@ -181,24 +187,28 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 4,
               },
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 3,
               },
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: true,
+                dflt: null,
                 pos: 1,
               },
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 2,
               },
             },
@@ -229,6 +239,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD username TEXT UNIQUE`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo ADD username TEXT UNIQUE'},
@@ -240,24 +251,28 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 4,
               },
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 3,
               },
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: true,
+                dflt: null,
                 pos: 1,
               },
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 2,
               },
             },
@@ -291,10 +306,134 @@ describe('change-source/tables/ddl', () => {
       },
     ],
     [
+      'add column with default value',
+      `ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'`,
+      {
+        type: 'ddl',
+        version: 1,
+        event: {
+          tag: 'ALTER TABLE',
+          context: {query: `ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'`},
+          table: {
+            schema: 'pub',
+            name: 'foo',
+            columns: {
+              bar: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: `'boo'::text`,
+                pos: 4,
+              },
+              description: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 3,
+              },
+              id: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: true,
+                dflt: null,
+                pos: 1,
+              },
+              name: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 2,
+              },
+            },
+            primaryKey: ['id'],
+            publications: {['zero_all']: {rowFilter: null}},
+          },
+          indexes: [
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
+              name: 'foo_custom_index',
+              columns: ['description', 'name'],
+              unique: false,
+            },
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
+              name: 'foo_name_key',
+              columns: ['name'],
+              unique: true,
+            },
+          ],
+        },
+      },
+    ],
+    [
+      'alter column default value',
+      `ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'`,
+      {
+        type: 'ddl',
+        version: 1,
+        event: {
+          tag: 'ALTER TABLE',
+          context: {
+            query: `ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'`,
+          },
+          table: {
+            schema: 'pub',
+            name: 'foo',
+            columns: {
+              description: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 3,
+              },
+              id: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: true,
+                dflt: null,
+                pos: 1,
+              },
+              name: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: `'alice'::text`,
+                pos: 2,
+              },
+            },
+            primaryKey: ['id'],
+            publications: {['zero_all']: {rowFilter: null}},
+          },
+          indexes: [
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
+              name: 'foo_custom_index',
+              columns: ['description', 'name'],
+              unique: false,
+            },
+            {
+              schemaName: 'pub',
+              tableName: 'foo',
+              name: 'foo_name_key',
+              columns: ['name'],
+              unique: true,
+            },
+          ],
+        },
+      },
+    ],
+    [
       'rename column',
       `ALTER TABLE pub.foo RENAME name to handle`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo RENAME name to handle'},
@@ -306,18 +445,21 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 3,
               },
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: true,
+                dflt: null,
                 pos: 1,
               },
               handle: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 2,
               },
             },
@@ -348,6 +490,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo drop description`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'ALTER TABLE',
           context: {query: 'ALTER TABLE pub.foo drop description'},
@@ -359,12 +502,14 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: true,
+                dflt: null,
                 pos: 1,
               },
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
+                dflt: null,
                 pos: 2,
               },
             },
@@ -389,6 +534,7 @@ describe('change-source/tables/ddl', () => {
       `DROP TABLE pub.foo, pub.yoo`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'DROP TABLE',
           context: {query: `DROP TABLE pub.foo, pub.yoo`},
@@ -411,6 +557,7 @@ describe('change-source/tables/ddl', () => {
       `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
       {
         type: 'ddl',
+        version: 1,
         event: {
           tag: 'DROP INDEX',
           context: {
@@ -449,7 +596,7 @@ describe('change-source/tables/ddl', () => {
     });
 
     const messages = await drainReplicationMessages(8);
-    expect(messages).toMatchObject([
+    expect(messages.slice(0, 5)).toMatchObject([
       {tag: 'begin'},
       {tag: 'relation'},
       {tag: 'insert'},
@@ -461,15 +608,30 @@ describe('change-source/tables/ddl', () => {
         transactional: true,
       },
       {tag: 'commit'},
-
-      // There should be no "zero" message emitted in the second transaction
-      {tag: 'begin'},
-      {tag: 'insert'},
-      {tag: 'commit'},
     ]);
 
     const {content} = messages[3] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(content))).toEqual(event);
+
+    // Depending on how busy Postgres is, the remaining messages will either
+    // be:
+    //
+    // {tag: 'begin'},
+    // {tag: 'insert'},
+    // {tag: 'commit'},
+    //
+    // or:
+    //
+    // {tag: 'begin'},
+    // {tag: 'relation'},
+    // {tag: 'insert'},
+    // {tag: 'commit'},
+    //
+    // the latter happening when Postgres loses some state and resends
+    // the relation from messages[2]. What we want to verify is that
+    // no `tag: 'message'` message arrives, as the schema changes
+    // in the 'private' schema should not result in schema updates.
+    expect(messages.slice(5).find(m => m.tag === 'message')).toBeUndefined();
   });
 
   test('postgres documentation: current_query() is unreliable', async () => {
@@ -515,6 +677,7 @@ describe('change-source/tables/ddl', () => {
     let msg = messages[1] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddl',
+      version: 1,
       event: {
         tag: 'ALTER TABLE',
         // Top level query may not provide any information about the actual DDL command.
@@ -525,6 +688,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[4] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddl',
+      version: 1,
       event: {
         tag: 'ALTER TABLE',
         // A compound top level query may contain more than one DDL command.
@@ -536,6 +700,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[5] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddl',
+      version: 1,
       event: {
         tag: 'ALTER TABLE',
         // A compound top level query may contain more than one DDL command.

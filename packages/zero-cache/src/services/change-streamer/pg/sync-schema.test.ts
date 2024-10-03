@@ -16,7 +16,7 @@ import type {PostgresDB} from 'zero-cache/src/types/pg.js';
 import {replicationSlot} from './initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 
-const REPLICA_ID = 'sync_schema_test_id';
+const SHARD_ID = 'sync_schema_test_id';
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
@@ -26,11 +26,12 @@ const CURRENT_SCHEMA_VERSIONS = {
   lock: 1, // Internal column, always 1
 };
 
-describe('replicator/schema/sync-schema', () => {
+describe('change-streamer/pg/sync-schema', () => {
   type Case = {
     name: string;
 
     upstreamSetup?: string;
+    requestedPublications?: string[];
     upstreamPreState?: Record<string, object[]>;
     upstreamPostState?: Record<string, object[]>;
 
@@ -57,6 +58,7 @@ describe('replicator/schema/sync-schema', () => {
         CREATE TABLE users("userID" INTEGER, password TEXT, handle TEXT, PRIMARY KEY ("userID"));
         CREATE PUBLICATION zero_custom FOR TABLE users ("userID", handle);
     `,
+      requestedPublications: ['zero_custom'],
       upstreamPreState: {
         users: [
           {userID: 123, password: 'not-replicated', handle: '@zoot'},
@@ -86,7 +88,7 @@ describe('replicator/schema/sync-schema', () => {
   });
 
   afterEach(async () => {
-    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
+    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
     await testDBs.drop(upstream);
     await replicaFile.unlink();
   }, 10000);
@@ -103,7 +105,7 @@ describe('replicator/schema/sync-schema', () => {
         await initSyncSchema(
           createSilentLogContext(),
           'test',
-          REPLICA_ID,
+          {id: SHARD_ID, publications: c.requestedPublications ?? []},
           replicaFile.path,
           getConnectionURI(upstream),
         );
@@ -118,9 +120,9 @@ describe('replicator/schema/sync-schema', () => {
         // Slot should still exist.
         const slots =
           await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
-            REPLICA_ID,
+            SHARD_ID,
           )}`.values();
-        expect(slots[0]).toEqual([replicationSlot(REPLICA_ID)]);
+        expect(slots[0]).toEqual([replicationSlot(SHARD_ID)]);
       },
       10000,
     );

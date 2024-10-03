@@ -1,6 +1,7 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {Mode} from 'zero-cache/src/db/transaction-pool.js';
@@ -14,47 +15,70 @@ import {
   type SetOp,
   type UpdateOp,
 } from 'zero-protocol/src/push.js';
-import type {AuthorizationConfig} from '../../config/zero-config.js';
+import {Database} from 'zqlite/src/db.js';
+import {type ZeroConfig} from '../../config/zero-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
+import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
 export type MutationError = string;
 
 export interface Mutagen {
-  processMutation(mutation: Mutation): Promise<MutationError | undefined>;
+  processMutation(
+    mutation: Mutation,
+    authData: JWTPayload,
+  ): Promise<MutationError | undefined>;
 }
 
 export class MutagenService implements Mutagen, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
+  readonly #shardID: string;
   readonly #stopped = resolver();
-  readonly #authorizationConfig: AuthorizationConfig;
+  readonly #replica: Database;
+  readonly #writeAuthorizer: WriteAuthorizer;
 
   constructor(
     lc: LogContext,
+    shardID: string,
     clientGroupID: string,
     upstream: PostgresDB,
-    authorizationConfig: AuthorizationConfig,
+    config: ZeroConfig,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
       .withContext('component', 'Mutagen')
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
-    this.#authorizationConfig = authorizationConfig;
+    this.#shardID = shardID;
+    this.#replica = new Database(this.#lc, config.replicaDbFile, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    this.#writeAuthorizer = new WriteAuthorizerImpl(
+      this.#lc,
+      config,
+      this.#replica,
+      clientGroupID,
+    );
   }
 
-  processMutation(mutation: Mutation): Promise<MutationError | undefined> {
+  processMutation(
+    mutation: Mutation,
+    authData: JWTPayload,
+  ): Promise<MutationError | undefined> {
     return processMutation(
       this.#lc,
+      authData,
       this.#upstream,
+      this.#shardID,
       this.id,
       mutation,
-      this.#authorizationConfig,
+      this.#writeAuthorizer,
     );
   }
 
@@ -72,10 +96,12 @@ const MAX_SERIALIZATION_ATTEMPTS = 2;
 
 export async function processMutation(
   lc: LogContext | undefined,
+  authData: JWTPayload,
   db: PostgresDB,
+  shardID: string,
   clientGroupID: string,
   mutation: Mutation,
-  _authorizationConfig: AuthorizationConfig,
+  writeAuthorizer: WriteAuthorizer,
   onTxStart?: () => void, // for testing
 ): Promise<MutationError | undefined> {
   assert(
@@ -133,7 +159,15 @@ export async function processMutation(
       try {
         await db.begin(Mode.SERIALIZABLE, tx => {
           onTxStart?.();
-          return processMutationWithTx(tx, clientGroupID, mutation, errorMode);
+          return processMutationWithTx(
+            tx,
+            authData,
+            shardID,
+            clientGroupID,
+            mutation,
+            errorMode,
+            writeAuthorizer,
+          );
         });
         if (errorMode) {
           lc?.debug?.('Ran mutation successfully in error mode');
@@ -172,39 +206,70 @@ export async function processMutation(
 
 async function processMutationWithTx(
   tx: PostgresTransaction,
+  authData: JWTPayload,
+  shardID: string,
   clientGroupID: string,
   mutation: CRUDMutation,
   errorMode: boolean,
+  authorizer: WriteAuthorizer,
 ) {
-  const queryPromises: Promise<unknown>[] = [
-    incrementLastMutationID(tx, clientGroupID, mutation.clientID, mutation.id),
-  ];
+  const tasks: (() => Promise<unknown>)[] = [];
 
   if (!errorMode) {
     const {ops} = mutation.args[0];
 
-    for (const op of ops) {
+    for (const [i, op] of ops.entries()) {
+      if (tasks.length !== i) {
+        // Some mutation was not allowed. No need to visit the rest.
+        break;
+      }
       switch (op.op) {
         case 'create':
-          queryPromises.push(getCreateSQL(tx, op).execute());
+          if (authorizer.canInsert(authData, op)) {
+            tasks.push(() => getCreateSQL(tx, op).execute());
+          }
           break;
         case 'set':
-          queryPromises.push(getSetSQL(tx, op).execute());
+          if (authorizer.canUpsert(authData, op)) {
+            tasks.push(() => getSetSQL(tx, op).execute());
+          }
           break;
         case 'update':
-          queryPromises.push(getUpdateSQL(tx, op).execute());
+          if (authorizer.canUpdate(authData, op)) {
+            tasks.push(() => getUpdateSQL(tx, op).execute());
+          }
           break;
         case 'delete':
-          queryPromises.push(getDeleteSQL(tx, op).execute());
+          if (authorizer.canDelete(authData, op)) {
+            tasks.push(() => getDeleteSQL(tx, op).execute());
+          }
           break;
         default:
           unreachable(op);
       }
     }
+
+    // If not all mutations are allowed, don't do any of them.
+    // This is to prevent partial application of mutations.
+    if (tasks.length < ops.length) {
+      tasks.length = 0; // Clear all tasks.
+    }
   }
 
+  // Confirm the mutation even though it may have been blocked by the authorizer.
+  // Authorizer blocking a mutation is not an error but the correct result of the mutation.
+  tasks.unshift(() =>
+    incrementLastMutationID(
+      tx,
+      shardID,
+      clientGroupID,
+      mutation.clientID,
+      mutation.id,
+    ),
+  );
+
   // Note: An error thrown from any Promise aborts the entire transaction.
-  await Promise.all(queryPromises);
+  await Promise.all(tasks.map(task => task()));
 }
 
 export function getCreateSQL(
@@ -266,14 +331,15 @@ function getDeleteSQL(
 
 async function incrementLastMutationID(
   tx: PostgresTransaction,
+  shardID: string,
   clientGroupID: string,
   clientID: string,
   receivedMutationID: number,
 ) {
   const [{lastMutationID}] = await tx<{lastMutationID: bigint}[]>`
-    INSERT INTO zero.clients as current ("clientGroupID", "clientID", "lastMutationID")
-    VALUES (${clientGroupID}, ${clientID}, ${1})
-    ON CONFLICT ("clientGroupID", "clientID")
+    INSERT INTO zero.clients as current ("shardID", "clientGroupID", "clientID", "lastMutationID")
+    VALUES (${shardID}, ${clientGroupID}, ${clientID}, ${1})
+    ON CONFLICT ("shardID", "clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
     RETURNING "lastMutationID"
   `;

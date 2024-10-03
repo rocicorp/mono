@@ -104,11 +104,14 @@ const issueLabelSchema = {
 } as const;
 
 export const schema = {
-  user: userSchema,
-  issue: issueSchema,
-  comment: commentSchema,
-  label: labelSchema,
-  issueLabel: issueLabelSchema,
+  version: 1,
+  tables: {
+    user: userSchema,
+    issue: issueSchema,
+    comment: commentSchema,
+    label: labelSchema,
+    issueLabel: issueLabelSchema,
+  },
 } as const;
 
 const baseConfig = {

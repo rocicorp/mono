@@ -30,7 +30,7 @@ test('basics', () => {
           op: operator as SimpleOperator,
           value: b,
         };
-        const predicate = createPredicate(condition, undefined);
+        const predicate = createPredicate(condition);
         expect(predicate({foo: a})).toBe(false);
       },
     ),
@@ -56,21 +56,9 @@ test('basics', () => {
           op: op as SimpleOperator,
           value: b,
         };
-        const predicate = createPredicate(condition, undefined);
+        const predicate = createPredicate(condition);
         const jsOp = {'=': '===', '!=': '!=='}[op] ?? op;
         expect(predicate({foo: a})).toBe(eval(`a ${jsOp} b`));
-
-        const parameterizedCondition = {
-          type: 'simple',
-          field: 'foo',
-          op: op as SimpleOperator,
-          value: {type: 'static', anchor: 'authData', field: 'bar'},
-        } as const;
-        const predicate2 = createPredicate(parameterizedCondition, {
-          authData: {bar: b},
-          preMutationRow: undefined,
-        });
-        expect(predicate2({foo: a})).toBe(eval(`a ${jsOp} b`));
       },
     ),
   );
@@ -85,7 +73,7 @@ test('like', () => {
         op: flags ? 'ILIKE' : 'LIKE',
         value: pattern,
       };
-      const predicate = createPredicate(condition, undefined);
+      const predicate = createPredicate(condition);
       expect(predicate({foo: input})).toBe(expected);
     }
   }

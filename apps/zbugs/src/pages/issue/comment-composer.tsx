@@ -1,6 +1,7 @@
 import {useState} from 'react';
-import {useZero} from '../../domain/schema.js';
+import {useZero} from '../../hooks/use-zero.js';
 import {nanoid} from 'zero-client/src/util/nanoid.js';
+import {useLogin} from '../../hooks/use-login.js';
 
 export default function CommentComposer({
   id,
@@ -11,11 +12,13 @@ export default function CommentComposer({
   issueID: string;
   id?: string | undefined;
   body?: string | undefined;
-  onDone: () => void;
+  onDone?: (() => void) | undefined;
 }) {
   const z = useZero();
+  const login = useLogin();
   const [currentBody, setCurrentBody] = useState(body ?? '');
   const save = () => {
+    setCurrentBody(body ?? '');
     if (!id) {
       z.mutate.comment.create({
         id: nanoid(),
@@ -24,27 +27,37 @@ export default function CommentComposer({
         body: currentBody,
         created: Date.now(),
       });
-      onDone();
+      onDone?.();
       return;
     }
 
     z.mutate.comment.update({id, body: currentBody});
-    onDone();
+    onDone?.();
   };
 
   const textAreaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentBody(e.target.value);
   };
 
+  if (!login.loginState) {
+    return null;
+  }
+
   return (
     <>
       <textarea
         value={currentBody}
         onChange={textAreaChange}
-        style={{width: '100%', height: '100%', background: 'transparent'}}
+        style={{
+          width: '100%',
+          height: '100%',
+          background: 'white',
+          color: 'black',
+          borderRadius: '0.3rem',
+        }}
       />
-      <button onClick={save}>Save</button>{' '}
-      <button onClick={onDone}>Cancel</button>
+      <button onMouseDown={save}>{id ? 'Save' : 'Comment'}</button>{' '}
+      {id ? <button onMouseDown={onDone}>Cancel</button> : null}
     </>
   );
 }

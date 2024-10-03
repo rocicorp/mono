@@ -3,7 +3,7 @@ import type {Change} from './change.js';
 import type {Node, Row} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
 import type {FetchRequest, Input, Operator, Output} from './operator.js';
-import type {Schema} from './schema.js';
+import type {TableSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
 /**
@@ -40,7 +40,7 @@ export class Filter implements Operator {
     this.#input.destroy();
   }
 
-  getSchema(): Schema {
+  getSchema(): TableSchema {
     return this.#input.getSchema();
   }
 

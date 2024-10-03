@@ -9,12 +9,11 @@ import {
   type ReplicacheImplOptions,
 } from 'replicache/src/replicache-impl.js';
 import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import {SubscriptionsManagerImpl} from 'replicache/src/subscriptions.js';
 import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
 import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
 import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
 import type {UpdateNeededReason as ReplicacheUpdateNeededReason} from 'replicache/src/types.js';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {getDocument, getLocation} from 'shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
 import {must} from 'shared/src/must.js';
@@ -49,7 +48,7 @@ import type {
 } from 'zero-protocol/src/pull.js';
 import {newQuery} from 'zql/src/zql/query/query-impl.js';
 import type {Query} from 'zql/src/zql/query/query.js';
-import type {Schema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
@@ -79,14 +78,15 @@ import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 
-export type SchemaDefs = {
-  readonly [table: string]: Schema;
+export type Schema = {
+  readonly version: number;
+  readonly tables: {readonly [table: string]: TableSchema};
 };
 
 export type NoRelations = Record<string, never>;
 
-export type MakeEntityQueriesFromQueryDefs<SD extends SchemaDefs> = {
-  readonly [K in keyof SD]: Query<SD[K]>;
+export type MakeEntityQueriesFromSchema<S extends Schema> = {
+  readonly [K in keyof S['tables']]: Query<S['tables'][K]>;
 };
 
 declare const TESTING: boolean;
@@ -114,7 +114,7 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<QD extends SchemaDefs>(z: Zero<QD>): TestZero {
+function asTestZero<S extends Schema>(z: Zero<S>): TestZero {
   return z as TestZero;
 }
 
@@ -170,15 +170,35 @@ export type UpdateNeededReason =
   // does not support
   | {type: 'VersionNotSupported'};
 
-export function serverAheadReloadReason(kind: string) {
-  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
-}
-
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
 ): UpdateNeededReason {
   return {type: reason.type};
 }
+
+export function updateNeededReloadReason(reason: UpdateNeededReason) {
+  const {type} = reason;
+  switch (type) {
+    case 'NewClientGroup':
+      return "This client could not sync with a newer client. This is probably due to another tab loading a newer incompatible version of the app's code.";
+      break;
+    case 'VersionNotSupported':
+      return "The server no longer supports this client's protocol version.";
+      break;
+    default:
+      unreachable(type);
+  }
+}
+
+export function serverAheadReloadReason(kind: string) {
+  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
+}
+
+export function onClientStateNotFoundServerReason(serverErrMsg: string) {
+  return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
+}
+const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
+  'The local persistent state needed to synchronize this client has been garbage collected.';
 
 const enum PingResult {
   TimedOut = 0,
@@ -194,12 +214,12 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 
 export function getInternalReplicacheImplForTesting<
   MD extends MutatorDefs,
-  QD extends SchemaDefs,
->(z: Zero<QD>): ReplicacheImpl<MD> {
+  S extends Schema,
+>(z: Zero<S>): ReplicacheImpl<MD> {
   return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
-export class Zero<QD extends SchemaDefs> {
+export class Zero<S extends Schema> {
   readonly version = version;
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
@@ -226,7 +246,8 @@ export class Zero<QD extends SchemaDefs> {
    */
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
 
-  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null;
+  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = null;
+  #onClientStateNotFound: ((reason?: string) => void) | null = null;
   readonly #jurisdiction: 'eu' | undefined;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -275,6 +296,26 @@ export class Zero<QD extends SchemaDefs> {
       });
   }
 
+  /**
+   * `onClientStateNotFound` is called when this client will no longer be able
+   * to sync due to missing synchronization state.  This can be because:
+   * - the local persistent synchronization state has been garbage collected.
+   *   This can happen if the client has no pending mutations and has not been
+   *   used for a while.
+   * - the zero-cache fails to find the synchronization state of this client.
+   *
+   * The default behavior is to reload the page (using `location.reload()`). Set
+   * this to `null` or provide your own function to prevent the page from
+   * reloading automatically.
+   */
+  get onClientStateNotFound(): (() => void) | null {
+    return this.#onClientStateNotFound;
+  }
+  set onClientStateNotFound(value: (() => void) | null) {
+    this.#onClientStateNotFound = value;
+    this.#rep.onClientStateNotFound = value;
+  }
+
   #connectResolver = resolver<void>();
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
@@ -321,9 +362,9 @@ export class Zero<QD extends SchemaDefs> {
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<QD>;
+  readonly #options: ZeroOptions<S>;
 
-  readonly query: MakeEntityQueriesFromQueryDefs<QD>;
+  readonly query: MakeEntityQueriesFromSchema<S>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -336,14 +377,14 @@ export class Zero<QD extends SchemaDefs> {
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<QD>) {
+  constructor(options: ZeroOptions<S>) {
     const {
       userID,
       onOnlineChange,
       jurisdiction,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
-      schemas = {} as QD,
+      schema,
     } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -374,18 +415,17 @@ export class Zero<QD extends SchemaDefs> {
     const logOptions = this.#logOptions;
 
     const replicacheMutators = {
-      ['_zero_crud']: makeCRUDMutator(schemas),
+      ['_zero_crud']: makeCRUDMutator(schema),
     };
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      schemaVersion: options.schemaVersion,
+      schemaVersion: schema.version.toString(),
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
       name: `zero-${userID}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
-      // TODO: Do we need these?
       pushDelay: 0,
       requestOptions: {
         maxDelayMs: 0,
@@ -395,8 +435,6 @@ export class Zero<QD extends SchemaDefs> {
       kvStore,
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
-      makeSubscriptionsManager: (queryInternal, lc) =>
-        new SubscriptionsManagerImpl(queryInternal, lc),
       enableClientGroupForking: false,
     };
 
@@ -408,7 +446,6 @@ export class Zero<QD extends SchemaDefs> {
     }
 
     rep.getAuth = this.#getAuthToken;
-    this.#onUpdateNeeded = rep.onUpdateNeeded; // defaults to reload.
     this.#server = server;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
@@ -417,14 +454,28 @@ export class Zero<QD extends SchemaDefs> {
       {clientID: rep.clientID},
       logOptions.logSink,
     );
+    this.onUpdateNeeded = (reason: UpdateNeededReason) => {
+      reloadWithReason(
+        this.#lc,
+        this.#reload,
+        updateNeededReloadReason(reason),
+      );
+    };
+    this.onClientStateNotFound = (reason?: string) => {
+      reloadWithReason(
+        this.#lc,
+        this.#reload,
+        reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
+      );
+    };
 
-    this.mutate = makeCRUDMutate<QD>(schemas, rep.mutate);
+    this.mutate = makeCRUDMutate<S>(schema, rep.mutate);
 
     this.#queryManager = new QueryManager(rep.clientID, msg =>
       this.#sendChangeDesiredQueries(msg),
     );
 
-    this.#zeroContext = new ZeroContext(schemas, ast =>
+    this.#zeroContext = new ZeroContext(schema.tables, ast =>
       this.#queryManager.add(ast),
     );
 
@@ -436,7 +487,7 @@ export class Zero<QD extends SchemaDefs> {
       },
     );
 
-    this.query = this.#registerQueries(schemas);
+    this.query = this.#registerQueries(schema);
 
     reportReloadReason(this.#lc);
 
@@ -553,7 +604,7 @@ export class Zero<QD extends SchemaDefs> {
    * The function form of `mutate` is not allowed to be called inside another
    * `mutate` function. Doing so will throw an error.
    */
-  readonly mutate: MakeCRUDMutate<QD>;
+  readonly mutate: MakeCRUDMutate<S>;
 
   /**
    * Whether this Zero instance has been closed. Once a Zero instance has
@@ -675,27 +726,27 @@ export class Zero<QD extends SchemaDefs> {
     downMessage: ErrorMessage,
   ): Promise<void> {
     const [, kind, message] = downMessage;
-
-    if (kind === ErrorKind.VersionNotSupported) {
-      this.onUpdateNeeded?.({type: kind});
-    }
-
-    if (
-      kind === 'InvalidConnectionRequestLastMutationID' ||
-      kind === 'InvalidConnectionRequestBaseCookie'
-    ) {
-      await dropDatabase(this.#rep.idbName);
-      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
-    }
+    lc.info?.(`${kind}: ${message}}`);
 
     const error = new ServerError(kind, message);
-
-    lc.info?.(`${kind}: ${message}}`);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this.#connectResolver.reject(error);
     this.#disconnect(lc, {server: kind});
+
+    if (kind === ErrorKind.VersionNotSupported) {
+      this.onUpdateNeeded?.({type: kind});
+    } else if (kind === ErrorKind.ClientNotFound) {
+      await this.#rep.disableClientGroup();
+      this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
+    } else if (
+      kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
+      kind === ErrorKind.InvalidConnectionRequestBaseCookie
+    ) {
+      await dropDatabase(this.#rep.idbName);
+      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
+    }
   }
 
   async #handleConnectedMessage(
@@ -835,6 +886,7 @@ export class Zero<QD extends SchemaDefs> {
       this.#connectCookie,
       this.clientID,
       await this.clientGroupID,
+      this.#options.schema.version,
       this.userID,
       this.#rep.auth,
       this.#jurisdiction,
@@ -1050,7 +1102,8 @@ export class Zero<QD extends SchemaDefs> {
           clientGroupID: req.clientGroupID,
           mutations: [zeroM],
           pushVersion: req.pushVersion,
-          schemaVersion: req.schemaVersion,
+          // Zero schema versions are always numbers.
+          schemaVersion: parseInt(req.schemaVersion),
           requestID,
         },
       ];
@@ -1457,15 +1510,15 @@ export class Zero<QD extends SchemaDefs> {
     // }
   }
 
-  #registerQueries(queryDefs: QD): MakeEntityQueriesFromQueryDefs<QD> {
-    const rv = {} as Record<string, Query<Schema>>;
+  #registerQueries(schema: S): MakeEntityQueriesFromSchema<S> {
+    const rv = {} as Record<string, Query<TableSchema>>;
     const context = this.#zeroContext;
     // Not using parse yet
-    for (const [name, schema] of Object.entries(queryDefs)) {
-      rv[name] = newQuery(context, schema);
+    for (const [name, table] of Object.entries(schema.tables)) {
+      rv[name] = newQuery(context, table);
     }
 
-    return rv as MakeEntityQueriesFromQueryDefs<QD>;
+    return rv as MakeEntityQueriesFromSchema<S>;
   }
 }
 
@@ -1474,6 +1527,7 @@ export function createSocket(
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,
+  schemaVersion: number,
   userID: string,
   auth: string | undefined,
   jurisdiction: 'eu' | undefined,
@@ -1488,6 +1542,7 @@ export function createSocket(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
+  searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   if (jurisdiction !== undefined) {
     searchParams.set('jurisdiction', jurisdiction);

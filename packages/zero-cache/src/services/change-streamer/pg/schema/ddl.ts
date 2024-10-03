@@ -1,11 +1,15 @@
 import {jsonObjectSchema} from 'shared/src/json-schema.js';
 import * as v from 'shared/src/valita.js';
 import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
-import {
-  indexDefinitionsQuery,
-  publishedTableQuery,
-  ZERO_PUB_PREFIX,
-} from './published.js';
+import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
+
+// Sent in the 'version' tag of "ddl" event messages. This is used to ensure
+// that the message constructed in the upstream Trigger function is compatible
+// with the code processing it in the zero-cache.
+//
+// Increment this when changing the format of the contents of the "ddl" events.
+// This will allow old / incompatible code to detect the change and abort.
+export const PROTOCOL_VERSION = 1;
 
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
@@ -57,6 +61,7 @@ const dropIndexEventSchema = triggerEvent.extend({
 
 export const ddlEventSchema = v.object({
   type: v.literal('ddl'),
+  version: v.literal(PROTOCOL_VERSION),
   event: v.union(
     createOrAlterTableEventSchema,
     createIndexEventSchema,
@@ -105,7 +110,7 @@ END
 $$ LANGUAGE plpgsql;
 `;
 
-export function replicateCreateOrAlterTable(pubPrefix: string) {
+export function replicateCreateOrAlterTable() {
   return `
 CREATE OR REPLACE FUNCTION zero.replicate_create_or_alter_table()
 RETURNS event_trigger
@@ -123,7 +128,7 @@ BEGIN
   END IF;
 
   ${publishedTableQuery(
-    pubPrefix,
+    undefined,
     `JOIN pg_event_trigger_ddl_commands() ddl ON ddl.objid = pc.oid`,
   )} INTO tables;
 
@@ -140,12 +145,13 @@ BEGIN
   END IF;
 
   ${indexDefinitionsQuery(
-    pubPrefix,
+    undefined,
     `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pg_index.indrelid`,
   )} INTO indexes;
   
   SELECT json_build_object(
     'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
     'event', json_build_object(
       'context', zero.get_trigger_context(),
       'tag', tag,
@@ -160,7 +166,7 @@ $$ LANGUAGE plpgsql;
   `;
 }
 
-export function replicateCreateIndex(pubPrefix: string) {
+export function replicateCreateIndex() {
   return `
 CREATE OR REPLACE FUNCTION zero.replicate_create_index()
 RETURNS event_trigger
@@ -170,7 +176,7 @@ DECLARE
   event text;
 BEGIN 
   ${indexDefinitionsQuery(
-    pubPrefix,
+    undefined,
     `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pc.oid`,
   )} INTO indexes;
 
@@ -188,6 +194,7 @@ BEGIN
   
   SELECT json_build_object(
     'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
     'event', json_build_object(
       'context', zero.get_trigger_context(),
       'tag', 'CREATE INDEX',
@@ -210,6 +217,7 @@ DECLARE
 BEGIN
   SELECT json_build_object(
     'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
     'event', json_build_object(
       'context', zero.get_trigger_context(),
       'tag', tag,
@@ -243,18 +251,18 @@ END
 $$ LANGUAGE plpgsql;
 `;
 
-export function createEventTriggerStatements(pubPrefix = ZERO_PUB_PREFIX) {
+export function createEventTriggerStatements() {
   return [
     COMMON_TRIGGER_FUNCTIONS,
 
-    replicateCreateOrAlterTable(pubPrefix),
+    replicateCreateOrAlterTable(),
     `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_or_alter_table`,
     `CREATE EVENT TRIGGER zero_replicate_create_or_alter_table
       ON ddl_command_end
       WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE')
       EXECUTE PROCEDURE zero.replicate_create_or_alter_table()`,
 
-    replicateCreateIndex(pubPrefix),
+    replicateCreateIndex(),
     `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_index`,
     `CREATE EVENT TRIGGER zero_replicate_create_index
       ON ddl_command_end

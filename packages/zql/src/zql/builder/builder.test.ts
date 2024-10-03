@@ -2,7 +2,8 @@ import {expect, test} from 'vitest';
 import {Catch} from '../ivm/catch.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
-import {buildPipeline} from './builder.js';
+import {bindStaticParameters, buildPipeline} from './builder.js';
+import type {AST} from '../ast/ast.js';
 
 export function testSources() {
   const users = new MemorySource(
@@ -552,4 +553,53 @@ test('skip', () => {
       node: {row: {id: 8, name: 'sam'}, relationships: {}},
     },
   ]);
+});
+
+test('bind static parameters', () => {
+  // Static params are replaced with their values
+
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    where: [
+      {
+        type: 'simple',
+        field: 'id',
+        op: '=',
+        value: {type: 'static', anchor: 'authData', field: 'userID'},
+      },
+    ],
+    related: [
+      {
+        correlation: {
+          parentField: 'id',
+          op: '=',
+          childField: 'userID',
+        },
+        subquery: {
+          table: 'userStates',
+          alias: 'userStates',
+          where: [
+            {
+              type: 'simple',
+              field: 'stateCode',
+              op: '=',
+              value: {
+                type: 'static',
+                anchor: 'preMutationRow',
+                field: 'stateCode',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const newAst = bindStaticParameters(ast, {
+    authData: {userID: 1},
+    preMutationRow: {stateCode: 'HI'},
+  });
+
+  expect(newAst).toMatchSnapshot();
 });

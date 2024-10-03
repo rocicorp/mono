@@ -63,6 +63,14 @@ export type CorrelatedSubQuery = {
   readonly hidden?: boolean | undefined;
 };
 
+export type ValuePosition = LiteralValue | Parameter;
+
+export type LiteralValue =
+  | string
+  | number
+  | boolean
+  | ReadonlyArray<string | number | boolean>;
+
 /**
  * Starting only with SimpleCondition for now.
  * ivm1 supports Conjunctions and Disjunctions.
@@ -84,12 +92,7 @@ export type SimpleCondition = {
    * `null` is absent since we do not have an `IS` or `IS NOT`
    * operator defined and `null != null` in SQL.
    */
-  value:
-    | string
-    | number
-    | boolean
-    | ReadonlyArray<string | number | boolean>
-    | Parameter;
+  value: ValuePosition;
 };
 /**
  * A parameter is a value that is not known at the time the query is written

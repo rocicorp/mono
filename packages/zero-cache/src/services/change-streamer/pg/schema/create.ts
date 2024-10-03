@@ -13,6 +13,8 @@ export function createTableStatement(spec: TableSpec): string {
     if (colSpec.notNull) {
       parts.push(' NOT NULL');
     }
+    // Note: DEFAULT expressions are ignored for CREATE TABLE statements,
+    // as in that case, row values always come from the replication stream.
     return parts.join('');
   }
 

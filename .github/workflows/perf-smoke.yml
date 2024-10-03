@@ -25,9 +25,6 @@ jobs:
       - name: Install Playwright Deps
         run: npx playwright install --with-deps
 
-      - run: npm run build
-        working-directory: packages/replicache-perf
-
       - name: Run benchmark
         working-directory: packages/replicache-perf
         run: |

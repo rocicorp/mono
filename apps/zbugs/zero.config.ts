@@ -1,61 +1,73 @@
-import 'dotenv/config';
-import process from 'node:process';
-import {must} from 'shared/src/must.js';
-import {
-  defineConfig,
-  type Queries,
-} from 'zero-cache/src/config/define-config.js';
-import {type Schema, schema} from './src/domain/schema-shared.js';
+import {defineConfig, runtimeEnv} from 'zero-cache/src/config/define-config.js';
+import {schema, type Schema} from './src/domain/schema.js';
 
-type AuthData = {sub: string};
+/** The contents of the zbugs JWT */
+type AuthData = {
+  // The logged in userID.
+  sub: string;
+};
 
-const allowIfCrewMember = (queries: Queries<Schema>) => (authData: AuthData) =>
-  queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
+defineConfig<AuthData, Schema>(schema, queries => {
+  // TODO: We need `querify` so we can just check the authData without having to
+  // read the DB E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
+  const allowIfLoggedIn = (authData: AuthData) =>
+    queries.user.where('id', '=', authData.sub);
 
-defineConfig<AuthData, Schema>(schema, queries => ({
-  upstreamUri: must(process.env.UPSTREAM_URI),
-  cvrDbUri: must(process.env.CVR_DB_URI),
-  changeDbUri: must(process.env.CHANGE_DB_URI),
+  const allowIfIssueCreator = (authData: AuthData, row: {id: string}) => {
+    return queries.issue
+      .where('id', row.id)
+      .where('creatorID', '=', authData.sub);
+  };
 
-  replicaId: must(process.env.REPLICA_ID),
-  replicaDbFile: must(process.env.REPLICA_DB_FILE),
+  // TODO: It would be nice to share code with above.
+  const allowIfCommentCreator = (authData: AuthData, row: {id: string}) => {
+    return queries.comment
+      .where('id', row.id)
+      .where('creatorID', '=', authData.sub);
+  };
 
-  log: {
-    level: 'debug',
-  },
+  const allowIfAdmin = (authData: AuthData) =>
+    queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
-  authorization: {
-    user: {
-      // Only the authentication system can
-      // write to the user table.
-      table: {
-        delete: [],
-        insert: [],
-        update: [],
+  return {
+    upstreamUri: runtimeEnv('UPSTREAM_URI'),
+    cvrDbUri: runtimeEnv('CVR_DB_URI'),
+    changeDbUri: runtimeEnv('CHANGE_DB_URI'),
+
+    replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
+    jwtSecret: runtimeEnv('JWT_SECRET'),
+    litestream: runtimeEnv('LITESTREAM'),
+    shard: {
+      id: runtimeEnv('SHARD_ID'),
+      publications: runtimeEnv('PUBLICATIONS'),
+    },
+    log: {
+      level: 'debug',
+    },
+
+    authorization: {
+      user: {
+        // Only the authentication system can write to the user table.
+        table: {
+          insert: [],
+          update: [],
+          delete: [],
+        },
+      },
+      issue: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: [allowIfIssueCreator, allowIfAdmin],
+          delete: [allowIfIssueCreator, allowIfAdmin],
+        },
+      },
+      comment: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: [allowIfCommentCreator, allowIfAdmin],
+          delete: [allowIfCommentCreator, allowIfAdmin],
+        },
       },
     },
-    issue: {
-      row: {
-        delete: [],
-        update: [
-          (authData, row) =>
-            queries.issue
-              .where('id', '=', row.id)
-              .where('creatorID', '=', authData.sub),
-          allowIfCrewMember(queries),
-        ],
-      },
-    },
-    comment: {
-      row: {
-        delete: [],
-        update: [
-          (authData, row) =>
-            queries.comment
-              .where('id', '=', row.id)
-              .where('creatorID', '=', authData.sub),
-        ],
-      },
-    },
-  },
-}));
+  };
+});

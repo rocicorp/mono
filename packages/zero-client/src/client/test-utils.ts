@@ -19,7 +19,7 @@ import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
   ConnectionState,
-  type SchemaDefs,
+  type Schema,
   type TestingContext,
   Zero,
   createLogOptionsSymbol,
@@ -59,7 +59,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestZero<SD extends SchemaDefs> extends Zero<SD> {
+export class TestZero<S extends Schema> extends Zero<S> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -184,13 +184,14 @@ export class TestZero<SD extends SchemaDefs> extends Zero<SD> {
 
 declare const TESTING: boolean;
 
-const testZeroInstances = new Set<TestZero<SchemaDefs>>();
+const testZeroInstances = new Set<TestZero<Schema>>();
 
 let testZeroCounter = 0;
 
-export function zeroForTest<QD extends SchemaDefs>(
-  options: Partial<ZeroOptions<QD>> = {},
-): TestZero<QD> {
+export function zeroForTest<S extends Schema>(
+  options: Partial<ZeroOptions<S>> = {},
+  errorOnUpdateNeeded = true,
+): TestZero<S> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
   const newOptions = {...options};
@@ -198,26 +199,31 @@ export function zeroForTest<QD extends SchemaDefs>(
     newOptions.kvStore = 'mem';
   }
 
+  const schema = options.schema ?? {version: 1, tables: {}};
+
   const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testZeroCounter++,
     auth: 'test-auth',
+    schema,
     ...newOptions,
   });
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.
-  r.onUpdateNeeded = () => {
-    throw new Error('Unexpected update needed');
-  };
+  if (errorOnUpdateNeeded) {
+    r.onUpdateNeeded = () => {
+      throw new Error('Unexpected update needed');
+    };
+  }
 
   // Keep track of all instances so we can close them in teardown.
-  testZeroInstances.add(r as TestZero<SchemaDefs>);
-  return r;
+  testZeroInstances.add(r);
+  return r as TestZero<S>;
 }
 
 export async function waitForUpstreamMessage(
-  r: TestZero<SchemaDefs>,
+  r: TestZero<Schema>,
   name: string,
   clock: SinonFakeTimers,
 ) {

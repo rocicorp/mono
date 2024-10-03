@@ -4,7 +4,8 @@ import type {SchemaToRow} from 'zero-client';
 import {useQuery} from 'zero-react/src/use-query.js';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import labelIcon from '../assets/icons/label.svg';
-import {type Schema, useZero} from '../domain/schema.js';
+import {useZero} from '../hooks/use-zero.js';
+import type {Schema} from '../domain/schema.js';
 import Selector from './selector.js';
 
 export type Selection = {creator: string} | {label: string};
@@ -111,7 +112,7 @@ export default function Filter({onSelect}: Props) {
 }
 
 // TODO: export a nicer named version of SchemaToRow.
-function preloadAvatar(user: SchemaToRow<Schema['user']>) {
+function preloadAvatar(user: SchemaToRow<Schema['tables']['user']>) {
   return new Promise<[string, string]>((res, rej) => {
     fetch(user.avatar)
       .then(response => response.blob())

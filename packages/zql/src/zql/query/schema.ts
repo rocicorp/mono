@@ -1,7 +1,7 @@
-import type {SchemaBase} from '../ivm/schema.js';
+import type {TableSchemaBase} from '../ivm/schema.js';
 
-export type Schema = SchemaBase & {
-  readonly relationships: Record<string, Relationship>;
+export type TableSchema = TableSchemaBase & {
+  readonly relationships: {readonly [name: string]: Relationship};
 };
 
 /**
@@ -12,16 +12,16 @@ export type Schema = SchemaBase & {
 export type Lazy<T> = () => T;
 
 type Relationship =
-  | FieldRelationship<Schema, Schema>
-  | JunctionRelationship<Schema, Schema, Schema>;
+  | FieldRelationship<TableSchema, TableSchema>
+  | JunctionRelationship<TableSchema, TableSchema, TableSchema>;
 
 /**
  * A relationship between two entities where
  * that relationship is defined via fields on both entities.
  */
 type FieldRelationship<
-  TSourceSchema extends Schema,
-  TDestSchema extends Schema,
+  TSourceSchema extends TableSchema,
+  TDestSchema extends TableSchema,
 > = {
   source: keyof TSourceSchema['columns'];
   dest: {
@@ -35,9 +35,9 @@ type FieldRelationship<
  * that relationship is defined via a junction table.
  */
 type JunctionRelationship<
-  TSourceSchema extends Schema,
-  TJunctionSchema extends Schema,
-  TDestSchema extends Schema,
+  TSourceSchema extends TableSchema,
+  TJunctionSchema extends TableSchema,
+  TDestSchema extends TableSchema,
 > = {
   source: keyof TSourceSchema['columns'];
   junction: {
@@ -53,16 +53,21 @@ type JunctionRelationship<
 
 export function isFieldRelationship(
   relationship: Relationship,
-): relationship is FieldRelationship<Schema, Schema> {
+): relationship is FieldRelationship<TableSchema, TableSchema> {
   return (
-    (relationship as JunctionRelationship<Schema, Schema, Schema>).junction ===
-    undefined
+    (
+      relationship as JunctionRelationship<
+        TableSchema,
+        TableSchema,
+        TableSchema
+      >
+    ).junction === undefined
   );
 }
 
 export function isJunctionRelationship(
   relationship: Relationship,
-): relationship is JunctionRelationship<Schema, Schema, Schema> {
+): relationship is JunctionRelationship<TableSchema, TableSchema, TableSchema> {
   return !isFieldRelationship(relationship);
 }
 
@@ -75,16 +80,16 @@ export function isJunctionRelationship(
  * relationship.
  */
 export type PullSchemaForRelationship<
-  TSchema extends Schema,
+  TSchema extends TableSchema,
   TRelationship extends keyof TSchema['relationships'],
 > = TSchema['relationships'][TRelationship] extends FieldRelationship<
-  Schema,
+  TableSchema,
   infer TSchema
 >
   ? TSchema
   : TSchema['relationships'][TRelationship] extends JunctionRelationship<
-      Schema,
-      Schema,
+      TableSchema,
+      TableSchema,
       infer TSchema
     >
   ? TSchema
