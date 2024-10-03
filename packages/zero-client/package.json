@@ -8,8 +8,8 @@
   "module": "out/zero-client.js",
   "types": "out/zero-client.d.ts",
   "scripts": {
-    "format": "prettier --write *",
-    "check-format": "prettier --check *",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "vitest run",
     "bench": "vitest bench",

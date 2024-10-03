@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "format": "prettier --write 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
-    "check-format": "prettier --check 'src/*.{js,jsx,json,ts,tsx,html,css,md}' '*.{cjs,js,jsx,json,ts,tsx,html,css,md}'",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
     "check-types": "tsc --noEmit",
     "build:bin": "tsc -p tsconfig.bin.json",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
@@ -19,7 +19,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/logger": "^5.2.2",
-    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/prettizer-config": "^0.2.0",
     "@types/better-sqlite3": "^7.6.0",
     "fast-check": "^3.18.0",
     "nanoid": "^4.0.2",

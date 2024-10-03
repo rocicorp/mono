@@ -1,8 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "format": "prettier --write *",
-    "check-format": "prettier --check *",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
     "check-types": "tsc --noEmit",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "node tool/build.js",

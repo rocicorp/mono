@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc --noEmit",
-    "format": "prettier --write *",
-    "check-format": "prettier --check *",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "npm run test-node && npm run test-dom",
     "test-node": "vitest run",
