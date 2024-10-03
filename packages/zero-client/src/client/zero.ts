@@ -184,7 +184,7 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-export function updateNeededReloadReason(
+function updateNeededReloadReason(
   reason: UpdateNeededReason,
   serverErrMsg?: string | undefined,
 ) {
@@ -211,11 +211,11 @@ export function updateNeededReloadReason(
   return reasonMsg;
 }
 
-export function serverAheadReloadReason(kind: string) {
+function serverAheadReloadReason(kind: string) {
   return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
 }
 
-export function onClientStateNotFoundServerReason(serverErrMsg: string) {
+function onClientStateNotFoundServerReason(serverErrMsg: string) {
   return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
 }
 const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
@@ -270,7 +270,7 @@ export class Zero<S extends Schema> {
   #onUpdateNeeded:
     | ((reason: UpdateNeededReason, serverErrorMsg?: string) => void)
     | null = null;
-  #onClientStateNotFound: ((serverErrorMsg?: string) => void) | null = null;
+  #onClientStateNotFound: ((reason?: string) => void) | null = null;
   readonly #jurisdiction: 'eu' | undefined;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -477,11 +477,14 @@ export class Zero<S extends Schema> {
       {clientID: rep.clientID},
       logOptions.logSink,
     );
-    this.onUpdateNeeded = (reason: UpdateNeededReason) => {
+    this.onUpdateNeeded = (
+      reason: UpdateNeededReason,
+      serverErrorMsg?: string | undefined,
+    ) => {
       reloadWithReason(
         this.#lc,
         this.#reload,
-        updateNeededReloadReason(reason),
+        updateNeededReloadReason(reason, serverErrorMsg),
       );
     };
     this.onClientStateNotFound = (reason?: string) => {

@@ -37,9 +37,6 @@ import {
   type Schema,
   type UpdateNeededReason,
   createSocket,
-  onClientStateNotFoundServerReason,
-  serverAheadReloadReason,
-  updateNeededReloadReason,
 } from './zero.js';
 
 let clock: sinon.SinonFakeTimers;
@@ -1480,7 +1477,7 @@ test('ClientNotFound default handler', async () => {
   expect(fake.calledOnce).true;
 
   expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    onClientStateNotFoundServerReason('server test message'),
+    'Server could not find state needed to synchronize this client. server test message',
   );
 });
 
@@ -1521,7 +1518,7 @@ test('server ahead', async () => {
   await promise;
 
   expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    serverAheadReloadReason(ErrorKind.InvalidConnectionRequestBaseCookie),
+    'Server reported that client is ahead of server (InvalidConnectionRequestBaseCookie). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.',
   );
 });
 
