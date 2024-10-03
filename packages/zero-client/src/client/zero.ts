@@ -173,7 +173,10 @@ export type UpdateNeededReason =
   | {type: 'NewClientGroup'}
   // This is used when Zero tries to connect with a version that the server
   // does not support
-  | {type: 'VersionNotSupported'};
+  | {type: 'VersionNotSupported'}
+  // This is used when Zero tries to connect with a schema version that the
+  // server does not support
+  | {type: 'SchemaVersionNotSupported'};
 
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
@@ -181,25 +184,38 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-export function updateNeededReloadReason(reason: UpdateNeededReason) {
+function updateNeededReloadReason(
+  reason: UpdateNeededReason,
+  serverErrMsg?: string | undefined,
+) {
   const {type} = reason;
+  let reasonMsg = '';
   switch (type) {
     case 'NewClientGroup':
-      return "This client could not sync with a newer client. This is probably due to another tab loading a newer incompatible version of the app's code.";
+      reasonMsg =
+        "This client could not sync with a newer client. This is probably due to another tab loading a newer incompatible version of the app's code.";
       break;
     case 'VersionNotSupported':
-      return "The server no longer supports this client's protocol version.";
+      reasonMsg =
+        "The server no longer supports this client's protocol version.";
+      break;
+    case 'SchemaVersionNotSupported':
+      reasonMsg = "The server no longer supports this client's schema version.";
       break;
     default:
       unreachable(type);
   }
+  if (serverErrMsg) {
+    reasonMsg += ' ' + serverErrMsg;
+  }
+  return reasonMsg;
 }
 
-export function serverAheadReloadReason(kind: string) {
+function serverAheadReloadReason(kind: string) {
   return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
 }
 
-export function onClientStateNotFoundServerReason(serverErrMsg: string) {
+function onClientStateNotFoundServerReason(serverErrMsg: string) {
   return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
 }
 const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
@@ -251,7 +267,9 @@ export class Zero<S extends Schema> {
    */
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
 
-  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = null;
+  #onUpdateNeeded:
+    | ((reason: UpdateNeededReason, serverErrorMsg?: string) => void)
+    | null = null;
   #onClientStateNotFound: ((reason?: string) => void) | null = null;
   readonly #jurisdiction: 'eu' | undefined;
   // Last cookie used to initiate a connection
@@ -459,11 +477,14 @@ export class Zero<S extends Schema> {
       {clientID: rep.clientID},
       logOptions.logSink,
     );
-    this.onUpdateNeeded = (reason: UpdateNeededReason) => {
+    this.onUpdateNeeded = (
+      reason: UpdateNeededReason,
+      serverErrorMsg?: string | undefined,
+    ) => {
       reloadWithReason(
         this.#lc,
         this.#reload,
-        updateNeededReloadReason(reason),
+        updateNeededReloadReason(reason, serverErrorMsg),
       );
     };
     this.onClientStateNotFound = (reason?: string) => {
@@ -741,7 +762,10 @@ export class Zero<S extends Schema> {
     this.#disconnect(lc, {server: kind});
 
     if (kind === ErrorKind.VersionNotSupported) {
-      this.onUpdateNeeded?.({type: kind});
+      this.#onUpdateNeeded?.({type: kind}, message);
+    } else if (kind === ErrorKind.SchemaVersionNotSupported) {
+      await this.#rep.disableClientGroup();
+      this.#onUpdateNeeded?.({type: 'SchemaVersionNotSupported'}, message);
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
       this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));

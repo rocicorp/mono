@@ -16,6 +16,7 @@ export enum ErrorKind {
   MutationFailed = 'MutationFailed',
   Unauthorized = 'Unauthorized',
   VersionNotSupported = 'VersionNotSupported',
+  SchemaVersionNotSupported = 'SchemaVersionNotSupported',
   Internal = 'Internal',
 }
 
@@ -31,6 +32,7 @@ export const errorKindSchema = v.union(
   v.literal(ErrorKind.MutationFailed),
   v.literal(ErrorKind.Unauthorized),
   v.literal(ErrorKind.VersionNotSupported),
+  v.literal(ErrorKind.SchemaVersionNotSupported),
   v.literal(ErrorKind.Internal),
 );
 
