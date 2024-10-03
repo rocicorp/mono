@@ -142,15 +142,15 @@ export function singleProcessMode(): boolean {
   return (process.env[SINGLE_PROCESS] ?? '0') !== '0';
 }
 
-export function childWorker(module: string, ...args: string[]): Worker {
+export function childWorker(absModulePath: string, ...args: string[]): Worker {
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
-    void import(module)
+    import(absModulePath)
       .then(({default: runWorker}) => runWorker(parent, ...args))
       .catch(err => child.emit('error', err));
     return child;
   }
-  const worker = wrap(fork(module, args, {serialization: 'advanced'}));
+  const worker = wrap(fork(absModulePath, args, {serialization: 'advanced'}));
 
   // Propagate all listenable termination signals to the workers.
   // Note: https://nodejs.org/api/process.html#process_signal_events
