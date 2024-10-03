@@ -13,3 +13,4 @@ renderer
 vendor
 !/renderer/src/constants.ts
 **/bot-recordings.ts
+*.tsbuildinfo

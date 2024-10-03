@@ -1,6 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID} from 'replicache';
+import type {ClientID, PatchOperation} from 'replicache';
+import type {PatchOperationInternal, PokeInternal} from 'replicache/impl';
 import type {
   ClientsPatchOp,
   EntitiesPatchOp,
@@ -15,11 +16,6 @@ import {
   toEntitiesKey,
   toGotQueriesKey,
 } from './keys.js';
-import type {
-  PatchOperation,
-  PatchOperationInternal,
-} from 'replicache/src/patch-operation.js';
-import type {PokeInternal} from 'replicache/src/types.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;

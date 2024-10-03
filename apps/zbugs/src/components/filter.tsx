@@ -1,11 +1,11 @@
+import type {SchemaToRow} from '@rocicorp/zero';
+import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useEffect, useState} from 'react';
-import type {SchemaToRow} from 'zero-client';
-import {useQuery} from 'zero-react/src/use-query.js';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import labelIcon from '../assets/icons/label.svg';
-import {useZero} from '../hooks/use-zero.js';
 import type {Schema} from '../domain/schema.js';
+import {useZero} from '../hooks/use-zero.js';
 import Selector from './selector.js';
 
 export type Selection = {creator: string} | {label: string};

@@ -1,18 +1,23 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
-import type {ExperimentalNoIndexDiff, MutatorDefs} from 'replicache';
-import {dropDatabase} from 'replicache/src/persist/collect-idb-databases.js';
-import type {Puller, PullerResultV1} from 'replicache/src/puller.js';
-import type {Pusher, PusherResult} from 'replicache/src/pusher.js';
 import {
-  ReplicacheImpl,
-  type ReplicacheImplOptions,
-} from 'replicache/src/replicache-impl.js';
-import type {ReplicacheOptions} from 'replicache/src/replicache-options.js';
-import type {ClientGroupID, ClientID} from 'replicache/src/sync/ids.js';
-import type {PullRequestV0, PullRequestV1} from 'replicache/src/sync/pull.js';
-import type {PushRequestV0, PushRequestV1} from 'replicache/src/sync/push.js';
-import type {UpdateNeededReason as ReplicacheUpdateNeededReason} from 'replicache/src/types.js';
+  type ClientGroupID,
+  type ClientID,
+  type ExperimentalNoIndexDiff,
+  type MutatorDefs,
+  type PullRequestV0,
+  type PullRequestV1,
+  type Puller,
+  type PullerResultV1,
+  type PushRequestV0,
+  type PushRequestV1,
+  type Pusher,
+  type PusherResult,
+  type ReplicacheOptions,
+  type UpdateNeededReason as ReplicacheUpdateNeededReason,
+  dropDatabase,
+} from 'replicache';
+import {ReplicacheImpl, type ReplicacheImplOptions} from 'replicache/impl';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {getDocument, getLocation} from 'shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';

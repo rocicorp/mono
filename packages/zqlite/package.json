@@ -1,7 +1,7 @@
 {
   "name": "zqlite",
-  "version": "0.0.0",
   "description": "SQLite source provider for ZQL (for use on the server)",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {

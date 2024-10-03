@@ -1,9 +1,9 @@
 import {useRef, useState} from 'react';
 
+import {nanoid} from 'zero-client/src/util/nanoid.js';
 import CloseIcon from '../../assets/icons/close.svg?react';
 import Modal from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
-import {nanoid} from 'zero-client/src/util/nanoid.js';
 
 interface Props {
   onDismiss?: () => void;

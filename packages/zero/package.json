@@ -1,0 +1,79 @@
+{
+  "name": "@rocicorp/zero",
+  "version": "0.0.1",
+  "scripts": {
+    "prepack": "rm -rf deps && mkdir -p deps/sqlite3 && cp -r ../../deps/sqlite3/* deps/sqlite3/",
+    "preinstall": "node tool/install-sqlite3.js",
+    "build": "rm -rf out && npm run build-server && npm run build-client",
+    "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
+    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json",
+    "check-types": "tsc --noEmit",
+    "check-types:watch": "tsc --noEmit --watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "@databases/escape-identifier": "^1.0.3",
+    "@databases/sql": "^3.3.0",
+    "@drdgvhbh/postgres-error-codes": "^0.0.6",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "@postgresql-typed/oids": "^0.2.0",
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.2.2",
+    "@rocicorp/resolver": "^1.0.2",
+    "compare-utf8": "^0.1.1",
+    "dotenv": "^16.4.5",
+    "eventemitter3": "^5.0.1",
+    "fastify": "^5.0.0",
+    "jose": "^5.9.3",
+    "json-custom-numbers": "^3.1.1",
+    "pg": "^8.11.3",
+    "pg-format": "npm:pg-format-fix@^1.0.5",
+    "pg-logical-replication": "^2.0.7",
+    "postgres": "^3.4.4",
+    "postgres-array": "^3.0.2",
+    "replicache": "15.2.1",
+    "ws": "^8.18.0",
+    "xxhash-wasm": "^1.0.2"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/prettier-config": "^0.2.0",
+    "esbuild": "^0.20.2",
+    "tsc-alias": "^1.8.10",
+    "typescript": "^5.5.3"
+  },
+  "type": "module",
+  "main": "out/zero.js",
+  "module": "out/zero.js",
+  "types": "out/zero-client/src/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./out/zero-client/src/mod.d.ts",
+      "default": "./out/zero.js"
+    },
+    "./react": {
+      "types": "./out/zero-react/src/mod.d.ts",
+      "default": "./out/react.js"
+    },
+    "./server": {
+      "types": "./out/zero-cache/src/server/main.d.ts",
+      "default": "./out/zero-cache/src/server/main.js"
+    }
+  },
+  "bin": {
+    "zero": "./out/zero/src/cli.js"
+  },
+  "files": [
+    "out",
+    "!*.tsbuildinfo",
+    "deps/sqlite3",
+    "tool/install-sqlite3.js"
+  ],
+  "eslintConfig": {
+    "extends": "@rocicorp/eslint-config"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

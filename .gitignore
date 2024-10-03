@@ -71,3 +71,4 @@ next-env.d.ts
 bundle-sizes.json
 packages/zero-cache/coverage
 __screenshots__/
+packages/zero/deps

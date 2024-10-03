@@ -6,11 +6,9 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
-import {readPackageJSON} from './read-package-json.js';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const perf = process.argv.includes('--perf');
-const debug = process.argv.includes('--debug');
 // You can then visualize the metafile at https://esbuild.github.io/analyze/
 const metafile = process.argv.includes('--metafile');
 
@@ -46,9 +44,7 @@ async function buildReplicache(options) {
   const outfile = basePath('out', 'replicache.' + ext);
   const entryPoints = {
     replicache: basePath('src', 'mod.ts'),
-    ...(forBundleSizeDashboard
-      ? {}
-      : {impl: basePath('src', 'replicache-impl.ts')}),
+    ...(forBundleSizeDashboard ? {} : {impl: basePath('src', 'impl.ts')}),
   };
   const result = await esbuild.build({
     ...sharedOptions(options.minify, metafile),
@@ -69,18 +65,6 @@ async function buildReplicache(options) {
   }
 }
 
-/**
- * @param {Partial<BuildOptions>} options
- */
-async function buildMJS({
-  minify = true,
-  ext = 'js',
-  mode = 'unknown',
-  external,
-} = {}) {
-  await buildReplicache({minify, ext, mode, external});
-}
-
 async function buildCLI() {
   await esbuild.build({
     ...sharedOptions(true),
@@ -91,26 +75,18 @@ async function buildCLI() {
   });
 }
 
-async function isRocicorpPackage() {
-  const packageJSON = await readPackageJSON();
-  return packageJSON.name.startsWith('@rocicorp/');
-}
-
 if (perf) {
-  await buildMJS({mode: 'release'});
+  await buildReplicache({minify: true, ext: 'js', mode: 'release'});
 } else if (forBundleSizeDashboard) {
   // Bundle external modules for the bundle size dashboard
   const external = ['node:*'];
   // We keep mjs as mjs so the dashboard does not get reset
   await Promise.all([
-    buildMJS({minify: false, ext: 'mjs', external}),
-    buildMJS({minify: true, ext: 'min.mjs', external}),
+    buildReplicache({minify: false, ext: 'mjs', mode: 'unknown', external}),
+    buildReplicache({minify: true, ext: 'min.mjs', mode: 'unknown', external}),
     buildCLI(),
   ]);
 } else {
-  let opts = {};
-  if (debug || (await isRocicorpPackage())) {
-    opts = {minify: false};
-  }
-  await Promise.all([buildMJS(opts), buildCLI()]);
+  await buildCLI();
+  await buildReplicache({minify: false, ext: 'js', mode: 'unknown'});
 }

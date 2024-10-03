@@ -22,7 +22,12 @@ for (const p of ['packages']) {
       const packageJSONPath = path.join(monoRootPath, p, f, 'package.json');
 
       if (fs.existsSync(packageJSONPath)) {
-        internalPackagesMap.set(f, `${p}/${f}`);
+        const packageJSON = JSON.parse(
+          fs.readFileSync(packageJSONPath, 'utf-8'),
+        );
+        if (packageJSON.private) {
+          internalPackagesMap.set(f, `${p}/${f}`);
+        }
       }
     }
   }

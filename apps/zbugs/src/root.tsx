@@ -1,13 +1,13 @@
-import {Route, Switch} from 'wouter';
-import ListPage from './pages/list/list-page.js';
-import IssuePage from './pages/issue/issue-page.js';
-import ErrorPage from './pages/error/error-page.js';
-import {Nav} from './components/nav.js';
-import {useLogin} from './hooks/use-login.js';
-import {ZeroProvider} from 'zero-react/src/use-zero.js';
-import {type Schema, schema} from './domain/schema.js';
-import {Zero} from 'zero-client';
+import {Zero} from '@rocicorp/zero';
+import {ZeroProvider} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
+import {Route, Switch} from 'wouter';
+import {Nav} from './components/nav.js';
+import {type Schema, schema} from './domain/schema.js';
+import {useLogin} from './hooks/use-login.js';
+import ErrorPage from './pages/error/error-page.js';
+import IssuePage from './pages/issue/issue-page.js';
+import ListPage from './pages/list/list-page.js';
 
 export default function Root() {
   const login = useLogin();

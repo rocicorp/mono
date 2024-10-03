@@ -1,4 +1,4 @@
-import type {Schema} from 'zero-client/src/client/zero.js';
+import type {Schema} from 'zero-client';
 import type {Database} from 'zqlite/src/db.js';
 
 /**

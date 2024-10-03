@@ -1,21 +1,16 @@
 {
   "name": "zql",
-  "version": "0.0.0",
   "description": "ZQL IVM Query library",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "check-types": "tsc --noEmit",
-    "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
-    "build": "rm -rf out && node tool/build.js && npm run build-dts ",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "vitest run",
-    "test:watch": "vitest watch",
-    "bench": "vitest bench",
-    "test-types": "vitest run --typecheck.only --no-browser.enabled",
-    "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
+    "test:watch": "vitest watch"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
