@@ -12,10 +12,10 @@ import {
   newWriteSnapshotSDD,
   readIndexesForWrite,
 } from '../db/write.js';
-import {FormatVersion} from '../format-version.js';
-import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import type {ClientID} from './ids.js';
+import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
 // See db.test_helpers for addLocal, addSnapshot, etc. We can't put addLocalRebase
 // there because sync depends on db, and addLocalRebase depends on sync.
@@ -30,7 +30,7 @@ export async function addSyncSnapshot(
   store: Store,
   takeIndexesFrom: number,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Chain> {
   expect(chain.length >= 2).to.be.true;
 

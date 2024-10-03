@@ -5,12 +5,12 @@ import {stringCompare} from 'shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeWrite} from '../btree/write.js';
 import {TestStore} from '../dag/test-store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {withWrite} from '../with-transactions.js';
+import * as IndexOperation from './index-operation-enum.js';
 import {
   type IndexKey,
-  IndexOperation,
   KEY_SEPARATOR,
   KEY_VERSION_0,
   decodeIndexKey,
@@ -198,7 +198,7 @@ test('index value', async () => {
     key: string,
     value: JSONValue,
     jsonPointer: string,
-    op: IndexOperation,
+    op: IndexOperation.Type,
     expected: number[] | string,
   ) => {
     const dagStore = new TestStore();

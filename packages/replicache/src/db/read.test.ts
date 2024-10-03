@@ -2,14 +2,14 @@ import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
 import {mustGetHeadHash} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {DEFAULT_HEAD_NAME} from './commit.js';
 import {readFromDefaultHead} from './read.js';
 import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics', () => {
-  const t = async (replicacheFormatVersion: FormatVersion) => {
+  const t = async (replicacheFormatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const dagStore = new TestStore();
     const lc = new LogContext();

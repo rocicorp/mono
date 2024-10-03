@@ -14,6 +14,7 @@ import type {
 import type {IndexKey} from './db/index.js';
 import {decodeIndexKey} from './db/index.js';
 import type {ScanOptions} from './db/scan.js';
+import * as InvokeKind from './invoke-kind-enum.js';
 import type {DiffComputationConfig, DiffsMap} from './sync/diff.js';
 import {
   type ReadTransaction,
@@ -21,17 +22,12 @@ import {
 } from './transactions.js';
 import type {QueryInternal} from './types.js';
 
-const enum InvokeKind {
-  InitialRun,
-  Regular,
-}
-
 export interface Subscription<R> {
   hasIndexSubscription(indexName: string): boolean;
 
   invoke(
     tx: ReadTransaction,
-    kind: InvokeKind,
+    kind: InvokeKind.Type,
     diffs: DiffsMap | undefined,
   ): Promise<R>;
 
@@ -89,7 +85,7 @@ export class SubscriptionImpl<R> implements Subscription<R> {
 
   invoke(
     tx: ReadTransaction,
-    _kind: InvokeKind,
+    _kind: InvokeKind.Type,
     _diffs: DiffsMap | undefined,
   ): Promise<R> {
     return this.#body(tx);
@@ -214,7 +210,7 @@ export class WatchSubscription implements Subscription<Diff | undefined> {
 
   invoke(
     tx: ReadTransaction,
-    kind: InvokeKind,
+    kind: InvokeKind.Type,
     diffs: DiffsMap | undefined,
   ): Promise<Diff | undefined> {
     const invoke = async <Key extends IndexKey | string>(
@@ -407,7 +403,7 @@ export class SubscriptionsManagerImpl implements SubscriptionsManager {
 
   async #fireSubscriptions(
     subscriptions: Iterable<UnknownSubscription>,
-    kind: InvokeKind,
+    kind: InvokeKind.Type,
     diffs: DiffsMap | undefined,
   ) {
     const subs = [...subscriptions] as readonly Subscription<unknown>[];

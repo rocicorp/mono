@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from 'shared/src/asserts.js';
 import type {Write as DagWrite} from '../dag/store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
 import type {ClientID} from '../sync/ids.js';
 import {WriteTransactionImpl} from '../transactions.js';
@@ -25,7 +25,7 @@ async function rebaseMutation(
   mutators: MutatorDefs,
   lc: LogContext,
   mutationClientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Write> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
@@ -101,7 +101,7 @@ export async function rebaseMutationAndPutCommit(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Commit<Meta>> {
   const tx = await rebaseMutation(
     mutation,
@@ -125,7 +125,7 @@ export async function rebaseMutationAndCommit(
   // TODO(greg): mutationClientID can be retrieved from mutation if LocalMeta
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Hash> {
   const dbWrite = await rebaseMutation(
     mutation,

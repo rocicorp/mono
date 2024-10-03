@@ -4,7 +4,7 @@ import {assertNotUndefined} from 'shared/src/asserts.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Store} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {fakeHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import {hasMemStore} from '../kv/mem-store.js';

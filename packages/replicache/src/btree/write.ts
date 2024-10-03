@@ -3,7 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {ReadonlyJSONValue} from 'shared/src/json.js';
 import {type Chunk, type CreateChunk, toRefs} from '../dag/chunk.js';
 import type {Write} from '../dag/store.js';
-import type {FormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version-enum.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
 import {type Hash, emptyHash, newRandomHash} from '../hash.js';
 import {getSizeOfEntry} from '../size-of-value.js';

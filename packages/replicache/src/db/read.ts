@@ -1,6 +1,6 @@
 import {BTreeRead} from '../btree/read.js';
 import type {Read as DagRead} from '../dag/store.js';
-import type {FormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version-enum.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
 import type {Hash} from '../hash.js';
 import {

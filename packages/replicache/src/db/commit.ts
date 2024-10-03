@@ -21,16 +21,9 @@ import {
 import {type Hash, assertHash} from '../hash.js';
 import type {IndexDefinition} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
+import * as MetaType from './meta-type-enum.js';
 
 export const DEFAULT_HEAD_NAME = 'main';
-
-export const enum MetaType {
-  IndexChangeSDD = 1,
-  LocalSDD = 2,
-  SnapshotSDD = 3,
-  LocalDD31 = 4,
-  SnapshotDD31 = 5,
-}
 
 export function commitIsLocalSDD(
   commit: Commit<Meta>,

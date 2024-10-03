@@ -1,12 +1,12 @@
 import {expect} from 'chai';
 import {fakeHash} from '../hash.js';
+import * as KeyType from './key-type-enum.js';
 import {
   chunkDataKey,
   chunkMetaKey,
   chunkRefCountKey,
   headKey,
   type Key,
-  KeyType,
   parse,
 } from './key.js';
 
