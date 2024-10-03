@@ -9,72 +9,79 @@ import type {
   Replicator,
 } from 'zero-cache/src/services/replicator/replicator.js';
 import {Database} from 'zqlite/src/db.js';
-import {
-  type Checkpointer as Checkpoint,
-  NULL_CHECKPOINTER,
-  WALCheckpointer,
-} from '../services/replicator/checkpointer.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import type {Worker} from '../types/processes.js';
 
 export type ReplicatorMode = 'serving' | 'serving-copy' | 'backup';
 
-function connect(lc: LogContext, replicaDbFile: string): Database {
+function connect(
+  lc: LogContext,
+  replicaDbFile: string,
+  walMode: 'wal' | 'wal2',
+): Database {
   const replica = new Database(lc, replicaDbFile);
-  replica.pragma('journal_mode = WAL');
+
+  const [{journal_mode: mode}] = replica.pragma('journal_mode') as {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    journal_mode: string;
+  }[];
+
+  if (mode !== walMode) {
+    lc.info?.(`switching ${replicaDbFile} from ${mode} to ${walMode} mode`);
+    replica.pragma('journal_mode = delete');
+    replica.pragma(`journal_mode = ${walMode}`);
+  }
+
   replica.pragma('synchronous = NORMAL');
   replica.pragma('optimize = 0x10002');
-
-  // checkpoints are handled by us or by litestream (in 'backup' mode).
-  replica.pragma('wal_autocheckpoint = 0');
   return replica;
 }
 
-export function setupReplicaAndCheckpointer(
+export function setupReplica(
   lc: LogContext,
   mode: ReplicatorMode,
   replicaDbFile: string,
-): {replica: Database; checkpointer: Checkpoint} {
+): Database {
   lc.info?.(`setting up replicator in ${mode} mode`);
 
-  let replica = connect(lc, replicaDbFile);
-
-  // In 'backup' mode, litestream is replicating the file, and
-  // locks it to perform its backups and checkpoints.
-  if (mode === 'backup') {
-    // The official docs recommend a 5 second timeout
-    // (https://litestream.io/tips/#busy-timeout), but since this is
-    // an isolated backup replica, we can wait longer to achieve
-    // higher write throughput.
-    replica.pragma('busy_timeout = 60000');
-    return {replica, checkpointer: NULL_CHECKPOINTER};
-  }
-
-  // In 'serving-copy' mode, the original file is being used for 'backup'
-  // mode, so we make a copy for servicing sync requests.
-  if (mode === 'serving-copy') {
-    const copyLocation = `${replicaDbFile}-serving-copy`;
-    for (const suffix of ['', '-wal', '-shm']) {
-      rmSync(`${copyLocation}${suffix}`, {force: true});
+  switch (mode) {
+    case 'backup': {
+      const replica = connect(lc, replicaDbFile, 'wal');
+      // In 'backup' mode, litestream is replicating the file, and
+      // locks it to perform its backups and checkpoints.
+      // The official docs recommend a 5 second timeout
+      // (https://litestream.io/tips/#busy-timeout), but since this is
+      // an isolated backup replica, we can wait longer to achieve
+      // higher write throughput.
+      replica.pragma('busy_timeout = 60000');
+      replica.pragma('wal_autocheckpoint = 0');
+      return replica;
     }
 
-    const start = Date.now();
-    lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);
-    replica.prepare(`VACUUM INTO ?`).run(copyLocation);
-    lc.info?.(`finished copy (${Date.now() - start} ms)`);
+    case 'serving-copy': {
+      // In 'serving-copy' mode, the original file is being used for 'backup'
+      // mode, so we make a copy for servicing sync requests.
+      const copyLocation = `${replicaDbFile}-serving-copy`;
+      for (const suffix of ['', '-wal', '-shm']) {
+        rmSync(`${copyLocation}${suffix}`, {force: true});
+      }
 
-    replica.close();
-    replica = connect(lc, copyLocation);
-  } else if (mode !== 'serving') {
-    throw new Error(`Invalid ReplicaMode ${mode}`);
+      const start = Date.now();
+      lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);
+      const replica = connect(lc, replicaDbFile, 'wal');
+      replica.prepare(`VACUUM INTO ?`).run(copyLocation);
+      replica.close();
+      lc.info?.(`finished copy (${Date.now() - start} ms)`);
+
+      return connect(lc, copyLocation, 'wal2');
+    }
+
+    case 'serving':
+      return connect(lc, replicaDbFile, 'wal2');
+
+    default:
+      throw new Error(`Invalid ReplicaMode ${mode}`);
   }
-
-  // In 'serving' and 'serving-copy' modes, the WALCheckpointer
-  // manages checkpointing.
-  return {
-    replica,
-    checkpointer: new WALCheckpointer(lc, replica.name),
-  };
 }
 
 export function setUpMessageHandlers(

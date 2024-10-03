@@ -225,7 +225,6 @@ export interface SnapshotDiff extends Iterable<Change> {
 class Snapshot {
   static create(lc: LogContext, dbFile: string) {
     const conn = new Database(lc, dbFile);
-    conn.pragma('journal_mode = WAL');
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
 
     const db = new StatementRunner(conn);
