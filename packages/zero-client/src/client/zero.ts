@@ -752,8 +752,16 @@ export class Zero<S extends Schema> {
     downMessage: ErrorMessage,
   ): Promise<void> {
     const [, kind, message] = downMessage;
-    lc.info?.(`${kind}: ${message}}`);
 
+    // Rate limit errors are not fatal to the connection.
+    // We really don't want to disconnect and reconnect a rate limited user as
+    // it'll use more resources on the server
+    if (kind === ErrorKind.MutationRateLimited) {
+      lc.error?.('Mutation rate limited', {message});
+      return;
+    }
+
+    lc.info?.(`${kind}: ${message}}`);
     const error = new ServerError(kind, message);
 
     this.#rejectMessageError?.reject(error);

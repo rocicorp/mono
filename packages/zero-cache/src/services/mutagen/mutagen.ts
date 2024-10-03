@@ -25,7 +25,10 @@ import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
-export type MutationError = string;
+export type MutationError = [
+  kind: ErrorKind.MutationFailed | ErrorKind.MutationRateLimited,
+  desc: string,
+];
 
 export interface Mutagen {
   processMutation(
@@ -81,7 +84,10 @@ export class MutagenService implements Mutagen, Service {
     authData: JWTPayload,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
-      return Promise.resolve('Rate limit exceeded');
+      return Promise.resolve([
+        ErrorKind.MutationRateLimited,
+        'Rate limit exceeded',
+      ]);
     }
     return processMutation(
       this.#lc,
@@ -201,7 +207,7 @@ export async function processMutation(
           lc?.info?.(i < MAX_SERIALIZATION_ATTEMPTS ? `Retrying` : '', e);
           continue; // Retry up to MAX_SERIALIZATION_ATTEMPTS.
         }
-        result = String(e);
+        result = [ErrorKind.MutationFailed, String(e)];
         if (errorMode) {
           break;
         }

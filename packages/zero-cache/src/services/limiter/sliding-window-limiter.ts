@@ -79,17 +79,25 @@ export class SlidingWindowLimiter {
       this.#rotateWindows();
     }
 
-    // If "now" in the prior or next window? Increment the count for the correct window.
-    if (now < this.#nextWindow.start) {
-      this.#priorWindow.count++;
-    } else {
-      this.#nextWindow.count++;
-    }
-
     // Now compute the total mutations in the current window.
     // Weighted by the fraction of the window that has passed.
     const totalCalls = this.totalCallsForTime(now);
-    return totalCalls <= this.#maxMutations;
+    const canDo = totalCalls < this.#maxMutations;
+
+    // We don't increment counts if we throttled the user. This is so the user can
+    // eventually do the action they are trying to do. If we incremented on every
+    // attempt they can end up in a case where their excessive retries lock them out
+    // continuously.
+    if (canDo) {
+      // If "now" in the prior or next window? Increment the count for the correct window.
+      if (now < this.#nextWindow.start) {
+        this.#priorWindow.count++;
+      } else {
+        this.#nextWindow.count++;
+      }
+    }
+
+    return canDo;
   }
 
   totalCallsForTime(now: number): number {

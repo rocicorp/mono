@@ -138,12 +138,12 @@ export class Connection {
           // 2. A single view syncer connection cannot hog multiple upstream connections.
           await this.#mutationLock.withLock(async () => {
             for (const mutation of mutations) {
-              const errorDesc = await this.#mutagen.processMutation(
+              const maybeError = await this.#mutagen.processMutation(
                 mutation,
                 this.#authData,
               );
-              if (errorDesc !== undefined) {
-                this.sendError(['error', ErrorKind.MutationFailed, errorDesc]);
+              if (maybeError !== undefined) {
+                this.sendError(['error', maybeError[0], maybeError[1]]);
               }
             }
           });
