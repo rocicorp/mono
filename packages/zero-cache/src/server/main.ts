@@ -64,7 +64,7 @@ if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = pgClient(lc, config.changeDbUri);
+  const cvrDB = pgClient(lc, config.cvrDbUri);
   await initViewSyncerSchema(lc, cvrDB);
   void cvrDB.end();
 }
