@@ -124,7 +124,7 @@ export class Connection {
           this.send(['pong', {}] satisfies PongMessage);
           break;
         case 'push': {
-          const {clientGroupID, mutations} = msg[1];
+          const {clientGroupID, mutations, schemaVersion} = msg[1];
           if (clientGroupID !== this.#clientGroupID) {
             this.#closeWithError([
               'error',
@@ -141,6 +141,7 @@ export class Connection {
               const maybeError = await this.#mutagen.processMutation(
                 mutation,
                 this.#authData,
+                schemaVersion,
               );
               if (maybeError !== undefined) {
                 this.sendError(['error', maybeError[0], maybeError[1]]);

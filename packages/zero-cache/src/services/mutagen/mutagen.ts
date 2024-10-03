@@ -34,6 +34,7 @@ export interface Mutagen {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload,
+    schemaVersion: number,
   ): Promise<MutationError | undefined>;
 }
 
@@ -82,6 +83,7 @@ export class MutagenService implements Mutagen, Service {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload,
+    schemaVersion: number,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
       return Promise.resolve([
@@ -97,6 +99,7 @@ export class MutagenService implements Mutagen, Service {
       this.id,
       mutation,
       this.#writeAuthorizer,
+      schemaVersion,
     );
   }
 
@@ -120,6 +123,7 @@ export async function processMutation(
   clientGroupID: string,
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
+  schemaVersion: number,
   onTxStart?: () => void, // for testing
 ): Promise<MutationError | undefined> {
   assert(
@@ -175,8 +179,27 @@ export async function processMutation(
     let errorMode = false;
     for (let i = 0; i < MAX_SERIALIZATION_ATTEMPTS; i++) {
       try {
-        await db.begin(Mode.SERIALIZABLE, tx => {
+        await db.begin(Mode.SERIALIZABLE, async tx => {
           onTxStart?.();
+          const supportedVersionRange = await tx<
+            {
+              minSupportedVersion: number;
+              maxSupportedVersion: number;
+            }[]
+          >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`;
+          assert(supportedVersionRange.length === 1);
+          const {minSupportedVersion, maxSupportedVersion} =
+            supportedVersionRange[0];
+          if (
+            schemaVersion < minSupportedVersion ||
+            schemaVersion > maxSupportedVersion
+          ) {
+            throw new ErrorForClient([
+              'error',
+              ErrorKind.SchemaVersionNotSupported,
+              `Schema version ${schemaVersion} is not in range of supported schema versions [${minSupportedVersion}, ${maxSupportedVersion}]`,
+            ]);
+          }
           return processMutationWithTx(
             tx,
             authData,
