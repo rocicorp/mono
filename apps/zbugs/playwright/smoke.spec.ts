@@ -1,6 +1,7 @@
 import {test} from '@playwright/test';
 
 test('loadtest', async ({page}) => {
+  test.setTimeout(75000);
   const testID = Math.random().toString(36).substring(2, 8);
 
   await page.goto('https://zbugs.vercel.app/');
@@ -8,10 +9,11 @@ test('loadtest', async ({page}) => {
   await page.getByLabel('VISITOR PASSWORD').fill('zql');
   await page.getByLabel('VISITOR PASSWORD').press('Enter');
 
-  const delay = Math.random() * 5000;
+  const delay = Math.random() * 30000;
   console.log(testID, `Delaying for ${delay}ms to create jitter`);
   await page.waitForTimeout(delay);
 
+  const start = Date.now();
   const cgID = await page.evaluate('window.z.clientGroupID');
   for (let i = 0; i < 10; i++) {
     console.log(cgID, `Iteration: ${i}`);
@@ -79,5 +81,7 @@ test('loadtest', async ({page}) => {
       .click();
     await page.goBack();
   }
+  const elapsed = Date.now() - start;
+  console.log(`${cgID} loadtest completed in ${(elapsed / 1000).toFixed(2)} secs`);
   console.log(cgID, `Done`);
 });
