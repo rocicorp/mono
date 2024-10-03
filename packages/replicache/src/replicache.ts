@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from 'shared/src/types.js';
-import {FormatVersion} from './format-version.js';
+import * as FormatVersion from './format-version-enum.js';
 import {
   dropIDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,

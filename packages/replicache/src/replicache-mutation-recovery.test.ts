@@ -5,7 +5,7 @@ import {randomUint64} from 'shared/src/random-uint64.js';
 import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
-import {FormatVersion} from './format-version.js';
+import * as FormatVersion from './format-version-enum.js';
 import {
   createAndPersistClientWithPendingLocalSDD,
   createPerdag,

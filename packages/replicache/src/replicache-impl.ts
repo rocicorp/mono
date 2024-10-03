@@ -26,7 +26,7 @@ import {
   isVersionNotSupportedResponse,
   type VersionNotSupportedResponse,
 } from './error-responses.js';
-import {FormatVersion} from './format-version.js';
+import * as FormatVersion from './format-version-enum.js';
 import {deepFreeze} from './frozen-json.js';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
@@ -95,14 +95,10 @@ import {
   type WatchOptions,
   WatchSubscription,
 } from './subscriptions.js';
+import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {PullError} from './sync/pull-error.js';
-import {
-  beginPullV1,
-  HandlePullResponseResultType,
-  handlePullResponseV1,
-  maybeEndPull,
-} from './sync/pull.js';
+import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.js';
 import {push, PUSH_VERSION_DD31} from './sync/push.js';
 import {newRequestID} from './sync/request-id.js';
 import {SYNC_HEAD_NAME} from './sync/sync-head-name.js';
@@ -1070,15 +1066,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
 
     switch (result.type) {
-      case HandlePullResponseResultType.Applied:
+      case HandlePullResponseResultEnum.Applied:
         await this.maybeEndPull(result.syncHead, requestID);
         break;
-      case HandlePullResponseResultType.CookieMismatch:
+      case HandlePullResponseResultEnum.CookieMismatch:
         throw new Error(
           'unexpected base cookie for poke: ' + JSON.stringify(poke),
         );
-        break;
-      case HandlePullResponseResultType.NoOp:
+      case HandlePullResponseResultEnum.NoOp:
         break;
     }
   }

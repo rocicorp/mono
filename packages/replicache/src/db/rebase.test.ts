@@ -4,7 +4,7 @@ import sinon from 'sinon';
 import {BTreeRead} from '../btree/read.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
 import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
 import type {WriteTransaction} from '../transactions.js';
@@ -30,7 +30,7 @@ teardown(() => {
 });
 
 async function createMutationSequenceFixture() {
-  const formatVersion: FormatVersion = FormatVersion.Latest;
+  const formatVersion: FormatVersion.Type = FormatVersion.Latest;
   const clientID = 'test_client_id';
   const store = new TestStore();
   const b = new ChainBuilder(store, undefined, formatVersion);
@@ -140,7 +140,7 @@ async function createMutationSequenceFixture() {
 }
 
 async function createMissingMutatorFixture() {
-  const formatVersion: FormatVersion = FormatVersion.Latest;
+  const formatVersion: FormatVersion.Type = FormatVersion.Latest;
   const consoleErrorStub = sinon.stub(console, 'error');
   const clientID = 'test_client_id';
   const store = new TestStore();
@@ -205,7 +205,7 @@ async function createMissingMutatorFixture() {
 async function commitAndBTree(
   name = SYNC_HEAD_NAME,
   read: Read,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<[Commit<Meta>, BTreeRead]> {
   const commit = await commitFromHead(name, read);
   const btreeRead = new BTreeRead(read, formatVersion, commit.valueHash);
@@ -446,7 +446,7 @@ suite('rebaseMutationAndPutCommit', () => {
 
 async function testThrowsErrorOnClientIDMismatch(
   variant: 'commit' | 'putCommit',
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ) {
   const clientID = 'test_client_id';
   const store = new TestStore();

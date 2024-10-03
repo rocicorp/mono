@@ -3,7 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Store} from '../dag/store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {assertHash, newRandomHash} from '../hash.js';
 import {IDBStore} from '../kv/idb-store.js';
 import type {DropStore, StoreProvider} from '../kv/store.js';

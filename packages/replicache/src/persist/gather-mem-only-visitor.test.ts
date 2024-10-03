@@ -2,15 +2,16 @@ import {expect} from 'chai';
 import {LazyStore} from '../dag/lazy-store.js';
 import {TestLazyStore} from '../dag/test-lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
-import {DEFAULT_HEAD_NAME, MetaType} from '../db/commit.js';
+import {DEFAULT_HEAD_NAME} from '../db/commit.js';
+import * as MetaType from '../db/meta-type-enum.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
 suite('dag with no memory-only hashes gathers nothing', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new TestStore(undefined, hashFunction);
@@ -51,7 +52,7 @@ suite('dag with no memory-only hashes gathers nothing', () => {
 });
 
 suite('dag with only memory-only hashes gathers everything', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new TestStore(undefined, hashFunction);
@@ -95,7 +96,7 @@ suite('dag with only memory-only hashes gathers everything', () => {
 suite(
   'dag with some persisted hashes and some memory-only hashes on top',
   () => {
-    const t = async (formatVersion: FormatVersion) => {
+    const t = async (formatVersion: FormatVersion.Type) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
       const perdag = new TestStore(undefined, hashFunction);
@@ -172,7 +173,7 @@ suite(
 suite(
   'dag with some permanent hashes and some memory-only hashes on top w index',
   () => {
-    const t = async (formatVersion: FormatVersion) => {
+    const t = async (formatVersion: FormatVersion.Type) => {
       const clientID = 'client-id';
       const hashFunction = makeNewFakeHashFunction();
       const perdag = new TestStore(undefined, hashFunction);

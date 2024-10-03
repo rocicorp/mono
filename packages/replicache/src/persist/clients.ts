@@ -20,7 +20,7 @@ import {
   toChunkIndexDefinition,
 } from '../db/commit.js';
 import {createIndexBTree} from '../db/write.js';
-import type {FormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version-enum.js';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {type Hash, hashSchema} from '../hash.js';
 import {type IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';

@@ -4,7 +4,7 @@ import {TestStore} from '../dag/test-store.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {readFromDefaultHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import type {Pusher, PusherResult} from '../pusher.js';
 import {withRead, withWrite} from '../with-transactions.js';

@@ -26,7 +26,7 @@ import {
   updateIndexes,
 } from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
 import {
   assertPullerResultV0,
@@ -52,6 +52,7 @@ import {
   type DiffComputationConfig,
   DiffsMap,
 } from './diff.js';
+import * as HandlePullResponseResultType from './handle-pull-response-result-type-enum.js';
 import type {ClientGroupID, ClientID} from './ids.js';
 import * as patch from './patch.js';
 import {PullError} from './pull-error.js';
@@ -123,7 +124,7 @@ export async function beginPullV0(
   puller: Puller,
   requestID: string,
   store: Store,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV0> {
@@ -201,7 +202,7 @@ export async function beginPullV1(
   puller: Puller,
   requestID: string,
   store: Store,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV1> {
@@ -305,7 +306,7 @@ export function handlePullResponseV0(
   expectedBaseCookie: ReadonlyJSONValue,
   response: PullResponseOKV0,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
@@ -440,12 +441,6 @@ export function handlePullResponseV0(
   });
 }
 
-export enum HandlePullResponseResultType {
-  Applied,
-  NoOp,
-  CookieMismatch,
-}
-
 type HandlePullResponseResult =
   | {
       type: HandlePullResponseResultType.Applied;
@@ -471,7 +466,7 @@ export function handlePullResponseV1(
   expectedBaseCookie: FrozenJSONValue,
   response: PullResponseOKV1Internal,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
@@ -581,7 +576,7 @@ export function maybeEndPull<M extends LocalMeta>(
   expectedSyncHead: Hash,
   clientID: ClientID,
   diffConfig: DiffComputationConfig,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<{
   syncHead: Hash;
   replayMutations: Commit<M>[];

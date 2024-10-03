@@ -4,6 +4,7 @@ import type {BTreeWrite} from '../btree/write.js';
 import type {FrozenJSONObject, FrozenJSONValue} from '../frozen-json.js';
 import type {Hash} from '../hash.js';
 import type {IndexRecord} from './commit.js';
+import * as IndexOperation from './index-operation-enum.js';
 
 export class IndexRead<BTree = BTreeRead> {
   readonly meta: IndexRecord;
@@ -31,7 +32,7 @@ export class IndexWrite extends IndexRead<BTreeWrite> {
 export async function indexValue(
   lc: LogContext,
   index: BTreeWrite,
-  op: IndexOperation,
+  op: IndexOperation.Type,
   key: string,
   val: FrozenJSONValue,
   jsonPointer: string,
@@ -212,9 +213,4 @@ export function evaluateJSONPointer(
     target = targetOpt;
   }
   return target;
-}
-
-export const enum IndexOperation {
-  Add,
-  Remove,
 }

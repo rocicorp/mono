@@ -1,4 +1,5 @@
 import {type Hash, parse as parseHash} from '../hash.js';
+import * as KeyType from './key-type-enum.js';
 
 export function chunkDataKey(hash: Hash): string {
   return `c/${hash}/d`;
@@ -14,13 +15,6 @@ export function chunkRefCountKey(hash: Hash): string {
 
 export function headKey(name: string): string {
   return `h/${name}`;
-}
-
-export const enum KeyType {
-  ChunkData,
-  ChunkMeta,
-  ChunkRefCount,
-  Head,
 }
 
 export type Key =

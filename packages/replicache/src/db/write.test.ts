@@ -5,7 +5,7 @@ import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import {mustGetHeadHash} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {DEFAULT_HEAD_NAME, commitFromHead} from './commit.js';
 import {readIndexesForRead} from './read.js';
@@ -13,7 +13,7 @@ import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
 suite('basics w/ commit', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const ds = new TestStore();
     const lc = new LogContext();
@@ -102,7 +102,7 @@ suite('basics w/ commit', () => {
 });
 
 suite('basics w/ putCommit', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const ds = new TestStore();
     const lc = new LogContext();

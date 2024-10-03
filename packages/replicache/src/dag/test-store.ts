@@ -13,7 +13,8 @@ import {
   type Refs,
   toRefs as chunkToRefs,
 } from './chunk.js';
-import {KeyType, chunkMetaKey, parse as parseKey} from './key.js';
+import * as KeyType from './key-type-enum.js';
+import {chunkMetaKey, parse as parseKey} from './key.js';
 import {StoreImpl} from './store-impl.js';
 
 export class TestStore extends StoreImpl {

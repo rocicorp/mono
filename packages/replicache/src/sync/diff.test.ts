@@ -2,7 +2,7 @@ import {expect} from 'chai';
 import type {InternalDiff} from '../btree/node.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
 import {withRead} from '../with-transactions.js';

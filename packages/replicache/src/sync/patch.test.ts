@@ -8,7 +8,7 @@ import {
   newWriteSnapshotSDD,
   readIndexesForWrite,
 } from '../db/write.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {
   type PatchOperationInternal,
@@ -18,7 +18,7 @@ import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
 
 suite('patch', () => {
-  const t = (formatVersion: FormatVersion) => {
+  const t = (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const lc = new LogContext();

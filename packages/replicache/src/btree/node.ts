@@ -14,7 +14,7 @@ import {
 import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
 import {skipBTreeNodeAsserts} from '../config.js';
 import type {IndexKey} from '../db/index.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {
   type FrozenJSONValue,
   type FrozenTag,
@@ -43,7 +43,7 @@ export type DataNode = BaseNode<FrozenJSONValue>;
 export function makeNodeChunkData<V>(
   level: number,
   entries: ReadonlyArray<Entry<V>>,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): BaseNode<V> {
   return deepFreeze([
     level,
@@ -173,7 +173,7 @@ export function binarySearchFound(
 
 export function parseBTreeNode(
   v: unknown,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
   getSizeOfEntry: <K, V>(key: K, value: V) => number,
 ): InternalNode | DataNode {
   if (skipBTreeNodeAsserts && formatVersion >= FormatVersion.V7) {
@@ -291,7 +291,7 @@ abstract class NodeImpl<Value> {
 
 export function toChunkData<V>(
   node: NodeImpl<V>,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): BaseNode<V> {
   return makeNodeChunkData(node.level, node.entries, formatVersion);
 }

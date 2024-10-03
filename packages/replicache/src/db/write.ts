@@ -6,7 +6,7 @@ import {BTreeRead, allEntriesAsDiff} from '../btree/read.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {FrozenCookie} from '../cookies.js';
 import type {Write as DagWrite} from '../dag/store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
 import {type Hash, emptyHash} from '../hash.js';
 import {lazy} from '../lazy.js';
@@ -18,7 +18,6 @@ import {
   type Meta as CommitMeta,
   type IndexRecord,
   type Meta,
-  MetaType,
   baseSnapshotHashFromHash,
   commitFromHash,
   newIndexChange as commitNewIndexChange,
@@ -28,7 +27,9 @@ import {
   newSnapshotSDD as commitNewSnapshotSDD,
   getMutationID,
 } from './commit.js';
-import {IndexOperation, IndexRead, IndexWrite, indexValue} from './index.js';
+import * as IndexOperation from './index-operation-enum.js';
+import {IndexRead, IndexWrite, indexValue} from './index.js';
+import * as MetaType from './meta-type-enum.js';
 import {Read, readIndexesForRead} from './read.js';
 
 export class Write extends Read {
@@ -40,7 +41,7 @@ export class Write extends Read {
 
   declare readonly indexes: Map<string, IndexWrite>;
   readonly #clientID: ClientID;
-  readonly #formatVersion: FormatVersion;
+  readonly #formatVersion: FormatVersion.Type;
 
   constructor(
     dagWrite: DagWrite,
@@ -49,7 +50,7 @@ export class Write extends Read {
     meta: CommitMeta,
     indexes: Map<string, IndexWrite>,
     clientID: ClientID,
-    formatVersion: FormatVersion,
+    formatVersion: FormatVersion.Type,
   ) {
     // TypeScript has trouble
     super(dagWrite, map, indexes);
@@ -326,7 +327,7 @@ export async function newWriteLocal(
   dagWrite: DagWrite,
   timestamp: number,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Write> {
   const basis = await commitFromHash(basisHash, dagWrite);
   const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
@@ -370,7 +371,7 @@ export async function newWriteSnapshotSDD(
   dagWrite: DagWrite,
   indexes: Map<string, IndexWrite>,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Write> {
   assert(formatVersion <= FormatVersion.SDD);
   const basis = await commitFromHash(basisHash, dagWrite);
@@ -392,7 +393,7 @@ export async function newWriteSnapshotDD31(
   cookieJSON: FrozenCookie,
   dagWrite: DagWrite,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Write> {
   const basis = await commitFromHash(basisHash, dagWrite);
   const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
@@ -453,7 +454,7 @@ export async function updateIndexes(
 export function readIndexesForWrite(
   commit: Commit<CommitMeta>,
   dagWrite: DagWrite,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Map<string, IndexWrite> {
   const m = new Map();
   for (const index of commit.indexes) {
@@ -475,7 +476,7 @@ export async function createIndexBTree(
   prefix: string,
   jsonPointer: string,
   allowEmpty: boolean,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<BTreeWrite> {
   const indexMap = new BTreeWrite(dagWrite, formatVersion);
   for await (const entry of valueMap.scan(prefix)) {

@@ -14,7 +14,7 @@ import {
   fromChunk,
 } from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {assertHash, fakeHash, newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';

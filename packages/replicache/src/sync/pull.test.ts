@@ -29,7 +29,7 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from '../error-responses.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {
   assertPullResponseV0,
@@ -54,10 +54,10 @@ import {
   withWriteNoImplicitCommit,
 } from '../with-transactions.js';
 import type {DiffsMap} from './diff.js';
+import * as HandlePullResponseResultEnum from './handle-pull-response-result-type-enum.js';
 import {
   type BeginPullResponseV0,
   type BeginPullResponseV1,
-  HandlePullResponseResultType,
   type MaybeEndPullResultV0,
   PULL_VERSION_DD31,
   PULL_VERSION_SDD,
@@ -1088,7 +1088,7 @@ test('begin try pull DD31', async () => {
 });
 
 suite('maybe end try pull', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     type Case = {
       name: string;
@@ -1345,7 +1345,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
 }
 
 suite('changed keys', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     type IndexDef = {
       name: string;
       prefix: string;
@@ -1825,7 +1825,7 @@ suite('handlePullResponseDD31', () => {
   }: {
     expectedBaseCookieJSON: ReadonlyJSONValue;
     responseCookie: Cookie;
-    expectedResultType: HandlePullResponseResultType;
+    expectedResultType: HandlePullResponseResultEnum.Type;
     setupChain?: (b: ChainBuilder) => Promise<unknown>;
     responseLastMutationIDChanges?: {[clientID: string]: number};
     responsePatch?: PatchOperation[];
@@ -1858,7 +1858,7 @@ suite('handlePullResponseDD31', () => {
     );
 
     expect(result.type).to.equal(expectedResultType);
-    if (result.type === HandlePullResponseResultType.Applied) {
+    if (result.type === HandlePullResponseResultEnum.Applied) {
       assertHash(result.syncHead);
 
       await withRead(store, async dagRead => {
@@ -1894,7 +1894,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.CookieMismatch,
+      expectedResultType: HandlePullResponseResultEnum.CookieMismatch,
     });
   });
 
@@ -1902,7 +1902,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 1,
-      expectedResultType: HandlePullResponseResultType.NoOp,
+      expectedResultType: HandlePullResponseResultEnum.NoOp,
       setupChain: b => b.addSnapshot([], clientID1, 1, {}),
     });
   });
@@ -1911,19 +1911,19 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 1,
-      expectedResultType: HandlePullResponseResultType.NoOp,
+      expectedResultType: HandlePullResponseResultEnum.NoOp,
       setupChain: b => b.addSnapshot([], clientID1, 1, {[clientID1]: 10}),
     });
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 1,
-      expectedResultType: HandlePullResponseResultType.NoOp,
+      expectedResultType: HandlePullResponseResultEnum.NoOp,
       setupChain: b => b.addSnapshot([], clientID1, 1, {[clientID2]: 20}),
     });
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 1,
-      expectedResultType: HandlePullResponseResultType.NoOp,
+      expectedResultType: HandlePullResponseResultEnum.NoOp,
       setupChain: b =>
         b.addSnapshot([], clientID1, 1, {
           [clientID1]: 10,
@@ -1936,21 +1936,21 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b => b.addSnapshot([], clientID1, 1, {[clientID1]: 10}),
       responseLastMutationIDChanges: {[clientID1]: 10},
     });
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b => b.addSnapshot([], clientID1, 1, {[clientID2]: 20}),
       responseLastMutationIDChanges: {[clientID2]: 20},
     });
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b =>
         b.addSnapshot([], clientID1, 1, {
           [clientID1]: 10,
@@ -1963,7 +1963,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b =>
         b.addSnapshot([], clientID1, 1, {
           [clientID1]: 10,
@@ -1976,7 +1976,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b =>
         b.addSnapshot([], clientID1, 1, {
           [clientID1]: 10,
@@ -1989,7 +1989,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b =>
         b.addSnapshot([], clientID1, 1, {
           [clientID1]: 10,
@@ -2001,7 +2001,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: async b => {
         await b.addSnapshot([], clientID1, 1, {
           [clientID1]: 10,
@@ -2018,7 +2018,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b => b.addSnapshot([], clientID1, 1, {[clientID1]: 10}),
       responseLastMutationIDChanges: {[clientID1]: 10},
       responsePatch: [
@@ -2034,7 +2034,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: async b => {
         await b.addSnapshot([], clientID1, 1, {[clientID1]: 10});
         await b.addLocal(clientID1, [['b', 1]]);
@@ -2055,7 +2055,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: b => b.addSnapshot([], clientID1, 1, {[clientID1]: 10}),
       indexDefinitions: {
         i1: {
@@ -2081,7 +2081,7 @@ suite('handlePullResponseDD31', () => {
     await t({
       expectedBaseCookieJSON: 1,
       responseCookie: 2,
-      expectedResultType: HandlePullResponseResultType.Applied,
+      expectedResultType: HandlePullResponseResultEnum.Applied,
       setupChain: async b => {
         await b.addSnapshot([], clientID1, 1, {[clientID1]: 10});
         await b.addLocal(clientID1, [['b', {id: 'bId', x: 2}]]);

@@ -10,7 +10,7 @@ import {
   getRefs,
   newSnapshotCommitDataSDD,
 } from '../db/commit.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
@@ -100,7 +100,7 @@ export async function initClientWithClientID(
   dagStore: Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<void> {
   if (formatVersion >= FormatVersion.DD31) {
     await initClientV6(

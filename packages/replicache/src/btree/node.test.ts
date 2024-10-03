@@ -5,7 +5,7 @@ import {toRefs} from '../dag/chunk.js';
 import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {
   type Hash,
@@ -47,7 +47,7 @@ suite('btree node', () => {
   function makeTree(
     node: TreeData,
     dagStore: Store,
-    formatVersion: FormatVersion,
+    formatVersion: FormatVersion.Type,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
       const [h] = await makeTreeInner(node, dagWrite);
@@ -96,7 +96,7 @@ suite('btree node', () => {
   async function readTreeData(
     rootHash: Hash,
     dagRead: Read,
-    formatVersion: FormatVersion,
+    formatVersion: FormatVersion.Type,
   ): Promise<Record<string, unknown>> {
     const chunk = await dagRead.getChunk(rootHash);
     const node = parseBTreeNode(chunk?.data, formatVersion, getEntrySize);
@@ -129,7 +129,7 @@ suite('btree node', () => {
   async function expectTree(
     rootHash: Hash,
     dagStore: Store,
-    formatVersion: FormatVersion,
+    formatVersion: FormatVersion.Type,
     expected: TreeData,
   ) {
     await withRead(dagStore, async dagRead => {
@@ -154,7 +154,7 @@ suite('btree node', () => {
   function doRead<R>(
     rootHash: Hash,
     dagStore: Store,
-    formatVersion: FormatVersion,
+    formatVersion: FormatVersion.Type,
     fn: (r: BTreeRead) => R | Promise<R>,
   ): Promise<R> {
     return withRead(dagStore, dagWrite => {
@@ -172,7 +172,7 @@ suite('btree node', () => {
   function doWrite(
     rootHash: Hash,
     dagStore: Store,
-    formatVersion: FormatVersion,
+    formatVersion: FormatVersion.Type,
     fn: (w: BTreeWrite) => void | Promise<void>,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
@@ -1656,7 +1656,7 @@ suite('Write nodes using ChainBuilder', () => {
     );
   }
 
-  const getBTreeNodes = async (formatVersion: FormatVersion) => {
+  const getBTreeNodes = async (formatVersion: FormatVersion.Type) => {
     const dagStore = new TestStore();
     const clientID = 'client1';
     const b = new ChainBuilder(dagStore, undefined, formatVersion);

@@ -12,10 +12,8 @@ import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from './error-responses.js';
-import {
-  FormatVersion,
-  parseReplicacheFormatVersion as parseFormatVersion,
-} from './format-version.js';
+import * as FormatVersion from './format-version-enum.js';
+import {parseReplicacheFormatVersion as parseFormatVersion} from './format-version.js';
 import {assertHash, newRandomHash} from './hash.js';
 import type {HTTPRequestInfo} from './http-request-info.js';
 import type {CreateStore} from './kv/store.js';
@@ -194,7 +192,7 @@ async function recoverMutationsOfClientV4(
   perdag: Store,
   database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<ClientMap | undefined> {
   assert(database.replicacheFormatVersion === FormatVersion.SDD);
   assertClientV4(client);
@@ -558,7 +556,7 @@ async function recoverMutationsOfClientGroupDD31(
   perdag: Store,
   database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<ClientGroupMap | undefined> {
   assert(database.replicacheFormatVersion >= FormatVersion.DD31);
 

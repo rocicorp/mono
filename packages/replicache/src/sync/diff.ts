@@ -5,7 +5,7 @@ import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
 import type {Read} from '../dag/store.js';
 import {Commit, commitFromHash, type Meta} from '../db/commit.js';
 import {readIndexesForRead} from '../db/read.js';
-import type {FormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
 
 /**

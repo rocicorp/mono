@@ -16,7 +16,7 @@ import {
   localMutationsGreaterThan,
 } from '../db/commit.js';
 import {rebaseMutationAndPutCommit} from '../db/rebase.js';
-import type {FormatVersion} from '../format-version.js';
+import type {FormatVersion} from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
 import {
   type DiffComputationConfig,
