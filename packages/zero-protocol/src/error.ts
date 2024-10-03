@@ -16,6 +16,7 @@ export enum ErrorKind {
   MutationFailed = 'MutationFailed',
   Unauthorized = 'Unauthorized',
   VersionNotSupported = 'VersionNotSupported',
+  SchemaVersionNotSupported = 'SchemaVersionNotSupported',
   Internal = 'Internal',
 }
 

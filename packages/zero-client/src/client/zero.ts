@@ -173,7 +173,10 @@ export type UpdateNeededReason =
   | {type: 'NewClientGroup'}
   // This is used when Zero tries to connect with a version that the server
   // does not support
-  | {type: 'VersionNotSupported'};
+  | {type: 'VersionNotSupported'}
+  // This is used when Zero tries to connect with a schema version that the
+  // server does not support
+  | {type: 'SchemaVersionNotSupported'};
 
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
@@ -181,18 +184,31 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-export function updateNeededReloadReason(reason: UpdateNeededReason) {
+export function updateNeededReloadReason(
+  reason: UpdateNeededReason,
+  serverErrMsg?: string | undefined,
+) {
   const {type} = reason;
+  let reasonMsg = '';
   switch (type) {
     case 'NewClientGroup':
-      return "This client could not sync with a newer client. This is probably due to another tab loading a newer incompatible version of the app's code.";
+      reasonMsg =
+        "This client could not sync with a newer client. This is probably due to another tab loading a newer incompatible version of the app's code.";
       break;
     case 'VersionNotSupported':
-      return "The server no longer supports this client's protocol version.";
+      reasonMsg =
+        "The server no longer supports this client's protocol version.";
+      break;
+    case 'SchemaVersionNotSupported':
+      reasonMsg = "The server no longer supports this client's schema version.";
       break;
     default:
       unreachable(type);
   }
+  if (serverErrMsg) {
+    reasonMsg += ' ' + serverErrMsg;
+  }
+  return reasonMsg;
 }
 
 export function serverAheadReloadReason(kind: string) {
@@ -251,8 +267,10 @@ export class Zero<S extends Schema> {
    */
   onOnlineChange: ((online: boolean) => void) | null | undefined = null;
 
-  #onUpdateNeeded: ((reason: UpdateNeededReason) => void) | null = null;
-  #onClientStateNotFound: ((reason?: string) => void) | null = null;
+  #onUpdateNeeded:
+    | ((reason: UpdateNeededReason, serverErrorMsg?: string) => void)
+    | null = null;
+  #onClientStateNotFound: ((serverErrorMsg?: string) => void) | null = null;
   readonly #jurisdiction: 'eu' | undefined;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -741,7 +759,10 @@ export class Zero<S extends Schema> {
     this.#disconnect(lc, {server: kind});
 
     if (kind === ErrorKind.VersionNotSupported) {
-      this.onUpdateNeeded?.({type: kind});
+      this.#onUpdateNeeded?.({type: kind}, message);
+    } else if (kind === ErrorKind.SchemaVersionNotSupported) {
+      await this.#rep.disableClientGroup();
+      this.#onUpdateNeeded?.({type: 'SchemaVersionNotSupported'}, message);
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
       this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));

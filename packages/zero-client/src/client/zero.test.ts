@@ -1385,7 +1385,7 @@ test('VersionNotSupported default handler', async () => {
   expect(fake.calledOnce).true;
 
   expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    updateNeededReloadReason({type: 'VersionNotSupported'}),
+    "The server no longer supports this client's protocol version. server test message",
   );
 });
 
@@ -1409,6 +1409,57 @@ test('VersionNotSupported null onUpdateNeeded handler', async () => {
   r.onUpdateNeeded = null;
 
   await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+});
+
+test('SchemaVersionNotSupported default handler', async () => {
+  const storage: Record<string, string> = {};
+  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake(resolve);
+  const r = zeroForTest(undefined, false);
+  r.reload = fake;
+
+  await r.triggerError(
+    ErrorKind.SchemaVersionNotSupported,
+    'server test message',
+  );
+  await promise;
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  expect(fake.calledOnce).true;
+
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
+    "The server no longer supports this client's schema version. server test message",
+  );
+});
+
+test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
+  const {promise, resolve} = resolver();
+  const fake = sinon.fake((_reason: UpdateNeededReason) => {
+    resolve();
+  });
+  const r = zeroForTest();
+  r.onUpdateNeeded = fake;
+
+  await r.triggerError(
+    ErrorKind.SchemaVersionNotSupported,
+    'server test message',
+  );
+  await promise;
+  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+
+  expect(fake.calledOnce).true;
+});
+
+test('SchemaVersionNotSupported null onUpdateNeeded handler', async () => {
+  const r = zeroForTest();
+  r.onUpdateNeeded = null;
+
+  await r.triggerError(
+    ErrorKind.SchemaVersionNotSupported,
+    'server test message',
+  );
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
