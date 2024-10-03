@@ -9,7 +9,7 @@
   "type": "module",
   "scripts": {
     "download-deps": "bash ./deps/download.sh",
-    "preinstall": "npm install -w zqlite -w zero-cache better-sqlite3@11.1.2 --no-save --build-from-source --sqlite3=\"$(pwd)/deps/sqlite3\"",
+    "preinstall": "npm install -w zero -w zero-cache -w zqlite better-sqlite3@11.1.2 --no-save --build-from-source --sqlite3=\"$(pwd)/deps/sqlite3\"",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",

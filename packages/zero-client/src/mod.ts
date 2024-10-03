@@ -57,14 +57,17 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from 'replicache';
+export {QueryImpl} from 'zql/src/zql/query/query-impl.js';
 export type {
-  Query,
   DefaultQueryResultRow as EmptyQueryResultRow,
+  Query,
+  QueryReturnType,
+  QueryRowType,
+  QueryType,
   SchemaToRow,
   Smash,
-  QueryRowType,
-  QueryReturnType,
 } from 'zql/src/zql/query/query.js';
 export type {TableSchema} from 'zql/src/zql/query/schema.js';
+export type {TypedView} from 'zql/src/zql/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero, type Schema} from './client/zero.js';

@@ -3,8 +3,6 @@
 /* eslint-env es2022 */
 
 import {readFile} from 'node:fs/promises';
-import {createRequire} from 'node:module';
-import {fileURLToPath} from 'node:url';
 import {pkgUp} from 'pkg-up';
 import {isInternalPackage} from './internal-packages.js';
 
@@ -41,10 +39,9 @@ export async function getExternalFromPackageJSON(basePath) {
  */
 function getRecursiveExternals(name) {
   if (name === 'shared') {
-    return getExternalFromPackageJSON(fileURLToPath(import.meta.url));
+    return getExternalFromPackageJSON(new URL(import.meta.url).pathname);
   }
-
-  const require = createRequire(import.meta.url);
-  const depPath = require.resolve(name);
+  const depPath = new URL(`../../../${name}/package.json`, import.meta.url)
+    .pathname;
   return getExternalFromPackageJSON(depPath);
 }
