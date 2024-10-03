@@ -12,14 +12,15 @@ test('loadtest', async ({page}) => {
   console.log(testID, `Delaying for ${delay}ms to create jitter`);
   await page.waitForTimeout(delay);
 
+  const cgID = await page.evaluate('window.z.clientGroupID');
   for (let i = 0; i < 10; i++) {
-    console.log(testID, `Iteration: ${i}`);
+    console.log(cgID, `Iteration: ${i}`);
     await page.waitForSelector('.issue-list .row');
-    //console.log(testID, 'Filtering by open');
+    console.log(cgID, 'Filtering by open');
     await page.locator('.nav-item', {hasText: 'Open'}).click();
-    //console.log(testID, 'Filtering by closed');
+    console.log(cgID, 'Filtering by closed');
     await page.locator('.nav-item', {hasText: 'Closed'}).click();
-    //console.log(testID, 'Filtering by all');
+    console.log(cgID, 'Filtering by all');
     await page.locator('.nav-item', {hasText: 'All'}).click();
     await page.locator('.add-filter').click();
     await page.getByText('Filtered by:+ Filter').click();
@@ -34,7 +35,7 @@ test('loadtest', async ({page}) => {
         Math.floor(Math.random() * 10) + 1
       })`,
     );
-    //console.log(testID, `Filtering by ${await elm.allTextContents()}`);
+    console.log(cgID, `Filtering by ${await elm.allTextContents()}`);
     await elm.click();
 
     await page.getByRole('button', {name: '+ Filter'}).click();
@@ -48,11 +49,11 @@ test('loadtest', async ({page}) => {
         Math.floor(Math.random() * 10) + 1
       })`,
     );
-    //console.log(testID, `Filtering by ${await elm.allTextContents()}`);
+    console.log(cgID, `Filtering by ${await elm.allTextContents()}`);
     await elm.click();
-    //console.log(testID, 'Removing user filter');
+    console.log(cgID, 'Removing user filter');
     await page.locator('.list-view-filter-container .pill.user').click();
-    //console.log(testID, 'Removing label filter');
+    console.log(cgID, 'Removing label filter');
     await page.locator('.list-view-filter-container .pill.label').click();
     await page.locator('.nav-item', {hasText: 'All'}).click();
     await page
@@ -78,4 +79,5 @@ test('loadtest', async ({page}) => {
       .click();
     await page.goBack();
   }
+  console.log(cgID, `Done`);
 });
