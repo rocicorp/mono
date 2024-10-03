@@ -9,12 +9,6 @@ import {type Schema, schema} from './domain/schema.js';
 import {Zero} from 'zero-client';
 import {useEffect, useState} from 'react';
 
-const qs = new URLSearchParams(location.search);
-const hiddenTabDisconnectDelayMinutes = qs.get('keepalive') ? 60 : 5;
-console.info(
-  `Hidden tab disconnect delay: ${hiddenTabDisconnectDelayMinutes} minutes`,
-);
-
 export default function Root() {
   const login = useLogin();
 
@@ -27,7 +21,6 @@ export default function Root() {
       userID: login.loginState?.userID ?? 'anon',
       auth: login.loginState?.token,
       schema,
-      hiddenTabDisconnectDelay: hiddenTabDisconnectDelayMinutes * 60 * 1000,
     });
     setZ(z);
 
