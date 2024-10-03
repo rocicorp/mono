@@ -1,8 +1,7 @@
-import 'dotenv/config';
 import {defineConfig, runtimeEnv} from 'zero-cache/src/config/define-config.js';
 import {schema, type Schema} from './src/domain/schema.js';
 
-/** The contents of the decoded JWT */
+/** The contents of the zbugs JWT */
 type AuthData = {
   // The logged in userID.
   sub: string;
@@ -14,22 +13,20 @@ defineConfig<AuthData, Schema>(schema, queries => {
   const allowIfLoggedIn = (authData: AuthData) =>
     queries.user.where('id', '=', authData.sub);
 
-  const allowIfCreatorOf =
-    (table: 'issue' | 'comment') => (authData: AuthData, row: {id: string}) => {
-      // Sigh, TypeScript
-      // Why can't I treat these generically?
-      if (table === 'issue') {
-        return queries[table]
-          .where('id', row.id)
-          .where('creatorID', '=', authData.sub);
-      } else {
-        return queries[table]
-          .where('id', row.id)
-          .where('creatorID', '=', authData.sub);
-      }
-    };
+  const allowIfIssueCreator = (authData: AuthData, row: {id: string}) => {
+    return queries.issue
+      .where('id', row.id)
+      .where('creatorID', '=', authData.sub);
+  };
 
-  const allowIfCrewMember = (authData: AuthData) =>
+  // TODO: It would be nice to share code with above.
+  const allowIfCommentCreator = (authData: AuthData, row: {id: string}) => {
+    return queries.comment
+      .where('id', row.id)
+      .where('creatorID', '=', authData.sub);
+  };
+
+  const allowIfAdmin = (authData: AuthData) =>
     queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
@@ -60,15 +57,15 @@ defineConfig<AuthData, Schema>(schema, queries => {
       issue: {
         row: {
           insert: [allowIfLoggedIn],
-          update: [allowIfCreatorOf('issue'), allowIfCrewMember],
-          delete: [allowIfCreatorOf('issue'), allowIfCrewMember],
+          update: [allowIfIssueCreator, allowIfAdmin],
+          delete: [allowIfIssueCreator, allowIfAdmin],
         },
       },
       comment: {
         row: {
           insert: [allowIfLoggedIn],
-          update: [allowIfCreatorOf('comment'), allowIfCrewMember],
-          delete: [allowIfCreatorOf('comment'), allowIfCrewMember],
+          update: [allowIfCommentCreator, allowIfAdmin],
+          delete: [allowIfCommentCreator, allowIfAdmin],
         },
       },
     },
