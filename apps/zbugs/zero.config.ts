@@ -44,6 +44,14 @@ defineConfig<AuthData, Schema>(schema, queries => {
     log: {
       level: 'debug',
     },
+    rateLimit: {
+      mutationTransactions: {
+        algorithm: 'sliding-window',
+        // 100 writes per minute per user
+        windowMs: 1000 * 60,
+        max: 100,
+      },
+    },
 
     authorization: {
       user: {
