@@ -1,7 +1,7 @@
 import {expect} from 'chai';
 import {LazyStore} from '../dag/lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
-import {MetaType} from '../db/commit.js';
+import * as MetaType from '../db/meta-type-enum.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';

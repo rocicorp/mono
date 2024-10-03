@@ -1,7 +1,7 @@
 import {expect} from 'chai';
 import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {type Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead} from '../with-transactions.js';
@@ -11,7 +11,6 @@ import {
   type CommitData,
   type IndexChangeMetaSDD,
   type Meta,
-  MetaType,
   baseSnapshotFromHash,
   chunkIndexDefinitionEqualIgnoreName,
   commitChain,
@@ -26,10 +25,11 @@ import {
   localMutationsGreaterThan,
   makeCommitData,
 } from './commit.js';
+import * as MetaType from './meta-type-enum.js';
 import {ChainBuilder} from './test-helpers.js';
 
 suite('base snapshot', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -91,7 +91,7 @@ suite('base snapshot', () => {
 });
 
 suite('local mutations', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -199,7 +199,7 @@ test('local mutations greater than', async () => {
 });
 
 suite('chain', () => {
-  const t = async (formatVersion: FormatVersion) => {
+  const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);

@@ -10,7 +10,7 @@ import {
   assertLocalMetaDD31,
 } from './db/commit.js';
 import {ChainBuilder} from './db/test-helpers.js';
-import {FormatVersion} from './format-version.js';
+import * as FormatVersion from './format-version-enum.js';
 import {assertHash, newRandomHash} from './hash.js';
 import {IDBStore} from './kv/idb-store.js';
 import {initClientWithClientID} from './persist/clients-test-helpers.js';
@@ -26,7 +26,7 @@ import type {MutatorDefs} from './types.js';
 export async function createPerdag(args: {
   replicacheName: string;
   schemaVersion: string;
-  formatVersion: FormatVersion;
+  formatVersion: FormatVersion.Type;
 }): Promise<Store> {
   const {replicacheName, schemaVersion, formatVersion: formatVersion} = args;
   const idbName = makeIDBNameForTesting(
@@ -96,7 +96,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
   numLocal: number;
   mutatorNames: string[];
   cookie: string | number;
-  formatVersion: FormatVersion;
+  formatVersion: FormatVersion.Type;
   snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
 }): Promise<LocalMetaDD31[]> {
   assert(formatVersion >= FormatVersion.DD31);
@@ -156,7 +156,7 @@ export async function persistSnapshotDD31(
   cookie: string | number,
   mutatorNames: string[],
   snapshotLastMutationIDs: Record<ClientID, number>,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<void> {
   const testMemdag = new LazyStore(
     perdag,

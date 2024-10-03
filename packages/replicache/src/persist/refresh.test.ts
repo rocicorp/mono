@@ -19,7 +19,7 @@ import {
   newSnapshotDD31,
 } from '../db/commit.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {
   type Hash,

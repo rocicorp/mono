@@ -13,7 +13,7 @@ import {
   mustGetHeadHash,
 } from '../dag/store.js';
 import {Visitor} from '../dag/visitor.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {type Hash, emptyHash} from '../hash.js';
 import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
@@ -31,7 +31,6 @@ import {
   type IndexRecord,
   type LocalMeta,
   type Meta,
-  MetaType,
   type SnapshotMetaDD31,
   type SnapshotMetaSDD,
   assertIndexChangeCommit,
@@ -45,6 +44,7 @@ import {
   toChunkIndexDefinition,
 } from './commit.js';
 import {IndexWrite} from './index.js';
+import * as MetaType from './meta-type-enum.js';
 import {
   Write,
   createIndexBTree,
@@ -62,7 +62,7 @@ async function addGenesis(
   clientID: ClientID,
   headName = DEFAULT_HEAD_NAME,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Chain> {
   expect(chain).to.have.length(0);
   const commit = await createGenesis(
@@ -81,7 +81,7 @@ async function createGenesis(
   clientID: ClientID,
   headName: string,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Commit<Meta>> {
   await withWriteNoImplicitCommit(store, async w => {
     await initDB(w, headName, clientID, indexDefinitions, formatVersion);
@@ -97,7 +97,7 @@ async function addLocal(
   clientID: ClientID,
   entries: [string, JSONValue][] | undefined,
   headName: string,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const i = chain.length;
@@ -120,7 +120,7 @@ async function createLocal(
   i: number,
   clientID: ClientID,
   headName: string,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Commit<Meta>> {
   const lc = new LogContext();
   await withWriteNoImplicitCommit(store, async dagWrite => {
@@ -153,7 +153,7 @@ async function addIndexChange(
   indexName: string | undefined,
   indexDefinition: IndexDefinition | undefined,
   headName: string,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Chain> {
   assert(formatVersion <= FormatVersion.SDD);
   expect(chain).to.have.length.greaterThan(0);
@@ -187,7 +187,7 @@ async function createIndex(
   jsonPointer: string,
   allowEmpty: boolean,
   headName: string,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Commit<Meta>> {
   assert(formatVersion <= FormatVersion.SDD);
   const lc = new LogContext();
@@ -226,7 +226,7 @@ async function addSnapshot(
   cookie: Cookie = `cookie_${chain.length}`,
   lastMutationIDs: Record<ClientID, number> | undefined,
   headName: string,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
@@ -276,12 +276,12 @@ export class ChainBuilder {
   readonly store: Store;
   readonly headName: string;
   chain: Chain;
-  readonly formatVersion: FormatVersion;
+  readonly formatVersion: FormatVersion.Type;
 
   constructor(
     store: Store,
     headName = DEFAULT_HEAD_NAME,
-    formatVersion: FormatVersion = FormatVersion.Latest,
+    formatVersion: FormatVersion.Type = FormatVersion.Latest,
   ) {
     this.store = store;
     this.headName = headName;
@@ -408,7 +408,7 @@ export async function initDB(
   headName: string,
   clientID: ClientID,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Hash> {
   const basisHash = emptyHash;
   const indexes = await createEmptyIndexMaps(
@@ -447,7 +447,7 @@ export async function initDB(
 async function createEmptyIndexMaps(
   indexDefinitions: IndexDefinitions,
   dagWrite: DagWrite,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Map<string, IndexWrite>> {
   const indexes = new Map();
 
@@ -497,7 +497,7 @@ async function newWriteIndexChange(
   basisHash: Hash,
   dagWrite: DagWrite,
   clientID: ClientID,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<Write> {
   assert(formatVersion <= FormatVersion.SDD);
   const basis = await commitFromHash(basisHash, dagWrite);
@@ -524,7 +524,7 @@ async function createIndexForTesting(
   indexes: Map<string, IndexWrite>,
   dagWrite: DagWrite,
   map: BTreeRead,
-  formatVersion: FormatVersion,
+  formatVersion: FormatVersion.Type,
 ): Promise<void> {
   const chunkIndexDefinition: ChunkIndexDefinition = {
     name,

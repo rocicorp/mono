@@ -6,7 +6,7 @@ import {stringCompare} from 'shared/src/string-compare.js';
 import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
-import {FormatVersion} from './format-version.js';
+import * as FormatVersion from './format-version-enum.js';
 import {
   createAndPersistClientWithPendingLocalDD31,
   createAndPersistClientWithPendingLocalSDD,
@@ -68,7 +68,7 @@ suite('DD31', () => {
     expectedLastServerAckdMutationIDs?: Record<ClientID, number> | undefined;
     pullResponse?: PullResponseV1 | undefined;
     pushResponse?: PushResponse | undefined;
-    formatVersion: FormatVersion;
+    formatVersion: FormatVersion.Type;
     expectClientGroupDisabled?: boolean;
   }) {
     sinon.stub(console, 'error');

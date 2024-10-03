@@ -21,7 +21,7 @@ import {
   createMutatorName,
   getChunkSnapshot,
 } from '../db/test-helpers.js';
-import {FormatVersion} from '../format-version.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {WriteTransaction} from '../transactions.js';
@@ -46,15 +46,9 @@ import {
 } from './clients.js';
 import {makeClientID} from './make-client-id.js';
 import {persistDD31} from './persist.js';
+import * as PersistedExpectation from './persisted-expectation-enum.js';
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
-
-enum PersistedExpectation {
-  Snapshot,
-  SnapshotAndLocals,
-  Locals,
-  Nothing,
-}
 
 suite('persistDD31', () => {
   let memdag: LazyStore,
@@ -64,7 +58,7 @@ suite('persistDD31', () => {
     clients: {clientID: ClientID; client: Client}[],
     clientGroupID: ClientGroupID,
     testPersist: (
-      persistedExpectation: PersistedExpectation,
+      persistedExpectation: PersistedExpectation.Type,
       onGatherMemOnlyChunksForTest?: () => Promise<void>,
     ) => Promise<void>;
 
@@ -917,7 +911,7 @@ async function setupPersistTest() {
   assertNotUndefined(clientGroupID);
 
   const testPersist = async (
-    persistedExpectation: PersistedExpectation,
+    persistedExpectation: PersistedExpectation.Type,
     onGatherMemOnlyChunksForTest = () => promiseVoid,
   ) => {
     chunksPersistedSpy.resetHistory();

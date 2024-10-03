@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "check-types": "tsc --noEmit && tsc --noEmit --project tool/tsconfig.json",
+    "check-types:watch": "tsc --noEmit --watch",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build": "rm -rf out && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node tool/build.js",
     "build-bundle-sizes": "rm -rf out && node tool/build.js --bundle-sizes",
@@ -71,7 +72,16 @@
     "!*.tsbuildinfo"
   ],
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "@rocicorp/eslint-config",
+    "rules": {
+      "no-restricted-syntax": [
+        "error",
+        {
+          "selector": "TSEnumDeclaration",
+          "message": "Enums are not allowed"
+        }
+      ]
+    }
   },
   "prettier": "@rocicorp/prettier-config"
 }
