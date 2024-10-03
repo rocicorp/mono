@@ -22,8 +22,8 @@ test('all mutations occur at prior window start', () => {
   // and 12th of course
   expect(limiter.canDo()).toBe(false);
 
-  // failed limiter calls still bump the count
-  expect(limiter.totalCallsForTime(10)).toBe(12);
+  // failed limiter calls do not bump the count
+  expect(limiter.totalCallsForTime(10)).toBe(10);
 });
 
 // Sliding window setup should look like:
