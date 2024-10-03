@@ -7,7 +7,7 @@ import {useLogin} from './hooks/use-login.js';
 import {ZeroProvider} from 'zero-react/src/use-zero.js';
 import {type Schema, schema} from './domain/schema.js';
 import {Zero} from 'zero-client';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 
 const qs = new URLSearchParams(location.search);
 const hiddenTabDisconnectDelayMinutes = qs.get('keepalive') ? 60 : 5;
@@ -18,8 +18,10 @@ console.info(
 export default function Root() {
   const login = useLogin();
 
-  const newZero = () =>
-    new Zero({
+  const [z, setZ] = useState<Zero<Schema> | undefined>();
+
+  useEffect(() => {
+    const z = new Zero({
       logLevel: 'info',
       server: import.meta.env.VITE_PUBLIC_SERVER,
       userID: login.loginState?.userID ?? 'anon',
@@ -27,23 +29,18 @@ export default function Root() {
       schema,
       hiddenTabDisconnectDelay: hiddenTabDisconnectDelayMinutes * 60 * 1000,
     });
+    setZ(z);
 
-  const [lastUserID, setLastUserID] = useState<string | undefined>(
-    login.loginState?.userID,
-  );
-  const [lastToken, setLastToken] = useState<string | undefined>(
-    login.loginState?.token,
-  );
-  const [z, setZ] = useState<Zero<Schema>>(newZero);
+    // To enable accessing zero in the devtools easily.
+    (window as {z?: Zero<Schema>}).z = z;
 
-  if (
-    lastUserID !== login.loginState?.userID ||
-    lastToken !== login.loginState?.token
-  ) {
-    setLastUserID(login.loginState?.userID);
-    setLastToken(login.loginState?.token);
-    z?.close();
-    setZ(newZero());
+    return () => {
+      z.close();
+    };
+  }, [login]);
+
+  if (!z) {
+    return null;
   }
 
   z.query.user.preload();
