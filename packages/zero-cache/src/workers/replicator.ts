@@ -61,7 +61,6 @@ export function setupReplica(
     case 'serving-copy': {
       // In 'serving-copy' mode, the original file is being used for 'backup'
       // mode, so we make a copy for servicing sync requests.
-      const replica = connect(lc, replicaDbFile, 'wal');
       const copyLocation = `${replicaDbFile}-serving-copy`;
       for (const suffix of ['', '-wal', '-shm']) {
         rmSync(`${copyLocation}${suffix}`, {force: true});
@@ -69,10 +68,11 @@ export function setupReplica(
 
       const start = Date.now();
       lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);
+      const replica = connect(lc, replicaDbFile, 'wal');
       replica.prepare(`VACUUM INTO ?`).run(copyLocation);
+      replica.close();
       lc.info?.(`finished copy (${Date.now() - start} ms)`);
 
-      replica.close();
       return connect(lc, copyLocation, 'wal2');
     }
 
