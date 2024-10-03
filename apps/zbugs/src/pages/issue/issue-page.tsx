@@ -37,6 +37,14 @@ export default function IssuePage() {
     setEdits({});
   };
 
+  const remove = () => {
+    // TODO: Implement undo - https://github.com/rocicorp/undo
+    if (confirm('Really delete?')) {
+      z.mutate.issue.delete({id: issue.id});
+    }
+    navigate('/');
+  };
+
   const cancel = () => {
     setEditing(null);
     setEdits({});
@@ -91,12 +99,20 @@ export default function IssuePage() {
         </div>
         <div className="edit-button">
           {!editing ? (
-            <button
-              style={{border: '1px outset white'}}
-              onMouseDown={() => setEditing(issue)}
-            >
-              Edit
-            </button>
+            <>
+              <button
+                style={{border: '1px outset white', marginRight: '0.5rem'}}
+                onMouseDown={() => setEditing(issue)}
+              >
+                Edit
+              </button>
+              <button
+                style={{border: '1px outset white'}}
+                onMouseDown={() => remove()}
+              >
+                Delete
+              </button>
+            </>
           ) : (
             <>
               <button style={{border: '1px outset white'}} onMouseDown={save}>
