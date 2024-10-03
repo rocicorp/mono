@@ -43,9 +43,7 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "esbuild": "^0.20.2",
     "tsc-alias": "^1.8.10",
-    "typescript": "^5.5.3",
-    "zero-cache": "0.0.0",
-    "zero-client": "0.0.0"
+    "typescript": "^5.5.3"
   },
   "type": "module",
   "main": "out/zero.js",
