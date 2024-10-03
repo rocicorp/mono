@@ -81,6 +81,7 @@ test('loadtest', async ({page}) => {
       .click();
     await page.goBack();
   }
+  await page.close();
   const elapsed = Date.now() - start;
   console.log(`${cgID} loadtest completed in ${(elapsed / 1000).toFixed(2)} secs`);
   console.log(cgID, `Done`);
