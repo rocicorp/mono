@@ -18,6 +18,7 @@
     "@fastify/oauth2": "^8.0.0",
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
+    "@rocicorp/zero": "0.0.0-202410031711",
     "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
     "dotenv": "^16.4.5",
@@ -32,9 +33,7 @@
     "react-window": "^1.8.10",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
-    "wouter": "^3.3.5",
-    "zero": "0.0.1",
-    "zero-react": "0.0.0"
+    "wouter": "^3.3.5"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
