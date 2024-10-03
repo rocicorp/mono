@@ -7,8 +7,8 @@
   "scripts": {
     "test": "web-test-runner",
     "test:watch": "web-test-runner --watch",
-    "format": "prettier --write *",
-    "check-format": "prettier --check *",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
     "check-types": "tsc --noEmit && tsc --noEmit --project tool/tsconfig.json",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "build-dts": "rm -rf out/.dts/ && tsc --emitDeclarationOnly --outDir out/.dts/ && rollup --config rollup.config.js && rm -rf out/.dts",
