@@ -10,6 +10,7 @@ import classnames from 'classnames';
 import CloseIcon from '../assets/icons/close.svg?react';
 import useLockBodyScroll from '../hooks/use-lock-body-scroll.js';
 import {Transition} from '@headlessui/react';
+import {useKeypress} from '../hooks/use-keypress.js';
 
 interface Props {
   title?: string;
@@ -44,38 +45,32 @@ export default function Modal({
     },
   );
   const modalClasses = classnames(
-    'flex flex-col items-center overflow-hidden transform bg-modal modal shadow-large-modal rounded-xl border border-modalOutline',
+    'flex flex-col items-center overflow-hidden transform bg-modal modal shadow-large-modal rounded-lg border border-modalOutline',
     {
       'mt-20 mb-2 ': !center,
     },
     sizeClasses[size],
     className,
   );
-  const handleClick = useCallback(
+  const handleMouseDown = useCallback(
     (event: MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
       if (!onDismiss) return;
       if (ref.current && !ref.current.contains(event.target as Element)) {
+        event.stopPropagation();
+        event.preventDefault();
         onDismiss();
       }
     },
     [onDismiss],
   );
 
+  useKeypress('Escape', () => onDismiss?.(), 'keydown');
+
   useLockBodyScroll();
 
   const modal = (
-    <div ref={outerRef} onClick={handleClick}>
-      <Transition
-        show={isOpen}
-        enter="transition ease-out duration-100"
-        enterFrom="transform opacity-0 scale-95"
-        enterTo="transform opacity-100 scale-100"
-        leave="transition easy-in duration-95"
-        leaveFrom="transform opacity-100 scale-100"
-        leaveTo="transform opacity-0 scale-95"
-      >
+    <div ref={outerRef} onMouseDown={handleMouseDown}>
+      <Transition show={isOpen}>
         <div className={wrapperClasses}>
           <div ref={ref} className={modalClasses}>
             {title && (

@@ -7,7 +7,7 @@ export default {
         primary: '#ff5c00',
         text: '#ffffff',
         modal: '#121212',
-        modalOutline: '#3e3e3e',
+        modalOutline: 'rgba(62, 62, 62, 0.5)',
       },
     },
   },

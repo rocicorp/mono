@@ -36,7 +36,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
     setDescription('');
   };
 
-  const handleClickCloseBtn = () => {
+  const handleCloseMouseDown = () => {
     reset();
     onDismiss?.();
   };
@@ -50,7 +50,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
         <div className="flex items-center">
           <button
             className="inline-flex rounded items-center justify-center ml-2 text-gray-500 h-7 w-7 hover:bg-gray-100 rouned hover:text-gray-700"
-            onMouseDown={handleClickCloseBtn}
+            onMouseDown={handleCloseMouseDown}
           >
             <CloseIcon className="w-4" />
           </button>
@@ -78,7 +78,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       <div className="flex items-center flex-shrink-0 px-4 pt-3">
         <button
           className="px-3 ml-auto text-black bg-primary rounded h-7"
-          onClick={handleSubmit}
+          onMouseDown={handleSubmit}
         >
           Save Issue
         </button>
