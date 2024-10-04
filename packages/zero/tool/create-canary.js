@@ -86,6 +86,7 @@ try {
   });
 
   execute('npm install');
+  execute('npm run build');
   execute('npm run format');
   execute('npx syncpack fix-mismatches');
   execute('git status');
