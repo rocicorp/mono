@@ -42,6 +42,8 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
+    "zero-client": "0.0.0",
+    "zero-cache": "0.0.0",
     "esbuild": "^0.20.2",
     "replicache": "15.2.1",
     "tsc-alias": "^1.8.10",
