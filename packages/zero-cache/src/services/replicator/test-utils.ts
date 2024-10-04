@@ -40,7 +40,12 @@ export function createMessageProcessor(
   ack: (lsn: string) => void = NOOP,
   failures: (lc: LogContext, err: unknown) => void = NOOP,
 ): MessageProcessor {
-  return new MessageProcessor(new StatementRunner(db), ack, failures);
+  return new MessageProcessor(
+    new StatementRunner(db),
+    'DEFAULT',
+    ack,
+    failures,
+  );
 }
 
 export class ReplicationMessages<

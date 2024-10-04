@@ -57,6 +57,8 @@ export interface Replicator extends ReplicaStateNotifier {
   status(): Promise<ReadonlyJSONObject>;
 }
 
+export type ReplicatorMode = 'backup' | 'serving';
+
 export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
@@ -65,6 +67,7 @@ export class ReplicatorService implements Replicator, Service {
   constructor(
     lc: LogContext,
     id: string,
+    mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
     replica: Database,
     checkpointer: Checkpointer,
@@ -78,6 +81,7 @@ export class ReplicatorService implements Replicator, Service {
       id,
       changeStreamer,
       replica,
+      mode === 'serving' ? 'CONCURRENT' : 'DEFAULT',
       checkpointer,
     );
   }

@@ -12,7 +12,7 @@ import {Database} from 'zqlite/src/db.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import type {Worker} from '../types/processes.js';
 
-export type ReplicatorMode = 'serving' | 'serving-copy' | 'backup';
+export type ReplicaFileMode = 'serving' | 'serving-copy' | 'backup';
 
 function connect(
   lc: LogContext,
@@ -39,10 +39,10 @@ function connect(
 
 export function setupReplica(
   lc: LogContext,
-  mode: ReplicatorMode,
+  mode: ReplicaFileMode,
   replicaDbFile: string,
 ): Database {
-  lc.info?.(`setting up replicator in ${mode} mode`);
+  lc.info?.(`setting up ${mode} replica`);
 
   switch (mode) {
     case 'backup': {

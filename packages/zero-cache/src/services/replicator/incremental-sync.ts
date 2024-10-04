@@ -34,6 +34,8 @@ import {
   updateReplicationWatermark,
 } from './schema/replication-state.js';
 
+type TransactionMode = 'DEFAULT' | 'CONCURRENT';
+
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
  * handling application lifecycle events (start, stop) and retrying the
@@ -44,6 +46,7 @@ export class IncrementalSyncer {
   readonly #id: string;
   readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
+  readonly #txMode: TransactionMode;
   readonly #notifier: Notifier;
   readonly #checkpointer: Checkpointer;
 
@@ -54,11 +57,13 @@ export class IncrementalSyncer {
     id: string,
     changeStreamer: ChangeStreamer,
     replica: Database,
+    txMode: TransactionMode,
     checkpointer: Checkpointer,
   ) {
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
+    this.#txMode = txMode;
     this.#notifier = new Notifier();
     this.#checkpointer = checkpointer;
   }
@@ -81,6 +86,7 @@ export class IncrementalSyncer {
 
       const processor = new MessageProcessor(
         this.#replica,
+        this.#txMode,
         (_watermark: string) => {}, // TODO: Add ACKs to ChangeStreamer API
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
@@ -157,6 +163,7 @@ class ReplayedTransactionError extends Error {
 // Exported for testing.
 export class MessageProcessor {
   readonly #db: StatementRunner;
+  readonly #txMode: TransactionMode;
   readonly #acknowledge: (watermark: string) => unknown;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -167,10 +174,12 @@ export class MessageProcessor {
 
   constructor(
     db: StatementRunner,
+    txMode: TransactionMode,
     acknowledge: (watermark: string) => unknown,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
+    this.#txMode = txMode;
     this.#acknowledge = acknowledge;
     this.#failService = failService;
   }
@@ -227,7 +236,7 @@ export class MessageProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = new TransactionProcessor(this.#db);
+      this.#currentTx = new TransactionProcessor(this.#db, this.#txMode);
       return (this.#pendingChanges = 0);
     }
 
@@ -301,17 +310,25 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #version: LexiVersion;
 
-  constructor(db: StatementRunner) {
+  constructor(db: StatementRunner, txMode: TransactionMode) {
     this.#startMs = Date.now();
 
-    // Although the Replicator / Incremental Syncer is the only writer of the replica,
-    // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
-    // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
-    // purpose of IVM).
-    //
-    // This TransactionProcessor is the only logic that will actually
-    // `COMMIT` any transactions to the replica.
-    db.beginConcurrent();
+    if (txMode === 'CONCURRENT') {
+      // Although the Replicator / Incremental Syncer is the only writer of the replica,
+      // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
+      // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
+      // purpose of IVM).
+      //
+      // This TransactionProcessor is the only logic that will actually
+      // `COMMIT` any transactions to the replica.
+      db.beginConcurrent();
+    } else {
+      // For the backup-replicator (i.e. replication-manager), there are no View Syncers
+      // and thus BEGIN CONCURRENT is not necessary. In fact, BEGIN CONCURRENT can cause
+      // deadlocks with forced wal-checkpoints (which `litestream replicate` performs),
+      // so it is important to use vanilla transactions in this configuration.
+      db.begin();
+    }
     const {nextStateVersion} = getReplicationVersions(db);
     this.#db = db;
     this.#version = nextStateVersion;
