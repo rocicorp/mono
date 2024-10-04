@@ -15,12 +15,16 @@ function basePath(path) {
   return new URL('../' + path, import.meta.url).pathname;
 }
 
-const externalSet = new Set([
-  ...(await getExternalFromPackageJSON(import.meta.url)),
+const extraExternals = [
   'node:*',
   ...builtinModules,
   // better-sqlite3 is installed using a preinstall script.
   'better-sqlite3',
+];
+
+const externalSet = new Set([
+  ...(await getExternalFromPackageJSON(import.meta.url)),
+  ...extraExternals,
 ]);
 
 /**
@@ -71,20 +75,16 @@ await verifyExternals(external);
 async function verifyExternals(external) {
   // Get the dependencies from the package.json file
   const packageJSON = await readFile(basePath('package.json'), 'utf-8');
-  const copy = new Set(external);
-  for (const dep of builtinModules) {
-    copy.delete(dep);
+  const expectedDeps = new Set(external);
+  for (const dep of extraExternals) {
+    expectedDeps.delete(dep);
   }
-  copy.delete('node:*');
-  copy.delete('better-sqlite3');
-
-  const expectedDeps = [...copy].sort();
 
   const {dependencies} = JSON.parse(packageJSON);
-  const actualDep = Object.keys(dependencies).sort();
+  const actualDeps = new Set(Object.keys(dependencies));
   assert.deepEqual(
     expectedDeps,
-    actualDep,
+    actualDeps,
     'zero/package.json dependencies do not match the dependencies of the internal packages',
   );
 }
