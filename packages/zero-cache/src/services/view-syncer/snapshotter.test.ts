@@ -646,37 +646,4 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.curr.db.statementCache.size).toBe(currStmts + 1);
     expect(diff.prev.db.statementCache.size).toBe(prevStmts + 1);
   });
-
-  test('release / resume', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
-    const {version} = s.current();
-
-    expect(version).toBe('00');
-
-    replicator.processMessage(lc, ['begin', messages.begin()]);
-    replicator.processMessage(lc, ['data', messages.truncate('users')]);
-    replicator.processMessage(lc, [
-      'commit',
-      messages.commit(),
-      {watermark: '07'},
-    ]);
-
-    const diff = s.advance();
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
-
-    s.release();
-
-    // Simulate a write that happens while released.
-    replicator.processMessage(lc, ['begin', messages.begin()]);
-    replicator.processMessage(lc, ['data', messages.truncate('comments')]);
-    replicator.processMessage(lc, [
-      'commit',
-      messages.commit(),
-      {watermark: '09'},
-    ]);
-
-    const {version: reacquired} = s.advance().curr;
-    expect(reacquired).toBe('07');
-  });
 });

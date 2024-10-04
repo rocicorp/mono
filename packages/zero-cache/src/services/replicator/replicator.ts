@@ -4,23 +4,15 @@ import {Database} from 'zqlite/src/db.js';
 import type {Source} from '../../types/streams.js';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.js';
 import type {Service} from '../service.js';
-import type {Checkpointer} from './checkpointer.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {
-  readonly state: 'version-ready' | 'maintenance';
+  readonly state: 'version-ready';
 
-  /**
-   * An optional random integer indicating that the notifier requests
-   * an ACK from all (transitive) subscribers. As the Subscription class
-   * uses the AsyncIterable paradigm to automatically handle ACKs for
-   * in-process communication, this field is primarily for IPC-level
-   * logic to perform additional communication between processes.
-   *
-   * It follows that application logic can largely ignore this field.
-   */
-  readonly ack?: number | undefined;
+  // Used in tests to verify behavior when additional information
+  // is ferried in the future. Not set in production.
+  readonly testSeqNum?: number;
 };
 
 export interface ReplicaStateNotifier {
@@ -70,7 +62,6 @@ export class ReplicatorService implements Replicator, Service {
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
     replica: Database,
-    checkpointer: Checkpointer,
   ) {
     this.id = id;
     this.#lc = lc
@@ -82,7 +73,6 @@ export class ReplicatorService implements Replicator, Service {
       changeStreamer,
       replica,
       mode === 'serving' ? 'CONCURRENT' : 'DEFAULT',
-      checkpointer,
     );
   }
 

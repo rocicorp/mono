@@ -141,7 +141,7 @@ describe('replicator/message-processor', () => {
       );
 
       for (const msg of c.messages) {
-        if (processor.processMessage(lc, msg) > 0) {
+        if (processor.processMessage(lc, msg)) {
           versionChanges++;
         }
       }
