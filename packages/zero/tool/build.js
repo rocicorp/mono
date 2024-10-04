@@ -15,6 +15,58 @@ function basePath(path) {
   return new URL('../' + path, import.meta.url).pathname;
 }
 
+/**
+ * @param {boolean} includePeerDeps
+ * @returns {Promise<string[]>}
+ */
+async function getExternal(includePeerDeps) {
+  const externalSet = new Set([
+    ...(await getExternalFromPackageJSON(import.meta.url, true)),
+    ...extraExternals,
+  ]);
+
+  /**
+   * @param {string} internalPackageName
+   */
+  async function addExternalDepsFor(internalPackageName) {
+    for (const dep of await getExternalFromPackageJSON(
+      basePath('../' + internalPackageName),
+      includePeerDeps,
+    )) {
+      externalSet.add(dep);
+    }
+  }
+
+  // Normally we would put the internal packages in devDependencies, but we cant
+  // do that because zero has a preinstall script that tries to install the
+  // devDependencies and fails because the internal packages are not published to
+  // npm.
+  //
+  // preinstall has a `--omit=dev` flag, but it does not work with `npm install`
+  // for whatever reason.
+  //
+  // Instead we list the internal packages here.
+  for (const dep of [
+    'btree',
+    'datadog',
+    'replicache',
+    'shared',
+    'zero-cache',
+    'zero-client',
+    'zero-integration-test',
+    'zero-protocol',
+    'zero-react',
+    'zql',
+    'zqlite',
+  ]) {
+    await addExternalDepsFor(dep);
+  }
+
+  externalSet.delete('replicache');
+
+  return [...externalSet].sort();
+}
+
 const extraExternals = [
   'node:*',
   ...builtinModules,
@@ -22,57 +74,12 @@ const extraExternals = [
   'better-sqlite3',
 ];
 
-const externalSet = new Set([
-  ...(await getExternalFromPackageJSON(import.meta.url)),
-  ...extraExternals,
-]);
-
-/**
- * @param {string} internalPackageName
- */
-async function addExternalDepsFor(internalPackageName) {
-  for (const dep of await getExternalFromPackageJSON(
-    basePath('../' + internalPackageName),
-  )) {
-    externalSet.add(dep);
-  }
-}
-
-// Normally we would put the internal packages in devDependencies, but we cant
-// do that because zero has a preinstall script that tries to install the
-// devDependencies and fails because the internal packages are not published to
-// npm.
-//
-// preinstall has a `--omit=dev` flag, but it does not work with `npm install`
-// for whatever reason.
-//
-// Instead we list the internal packages here.
-for (const dep of [
-  'btree',
-  'datadog',
-  'replicache',
-  'shared',
-  'zero-cache',
-  'zero-client',
-  'zero-integration-test',
-  'zero-protocol',
-  'zero-react',
-  'zql',
-  'zqlite',
-]) {
-  await addExternalDepsFor(dep);
-}
-
-externalSet.delete('replicache');
-
-const external = [...externalSet].sort();
-
-await verifyExternals(external);
+await verifyDependencies(await getExternal(false));
 
 /**
  * @param {Iterable<string>} external
  */
-async function verifyExternals(external) {
+async function verifyDependencies(external) {
   // Get the dependencies from the package.json file
   const packageJSON = await readFile(basePath('package.json'), 'utf-8');
   const expectedDeps = new Set(external);
@@ -97,7 +104,7 @@ async function buildZeroClient() {
   };
   await esbuild.build({
     ...sharedOptions(false, false),
-    external,
+    external: await getExternal(true),
     splitting: true,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
