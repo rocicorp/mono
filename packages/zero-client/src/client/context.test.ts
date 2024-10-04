@@ -45,9 +45,7 @@ test('getSource', () => {
   // Calling again should cache first value.
   expect(context.getSource('users')).toBe(source);
 
-  expect(() => context.getSource('nonexistent')).toThrow(
-    'No schema found for table nonexistent',
-  );
+  expect(context.getSource('nonexistent')).toBeUndefined();
 
   // Should work for other table too.
   const source2 = context.getSource('userStates');
@@ -76,7 +74,7 @@ test('processChanges', () => {
 
   const context = new ZeroContext(schemas, null as unknown as AddQuery);
   const out = new Catch(
-    context.getSource('t1').connect([
+    context.getSource('t1')!.connect([
       ['name', 'desc'],
       ['id', 'desc'],
     ]),
@@ -140,8 +138,8 @@ test('transactions', () => {
   } as const;
 
   const context = new ZeroContext(schemas, null as unknown as AddQuery);
-  const servers = context.getSource('server');
-  const flair = context.getSource('flair');
+  const servers = context.getSource('server')!;
+  const flair = context.getSource('flair')!;
   const join = new Join({
     parent: servers.connect([['id', 'asc']]),
     child: flair.connect([['id', 'asc']]),

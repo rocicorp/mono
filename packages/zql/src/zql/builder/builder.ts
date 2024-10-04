@@ -34,7 +34,7 @@ export interface BuilderDelegate {
    * Might be called multiple times with same tableName. It is OK to return
    * same storage instance in that case.
    */
-  getSource(tableName: string): Source;
+  getSource(tableName: string): Source | undefined;
 
   /**
    * Called once for each operator that requires storage. Should return a new
@@ -132,6 +132,9 @@ function buildPipelineInternal(
   partitionKey?: string | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
+  if (!source) {
+    throw new Error(`Source not found: ${ast.table}`);
+  }
   const conn = source.connect(must(ast.orderBy), ast.where ?? []);
   let end: Input = conn;
   const {appliedFilters} = conn;
