@@ -29,7 +29,12 @@ export function useQuery<
       const view = q.materialize();
       setView(view);
       const unsubscribe = view.addListener(snapshot => {
-        setSnapshot(deepClone(snapshot) as Smash<TReturn>);
+        // snapshot can contain `undefined`
+        setSnapshot(
+          (snapshot === undefined
+            ? snapshot
+            : deepClone(snapshot)) as Smash<TReturn>,
+        );
       });
       view.hydrate();
       return () => {
@@ -44,7 +49,11 @@ export function useQuery<
     return () => {
       //
     };
-  }, [JSON.stringify(enable ? (q as QueryImpl<never, never>).ast : null)]);
+  }, [
+    JSON.stringify(
+      enable ? (q as unknown as QueryImpl<never, never>).ast : null,
+    ),
+  ]);
 
   return snapshot;
 }
