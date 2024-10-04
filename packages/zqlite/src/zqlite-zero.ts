@@ -15,6 +15,7 @@ import {newQuery} from 'zql/src/zql/query/query-impl.js';
 import type {TableSchema} from 'zql/src/zql/query/schema.js';
 import type {Database} from 'zqlite/src/db.js';
 import type {ZQLiteZeroOptions} from './options.js';
+import {must} from 'shared/src/must.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
@@ -96,14 +97,14 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
           .get(value.id);
         if (existingEntity) return;
         //console.log('Adding', value);
-        await this.zeroContext.getSource(entityType).push({
+        await must(this.zeroContext.getSource(entityType)).push({
           type: 'add',
           row: value,
         });
       },
       set: async (value: E) => {
         assertNotInBatch(entityType, 'set');
-        await this.zeroContext.getSource(entityType).push({
+        await must(this.zeroContext.getSource(entityType)).push({
           type: 'add',
           row: value,
         });
@@ -116,12 +117,14 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
         if (!existingEntity)
           throw new Error(`Entity with id ${value.id} not found`);
         const mergedValue = {...existingEntity, ...value};
-        await this.zeroContext
-          .getSource(entityType)
-          .push({type: 'remove', row: existingEntity});
-        await this.zeroContext
-          .getSource(entityType)
-          .push({type: 'add', row: mergedValue});
+        await must(this.zeroContext.getSource(entityType)).push({
+          type: 'remove',
+          row: existingEntity,
+        });
+        await must(this.zeroContext.getSource(entityType)).push({
+          type: 'add',
+          row: mergedValue,
+        });
       },
       delete: async (id: EntityID) => {
         assertNotInBatch(entityType, 'delete');
@@ -129,9 +132,10 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
           .get<Row>(id);
         if (!existingEntity) throw new Error(`Entity with id ${id} not found`);
-        await this.zeroContext
-          .getSource(entityType)
-          .push({type: 'remove', row: existingEntity});
+        await must(this.zeroContext.getSource(entityType)).push({
+          type: 'remove',
+          row: existingEntity,
+        });
       },
     };
   }
