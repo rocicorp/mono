@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.0.202410041722+d0f469",
+  "version": "0.0.202410041744+c31257",
   "scripts": {
     "prepack": "rm -rf deps && mkdir -p deps/sqlite3 && cp -r ../../deps/sqlite3/* deps/sqlite3/",
     "preinstall": "node tool/install-sqlite3.js",
