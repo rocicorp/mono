@@ -8,6 +8,10 @@ import {
   type Downstream,
   ErrorKind,
   type ErrorMessage,
+  type PokeEndBody,
+  type PokeEndMessage,
+  type PokePartBody,
+  type PokePartMessage,
   type PokeStartBody,
   type PokeStartMessage,
   type PongMessage,
@@ -146,6 +150,16 @@ export class TestZero<S extends Schema> extends Zero<S> {
 
   triggerPokeStart(pokeStartBody: PokeStartBody): Promise<void> {
     const msg: PokeStartMessage = ['pokeStart', pokeStartBody];
+    return this.triggerMessage(msg);
+  }
+
+  triggerPokePart(pokePart: PokePartBody): Promise<void> {
+    const msg: PokePartMessage = ['pokePart', pokePart];
+    return this.triggerMessage(msg);
+  }
+
+  triggerPokeEnd(pokeEnd: PokeEndBody): Promise<void> {
+    const msg: PokeEndMessage = ['pokeEnd', pokeEnd];
     return this.triggerMessage(msg);
   }
 
