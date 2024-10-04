@@ -2,22 +2,22 @@ import {describe, expect, test} from 'vitest';
 import {newQuery, type QueryDelegate} from './query-impl.js';
 import {QueryDelegateImpl} from './query-impl.query.test.js';
 import {issueSchema} from './test/testSchemas.js';
+import {must} from 'shared/src/must.js';
 
 function addData(queryDelegate: QueryDelegate) {
-  queryDelegate
-    .getSource('user')
-    .push({type: 'add', row: {id: '001', name: 'Alice'}});
-  queryDelegate
-    .getSource('user')
-    .push({type: 'add', row: {id: '002', name: 'Bob'}});
-  queryDelegate
-    .getSource('user')
-    .push({type: 'add', row: {id: '003', name: 'Charlie'}});
-  queryDelegate
-    .getSource('user')
-    .push({type: 'add', row: {id: '004', name: 'Daniel'}});
+  const userSource = must(queryDelegate.getSource('user'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const revisionSource = must(queryDelegate.getSource('revision'));
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
 
-  queryDelegate.getSource('issue').push({
+  userSource.push({type: 'add', row: {id: '001', name: 'Alice'}});
+  userSource.push({type: 'add', row: {id: '002', name: 'Bob'}});
+  userSource.push({type: 'add', row: {id: '003', name: 'Charlie'}});
+  userSource.push({type: 'add', row: {id: '004', name: 'Daniel'}});
+
+  issueSource.push({
     type: 'add',
     row: {
       id: '101',
@@ -27,7 +27,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '001',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '102',
@@ -37,7 +37,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '001',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '103',
@@ -48,7 +48,7 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
 
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '104',
@@ -58,7 +58,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '002',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '105',
@@ -68,7 +68,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '002',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '106',
@@ -78,7 +78,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '002',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '107',
@@ -88,7 +88,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '003',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '108',
@@ -98,7 +98,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '003',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '109',
@@ -108,7 +108,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '003',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '110',
@@ -119,7 +119,7 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
 
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '201',
@@ -129,7 +129,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 1,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '202',
@@ -139,7 +139,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 2,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '203',
@@ -149,7 +149,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 3,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '204',
@@ -159,7 +159,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 4,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '205',
@@ -169,7 +169,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 5,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '206',
@@ -179,7 +179,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 6,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '207',
@@ -189,7 +189,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 7,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '208',
@@ -199,7 +199,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 8,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '209',
@@ -209,7 +209,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 9,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '210',
@@ -219,7 +219,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 10,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '211',
@@ -229,7 +229,7 @@ function addData(queryDelegate: QueryDelegate) {
       createdAt: 11,
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '212',
@@ -240,59 +240,49 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
 
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '301', commentId: '209', text: 'Revision 1', authorId: '001'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '302', commentId: '209', text: 'Revision 2', authorId: '001'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '303', commentId: '209', text: 'Revision 3', authorId: '001'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '304', commentId: '208', text: 'Revision 1', authorId: '002'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '305', commentId: '208', text: 'Revision 2', authorId: '002'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '306', commentId: '208', text: 'Revision 3', authorId: '002'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '307', commentId: '211', text: 'Revision 1', authorId: '003'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '308', commentId: '211', text: 'Revision 2', authorId: '003'},
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {id: '309', commentId: '211', text: 'Revision 3', authorId: '003'},
   });
 
-  queryDelegate
-    .getSource('label')
-    .push({type: 'add', row: {id: '401', name: 'bug'}});
-  queryDelegate
-    .getSource('label')
-    .push({type: 'add', row: {id: '402', name: 'feature'}});
+  labelSource.push({type: 'add', row: {id: '401', name: 'bug'}});
+  labelSource.push({type: 'add', row: {id: '402', name: 'feature'}});
 
-  queryDelegate
-    .getSource('issueLabel')
-    .push({type: 'add', row: {issueId: '103', labelId: '401'}});
-  queryDelegate
-    .getSource('issueLabel')
-    .push({type: 'add', row: {issueId: '102', labelId: '401'}});
-  queryDelegate
-    .getSource('issueLabel')
-    .push({type: 'add', row: {issueId: '102', labelId: '402'}});
+  issueLabelSource.push({type: 'add', row: {issueId: '103', labelId: '401'}});
+  issueLabelSource.push({type: 'add', row: {issueId: '102', labelId: '401'}});
+  issueLabelSource.push({type: 'add', row: {issueId: '102', labelId: '402'}});
 }
 
 describe('kitchen sink query', () => {

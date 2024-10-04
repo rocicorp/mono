@@ -19,6 +19,7 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
+import {must} from 'shared/src/must.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();
@@ -95,21 +96,27 @@ function makeSources() {
 }
 
 function addData(queryDelegate: QueryDelegate) {
-  queryDelegate.getSource('user').push({
+  const userSource = must(queryDelegate.getSource('user'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const revisionSource = must(queryDelegate.getSource('revision'));
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+  userSource.push({
     type: 'add',
     row: {
       id: '0001',
       name: 'Alice',
     },
   });
-  queryDelegate.getSource('user').push({
+  userSource.push({
     type: 'add',
     row: {
       id: '0002',
       name: 'Bob',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '0001',
@@ -119,7 +126,7 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '0001',
     },
   });
-  queryDelegate.getSource('issue').push({
+  issueSource.push({
     type: 'add',
     row: {
       id: '0002',
@@ -130,7 +137,7 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
 
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '0001',
@@ -139,7 +146,7 @@ function addData(queryDelegate: QueryDelegate) {
       body: 'comment 1',
     },
   });
-  queryDelegate.getSource('comment').push({
+  commentSource.push({
     type: 'add',
     row: {
       id: '0002',
@@ -148,7 +155,7 @@ function addData(queryDelegate: QueryDelegate) {
       body: 'comment 2',
     },
   });
-  queryDelegate.getSource('revision').push({
+  revisionSource.push({
     type: 'add',
     row: {
       id: '0001',
@@ -158,14 +165,14 @@ function addData(queryDelegate: QueryDelegate) {
     },
   });
 
-  queryDelegate.getSource('label').push({
+  labelSource.push({
     type: 'add',
     row: {
       id: '0001',
       name: 'label 1',
     },
   });
-  queryDelegate.getSource('issueLabel').push({
+  issueLabelSource.push({
     type: 'add',
     row: {
       issueId: '0001',
