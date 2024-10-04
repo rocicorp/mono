@@ -757,6 +757,7 @@ export class Zero<S extends Schema> {
     // We really don't want to disconnect and reconnect a rate limited user as
     // it'll use more resources on the server
     if (kind === ErrorKind.MutationRateLimited) {
+      this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
       lc.error?.('Mutation rate limited', {message});
       return;
     }
