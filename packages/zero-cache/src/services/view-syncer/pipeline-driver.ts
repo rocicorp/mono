@@ -118,10 +118,6 @@ export class PipelineDriver {
     return this.#snapshotter.current().version;
   }
 
-  release() {
-    this.#snapshotter.release();
-  }
-
   advanceWithoutDiff(): string {
     const {db, version} = this.#snapshotter.advance().curr;
     for (const table of this.#tables.values()) {
@@ -190,14 +186,6 @@ export class PipelineDriver {
       this.#pipelines.delete(hash);
       input.destroy();
     }
-  }
-
-  /** Removes pipelines for all queries. */
-  clear() {
-    for (const input of this.#pipelines.values()) {
-      input.destroy();
-    }
-    this.#pipelines.clear();
   }
 
   /**

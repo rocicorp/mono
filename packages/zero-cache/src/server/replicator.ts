@@ -3,7 +3,6 @@ import {assert} from 'shared/src/asserts.js';
 import {must} from 'shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
-import {NULL_CHECKPOINTER} from '../services/replicator/checkpointer.js';
 import {
   ReplicatorService,
   type ReplicatorMode,
@@ -42,7 +41,6 @@ export default async function runWorker(parent: Worker, ...args: string[]) {
     mode,
     changeStreamer,
     replica,
-    NULL_CHECKPOINTER, // TODO: Get rid of the Checkpointer stuff; no longer be needed with wal2.
   );
 
   setUpMessageHandlers(lc, replicator, parent);

@@ -111,7 +111,7 @@ export class Snapshotter {
 
   /** Returns the current snapshot. Asserts if {@link initialized()} is false. */
   current(): {db: StatementRunner; version: string} {
-    assert(this.#curr?.hasLock, 'Snapshotter uninitialized or released');
+    assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     return this.#curr;
   }
 
@@ -160,18 +160,6 @@ export class Snapshotter {
     this.#prev = this.#curr;
     this.#curr = next;
     return new Diff(this.#prev, this.#curr);
-  }
-
-  /**
-   * Releases all locks on the database. Call {@link advance()}
-   * to reestablish a snapshot.
-   *
-   * This must only be called if the Snapshotter has been initialized.
-   */
-  release() {
-    assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
-    this.#curr.release();
-    this.#prev?.release();
   }
 
   /**
@@ -286,18 +274,8 @@ class Snapshot {
     };
   }
 
-  get hasLock() {
-    return this.db.db.inTransaction;
-  }
-
-  release() {
-    if (this.hasLock) {
-      this.db.rollback();
-    }
-  }
-
   resetToHead(): Snapshot {
-    this.release();
+    this.db.rollback();
     this.db.beginConcurrent();
     const {stateVersion} = getReplicationVersions(this.db);
     return new Snapshot(this.db, stateVersion);

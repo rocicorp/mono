@@ -1,8 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {rmSync} from 'node:fs';
-import {assert} from 'shared/src/asserts.js';
-import {promiseVoid} from 'shared/src/resolved-promises.js';
 import type {
   ReplicaState,
   ReplicaStateNotifier,
@@ -94,39 +91,15 @@ export function setUpMessageHandlers(
 
 type Notification = ['notify', ReplicaState];
 
-type NotificationACK = ['ackNotify', ReplicaState];
-
 export function handleSubscriptionsFrom(
-  lc: LogContext,
+  _lc: LogContext,
   subscriber: Worker,
   notifier: ReplicaStateNotifier,
 ) {
-  const pendingACKs = new Map<number, () => void>();
-
-  subscriber.onMessageType<NotificationACK>('ackNotify', msg => {
-    assert(msg.ack);
-    const resolve = pendingACKs.get(msg.ack);
-    if (resolve) {
-      resolve();
-      pendingACKs.delete(msg.ack);
-    } else {
-      lc.error?.('received ack with no resolver', msg);
-    }
-  });
-
   subscriber.onMessageType('subscribe', async () => {
     const subscription = notifier.subscribe();
     for await (const msg of subscription) {
-      let ack = promiseVoid; // By default, nothing to await.
-
-      if (msg.ack !== undefined) {
-        const {promise, resolve} = resolver();
-        ack = promise;
-        pendingACKs.set(msg.ack, resolve);
-      }
-
       subscriber.send<Notification>(['notify', msg]);
-      await ack;
     }
   });
 }
@@ -138,14 +111,9 @@ export function handleSubscriptionsFrom(
  */
 export function createNotifierFrom(_lc: LogContext, source: Worker): Notifier {
   const notifier = new Notifier();
-  source.onMessageType<Notification>('notify', async msg => {
-    const results = notifier.notifySubscribers(msg);
-
-    if (msg.ack !== undefined) {
-      await Promise.allSettled(results);
-      source.send<NotificationACK>(['ackNotify', msg]);
-    }
-  });
+  source.onMessageType<Notification>('notify', msg =>
+    notifier.notifySubscribers(msg),
+  );
   return notifier;
 }
 
