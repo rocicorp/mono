@@ -52,6 +52,7 @@ describe('replicator/incremental-sync', () => {
       REPLICA_ID,
       {subscribe: subscribeFn.mockImplementation(() => downstream)},
       replica,
+      'CONCURRENT',
       {
         maybeCheckpoint: checkpointFn.mockReturnValue(promiseVoid),
         stop: vi.fn(),

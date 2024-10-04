@@ -1,8 +1,8 @@
-import {Database} from 'zqlite/src/db.js';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {Database} from 'zqlite/src/db.js';
 import {expectTables} from '../test/lite.js';
 import {StatementRunner} from './statements.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 
 describe('db/statements', () => {
   let db: StatementRunner;
@@ -40,7 +40,7 @@ describe('db/statements', () => {
     db.rollback();
     expectTables(db.db, {foo: []});
 
-    db.beginConcurrent();
+    db.begin();
     db.run('INSERT INTO foo(id) VALUES(?)', 987);
     db.commit();
 
