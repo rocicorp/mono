@@ -27,86 +27,91 @@ describe('db/wal-checkpoint', () => {
     await dbFile.unlink();
   });
 
-  type CheckpointResult = {
+  type Checkpoint = {
     busy: number;
     log: number;
     checkpointed: number;
   }[];
 
-  test('checkpointing', async () => {
-    // The read lock logic must be run in a different thread.
-    const worker = new Worker(
-      `
+  type TransactionMode = 'IMMEDIATE' | 'CONCURRENT';
+
+  test.each([['IMMEDIATE'], ['CONCURRENT']] satisfies [TransactionMode][])(
+    'wal_checkpoint with BEGIN %s',
+    async transaction => {
+      const writer = dbFile.connect(lc);
+      writer.pragma('wal_autocheckpoint = 0');
+      writer.pragma('busy_timeout = 100');
+
+      const insert = writer.prepare('INSERT INTO foo(id) VALUES(?)');
+      for (let i = 10; i < 20; i++) {
+        insert.run(i);
+      }
+
+      // Simulate a concurrent transaction (e.g. replicator) in a different thread.
+      const worker = new Worker(
+        `
       const {parentPort} = require('worker_threads');
       const Database = require('better-sqlite3');
 
       // Acquire a read lock.
       const reader = new Database('${dbFile.path}');
+      reader.pragma('busy_timeout = 5000');
       const count = reader.prepare('select count(*) as count from foo');
 
-      reader.prepare('begin concurrent').run();
+      reader.prepare('begin ${transaction}').run();
       const before = count.get();
+      reader.prepare('insert into foo(id) VALUES(30)').run();
 
-      parentPort.postMessage('ready');
+      parentPort.postMessage('inTransaction');
 
-      // Release the read lock when a message is posted to this worker.
+      // Commit the transaction when a message is posted to this worker.
       parentPort.once('message', () => {
-        reader.prepare('rollback').run();
+        reader.prepare('commit').run();
         const after = count.get();
 
         // Respond with the before and after counts.
         parentPort.postMessage({before, after});
       });
     `,
-      {eval: true},
-    );
+        {eval: true},
+      );
 
-    const {promise: running, resolve: setRunning} = resolver();
-    worker.once('message', setRunning);
-    await running;
+      const {promise: inTransaction, resolve: setRunning} = resolver();
+      worker.once('message', setRunning);
+      await inTransaction;
 
-    const writer = dbFile.connect(lc);
-    writer.pragma('busy_timeout = 50');
+      // Signal the worker to proceed and immediately force a wal_checkpoint.
+      worker.postMessage('commit');
+      const [result] = writer.pragma('wal_checkpoint(RESTART)') as Checkpoint;
 
-    const insert = writer.prepare('INSERT INTO foo(id) VALUES(?)');
-    for (let i = 10; i < 20; i++) {
-      insert.run(i);
-    }
+      if (transaction === 'CONCURRENT') {
+        // With a BEGIN CONCURRENT, the checkpoint fails. Note that if this were
+        // litestream, this would result in a deadlock as litestream does not
+        // set a busy_timeout.
+        expect(result).toEqual({busy: 1, log: 10, checkpointed: 10});
+        return;
+      }
+      // With normal transactions, the wal_checkpoint waits for a write to finish.
+      expect(result).toEqual({busy: 0, log: 11, checkpointed: 11});
 
-    // A passive wal_checkpoint does not block and won't succeed in
-    // checkpointing, but it returns the state of the wal.
-    expect(
-      (writer.pragma('wal_checkpoint(PASSIVE)') as CheckpointResult)[0],
-    ).toEqual({busy: 0, log: 10, checkpointed: 0});
+      const {promise: response, resolve: setResponse} = resolver<unknown>();
+      worker.once('message', setResponse);
+      expect(await response).toEqual({
+        before: {count: 13},
+        after: {count: 14},
+      });
 
-    // A RESTART should fail with 'busy' while the read lock is held.
-    expect(
-      (writer.pragma('wal_checkpoint(RESTART)') as CheckpointResult)[0],
-    ).toEqual({busy: 1, log: 10, checkpointed: 0});
+      // New writes should be written from the beginning of the WAL.
+      insert.run(20);
+      insert.run(21);
+      expect(
+        (writer.pragma('wal_checkpoint(PASSIVE)') as Checkpoint)[0],
+      ).toEqual({busy: 0, log: 2, checkpointed: 2});
 
-    // A wal_checkpoint should succeed once the read lock is released.
-    worker.postMessage('release');
-    expect(
-      (writer.pragma('wal_checkpoint(RESTART)') as CheckpointResult)[0],
-    ).toEqual({busy: 0, log: 10, checkpointed: 10});
-
-    const {promise: response, resolve: setResponse} = resolver<unknown>();
-    worker.once('message', setResponse);
-    expect(await response).toEqual({
-      before: {count: 3},
-      after: {count: 13},
-    });
-
-    // New writes should be written from the beginning of the WAL.
-    insert.run(20);
-    insert.run(21);
-    expect(
-      (writer.pragma('wal_checkpoint(PASSIVE)') as CheckpointResult)[0],
-    ).toEqual({busy: 0, log: 2, checkpointed: 2});
-
-    insert.run(22);
-    expect(
-      (writer.pragma('wal_checkpoint(PASSIVE)') as CheckpointResult)[0],
-    ).toEqual({busy: 0, log: 1, checkpointed: 1});
-  });
+      insert.run(22);
+      expect(
+        (writer.pragma('wal_checkpoint(PASSIVE)') as Checkpoint)[0],
+      ).toEqual({busy: 0, log: 1, checkpointed: 1});
+    },
+  );
 });
