@@ -48,6 +48,10 @@ export class StatementRunner {
   }
 
   // Syntactic sugar methods
+  begin(): RunResult {
+    return this.run('BEGIN');
+  }
+
   beginConcurrent(): RunResult {
     return this.run('BEGIN CONCURRENT');
   }
