@@ -70,10 +70,7 @@ for (const dep of [
   await addExternalDepsFor(dep);
 }
 
-// temporary hack to remove replicache from the externals. This is because we
-// are using the replicache source directly in the zero-client.
-// This is only until we get things running.
-// externalSet.delete('replicache');
+externalSet.delete('replicache');
 
 const external = [...externalSet];
 
