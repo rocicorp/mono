@@ -15,8 +15,7 @@
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.2.2",
-    "@rocicorp/resolver": "^1.0.2",
-    "replicache": "15.2.1"
+    "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
@@ -24,6 +23,7 @@
     "@types/sinon": "^10.0.11",
     "datadog": "0.0.0",
     "esbuild": "^0.20.2",
+    "replicache": "15.2.1",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "tsc-alias": "^1.8.10",

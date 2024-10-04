@@ -14,6 +14,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "dependencies": {
+    "@badrap/valita": "^0.3.9",
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
@@ -34,7 +35,7 @@
     "pg-logical-replication": "^2.0.7",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
-    "replicache": "15.2.1",
+    "semver": "^7.5.4",
     "ws": "^8.18.0",
     "xxhash-wasm": "^1.0.2"
   },
@@ -42,6 +43,7 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "esbuild": "^0.20.2",
+    "replicache": "15.2.1",
     "tsc-alias": "^1.8.10",
     "typescript": "^5.5.3"
   },
