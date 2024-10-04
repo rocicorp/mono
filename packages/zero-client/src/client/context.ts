@@ -25,7 +25,7 @@ export class ZeroContext implements QueryDelegate {
   // data in from the Replicache db. But we want the data to be accessible via
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
-  readonly #sources = new Map<string, MemorySource>();
+  readonly #sources = new Map<string, MemorySource | undefined>();
   readonly #tables: Record<string, TableSchema>;
   readonly #addQuery: AddQuery;
   readonly #commitListeners: Set<CommitListener> = new Set();
@@ -37,16 +37,15 @@ export class ZeroContext implements QueryDelegate {
     this.#addQuery = addQuery;
   }
 
-  getSource(name: string): Source {
-    let source = this.#sources.get(name);
-    if (source !== undefined) {
-      return source;
+  getSource(name: string): Source | undefined {
+    if (this.#sources.has(name)) {
+      return this.#sources.get(name);
     }
+
     const schema = this.#tables[name] as TableSchema | undefined;
-    if (!schema) {
-      throw new Error(`No schema found for table ${name}`);
-    }
-    source = new MemorySource(name, schema.columns, schema.primaryKey);
+    const source = schema
+      ? new MemorySource(name, schema.columns, schema.primaryKey)
+      : undefined;
     this.#sources.set(name, source);
     return source;
   }
@@ -74,6 +73,9 @@ export class ZeroContext implements QueryDelegate {
         const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
         const name = key.slice(ENTITIES_KEY_PREFIX.length, slash);
         const source = this.getSource(name);
+        if (!source) {
+          continue;
+        }
 
         switch (diff.op) {
           case 'del':
