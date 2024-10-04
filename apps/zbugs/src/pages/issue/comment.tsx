@@ -27,7 +27,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
     <div className={style.commentItem}>
       <p className={style.commentAuthor}>
         <img
-          src={comment.creator.avatar}
+          src={comment.creator?.avatar}
           style={{
             width: '2rem',
             height: '2rem',
@@ -35,9 +35,9 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
             display: 'inline-block',
             marginRight: '0.3rem',
           }}
-          alt={comment.creator.name}
+          alt={comment.creator?.name}
         />{' '}
-        {comment.creator.login}
+        {comment.creator?.login}
       </p>
       {editing ? (
         <CommentComposer

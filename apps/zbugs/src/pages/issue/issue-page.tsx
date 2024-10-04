@@ -37,21 +37,14 @@ export default function IssuePage() {
     setEdits({});
   };
 
-  const remove = () => {
-    // TODO: Implement undo - https://github.com/rocicorp/undo
-    if (confirm('Really delete?')) {
-      z.mutate.issue.delete({id: issue.id});
-    }
-    navigate('/');
-  };
-
   const cancel = () => {
     setEditing(null);
     setEdits({});
   };
 
   const next = useQuery(
-    z.query.issue.orderBy('modified', 'desc').start(issue).one(),
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    z.query.issue.orderBy('modified', 'desc').start(issue!).one(),
     issue !== undefined,
   );
   useKeypress('j', () => {
@@ -79,6 +72,14 @@ export default function IssuePage() {
   if (!issue) {
     return null;
   }
+
+  const remove = () => {
+    // TODO: Implement undo - https://github.com/rocicorp/undo
+    if (confirm('Really delete?')) {
+      z.mutate.issue.delete({id: issue.id});
+    }
+    navigate('/');
+  };
 
   // TODO: This check goes away once Zero's consistency model is implemented.
   // The query above should not be able to return an incomplete result.
