@@ -22,6 +22,7 @@ import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
+import {throwErrorForClientIfSchemaVersionNotSupported} from 'zero-cache/src/types/schema-versions.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -179,32 +180,14 @@ export async function processMutation(
     let errorMode = false;
     for (let i = 0; i < MAX_SERIALIZATION_ATTEMPTS; i++) {
       try {
-        await db.begin(Mode.SERIALIZABLE, async tx => {
+        await db.begin(Mode.SERIALIZABLE, tx => {
           onTxStart?.();
-          const supportedVersionRange = await tx<
-            {
-              minSupportedVersion: number;
-              maxSupportedVersion: number;
-            }[]
-          >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`;
-          assert(supportedVersionRange.length === 1);
-          const {minSupportedVersion, maxSupportedVersion} =
-            supportedVersionRange[0];
-          if (
-            schemaVersion < minSupportedVersion ||
-            schemaVersion > maxSupportedVersion
-          ) {
-            throw new ErrorForClient([
-              'error',
-              ErrorKind.SchemaVersionNotSupported,
-              `Schema version ${schemaVersion} is not in range of supported schema versions [${minSupportedVersion}, ${maxSupportedVersion}]`,
-            ]);
-          }
           return processMutationWithTx(
             tx,
             authData,
             shardID,
             clientGroupID,
+            schemaVersion,
             mutation,
             errorMode,
             writeAuthorizer,
@@ -250,6 +233,7 @@ async function processMutationWithTx(
   authData: JWTPayload,
   shardID: string,
   clientGroupID: string,
+  schemaVersion: number,
   mutation: CRUDMutation,
   errorMode: boolean,
   authorizer: WriteAuthorizer,
@@ -300,10 +284,11 @@ async function processMutationWithTx(
   // Confirm the mutation even though it may have been blocked by the authorizer.
   // Authorizer blocking a mutation is not an error but the correct result of the mutation.
   tasks.unshift(() =>
-    incrementLastMutationID(
+    checkSchemaVersionAndIncrementLastMutationID(
       tx,
       shardID,
       clientGroupID,
+      schemaVersion,
       mutation.clientID,
       mutation.id,
     ),
@@ -370,20 +355,30 @@ function getDeleteSQL(
   return tx`DELETE FROM ${tx(table)} WHERE ${conditions}`;
 }
 
-async function incrementLastMutationID(
+async function checkSchemaVersionAndIncrementLastMutationID(
   tx: PostgresTransaction,
   shardID: string,
   clientGroupID: string,
+  schemaVersion: number,
   clientID: string,
   receivedMutationID: number,
 ) {
-  const [{lastMutationID}] = await tx<{lastMutationID: bigint}[]>`
+  const lastMutationIdPromise = tx<{lastMutationID: bigint}[]>`
     INSERT INTO zero.clients as current ("shardID", "clientGroupID", "clientID", "lastMutationID")
     VALUES (${shardID}, ${clientGroupID}, ${clientID}, ${1})
     ON CONFLICT ("shardID", "clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
     RETURNING "lastMutationID"
   `;
+
+  const supportedVersionRangePromise = tx<
+    {
+      minSupportedVersion: number;
+      maxSupportedVersion: number;
+    }[]
+  >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`.execute();
+
+  const [{lastMutationID}] = await lastMutationIdPromise;
 
   // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.
   if (receivedMutationID < lastMutationID) {
@@ -399,6 +394,10 @@ async function incrementLastMutationID(
       `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
     ]);
   }
+
+  const supportedVersionRange = await supportedVersionRangePromise;
+  assert(supportedVersionRange.length === 1);
+  throwErrorForClientIfSchemaVersionNotSupported(supportedVersionRange[0]);
 }
 
 class MutationAlreadyProcessedError extends Error {

@@ -4,6 +4,7 @@ import {URLParams} from 'zero-cache/src/types/url-params.js';
 export type ConnectParams = {
   readonly clientID: string;
   readonly clientGroupID: string;
+  readonly schemaVersion: number;
   readonly baseCookie: string | null;
   readonly timestamp: number;
   readonly lmID: number;
@@ -30,6 +31,7 @@ export function getConnectParams(
   try {
     const clientID = params.get('clientID', true);
     const clientGroupID = params.get('clientGroupID', true);
+    const schemaVersion = params.getInteger('schemaVersion', true);
     const baseCookie = params.get('baseCookie', false);
     const timestamp = params.getInteger('ts', true);
     const lmID = params.getInteger('lmid', true);
@@ -42,6 +44,7 @@ export function getConnectParams(
       params: {
         clientID,
         clientGroupID,
+        schemaVersion,
         baseCookie,
         timestamp,
         lmID,

@@ -56,9 +56,10 @@ export class Connection {
   ) {
     this.#ws = ws;
     this.#authData = authData;
-    const {clientGroupID, clientID, wsID, baseCookie} = connectParams;
+    const {clientGroupID, clientID, wsID, baseCookie, schemaVersion} =
+      connectParams;
     this.#clientGroupID = clientGroupID;
-    this.#syncContext = {clientID, wsID, baseCookie};
+    this.#syncContext = {clientID, wsID, baseCookie, schemaVersion};
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
