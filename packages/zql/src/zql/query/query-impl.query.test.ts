@@ -544,7 +544,7 @@ describe('joins and filters', () => {
     const q3 = newQuery(queryDelegate, issueSchema).related('comments', q =>
       q.one(),
     );
-    expect((q3 as QueryImpl<never, never>).format).toEqual({
+    expect((q3 as unknown as QueryImpl<never, never>).format).toEqual({
       singular: false,
       relationships: {
         comments: {

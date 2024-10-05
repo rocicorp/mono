@@ -23,7 +23,6 @@ import type {
   MessageUpdate,
 } from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
-import type {Checkpointer} from './checkpointer.js';
 import {Notifier} from './notifier.js';
 import type {ReplicaState} from './replicator.js';
 import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
@@ -48,7 +47,6 @@ export class IncrementalSyncer {
   readonly #replica: StatementRunner;
   readonly #txMode: TransactionMode;
   readonly #notifier: Notifier;
-  readonly #checkpointer: Checkpointer;
 
   readonly #state = new RunningState('IncrementalSyncer');
   #service: LogicalReplicationService | undefined;
@@ -58,14 +56,12 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     replica: Database,
     txMode: TransactionMode,
-    checkpointer: Checkpointer,
   ) {
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
     this.#txMode = txMode;
     this.#notifier = new Notifier();
-    this.#checkpointer = checkpointer;
   }
 
   async run(lc: LogContext) {
@@ -101,10 +97,8 @@ export class IncrementalSyncer {
           }
           this.#state.resetBackoff();
 
-          const committed = processor.processMessage(lc, message);
-          if (committed > 0) {
+          if (processor.processMessage(lc, message)) {
             this.#notifier.notifySubscribers({state: 'version-ready'});
-            await this.#checkpointer.maybeCheckpoint(committed, this.#notifier);
           }
         }
         processor.abort(lc);
@@ -126,7 +120,6 @@ export class IncrementalSyncer {
 
   async stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
-    this.#checkpointer.stop();
     await this.#service?.stop();
   }
 }
@@ -168,7 +161,6 @@ export class MessageProcessor {
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
   #currentTx: TransactionProcessor | null = null;
-  #pendingChanges = 0;
 
   #failure: Error | undefined;
 
@@ -205,12 +197,12 @@ export class MessageProcessor {
     this.#fail(lc, err ?? new AbortError());
   }
 
-  /** @return The number of changes committed. */
-  processMessage(lc: LogContext, downstream: DownstreamChange): number {
+  /** @return If a transaction was committed. */
+  processMessage(lc: LogContext, downstream: DownstreamChange): boolean {
     const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);
-      return 0;
+      return false;
     }
     try {
       const watermark = type === 'commit' ? downstream[2].watermark : undefined;
@@ -223,7 +215,7 @@ export class MessageProcessor {
         this.#fail(lc, e);
       }
     }
-    return 0;
+    return false;
   }
 
   /** @return The number of changes committed. */
@@ -231,13 +223,13 @@ export class MessageProcessor {
     lc: LogContext,
     msg: Change,
     watermark: string | undefined,
-  ): number {
+  ): boolean {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
       this.#currentTx = new TransactionProcessor(this.#db, this.#txMode);
-      return (this.#pendingChanges = 0);
+      return false;
     }
 
     // For non-begin messages, there should be a #currentTx set.
@@ -257,10 +249,8 @@ export class MessageProcessor {
       lc.debug?.(`Committed tx (${elapsedMs} ms)`);
 
       this.#acknowledge(watermark);
-      return this.#pendingChanges;
+      return true;
     }
-
-    this.#pendingChanges++;
 
     switch (msg.tag) {
       case 'insert':
@@ -280,7 +270,7 @@ export class MessageProcessor {
         unreachable(msg);
     }
 
-    return 0;
+    return false;
   }
 }
 

@@ -11,7 +11,7 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "tsx ./zero.config.ts && ZERO_CONFIG_PATH=zero.config.json zero start"
+    "zero": "tsx ./zero.config.ts && ZERO_CONFIG_PATH=zero.config.json zero-cache start"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",

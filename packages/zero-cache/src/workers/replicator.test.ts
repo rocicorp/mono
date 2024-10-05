@@ -3,7 +3,6 @@ import {describe, expect, test, vi} from 'vitest';
 import type {ReplicaState} from 'zero-cache/src/services/replicator/replicator.js';
 import {Subscription} from 'zero-cache/src/types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
-import {orTimeout} from '../types/timeout.js';
 import {
   createNotifierFrom,
   setUpMessageHandlers,
@@ -25,33 +24,16 @@ describe('workers/replicator', () => {
 
     void setUpMessageHandlers(lc, replicator, parent);
 
-    const msg1 = originalSub.push({state: 'version-ready'});
-    const msg2 = originalSub.push({state: 'version-ready', ack: 123});
-    const msg3 = originalSub.push({state: 'maintenance', ack: 456});
+    originalSub.push({state: 'version-ready', testSeqNum: 1});
+    originalSub.push({state: 'version-ready', testSeqNum: 2});
+    const msg3 = originalSub.push({state: 'version-ready', testSeqNum: 3});
 
     const notifications = [];
     const notifier = createNotifierFrom(lc, child);
     subscribeTo(lc, child);
 
-    let i = 0;
     for await (const msg of notifier.subscribe()) {
       notifications.push(msg);
-      switch (i++) {
-        case 0:
-          // Expect msg1 to already be 'consumed' because it is not waiting on an ACK.
-          expect(await orTimeout(msg1.result, 5)).toBe('consumed');
-          break;
-        case 1:
-          // msg2 is waiting on an ACK, so it should not be consumed until the next
-          // iteration of this loop.
-          expect(await orTimeout(msg2.result, 5)).toBe('timed-out');
-          break;
-        case 2:
-          // msg2 should be ACK'ed, and msg3 awaiting the ACK.
-          expect(await orTimeout(msg2.result, 5)).toBe('consumed');
-          expect(await orTimeout(msg3.result, 5)).toBe('timed-out');
-          break;
-      }
       if (notifications.length === 3) {
         break;
       }
@@ -61,9 +43,9 @@ describe('workers/replicator', () => {
     expect(await msg3.result).toBe('consumed');
 
     expect(notifications).toEqual([
-      {state: 'version-ready'},
-      {state: 'version-ready', ack: 123},
-      {state: 'maintenance', ack: 456},
+      {state: 'version-ready', testSeqNum: 1},
+      {state: 'version-ready', testSeqNum: 2},
+      {state: 'version-ready', testSeqNum: 3},
     ]);
   });
 });

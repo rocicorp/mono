@@ -80,7 +80,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #cvrStore: CVRStore;
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
-  #pipelinesPaused = false;
 
   constructor(
     lc: LogContext,
@@ -109,34 +108,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  #pipelinesReady() {
-    return this.#pipelinesSynced && !this.#pipelinesPaused;
-  }
-
   async run(): Promise<void> {
     try {
       for await (const {state} of this.#stateChanges) {
+        assert(state === 'version-ready'); // This is the only state change used.
+        if (!this.#pipelines.initialized()) {
+          // On the first version-ready signal, connect to the replica.
+          this.#pipelines.init();
+        }
         await this.#runInLockWithCVR(async cvr => {
-          if (state === 'maintenance') {
-            if (this.#pipelines.initialized()) {
-              this.#pipelines.release();
-            }
-            this.#pipelinesPaused = true; // Block access to pipelines until resume.
-            return;
-          }
-
-          if (!this.#pipelines.initialized()) {
-            // On the first version-ready signal, connect to the replica.
-            this.#pipelines.init();
-          }
-
-          if (this.#pipelinesReady()) {
-            // Note: #pipelinesReady() means `paused === false`.
+          if (this.#pipelinesSynced) {
             await this.#advancePipelines(cvr);
             return;
           }
-
-          this.#pipelinesPaused = false;
 
           // Advance the snapshot to the current version.
           const version = this.#pipelines.advanceWithoutDiff();
@@ -144,23 +128,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           if (version < cvr.version.stateVersion) {
             this.#lc.debug?.(`replica@${version} is behind cvr@${cvrVer}`);
-            // Wait for the next advancement.
-          } else if (
-            version === cvr.version.stateVersion &&
-            this.#pipelinesSynced
-          ) {
-            // This happens when an advance-after-unpause lands on the same
-            // version, which is hopefully the common case. Nothing to do.
-          } else {
-            this.#lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
-            // stateVersion matches the CVR for the first time,
-            // or it advanced beyond the CVR during a maintenance pause.
-            // (Clear and re-)initialize the pipelines.
-            this.#pipelines.clear();
-            this.#hydrateUnchangedQueries(cvr);
-            await this.#syncQueryPipelineSet(cvr);
-            this.#pipelinesSynced = true;
+            return; // Wait for the next advancement.
           }
+
+          // stateVersion is at or beyond CVR version for the first time.
+          this.#lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
+          this.#hydrateUnchangedQueries(cvr);
+          await this.#syncQueryPipelineSet(cvr);
+          this.#pipelinesSynced = true;
         });
       }
 
@@ -370,7 +345,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr = this.#cvr; // For #syncQueryPipelineSet().
     }
 
-    if (this.#pipelinesReady()) {
+    if (this.#pipelinesSynced) {
       await this.#syncQueryPipelineSet(cvr);
     }
   };
