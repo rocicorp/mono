@@ -62,8 +62,6 @@ async function getExternal(includePeerDeps) {
     await addExternalDepsFor(dep);
   }
 
-  externalSet.delete('replicache');
-
   return [...externalSet].sort();
 }
 
