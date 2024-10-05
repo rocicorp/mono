@@ -78,11 +78,16 @@ export class Syncer {
 
     let decodedToken: JWTPayload | undefined;
     if (auth) {
-      decodedToken = await decodeAndCheckToken(
-        auth,
-        this.#jwtSecretBytes,
-        userID,
-      );
+      try {
+        decodedToken = await decodeAndCheckToken(
+          auth,
+          this.#jwtSecretBytes,
+          userID,
+        );
+      } catch (e) {
+        this.#lc.error?.('Failed to decode JWT', e);
+        ws.close(401, 'Failed to decode JWT');
+      }
     }
 
     const connection = new Connection(
