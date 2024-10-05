@@ -145,6 +145,10 @@ class PostgresChangeSource implements ChangeSource {
           if (change) {
             changes.push(change);
           }
+        })
+        .on('error', err => {
+          this.#lc.error?.('error from upstream postgres', err);
+          changes.fail(err);
         });
 
       await this.stopExistingReplicationSlotSubscriber(db, slot);
