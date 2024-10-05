@@ -11,7 +11,7 @@ import {orTimeout} from '../types/timeout.js';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
-  type ReplicatorMode,
+  type ReplicaFileMode,
   subscribeTo,
 } from '../workers/replicator.js';
 import {createLogContext} from './logging.js';
@@ -74,7 +74,7 @@ if (numSyncers) {
 await changeStreamerReady;
 
 if (config.litestream) {
-  const mode: ReplicatorMode = 'backup';
+  const mode: ReplicaFileMode = 'backup';
   const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
     () => subscribeTo(lc, replicator),
@@ -87,7 +87,7 @@ if (config.litestream) {
 
 const syncers: Worker[] = [];
 if (numSyncers) {
-  const mode: ReplicatorMode = config.litestream ? 'serving-copy' : 'serving';
+  const mode: ReplicaFileMode = config.litestream ? 'serving-copy' : 'serving';
   const replicator = loadWorker('./replicator.ts', mode, mode).once(
     'message',
     () => subscribeTo(lc, replicator),

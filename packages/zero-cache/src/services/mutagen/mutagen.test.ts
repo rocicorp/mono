@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {Mode} from 'zero-cache/src/db/transaction-pool.js';
-import {MutationType, type CRUDMutation} from 'zero-protocol';
+import {ErrorKind, MutationType, type CRUDMutation} from 'zero-protocol';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';
@@ -436,9 +436,10 @@ describe('processMutation', () => {
       mockWriteAuthorizer,
     );
 
-    expect(error).toEqual(
+    expect(error).toEqual([
+      ErrorKind.MutationFailed,
       'PostgresError: insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
-    );
+    ]);
     console.log(error);
 
     await expectTables(db, {

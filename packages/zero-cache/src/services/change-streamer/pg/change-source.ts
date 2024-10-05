@@ -55,6 +55,7 @@ export async function initializeChangeSource(
 
   const replica = new Database(lc, replicaDbFile);
   const replicationConfig = getSubscriptionState(new StatementRunner(replica));
+  replica.close();
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.
@@ -144,6 +145,10 @@ class PostgresChangeSource implements ChangeSource {
           if (change) {
             changes.push(change);
           }
+        })
+        .on('error', err => {
+          this.#lc.error?.('error from upstream postgres', err);
+          changes.fail(err);
         });
 
       await this.stopExistingReplicationSlotSubscriber(db, slot);

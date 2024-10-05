@@ -17,7 +17,7 @@ export type Context = {
 };
 
 export type Smash<T extends QueryType> = T['singular'] extends true
-  ? SmashOne<T>
+  ? SmashOne<T> | undefined
   : Array<SmashOne<T>>;
 
 type SmashOne<T extends QueryType> = T['row'] & {

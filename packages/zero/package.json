@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.0.202410041722+d0f469",
+  "version": "0.0.202410041744+c31257",
   "scripts": {
     "prepack": "rm -rf deps && mkdir -p deps/sqlite3 && cp -r ../../deps/sqlite3/* deps/sqlite3/",
     "preinstall": "node tool/install-sqlite3.js",
@@ -42,6 +42,8 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
+    "zero-client": "0.0.0",
+    "zero-cache": "0.0.0",
     "esbuild": "^0.20.2",
     "replicache": "15.2.1",
     "tsc-alias": "^1.8.10",
