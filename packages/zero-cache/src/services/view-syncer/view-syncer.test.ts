@@ -566,6 +566,10 @@ describe('view-syncer/service', () => {
             "baseCookie": "00:02",
             "cookie": "01",
             "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
           },
         ],
         [
