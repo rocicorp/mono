@@ -86,7 +86,7 @@ export class Syncer {
         );
       } catch (e) {
         this.#lc.error?.('Failed to decode JWT', e);
-        ws.close(401, 'Failed to decode JWT');
+        ws.close(3000, 'Failed to decode JWT');
       }
     }
 
