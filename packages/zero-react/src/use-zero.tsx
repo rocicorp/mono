@@ -1,5 +1,5 @@
 import {createContext, useContext} from 'react';
-import type {Schema, Zero} from 'zero-client';
+import type {Schema, Zero} from '../../zero-client/src/mod.js';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const ZeroContext = createContext<Zero<Schema> | undefined>(undefined);

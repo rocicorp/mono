@@ -16,8 +16,11 @@ import {
   type ReplicacheOptions,
   type UpdateNeededReason as ReplicacheUpdateNeededReason,
   dropDatabase,
-} from 'replicache';
-import {ReplicacheImpl, type ReplicacheImplOptions} from 'replicache/impl';
+} from '../../../replicache/src/mod.js';
+import {
+  ReplicacheImpl,
+  type ReplicacheImplOptions,
+} from '../../../replicache/src/impl.js';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {getDocument, getLocation} from 'shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
@@ -44,7 +47,7 @@ import {
   type PushMessage,
   downstreamSchema,
   nullableVersionSchema,
-} from 'zero-protocol';
+} from '../../../zero-protocol/src/mod.js';
 import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.js';
 import type {
   PullRequestMessage,
