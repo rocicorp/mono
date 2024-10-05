@@ -129,7 +129,12 @@ const zeroConfigSchemaSansAuthorization = v.object({
   // on port 2999.
   changeStreamerUri: configStringValueSchema.optional(),
 
+  // Indicates that a `litestream replicate` process is backing up
+  // the `replicatDbFile`. This should be the production configuration
+  // for the `replication-manager`. It is okay to run this in
+  // development too.
   litestream: v.union(envRefSchema, booleanLiteral).optional(),
+
   jwtSecret: configStringValueSchema.optional(),
 
   log: logConfigSchema,
