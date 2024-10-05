@@ -36,6 +36,14 @@ describe('view-syncer/pipeline-driver', () => {
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
+      CREATE TABLE "zero.schemaVersions" (
+        "lock"                INTEGER PRIMARY KEY,
+        "minSupportedVersion" INTEGER,
+        "maxSupportedVersion" INTEGER,
+        _0_version            TEXT NOT NULL
+      );
+      INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+        VALUES (1, 1, 1, '00');  
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,

@@ -23,6 +23,14 @@ describe('view-syncer/snapshotter', () => {
     db.pragma('journal_mode = WAL');
     db.exec(
       `
+        CREATE TABLE "zero.schemaVersions" (
+          "lock"                INTEGER PRIMARY KEY,
+          "minSupportedVersion" INTEGER,
+          "maxSupportedVersion" INTEGER,
+          _0_version            TEXT NOT NULL
+        );
+        INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+          VALUES (1, 1, 1, '00');  
         CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, _0_version TEXT NOT NULL);

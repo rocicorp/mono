@@ -24,16 +24,44 @@ describe('view-syncer/client-handler', () => {
     );
 
     const lc = createSilentLogContext();
+    const schemaVersion = 1;
+    const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
     const handlers = [
       // Client 1 is already caught up.
-      new ClientHandler(lc, 'g1', 'id1', 'ws1', '121', subscriptions[0]),
+      new ClientHandler(
+        lc,
+        'g1',
+        'id1',
+        'ws1',
+        '121',
+        schemaVersion,
+        subscriptions[0],
+      ),
       // Client 2 is a bit behind.
-      new ClientHandler(lc, 'g1', 'id2', 'ws2', '120:01', subscriptions[1]),
+      new ClientHandler(
+        lc,
+        'g1',
+        'id2',
+        'ws2',
+        '120:01',
+        schemaVersion,
+        subscriptions[1],
+      ),
       // Client 3 is more behind.
-      new ClientHandler(lc, 'g1', 'id3', 'ws3', '11z', subscriptions[2]),
+      new ClientHandler(
+        lc,
+        'g1',
+        'id3',
+        'ws3',
+        '11z',
+        schemaVersion,
+        subscriptions[2],
+      ),
     ];
 
-    let pokers = handlers.map(client => client.startPoke(poke1Version));
+    let pokers = handlers.map(client =>
+      client.startPoke(poke1Version, schemaVersions),
+    );
     for (const poker of pokers) {
       poker.addPatch({
         toVersion: {stateVersion: '11z', minorVersion: 1},
@@ -156,7 +184,9 @@ describe('view-syncer/client-handler', () => {
     }
 
     // Now send another (empty) poke with everyone at the same baseCookie.
-    pokers = handlers.map(client => client.startPoke(poke2Version));
+    pokers = handlers.map(client =>
+      client.startPoke(poke2Version, schemaVersions),
+    );
     for (const poker of pokers) {
       poker.end();
     }
@@ -168,16 +198,16 @@ describe('view-syncer/client-handler', () => {
     expect(received[0]).toEqual([
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', cookie: '123'},
-      ] as PokeStartMessage,
-      ['pokeEnd', {pokeID: '123'}] as PokeEndMessage,
+        {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '123'}] satisfies PokeEndMessage,
     ]);
 
     // Client 2 is a bit behind.
     expect(received[1]).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '120:01', cookie: '121'},
+        {pokeID: '121', baseCookie: '120:01', cookie: '121', schemaVersions},
       ] satisfies PokeStartMessage,
       [
         'pokePart',
@@ -212,16 +242,16 @@ describe('view-syncer/client-handler', () => {
       // Second poke
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', cookie: '123'},
-      ] as PokeStartMessage,
-      ['pokeEnd', {pokeID: '123'}] as PokeEndMessage,
+        {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '123'}] satisfies PokeEndMessage,
     ]);
 
     // Client 3 is more behind.
     expect(received[2]).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '11z', cookie: '121'},
+        {pokeID: '121', baseCookie: '11z', cookie: '121', schemaVersions},
       ] satisfies PokeStartMessage,
       [
         'pokePart',
@@ -267,9 +297,9 @@ describe('view-syncer/client-handler', () => {
       // Second poke
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', cookie: '123'},
-      ] as PokeStartMessage,
-      ['pokeEnd', {pokeID: '123'}] as PokeEndMessage,
+        {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '123'}] satisfies PokeEndMessage,
     ]);
   });
 
@@ -305,15 +335,18 @@ describe('view-syncer/client-handler', () => {
         },
       });
 
+      const schemaVersion = 1;
+      const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
       const handler = new ClientHandler(
         createSilentLogContext(),
         'g1',
         'id1',
         'ws1',
         '121',
+        schemaVersion,
         downstream,
       );
-      const poker = handler.startPoke({stateVersion: '123'});
+      const poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
 
       expect(terminated).toBe(false);
       poker.addPatch({toVersion: {stateVersion: '123'}, patch});

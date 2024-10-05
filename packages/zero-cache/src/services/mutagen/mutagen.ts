@@ -397,7 +397,10 @@ async function checkSchemaVersionAndIncrementLastMutationID(
 
   const supportedVersionRange = await supportedVersionRangePromise;
   assert(supportedVersionRange.length === 1);
-  throwErrorForClientIfSchemaVersionNotSupported(supportedVersionRange[0]);
+  throwErrorForClientIfSchemaVersionNotSupported(
+    schemaVersion,
+    supportedVersionRange[0],
+  );
 }
 
 class MutationAlreadyProcessedError extends Error {

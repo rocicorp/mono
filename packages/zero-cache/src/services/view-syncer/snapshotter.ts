@@ -213,7 +213,7 @@ export interface SnapshotDiff extends Iterable<Change> {
 
 function getSchemaVersions(db: StatementRunner): SchemaVersions {
   return db.get(
-    'SELECT minSupportedVersion, maxSupportedVersion FROM "zero.SchemaVersions"',
+    'SELECT minSupportedVersion, maxSupportedVersion FROM "zero.schemaVersions"',
   );
 }
 

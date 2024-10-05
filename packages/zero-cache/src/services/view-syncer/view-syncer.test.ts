@@ -63,7 +63,12 @@ describe('view-syncer/service', () => {
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
 
-  const SYNC_CONTEXT = {clientID: 'foo', wsID: 'ws1', baseCookie: null};
+  const SYNC_CONTEXT = {
+    clientID: 'foo',
+    wsID: 'ws1',
+    baseCookie: null,
+    schemaVersion: 1,
+  };
 
   const messages = new ReplicationMessages({issues: 'id', users: 'id'});
 
@@ -88,6 +93,12 @@ describe('view-syncer/service', () => {
       _0_version       TEXT NOT NULL,
       PRIMARY KEY ("shardID", "clientGroupID", "clientID")
     );
+    CREATE TABLE "zero.schemaVersions" (
+      "lock"                INTEGER PRIMARY KEY,
+      "minSupportedVersion" INTEGER,
+      "maxSupportedVersion" INTEGER,
+      _0_version            TEXT NOT NULL
+    );
     CREATE TABLE issues (
       id text PRIMARY KEY,
       owner text,
@@ -103,7 +114,9 @@ describe('view-syncer/service', () => {
     );
 
     INSERT INTO "zero.clients" ("shardID", "clientGroupID", "clientID", "lastMutationID", _0_version)
-                      VALUES ('0', '9876', 'foo', 42, '00');
+      VALUES ('0', '9876', 'foo', 42, '00');
+    INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+      VALUES (1, 1, 1, '00');  
 
     INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '00');
     INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '00');
@@ -296,6 +309,10 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "cookie": "00:02",
             "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
           },
         ],
         [
@@ -523,6 +540,7 @@ describe('view-syncer/service', () => {
         baseCookie: null,
         cookie: '00:02',
         pokeID: '00:02',
+        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
       },
     ]);
 
@@ -670,6 +688,7 @@ describe('view-syncer/service', () => {
       baseCookie: null,
       cookie: '00:02',
       pokeID: '00:02',
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
 
     const replicator = fakeReplicator(lc, replica);
@@ -713,7 +732,12 @@ describe('view-syncer/service', () => {
     // Connect with another client (i.e. tab) at older version '00:02'
     // (i.e. pre-advancement).
     const client2 = await connect(
-      {clientID: 'bar', wsID: '9382', baseCookie: preAdvancement.cookie},
+      {
+        clientID: 'bar',
+        wsID: '9382',
+        baseCookie: preAdvancement.cookie,
+        schemaVersion: 1,
+      },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
 
@@ -732,6 +756,10 @@ describe('view-syncer/service', () => {
             "baseCookie": "00:02",
             "cookie": "01:01",
             "pokeID": "01:01",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
           },
         ],
         [
@@ -818,6 +846,10 @@ describe('view-syncer/service', () => {
             "baseCookie": "01",
             "cookie": "01:01",
             "pokeID": "01:01",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
           },
         ],
         [
@@ -923,6 +955,10 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "cookie": "07:02",
             "pokeID": "07:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
           },
         ],
         [
