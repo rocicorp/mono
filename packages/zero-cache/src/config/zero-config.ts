@@ -118,8 +118,17 @@ const zeroConfigSchemaSansAuthorization = v.object({
   taskId: configStringValueSchema.optional(),
   replicaDbFile: configStringValueSchema,
   storageDbTmpDir: configStringValueSchema.optional(),
+
+  // The number of sync workers defaults to available-cores - 1.
+  // It should be set to 0 for the `replication-manager`.
   numSyncWorkers: v.union(envRefSchema, numberLiteral).optional(),
+
+  // In development, the `zero-cache` runs its own `replication-manager`
+  // (i.e. `change-streamer`). In production, this URI should point to
+  // to the `replication-manager`, which runs a `change-streamer`
+  // on port 2999.
   changeStreamerUri: configStringValueSchema.optional(),
+
   litestream: v.union(envRefSchema, booleanLiteral).optional(),
   jwtSecret: configStringValueSchema.optional(),
 
