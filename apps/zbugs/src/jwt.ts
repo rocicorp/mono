@@ -1,4 +1,5 @@
 import {decodeJwt} from 'jose';
+import Cookies from 'js-cookie';
 
 export function getJwt() {
   const token = getRawJwt();
@@ -15,14 +16,7 @@ export function getJwt() {
 }
 
 export function getRawJwt() {
-  const cookies = document.cookie.split(';');
-  const jwtCookie = cookies.find(cookie => cookie.trim().startsWith('jwt='));
-
-  if (!jwtCookie) {
-    return undefined;
-  }
-
-  return jwtCookie.split('=')[1].trim();
+  return Cookies.get('jwt');
 }
 
 export function clearJwt() {
@@ -30,5 +24,5 @@ export function clearJwt() {
 }
 
 function deleteCookie(name: string) {
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+  Cookies.remove(name);
 }
