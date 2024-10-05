@@ -3,7 +3,7 @@ import type {
   ReadonlyJSONObject,
   ReadTransaction as ReplicacheReadTransaction,
   WriteTransaction as ReplicacheWriteTransaction,
-} from 'replicache';
+} from '../../../replicache/src/mod.js';
 
 /**
  * `AuthData` must include a `userID` which is unique stable identifier

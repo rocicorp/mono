@@ -1,4 +1,4 @@
-import type {ExperimentalNoIndexDiff} from 'replicache';
+import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {Row} from 'zql/src/zql/ivm/data.js';

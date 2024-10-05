@@ -1,4 +1,4 @@
-import {ErrorKind} from 'zero-protocol';
+import {ErrorKind} from '../../../zero-protocol/src/mod.js';
 
 /**
  * Represents an error sent by server as part of Zero protocol.

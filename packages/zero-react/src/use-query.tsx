@@ -7,7 +7,7 @@ import type {
   Smash,
   TableSchema,
   TypedView,
-} from 'zero-client';
+} from '../../zero-client/src/mod.js';
 
 export function useQuery<
   TSchema extends TableSchema,

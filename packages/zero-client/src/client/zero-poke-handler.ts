@@ -1,7 +1,10 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID, PatchOperation} from 'replicache';
-import type {PatchOperationInternal, PokeInternal} from 'replicache/impl';
+import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
+import type {
+  PatchOperationInternal,
+  PokeInternal,
+} from '../../../replicache/src/impl.js';
 import type {
   ClientsPatchOp,
   EntitiesPatchOp,
@@ -9,7 +12,7 @@ import type {
   PokePartBody,
   PokeStartBody,
   QueriesPatchOp,
-} from 'zero-protocol';
+} from '../../../zero-protocol/src/mod.js';
 import {
   toClientsKey,
   toDesiredQueriesKey,
