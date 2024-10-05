@@ -111,7 +111,7 @@ export class Snapshotter {
   }
 
   /** Returns the current snapshot. Asserts if {@link initialized()} is false. */
-  current(): {db: StatementRunner; version: string} {
+  current(): Snapshot {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     return this.#curr;
   }
