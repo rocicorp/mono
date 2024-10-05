@@ -34,6 +34,9 @@ defineConfig<AuthData, Schema>(schema, queries => {
     cvrDbUri: runtimeEnv('CVR_DB_URI'),
     changeDbUri: runtimeEnv('CHANGE_DB_URI'),
 
+    numSyncWorkers: runtimeEnv('NUM_SYNC_WORKERS'),
+    changeStreamerUri: runtimeEnv('CHANGE_STREAMER_URI'),
+
     replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
     jwtSecret: runtimeEnv('JWT_SECRET'),
     litestream: runtimeEnv('LITESTREAM'),
