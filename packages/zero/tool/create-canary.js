@@ -39,18 +39,56 @@ function writePackageData(packagePath, data) {
  * @param {string} hash
  */
 function bumpCanaryVersion(version, hash) {
-  const match = version.match(/^(\d+)\.(\d+)\./);
+  // Why this odd version format?
+  //
+  // I think it is important that builds be automated because I am very
+  // distractable and will screw them up if they aren't. Part of this is that
+  // each release should have a unique (as far as npm is concerned) version.
+  //
+  // Build tags do not change the identity of the release. They aren't
+  // comparable - one build tag is not bigger than another. So they don't
+  // work for this purpose.
+  //
+  // Previously we constructed versions of the form:
+  //
+  // major.minor.<year><month><day><hour><minute>+<hash>
+  //
+  // But these result in integer patch values that are larger than 32 bits and
+  // Bun limits version components to 32 bits. So we now use:
+  //
+  // major.minor.<year><month><day><counter>+<hash>
+  //
+  // The counter can be up to 99, so we can have up to 100 versions per day.
+  // If we ever find we need more than 100 releases per day (perhaps automated
+  // builds?) we can switch to unix timestamp for the time component, but I
+  // prefer not to because the current scheme is human readable.
+  //
+  // This scheme gets up to roughly the year 4050 before running out of bits,
+  // hopefully by then Bun has fixed this limitation.
+  const match = version.match(/^(\d+)\.(\d+)\.(\d{10})\+/);
   if (!match) {
     throw new Error('Cannot parse existing version');
   }
 
-  const [, major, minor] = match;
-  const [year, month, day, hour, minute] = new Date()
-    .toISOString()
-    .split(/[^\d]/);
-  const ts = `${year}${month}${day}${hour}${minute}`;
+  const [, major, minor, prevPatch] = match;
+  const [year, month, day] = new Date().toISOString().split(/[^\d]/);
 
-  return `${major}.${minor}.${ts}+${hash}`;
+  const prevPatchPrefix = prevPatch.substring(0, 8);
+  const prevPatchCounter = parseInt(prevPatch.substring(8));
+  const newPatchPrefix = `${year}${month}${day}`;
+
+  let newPatchCounter = 0;
+  if (prevPatchPrefix === newPatchPrefix) {
+    newPatchCounter = prevPatchCounter + 1;
+    if (newPatchCounter >= 100) {
+      throw new Error('Too many releases in one day');
+    }
+  } else {
+    newPatchCounter = 0;
+  }
+
+  const patch = newPatchPrefix + String(newPatchCounter).padStart(2, '0');
+  return `${major}.${minor}.${patch}+${hash}`;
 }
 
 try {
@@ -60,7 +98,6 @@ try {
   //installs turbo and other build dependencies
   execute('npm install');
   const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
-
   const hash = execute('git rev-parse HEAD', {stdio: 'pipe'})
     .toString()
     .trim()
