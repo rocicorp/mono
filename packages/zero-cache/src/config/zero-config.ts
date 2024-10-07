@@ -106,17 +106,17 @@ const rateLimitConfigSchema = v.object({
   mutationTransactions: v.object({
     algorithm: v.literal('sliding-window'),
     windowMs: v.union(envRefSchema, numberLiteral),
-    max: v.union(envRefSchema, numberLiteral),
+    maxTransactions: v.union(envRefSchema, numberLiteral),
   }),
 });
 type RateLimitConfigType = v.Infer<typeof rateLimitConfigSchema>;
 
 const zeroConfigSchemaSansAuthorization = v.object({
-  upstreamUri: configStringValueSchema,
-  cvrDbUri: configStringValueSchema,
-  changeDbUri: configStringValueSchema,
+  upstreamDBConnStr: configStringValueSchema,
+  cvrDBConnStr: configStringValueSchema,
+  changeDBConnStr: configStringValueSchema,
   taskId: configStringValueSchema.optional(),
-  replicaDbFile: configStringValueSchema,
+  replicaDBFile: configStringValueSchema,
   storageDbTmpDir: configStringValueSchema.optional(),
 
   // The number of sync workers defaults to available-cores - 1.
@@ -127,7 +127,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
   // (i.e. `change-streamer`). In production, this URI should point to
   // to the `replication-manager`, which runs a `change-streamer`
   // on port 2999.
-  changeStreamerUri: configStringValueSchema.optional(),
+  changeStreamerConnStr: configStringValueSchema.optional(),
 
   // Indicates that a `litestream replicate` process is backing up
   // the `replicatDbFile`. This should be the production configuration
@@ -188,27 +188,27 @@ export class ZeroConfig {
     }
   }
 
-  get upstreamUri() {
-    return mustResolveValue(this.#config.upstreamUri);
+  get upstreamDBConnStr() {
+    return mustResolveValue(this.#config.upstreamDBConnStr);
   }
 
-  get cvrDbUri() {
-    return mustResolveValue(this.#config.cvrDbUri);
+  get cvrDBConnStr() {
+    return mustResolveValue(this.#config.cvrDBConnStr);
   }
 
-  get changeDbUri() {
-    return mustResolveValue(this.#config.changeDbUri);
+  get changeDBConnStr() {
+    return mustResolveValue(this.#config.changeDBConnStr);
   }
 
-  get taskId() {
+  get taskID() {
     return resolveValue(this.#config.taskId);
   }
 
-  get replicaDbFile() {
-    return mustResolveValue(this.#config.replicaDbFile);
+  get replicaDBFile() {
+    return mustResolveValue(this.#config.replicaDBFile);
   }
 
-  get storageDbTmpDir() {
+  get storageDBTmpDir() {
     return resolveValue(this.#config.storageDbTmpDir);
   }
 
@@ -216,8 +216,8 @@ export class ZeroConfig {
     return resolveValue(this.#config.numSyncWorkers);
   }
 
-  get changeStreamerUri() {
-    return resolveValue(this.#config.changeStreamerUri);
+  get changeStreamerConnStr() {
+    return resolveValue(this.#config.changeStreamerConnStr);
   }
 
   get litestream() {
@@ -268,8 +268,8 @@ export class MutationTransactionLimits {
     return mustResolveValue(this.#config.windowMs);
   }
 
-  get max() {
-    return mustResolveValue(this.#config.max);
+  get maxTransactions() {
+    return mustResolveValue(this.#config.maxTransactions);
   }
 }
 

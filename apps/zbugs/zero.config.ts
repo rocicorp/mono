@@ -30,14 +30,14 @@ defineConfig<AuthData, Schema>(schema, queries => {
     queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
-    upstreamUri: runtimeEnv('UPSTREAM_URI'),
-    cvrDbUri: runtimeEnv('CVR_DB_URI'),
-    changeDbUri: runtimeEnv('CHANGE_DB_URI'),
+    upstreamDBConnStr: runtimeEnv('UPSTREAM_URI'),
+    cvrDBConnStr: runtimeEnv('CVR_DB_URI'),
+    changeDBConnStr: runtimeEnv('CHANGE_DB_URI'),
 
     numSyncWorkers: runtimeEnv('NUM_SYNC_WORKERS'),
-    changeStreamerUri: runtimeEnv('CHANGE_STREAMER_URI'),
+    changeStreamerConnStr: runtimeEnv('CHANGE_STREAMER_URI'),
 
-    replicaDbFile: runtimeEnv('REPLICA_DB_FILE'),
+    replicaDBFile: runtimeEnv('REPLICA_DB_FILE'),
     jwtSecret: runtimeEnv('JWT_SECRET'),
     litestream: runtimeEnv('LITESTREAM'),
     shard: {
@@ -52,7 +52,7 @@ defineConfig<AuthData, Schema>(schema, queries => {
         algorithm: 'sliding-window',
         // 100 writes per minute per user
         windowMs: 1000 * 60,
-        max: 100,
+        maxTransactions: 100,
       },
     },
 

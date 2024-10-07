@@ -10,10 +10,10 @@ import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const lc = createSilentLogContext();
 const baseConfig: ZeroConfigType = {
-  upstreamUri: 'upstream',
-  cvrDbUri: 'cvr',
-  changeDbUri: 'change',
-  replicaDbFile: 'replica',
+  upstreamDBConnStr: 'upstream',
+  cvrDBConnStr: 'cvr',
+  changeDBConnStr: 'change',
+  replicaDBFile: 'replica',
   log: {level: 'debug'},
 };
 

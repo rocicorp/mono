@@ -2,11 +2,11 @@
 
 exports[`instance authorization rules 1`] = `
 "{
-  "upstreamUri": "",
-  "cvrDbUri": "",
-  "changeDbUri": "",
-  "replicaDbFile": "",
-  "replicaId": "",
+  "upstreamDBConnStr": "",
+  "cvrDBConnStr": "",
+  "changeDBConnStr": "",
+  "replicaDBFile": "",
+  "replicaID": "",
   "log": {
     "level": "info"
   },
@@ -163,11 +163,11 @@ exports[`instance authorization rules 1`] = `
 
 exports[`static authorization rules 1`] = `
 "{
-  "upstreamUri": "",
-  "cvrDbUri": "",
-  "changeDbUri": "",
-  "replicaDbFile": "",
-  "replicaId": "",
+  "upstreamDBConnStr": "",
+  "cvrDBConnStr": "",
+  "changeDBConnStr": "",
+  "replicaDBFile": "",
+  "replicaID": "",
   "log": {
     "level": "info"
   },
@@ -298,11 +298,11 @@ exports[`static authorization rules 1`] = `
 
 exports[`static authorization rules 2`] = `
 "{
-  "upstreamUri": "",
-  "cvrDbUri": "",
-  "changeDbUri": "",
-  "replicaDbFile": "",
-  "replicaId": "",
+  "upstreamDBConnStr": "",
+  "cvrDBConnStr": "",
+  "changeDBConnStr": "",
+  "replicaDBFile": "",
+  "replicaID": "",
   "log": {
     "level": "info"
   },

@@ -115,11 +115,11 @@ export const schema = {
 } as const;
 
 const baseConfig = {
-  upstreamUri: '',
-  cvrDbUri: '',
-  changeDbUri: '',
-  replicaDbFile: '',
-  replicaId: '',
+  upstreamDBConnStr: '',
+  cvrDBConnStr: '',
+  changeDBConnStr: '',
+  replicaDBFile: '',
+  replicaID: '',
   log: {
     level: 'info',
   },

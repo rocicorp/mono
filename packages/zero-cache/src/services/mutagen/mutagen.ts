@@ -60,7 +60,7 @@ export class MutagenService implements Mutagen, Service {
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
     this.#shardID = shardID;
-    this.#replica = new Database(this.#lc, config.replicaDbFile, {
+    this.#replica = new Database(this.#lc, config.replicaDBFile, {
       readonly: true,
       fileMustExist: true,
     });
@@ -74,7 +74,7 @@ export class MutagenService implements Mutagen, Service {
     if (config.rateLimit) {
       this.#limiter = new SlidingWindowLimiter(
         config.rateLimit.mutationTransactions.windowMs,
-        config.rateLimit.mutationTransactions.max,
+        config.rateLimit.mutationTransactions.maxTransactions,
       );
     }
   }
