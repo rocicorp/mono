@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsx ./zero.config.ts && tsc && vite build",
     "check-types": "tsc && tsc -p tsconfig.node.json",
+    "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
