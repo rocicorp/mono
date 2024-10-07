@@ -29,7 +29,7 @@
       "@rocicorp/zero/react": ["zero/src/react.ts"],
 
       "btree": ["btree/b+tree.ts"],
-      "datadog/src/*": [],
+      "datadog/src/*": ["datadog/src/*"],
       "replicache/src/*": ["replicache/src/*"],
       "shared/src/*": ["shared/src/*"],
       "zero-client/src/*": ["zero-client/src/*"],
