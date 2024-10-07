@@ -1,4 +1,4 @@
-import type {ExperimentalNoIndexDiff} from 'replicache';
+import type {ExperimentalNoIndexDiff} from 'replicache/src/mod.js';
 import {expect, test} from 'vitest';
 import {Catch} from 'zql/src/zql/ivm/catch.js';
 import {Join} from 'zql/src/zql/ivm/join.js';

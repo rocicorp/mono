@@ -5,7 +5,7 @@ export {
   dropDatabase,
   getDefaultPuller,
   makeIDBName,
-} from 'replicache';
+} from 'replicache/src/mod.js';
 export type {
   AsyncIterableIteratorToArray,
   ClientGroupID,
@@ -56,7 +56,7 @@ export type {
   UpdateNeededReason,
   VersionNotSupportedResponse,
   WriteTransaction,
-} from 'replicache';
+} from 'replicache/src/mod.js';
 export {QueryImpl} from 'zql/src/zql/query/query-impl.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,

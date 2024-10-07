@@ -25,20 +25,16 @@
     "skipLibCheck": true,
     "baseUrl": "./packages/",
     "paths": {
-      "btree": ["btree/b+tree.ts"],
-      "datadog": ["datadog/src/mod.ts"],
-      "datadog/src/*": ["datadog/src/*"],
-      "replicache": ["replicache/src/mod.ts"],
-      "replicache/impl": ["replicache/src/impl.ts"],
-      "replicache/src/*": ["replicache/src/*"],
-      "shared/src/*": ["shared/src/*"],
       "@rocicorp/zero": ["zero/src/zero.ts"],
       "@rocicorp/zero/react": ["zero/src/react.ts"],
-      "zero-client": ["zero-client/src/mod.ts"],
-      "zero-protocol": ["zero-protocol/src/mod.ts"],
+
+      "btree": ["btree/b+tree.ts"],
+      "datadog/src/*": ["datadog/src/*"],
+      "replicache/src/*": ["replicache/src/*"],
+      "shared/src/*": ["shared/src/*"],
+      "zero-client/src/*": ["zero-client/src/*"],
       "zero-protocol/src/*": ["zero-protocol/src/*"],
-      "zero-react": ["zero-react/src/mod.ts"],
-      "zql": ["zql/src/mod.ts"],
+      "zero-react/src/*": ["zero-react/src/*"],
       "zql/src/*": ["zql/src/*"]
     }
   }

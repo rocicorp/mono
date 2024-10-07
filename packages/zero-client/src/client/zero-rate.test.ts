@@ -1,10 +1,10 @@
-import type {PushRequestV1} from 'replicache';
-import {zeroForTest, MockSocket, tickAFewTimes} from './test-utils.js';
-import {test, expect, beforeEach, afterEach} from 'vitest';
-import {ErrorKind} from 'zero-protocol/src/error.js';
+import type {PushRequestV1} from 'replicache/src/mod.js';
 import * as sinon from 'sinon';
-import {ConnectionState} from './zero.js';
+import {afterEach, beforeEach, expect, test} from 'vitest';
+import {ErrorKind} from 'zero-protocol/src/error.js';
 import type {Mutation} from '../../../zero-protocol/src/push.js';
+import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.js';
+import {ConnectionState} from './zero.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;

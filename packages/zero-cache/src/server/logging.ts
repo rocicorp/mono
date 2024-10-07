@@ -1,5 +1,5 @@
 import {LogContext, TeeLogSink, consoleLogSink} from '@rocicorp/logger';
-import {DatadogLogSink} from 'datadog/src/datadog-log-sink.js';
+import {DatadogLogSink} from 'datadog/src/mod.js';
 import {pid} from 'node:process';
 import {type LogConfig} from '../config/zero-config.js';
 
