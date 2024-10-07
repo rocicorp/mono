@@ -7,7 +7,8 @@
   "scripts": {
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "vitest run",
     "test:watch": "vitest watch"

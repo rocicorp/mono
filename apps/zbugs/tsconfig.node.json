@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "composite": true,
-    "noEmit": true,
     "baseUrl": "./packages/",
     "paths": {
       "shared/src/*": ["shared/src/*"],
