@@ -2,9 +2,8 @@
   "name": "@rocicorp/zero",
   "version": "0.0.2024100502+50481a",
   "scripts": {
-    "prepack": "rm -rf deps && mkdir -p deps/sqlite3 && cp -r ../../deps/sqlite3/* deps/sqlite3/ && node tool/prepack.js",
+    "prepack": "rm -rf deps && mkdir -p deps/sqlite3 && cp -r ../../deps/sqlite3/* deps/sqlite3/",
     "preinstall": "node tool/install-sqlite3.js",
-    "postpack": "node tool/postpack.js",
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
     "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json",
@@ -46,10 +45,7 @@
     "esbuild": "^0.20.2",
     "replicache": "15.2.1",
     "tsc-alias": "^1.8.10",
-    "typescript": "^5.5.3",
-    "zero-cache": "0.0.0",
-    "zero-client": "0.0.0",
-    "zero-react": "0.0.0"
+    "typescript": "^5.5.3"
   },
   "type": "module",
   "main": "out/zero.js",

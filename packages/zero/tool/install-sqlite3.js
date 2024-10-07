@@ -12,7 +12,7 @@ if (isPartOfMonorepo()) {
 } else {
   // Now run the npm install command
   execSync(
-    `npm install better-sqlite3@11.1.2 --no-save --omit=dev --production --build-from-source --sqlite3="${cwd()}/deps/sqlite3"`,
+    `npm install better-sqlite3@11.1.2 --no-save --build-from-source --sqlite3="${cwd()}/deps/sqlite3"`,
     {
       stdio: 'inherit',
       cwd: cwd(),
