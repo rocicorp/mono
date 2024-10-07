@@ -6,7 +6,7 @@ import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import * as valita from 'shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
-import {ErrorKind, initConnectionMessageSchema} from 'zero-protocol';
+import {ErrorKind, initConnectionMessageSchema} from 'zero-protocol/src/mod.js';
 import {
   type Mutation,
   MutationType,

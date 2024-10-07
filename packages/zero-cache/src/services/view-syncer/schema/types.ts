@@ -1,5 +1,5 @@
 import * as v from 'shared/src/valita.js';
-import {astSchema} from 'zero-protocol';
+import {astSchema} from 'zero-protocol/src/mod.js';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
 import {jsonValueSchema} from '../../../types/bigint-json.js';
 

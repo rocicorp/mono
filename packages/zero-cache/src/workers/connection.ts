@@ -11,7 +11,7 @@ import {
   type ErrorMessage,
   type PongMessage,
   upstreamSchema,
-} from 'zero-protocol';
+} from 'zero-protocol/src/mod.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {

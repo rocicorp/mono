@@ -12,7 +12,7 @@ import type {
   ChangeDesiredQueriesMessage,
   Downstream,
   InitConnectionMessage,
-} from 'zero-protocol';
+} from 'zero-protocol/src/mod.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import type {Row} from 'zql/src/zql/ivm/data.js';
 import type {PostgresDB} from '../../types/pg.js';

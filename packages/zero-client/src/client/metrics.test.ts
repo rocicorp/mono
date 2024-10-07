@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
 import {afterEach, expect, test} from 'vitest';
-import {ErrorKind} from 'zero-protocol';
+import {ErrorKind} from 'zero-protocol/src/mod.js';
 import {
   DID_NOT_CONNECT_VALUE,
   type DisconnectReason,

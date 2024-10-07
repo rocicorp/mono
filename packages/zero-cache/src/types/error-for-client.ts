@@ -1,4 +1,4 @@
-import type {ErrorMessage} from 'zero-protocol';
+import type {ErrorMessage} from 'zero-protocol/src/mod.js';
 
 export class ErrorForClient extends Error {
   readonly errorMessage;

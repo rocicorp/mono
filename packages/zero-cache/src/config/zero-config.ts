@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import {must} from 'shared/src/must.js';
 import * as v from 'shared/src/valita.js';
-import {astSchema} from 'zero-protocol';
+import {astSchema} from 'zero-protocol/src/mod.js';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
