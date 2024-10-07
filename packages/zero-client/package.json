@@ -10,7 +10,8 @@
     "test": "vitest run",
     "bench": "vitest bench",
     "test:watch": "vitest",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch"
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",

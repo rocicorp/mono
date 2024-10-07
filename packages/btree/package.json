@@ -8,7 +8,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
     "benchmark": "npm run build && node benchmarks.js"
   },
   "files": [

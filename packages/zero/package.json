@@ -8,8 +8,8 @@
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
     "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json",
-    "check-types": "tsc --noEmit",
-    "check-types:watch": "tsc --noEmit --watch",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
