@@ -18,7 +18,7 @@ import {
   type PullResponseBody,
   type PullResponseMessage,
   upstreamSchema,
-} from 'zero-protocol';
+} from 'zero-protocol/src/mod.js';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {

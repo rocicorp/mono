@@ -8,7 +8,7 @@ import type {
   PokePartBody,
   PokeStartBody,
   QueriesPatch,
-} from 'zero-protocol';
+} from 'zero-protocol/src/mod.js';
 import type {AST} from 'zql/src/zql/ast/ast.js';
 import {Database} from 'zqlite/src/db.js';
 import {testDBs} from '../../test/db.js';
