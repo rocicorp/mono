@@ -46,12 +46,34 @@ export class ServiceRunner<S extends Service> {
       });
     return service;
   }
+}
 
-  get size() {
-    return this.#instances.size;
+/**
+ * Runs the specified services, exiting on SIGTERM, or logging an error and
+ * exiting the process if any of them fail.
+ */
+export async function runOrExit(
+  lc: LogContext,
+  ...services: Service[]
+): Promise<void> {
+  for (const signal of ['SIGINT', 'SIGQUIT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      for (const svc of services) {
+        lc.info?.(`exiting ${svc.constructor.name} (${svc.id}) for ${signal}`);
+        void svc.stop();
+      }
+    });
   }
 
-  getServices(): Iterable<S> {
-    return this.#instances.values();
+  try {
+    // Exit if any of the services stop.
+    const svc = await Promise.race(
+      services.map(svc => svc.run().then(() => svc)),
+    );
+    lc.info?.(`exiting because ${svc.constructor.name} (${svc.id}) stopped`);
+    process.exit(0);
+  } catch (e) {
+    lc.error?.(`exiting on error`, e);
+    process.exit(-1);
   }
 }

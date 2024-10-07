@@ -1,6 +1,5 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import {CustomKeyMap} from 'shared/src/custom-key-map.js';
 import {must} from 'shared/src/must.js';
@@ -58,8 +57,6 @@ export interface ViewSyncer {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
-
-  totalHydrationTimeMs(): number;
 }
 
 type IdleToken = {
@@ -81,8 +78,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
-  readonly #stopped = resolver();
-
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
 
@@ -150,12 +145,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#cleanup(e);
     } finally {
       this.#lc.info?.('view-syncer stopped');
-      this.#stopped.resolve();
     }
-  }
-
-  totalHydrationTimeMs(): number {
-    return this.#pipelines.totalHydrationTimeMs();
   }
 
   // The idleToken is an object associated with an idle timeout function,
@@ -694,10 +684,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc.info?.(`finished processing advancement (${Date.now() - start} ms)`);
   }
 
-  stop(): Promise<void> {
+  // eslint-disable-next-line require-await
+  async stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');
     this.#stateChanges.cancel();
-    return this.#stopped.promise;
   }
 
   #cleanup(err?: unknown) {

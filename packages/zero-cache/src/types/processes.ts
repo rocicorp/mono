@@ -69,8 +69,6 @@ export interface Receiver {
     sendHandle?: SendHandle,
     callback?: (error: Error | null) => void,
   ): boolean;
-
-  kill(signal?: NodeJS.Signals): void;
 }
 
 export interface Sender extends EventEmitter {
@@ -127,7 +125,7 @@ function wrap<P extends EventEmitter>(proc: P): P & Sender {
   }) as P & Sender;
 }
 
-type Proc = Pick<ChildProcess, 'send' | 'kill'> & EventEmitter;
+type Proc = Pick<ChildProcess, 'send'> & EventEmitter;
 
 /**
  * The parentWorker for forked processes, or `null` if the process was not forked.
@@ -147,21 +145,21 @@ export function childWorker(absModulePath: string, ...args: string[]): Worker {
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
     import(absModulePath)
-      .then(({default: runWorker}) =>
-        runWorker(parent, ...args).then(
-          () => child.emit('close', 0),
-          (err: unknown) => child.emit('error', err),
-        ),
-      )
+      .then(({default: runWorker}) => runWorker(parent, ...args))
       .catch(err => child.emit('error', err));
     return child;
   }
-  return wrap(
-    fork(absModulePath, args, {
-      detached: true, // do not automatically propagate SIGINT
-      serialization: 'advanced', // use structured clone for IPC
-    }),
-  );
+  const worker = wrap(fork(absModulePath, args, {serialization: 'advanced'}));
+
+  // Propagate all listenable termination signals to the workers.
+  // Note: https://nodejs.org/api/process.html#process_signal_events
+  // > * 'SIGKILL' cannot have a listener installed, it will unconditionally terminate Node.js on all platforms.
+  // > * 'SIGSTOP' cannot have a listener installed.
+  for (const sig of ['SIGINT', 'SIGQUIT', 'SIGTERM'] as const) {
+    process.on(sig, () => worker.kill(sig));
+  }
+  process.on('exit', () => worker.kill());
+  return worker;
 }
 
 /**
@@ -191,13 +189,8 @@ export function inProcChannel(): [Worker, Worker] {
       return true;
     };
 
-  const kill =
-    (dest: EventEmitter) =>
-    (signal: NodeJS.Signals = 'SIGTERM') =>
-      dest.emit(signal, signal);
-
   return [
-    wrap(Object.assign(worker1, {send: sendTo(worker2), kill: kill(worker2)})),
-    wrap(Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1)})),
+    wrap(Object.assign(worker1, {send: sendTo(worker2)})),
+    wrap(Object.assign(worker2, {send: sendTo(worker1)})),
   ];
 }

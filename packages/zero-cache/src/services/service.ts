@@ -29,12 +29,3 @@ export interface ActivityBasedService extends Service {
    */
   keepalive(): boolean;
 }
-
-export interface SingletonService extends Service {
-  /**
-   * `drain` is called when the process receives the `SIGTERM` signal
-   * to initiate graceful shutdown. The process will wait until the
-   * return Promise resolves, after which {@link stop()} will be called.
-   */
-  drain?(): Promise<void>;
-}

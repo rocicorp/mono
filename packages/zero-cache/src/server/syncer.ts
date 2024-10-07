@@ -18,10 +18,9 @@ import {
 } from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
-import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
-export default async function runWorker(parent: Worker): Promise<void> {
+export default async function runWorker(parent: Worker) {
   const config = await getZeroConfig();
 
   // Consider parameterizing these (in main) based on total number of workers.
@@ -69,20 +68,13 @@ export default async function runWorker(parent: Worker): Promise<void> {
   const mutagenFactory = (id: string) =>
     new MutagenService(lc, config.shard.id, id, upstreamDB, config);
 
-  const syncer = new Syncer(
-    lc,
-    config,
-    viewSyncerFactory,
-    mutagenFactory,
-    parent,
-  );
+  new Syncer(lc, config, viewSyncerFactory, mutagenFactory, parent).run();
 
-  void dbWarmup.then(() => parent.send(['ready', {ready: true}]));
-
-  return runUntilKilled(lc, parent, syncer);
+  await dbWarmup;
+  parent.send(['ready', {ready: true}]);
 }
 
 // fork()
 if (!singleProcessMode()) {
-  exitAfter(runWorker(must(parentWorker)));
+  void runWorker(must(parentWorker));
 }

@@ -14,19 +14,21 @@ import {
   type ReplicaFileMode,
   subscribeTo,
 } from '../workers/replicator.js';
-import {GRACEFUL_SHUTDOWN, Terminator, type WorkerType} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 const startMs = Date.now();
 const config = await getZeroConfig();
 const lc = createLogContext(config.log, {worker: 'dispatcher'});
 
-const terminator = new Terminator(lc);
+function logErrorAndExit(err: unknown) {
+  lc.error?.(err);
+  process.exit(1);
+}
+
 const ready: Promise<void>[] = [];
 
 function loadWorker(
   modulePath: string,
-  type: WorkerType,
   id?: string | number,
   ...args: string[]
 ): Worker {
@@ -40,16 +42,18 @@ function loadWorker(
   const {promise, resolve} = resolver();
   ready.push(promise);
 
-  return terminator.addWorker(worker, type).onceMessageType('ready', () => {
-    lc.debug?.(`${name} ready (${Date.now() - startMs} ms)`);
-    resolve();
-  });
+  return worker
+    .onceMessageType('ready', () => {
+      lc.debug?.(`${name} ready (${Date.now() - startMs} ms)`);
+      resolve();
+    })
+    .on('close', logErrorAndExit);
 }
 
 const {promise: changeStreamerReady, resolve} = resolver();
 const changeStreamer = config.changeStreamerConnStr
   ? resolve()
-  : loadWorker('./change-streamer.ts', 'supporting').once('message', resolve);
+  : loadWorker('./change-streamer.ts').once('message', resolve);
 
 const numSyncers = config.numSyncWorkers
   ? Number(config.numSyncWorkers)
@@ -71,12 +75,10 @@ await changeStreamerReady;
 
 if (config.litestream) {
   const mode: ReplicaFileMode = 'backup';
-  const replicator = loadWorker(
-    './replicator.ts',
-    'supporting',
-    mode,
-    mode,
-  ).once('message', () => subscribeTo(lc, replicator));
+  const replicator = loadWorker('./replicator.ts', mode, mode).once(
+    'message',
+    () => subscribeTo(lc, replicator),
+  );
   const notifier = createNotifierFrom(lc, replicator);
   if (changeStreamer) {
     handleSubscriptionsFrom(lc, changeStreamer, notifier);
@@ -86,15 +88,13 @@ if (config.litestream) {
 const syncers: Worker[] = [];
 if (numSyncers) {
   const mode: ReplicaFileMode = config.litestream ? 'serving-copy' : 'serving';
-  const replicator = loadWorker(
-    './replicator.ts',
-    'supporting',
-    mode,
-    mode,
-  ).once('message', () => subscribeTo(lc, replicator));
+  const replicator = loadWorker('./replicator.ts', mode, mode).once(
+    'message',
+    () => subscribeTo(lc, replicator),
+  );
   const notifier = createNotifierFrom(lc, replicator);
   for (let i = 0; i < numSyncers; i++) {
-    syncers.push(loadWorker('./syncer.ts', 'user-facing', i + 1));
+    syncers.push(loadWorker('./syncer.ts', i + 1));
   }
   syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
 }
@@ -113,13 +113,6 @@ if (numSyncers) {
   try {
     await dispatcher.run();
   } catch (err) {
-    terminator.logErrorAndExit(err);
-  }
-
-  for (const signal of GRACEFUL_SHUTDOWN) {
-    process.on(signal, () => {
-      lc.info?.('drain mode: no longer accepting connections');
-      return dispatcher.stop();
-    });
+    logErrorAndExit(err);
   }
 }
