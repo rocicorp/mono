@@ -29,5 +29,5 @@ jobs:
         working-directory: packages/replicache-perf
         run: |
           npm run build
-          node out/runner.js --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
+          npx tsx src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
         shell: bash

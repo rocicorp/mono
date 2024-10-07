@@ -6,8 +6,8 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "node tool/build.js",
-    "perf": "npm run build && node out/runner.js"
+    "build": "tsx tool/build.ts",
+    "perf": "npm run build && tsx src/runner.ts"
   },
   "type": "module",
   "dependencies": {
@@ -26,6 +26,7 @@
     "playwright": "^1.43.1",
     "replicache": "15.2.1",
     "shared": "0.0.0",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.3",
     "xbytes": "^1.7.0"
   },
