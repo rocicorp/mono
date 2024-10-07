@@ -263,6 +263,7 @@ export interface Query<
   one(): Query<TSchema, MakeSingular<TReturn>>;
 
   materialize(): TypedView<Smash<TReturn>>;
+  materializeSolid(): TypedView<Smash<TReturn>>;
   preload(): {
     cleanup: () => void;
   };

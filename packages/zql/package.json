@@ -33,6 +33,7 @@
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "@rocicorp/resolver": "^1.0.2",
-    "compare-utf8": "^0.1.1"
+    "compare-utf8": "^0.1.1",
+    "solid-js": "^1.9.1"
   }
 }
