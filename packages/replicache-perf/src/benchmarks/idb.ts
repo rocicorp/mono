@@ -1,11 +1,11 @@
-import {deleteDB, IDBPDatabase, openDB} from 'idb/with-async-ittr';
+import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore Invalid module when using node16 module resolution.
 import xbytes from 'xbytes';
 import type {Bencher, Benchmark} from '../benchmark.js';
-import {randomData, RandomDataType} from '../data.js';
+import {randomData, type RandomDataType} from '../data.js';
 
-export function benchmarkIDBReadGetAll(opts: {
+function benchmarkIDBReadGetAll(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -62,7 +62,7 @@ export function benchmarkIDBReadGetAll(opts: {
   };
 }
 
-export function benchmarkIDBReadGetAllGetAllKeys(opts: {
+function benchmarkIDBReadGetAllGetAllKeys(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -120,7 +120,7 @@ export function benchmarkIDBReadGetAllGetAllKeys(opts: {
   };
 }
 
-export function benchmarkIDBReadGet(opts: {
+function benchmarkIDBReadGet(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -198,7 +198,7 @@ async function idbPopulateInlineKey(
   await tx.done;
 }
 
-export function benchmarkIDBWrite(opts: {
+function benchmarkIDBWrite(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -245,7 +245,7 @@ export function benchmarkIDBWrite(opts: {
   };
 }
 
-export function benchmarkIDBReadGetWithInlineKeys(opts: {
+function benchmarkIDBReadGetWithInlineKeys(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -303,7 +303,7 @@ export function benchmarkIDBReadGetWithInlineKeys(opts: {
   };
 }
 
-export function benchmarkIDBReadGetAllWithInlineKey(opts: {
+function benchmarkIDBReadGetAllWithInlineKey(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -360,7 +360,7 @@ export function benchmarkIDBReadGetAllWithInlineKey(opts: {
   };
 }
 
-export function benchmarkIDBWriteWithInlineKey(opts: {
+function benchmarkIDBWriteWithInlineKey(opts: {
   dataType: RandomDataType;
   group: string;
   valSize: number;
@@ -407,4 +407,49 @@ export function benchmarkIDBWriteWithInlineKey(opts: {
       }
     },
   };
+}
+
+export function benchmarks(): Array<Benchmark> {
+  const benchmarks: Benchmark[] = [];
+
+  for (const b of [
+    benchmarkIDBReadGet,
+    benchmarkIDBReadGetWithInlineKeys,
+    benchmarkIDBReadGetAll,
+    benchmarkIDBReadGetAllGetAllKeys,
+    benchmarkIDBReadGetAllWithInlineKey,
+    benchmarkIDBWrite,
+    benchmarkIDBWriteWithInlineKey,
+  ]) {
+    for (const numKeys of [1, 10, 100, 1000]) {
+      const dataTypes: RandomDataType[] = ['string', 'object', 'arraybuffer'];
+      for (const dataType of dataTypes) {
+        const kb = 1024;
+        const mb = kb * kb;
+        const sizes = [
+          kb,
+          32 * kb,
+          // Note: on blink, as of 4/2/2021, there's a cliff at 64kb
+          mb,
+          10 * mb,
+          100 * mb,
+        ];
+        const group = dataType === 'arraybuffer' ? 'idb' : 'idb-extras';
+        for (const valSize of sizes) {
+          if (valSize > 10 * mb) {
+            if (numKeys > 1) {
+              continue;
+            }
+          } else if (valSize >= mb) {
+            if (numKeys > 10) {
+              continue;
+            }
+          }
+
+          benchmarks.push(b({group, dataType, numKeys, valSize}));
+        }
+      }
+    }
+  }
+  return benchmarks;
 }

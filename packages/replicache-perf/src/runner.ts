@@ -11,7 +11,7 @@ import * as playwright from 'playwright';
 import {assert} from 'shared/src/asserts.js';
 import {makeDefine} from 'shared/src/build.js';
 import {
-  BencherMetricsFormat,
+  type BencherMetricsFormat,
   toBencherMetricFormat,
 } from './bencher-metric-format.js';
 import {formatAsBenchmarkJS, formatAsReplicache} from './format.js';
