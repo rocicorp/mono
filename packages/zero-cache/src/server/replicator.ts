@@ -29,10 +29,10 @@ export default async function runWorker(parent: Worker, ...args: string[]) {
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config.log, {worker: workerName});
 
-  const replica = setupReplica(lc, fileMode, config.replicaDbFile);
+  const replica = setupReplica(lc, fileMode, config.replicaDBFile);
 
-  const changeStreamer = config.changeStreamerUri
-    ? new ChangeStreamerHttpClient(lc, config.changeStreamerUri)
+  const changeStreamer = config.changeStreamerConnStr
+    ? new ChangeStreamerHttpClient(lc, config.changeStreamerConnStr)
     : new ChangeStreamerHttpClient(lc);
 
   const replicator = new ReplicatorService(

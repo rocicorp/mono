@@ -51,7 +51,7 @@ function loadWorker(
 }
 
 const {promise: changeStreamerReady, resolve} = resolver();
-const changeStreamer = config.changeStreamerUri
+const changeStreamer = config.changeStreamerConnStr
   ? resolve()
   : loadWorker('./change-streamer.ts').once('message', resolve);
 
@@ -64,7 +64,7 @@ if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = pgClient(lc, config.cvrDbUri);
+  const cvrDB = pgClient(lc, config.cvrDBConnStr);
   await initViewSyncerSchema(lc, cvrDB);
   void cvrDB.end();
 }

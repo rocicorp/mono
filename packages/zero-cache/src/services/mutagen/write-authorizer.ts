@@ -51,7 +51,7 @@ export class WriteAuthorizerImpl {
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#authorizationConfig = config.authorization ?? {};
     this.#replica = replica;
-    const tmpDir = config.storageDbTmpDir ?? tmpdir();
+    const tmpDir = config.storageDBTmpDir ?? tmpdir();
     const writeAuthzStorage = DatabaseStorage.create(
       lc,
       path.join(tmpDir, `mutagen-${pid}-${randInt(1000000, 9999999)}`),

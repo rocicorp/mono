@@ -29,11 +29,11 @@ export default async function runWorker(parent: Worker) {
 
   const lc = createLogContext(config.log, {worker: 'syncer'});
 
-  const cvrDB = pgClient(lc, config.cvrDbUri, {
+  const cvrDB = pgClient(lc, config.cvrDBConnStr, {
     max: MAX_CVR_CONNECTIONS,
   });
 
-  const upstreamDB = pgClient(lc, config.upstreamUri, {
+  const upstreamDB = pgClient(lc, config.upstreamDBConnStr, {
     max: MAX_MUTAGEN_CONNECTIONS,
   });
 
@@ -46,7 +46,7 @@ export default async function runWorker(parent: Worker) {
     ),
   ]);
 
-  const tmpDir = config.storageDbTmpDir ?? tmpdir();
+  const tmpDir = config.storageDBTmpDir ?? tmpdir();
   const operatorStorage = DatabaseStorage.create(
     lc,
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
@@ -59,7 +59,7 @@ export default async function runWorker(parent: Worker) {
       cvrDB,
       new PipelineDriver(
         lc,
-        new Snapshotter(lc, config.replicaDbFile),
+        new Snapshotter(lc, config.replicaDBFile),
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,
