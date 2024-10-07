@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {PullRequestV1, PushRequestV1} from 'replicache';
+import type {PullRequestV1, PushRequestV1} from 'replicache/src/mod.js';
 import {assert} from 'shared/src/asserts.js';
 import {TestLogSink} from 'shared/src/logging-test-utils.js';
 import * as valita from 'shared/src/valita.js';

@@ -8,7 +8,7 @@ import {
   type ScanNoIndexOptions,
   type ScanOptions,
   type ScanResult,
-} from 'replicache';
+} from 'replicache/src/mod.js';
 import {expect, test, vi} from 'vitest';
 import type {ChangeDesiredQueriesMessage} from 'zero-protocol';
 import type {AST} from 'zql/src/zql/ast/ast.js';

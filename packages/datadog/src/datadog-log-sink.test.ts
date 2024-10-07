@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import type {ReadonlyJSONObject} from 'replicache';
+import type {ReadonlyJSONObject} from 'shared/src/json.js';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {
   DatadogLogSink,

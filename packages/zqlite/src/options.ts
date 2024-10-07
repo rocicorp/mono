@@ -1,5 +1,5 @@
-import type {Schema} from 'zero-client';
-import type {Database} from 'zqlite/src/db.js';
+import type {Schema} from 'zero-client/src/mod.js';
+import type {Database} from './db.js';
 
 /**
  * Configuration for [[ZqlLiteZero]].

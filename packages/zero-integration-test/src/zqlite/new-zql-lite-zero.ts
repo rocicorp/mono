@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import type {Schema} from 'zero-client';
+import type {Schema} from 'zero-client/src/mod.js';
 import {Database} from 'zqlite/src/db.js';
 import {ZQLiteZero} from 'zqlite/src/zqlite-zero.js';
 
