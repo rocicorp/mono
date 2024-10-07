@@ -29,6 +29,24 @@ describe('types/processes', () => {
     ]);
   });
 
+  test('in-proc channel kill', () => {
+    const [port1, port2] = inProcChannel();
+
+    const signals1: unknown[] = [];
+    const signals2: unknown[] = [];
+
+    port1.on('SIGTERM', data => signals1.push(data));
+    port1.on('SIGQUIT', data => signals1.push(data));
+    port2.on('SIGTERM', data => signals2.push(data));
+    port2.on('SIGQUIT', data => signals2.push(data));
+
+    port1.kill('SIGQUIT');
+    expect(signals2).toEqual(['SIGQUIT']);
+
+    port2.kill();
+    expect(signals1).toEqual(['SIGTERM']);
+  });
+
   type NotifyMessage = ['notify', {uuid: string}];
   type SubscribeMessage = ['subscribe', {foo: string}];
 

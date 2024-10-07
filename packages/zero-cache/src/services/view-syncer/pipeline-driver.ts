@@ -63,12 +63,17 @@ export function normalize(tableSpec: TableSpec): NormalizedTableSpec {
   };
 }
 
+type Pipeline = {
+  readonly input: Input;
+  readonly hydrationTimeMs: number;
+};
+
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
-  readonly #pipelines = new Map<string, Input>();
+  readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
@@ -140,6 +145,14 @@ export class PipelineDriver {
     return new Set(this.#pipelines.keys());
   }
 
+  totalHydrationTimeMs(): number {
+    let total = 0;
+    for (const pipeline of this.#pipelines.values()) {
+      total += pipeline.hydrationTimeMs;
+    }
+    return total;
+  }
+
   /**
    * Adds a pipeline for the query. The method will hydrated the query using
    * the the driver's current snapshot of the database and return a stream
@@ -160,8 +173,6 @@ export class PipelineDriver {
       },
       undefined,
     );
-    this.#pipelines.set(hash, input);
-
     const schema = input.getSchema();
     input.setOutput({
       push: change => {
@@ -171,9 +182,14 @@ export class PipelineDriver {
       },
     });
 
+    const start = Date.now();
+
     const res = input.fetch({});
     const streamer = new Streamer().accumulate(hash, schema, toAdds(res));
     yield* streamer.stream();
+
+    const hydrationTimeMs = Date.now() - start;
+    this.#pipelines.set(hash, {input, hydrationTimeMs});
   }
 
   /**
@@ -181,10 +197,10 @@ export class PipelineDriver {
    * was not added.
    */
   removeQuery(hash: string) {
-    const input = this.#pipelines.get(hash);
-    if (input) {
+    const pipeline = this.#pipelines.get(hash);
+    if (pipeline) {
       this.#pipelines.delete(hash);
-      input.destroy();
+      pipeline.input.destroy();
     }
   }
 

@@ -7,7 +7,6 @@ import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.js';
-import {runOrExit} from '../services/runner.js';
 import {
   parentWorker,
   singleProcessMode,
@@ -18,9 +17,13 @@ import {
   setupReplica,
   type ReplicaFileMode,
 } from '../workers/replicator.js';
+import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
-export default async function runWorker(parent: Worker, ...args: string[]) {
+export default async function runWorker(
+  parent: Worker,
+  ...args: string[]
+): Promise<void> {
   const config = await getZeroConfig();
   assert(args.length > 0, `replicator mode not specified`);
 
@@ -45,16 +48,18 @@ export default async function runWorker(parent: Worker, ...args: string[]) {
 
   setUpMessageHandlers(lc, replicator, parent);
 
-  void runOrExit(lc, replicator);
+  const running = runUntilKilled(lc, parent, replicator);
 
   // Signal readiness once the first ReplicaVersionReady notification is received.
   for await (const _ of replicator.subscribe()) {
     parent.send(['ready', {ready: true}]);
     break;
   }
+
+  return running;
 }
 
 // fork()
 if (!singleProcessMode()) {
-  void runWorker(must(parentWorker), ...process.argv.slice(2));
+  exitAfter(runWorker(must(parentWorker), ...process.argv.slice(2)));
 }
