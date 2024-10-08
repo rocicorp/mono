@@ -1,4 +1,4 @@
-import type * as v from 'shared/src/valita.js';
+import type * as v from '../../shared/src/valita.js';
 import type {
   AST,
   Condition,
@@ -8,7 +8,7 @@ import type {
   OrderOps,
   Ordering,
   SimpleOperator,
-} from 'zql/src/zql/ast/ast.js';
+} from '../../zql/src/zql/ast/ast.js';
 import type {
   astSchema,
   conditionSchema,

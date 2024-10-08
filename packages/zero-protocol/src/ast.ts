@@ -6,8 +6,8 @@
  * are also required for recursive schema definitions.)
  */
 
-import * as v from 'shared/src/valita.js';
-import type {CorrelatedSubQuery} from 'zql/src/zql/ast/ast.js';
+import * as v from '../../shared/src/valita.js';
+import type {CorrelatedSubQuery} from '../../zql/src/zql/ast/ast.js';
 
 function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
   return t as v.Type<Readonly<T>>;

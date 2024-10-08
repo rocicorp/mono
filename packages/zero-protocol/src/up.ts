@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.js';
+import * as v from '../../shared/src/valita.js';
 import {pingMessageSchema} from './ping.js';
 import {deleteClientsMessageSchema} from './delete-clients.js';
 import {initConnectionMessageSchema} from './connect.js';

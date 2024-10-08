@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.js';
+import * as v from '../../shared/src/valita.js';
 
 export const pingBodySchema = v.object({});
 export const pingMessageSchema = v.tuple([v.literal('ping'), pingBodySchema]);
