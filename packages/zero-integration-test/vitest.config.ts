@@ -1,6 +1,5 @@
 import {defineConfig} from 'vitest/config';
 import {makeDefine} from '../shared/src/build.js';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
 const define = {
   ...makeDefine(),
@@ -16,7 +15,6 @@ export default defineConfig({
   esbuild: {
     define,
   },
-  plugins: [tsconfigPaths()] as any[],
   test: {
     onConsoleLog(log: string) {
       if (

@@ -22,12 +22,12 @@ function inlineWASM(): PluginOption {
   };
 }
 
-const {define, plugins, esbuild} = config;
+const {define, esbuild} = config;
 
 export default defineConfig({
   define,
   esbuild,
-  plugins: [...plugins, inlineWASM()],
+  plugins: [inlineWASM()],
   test: {
     include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     globalSetup: ['./test/pg-container-setup.ts'],
