@@ -426,6 +426,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.subscriptions = new SubscriptionsManagerImpl(
       this.#queryInternal,
       this.#lc,
+      this.#closeAbortController.signal,
     );
 
     const kvStoreProvider = getKVStoreProvider(this.#lc, options.kvStore);
