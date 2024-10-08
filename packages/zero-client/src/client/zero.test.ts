@@ -1,12 +1,18 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {PullRequestV1, PushRequestV1} from '../../../replicache/src/mod.js';
+import type {
+  PullRequestV1,
+  PushRequestV1,
+} from '../../../replicache/src/mod.js';
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
-import {ErrorKind, initConnectionMessageSchema} from '../../../zero-protocol/src/mod.js';
+import {
+  ErrorKind,
+  initConnectionMessageSchema,
+} from '../../../zero-protocol/src/mod.js';
 import {
   type Mutation,
   MutationType,

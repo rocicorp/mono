@@ -1,6 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assert, assertNotNull, assertNotUndefined} from '../../../shared/src/asserts.js';
+import {
+  assert,
+  assertNotNull,
+  assertNotUndefined,
+} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import sinon from 'sinon';

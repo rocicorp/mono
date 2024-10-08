@@ -1,4 +1,8 @@
-import {assertNumber, assertObject, assertString} from '../../shared/src/asserts.js';
+import {
+  assertNumber,
+  assertObject,
+  assertString,
+} from '../../shared/src/asserts.js';
 import {assertJSONValue} from '../../shared/src/json.js';
 import {callDefaultFetch} from './call-default-fetch.js';
 import {assertCookie} from './cookies.js';

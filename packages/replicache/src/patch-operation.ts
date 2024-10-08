@@ -1,4 +1,8 @@
-import {assertArray, assertObject, assertString} from '../../shared/src/asserts.js';
+import {
+  assertArray,
+  assertObject,
+  assertString,
+} from '../../shared/src/asserts.js';
 import {
   type ReadonlyJSONObject,
   type ReadonlyJSONValue,

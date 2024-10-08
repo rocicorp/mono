@@ -8,11 +8,7 @@ import Fastify, {
 import * as v from '../../../../shared/src/valita.js';
 import WebSocket from 'ws';
 import {jsonValueSchema} from '../../types/bigint-json.js';
-import {
-  type Source,
-  streamIn,
-  streamOut,
-} from '../../types/streams.js';
+import {type Source, streamIn, streamOut} from '../../types/streams.js';
 import {URLParams} from '../../types/url-params.js';
 import {RunningState} from '../running-state.js';
 import type {Service} from '../service.js';

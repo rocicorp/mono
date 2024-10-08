@@ -3,10 +3,7 @@ import {ident} from 'pg-format';
 import {assert} from '../../../../shared/src/asserts.js';
 import * as v from '../../../../shared/src/valita.js';
 import {StatementRunner} from '../../db/statements.js';
-import {
-  jsonObjectSchema,
-  type JSONValue,
-} from '../../types/bigint-json.js';
+import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
 import {type SchemaVersions} from '../../types/schema-versions.js';
 import {
   normalizedKeyOrder,
