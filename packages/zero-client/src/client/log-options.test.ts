@@ -1,6 +1,6 @@
 import {consoleLogSink, type LogSink} from '@rocicorp/logger';
-import type {DatadogLogSinkOptions} from 'datadog/src/mod.js';
-import {TestLogSink} from 'shared/src/logging-test-utils.js';
+import type {DatadogLogSinkOptions} from '../../../datadog/src/mod.js';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {createLogOptions} from './log-options.js';

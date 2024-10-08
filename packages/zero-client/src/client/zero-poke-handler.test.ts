@@ -9,7 +9,7 @@ import {
   test,
   vi,
 } from 'vitest';
-import type {AST} from 'zql/src/zql/ast/ast.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;

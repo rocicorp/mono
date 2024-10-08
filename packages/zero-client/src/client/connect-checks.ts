@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {navigator} from 'shared/src/navigator.js';
-import {sleep} from 'shared/src/sleep.js';
+import {navigator} from '../../../shared/src/navigator.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import {nanoid} from '../util/nanoid.js';
 import {
   type HTTPString,

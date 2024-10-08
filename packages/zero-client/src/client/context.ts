@@ -1,16 +1,16 @@
 import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
-import {assert, unreachable} from 'shared/src/asserts.js';
-import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {Row} from 'zql/src/zql/ivm/data.js';
-import {MemorySource} from 'zql/src/zql/ivm/memory-source.js';
-import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
-import type {Storage} from 'zql/src/zql/ivm/operator.js';
-import type {Source} from 'zql/src/zql/ivm/source.js';
+import {assert, unreachable} from '../../../shared/src/asserts.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import type {Row} from '../../../zql/src/zql/ivm/data.js';
+import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
+import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
+import type {Storage} from '../../../zql/src/zql/ivm/operator.js';
+import type {Source} from '../../../zql/src/zql/ivm/source.js';
 import type {
   CommitListener,
   QueryDelegate,
-} from 'zql/src/zql/query/query-impl.js';
-import type {TableSchema} from 'zql/src/zql/query/schema.js';
+} from '../../../zql/src/zql/query/query-impl.js';
+import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
 export type AddQuery = (ast: AST) => () => void;

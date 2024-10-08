@@ -8,10 +8,10 @@ import {
   type ScanNoIndexOptions,
   type ScanOptions,
   type ScanResult,
-} from 'replicache/src/mod.js';
+} from '../../../replicache/src/mod.js';
 import {expect, test, vi} from 'vitest';
-import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/mod.js';
-import type {AST} from 'zql/src/zql/ast/ast.js';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/mod.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import {QueryManager} from './query-manager.js';
 
 test('add', () => {
