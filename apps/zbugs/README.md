@@ -79,7 +79,7 @@ npm run zero
 In still another tab:
 
 ```bash
-VITE_PUBLIC_SERVER="http://[::1]:3000" npm run dev
+VITE_PUBLIC_SERVER="http://localhost:4848" npm run dev
 ```
 
 After you have visited the local website and the sync / replica tables have populated.
