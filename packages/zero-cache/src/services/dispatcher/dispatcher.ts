@@ -69,7 +69,6 @@ export class Dispatcher implements Service {
 
   async run(): Promise<void> {
     const address = await this.#fastify.listen({
-      host: '::',
       port: this.#port,
     });
     this.#lc.info?.(`Server listening at ${address}`);
