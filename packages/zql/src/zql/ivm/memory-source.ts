@@ -1,4 +1,4 @@
-import BTree from 'btree';
+import {BTree} from 'btree/src/mod.js';
 import {assert, unreachable} from 'shared/src/asserts.js';
 import type {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
@@ -15,7 +15,7 @@ import {
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Constraint, FetchRequest, Input, Output} from './operator.js';
-import type {PrimaryKey, TableSchema, SchemaValue} from './schema.js';
+import type {PrimaryKey, SchemaValue, TableSchema} from './schema.js';
 import type {
   Source,
   SourceChange,
