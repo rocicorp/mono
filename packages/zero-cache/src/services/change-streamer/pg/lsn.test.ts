@@ -2,7 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {
   versionFromLexi,
   type LexiVersion,
-} from 'zero-cache/src/types/lexi-version.js';
+} from '../../../types/lexi-version.js';
 import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
 
 describe('lsn to/from LexiVersion', () => {

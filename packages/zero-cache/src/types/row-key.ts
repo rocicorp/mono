@@ -1,4 +1,4 @@
-import {h64} from 'shared/src/xxhash.js';
+import {h64} from '../../../shared/src/xxhash.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 
 export type ColumnType = {readonly typeOid: number};

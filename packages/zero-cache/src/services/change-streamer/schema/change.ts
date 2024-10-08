@@ -1,6 +1,6 @@
 import {Pgoutput} from 'pg-logical-replication';
-import type {JSONObject} from 'zero-cache/src/types/bigint-json.js';
-import type {Satisfies} from 'zero-cache/src/types/satisfies.js';
+import type {JSONObject} from '../../../types/bigint-json.js';
+import type {Satisfies} from '../../../types/satisfies.js';
 
 export type MessageBegin = {
   tag: 'begin';

@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {assert} from 'shared/src/asserts.js';
-import {randInt} from 'shared/src/rand.js';
-import * as v from 'shared/src/valita.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {randInt} from '../../../shared/src/rand.js';
+import * as v from '../../../shared/src/valita.js';
 
 /**
  * A PreMigrationFn executes logic outside of a database transaction, and is

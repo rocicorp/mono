@@ -7,19 +7,19 @@ import {
   PgoutputPlugin,
 } from 'pg-logical-replication';
 import {DatabaseError} from 'pg-protocol';
-import {AbortError} from 'shared/src/abort-error.js';
-import {deepEqual} from 'shared/src/json.js';
-import {sleep} from 'shared/src/sleep.js';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {stringify} from 'zero-cache/src/types/bigint-json.js';
-import {max, oneAfter} from 'zero-cache/src/types/lexi-version.js';
+import {AbortError} from '../../../../../shared/src/abort-error.js';
+import {deepEqual} from '../../../../../shared/src/json.js';
+import {sleep} from '../../../../../shared/src/sleep.js';
+import {StatementRunner} from '../../../db/statements.js';
+import {stringify} from '../../../types/bigint-json.js';
+import {max, oneAfter} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
   type PostgresDB,
-} from 'zero-cache/src/types/pg.js';
-import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {Database} from 'zqlite/src/db.js';
+} from '../../../types/pg.js';
+import {Subscription} from '../../../types/subscription.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {ChangeSource, ChangeStream} from '../change-streamer-service.js';
 import type {Commit, DownstreamChange} from '../change-streamer.js';

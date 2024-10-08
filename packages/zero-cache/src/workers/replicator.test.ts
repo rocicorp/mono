@@ -1,7 +1,7 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {describe, expect, test, vi} from 'vitest';
-import type {ReplicaState} from 'zero-cache/src/services/replicator/replicator.js';
-import {Subscription} from 'zero-cache/src/types/subscription.js';
+import type {ReplicaState} from '../services/replicator/replicator.js';
+import {Subscription} from '../types/subscription.js';
 import {inProcChannel} from '../types/processes.js';
 import {
   createNotifierFrom,

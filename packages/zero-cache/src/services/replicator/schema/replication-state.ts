@@ -5,9 +5,9 @@
  * after the logical replication handoff when initial data synchronization has completed.
  */
 
-import * as v from 'shared/src/valita.js';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {Database} from 'zqlite/src/db.js';
+import * as v from '../../../../../shared/src/valita.js';
+import {StatementRunner} from '../../../db/statements.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 

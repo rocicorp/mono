@@ -1,5 +1,5 @@
-import type {ColumnSpec, TableSpec} from 'zero-cache/src/types/specs.js';
-import {id, idList} from 'zero-cache/src/types/sql.js';
+import type {ColumnSpec, TableSpec} from '../../../../types/specs.js';
+import {id, idList} from '../../../../types/sql.js';
 
 /**
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.

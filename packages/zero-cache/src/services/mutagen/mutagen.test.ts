@@ -1,11 +1,11 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {Mode} from 'zero-cache/src/db/transaction-pool.js';
+import {Mode} from '../../db/transaction-pool.js';
 import {
   ErrorKind,
   MutationType,
   type CRUDMutation,
-} from 'zero-protocol/src/mod.js';
+} from '../../../../zero-protocol/src/mod.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';

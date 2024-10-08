@@ -1,4 +1,4 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
@@ -6,13 +6,13 @@ import {
   getConnectionURI,
   initDB,
   testDBs,
-} from 'zero-cache/src/test/db.js';
+} from '../../../test/db.js';
 import {
   DbFile,
   expectTables as expectLiteTables,
   initDB as initLiteDB,
-} from 'zero-cache/src/test/lite.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+} from '../../../test/lite.js';
+import type {PostgresDB} from '../../../types/pg.js';
 import {replicationSlot} from './initial-sync.js';
 import {initSyncSchema} from './sync-schema.js';
 

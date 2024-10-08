@@ -1,8 +1,8 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, test} from 'vitest';
-import {expectTables, testDBs} from 'zero-cache/src/test/db.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
-import {Database} from 'zqlite/src/db.js';
+import {expectTables, testDBs} from '../../../test/db.js';
+import type {PostgresDB} from '../../../types/pg.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {initReplicationState} from '../../replicator/schema/replication-state.js';
 import {ensureReplicationConfig, setupCDCTables} from './tables.js';
 

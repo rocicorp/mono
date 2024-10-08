@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {Pgoutput} from 'pg-logical-replication';
-import {assert} from 'shared/src/asserts.js';
-import {h32} from 'shared/src/xxhash.js';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import type {RowKey, RowValue} from 'zero-cache/src/types/row-key.js';
-import {Database} from 'zqlite/src/db.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import {h32} from '../../../../shared/src/xxhash.js';
+import {StatementRunner} from '../../db/statements.js';
+import type {RowKey, RowValue} from '../../types/row-key.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import type {
   DataChange,
   MessageBegin,

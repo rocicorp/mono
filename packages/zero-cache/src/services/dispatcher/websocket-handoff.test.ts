@@ -1,9 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {Server} from 'node:http';
-import {randInt} from 'shared/src/rand.js';
+import {randInt} from '../../../../shared/src/rand.js';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
-import {inProcChannel} from 'zero-cache/src/types/processes.js';
+import {inProcChannel} from '../../types/processes.js';
 import {
   installWebSocketHandoff,
   installWebSocketReceiver,

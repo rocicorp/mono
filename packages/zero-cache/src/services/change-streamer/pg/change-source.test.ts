@@ -1,22 +1,22 @@
 import {LogContext} from '@rocicorp/logger';
-import {AbortError} from 'shared/src/abort-error.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {Queue} from 'shared/src/queue.js';
+import {AbortError} from '../../../../../shared/src/abort-error.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {Queue} from '../../../../../shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
+import {StatementRunner} from '../../../db/statements.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
   testDBs,
-} from 'zero-cache/src/test/db.js';
-import {DbFile} from 'zero-cache/src/test/lite.js';
+} from '../../../test/db.js';
+import {DbFile} from '../../../test/lite.js';
 import {
   oneAfter,
   versionFromLexi,
   versionToLexi,
-} from 'zero-cache/src/types/lexi-version.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
-import type {Source} from 'zero-cache/src/types/streams.js';
+} from '../../../types/lexi-version.js';
+import type {PostgresDB} from '../../../types/pg.js';
+import type {Source} from '../../../types/streams.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {ChangeSource} from '../change-streamer-service.js';
 import type {Commit, DownstreamChange} from '../change-streamer.js';

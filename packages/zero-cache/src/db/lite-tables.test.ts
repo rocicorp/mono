@@ -1,6 +1,6 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
-import {Database} from 'zqlite/src/db.js';
+import {Database} from '../../../zqlite/src/db.js';
 import type {TableSpec} from '../types/specs.js';
 import {listTables} from './lite-tables.js';
 

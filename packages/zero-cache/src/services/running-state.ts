@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {AbortError} from 'shared/src/abort-error.js';
-import {sleepWithAbort} from 'shared/src/sleep.js';
+import {AbortError} from '../../../shared/src/abort-error.js';
+import {sleepWithAbort} from '../../../shared/src/sleep.js';
 
 const DEFAULT_INITIAL_RETRY_DELAY_MS = 100;
 const DEFAULT_MAX_RETRY_DELAY_MS = 10000;

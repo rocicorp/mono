@@ -3,22 +3,22 @@ import type {JWTPayload} from 'jose';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import {assert} from 'shared/src/asserts.js';
-import type {JSONValue} from 'shared/src/json.js';
-import {randInt} from 'shared/src/rand.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import type {JSONValue} from '../../../../shared/src/json.js';
+import {randInt} from '../../../../shared/src/rand.js';
 import type {
   CreateOp,
   DeleteOp,
   SetOp,
   UpdateOp,
-} from 'zero-protocol/src/mod.js';
-import type {BuilderDelegate} from 'zql/src/zql/builder/builder.js';
-import {buildPipeline} from 'zql/src/zql/builder/builder.js';
-import type {Row} from 'zql/src/zql/ivm/data.js';
-import {Database} from 'zqlite/src/db.js';
-import {compile, sql} from 'zqlite/src/internal/sql.js';
-import {StatementCache} from 'zqlite/src/internal/statement-cache.js';
-import {TableSource} from 'zqlite/src/table-source.js';
+} from '../../../../zero-protocol/src/mod.js';
+import type {BuilderDelegate} from '../../../../zql/src/zql/builder/builder.js';
+import {buildPipeline} from '../../../../zql/src/zql/builder/builder.js';
+import type {Row} from '../../../../zql/src/zql/ivm/data.js';
+import {Database} from '../../../../zqlite/src/db.js';
+import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
+import {StatementCache} from '../../../../zqlite/src/internal/statement-cache.js';
+import {TableSource} from '../../../../zqlite/src/table-source.js';
 import type {
   AuthorizationConfig,
   Policy,

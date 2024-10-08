@@ -1,12 +1,10 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {afterEach, beforeEach, describe, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {unreachable} from '../../../../shared/src/asserts.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {CVRStore} from './cvr-store.js';
-
-import {unreachable} from 'shared/src/asserts.js';
-import {expect} from 'vitest';
 import type {PatchToVersion} from './client-handler.js';
+import {CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,

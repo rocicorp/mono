@@ -1,7 +1,7 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from 'shared/src/asserts.js';
-import * as valita from 'shared/src/valita.js';
+import {unreachable} from '../../../shared/src/asserts.js';
+import * as valita from '../../../shared/src/valita.js';
 import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
 import WebSocket from 'ws';
 import {
@@ -11,7 +11,7 @@ import {
   type ErrorMessage,
   type PongMessage,
   upstreamSchema,
-} from 'zero-protocol/src/mod.js';
+} from '../../../zero-protocol/src/mod.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {

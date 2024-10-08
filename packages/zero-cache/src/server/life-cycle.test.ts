@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import EventEmitter from 'node:events';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {promiseVoid} from 'shared/src/resolved-promises.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {SingletonService} from '../services/service.js';
 import {inProcChannel} from '../types/processes.js';

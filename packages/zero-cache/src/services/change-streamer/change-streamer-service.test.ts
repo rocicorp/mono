@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {AbortError} from 'shared/src/abort-error.js';
-import {assert} from 'shared/src/asserts.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {Queue} from 'shared/src/queue.js';
+import {AbortError} from '../../../../shared/src/abort-error.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {Queue} from '../../../../shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {testDBs} from 'zero-cache/src/test/db.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
-import type {Source} from 'zero-cache/src/types/streams.js';
-import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {Database} from 'zqlite/src/db.js';
+import {StatementRunner} from '../../db/statements.js';
+import {testDBs} from '../../test/db.js';
+import type {PostgresDB} from '../../types/pg.js';
+import type {Source} from '../../types/streams.js';
+import {Subscription} from '../../types/subscription.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {
   getSubscriptionState,
   initReplicationState,

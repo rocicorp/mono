@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import type {Source} from 'zero-cache/src/types/streams.js';
+import type {Source} from '../../types/streams.js';
 import {Notifier} from './notifier.js';
 import type {ReplicaState} from './replicator.js';
 

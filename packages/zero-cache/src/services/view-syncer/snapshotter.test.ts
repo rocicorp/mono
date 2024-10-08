@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {DbFile, expectTables} from 'zero-cache/src/test/lite.js';
+import {DbFile, expectTables} from '../../test/lite.js';
 import {MessageProcessor} from '../replicator/incremental-sync.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';

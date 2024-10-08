@@ -1,6 +1,6 @@
 import type {RunResult} from 'better-sqlite3';
-import {Database} from 'zqlite/src/db.js';
-import {StatementCache} from 'zqlite/src/internal/statement-cache.js';
+import {Database} from '../../../zqlite/src/db.js';
+import {StatementCache} from '../../../zqlite/src/internal/statement-cache.js';
 
 /**
  * A stateless wrapper around a {@link StatementCache} that facilitates single-line

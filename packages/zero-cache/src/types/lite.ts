@@ -1,4 +1,4 @@
-import type {SchemaValue, ValueType} from 'zql/src/zql/ivm/schema.js';
+import type {SchemaValue, ValueType} from '../../../zql/src/zql/ivm/schema.js';
 import type {RowValue} from './row-key.js';
 
 export const INTEGER = 'INTEGER';

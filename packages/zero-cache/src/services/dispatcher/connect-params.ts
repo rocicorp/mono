@@ -1,5 +1,5 @@
 import type {IncomingHttpHeaders} from 'node:http2';
-import {URLParams} from 'zero-cache/src/types/url-params.js';
+import {URLParams} from '../../types/url-params.js';
 
 export type ConnectParams = {
   readonly clientID: string;

@@ -1,12 +1,12 @@
 // create a zql query
 
-import {assert} from 'shared/src/asserts.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {MemoryStorage} from 'zql/src/zql/ivm/memory-storage.js';
-import type {Source} from 'zql/src/zql/ivm/source.js';
-import {newQuery, type QueryDelegate} from 'zql/src/zql/query/query-impl.js';
-import {Database} from 'zqlite/src/db.js';
-import {TableSource} from 'zqlite/src/table-source.js';
+import {assert} from '../../shared/src/asserts.js';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
+import {MemoryStorage} from '../../zql/src/zql/ivm/memory-storage.js';
+import type {Source} from '../../zql/src/zql/ivm/source.js';
+import {newQuery, type QueryDelegate} from '../../zql/src/zql/query/query-impl.js';
+import {Database} from '../../zqlite/src/db.js';
+import {TableSource} from '../../zqlite/src/table-source.js';
 import {listTables} from '../src/db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.js';
 import {schema} from './schema.js';

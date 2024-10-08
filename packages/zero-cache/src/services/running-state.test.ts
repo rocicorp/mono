@@ -1,5 +1,5 @@
-import {AbortError} from 'shared/src/abort-error.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {AbortError} from '../../../shared/src/abort-error.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {expect, test, vi} from 'vitest';
 import {RunningState} from './running-state.js';
 

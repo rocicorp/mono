@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import {oneAfter} from 'zero-cache/src/types/lexi-version.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
-import type {Sink, Source} from 'zero-cache/src/types/streams.js';
-import {Subscription} from 'zero-cache/src/types/subscription.js';
+import {oneAfter} from '../../types/lexi-version.js';
+import type {PostgresDB} from '../../types/pg.js';
+import type {Sink, Source} from '../../types/streams.js';
+import {Subscription} from '../../types/subscription.js';
 import {RunningState} from '../running-state.js';
 import {
   type ChangeStreamerService,

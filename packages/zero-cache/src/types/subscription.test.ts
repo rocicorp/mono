@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.js';
-import {sleep} from 'shared/src/sleep.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import {describe, expect, test, vi} from 'vitest';
 import {type Result, Subscription} from './subscription.js';
 

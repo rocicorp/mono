@@ -3,15 +3,15 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
-import {Queue} from 'shared/src/queue.js';
+import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.js';
+import {Queue} from '../../../../../../shared/src/queue.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
   getConnectionURI,
   testDBs,
-} from 'zero-cache/src/test/db.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+} from '../../../../test/db.js';
+import type {PostgresDB} from '../../../../types/pg.js';
 import {createEventTriggerStatements} from './ddl.js';
 
 const SLOT_NAME = 'ddl_test_slot';

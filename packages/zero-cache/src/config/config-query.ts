@@ -1,14 +1,14 @@
-import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {Format} from 'zql/src/zql/ivm/array-view.js';
-import {AbstractQuery} from 'zql/src/zql/query/query-impl.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import type {Format} from '../../../zql/src/zql/ivm/array-view.js';
+import {AbstractQuery} from '../../../zql/src/zql/query/query-impl.js';
 import type {
   DefaultQueryResultRow,
   Query,
   QueryType,
   Smash,
-} from 'zql/src/zql/query/query.js';
-import type {TableSchema} from 'zql/src/zql/query/schema.js';
-import type {TypedView} from 'zql/src/zql/query/typed-view.js';
+} from '../../../zql/src/zql/query/query.js';
+import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
+import type {TypedView} from '../../../zql/src/zql/query/typed-view.js';
 
 export class ConfigQuery<
   TTableSchema extends TableSchema,

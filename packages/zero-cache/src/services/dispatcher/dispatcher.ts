@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import Fastify, {type FastifyInstance} from 'fastify';
 import {IncomingMessage} from 'http';
-import {h32} from 'shared/src/xxhash.js';
+import {h32} from '../../../../shared/src/xxhash.js';
 import type {Worker} from '../../types/processes.js';
 import type {Service} from '../service.js';
 import {getConnectParams} from './connect-params.js';

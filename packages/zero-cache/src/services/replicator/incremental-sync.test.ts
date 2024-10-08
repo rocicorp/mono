@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {
   afterEach,
   beforeEach,
@@ -9,9 +9,9 @@ import {
   test,
   vi,
 } from 'vitest';
-import {expectTables, initDB} from 'zero-cache/src/test/lite.js';
-import {Subscription} from 'zero-cache/src/types/subscription.js';
-import {Database} from 'zqlite/src/db.js';
+import {expectTables, initDB} from '../../test/lite.js';
+import {Subscription} from '../../types/subscription.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {dropReplicationSlot, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {

@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from 'zero-cache/src/test/db.js';
-import type {PostgresDB} from 'zero-cache/src/types/pg.js';
+import {testDBs} from '../../../../test/db.js';
+import type {PostgresDB} from '../../../../types/pg.js';
 import {setupTablesAndReplication} from './zero.js';
 
 describe('change-source/pg', () => {

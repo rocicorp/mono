@@ -1,15 +1,15 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import type {
   Downstream,
   PokeEndMessage,
   PokePartMessage,
   PokeStartMessage,
-} from 'zero-protocol';
+} from '../../../../zero-protocol/src/mod.js';
 import type {JSONObject} from '../../types/bigint-json.js';
+import {ErrorForClient} from '../../types/error-for-client.js';
 import {Subscription} from '../../types/subscription.js';
 import {ClientHandler, type Patch, ensureSafeJSON} from './client-handler.js';
-import {ErrorForClient} from 'zero-cache/src/types/error-for-client.js';
 
 describe('view-syncer/client-handler', () => {
   test('poke handler', () => {

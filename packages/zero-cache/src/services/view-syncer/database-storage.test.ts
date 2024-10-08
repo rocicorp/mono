@@ -1,8 +1,8 @@
-import {Database} from 'zqlite/src/db.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {afterEach} from 'node:test';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 
 describe('view-syncer/database-storage', () => {
   let db: Database;
