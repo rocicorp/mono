@@ -1,1 +1,1 @@
-import 'zero-cache/src/server/change-streamer.js';
+import '../../../zero-cache/src/server/change-streamer.js';

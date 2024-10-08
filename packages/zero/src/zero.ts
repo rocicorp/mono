@@ -1,1 +1,1 @@
-export * from 'zero-client/src/mod.js';
+export * from '../../zero-client/src/mod.js';
