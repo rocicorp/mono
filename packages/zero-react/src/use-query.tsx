@@ -1,5 +1,5 @@
 import {useLayoutEffect, useState} from 'react';
-import {deepClone} from 'shared/src/deep-clone.js';
+import {deepClone} from '../../shared/src/deep-clone.js';
 import type {
   Query,
   QueryImpl,
