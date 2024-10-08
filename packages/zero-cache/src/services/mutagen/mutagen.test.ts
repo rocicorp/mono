@@ -569,7 +569,6 @@ describe('processMutation', () => {
       ErrorKind.MutationFailed,
       'PostgresError: insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
     ]);
-    console.log(error);
 
     await expectTables(db, {
       ['fk_ref']: [],

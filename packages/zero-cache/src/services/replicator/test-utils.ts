@@ -53,13 +53,13 @@ export class ReplicationMessages<
 > {
   readonly #tables = new Map<string, Pgoutput.MessageRelation>();
 
-  constructor(tablesAndKeys: TablesAndKeys) {
+  constructor(tablesAndKeys: TablesAndKeys, schema = 'public') {
     for (const [table, k] of Object.entries(tablesAndKeys)) {
       const keys = typeof k === 'string' ? [k] : [...k];
       const relation = {
         tag: 'relation',
         relationOid: h32(table), // deterministic for snapshot-friendliness
-        schema: 'public',
+        schema,
         name: table,
         replicaIdentity: 'default',
         columns: keys.map(name => ({

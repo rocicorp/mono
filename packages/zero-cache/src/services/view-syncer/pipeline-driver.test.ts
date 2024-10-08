@@ -81,6 +81,10 @@ describe('view-syncer/pipeline-driver', () => {
   };
 
   const messages = new ReplicationMessages({issues: 'id', comments: 'id'});
+  const zeroMessages = new ReplicationMessages(
+    {schemaVersions: 'lock'},
+    'zero',
+  );
 
   test('add query', () => {
     pipelines.init();
@@ -389,6 +393,50 @@ describe('view-syncer/pipeline-driver', () => {
       issueID: '3',
       upvotes: 20000,
       ['_0_version']: '123',
+    });
+  });
+
+  test('schemaVersions change and insert', () => {
+    pipelines.init();
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+
+    const replicator = fakeReplicator(lc, db);
+    replicator.processTransaction(
+      '134',
+      messages.insert('issues', {id: '4', closed: 0}),
+      zeroMessages.insert('schemaVersions', {
+        lock: '1',
+        minSupportedVersion: 1,
+        maxSupportedVersion: 2,
+      }),
+    );
+
+    expect(pipelines.currentSchemaVersions()).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 1,
+    });
+
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "4",
+          },
+          "rowKey": {
+            "id": "4",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+      ]
+    `);
+
+    expect(pipelines.currentSchemaVersions()).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 2,
     });
   });
 

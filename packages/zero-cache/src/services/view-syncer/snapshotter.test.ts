@@ -95,6 +95,68 @@ describe('view-syncer/snapshotter', () => {
     comments: 'id',
   });
 
+  const zeroMessages = new ReplicationMessages(
+    {
+      schemaVersions: 'lock',
+    },
+    'zero',
+  );
+
+  test('schemaVersions change', () => {
+    const s = new Snapshotter(lc, dbFile.path).init();
+    expect(s.current().version).toBe('00');
+    expect(s.current().schemaVersions).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 1,
+    });
+
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, [
+      'data',
+      zeroMessages.insert('schemaVersions', {
+        lock: '1',
+        minSupportedVersion: 1,
+        maxSupportedVersion: 2,
+      }),
+    ]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(1);
+
+    expect(s.current().version).toBe('01');
+    expect(s.current().schemaVersions).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 2,
+    });
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": {
+            "_0_version": "01",
+            "lock": 1n,
+            "maxSupportedVersion": 2n,
+            "minSupportedVersion": 1n,
+          },
+          "prevValue": {
+            "_0_version": "00",
+            "lock": 1n,
+            "maxSupportedVersion": 1n,
+            "minSupportedVersion": 1n,
+          },
+          "table": "zero.schemaVersions",
+        },
+      ]
+    `);
+  });
+
   test('concurrent snapshot diffs', () => {
     const s1 = new Snapshotter(lc, dbFile.path).init();
     const s2 = new Snapshotter(lc, dbFile.path).init();
