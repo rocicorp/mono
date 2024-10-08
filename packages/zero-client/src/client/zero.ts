@@ -513,8 +513,8 @@ export class Zero<S extends Schema> {
       rep.experimentalWatch.bind(rep),
     );
 
-    this.#zeroContext = new ZeroContext(schema.tables, ast =>
-      this.#queryManager.add(ast),
+    this.#zeroContext = new ZeroContext(schema.tables, (ast, gotCallback) =>
+      this.#queryManager.add(ast, gotCallback),
     );
 
     rep.experimentalWatch(

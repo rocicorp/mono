@@ -8,12 +8,16 @@ import type {Storage} from '../../../zql/src/zql/ivm/operator.js';
 import type {Source} from '../../../zql/src/zql/ivm/source.js';
 import type {
   CommitListener,
+  GotCallback,
   QueryDelegate,
 } from '../../../zql/src/zql/query/query-impl.js';
 import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
-export type AddQuery = (ast: AST) => () => void;
+export type AddQuery = (
+  ast: AST,
+  gotCallback?: GotCallback | undefined,
+) => () => void;
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
@@ -50,8 +54,8 @@ export class ZeroContext implements QueryDelegate {
     return source;
   }
 
-  addServerQuery(ast: AST) {
-    return this.#addQuery(ast);
+  addServerQuery(ast: AST, gotCallback?: GotCallback | undefined) {
+    return this.#addQuery(ast, gotCallback);
   }
 
   createStorage(): Storage {

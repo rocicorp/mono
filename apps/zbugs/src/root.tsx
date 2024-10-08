@@ -38,9 +38,9 @@ export default function Root() {
     const {cleanup, complete} = baseIssueQuery.limit(50).preload();
 
     complete.then(() => {
-      cleanup();
       // load remainder of issues
       baseIssueQuery.preload();
+      cleanup();
     });
 
     z.query.user.preload();
