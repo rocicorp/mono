@@ -125,9 +125,9 @@ export class PipelineDriver {
   }
 
   /**
-   * Returns the current support schema versions of the database. This will
-   * reflect the latest version when calling {@link advance()} once the
-   * iteration has begun.
+   * Returns the current supported schema version range of the database.  This
+   * will reflect changes to supported schema version range when calling
+   * {@link advance()} once the iteration has begun.
    */
   currentSchemaVersions(): SchemaVersions {
     assert(this.initialized(), 'Not yet initialized');

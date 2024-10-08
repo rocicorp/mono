@@ -55,9 +55,13 @@ describe('view-syncer/snapshotter', () => {
 
   test('initial snapshot', () => {
     const s = new Snapshotter(lc, dbFile.path).init();
-    const {db, version} = s.current();
+    const {db, version, schemaVersions} = s.current();
 
     expect(version).toBe('00');
+    expect(schemaVersions).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 1,
+    });
     expectTables(db.db, {
       issues: [
         {id: 1, owner: 10, desc: 'foo', ['_0_version']: '00'},
