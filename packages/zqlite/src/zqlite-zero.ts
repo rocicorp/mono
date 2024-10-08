@@ -1,21 +1,21 @@
-import {ZeroContext} from 'zero-client/src/client/context.js';
+import {ZeroContext} from '../../zero-client/src/client/context.js';
 import {
   type BaseCRUDMutate,
   type EntityCRUDMutate,
   makeBatchCRUDMutate,
   type MakeCRUDMutate,
   type Update,
-} from 'zero-client/src/client/crud.js';
-import * as zeroJs from 'zero-client/src/client/zero.js';
-import type {Query} from 'zero-client/src/mod.js';
-import type {EntityID} from 'zero-protocol/src/entity.js';
-import type {CRUDOp, CRUDOpKind} from 'zero-protocol/src/push.js';
-import type {Row} from 'zql/src/zql/ivm/data.js';
-import {newQuery} from 'zql/src/zql/query/query-impl.js';
-import type {TableSchema} from 'zql/src/zql/query/schema.js';
-import type {Database} from 'zqlite/src/db.js';
+} from '../../zero-client/src/client/crud.js';
+import * as zeroJs from '../../zero-client/src/client/zero.js';
+import type {Query} from '../../zero-client/src/mod.js';
+import type {EntityID} from '../../zero-protocol/src/entity.js';
+import type {CRUDOp, CRUDOpKind} from '../../zero-protocol/src/push.js';
+import type {Row} from '../../zql/src/zql/ivm/data.js';
+import {newQuery} from '../../zql/src/zql/query/query-impl.js';
+import type {TableSchema} from '../../zql/src/zql/query/schema.js';
+import type {Database} from './db.js';
 import type {ZQLiteZeroOptions} from './options.js';
-import {must} from 'shared/src/must.js';
+import {must} from '../../shared/src/must.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;

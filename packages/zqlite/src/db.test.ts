@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {TestLogSink} from 'shared/src/logging-test-utils.js';
+import {TestLogSink} from '../../shared/src/logging-test-utils.js';
 import {expect, test, vi} from 'vitest';
 import {Database} from './db.js';
 
