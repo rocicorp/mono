@@ -28,12 +28,10 @@ export function useQuery<
     if (enable) {
       const view = q.materialize();
       setView(view);
-      const unsubscribe = view.addListener(snapshot => {
+      const unsubscribe = view.addListener(snap => {
         // snapshot can contain `undefined`
         setSnapshot(
-          (snapshot === undefined
-            ? snapshot
-            : deepClone(snapshot)) as Smash<TReturn>,
+          (snap === undefined ? snap : deepClone(snap)) as Smash<TReturn>,
         );
       });
       view.hydrate();
