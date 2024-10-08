@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import type {JSONValue} from 'shared/src/json.js';
+import type {JSONValue} from '../../shared/src/json.js';
 import {
   initReplicacheTesting,
   makePullResponseV1,

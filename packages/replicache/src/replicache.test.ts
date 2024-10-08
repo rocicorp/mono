@@ -1,10 +1,10 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
-import {assert} from 'shared/src/asserts.js';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
-import {promiseVoid} from 'shared/src/resolved-promises.js';
-import {sleep} from 'shared/src/sleep.js';
+import {assert} from '../../shared/src/asserts.js';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
+import {promiseVoid} from '../../shared/src/resolved-promises.js';
+import {sleep} from '../../shared/src/sleep.js';
 import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {Write} from './db/write.js';

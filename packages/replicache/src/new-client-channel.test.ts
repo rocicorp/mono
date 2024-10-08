@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
-import {sleep} from 'shared/src/sleep.js';
+import {sleep} from '../../shared/src/sleep.js';
 import {BroadcastChannel} from './broadcast-channel.js';
 import {TestStore} from './dag/test-store.js';
 import {fakeHash} from './hash.js';

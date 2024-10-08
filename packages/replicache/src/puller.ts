@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../shared/src/json.js';
 import type {Cookie} from './cookies.js';
 import type {
   ClientStateNotFoundResponse,

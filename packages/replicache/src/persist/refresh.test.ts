@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assert, assertNotUndefined} from 'shared/src/asserts.js';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.js';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.js';
 import type {Entry} from '../btree/node.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';

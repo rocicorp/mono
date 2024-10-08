@@ -1,7 +1,7 @@
 /* eslint-disable require-await */
 
-import {assert} from 'shared/src/asserts.js';
-import type {ReadonlyJSONObject} from 'shared/src/json.js';
+import {assert} from '../../shared/src/asserts.js';
+import type {ReadonlyJSONObject} from '../../shared/src/json.js';
 import type {IndexKey} from './db/index.js';
 import {Replicache} from './replicache.js';
 import type {DeepReadonly, WriteTransaction} from './transactions.js';

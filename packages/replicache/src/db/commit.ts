@@ -6,8 +6,8 @@ import {
   assertObject,
   assertString,
   unreachable,
-} from 'shared/src/asserts.js';
-import {assertJSONValue} from 'shared/src/json.js';
+} from '../../../shared/src/asserts.js';
+import {assertJSONValue} from '../../../shared/src/json.js';
 import {skipCommitDataAsserts} from '../config.js';
 import {type FrozenCookie, compareCookies} from '../cookies.js';
 import {type Chunk, type CreateChunk, type Refs, toRefs} from '../dag/chunk.js';

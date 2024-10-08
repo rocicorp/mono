@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import type {IndexKey} from './db/index.js';
 import {

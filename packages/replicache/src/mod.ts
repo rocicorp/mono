@@ -5,8 +5,8 @@ export type {
   JSONValue,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
-} from 'shared/src/json.js';
-export type {MaybePromise} from 'shared/src/types.js';
+} from '../../shared/src/json.js';
+export type {MaybePromise} from '../../shared/src/types.js';
 export type {
   Diff as ExperimentalDiff,
   DiffOperation as ExperimentalDiffOperation,

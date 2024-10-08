@@ -1,5 +1,5 @@
-import {assertNumber} from 'shared/src/asserts.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {assertNumber} from '../../../shared/src/asserts.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {type Hash, assertHash} from '../hash.js';
 import type {
   Read as KVRead,

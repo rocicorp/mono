@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import type {JSONValue} from 'shared/src/json.js';
+import type {JSONValue} from '../../../shared/src/json.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
 import {

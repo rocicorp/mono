@@ -1,7 +1,7 @@
 // This test file is loaded by worker.test.ts
 
 import {expect} from 'chai';
-import type {JSONValue} from 'shared/src/json.js';
+import type {JSONValue} from '../../shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {ReplicacheTest, closeAllReps, reps} from './test-util.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';

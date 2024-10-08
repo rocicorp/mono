@@ -3,7 +3,7 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from 'shared/src/asserts.js';
+} from '../../../shared/src/asserts.js';
 import {deepFreeze} from '../frozen-json.js';
 import type {CreateStore, Read, Store} from '../kv/store.js';
 import {withRead, withWrite} from '../with-transactions.js';

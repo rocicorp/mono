@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 import type {Chunk} from '../dag/chunk.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Read, Store, Write} from '../dag/store.js';

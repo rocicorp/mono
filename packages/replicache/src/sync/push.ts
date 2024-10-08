@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
-import {jsonSchema} from 'shared/src/json-schema.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
-import * as valita from 'shared/src/valita.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {jsonSchema} from '../../../shared/src/json-schema.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
+import * as valita from '../../../shared/src/valita.js';
 import type {Store} from '../dag/store.js';
 import {
   DEFAULT_HEAD_NAME,

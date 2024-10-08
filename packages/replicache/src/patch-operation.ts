@@ -1,10 +1,10 @@
-import {assertArray, assertObject, assertString} from 'shared/src/asserts.js';
+import {assertArray, assertObject, assertString} from '../../shared/src/asserts.js';
 import {
   type ReadonlyJSONObject,
   type ReadonlyJSONValue,
   assertJSONObject,
   assertJSONValue,
-} from 'shared/src/json.js';
+} from '../../shared/src/json.js';
 
 export type PatchOperationInternal =
   | {

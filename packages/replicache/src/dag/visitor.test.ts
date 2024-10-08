@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {type Hash, fakeHash} from '../hash.js';
 import {Chunk, toRefs} from './chunk.js';
 import type {MustGetChunk} from './store.js';

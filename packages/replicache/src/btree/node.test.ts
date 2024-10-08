@@ -1,6 +1,6 @@
 import {expect} from 'chai';
-import {assert} from 'shared/src/asserts.js';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import {assert} from '../../../shared/src/asserts.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {toRefs} from '../dag/chunk.js';
 import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';

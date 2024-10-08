@@ -1,5 +1,5 @@
 import {glob} from 'glob';
-import {existsSync, statSync} from 'node:fs';
+import {existsSync} from 'node:fs';
 import {readFile, writeFile} from 'node:fs/promises';
 import {dirname, relative} from 'node:path';
 import process, {argv} from 'node:process';
@@ -22,14 +22,10 @@ if (files.length === 0) {
 }
 
 async function transformFile(path: string) {
+  process.stdout.write(`Transforming ${path}... `);
   // path starts with packages/replicache/src/
   let s: string;
-  // vitest creates directories that has the name xxx.test.ts for its __screenshots__ directory
-  // Make sure we have a file and not a directory
-  if (!isFile(path)) {
-    console.log(`Skipping non file path: ${path}`);
-    return;
-  }
+
   try {
     s = await readFile(path, 'utf8');
   } catch (e) {
@@ -37,7 +33,7 @@ async function transformFile(path: string) {
     throw e;
   }
   const re =
-    /(from|import)\s+'((?:btree|datadog|replicache|shared|zero-cache|zero-client|zero-protocol|zero-react|zero|zql|zqlite)\/src\/.+)'/g;
+    /(from|import)\s+'((?:btree|datadog|replicache|shared|zero-cache|zero-client|zero-protocol|zero-react|zero|zql|zqlite)\/.+)'/g;
   const absDir = new URL(dirname(path), import.meta.url).href;
   const s2 = s.replace(re, (_, fromOrImport, m) => {
     const sharedURL = new URL(`./packages/${m}`, import.meta.url).href;
@@ -46,17 +42,18 @@ async function transformFile(path: string) {
       rel = './' + rel;
     }
     assertFileExists(rel, absDir + '/', path);
-    console.log(`Changed from ${m} to ${rel}`);
+    process.stdout.write(`\n  Changed from ${m} to ${rel}`);
     return `${fromOrImport} '${rel}'`;
   });
   if (s !== s2) {
-    console.log('Writing', path);
+    process.stdout.write(`\n  Wrote\n\n`);
     await writeFile(path, s2);
-    console.log();
+  } else {
+    process.stdout.write(`No change\n`);
   }
 }
 
-for (const file of files.slice(0, 60)) {
+for (const file of files) {
   await transformFile(file);
 }
 
@@ -74,12 +71,4 @@ function assertFileExists(relPath: string, base: string, importer: string) {
 
 function replaceExtension(relPath: string): string {
   return relPath.replace(/\.js(x?)/, '.ts$1');
-}
-
-function isFile(path: string): boolean {
-  const stat = statSync(path, {throwIfNoEntry: false});
-  if (!stat) {
-    return false;
-  }
-  return stat.isFile();
 }
