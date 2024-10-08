@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../../shared/src/asserts.js';
 import type {Condition, LiteralValue, SimpleOperator} from '../ast/ast.js';
 import type {Row, Value} from '../ivm/data.js';
 import {getLikePredicate} from './like.js';

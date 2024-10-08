@@ -1,4 +1,4 @@
-import {deepClone} from 'shared/src/deep-clone.js';
+import {deepClone} from '../../../../shared/src/deep-clone.js';
 import {describe, expect, test} from 'vitest';
 import type {AST} from '../ast/ast.js';
 import {MemorySource} from '../ivm/memory-source.js';
@@ -19,7 +19,7 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
-import {must} from 'shared/src/must.js';
+import {must} from '../../../../shared/src/must.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../../shared/src/asserts.js';
 import type {AST, Ordering} from '../ast/ast.js';
 import {type BuilderDelegate, buildPipeline} from '../builder/builder.js';
 import {ArrayView, type Format} from '../ivm/array-view.js';

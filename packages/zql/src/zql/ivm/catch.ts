@@ -1,4 +1,4 @@
-import {unreachable} from 'shared/src/asserts.js';
+import {unreachable} from '../../../../shared/src/asserts.js';
 import type {Change} from './change.js';
 import type {Node} from './data.js';
 import type {FetchRequest, Input, Output} from './operator.js';

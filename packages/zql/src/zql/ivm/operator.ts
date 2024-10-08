@@ -1,4 +1,4 @@
-import type {JSONValue} from 'shared/src/json.js';
+import type {JSONValue} from '../../../../shared/src/json.js';
 import type {Change} from './change.js';
 import type {Node, Row, Value} from './data.js';
 import type {TableSchema} from './schema.js';

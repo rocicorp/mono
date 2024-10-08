@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../../shared/src/asserts.js';
 import {expect, suite, test} from 'vitest';
 import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';

@@ -1,5 +1,5 @@
-import {BTree} from 'btree/src/mod.js';
-import type {JSONValue} from 'shared/src/json.js';
+import {BTree} from '../../../../btree/src/mod.js';
+import type {JSONValue} from '../../../../shared/src/json.js';
 import type {Storage} from './operator.js';
 import type {Stream} from './stream.js';
 

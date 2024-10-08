@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.js';
-import type {JSONValue} from 'shared/src/json.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import type {JSONValue} from '../../../../shared/src/json.js';
 import {expect, suite, test} from 'vitest';
 import type {Ordering} from '../ast/ast.js';
 import {Catch} from './catch.js';

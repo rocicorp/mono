@@ -1,5 +1,5 @@
-import {assert, unreachable} from 'shared/src/asserts.js';
-import {must} from 'shared/src/must.js';
+import {assert, unreachable} from '../../../../shared/src/asserts.js';
+import {must} from '../../../../shared/src/must.js';
 import type {Change, ChildChange} from './change.js';
 import {
   normalizeUndefined,
