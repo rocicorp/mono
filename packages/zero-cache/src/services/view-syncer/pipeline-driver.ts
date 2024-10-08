@@ -15,6 +15,7 @@ import type {Source, SourceChange} from 'zql/src/zql/ivm/source.js';
 import {TableSource} from 'zqlite/src/table-source.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
+import type {SchemaVersions} from 'zero-cache/src/types/schema-versions.js';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -121,6 +122,16 @@ export class PipelineDriver {
   currentVersion(): string {
     assert(this.initialized(), 'Not yet initialized');
     return this.#snapshotter.current().version;
+  }
+
+  /**
+   * Returns the current supported schema version range of the database.  This
+   * will reflect changes to supported schema version range when calling
+   * {@link advance()} once the iteration has begun.
+   */
+  currentSchemaVersions(): SchemaVersions {
+    assert(this.initialized(), 'Not yet initialized');
+    return this.#snapshotter.current().schemaVersions;
   }
 
   advanceWithoutDiff(): string {
@@ -303,7 +314,9 @@ export class PipelineDriver {
 
   *#push(table: string, change: SourceChange): Iterable<RowChange> {
     const source = this.#tables.get(table);
-    assert(source, `TableSource for ${table} not found`);
+    if (!source) {
+      return;
+    }
 
     this.#startAccumulating();
     source.push(change);

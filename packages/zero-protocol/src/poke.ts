@@ -36,6 +36,10 @@ export const pokeStartBodySchema = v.object({
   // able to send a base cookie with value `null` to match that state.
   baseCookie: nullableVersionSchema,
   cookie: versionSchema,
+  schemaVersions: v.object({
+    minSupportedVersion: v.number(),
+    maxSupportedVersion: v.number(),
+  }),
   timestamp: v.number().optional(),
 });
 

@@ -21,6 +21,10 @@ import {
   versionToCookie,
   versionToNullableCookie,
 } from './schema/types.js';
+import {
+  getErrorForClientIfSchemaVersionNotSupported,
+  type SchemaVersions,
+} from 'zero-cache/src/types/schema-versions.js';
 
 export type PutRowPatch = {
   type: 'row';
@@ -72,6 +76,7 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #pokes: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
+  readonly #schemaVersion: number;
 
   constructor(
     lc: LogContext,
@@ -79,6 +84,7 @@ export class ClientHandler {
     clientID: string,
     wsID: string,
     baseCookie: string | null,
+    schemaVersion: number,
     pokes: Subscription<Downstream>,
   ) {
     this.#clientGroupID = clientGroupID;
@@ -87,6 +93,7 @@ export class ClientHandler {
     this.#lc = lc.withContext('clientID', clientID);
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);
+    this.#schemaVersion = schemaVersion;
   }
 
   version(): NullableCVRVersion {
@@ -101,9 +108,22 @@ export class ClientHandler {
     this.#pokes.cancel();
   }
 
-  startPoke(finalVersion: CVRVersion): PokeHandler {
+  startPoke(
+    finalVersion: CVRVersion,
+    schemaVersions: SchemaVersions,
+  ): PokeHandler {
     const pokeID = versionToCookie(finalVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
+
+    const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
+      this.#schemaVersion,
+      schemaVersions,
+    );
+
+    if (schemaVersionError) {
+      this.fail(schemaVersionError);
+      return NOOP;
+    }
 
     if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
       lc.info?.(`already caught up, not sending poke.`);
@@ -114,7 +134,10 @@ export class ClientHandler {
     const cookie = versionToCookie(finalVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
 
-    this.#pokes.push(['pokeStart', {pokeID, baseCookie, cookie}]);
+    this.#pokes.push([
+      'pokeStart',
+      {pokeID, baseCookie, cookie, schemaVersions},
+    ]);
 
     let body: PokePartBody | undefined;
     let partCount = 0;

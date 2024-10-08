@@ -7,6 +7,7 @@ import {
   jsonObjectSchema,
   type JSONValue,
 } from 'zero-cache/src/types/bigint-json.js';
+import {type SchemaVersions} from 'zero-cache/src/types/schema-versions.js';
 import {
   normalizedKeyOrder,
   type RowKey,
@@ -110,7 +111,7 @@ export class Snapshotter {
   }
 
   /** Returns the current snapshot. Asserts if {@link initialized()} is false. */
-  current(): {db: StatementRunner; version: string} {
+  current(): Snapshot {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     return this.#curr;
   }
@@ -210,6 +211,12 @@ export interface SnapshotDiff extends Iterable<Change> {
   readonly changes: number;
 }
 
+function getSchemaVersions(db: StatementRunner): SchemaVersions {
+  return db.get(
+    'SELECT minSupportedVersion, maxSupportedVersion FROM "zero.schemaVersions"',
+  );
+}
+
 class Snapshot {
   static create(lc: LogContext, dbFile: string) {
     const conn = new Database(lc, dbFile);
@@ -221,15 +228,22 @@ class Snapshot {
     // (which results in the logical creation of the snapshot). Calling
     // `BEGIN CONCURRENT` alone does not result in acquiring the read lock.
     const {stateVersion} = getReplicationVersions(db);
-    return new Snapshot(db, stateVersion);
+    const schemaVersions = getSchemaVersions(db);
+    return new Snapshot(db, stateVersion, schemaVersions);
   }
 
   readonly db: StatementRunner;
   readonly version: string;
+  readonly schemaVersions: SchemaVersions;
 
-  constructor(db: StatementRunner, version: string) {
+  constructor(
+    db: StatementRunner,
+    version: string,
+    schemaVersions: SchemaVersions,
+  ) {
     this.db = db;
     this.version = version;
+    this.schemaVersions = schemaVersions;
   }
 
   numChangesSince(prevVersion: string) {
@@ -278,7 +292,8 @@ class Snapshot {
     this.db.rollback();
     this.db.beginConcurrent();
     const {stateVersion} = getReplicationVersions(this.db);
-    return new Snapshot(this.db, stateVersion);
+    const schemaVersions = getSchemaVersions(this.db);
+    return new Snapshot(this.db, stateVersion, schemaVersions);
   }
 }
 

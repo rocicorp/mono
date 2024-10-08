@@ -46,6 +46,7 @@ export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;
   readonly baseCookie: string | null;
+  readonly schemaVersion: number;
 };
 
 export interface ViewSyncer {
@@ -224,7 +225,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
   ): Promise<Source<Downstream>> {
-    const {clientID, wsID, baseCookie} = ctx;
+    const {clientID, wsID, baseCookie, schemaVersion} = ctx;
     const lc = this.#lc
       .withContext('clientID', clientID)
       .withContext('wsID', wsID);
@@ -245,6 +246,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       clientID,
       wsID,
       baseCookie,
+      schemaVersion,
       downstream,
     );
 
@@ -483,7 +485,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       removeQueries,
     );
     const pokers = [...this.#clients.values()].map(c =>
-      c.startPoke(newVersion),
+      c.startPoke(newVersion, this.#pipelines.currentSchemaVersions()),
     );
     for (const patch of queryPatches) {
       pokers.forEach(poker => poker.addPatch(patch));
@@ -542,7 +544,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     const pokers =
       usePokers ??
-      [...this.#clients.values()].map(c => c.startPoke(cvr.version));
+      [...this.#clients.values()].map(c =>
+        c.startPoke(cvr.version, this.#pipelines.currentSchemaVersions()),
+      );
 
     const catchupFrom = [...this.#clients.values()]
       .map(c => c.version())
@@ -679,7 +683,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // Probably need a new updater type. CVRAdvancementUpdater?
     const updater = new CVRQueryDrivenUpdater(this.#cvrStore, cvr, version);
     const pokers = [...this.#clients.values()].map(c =>
-      c.startPoke(updater.updatedVersion()),
+      c.startPoke(
+        updater.updatedVersion(),
+        this.#pipelines.currentSchemaVersions(),
+      ),
     );
 
     lc.debug?.(`applying ${numChanges} to advance to ${version}`);
