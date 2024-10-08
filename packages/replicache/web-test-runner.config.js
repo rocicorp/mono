@@ -25,7 +25,7 @@ const config = {
       },
     }),
   ],
-  staticLogging: !!process.env.CI,
+  staticLogging: !!(process.env.CI || process.env.TURBO_TEST),
   testFramework: {
     config: {
       ui: 'tdd',
@@ -34,6 +34,7 @@ const config = {
       retries: process.env.CI ? 3 : 0, // Firefox is flaky
     },
   },
+  rootDir: '../',
   files: ['src/**/*.test.ts'],
   browsers: [firefox, chromium, webkit],
 };
