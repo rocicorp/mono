@@ -4,7 +4,7 @@ ARG NPM_TOKEN
 RUN mkdir -p /opt/app
 RUN mkdir -p /data/db
 WORKDIR /opt/app
-COPY . ./
+COPY ../../ ./
 ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.tar.gz /tmp/litestream.tar.gz
 RUN tar -C /usr/local/bin -xzf /tmp/litestream.tar.gz
 RUN chmod +x /usr/local/bin/litestream
@@ -14,8 +14,3 @@ RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc && \
 RUN apk add --update curl
 WORKDIR /opt/app/packages/zero-cache
 RUN chmod +x ./restore-litestream-db.sh
-EXPOSE 4848
-ENTRYPOINT ["/bin/sh", "-c"]
-ENV LOG_LEVEL=debug
-ENV LOG_FORMAT=json
-CMD ["(./restore-litestream-db.sh || true) && npx tsx ../../apps/zbugs/zero.config.ts && litestream replicate -config /opt/app/litestream.yml"]

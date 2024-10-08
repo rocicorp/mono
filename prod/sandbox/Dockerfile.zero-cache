@@ -1,0 +1,4 @@
+FROM Dockerfile.base
+EXPOSE 4848
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["(./restore-litestream-db.sh || true) && npx tsx ../../apps/zbugs/zero.config.ts && npx tsx ./src/server/main.ts"]
