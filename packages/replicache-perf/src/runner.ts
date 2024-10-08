@@ -8,8 +8,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import * as playwright from 'playwright';
-import {assert} from 'shared/src/asserts.js';
-import {makeDefine} from 'shared/src/build.js';
+import {assert} from '../../shared/src/asserts.js';
+import {makeDefine} from '../../shared/src/build.js';
 import {
   type BencherMetricsFormat,
   toBencherMetricFormat,

@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {ReplicacheImpl} from 'replicache/src/impl.js';
-import {dropIDBStoreWithMemFallback} from 'replicache/src/kv/idb-store-with-mem-fallback.js';
+import {ReplicacheImpl} from '../../../replicache/src/impl.js';
+import {dropIDBStoreWithMemFallback} from '../../../replicache/src/kv/idb-store-with-mem-fallback.js';
 import type {
   IndexDefinitions,
   JSONValue,
@@ -9,10 +9,10 @@ import type {
   ReadTransaction,
   ReplicacheOptions,
   WriteTransaction,
-} from 'replicache/src/mod.js';
-import {assert} from 'shared/src/asserts.js';
-import {deepEqual} from 'shared/src/json.js';
-import {randomUint64} from 'shared/src/random-uint64.js';
+} from '../../../replicache/src/mod.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {deepEqual} from '../../../shared/src/json.js';
+import {randomUint64} from '../../../shared/src/random-uint64.js';
 import type {Bencher, Benchmark} from '../benchmark.js';
 import {
   type TestDataObject,
