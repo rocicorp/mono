@@ -22,20 +22,6 @@
     "types": [],
     "resolveJsonModule": true,
     "incremental": true,
-    "skipLibCheck": true,
-    "baseUrl": "./packages/",
-    "paths": {
-      "@rocicorp/zero": ["zero/src/zero.ts"],
-      "@rocicorp/zero/react": ["zero/src/react.ts"],
-
-      "btree": ["btree/b+tree.ts"],
-      "datadog/src/*": ["datadog/src/*"],
-      "replicache/src/*": ["replicache/src/*"],
-      "shared/src/*": ["shared/src/*"],
-      "zero-client/src/*": ["zero-client/src/*"],
-      "zero-protocol/src/*": ["zero-protocol/src/*"],
-      "zero-react/src/*": ["zero-react/src/*"],
-      "zql/src/*": ["zql/src/*"]
-    }
+    "skipLibCheck": true
   }
 }
