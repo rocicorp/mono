@@ -1,1 +1,1 @@
-export * from 'zero-react/src/mod.js';
+export * from '../../zero-react/src/mod.js';

@@ -1,8 +1,8 @@
 // This test file is loaded by worker.test.ts
 
-import {assert} from 'shared/src/asserts.js';
-import {deepEqual} from 'shared/src/json.js';
-import {sleep} from 'shared/src/sleep.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {deepEqual} from '../../../shared/src/json.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import sinon from 'sinon';
 import {MockSocket, zeroForTest} from './test-utils.js';
 import {version} from './version.js';

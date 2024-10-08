@@ -1,4 +1,7 @@
-import {defineConfig, runtimeEnv} from 'zero-cache/src/config/define-config.js';
+import {
+  defineConfig,
+  runtimeEnv,
+} from '../../packages/zero-cache/src/config/define-config.js';
 import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */

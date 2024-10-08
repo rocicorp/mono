@@ -1,5 +1,5 @@
 import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {initBgIntervalProcess} from '../bg-interval.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Store} from '../dag/store.js';

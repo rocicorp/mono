@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 import type {Chunk} from '../dag/chunk.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Store} from '../dag/store.js';

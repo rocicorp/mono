@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {diff as btreeDiff} from '../btree/diff.js';
 import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';

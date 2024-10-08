@@ -1,5 +1,5 @@
-import {jsonObjectSchema, jsonSchema} from 'shared/src/json-schema.js';
-import * as v from 'shared/src/valita.js';
+import {jsonObjectSchema, jsonSchema} from '../../shared/src/json-schema.js';
+import * as v from '../../shared/src/valita.js';
 import {entityIDSchema} from './entity.js';
 
 export const CRUD_MUTATION_NAME = '_zero_crud';

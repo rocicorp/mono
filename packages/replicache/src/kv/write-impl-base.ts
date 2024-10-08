@@ -1,9 +1,9 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {
   promiseFalse,
   promiseTrue,
   promiseVoid,
-} from 'shared/src/resolved-promises.js';
+} from '../../../shared/src/resolved-promises.js';
 import {
   type FrozenJSONValue,
   deepFreeze,

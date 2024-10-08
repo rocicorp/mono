@@ -29,7 +29,7 @@
     "zod": "^3.21.4"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {

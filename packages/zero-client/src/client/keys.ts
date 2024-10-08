@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.js';
-import type {EntityID} from 'zero-protocol/src/entity.js';
+import {assert} from '../../../shared/src/asserts.js';
+import type {EntityID} from '../../../zero-protocol/src/entity.js';
 
 export const CLIENTS_KEY_PREFIX = 'c/';
 export const DESIRED_QUERIES_KEY_PREFIX = 'd/';

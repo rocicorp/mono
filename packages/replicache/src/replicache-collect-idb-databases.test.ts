@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {sleep} from 'shared/src/sleep.js';
+import {sleep} from '../../shared/src/sleep.js';
 import {
   clock,
   initReplicacheTesting,

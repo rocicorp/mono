@@ -1,4 +1,3 @@
-import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../build.js';
 
 const define = {
@@ -16,9 +15,6 @@ export const config = {
   esbuild: {
     define,
   },
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  plugins: [tsconfigPaths()] as any[],
 
   test: {
     onConsoleLog(log: string) {

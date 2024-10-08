@@ -1,4 +1,4 @@
-import {Subscription} from 'zero-cache/src/types/subscription.js';
+import {Subscription} from '../../types/subscription.js';
 import type {Downstream} from './change-streamer.js';
 import {Subscriber} from './subscriber.js';
 

@@ -1,4 +1,4 @@
-import {randomUint64} from 'shared/src/random-uint64.js';
+import {randomUint64} from '../../../shared/src/random-uint64.js';
 
 /**
  * Returns a random 18 character string encoded in base32 suitable as a client

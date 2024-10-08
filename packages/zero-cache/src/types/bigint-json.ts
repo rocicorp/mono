@@ -7,7 +7,7 @@ import {
   parse as customParse,
   stringify as customStringify,
 } from 'json-custom-numbers';
-import * as v from 'shared/src/valita.js';
+import * as v from '../../../shared/src/valita.js';
 
 function numberParser(_: unknown, v: string) {
   const n = +v;

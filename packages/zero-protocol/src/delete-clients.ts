@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.js';
+import * as v from '../../shared/src/valita.js';
 
 const deleteClientsBodySchema = v.object({
   clientIDs: v.array(v.string()),

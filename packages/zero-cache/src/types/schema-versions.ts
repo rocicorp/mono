@@ -1,4 +1,4 @@
-import {ErrorKind} from 'zero-protocol/src/mod.js';
+import {ErrorKind} from '../../../zero-protocol/src/mod.js';
 import {ErrorForClient} from './error-for-client.js';
 
 export type SchemaVersions = {

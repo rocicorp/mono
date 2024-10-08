@@ -1,7 +1,10 @@
-import {throwInvalidType} from 'shared/src/asserts.js';
-import {skipAssertJSONValue} from 'shared/src/config.js';
-import {hasOwn} from 'shared/src/has-own.js';
-import type {ReadonlyJSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
+import {throwInvalidType} from '../../shared/src/asserts.js';
+import {skipAssertJSONValue} from '../../shared/src/config.js';
+import {hasOwn} from '../../shared/src/has-own.js';
+import type {
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from '../../shared/src/json.js';
 import {skipFreeze, skipFrozenAsserts} from './config.js';
 import type {Cookie, FrozenCookie} from './cookies.js';
 

@@ -1,1 +1,1 @@
-import 'zero-cache/src/server/syncer.js';
+import '../../../zero-cache/src/server/syncer.js';

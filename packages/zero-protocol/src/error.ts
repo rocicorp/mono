@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.js';
+import * as v from '../../shared/src/valita.js';
 
 // Note: Metric names depend on these values,
 // so if you add or change on here a corresponding dashboard

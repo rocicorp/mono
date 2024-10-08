@@ -2,9 +2,9 @@ import {LogContext} from '@rocicorp/logger';
 import {unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {ident} from 'pg-format';
-import {randInt} from 'shared/src/rand.js';
+import {randInt} from '../../../shared/src/rand.js';
 import {expect} from 'vitest';
-import {Database} from 'zqlite/src/db.js';
+import {Database} from '../../../zqlite/src/db.js';
 
 export class DbFile {
   readonly path;

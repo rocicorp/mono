@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
-import {promiseTrue} from 'shared/src/resolved-promises.js';
-import {sleep} from 'shared/src/sleep.js';
+import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
+import {promiseTrue} from '../../shared/src/resolved-promises.js';
+import {sleep} from '../../shared/src/sleep.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
   ConnectionLoop,

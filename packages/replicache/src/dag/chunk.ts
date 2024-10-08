@@ -1,4 +1,4 @@
-import {assert, assertString} from 'shared/src/asserts.js';
+import {assert, assertString} from '../../../shared/src/asserts.js';
 import {assertDeepFrozen} from '../frozen-json.js';
 import type {Hash} from '../hash.js';
 

@@ -1,6 +1,6 @@
 import postgres from 'postgres';
-import {assert, assertString} from 'shared/src/asserts.js';
-import {sleep} from 'shared/src/sleep.js';
+import {assert, assertString} from '../../../shared/src/asserts.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import {afterAll, expect} from 'vitest';
 import {type PostgresDB, postgresTypeConfig} from '../types/pg.js';
 

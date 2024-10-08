@@ -1,5 +1,5 @@
 import {expect, suite, test} from 'vitest';
-import type {EntityID} from 'zero-protocol/src/entity.js';
+import type {EntityID} from '../../../zero-protocol/src/entity.js';
 import {toEntitiesKey} from './keys.js';
 
 suite('toEntitiesKey', () => {

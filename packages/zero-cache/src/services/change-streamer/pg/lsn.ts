@@ -1,9 +1,9 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../../../shared/src/asserts.js';
 import {
   versionFromLexi,
   versionToLexi,
   type LexiVersion,
-} from 'zero-cache/src/types/lexi-version.js';
+} from '../../../types/lexi-version.js';
 import type {Change} from '../schema/change.js';
 
 /**

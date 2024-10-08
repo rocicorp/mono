@@ -1,16 +1,16 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from 'shared/src/asserts.js';
+import {unreachable} from '../../../../shared/src/asserts.js';
 import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
-} from 'shared/src/json.js';
-import * as v from 'shared/src/valita.js';
+} from '../../../../shared/src/json.js';
+import * as v from '../../../../shared/src/valita.js';
 import type {
   Downstream,
   EntitiesPatchOp,
   PokePartBody,
-} from 'zero-protocol/src/mod.js';
-import type {AST} from 'zql/src/zql/ast/ast.js';
+} from '../../../../zero-protocol/src/mod.js';
+import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {JSONObject, JSONValue} from '../../types/bigint-json.js';
 import type {Subscription} from '../../types/subscription.js';
 import {
@@ -28,7 +28,7 @@ import {
 import {
   getErrorForClientIfSchemaVersionNotSupported,
   type SchemaVersions,
-} from 'zero-cache/src/types/schema-versions.js';
+} from '../../types/schema-versions.js';
 
 export type PutRowPatch = {
   type: 'row';

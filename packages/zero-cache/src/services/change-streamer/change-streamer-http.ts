@@ -5,15 +5,11 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
-import * as v from 'shared/src/valita.js';
+import * as v from '../../../../shared/src/valita.js';
 import WebSocket from 'ws';
-import {jsonValueSchema} from 'zero-cache/src/types/bigint-json.js';
-import {
-  type Source,
-  streamIn,
-  streamOut,
-} from 'zero-cache/src/types/streams.js';
-import {URLParams} from 'zero-cache/src/types/url-params.js';
+import {jsonValueSchema} from '../../types/bigint-json.js';
+import {type Source, streamIn, streamOut} from '../../types/streams.js';
+import {URLParams} from '../../types/url-params.js';
 import {RunningState} from '../running-state.js';
 import type {Service} from '../service.js';
 import type {

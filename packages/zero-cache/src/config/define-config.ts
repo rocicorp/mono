@@ -5,9 +5,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type {AST} from 'zql/src/zql/ast/ast.js';
-import type {Query, SchemaToRow} from 'zql/src/zql/query/query.js';
-import type {TableSchema} from 'zql/src/zql/query/schema.js';
+import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import type {Query, SchemaToRow} from '../../../zql/src/zql/query/query.js';
+import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
 import {ConfigQuery} from './config-query.js';
 import {authDataRef, preMutationRowRef} from './refs.js';
 import type {

@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 
 /**
  * Store defines a transactional key/value store that Replicache stores all data

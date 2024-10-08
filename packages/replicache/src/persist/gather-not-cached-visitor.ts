@@ -1,4 +1,4 @@
-import {promiseVoid} from 'shared/src/resolved-promises.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {Chunk} from '../dag/chunk.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Read} from '../dag/store.js';

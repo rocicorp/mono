@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import {LogicalReplicationService} from 'pg-logical-replication';
-import {AbortError} from 'shared/src/abort-error.js';
-import {assert, unreachable} from 'shared/src/asserts.js';
-import {StatementRunner} from 'zero-cache/src/db/statements.js';
-import {liteValues} from 'zero-cache/src/types/lite.js';
-import {Database} from 'zqlite/src/db.js';
+import {AbortError} from '../../../../shared/src/abort-error.js';
+import {assert, unreachable} from '../../../../shared/src/asserts.js';
+import {StatementRunner} from '../../db/statements.js';
+import {liteValues} from '../../types/lite.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {liteTableName} from '../../types/names.js';

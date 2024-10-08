@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
-import * as v from 'shared/src/valita.js';
-import {create64} from 'shared/src/xxhash.js';
+import * as v from '../../../shared/src/valita.js';
+import {create64} from '../../../shared/src/xxhash.js';
 
 /**
  * Encodes the operations over filtered columns for which invalidation

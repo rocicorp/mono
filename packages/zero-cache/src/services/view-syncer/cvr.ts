@@ -1,10 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
-import {assert} from 'shared/src/asserts.js';
-import {CustomKeyMap} from 'shared/src/custom-key-map.js';
-import {difference, intersection, union} from 'shared/src/set-utils.js';
-import type {JSONObject} from 'zero-cache/src/types/bigint-json.js';
-import type {AST} from 'zql/src/zql/ast/ast.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
+import {
+  difference,
+  intersection,
+  union,
+} from '../../../../shared/src/set-utils.js';
+import type {JSONObject} from '../../types/bigint-json.js';
+import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';

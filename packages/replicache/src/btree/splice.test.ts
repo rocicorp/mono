@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import type {ReadonlyJSONValue} from 'shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {computeSplices, type Splice} from './splice.js';
 
 type Entry<V> = readonly [string, V];

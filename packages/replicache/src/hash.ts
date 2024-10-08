@@ -1,6 +1,6 @@
-import {assert} from 'shared/src/asserts.js';
-import {randomUint64} from 'shared/src/random-uint64.js';
-import * as valita from 'shared/src/valita.js';
+import {assert} from '../../shared/src/asserts.js';
+import {randomUint64} from '../../shared/src/random-uint64.js';
+import * as valita from '../../shared/src/valita.js';
 
 export const STRING_LENGTH = 22;
 

@@ -1,4 +1,4 @@
-import {sleep} from 'shared/src/sleep.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import {expect, test} from 'vitest';
 
 test('worker test', async () => {

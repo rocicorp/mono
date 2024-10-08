@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {DocumentVisibilityWatcher} from 'shared/src/document-visible.js';
-import {sleep} from 'shared/src/sleep.js';
+import type {DocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
+import {sleep} from '../../shared/src/sleep.js';
 
 export const DEBOUNCE_DELAY_MS = 10;
 

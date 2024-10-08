@@ -1,4 +1,4 @@
-import type {TableSchema} from 'zql/src/zql/query/schema.js';
+import type {TableSchema} from '../../zql/src/zql/query/schema.js';
 
 const memberSchema: TableSchema = {
   tableName: 'member',

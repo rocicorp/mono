@@ -1,5 +1,5 @@
 import {ident, literal} from 'pg-format';
-import type {PostgresTransaction} from 'zero-cache/src/types/pg.js';
+import type {PostgresTransaction} from '../../../../types/pg.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
 import {getPublicationInfo, type PublicationInfo} from './published.js';

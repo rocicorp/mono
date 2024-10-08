@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.js';
-import {parseBigInt} from 'shared/src/parse-big-int.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {parseBigInt} from '../../../shared/src/parse-big-int.js';
 
 /**
  * A LexiVersion is a lexicographically sortable representation of

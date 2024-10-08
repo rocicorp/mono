@@ -1,6 +1,6 @@
 import {pid} from 'node:process';
-import {assert} from 'shared/src/asserts.js';
-import {must} from 'shared/src/must.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {must} from '../../../shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
 import {

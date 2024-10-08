@@ -5,12 +5,12 @@ import {
   importSnapshot,
   Mode,
   TransactionPool,
-} from 'zero-cache/src/db/transaction-pool.js';
-import {liteValues} from 'zero-cache/src/types/lite.js';
-import {liteTableName} from 'zero-cache/src/types/names.js';
-import {pgClient, type PostgresDB} from 'zero-cache/src/types/pg.js';
-import type {FilteredTableSpec, IndexSpec} from 'zero-cache/src/types/specs.js';
-import {Database} from 'zqlite/src/db.js';
+} from '../../../db/transaction-pool.js';
+import {liteValues} from '../../../types/lite.js';
+import {liteTableName} from '../../../types/names.js';
+import {pgClient, type PostgresDB} from '../../../types/pg.js';
+import type {FilteredTableSpec, IndexSpec} from '../../../types/specs.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
   initReplicationState,

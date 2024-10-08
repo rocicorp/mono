@@ -1,14 +1,5 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "composite": true,
-    "baseUrl": "./packages/",
-    "paths": {
-      "shared/src/*": ["shared/src/*"],
-      "zero-cache": ["zero-cache/src/mod.ts"],
-      "zero-cache/src/*": ["zero-cache/src/*"]
-    }
-  },
   "include": [
     "vite.config.ts",
     "zero.config.ts",

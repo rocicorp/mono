@@ -1,11 +1,11 @@
 import type {ClientID} from '../../../replicache/src/mod.js';
-import {must} from 'shared/src/must.js';
-import {h64} from 'shared/src/xxhash.js';
+import {must} from '../../../shared/src/must.js';
+import {h64} from '../../../shared/src/xxhash.js';
 import type {
   ChangeDesiredQueriesMessage,
   QueriesPatch,
 } from '../../../zero-protocol/src/mod.js';
-import {normalizeAST, type AST} from 'zql/src/zql/ast/ast.js';
+import {normalizeAST, type AST} from '../../../zql/src/zql/ast/ast.js';
 import type {ReadTransaction} from '../mod.js';
 import {desiredQueriesPrefixForClient} from './keys.js';
 

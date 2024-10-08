@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
-import {randInt} from 'shared/src/rand.js';
-import * as v from 'shared/src/valita.js';
-import type {Database as Db} from 'zqlite/src/db.js';
-import {Database} from 'zqlite/src/db.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {randInt} from '../../../shared/src/rand.js';
+import * as v from '../../../shared/src/valita.js';
+import type {Database as Db} from '../../../zqlite/src/db.js';
+import {Database} from '../../../zqlite/src/db.js';
 
 /**
  * A PreMigrationFn executes logic outside of a database transaction, and is

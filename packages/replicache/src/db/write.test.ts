@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assertNotUndefined} from 'shared/src/asserts.js';
+import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
 import {mustGetHeadHash} from '../dag/store.js';

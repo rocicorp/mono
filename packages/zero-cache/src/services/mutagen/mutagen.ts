@@ -3,9 +3,9 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
-import {assert, unreachable} from 'shared/src/asserts.js';
-import {Mode} from 'zero-cache/src/db/transaction-pool.js';
-import {ErrorKind} from 'zero-protocol/src/mod.js';
+import {assert, unreachable} from '../../../../shared/src/asserts.js';
+import {Mode} from '../../db/transaction-pool.js';
+import {ErrorKind} from '../../../../zero-protocol/src/mod.js';
 import {
   MutationType,
   type CRUDMutation,
@@ -14,15 +14,15 @@ import {
   type Mutation,
   type SetOp,
   type UpdateOp,
-} from 'zero-protocol/src/push.js';
-import {Database} from 'zqlite/src/db.js';
+} from '../../../../zero-protocol/src/push.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {type ZeroConfig} from '../../config/zero-config.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
-import {throwErrorForClientIfSchemaVersionNotSupported} from 'zero-cache/src/types/schema-versions.js';
+import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.

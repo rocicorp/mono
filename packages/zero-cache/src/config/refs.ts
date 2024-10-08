@@ -1,4 +1,4 @@
-import {staticParam} from 'zql/src/zql/query/query-impl.js';
+import {staticParam} from '../../../zql/src/zql/query/query-impl.js';
 
 export const authDataRef = new Proxy(
   {},

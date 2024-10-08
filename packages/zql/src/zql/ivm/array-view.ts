@@ -4,9 +4,9 @@ import {
   assertObject,
   assertUndefined,
   unreachable,
-} from 'shared/src/asserts.js';
-import type {Immutable} from 'shared/src/immutable.js';
-import {must} from 'shared/src/must.js';
+} from '../../../../shared/src/asserts.js';
+import type {Immutable} from '../../../../shared/src/immutable.js';
+import {must} from '../../../../shared/src/must.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
 import type {Change} from './change.js';
 import type {Comparator, Row, Value} from './data.js';

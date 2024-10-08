@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {sleep} from 'shared/src/sleep.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Store} from '../dag/store.js';
 import {

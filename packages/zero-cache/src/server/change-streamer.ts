@@ -1,4 +1,4 @@
-import {must} from 'shared/src/must.js';
+import {must} from '../../../shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';

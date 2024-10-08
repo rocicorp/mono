@@ -1,7 +1,7 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.js';
-import {TestLogSink} from 'shared/src/logging-test-utils.js';
+import {assert} from '../../../shared/src/asserts.js';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import type {SinonFakeTimers} from 'sinon';
 import {
   type ConnectedMessage,
@@ -18,7 +18,7 @@ import {
   type PullResponseBody,
   type PullResponseMessage,
   upstreamSchema,
-} from 'zero-protocol/src/mod.js';
+} from '../../../zero-protocol/src/mod.js';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {

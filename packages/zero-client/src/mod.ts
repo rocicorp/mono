@@ -5,7 +5,7 @@ export {
   dropDatabase,
   getDefaultPuller,
   makeIDBName,
-} from 'replicache/src/mod.js';
+} from '../../replicache/src/mod.js';
 export type {
   AsyncIterableIteratorToArray,
   ClientGroupID,
@@ -56,8 +56,8 @@ export type {
   UpdateNeededReason,
   VersionNotSupportedResponse,
   WriteTransaction,
-} from 'replicache/src/mod.js';
-export {QueryImpl} from 'zql/src/zql/query/query-impl.js';
+} from '../../replicache/src/mod.js';
+export {QueryImpl} from '../../zql/src/zql/query/query-impl.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
@@ -66,8 +66,8 @@ export type {
   QueryType,
   SchemaToRow,
   Smash,
-} from 'zql/src/zql/query/query.js';
-export type {TableSchema} from 'zql/src/zql/query/schema.js';
-export type {TypedView} from 'zql/src/zql/query/typed-view.js';
+} from '../../zql/src/zql/query/query.js';
+export type {TableSchema} from '../../zql/src/zql/query/schema.js';
+export type {TypedView} from '../../zql/src/zql/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero, type Schema} from './client/zero.js';

@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../../shared/src/asserts.js';
 import type {AddChange, Change, ChildChange, RemoveChange} from './change.js';
 import type {Comparator, Node, Row} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';

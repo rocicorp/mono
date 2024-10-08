@@ -1,5 +1,5 @@
 import {compareUTF8} from 'compare-utf8';
-import {must} from 'shared/src/must.js';
+import {must} from '../../../../shared/src/must.js';
 import type {Bound} from '../ivm/skip.js';
 
 /**

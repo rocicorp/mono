@@ -1,5 +1,5 @@
-import {jsonObjectSchema} from 'shared/src/json-schema.js';
-import * as v from 'shared/src/valita.js';
+import {jsonObjectSchema} from '../../shared/src/json-schema.js';
+import * as v from '../../shared/src/valita.js';
 import {entityIDSchema} from './entity.js';
 
 const putOpSchema = v.object({

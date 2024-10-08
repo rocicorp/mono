@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {Queue} from 'shared/src/queue.js';
-import * as v from 'shared/src/valita.js';
+import {Queue} from '../../../shared/src/queue.js';
+import * as v from '../../../shared/src/valita.js';
 import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
 import {BigIntJSON, type JSONValue} from './bigint-json.js';
 import {Subscription} from './subscription.js';

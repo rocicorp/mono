@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, assertObject} from 'shared/src/asserts.js';
-import {hasOwn} from 'shared/src/has-own.js';
-import * as valita from 'shared/src/valita.js';
+import {assert, assertObject} from '../../../shared/src/asserts.js';
+import {hasOwn} from '../../../shared/src/has-own.js';
+import * as valita from '../../../shared/src/valita.js';
 import {emptyDataNode} from '../btree/node.js';
 import {BTreeRead} from '../btree/read.js';
 import {type FrozenCookie, compareCookies} from '../cookies.js';

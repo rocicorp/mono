@@ -1,8 +1,8 @@
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import {must} from 'shared/src/must.js';
-import {randInt} from 'shared/src/rand.js';
+import {must} from '../../../shared/src/must.js';
+import {randInt} from '../../../shared/src/rand.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
 import type {ReplicaState} from '../services/replicator/replicator.js';

@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 
 export type HTTPString = `http${'' | 's'}://${string}`;
 

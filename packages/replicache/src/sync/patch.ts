@@ -1,6 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assertObject} from 'shared/src/asserts.js';
-import type {ReadonlyJSONObject, ReadonlyJSONValue} from 'shared/src/json.js';
+import {assertObject} from '../../../shared/src/asserts.js';
+import type {
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from '../../../shared/src/json.js';
 import type {Write} from '../db/write.js';
 import {
   type FrozenJSONObject,

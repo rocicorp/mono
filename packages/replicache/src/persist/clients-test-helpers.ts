@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {emptyDataNode} from '../btree/node.js';
 import {Chunk} from '../dag/chunk.js';
 import type {Store} from '../dag/store.js';

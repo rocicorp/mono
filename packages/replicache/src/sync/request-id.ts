@@ -1,5 +1,4 @@
-import {getNonCryptoRandomValues} from 'shared/src/random-values.js';
-
+import {getNonCryptoRandomValues} from '../../../shared/src/random-values.js';
 import type {ClientID} from './ids.js';
 
 let sessionID = '';

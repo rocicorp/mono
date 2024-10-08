@@ -1,1 +1,1 @@
-import 'zero-cache/src/server/replicator.js';
+import '../../../zero-cache/src/server/replicator.js';

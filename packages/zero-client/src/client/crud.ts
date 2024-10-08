@@ -1,7 +1,7 @@
-import type {ReadonlyJSONObject} from 'shared/src/json.js';
-import {promiseVoid} from 'shared/src/resolved-promises.js';
-import type {MaybePromise} from 'shared/src/types.js';
-import type {EntityID} from 'zero-protocol/src/entity.js';
+import type {ReadonlyJSONObject} from '../../../shared/src/json.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.js';
+import type {MaybePromise} from '../../../shared/src/types.js';
+import type {EntityID} from '../../../zero-protocol/src/entity.js';
 import {
   type CRUDMutationArg,
   type CRUDOp,
@@ -11,9 +11,9 @@ import {
   type DeleteOp,
   type SetOp,
   type UpdateOp,
-} from 'zero-protocol/src/push.js';
-import type {Row} from 'zql/src/zql/ivm/data.js';
-import type {SchemaToRow} from 'zql/src/zql/query/query.js';
+} from '../../../zero-protocol/src/push.js';
+import type {Row} from '../../../zql/src/zql/ivm/data.js';
+import type {SchemaToRow} from '../../../zql/src/zql/query/query.js';
 import {toEntitiesKey} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {Schema} from './zero.js';

@@ -4,7 +4,7 @@
 // Also we changed the random number generator to use Math.random() for compat
 // with React Native.
 
-import {getNonCryptoRandomValues} from 'shared/src/random-values.js';
+import {getNonCryptoRandomValues} from '../../../shared/src/random-values.js';
 
 export function nanoid(size = 21): string {
   // Use our custom getRandomValues function to fill a Uint8Array with random values.

@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {assertNotNull} from 'shared/src/asserts.js';
-import {promiseVoid} from 'shared/src/resolved-promises.js';
+import {assertNotNull} from '../../../shared/src/asserts.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import {
   type FrozenJSONValue,
   deepFreezeAllowUndefined,

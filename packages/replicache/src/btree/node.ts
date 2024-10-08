@@ -4,13 +4,13 @@ import {
   assertArray,
   assertNumber,
   assertString,
-} from 'shared/src/asserts.js';
-import {joinIterables} from 'shared/src/iterables.js';
+} from '../../../shared/src/asserts.js';
+import {joinIterables} from '../../../shared/src/iterables.js';
 import {
   type JSONValue,
   type ReadonlyJSONValue,
   assertJSONValue,
-} from 'shared/src/json.js';
+} from '../../../shared/src/json.js';
 import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
 import {skipBTreeNodeAsserts} from '../config.js';
 import type {IndexKey} from '../db/index.js';

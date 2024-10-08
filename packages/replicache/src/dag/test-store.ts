@@ -1,5 +1,5 @@
-import {assertArray, assertString} from 'shared/src/asserts.js';
-import {stringCompare} from 'shared/src/string-compare.js';
+import {assertArray, assertString} from '../../../shared/src/asserts.js';
+import {stringCompare} from '../../../shared/src/string-compare.js';
 import type {Hash} from '../hash.js';
 import {
   assertHash,

@@ -28,11 +28,10 @@
     "fast-check": "^3.18.0",
     "pkg-up": "^5.0.0",
     "typescript": "^5.5.3",
-    "vite-tsconfig-paths": "^4.3.2",
     "vitest": "^2.0.3"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

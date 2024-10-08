@@ -30,7 +30,7 @@
     "vitest": "^2.0.3"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "./eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

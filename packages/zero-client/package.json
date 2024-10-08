@@ -32,7 +32,7 @@
     "zero-protocol": "0.0.0"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

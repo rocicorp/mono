@@ -21,14 +21,14 @@ import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.js';
-import {assert, unreachable} from 'shared/src/asserts.js';
-import {getDocument, getLocation} from 'shared/src/browser-env.js';
-import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.js';
-import {must} from 'shared/src/must.js';
-import {navigator} from 'shared/src/navigator.js';
-import {sleep, sleepWithAbort} from 'shared/src/sleep.js';
-import type {MaybePromise} from 'shared/src/types.js';
-import * as valita from 'shared/src/valita.js';
+import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {getDocument, getLocation} from '../../../shared/src/browser-env.js';
+import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.js';
+import {must} from '../../../shared/src/must.js';
+import {navigator} from '../../../shared/src/navigator.js';
+import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
+import type {MaybePromise} from '../../../shared/src/types.js';
+import * as valita from '../../../shared/src/valita.js';
 import {
   type CRUDMutation,
   type CRUDMutationArg,
@@ -48,15 +48,15 @@ import {
   downstreamSchema,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
-import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.js';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
 import type {
   PullRequestMessage,
   PullResponseBody,
   PullResponseMessage,
-} from 'zero-protocol/src/pull.js';
-import {newQuery} from 'zql/src/zql/query/query-impl.js';
-import type {Query} from 'zql/src/zql/query/query.js';
-import type {TableSchema} from 'zql/src/zql/query/schema.js';
+} from '../../../zero-protocol/src/pull.js';
+import {newQuery} from '../../../zql/src/zql/query/query-impl.js';
+import type {Query} from '../../../zql/src/zql/query/query.js';
+import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
