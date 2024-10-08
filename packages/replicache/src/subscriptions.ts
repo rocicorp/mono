@@ -374,10 +374,16 @@ export class SubscriptionsManagerImpl implements SubscriptionsManager {
   readonly #queryInternal: QueryInternal;
   readonly #lc: LogContext;
   hasPendingSubscriptionRuns = false;
+  readonly #signal: AbortSignal;
 
-  constructor(queryInternal: QueryInternal, lc: LogContext) {
+  constructor(
+    queryInternal: QueryInternal,
+    lc: LogContext,
+    signal: AbortSignal,
+  ) {
     this.#queryInternal = queryInternal;
     this.#lc = lc;
+    this.#signal = signal;
   }
 
   add<R>(subscription: Subscription<R>): () => void {
@@ -406,6 +412,10 @@ export class SubscriptionsManagerImpl implements SubscriptionsManager {
     kind: InvokeKind.Type,
     diffs: DiffsMap | undefined,
   ) {
+    if (this.#signal.aborted) {
+      return;
+    }
+
     const subs = [...subscriptions] as readonly Subscription<unknown>[];
     if (subs.length === 0) {
       return;
