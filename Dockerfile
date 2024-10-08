@@ -14,6 +14,6 @@ RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc && \
 RUN apk add --update curl
 WORKDIR /opt/app/packages/zero-cache
 RUN chmod +x ./restore-litestream-db.sh
-EXPOSE 3000
+EXPOSE 4848
 ENTRYPOINT ["/bin/sh", "-c"]
 CMD ["(./restore-litestream-db.sh || true) && npx tsx ../../apps/zbugs/zero.config.ts && litestream replicate -config /opt/app/litestream.yml"]
