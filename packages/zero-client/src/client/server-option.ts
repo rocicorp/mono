@@ -48,6 +48,10 @@ export function getServer(
   server: string | undefined | null,
 ): HTTPString | null {
   if (server === undefined || server === null) {
+    console.warn(
+      'Zero starting up with no server URL. This is supported for unit testing ' +
+        'and prototyping, but no data will be synced.',
+    );
     return null;
   }
   return validateServerParam('server', server);
