@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
 import type {AST, Ordering} from '../ast/ast.js';
 import {type BuilderDelegate, buildPipeline} from '../builder/builder.js';
@@ -48,8 +49,9 @@ function newQueryWithDetails<
 }
 
 export type CommitListener = () => void;
+export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
-  addServerQuery(ast: AST): () => void;
+  addServerQuery(ast: AST, gotCallback?: GotCallback | undefined): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
 }
 
@@ -354,6 +356,7 @@ export abstract class AbstractQuery<
   abstract materialize(): TypedView<Smash<TReturn>>;
   abstract preload(): {
     cleanup: () => void;
+    complete: Promise<void>;
   };
 }
 
@@ -410,11 +413,18 @@ export class QueryImpl<
 
   preload(): {
     cleanup: () => void;
+    complete: Promise<void>;
   } {
+    const {resolve, promise: complete} = resolver<void>();
     const ast = this._completeAst();
-    const unsub = this.#delegate.addServerQuery(ast);
+    const unsub = this.#delegate.addServerQuery(ast, got => {
+      if (got) {
+        resolve();
+      }
+    });
     return {
       cleanup: unsub,
+      complete,
     };
   }
 }

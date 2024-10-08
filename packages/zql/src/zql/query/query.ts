@@ -265,5 +265,6 @@ export interface Query<
   materialize(): TypedView<Smash<TReturn>>;
   preload(): {
     cleanup: () => void;
+    complete: Promise<void>;
   };
 }

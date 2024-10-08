@@ -507,8 +507,10 @@ export class Zero<S extends Schema> {
 
     this.mutate = makeCRUDMutate<S>(schema, rep.mutate);
 
-    this.#queryManager = new QueryManager(rep.clientID, msg =>
-      this.#sendChangeDesiredQueries(msg),
+    this.#queryManager = new QueryManager(
+      rep.clientID,
+      msg => this.#sendChangeDesiredQueries(msg),
+      rep.experimentalWatch.bind(rep),
     );
 
     this.#zeroContext = new ZeroContext(schema.tables, ast =>
