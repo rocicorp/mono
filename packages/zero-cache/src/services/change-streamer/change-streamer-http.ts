@@ -56,7 +56,7 @@ export class ChangeStreamerHttpServer implements Service {
     this.#fastify.addHook('preValidation', this.#checkParams);
     this.#fastify.get(CHANGES_URL_PATTERN, {websocket: true}, this.#subscribe);
 
-    const address = await this.#fastify.listen({port: this.#port});
+    const address = await this.#fastify.listen({host: '::', port: this.#port});
     this.#lc.info?.(`Server listening at ${address}`);
   }
 
