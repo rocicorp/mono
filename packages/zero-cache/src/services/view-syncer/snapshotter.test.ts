@@ -23,6 +23,14 @@ describe('view-syncer/snapshotter', () => {
     db.pragma('journal_mode = WAL');
     db.exec(
       `
+        CREATE TABLE "zero.schemaVersions" (
+          "lock"                INTEGER PRIMARY KEY,
+          "minSupportedVersion" INTEGER,
+          "maxSupportedVersion" INTEGER,
+          _0_version            TEXT NOT NULL
+        );
+        INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+          VALUES (1, 1, 1, '00');  
         CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, _0_version TEXT NOT NULL);
@@ -47,9 +55,13 @@ describe('view-syncer/snapshotter', () => {
 
   test('initial snapshot', () => {
     const s = new Snapshotter(lc, dbFile.path).init();
-    const {db, version} = s.current();
+    const {db, version, schemaVersions} = s.current();
 
     expect(version).toBe('00');
+    expect(schemaVersions).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 1,
+    });
     expectTables(db.db, {
       issues: [
         {id: 1, owner: 10, desc: 'foo', ['_0_version']: '00'},
@@ -81,6 +93,68 @@ describe('view-syncer/snapshotter', () => {
     issues: 'id',
     users: 'id',
     comments: 'id',
+  });
+
+  const zeroMessages = new ReplicationMessages(
+    {
+      schemaVersions: 'lock',
+    },
+    'zero',
+  );
+
+  test('schemaVersions change', () => {
+    const s = new Snapshotter(lc, dbFile.path).init();
+    expect(s.current().version).toBe('00');
+    expect(s.current().schemaVersions).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 1,
+    });
+
+    replicator.processMessage(lc, ['begin', messages.begin()]);
+    replicator.processMessage(lc, [
+      'data',
+      zeroMessages.insert('schemaVersions', {
+        lock: '1',
+        minSupportedVersion: 1,
+        maxSupportedVersion: 2,
+      }),
+    ]);
+    replicator.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
+
+    const diff = s.advance();
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(1);
+
+    expect(s.current().version).toBe('01');
+    expect(s.current().schemaVersions).toEqual({
+      minSupportedVersion: 1,
+      maxSupportedVersion: 2,
+    });
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": {
+            "_0_version": "01",
+            "lock": 1n,
+            "maxSupportedVersion": 2n,
+            "minSupportedVersion": 1n,
+          },
+          "prevValue": {
+            "_0_version": "00",
+            "lock": 1n,
+            "maxSupportedVersion": 1n,
+            "minSupportedVersion": 1n,
+          },
+          "table": "zero.schemaVersions",
+        },
+      ]
+    `);
   });
 
   test('concurrent snapshot diffs', () => {

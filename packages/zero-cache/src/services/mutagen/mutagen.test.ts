@@ -30,6 +30,8 @@ class MockWriteAuthorizer implements WriteAuthorizer {
 }
 const mockWriteAuthorizer = new MockWriteAuthorizer();
 
+const TEST_SCHEMA_VERSION = 1;
+
 async function createTables(db: PostgresDB) {
   await db.unsafe(`
       CREATE TABLE idonly (
@@ -57,6 +59,18 @@ async function createTables(db: PostgresDB) {
         "userID"         TEXT,
         PRIMARY KEY ("shardID", "clientGroupID", "clientID")
       );
+      CREATE TABLE zero."schemaVersions" (
+        "minSupportedVersion" INT4,
+        "maxSupportedVersion" INT4,
+
+        -- Ensure that there is only a single row in the table.
+        -- Application code can be agnostic to this column, and
+        -- simply invoke UPDATE statements on the version columns.
+        "lock" BOOL PRIMARY KEY DEFAULT true,
+        CONSTRAINT zero_schema_versions_single_row_constraint CHECK (lock)
+      );
+      INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
+        VALUES (true, 1, 1);
     `);
 }
 
@@ -105,6 +119,7 @@ describe('processMutation', () => {
           timestamp: Date.now(),
         },
         mockWriteAuthorizer,
+        TEST_SCHEMA_VERSION,
       );
 
       expect(error).undefined;
@@ -156,6 +171,7 @@ describe('processMutation', () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -205,6 +221,7 @@ describe('processMutation', () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -256,6 +273,7 @@ describe('processMutation', () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -306,9 +324,118 @@ describe('processMutation', () => {
           timestamp: Date.now(),
         },
         mockWriteAuthorizer,
+        TEST_SCHEMA_VERSION,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: ["error","InvalidPush","Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."]]`,
+    );
+
+    await expectTables(db, {
+      idonly: [],
+      ['zero.clients']: [
+        {
+          shardID: '0',
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
+  test('schema version below supported range throws', async () => {
+    await db`
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('0', 'abc', '123', 1)`;
+
+    await db`UPDATE zero."schemaVersions" SET "minSupportedVersion"=2, "maxSupportedVersion"=3`;
+
+    await expect(
+      processMutation(
+        undefined,
+        {},
+        db,
+        '0',
+        'abc',
+        {
+          type: MutationType.CRUD,
+          id: 2,
+          clientID: '123',
+          name: '_zero_crud',
+          args: [
+            {
+              ops: [
+                {
+                  op: 'create',
+                  entityType: 'idonly',
+                  id: {id: '1'},
+                  value: {},
+                },
+              ],
+            },
+          ],
+          timestamp: Date.now(),
+        },
+        mockWriteAuthorizer,
+        1,
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: ["error","SchemaVersionNotSupported","Schema version 1 is not in range of supported schema versions [2, 3]."]]`,
+    );
+
+    await expectTables(db, {
+      idonly: [],
+      ['zero.clients']: [
+        {
+          shardID: '0',
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
+  test('schema version above supported range throws', async () => {
+    await db`
+      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('0', 'abc', '123', 1)`;
+
+    await db`UPDATE zero."schemaVersions" SET "minSupportedVersion"=2, "maxSupportedVersion"=3`;
+
+    await expect(
+      processMutation(
+        undefined,
+        {},
+        db,
+        '0',
+        'abc',
+        {
+          type: MutationType.CRUD,
+          id: 2,
+          clientID: '123',
+          name: '_zero_crud',
+          args: [
+            {
+              ops: [
+                {
+                  op: 'create',
+                  entityType: 'idonly',
+                  id: {id: '1'},
+                  value: {},
+                },
+              ],
+            },
+          ],
+          timestamp: Date.now(),
+        },
+        mockWriteAuthorizer,
+        4,
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: ["error","SchemaVersionNotSupported","Schema version 4 is not in range of supported schema versions [2, 3]."]]`,
     );
 
     await expectTables(db, {
@@ -385,6 +512,7 @@ describe('processMutation', () => {
         timestamp: Date.now(),
       } satisfies CRUDMutation,
       mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -438,13 +566,13 @@ describe('processMutation', () => {
         timestamp: Date.now(),
       } satisfies CRUDMutation,
       mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
     );
 
     expect(error).toEqual([
       ErrorKind.MutationFailed,
       'PostgresError: insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
     ]);
-    console.log(error);
 
     await expectTables(db, {
       ['fk_ref']: [],
@@ -504,6 +632,7 @@ describe('processMutation', () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
       resolve, // Finish the 2 => 3 transaction only after this 3 => 4 transaction begins.
     );
 
