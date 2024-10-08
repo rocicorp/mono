@@ -1,13 +1,13 @@
+import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {type CSSProperties, useRef} from 'react';
 import {FixedSizeList as List} from 'react-window';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
-import {useQuery} from 'zero-react/src/use-query.js';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
-import {useZero} from '../../hooks/use-zero.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
+import {useZero} from '../../hooks/use-zero.js';
 
 export default function ListPage() {
   const z = useZero();

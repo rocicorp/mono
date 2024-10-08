@@ -1,16 +1,16 @@
+import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
-import {useQuery} from 'zero-react/src/use-query.js';
-import {useZero} from '../../hooks/use-zero.js';
+import {navigate} from 'wouter/use-browser-location';
+import statusClosed from '../../assets/icons/issue-closed.svg';
+import statusOpen from '../../assets/icons/issue-open.svg';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
-import statusOpen from '../../assets/icons/issue-open.svg';
-import statusClosed from '../../assets/icons/issue-closed.svg';
-import Comment from './comment.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
-import {navigate} from 'wouter/use-browser-location';
+import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
+import Comment from './comment.js';
 
 export default function IssuePage() {
   const z = useZero();

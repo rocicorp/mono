@@ -1,10 +1,10 @@
-import {useZero} from '../../hooks/use-zero.js';
-import {useQuery} from 'zero-react/src/use-query.js';
-import Markdown from '../../components/markdown.js';
-import style from './comment.module.css';
+import {useQuery} from '@rocicorp/zero/react';
 import {useState} from 'react';
-import CommentComposer from './comment-composer.js';
+import Markdown from '../../components/markdown.js';
 import {useLogin} from '../../hooks/use-login.js';
+import {useZero} from '../../hooks/use-zero.js';
+import CommentComposer from './comment-composer.js';
+import style from './comment.module.css';
 
 export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const z = useZero();
