@@ -1,0 +1,52 @@
+{
+  "extends": ["@rocicorp/eslint-config"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "btree/*",
+              "datadog/*",
+              "replicache/*",
+              "replicache-perf/*",
+              "shared/*",
+              "zero/*",
+              "zero-cache/*",
+              "zero-client/*",
+              "zero-integration-test/*",
+              "zero-protocol/*",
+              "zero-react/*",
+              "zql/*",
+              "zqlite/*"
+            ],
+            "message": "Use relative imports instead"
+          }
+        ],
+        "paths": [
+          {"name": "btree", "message": "Use relative imports instead"},
+          {"name": "datadog", "message": "Use relative imports instead"},
+          {"name": "replicache", "message": "Use relative imports instead"},
+          {
+            "name": "replicache-perf",
+            "message": "Use relative imports instead"
+          },
+          {"name": "shared", "message": "Use relative imports instead"},
+          {"name": "zero", "message": "Use relative imports instead"},
+          {"name": "zero-cache", "message": "Use relative imports instead"},
+          {"name": "zero-client", "message": "Use relative imports instead"},
+          {
+            "name": "zero-integration-test",
+            "message": "Use relative imports instead"
+          },
+          {"name": "zero-protocol", "message": "Use relative imports instead"},
+          {"name": "zero-react", "message": "Use relative imports instead"},
+          {"name": "zql", "message": "Use relative imports instead"},
+          {"name": "zqlite", "message": "Use relative imports instead"}
+        ]
+        // "message": "Use relative imports instead"
+      }
+    ]
+  }
+}

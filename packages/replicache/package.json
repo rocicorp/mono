@@ -72,7 +72,7 @@
     "!*.tsbuildinfo"
   ],
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config",
+    "extends": "../../eslint-config.json",
     "rules": {
       "no-restricted-syntax": [
         "error",

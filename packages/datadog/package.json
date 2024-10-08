@@ -22,7 +22,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

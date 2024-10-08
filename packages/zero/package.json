@@ -75,7 +75,7 @@
     "tool/install-sqlite3.js"
   ],
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

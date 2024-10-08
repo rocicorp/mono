@@ -63,9 +63,7 @@
     "vite-plugin-svgr": "^4.2.0"
   },
   "eslintConfig": {
-    "extends": [
-      "@rocicorp/eslint-config"
-    ]
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

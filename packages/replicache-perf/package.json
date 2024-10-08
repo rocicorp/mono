@@ -31,7 +31,7 @@
     "xbytes": "^1.7.0"
   },
   "eslintConfig": {
-    "extends": "@rocicorp/eslint-config"
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }
