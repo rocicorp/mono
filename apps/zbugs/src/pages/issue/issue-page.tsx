@@ -1,5 +1,5 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
@@ -11,6 +11,7 @@ import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import LabelPicker from '../../components/label-picker.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -65,6 +66,11 @@ export default function IssuePage() {
     window.addEventListener('mousemove', listener);
     return () => window.removeEventListener('mousemove', listener);
   }, [issue]);
+
+  const labelSet = useMemo(
+    () => new Set(issue?.labels?.map(l => l.id)),
+    [issue?.labels],
+  );
 
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
@@ -200,6 +206,19 @@ export default function IssuePage() {
               {label.name}
             </span>
           ))}
+          <LabelPicker
+            selected={labelSet}
+            onAssociateLabel={labelID =>
+              z.mutate.issueLabel.create({
+                id: `${issue.id}-${labelID}`,
+                issueID: issue.id,
+                labelID,
+              })
+            }
+            onDisassociateLabel={labelID =>
+              z.mutate.issueLabel.delete({id: `${issue.id}-${labelID}`})
+            }
+          />
         </div>
       </div>
     </div>
