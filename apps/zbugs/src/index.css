@@ -52,6 +52,11 @@ body {
   place-items: top;
   min-width: 320px;
   min-height: 100vh;
+  scrollbar-color: var(--color-nav-selected) var(--color-background);
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--color-background);
 }
 
 h1 {
