@@ -27,6 +27,25 @@ export default function Root() {
     // To enable accessing zero in the devtools easily.
     (window as {z?: Zero<Schema>}).z = z;
 
+    const baseIssueQuery = z.query.issue
+      .related('creator')
+      .related('labels')
+      .related('comments', c => c.limit(10).related('creator'))
+      .orderBy('modified', 'desc');
+
+    // Until we have query priorities, preload the first 50 issues then
+    // all the rest.
+    const {cleanup, complete} = baseIssueQuery.limit(50).preload();
+
+    complete.then(() => {
+      cleanup();
+      // load remainder of issues
+      baseIssueQuery.preload();
+    });
+
+    z.query.user.preload();
+    z.query.label.preload();
+
     return () => {
       z.close();
     };
@@ -35,16 +54,6 @@ export default function Root() {
   if (!z) {
     return null;
   }
-
-  z.query.user.preload();
-  z.query.label.preload();
-
-  z.query.issue
-    .related('creator')
-    .related('labels')
-    .related('comments', c => c.limit(10).related('creator'))
-    .orderBy('modified', 'desc')
-    .preload();
 
   return (
     <ZeroProvider zero={z}>
