@@ -31,7 +31,7 @@ export function getErrorForClientIfSchemaVersionNotSupported(
     return new ErrorForClient([
       'error',
       ErrorKind.SchemaVersionNotSupported,
-      `Schema version ${schemaVersion} is not in range of supported schema versions [${minSupportedVersion}, ${maxSupportedVersion}]`,
+      `Schema version ${schemaVersion} is not in range of supported schema versions [${minSupportedVersion}, ${maxSupportedVersion}].`,
     ]);
   }
   return undefined;

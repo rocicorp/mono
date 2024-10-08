@@ -377,7 +377,7 @@ describe('processMutation', () => {
         1,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","SchemaVersionNotSupported","Schema version 1 is not in range of supported schema versions [2, 3]"]]`,
+      `[Error: ["error","SchemaVersionNotSupported","Schema version 1 is not in range of supported schema versions [2, 3]."]]`,
     );
 
     await expectTables(db, {
@@ -431,7 +431,7 @@ describe('processMutation', () => {
         4,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","SchemaVersionNotSupported","Schema version 4 is not in range of supported schema versions [2, 3]"]]`,
+      `[Error: ["error","SchemaVersionNotSupported","Schema version 4 is not in range of supported schema versions [2, 3]."]]`,
     );
 
     await expectTables(db, {

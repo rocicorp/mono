@@ -344,7 +344,7 @@ describe('view-syncer/client-handler', () => {
     expect((e as unknown as ErrorForClient).errorMessage).toEqual([
       'error',
       'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3]',
+      'Schema version 1 is not in range of supported schema versions [2, 3].',
     ]);
   });
 

@@ -544,7 +544,7 @@ describe('view-syncer/service', () => {
     await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
       'error',
       'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3]',
+      'Schema version 1 is not in range of supported schema versions [2, 3].',
     ]);
   });
 
@@ -702,17 +702,30 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement that results in client having an unsupported schemaVersion', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client1 = await connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    const client2 = await connect(
+      {...SYNC_CONTEXT, clientID: 'bar', schemaVersion: 3},
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+    );
 
     stateChanges.push({state: 'version-ready'});
-    expect((await nextPoke(client))[0]).toEqual([
+    expect((await nextPoke(client1))[0]).toEqual([
       'pokeStart',
       {
         baseCookie: null,
-        cookie: '00:02',
-        pokeID: '00:02',
+        cookie: '00:03',
+        pokeID: '00:03',
+        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
+      },
+    ]);
+    expect((await nextPoke(client2))[0]).toEqual([
+      'pokeStart',
+      {
+        baseCookie: null,
+        cookie: '00:03',
+        pokeID: '00:03',
         schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
       },
     ]);
@@ -735,13 +748,69 @@ describe('view-syncer/service', () => {
     );
 
     stateChanges.push({state: 'version-ready'});
-    const dequeuePromise = client.dequeue();
+
+    // client1 now has an unsupported version and is sent an error and no poke
+    // client2 still has a supported version and is sent a poke with the
+    // updated schemaVersions range
+    const dequeuePromise = client1.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
     await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
       'error',
       'SchemaVersionNotSupported',
-      'Schema version 2 is not in range of supported schema versions [3, 3]',
+      'Schema version 2 is not in range of supported schema versions [3, 3].',
     ]);
+
+    expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:03",
+            "cookie": "01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 3,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "id": "1",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "2",
+                },
+                "entityType": "issues",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
   });
 
   test('catch up client', async () => {

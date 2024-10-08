@@ -369,7 +369,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
     ON CONFLICT ("shardID", "clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
     RETURNING "lastMutationID"
-  `;
+  `.execute();
 
   const supportedVersionRangePromise = tx<
     {
