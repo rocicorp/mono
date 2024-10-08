@@ -60,7 +60,8 @@
     "typescript": "^5.5.3",
     "universal-user-agent": "^7.0.2",
     "vite": "^5.2.0",
-    "vite-plugin-svgr": "^4.2.0"
+    "vite-plugin-svgr": "^4.2.0",
+    "vite-tsconfig-paths": "^5.0.1"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"

@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "baseUrl": "../../packages",
+    "paths": {
+      "@rocicorp/zero": ["./zero/src/zero.ts"],
+      "@rocicorp/zero/react": ["./zero/src/react.ts"]
+    }
   },
   "include": ["src"]
 }
