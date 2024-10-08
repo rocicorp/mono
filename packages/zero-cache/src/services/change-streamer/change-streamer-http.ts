@@ -24,7 +24,7 @@ import type {
 
 export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
 
-export const DEFAULT_PORT = 2999;
+export const DEFAULT_PORT = 4849;
 
 export type Options = {
   port: number;

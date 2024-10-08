@@ -126,7 +126,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
   // In development, the `zero-cache` runs its own `replication-manager`
   // (i.e. `change-streamer`). In production, this URI should point to
   // to the `replication-manager`, which runs a `change-streamer`
-  // on port 2999.
+  // on port 4849.
   changeStreamerConnStr: configStringValueSchema.optional(),
 
   // Indicates that a `litestream replicate` process is backing up

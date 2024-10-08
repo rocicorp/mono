@@ -13,7 +13,7 @@ export type Workers = {
   syncers: Worker[];
 };
 
-export const DEFAULT_PORT = 3000;
+export const DEFAULT_PORT = 4848;
 
 export type Options = {
   port: number;
@@ -69,7 +69,7 @@ export class Dispatcher implements Service {
 
   async run(): Promise<void> {
     const address = await this.#fastify.listen({
-      host: '0.0.0.0',
+      host: '::',
       port: this.#port,
     });
     this.#lc.info?.(`Server listening at ${address}`);
