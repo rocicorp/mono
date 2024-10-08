@@ -412,6 +412,13 @@ export class Zero<S extends Schema> {
       kvStore = 'idb',
       schema,
     } = options;
+    if (typeof WebSocket === 'undefined') {
+      throw new Error(
+        'Cannot find WebSocket global. Are you running in Node? Zero is only ' +
+          'currently supported in browsers.',
+      );
+    }
+
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
