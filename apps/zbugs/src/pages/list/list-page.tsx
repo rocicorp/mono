@@ -8,7 +8,9 @@ import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {mark} from '../../perf-log.js';
 
+let firstRowRendered = false;
 export default function ListPage() {
   const z = useZero();
 
@@ -68,6 +70,10 @@ export default function ListPage() {
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
     const issue = issues[index];
+    if (firstRowRendered === false) {
+      mark('first issue row rendered');
+      firstRowRendered = true;
+    }
     return (
       <div
         key={issue.id}
