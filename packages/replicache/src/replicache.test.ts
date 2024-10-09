@@ -1,11 +1,11 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {assert as chaiAssert, expect} from 'chai';
+import * as sinon from 'sinon';
 import {assert} from '../../shared/src/asserts.js';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
 import {promiseVoid} from '../../shared/src/resolved-promises.js';
 import {sleep} from '../../shared/src/sleep.js';
-import * as sinon from 'sinon';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {Write} from './db/write.js';
 import {TestMemStore} from './kv/test-mem-store.js';
@@ -2411,4 +2411,29 @@ test('set with undefined key', async () => {
 
   // eslint-disable-next-line no-sparse-arrays
   expect(await set([1, , 2])).instanceOf(TypeError);
+});
+
+test('subscribe while closing', async () => {
+  // This tests that we do not try to open an IndexedDB transaction after the
+  // database has been closed.
+  const rep = await replicacheForTesting('subscribe-while-closing', {
+    mutators: {addData},
+  });
+  await rep.mutate.addData({a: 1});
+  const p = rep.close();
+  const query = sinon.fake();
+  const onData = sinon.fake();
+  const watchCallback = sinon.fake();
+  const unsubscribe = rep.subscribe(query, onData);
+  const unwatch = rep.experimentalWatch(watchCallback);
+
+  await clock.tickAsync(10);
+
+  await p;
+  unsubscribe();
+  unwatch();
+
+  expect(query.callCount).to.equal(0);
+  expect(onData.callCount).to.equal(0);
+  expect(watchCallback.callCount).to.equal(0);
 });
