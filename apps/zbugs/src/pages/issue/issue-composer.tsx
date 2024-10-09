@@ -41,14 +41,14 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
   };
 
   const body = (
-    <div className="flex flex-col w-full py-4 overflow-hidden">
-      <div className="flex items-center justify-between flex-shrink-0 px-4">
+    <div className="flex flex-col w-full py-4 overflow-hidden modal-container">
+      <div className="flex items-center justify-between flex-shrink-0 px-4 issue-composer-header">
         <div className="flex items-center">
-          <span className="ml-1 font-normal text-white">New Issue</span>
+          <span className="issue-detail-label">New Issue</span>
         </div>
         <div className="flex items-center">
           <button
-            className="inline-flex rounded items-center justify-center ml-2 text-gray-500 h-7 w-7 hover:bg-gray-100 rouned hover:text-gray-700"
+            className="inline-flex rounded items-center justify-center text-gray-500 h-7 w-7 rouned hover:text-gray-700"
             onMouseDown={handleCloseMouseDown}
           >
             <CloseIcon className="w-4" />
@@ -58,7 +58,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
         <div className="flex items-center w-full mt-1.5 px-4">
           <input
-            className="bg-modal w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
+            className="bg-modal w-full text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
             placeholder="Issue title"
             value={title}
             ref={ref}
@@ -67,7 +67,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
         </div>
         <div className="w-full px-4">
           <textarea
-            className="bg-modal prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md editor border border-transparent focus:outline-none focus:ring-0"
+            className="bg-modal prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 text-md editor border border-transparent focus:outline-none focus:ring-0"
             value={description || ''}
             onChange={e => setDescription(e.target.value)}
             placeholder="Add description..."
@@ -76,7 +76,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       </div>
       <div className="flex items-center flex-shrink-0 px-4 pt-3">
         <button
-          className="px-3 ml-auto text-black bg-primary rounded h-7"
+          className="px-3 ml-auto text-black bg-primary rounded save-issue"
           onMouseDown={handleSubmit}
         >
           Save Issue
