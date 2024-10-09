@@ -100,38 +100,31 @@ export default function IssuePage() {
             <span className="breadcrumb-item">ZB-15</span>
           </div>
           <div className="edit-buttons">
-          {!editing ? (
-            <>
-              <button
-                className="edit-button"
-                onMouseDown={() => setEditing(issue)}
-              >
-                Edit
-              </button>
-              <button
-                className="delete-button"
-                onMouseDown={() => remove()}
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <>
-              <button 
-                className="save-button"
-                onMouseDown={save}>
-                Save
-              </button>
-              <button
-                className="cancel-button"
-                onMouseDown={cancel}>
-                Cancel
-              </button>
-            </>
-          )}
+            {!editing ? (
+              <>
+                <button
+                  className="edit-button"
+                  onMouseDown={() => setEditing(issue)}
+                >
+                  Edit
+                </button>
+                <button className="delete-button" onMouseDown={() => remove()}>
+                  Delete
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="save-button" onMouseDown={save}>
+                  Save
+                </button>
+                <button className="cancel-button" onMouseDown={cancel}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        </div>
-        
+
         {!editing ? (
           <h1 className="issue-detail-title">{rendering.title}</h1>
         ) : (
@@ -160,7 +153,7 @@ export default function IssuePage() {
             />
           </div>
         )}
-        
+
         {issue.comments.length > 0 ? (
           <div className="comments-container">
             <h2 className="issue-detail-label">Comments</h2>

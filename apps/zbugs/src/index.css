@@ -371,7 +371,8 @@ h1 {
 
 .sidebar-status-closed {
   padding-left: 2.5rem;
-  background: var(--color-nav-selected) url(assets/icons/issue-closed.svg) no-repeat center left;
+  background: var(--color-nav-selected) url(assets/icons/issue-closed.svg)
+    no-repeat center left;
 }
 
 .edit-buttons {
