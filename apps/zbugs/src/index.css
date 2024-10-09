@@ -72,6 +72,21 @@ h1 {
   background-color: rgba(0, 0, 0, 0.95);
 }
 
+.secondary-button {
+  color: var(--color-text-primary-active);
+  opacity: 0.6;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  transition: opacity 0.3s ease-in-out;
+  border: 1px solid var(--color-text-dimmed-label);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.secondary-button:hover {
+  opacity: 1;
+}
+
 /* Nav */
 
 .nav-container {
@@ -445,8 +460,8 @@ h1 {
   overflow: hidden;
 }
 
-.comments-container {
-  margin-top: 4rem;
+.description-container {
+  margin-bottom: 4rem;
 }
 
 .pill {
@@ -551,4 +566,16 @@ h1 {
 
 .issue-composer-header {
   margin-bottom: 1rem;
+}
+
+/* Comment Composer */
+
+.comment-input {
+  margin: 1rem 0;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-nav-selected);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  display: block;
+  width: 100%;
 }
