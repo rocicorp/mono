@@ -24,8 +24,8 @@ import type {
 } from '../../zql/src/zql/ivm/operator.js';
 import type {
   PrimaryKey,
-  TableSchema,
   SchemaValue,
+  TableSchema,
   ValueType,
 } from '../../zql/src/zql/ivm/schema.js';
 import type {
@@ -157,7 +157,9 @@ export class TableSource implements Source {
       getRow: db
         .prepare(
           compile(
-            sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
+            sql`SELECT ${this.#allColumns} FROM ${sql.ident(
+              this.#table,
+            )} WHERE ${sql.join(
               this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
               sql` AND`,
             )}`,
@@ -167,6 +169,13 @@ export class TableSource implements Source {
     };
     this.#dbCache.set(db, stmts);
     return stmts;
+  }
+
+  get #allColumns() {
+    return sql.join(
+      Object.keys(this.#columns).map(c => sql.ident(c)),
+      sql`,`,
+    );
   }
 
   #getSchema(connection: Connection): TableSchema {
@@ -238,8 +247,7 @@ export class TableSource implements Source {
         beforeRequest === undefined,
         'Before should only be converted once.',
       );
-      const preSql = requestToSQL(
-        this.#table,
+      const preSql = this.#requestToSQL(
         req.constraint,
         req.start !== undefined
           ? {
@@ -265,8 +273,7 @@ export class TableSource implements Source {
 
       yield* this.#fetch(newReq, connection, req);
     } else {
-      const query = requestToSQL(
-        this.#table,
+      const query = this.#requestToSQL(
         req.constraint,
         req.start !== undefined
           ? {
@@ -414,6 +421,70 @@ export class TableSource implements Source {
     }
     return row;
   }
+
+  #requestToSQL(
+    constraint: Constraint | undefined,
+    cursor: Cursor | undefined,
+    filters: SimpleCondition[],
+    order: Ordering,
+  ): SQLQuery {
+    let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
+    const constraints: SQLQuery[] = [];
+
+    if (constraint) {
+      constraints.push(sql`${sql.ident(constraint.key)} = ${constraint.value}`);
+    }
+
+    if (cursor) {
+      constraints.push(gatherStartConstraints(cursor, order));
+    }
+
+    for (const filter of filters) {
+      const {op} = filter;
+      if (op === 'IN' || op === 'NOT IN') {
+        constraints.push(
+          sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+            filter.op,
+          )} (SELECT value FROM json_each(${JSON.stringify(filter.value)}))`,
+        );
+      } else {
+        constraints.push(
+          sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+            filter.op === 'ILIKE'
+              ? 'LIKE'
+              : filter.op === 'NOT ILIKE'
+              ? 'NOT LIKE'
+              : filter.op,
+          )} ${filter.value}`,
+        );
+      }
+    }
+
+    if (constraints.length > 0) {
+      query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
+    }
+
+    if (cursor?.direction === 'before') {
+      query = sql`${query} ORDER BY ${sql.join(
+        order.map(
+          s =>
+            sql`${sql.ident(s[0])} ${sql.__dangerous__rawValue(
+              s[1] === 'asc' ? 'desc' : 'asc',
+            )}`,
+        ),
+        sql`, `,
+      )}`;
+    } else {
+      query = sql`${query} ORDER BY ${sql.join(
+        order.map(
+          s => sql`${sql.ident(s[0])} ${sql.__dangerous__rawValue(s[1])}`,
+        ),
+        sql`, `,
+      )}`;
+    }
+
+    return query;
+  }
 }
 
 type Cursor = {
@@ -421,71 +492,6 @@ type Cursor = {
   direction: 'before' | 'after';
   inclusive: boolean;
 };
-
-function requestToSQL(
-  table: string,
-  constraint: Constraint | undefined,
-  cursor: Cursor | undefined,
-  filters: SimpleCondition[],
-  order: Ordering,
-): SQLQuery {
-  let query = sql`SELECT * FROM ${sql.ident(table)}`;
-  const constraints: SQLQuery[] = [];
-
-  if (constraint) {
-    constraints.push(sql`${sql.ident(constraint.key)} = ${constraint.value}`);
-  }
-
-  if (cursor) {
-    constraints.push(gatherStartConstraints(cursor, order));
-  }
-
-  for (const filter of filters) {
-    const {op} = filter;
-    if (op === 'IN' || op === 'NOT IN') {
-      constraints.push(
-        sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
-          filter.op,
-        )} (SELECT value FROM json_each(${JSON.stringify(filter.value)}))`,
-      );
-    } else {
-      constraints.push(
-        sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
-          filter.op === 'ILIKE'
-            ? 'LIKE'
-            : filter.op === 'NOT ILIKE'
-            ? 'NOT LIKE'
-            : filter.op,
-        )} ${filter.value}`,
-      );
-    }
-  }
-
-  if (constraints.length > 0) {
-    query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
-  }
-
-  if (cursor?.direction === 'before') {
-    query = sql`${query} ORDER BY ${sql.join(
-      order.map(
-        s =>
-          sql`${sql.ident(s[0])} ${sql.__dangerous__rawValue(
-            s[1] === 'asc' ? 'desc' : 'asc',
-          )}`,
-      ),
-      sql`, `,
-    )}`;
-  } else {
-    query = sql`${query} ORDER BY ${sql.join(
-      order.map(
-        s => sql`${sql.ident(s[0])} ${sql.__dangerous__rawValue(s[1])}`,
-      ),
-      sql`, `,
-    )}`;
-  }
-
-  return query;
-}
 
 /**
  * The ordering could be complex such as:

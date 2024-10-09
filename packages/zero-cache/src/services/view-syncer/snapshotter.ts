@@ -1,16 +1,18 @@
 import {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import {assert} from '../../../../shared/src/asserts.js';
+import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
-import {type SchemaVersions} from '../../types/schema-versions.js';
 import {
   normalizedKeyOrder,
   type RowKey,
   type RowValue,
 } from '../../types/row-key.js';
-import {Database} from '../../../../zqlite/src/db.js';
+import {type SchemaVersions} from '../../types/schema-versions.js';
+import type {TableSpec} from '../../types/specs.js';
 import {
   changeLogEntrySchema as schema,
   SET_OP,
@@ -150,14 +152,19 @@ export class Snapshotter {
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
    */
-  advance(): SnapshotDiff {
+  advance(tables: Map<string, TableSpec>): SnapshotDiff {
+    const {prev, curr} = this.advanceWithoutDiff();
+    return new Diff(tables, prev, curr);
+  }
+
+  advanceWithoutDiff() {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     const next = this.#prev
       ? this.#prev.resetToHead()
       : Snapshot.create(this.#lc, this.#curr.db.db.name);
     this.#prev = this.#curr;
     this.#curr = next;
-    return new Diff(this.#prev, this.#curr);
+    return {prev: this.#prev, curr: this.#curr};
   }
 
   /**
@@ -261,11 +268,14 @@ class Snapshot {
     };
   }
 
-  getRow(table: string, rowKey: JSONValue) {
+  getRow(table: TableSpec, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${ident(c)}=?`);
+    const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
-      `SELECT * FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
+      `SELECT ${cols.map(c => ident(c)).join(',')} FROM ${ident(
+        table.name,
+      )} WHERE ${conds.join(' AND ')}`,
     );
     cached.statement.safeIntegers(true);
     try {
@@ -276,8 +286,11 @@ class Snapshot {
     }
   }
 
-  getRows(table: string) {
-    const cached = this.db.statementCache.get(`SELECT * FROM ${ident(table)}`);
+  getRows(table: TableSpec) {
+    const cols = Object.keys(table.columns);
+    const cached = this.db.statementCache.get(
+      `SELECT ${cols.map(c => ident(c)).join(',')} FROM ${ident(table.name)}`,
+    );
     cached.statement.safeIntegers(true);
     return {
       rows: cached.statement.iterate(),
@@ -295,11 +308,13 @@ class Snapshot {
 }
 
 class Diff implements SnapshotDiff {
+  readonly tables: Map<string, TableSpec>;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
 
-  constructor(prev: Snapshot, curr: Snapshot) {
+  constructor(tables: Map<string, TableSpec>, prev: Snapshot, curr: Snapshot) {
+    this.tables = tables;
     this.prev = prev;
     this.curr = curr;
     this.changes = curr.numChangesSince(prev.version);
@@ -330,16 +345,17 @@ class Diff implements SnapshotDiff {
           }
 
           const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+          const tableSpec = must(this.tables.get(table));
           if (op === TRUNCATE_OP) {
-            truncates.startTruncate(table);
+            truncates.startTruncate(tableSpec);
             continue; // loop around to pull rows from the TruncateTracker.
           }
 
           assert(rowKey !== null);
           const prevValue =
-            truncates.getRowIfNotTruncated(table, rowKey) ?? null;
+            truncates.getRowIfNotTruncated(tableSpec, rowKey) ?? null;
           const nextValue =
-            op === SET_OP ? this.curr.getRow(table, rowKey) : null;
+            op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
 
           // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
           this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
@@ -429,10 +445,10 @@ class TruncateTracker {
     this.#prev = prev;
   }
 
-  startTruncate(table: string) {
+  startTruncate(table: TableSpec) {
     assert(this.#truncating === null);
     const {rows, cleanup} = this.#prev.getRows(table);
-    this.#truncating = {table, rows, cleanup};
+    this.#truncating = {table: table.name, rows, cleanup};
   }
 
   next(): IteratorResult<Change> | null {
@@ -461,9 +477,11 @@ class TruncateTracker {
     return {value: {table, prevValue, nextValue: null} satisfies Change};
   }
 
-  getRowIfNotTruncated(table: string, rowKey: RowKey) {
+  getRowIfNotTruncated(table: TableSpec, rowKey: RowKey) {
     // If the row has been returned in a TRUNCATE iteration, its prevValue is henceforth null.
-    return this.#truncated.has(table) ? null : this.#prev.getRow(table, rowKey);
+    return this.#truncated.has(table.name)
+      ? null
+      : this.#prev.getRow(table, rowKey);
   }
 
   iterReturn(value: unknown) {

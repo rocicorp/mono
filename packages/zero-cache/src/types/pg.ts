@@ -1,3 +1,4 @@
+import {PreciseDate} from '@google-cloud/precise-date';
 import {OID} from '@postgresql-typed/oids';
 import {LogContext} from '@rocicorp/logger';
 import pg from 'pg';
@@ -9,28 +10,87 @@ const {
   types: {builtins, setTypeParser},
 } = pg;
 
+const TIMESTAMP_TYPES = [builtins.TIMESTAMP, builtins.TIMESTAMPTZ];
+
+const TIMESTAMP_ARRAYS = [1115 /* timestamp[] */, 1185 /* timestamptz[] */];
+
 const builtinsINT8ARRAY = 1016; // No definition in builtins for int8[]
 
 /** Registers types for the 'pg' library used by `pg-logical-replication`. */
 export function registerPostgresTypeParsers() {
   setTypeParser(builtins.INT8, val => BigInt(val));
   setTypeParser(builtinsINT8ARRAY, val => array.parse(val, val => BigInt(val)));
+
+  // For pg-logical-replication we convert timestamps directly to microseconds
+  // to facilitate serializing them in the Change stream.
+  for (const type of TIMESTAMP_TYPES) {
+    setTypeParser(type, parseTimestampToMicroseconds);
+  }
+  for (const type of TIMESTAMP_ARRAYS) {
+    setTypeParser(type, val => array.parse(val, parseTimestampToMicroseconds));
+  }
 }
 
-// Type these as `number` so that Typescript doesn't complain about
-// referencing external types during type inference.
-const builtinsJSON: number = builtins.JSON;
-const builtinsJSONB: number = builtins.JSONB;
+function parseTimestampToMicroseconds(timestamp: string): bigint {
+  return parseTimestamp(timestamp).getFullTime() / 1000n;
+}
+
+function parseTimestamp(timestamp: string): PreciseDate {
+  // Convert from PG's time string, e.g. "1999-01-08 12:05:06+00" to "Z"
+  // format expected by PreciseDate.
+  timestamp = timestamp.replace(' ', 'T').replace('+00', '') + 'Z';
+  return new PreciseDate(timestamp);
+}
+
+function serializeTimestamp(val: unknown): string {
+  switch (typeof val) {
+    case 'string':
+      return val; // Let Postgres parse it
+    case 'number':
+      return new PreciseDate(val).getFullTimeString();
+    // Note: Don't support bigint inputs until we decide what the semantics are (e.g. micros vs nanos)
+    // case 'bigint':
+    // return new PreciseDate(val).getFullTimeString();
+    default:
+      if (val instanceof PreciseDate) {
+        return val.getFullTimeString();
+      }
+      if (val instanceof Date) {
+        return val.toISOString();
+      }
+  }
+  throw new Error(`Unsupported type "${typeof val}" for timestamp: ${val}`);
+}
+
+/**
+ * The (javascript) types of objects that can be returned by our configured
+ * Postgres clients. For initial-sync, these comes from the postgres.js client:
+ *
+ * https://github.com/porsager/postgres/blob/master/src/types.js
+ *
+ * and for the replication stream these come from the the node-postgres client:
+ *
+ * https://github.com/brianc/node-pg-types/blob/master/lib/textParsers.js
+ */
+export type PostgresValueType = JSONValue | Uint8Array;
 
 /** Configures types for the Postgres.js client library (`postgres`). */
 export const postgresTypeConfig = () => ({
+  // Type the type IDs as `number` so that Typescript doesn't complain about
+  // referencing external types during type inference.
   types: {
     bigint: postgres.BigInt,
     json: {
-      to: builtinsJSON,
-      from: [builtinsJSON, builtinsJSONB],
+      to: builtins.JSON as number,
+      from: [builtins.JSON, builtins.JSONB] as number[],
       serialize: BigIntJSON.stringify,
       parse: BigIntJSON.parse,
+    },
+    date: {
+      to: builtins.TIMESTAMP as number,
+      from: TIMESTAMP_TYPES as number[],
+      serialize: serializeTimestamp,
+      parse: parseTimestamp,
     },
   },
 });

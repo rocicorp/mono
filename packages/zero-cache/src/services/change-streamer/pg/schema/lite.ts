@@ -1,67 +1,28 @@
-import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
-import type {LiteDataType} from '../../../../types/lite.js';
+import type {LogContext} from '@rocicorp/logger';
+import {dataTypeToZqlValueType} from '../../../../types/lite.js';
 import {liteTableName} from '../../../../types/names.js';
 import type {ColumnSpec, TableSpec} from '../../../../types/specs.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 
 export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   pos: Number.MAX_SAFE_INTEGER, // i.e. last
   characterMaximumLength: null,
-  dataType: 'TEXT',
+  dataType: 'text',
   notNull: true,
   dflt: null,
 };
 
-export function checkDataTypeSupported(pgDataType: string) {
-  mapPostgresToLiteDataType(pgDataType); // Throws on unsupported data types.
-}
-
-function mapPostgresToLiteDataType(pgDataType: string): LiteDataType {
-  switch (pgDataType) {
-    case 'smallint':
-    case 'integer':
-    case 'int':
-    case 'int2':
-    case 'int4':
-    case 'int8':
-    case 'bigint':
-    case 'smallserial':
-    case 'serial':
-    case 'serial2':
-    case 'serial4':
-    case 'serial8':
-    case 'bigserial':
-      return 'INTEGER';
-    case 'decimal':
-    case 'numeric':
-    case 'real':
-    case 'double precision':
-    case 'float':
-    case 'float4':
-    case 'float8':
-      return 'REAL';
-    case 'bytea':
-      return 'BLOB';
-    case 'character':
-    case 'character varying':
-    case 'text':
-    case 'varchar':
-      return 'TEXT';
-    case 'bool':
-    case 'boolean':
-      return 'BOOL';
-    // case 'date':
-    // case 'time':
-    // case 'timestamp':
-    // case 'timestamp with time zone':
-    // case 'timestamp without time zone':
-    // case 'time with time zone':
-    // case 'time without time zone':
-    //   return 'INTEGER';
-    default:
-      if (pgDataType.endsWith('[]')) {
-        throw new Error(`Array types are not supported: ${pgDataType}`);
-      }
-      throw new Error(`The "${pgDataType}" data type is not supported`);
+export function warnIfDataTypeSupported(
+  lc: LogContext,
+  pgDataType: string,
+  table: string,
+  column: string,
+) {
+  if (dataTypeToZqlValueType(pgDataType) === undefined) {
+    lc.info?.(
+      `\n\nWARNING: zero does not yet support the "${pgDataType}" data type.\n` +
+        `The "${table}"."${column}" column will not be synced to clients.\n\n`,
+    );
   }
 }
 
@@ -79,14 +40,14 @@ const STRING_EXPRESSION_REGEX = /^('.*')::[^']+$/;
 function mapPostgresToLiteDefault(
   table: string,
   column: string,
-  liteDataType: LiteDataType,
+  dataType: string,
   defaultExpression: string | null,
 ) {
   if (defaultExpression === null) {
     return null;
   }
   if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {
-    if (liteDataType === 'BOOL') {
+    if (dataTypeToZqlValueType(dataType) === 'boolean') {
       return defaultExpression === 'true' ? '1' : '0';
     }
     return defaultExpression;
@@ -109,19 +70,16 @@ export function mapPostgresToLite(t: TableSpec): TableSpec {
     columns: {
       ...Object.fromEntries(
         Object.entries(t.columns).map(
-          ([col, {pos, dataType: pgType, notNull, dflt}]) => {
-            const dataType = mapPostgresToLiteDataType(pgType);
-            return [
-              col,
-              {
-                pos,
-                dataType,
-                characterMaximumLength: null,
-                notNull,
-                dflt: mapPostgresToLiteDefault(name, col, dataType, dflt),
-              } satisfies ColumnSpec,
-            ];
-          },
+          ([col, {pos, dataType, notNull, dflt}]) => [
+            col,
+            {
+              pos,
+              dataType,
+              characterMaximumLength: null,
+              notNull,
+              dflt: mapPostgresToLiteDefault(name, col, dataType, dflt),
+            } satisfies ColumnSpec,
+          ],
         ),
       ),
       [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
