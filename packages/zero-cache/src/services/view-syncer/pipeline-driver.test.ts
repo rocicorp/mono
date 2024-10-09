@@ -57,8 +57,8 @@ describe('view-syncer/pipeline-driver', () => {
         ignored BYTEA,
          _0_version TEXT NOT NULL);
 
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 0, '"2024-09-09T00:00:00.000Z"', '00');
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 1, '"2024-04-04T00:00:00.000Z"', '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 0, 1728345600000, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 1, 1722902400000, '00');
       INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 0, null, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('10', '1', 0, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('20', '2', 1, '00');

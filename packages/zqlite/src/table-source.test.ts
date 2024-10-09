@@ -228,7 +228,7 @@ describe('fetched value types', () => {
     },
     {
       name: 'bigint, float, and true boolean',
-      input: ['2', 2n, 3.456, 1],
+      input: ['2', 2n, 3.456, 1n],
       output: {id: '2', a: 2, b: 3.456, c: true},
     },
     {
@@ -243,11 +243,11 @@ describe('fetched value types', () => {
     },
     {
       name: 'bigint too big',
-      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1],
+      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1n],
     },
     {
       name: 'bigint too small',
-      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1],
+      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1n],
     },
   ];
 
