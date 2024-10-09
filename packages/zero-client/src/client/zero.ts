@@ -412,12 +412,7 @@ export class Zero<S extends Schema> {
       kvStore = 'idb',
       schema,
     } = options;
-    if (typeof WebSocket === 'undefined') {
-      throw new Error(
-        'Cannot find WebSocket global. Are you running in Node? Zero is only ' +
-          'currently supported in browsers.',
-      );
-    }
+    checkRuntimeSupported();
 
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -1649,3 +1644,18 @@ class TimedOutError extends Error {
 }
 
 class CloseError extends Error {}
+
+function checkRuntimeSupported() {
+  const bail = (req: string) => {
+    throw new Error(
+      `Cannot find ${req} in this environment. Are you using ` +
+        `Zero in a node server? Zero is only supported in browsers currently.`,
+    );
+  };
+  if (typeof WebSocket === 'undefined') {
+    bail('WebSocket');
+  }
+  if (typeof indexedDB === 'undefined') {
+    bail('indexedDB');
+  }
+}
