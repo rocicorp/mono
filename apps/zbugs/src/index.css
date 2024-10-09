@@ -527,9 +527,9 @@ h1 {
 }
 
 .selector .item.icon {
-  padding-left: 2.5rem;
+  padding-left: 3.05rem;
   background-repeat: no-repeat;
-  background-position: 0.8175rem center;
+  background-position: 1.1rem center;
   background-size: 14px;
 }
 
@@ -551,6 +551,14 @@ h1 {
 
 .login-to-comment:hover {
   opacity: 1;
+}
+
+.issue-creator-avatar {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.8175rem;
 }
 
 /* Issue Composer */

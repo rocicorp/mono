@@ -170,7 +170,6 @@ export default function IssuePage() {
             ))}
           </div>
         ) : null}
-        
         {z.userID === 'anon' ? (
           <a href="/api/login/github" className="login-to-comment">
             Login to comment
@@ -207,7 +206,12 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Creator</p>
           <button className="sidebar-button issue-creator">
-            {issue.creator.name}
+            <img
+              src={issue.creator?.avatar}
+              className="issue-creator-avatar"
+              alt={issue.creator?.name}
+            />
+            <span className="issue-creator-name">{issue.creator.name}</span>
           </button>
         </div>
 
