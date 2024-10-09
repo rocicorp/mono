@@ -586,7 +586,7 @@ function pickColumns(columns: readonly string[], row: Row): readonly Value[] {
 }
 
 function toSQLiteType(v: unknown): unknown {
-  return v === false ? 'false' : v === true ? 'true' : v ?? null;
+  return v === false ? 0 : v === true ? 1 : v ?? null;
 }
 
 function* mapFromSQLiteTypes(
@@ -608,7 +608,7 @@ function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
 function fromSQLiteType(valueType: ValueType, v: Value): Value {
   switch (valueType) {
     case 'boolean':
-      return String(v) === 'true';
+      return !!v;
     default:
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {

@@ -1,5 +1,5 @@
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {Catch} from '../../zql/src/zql/ivm/catch.js';
 import type {Change} from '../../zql/src/zql/ivm/change.js';
 import {
@@ -223,12 +223,12 @@ describe('fetched value types', () => {
   const cases: Case[] = [
     {
       name: 'number, float and false boolean',
-      input: ['1', 1, 2.123, 'false'],
+      input: ['1', 1, 2.123, 0],
       output: {id: '1', a: 1, b: 2.123, c: false},
     },
     {
       name: 'bigint, float, and true boolean',
-      input: ['2', 2n, 3.456, 'true'],
+      input: ['2', 2n, 3.456, 1],
       output: {id: '2', a: 2, b: 3.456, c: true},
     },
     {
@@ -237,17 +237,17 @@ describe('fetched value types', () => {
         '3',
         BigInt(Number.MAX_SAFE_INTEGER),
         BigInt(Number.MIN_SAFE_INTEGER),
-        'true',
+        1,
       ],
       output: {id: '3', a: 9007199254740991, b: -9007199254740991, c: true},
     },
     {
       name: 'bigint too big',
-      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 'true'],
+      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1],
     },
     {
       name: 'bigint too small',
-      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 'true'],
+      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1],
     },
   ];
 
@@ -311,7 +311,7 @@ test('pushing values does the correct writes and outputs', () => {
      */
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: 'false'},
+      row: {a: 1, b: 2.123, c: 0},
     });
 
     expect(outputted.shift()).toEqual({
@@ -325,7 +325,7 @@ test('pushing values does the correct writes and outputs', () => {
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 'false'}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0}]);
 
     source.push({
       type: 'remove',
@@ -355,7 +355,7 @@ test('pushing values does the correct writes and outputs', () => {
 
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: 'true'},
+      row: {a: 1, b: 2.123, c: 1},
     });
 
     expect(outputted.shift()).toEqual({
@@ -369,12 +369,12 @@ test('pushing values does the correct writes and outputs', () => {
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 'true'}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1}]);
 
     expect(() => {
       source.push({
         type: 'add',
-        row: {a: 1, b: 2.123, c: 'true'},
+        row: {a: 1, b: 2.123, c: 1},
       });
     }).toThrow();
 
@@ -384,7 +384,7 @@ test('pushing values does the correct writes and outputs', () => {
       row: {
         a: BigInt(Number.MAX_SAFE_INTEGER),
         b: 3.456,
-        c: 'true',
+        c: 1,
       } as unknown as Row,
     });
 
@@ -401,8 +401,8 @@ test('pushing values does the correct writes and outputs', () => {
     });
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 'true'},
-      {a: 9007199254740991, b: 3.456, c: 'true'},
+      {a: 1, b: 2.123, c: 1},
+      {a: 9007199254740991, b: 3.456, c: 1},
     ]);
 
     // out of bounds
@@ -412,7 +412,7 @@ test('pushing values does the correct writes and outputs', () => {
         row: {
           a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
           b: 0,
-          c: 'true',
+          c: 1,
         } as unknown as Row,
       });
     }).toThrow(UnsupportedValueError);
@@ -424,21 +424,21 @@ test('pushing values does the correct writes and outputs', () => {
         row: {
           a: 0,
           b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
-          c: 'true',
+          c: 1,
         } as unknown as Row,
       });
     }).toThrow(UnsupportedValueError);
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 'true'},
-      {a: 9007199254740991, b: 3.456, c: 'true'},
+      {a: 1, b: 2.123, c: 1},
+      {a: 9007199254740991, b: 3.456, c: 1},
     ]);
 
     // edit changes
     source.push({
       type: 'edit',
-      row: {a: BigInt(1), b: 2.123, c: 'false'} as unknown as Row,
-      oldRow: {a: BigInt(1), b: 2.123, c: 'true'} as unknown as Row,
+      row: {a: BigInt(1), b: 2.123, c: 0} as unknown as Row,
+      oldRow: {a: BigInt(1), b: 2.123, c: 1} as unknown as Row,
     });
 
     expect(outputted.shift()).toEqual({
@@ -448,15 +448,15 @@ test('pushing values does the correct writes and outputs', () => {
     });
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 'false'},
-      {a: 9007199254740991, b: 3.456, c: 'true'},
+      {a: 1, b: 2.123, c: 0},
+      {a: 9007199254740991, b: 3.456, c: 1},
     ]);
 
     // edit pk should fall back to remove and insert
     source.push({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: 'false'},
-      row: {a: 1, b: 3, c: 'false'},
+      oldRow: {a: 1, b: 2.123, c: 0},
+      row: {a: 1, b: 3, c: 0},
     });
     expect(outputted.shift()).toEqual({
       type: 'edit',
@@ -464,16 +464,16 @@ test('pushing values does the correct writes and outputs', () => {
       row: {a: 1, b: 3, c: false},
     });
     expect(read.all()).toEqual([
-      {a: 9007199254740991, b: 3.456, c: 'true'},
-      {a: 1, b: 3, c: 'false'},
+      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 3, c: 0},
     ]);
 
     // non existing old row
     expect(() => {
       source.push({
         type: 'edit',
-        row: {a: 11, b: 2.123, c: 'false'},
-        oldRow: {a: 12, b: 2.123, c: 'true'},
+        row: {a: 11, b: 2.123, c: 0},
+        oldRow: {a: 12, b: 2.123, c: 1},
       });
     }).toThrow('Row not found');
 
@@ -484,12 +484,12 @@ test('pushing values does the correct writes and outputs', () => {
         row: {
           a: BigInt(Number.MAX_SAFE_INTEGER),
           b: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-          c: 'true',
+          c: 1,
         } as unknown as Row,
         oldRow: {
           a: BigInt(Number.MAX_SAFE_INTEGER),
           b: 3.456,
-          c: 'true',
+          c: 1,
         } as unknown as Row,
       });
     }).toThrow(UnsupportedValueError);
@@ -504,19 +504,19 @@ test('getByKey', () => {
   const stmt = db.prepare(
     /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
   );
-  stmt.run('1', 2, 3.123, 'false');
-  stmt.run('2', 3n, 4.567, 'true');
+  stmt.run('1', 2, 3.123, 0);
+  stmt.run('2', 3n, 4.567, 1);
   stmt.run(
     '3',
     BigInt(Number.MAX_SAFE_INTEGER),
     BigInt(Number.MIN_SAFE_INTEGER),
-    'true',
+    1,
   );
   stmt.run(
     '4',
     BigInt(Number.MAX_SAFE_INTEGER) + 1n,
     BigInt(Number.MIN_SAFE_INTEGER),
-    'true',
+    1,
   );
 
   const source = new TableSource(

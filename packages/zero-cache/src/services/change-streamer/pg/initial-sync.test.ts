@@ -200,7 +200,7 @@ describe('replicator/initial-sync', () => {
         ['zero.clients']: [],
         ['zero.schemaVersions']: [
           {
-            lock: 'true',
+            lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
             ['_0_version']: '00',
@@ -232,7 +232,7 @@ describe('replicator/initial-sync', () => {
         ['zero.clients']: [],
         ['zero.schemaVersions']: [
           {
-            lock: 'true',
+            lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
             ['_0_version']: '00',
@@ -459,7 +459,7 @@ describe('replicator/initial-sync', () => {
           {
             issueID: 123n,
             orgID: 456n,
-            isAdmin: 'true',
+            isAdmin: 1n,
             bigint: 99999999999999999n,
             time: null,
             bytes: null,
@@ -473,7 +473,7 @@ describe('replicator/initial-sync', () => {
             orgID: 789n,
             isAdmin: null,
             bigint: null,
-            time: '"2024-09-09T00:00:00.000Z"',
+            time: 1725840000000n,
             bytes: null,
             intArray: null,
             json: '[1,2,3]',
@@ -483,7 +483,7 @@ describe('replicator/initial-sync', () => {
           {
             issueID: 456n,
             orgID: 789n,
-            isAdmin: 'false',
+            isAdmin: 0n,
             bigint: null,
             time: null,
             bytes: Buffer.from('hello'),
@@ -495,7 +495,7 @@ describe('replicator/initial-sync', () => {
         ],
         ['zero.schemaVersions']: [
           {
-            lock: 'true',
+            lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
             ['_0_version']: '00',
@@ -590,7 +590,7 @@ describe('replicator/initial-sync', () => {
         ],
         ['zero.schemaVersions']: [
           {
-            lock: 'true',
+            lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
             ['_0_version']: '00',
@@ -690,7 +690,7 @@ describe('replicator/initial-sync', () => {
         ],
         ['zero.schemaVersions']: [
           {
-            lock: 'true',
+            lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
             ['_0_version']: '00',
@@ -808,7 +808,7 @@ describe('replicator/initial-sync', () => {
         issues: [],
         ['zero.schemaVersions']: [
           {
-            lock: 'true',
+            lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
             ['_0_version']: '00',

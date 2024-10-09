@@ -13,12 +13,11 @@ export function liteValues(row: RowValue): LiteValueType[] {
 /**
  * Postgres values types that are supported by SQLite are stored as-is.
  * This includes Uint8Arrays for the `bytea` / `BLOB` type.
+ * * `boolean` values are converted to `0` or `1` integers.
+ * * `Date` values are converted to epoch milliseconds.
+ * * JSON and Array values are stored as `JSON.stringify()` strings.
  *
- * booleans, Arrays, Dates and arbitrary JSON values are stored as
- * `JSON.stringify()` strings, from which the original value can be derived
- * based on the type definition of associated column.
- *
- * Note that currently does not handle the `bytea[]` type, but that's
+ * Note that this currently does not handle the `bytea[]` type, but that's
  * already a pretty questionable type.
  */
 export function liteValue(val: PostgresValueType): LiteValueType {
@@ -31,7 +30,21 @@ export function liteValue(val: PostgresValueType): LiteValueType {
     case 'bigint':
       return val;
   }
-  return stringify(val);
+  const obj = liteValueObject(val);
+  return typeof obj === 'object' ? stringify(obj) : obj;
+}
+
+function liteValueObject(val: object | boolean): object | number {
+  if (Array.isArray(val)) {
+    return val.map(v => liteValueObject(v));
+  }
+  if (typeof val === 'boolean') {
+    return val ? 1 : 0;
+  }
+  if (val instanceof Date) {
+    return val.getTime();
+  }
+  return val;
 }
 
 export function mapLiteDataTypeToZqlSchemaValue(

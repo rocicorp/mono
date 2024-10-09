@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {DbFile} from '../../test/lite.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {Database as DB} from '../../../../zqlite/src/db.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {DbFile} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
@@ -57,9 +57,9 @@ describe('view-syncer/pipeline-driver', () => {
         ignored BYTEA,
          _0_version TEXT NOT NULL);
 
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 'false', '"2024-09-09T00:00:00.000Z"', '00');
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 'true', '"2024-04-04T00:00:00.000Z"', '00');
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 'false', null, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 0, '"2024-09-09T00:00:00.000Z"', '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 1, '"2024-04-04T00:00:00.000Z"', '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 0, null, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('10', '1', 0, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('20', '2', 1, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('21', '2', 10000, '00');
@@ -206,7 +206,7 @@ describe('view-syncer/pipeline-driver', () => {
         issueID: '4',
         upvotes: BigInt(Number.MAX_SAFE_INTEGER),
       }),
-      messages.insert('issues', {id: '4', closed: 'false'}),
+      messages.insert('issues', {id: '4', closed: 0}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -449,7 +449,7 @@ describe('view-syncer/pipeline-driver', () => {
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
-      messages.insert('issues', {id: '4', closed: 'false'}),
+      messages.insert('issues', {id: '4', closed: 0}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -533,7 +533,7 @@ describe('view-syncer/pipeline-driver', () => {
       '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: 0}),
       messages.insert('comments', {id: '41', issueID: '4', upvotes: 0}),
-      messages.insert('issues', {id: '4', closed: 'true'}),
+      messages.insert('issues', {id: '4', closed: 1}),
     );
 
     expect(pipelines.currentVersion()).toBe('00');
