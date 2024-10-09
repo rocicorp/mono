@@ -40,6 +40,7 @@ export class ConfigQuery<
 
   preload(): {
     cleanup: () => void;
+    complete: Promise<void>;
   } {
     throw new Error('ConfigQuery cannot be preloaded');
   }

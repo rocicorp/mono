@@ -1,0 +1,27 @@
+.root {
+  display: inline-block;
+}
+
+.popover {
+  position: absolute;
+  left: -80px;
+  float: left;
+  display: block;
+  padding: 0.5rem;
+  background-color: var(--color-nav-selected);
+  border: 1px solid #e5e5e5;
+  border-radius: 0.25rem;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.label:hover {
+  background-color: var(--color-row-hover);
+}
+
+.label {
+  cursor: pointer;
+}
+
+.selected {
+  background-color: var(--color-primary-cta);
+}
