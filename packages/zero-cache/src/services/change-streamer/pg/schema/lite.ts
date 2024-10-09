@@ -19,7 +19,7 @@ export function warnIfDataTypeSupported(
   column: string,
 ) {
   if (dataTypeToZqlValueType(pgDataType) === undefined) {
-    lc.info?.(
+    lc.warn?.(
       `\n\nWARNING: zero does not yet support the "${pgDataType}" data type.\n` +
         `The "${table}"."${column}" column will not be synced to clients.\n\n`,
     );

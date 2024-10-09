@@ -1134,6 +1134,7 @@ test('logSinks length 1', async () => {
   const initLogCounts = () => ({
     info: 0,
     debug: 0,
+    warn: 0,
     error: 0,
   });
   let logCounts: Record<LogLevel, number> = initLogCounts();
@@ -1183,6 +1184,7 @@ test('logSinks length 3', async () => {
     Array.from({length: 3}, () => ({
       info: 0,
       debug: 0,
+      warn: 0,
       error: 0,
     }));
   let logCounts: Record<LogLevel, number>[] = initLogCounts();
