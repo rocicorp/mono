@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import postgres from 'postgres';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {
   importSnapshot,
   Mode,
@@ -10,7 +11,6 @@ import {liteValues} from '../../../types/lite.js';
 import {liteTableName} from '../../../types/names.js';
 import {pgClient, type PostgresDB} from '../../../types/pg.js';
 import type {FilteredTableSpec, IndexSpec} from '../../../types/specs.js';
-import {Database} from '../../../../../zqlite/src/db.js';
 import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
   initReplicationState,

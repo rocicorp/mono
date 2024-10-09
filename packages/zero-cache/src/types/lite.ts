@@ -1,5 +1,7 @@
+import {PreciseDate} from '@google-cloud/precise-date';
+import {assert} from '../../../shared/src/asserts.js';
 import type {SchemaValue, ValueType} from '../../../zql/src/zql/ivm/schema.js';
-import {stringify} from './bigint-json.js';
+import {stringify, type JSONValue} from './bigint-json.js';
 import type {PostgresValueType} from './pg.js';
 import type {RowValue} from './row-key.js';
 
@@ -14,37 +16,43 @@ export function liteValues(row: RowValue): LiteValueType[] {
  * Postgres values types that are supported by SQLite are stored as-is.
  * This includes Uint8Arrays for the `bytea` / `BLOB` type.
  * * `boolean` values are converted to `0` or `1` integers.
- * * `Date` values are converted to epoch milliseconds.
+ * * `PreciseDate` values are converted to epoch microseconds.
  * * JSON and Array values are stored as `JSON.stringify()` strings.
  *
  * Note that this currently does not handle the `bytea[]` type, but that's
  * already a pretty questionable type.
  */
 export function liteValue(val: PostgresValueType): LiteValueType {
-  if (val === null || val instanceof Uint8Array) {
+  if (val instanceof Uint8Array) {
     return val;
   }
+  const obj = toLiteValue(val);
+  return obj && typeof obj === 'object' ? stringify(obj) : obj;
+}
+
+function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
   switch (typeof val) {
     case 'string':
     case 'number':
     case 'bigint':
       return val;
+    case 'boolean':
+      return val ? 1 : 0;
   }
-  const obj = liteValueObject(val);
-  return typeof obj === 'object' ? stringify(obj) : obj;
-}
-
-function liteValueObject(val: object | boolean): object | number {
+  if (val === null) {
+    return val;
+  }
+  if (val instanceof PreciseDate) {
+    return val.getFullTime() / 1000n; // nanoseconds to microseconds
+  }
   if (Array.isArray(val)) {
-    return val.map(v => liteValueObject(v));
+    return val.map(v => toLiteValue(v));
   }
-  if (typeof val === 'boolean') {
-    return val ? 1 : 0;
-  }
-  if (val instanceof Date) {
-    return val.getTime();
-  }
-  return val;
+  assert(
+    val.constructor?.name === 'Object',
+    `Unexpected object type ${val.constructor?.name}`,
+  );
+  return val; // JSON
 }
 
 export function mapLiteDataTypeToZqlSchemaValue(
