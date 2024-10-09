@@ -7,6 +7,7 @@ import {
 } from '../frozen-json.js';
 import type {Read, Store, Write} from './store.js';
 import {WriteImplBase, deleteSentinel} from './write-impl-base.js';
+import {mustGetBrowserGlobal} from '../../../shared/src/browser-env.js';
 
 const RELAXED = {durability: 'relaxed'} as const;
 const OBJECT_STORE = 'chunks';
@@ -85,7 +86,7 @@ export class IDBStore implements Store {
           // user/developer has DevTools open in certain browsers.
           // See discussion at https://github.com/rocicorp/replicache-internal/pull/216
           this.#idbDeleted = true;
-          indexedDB.deleteDatabase(db.name);
+          mustGetBrowserGlobal('indexedDB').deleteDatabase(db.name);
           throw new IDBNotFoundError(
             `Replicache IndexedDB ${db.name} missing object store. Deleting db.`,
           );
@@ -184,8 +185,9 @@ function objectStore(tx: IDBTransaction): IDBObjectStore {
 }
 
 function openDatabase(name: string): Promise<IDBDatabase> {
+  const idb = mustGetBrowserGlobal('indexedDB');
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(name);
+    const req = idb.open(name);
     req.onupgradeneeded = () => {
       req.result.createObjectStore(OBJECT_STORE);
     };
