@@ -69,9 +69,7 @@ h1 {
 }
 
 .modal-background {
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background-color: rgba(0, 0, 0, 0.95);
 }
 
 /* Nav */
@@ -538,4 +536,19 @@ h1 {
 
 .login-to-comment:hover {
   opacity: 1;
+}
+
+/* Issue Composer */
+
+.save-issue {
+  font-weight: 800;
+  padding: 0.4rem 1.2rem;
+}
+
+.modal-container .issue-detail-label {
+  margin-bottom: 0;
+}
+
+.issue-composer-header {
+  margin-bottom: 1rem;
 }
