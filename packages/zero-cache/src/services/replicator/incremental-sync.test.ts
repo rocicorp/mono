@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {
   afterEach,
   beforeEach,
@@ -9,11 +8,13 @@ import {
   test,
   vi,
 } from 'vitest';
-import {expectTables, initDB} from '../../test/lite.js';
-import {Subscription} from '../../types/subscription.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {dropReplicationSlot, testDBs} from '../../test/db.js';
+import {expectTables, initDB} from '../../test/lite.js';
+import type {JSONObject} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
+import {Subscription} from '../../types/subscription.js';
 import type {
   Downstream,
   SubscriberContext,
@@ -77,6 +78,10 @@ describe('replicator/incremental-sync', () => {
         flt REAL,
         bool BOOL,
         description TEXT,
+        json JSON,
+        time TIMESTAMPTZ,
+        bytes bytesa,
+        intArray int4[],
         _0_version TEXT NOT NULL
       );
       `,
@@ -92,7 +97,11 @@ describe('replicator/incremental-sync', () => {
           issues.insert('issues', {
             issueID: 789,
             big: 9223372036854775807n,
-          }),
+            json: [{foo: 'bar', baz: 123}],
+            time: new Date(Date.UTC(2024, 3, 4)),
+            bytes: Buffer.from('world'),
+            intArray: [3, 2, 1],
+          } as unknown as Record<string, JSONObject>),
         ],
         ['data', issues.insert('issues', {issueID: 987, bool: true})],
         ['data', issues.insert('issues', {issueID: 234, flt: 123.456})],
@@ -106,14 +115,22 @@ describe('replicator/incremental-sync', () => {
             flt: null,
             bool: null,
             description: null,
+            json: null,
+            time: null,
+            bytes: null,
+            intArray: null,
             ['_0_version']: '02',
           },
           {
             issueID: 456n,
             big: null,
             flt: null,
-            bool: 0n,
+            bool: 'false',
             description: null,
+            json: null,
+            time: null,
+            bytes: null,
+            intArray: null,
             ['_0_version']: '02',
           },
           {
@@ -122,14 +139,22 @@ describe('replicator/incremental-sync', () => {
             flt: null,
             bool: null,
             description: null,
+            json: '[{"foo":"bar","baz":123}]',
+            time: '"2024-04-04T00:00:00.000Z"',
+            bytes: Buffer.from('world'),
+            intArray: '[3,2,1]',
             ['_0_version']: '06',
           },
           {
             issueID: 987n,
             big: null,
             flt: null,
-            bool: 1n,
+            bool: 'true',
             description: null,
+            json: null,
+            time: null,
+            bytes: null,
+            intArray: null,
             ['_0_version']: '06',
           },
           {
@@ -138,6 +163,10 @@ describe('replicator/incremental-sync', () => {
             flt: 123.456,
             bool: null,
             description: null,
+            json: null,
+            time: null,
+            bytes: null,
+            intArray: null,
             ['_0_version']: '06',
           },
         ],
@@ -225,14 +254,14 @@ describe('replicator/incremental-sync', () => {
             orgID: 2n,
             issueID: 123n,
             description: 'bar',
-            bool: 0n,
+            bool: 'false',
             ['_0_version']: '06',
           },
           {
             orgID: 1n,
             issueID: 456n,
             description: 'foo',
-            bool: 1n,
+            bool: 'true',
             ['_0_version']: '06',
           },
           {

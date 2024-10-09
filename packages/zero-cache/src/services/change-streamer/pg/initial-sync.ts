@@ -18,7 +18,7 @@ import {
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
 import {createTableStatement} from './schema/create.js';
-import {checkDataTypeSupported, mapPostgresToLite} from './schema/lite.js';
+import {mapPostgresToLite, warnIfDataTypeSupported} from './schema/lite.js';
 import {type PublicationInfo} from './schema/published.js';
 import {setupTablesAndReplication} from './schema/zero.js';
 import type {ShardConfig} from './shard-config.js';
@@ -157,7 +157,7 @@ function ensurePublishedTables(
             `Column "${col}" in table "${table.name}" has invalid characters.`,
           );
         }
-        checkDataTypeSupported(spec.dataType);
+        warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
       }
     });
 

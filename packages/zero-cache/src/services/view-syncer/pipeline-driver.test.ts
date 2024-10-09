@@ -47,17 +47,19 @@ describe('view-syncer/pipeline-driver', () => {
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,
+        ignored TIMESTAMPTZ,
         _0_version TEXT NOT NULL
       );
       CREATE TABLE comments (
         id TEXT PRIMARY KEY, 
         issueID TEXT,
         upvotes INTEGER,
+        ignored BYTEA,
          _0_version TEXT NOT NULL);
 
-      INSERT INTO ISSUES (id, closed, _0_version) VALUES ('1', 0, '00');
-      INSERT INTO ISSUES (id, closed, _0_version) VALUES ('2', 1, '00');
-      INSERT INTO ISSUES (id, closed, _0_version) VALUES ('3', 0, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 'false', '"2024-09-09T00:00:00.000Z"', '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 'true', '"2024-04-04T00:00:00.000Z"', '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 'false', null, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('10', '1', 0, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('20', '2', 1, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('21', '2', 10000, '00');
@@ -204,7 +206,7 @@ describe('view-syncer/pipeline-driver', () => {
         issueID: '4',
         upvotes: BigInt(Number.MAX_SAFE_INTEGER),
       }),
-      messages.insert('issues', {id: '4', closed: 0}),
+      messages.insert('issues', {id: '4', closed: 'false'}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -447,7 +449,7 @@ describe('view-syncer/pipeline-driver', () => {
     const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
-      messages.insert('issues', {id: '4', closed: 0}),
+      messages.insert('issues', {id: '4', closed: 'false'}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -531,7 +533,7 @@ describe('view-syncer/pipeline-driver', () => {
       '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: 0}),
       messages.insert('comments', {id: '41', issueID: '4', upvotes: 0}),
-      messages.insert('issues', {id: '4', closed: 1}),
+      messages.insert('issues', {id: '4', closed: 'true'}),
     );
 
     expect(pipelines.currentVersion()).toBe('00');

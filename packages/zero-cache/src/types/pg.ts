@@ -22,6 +22,18 @@ export function registerPostgresTypeParsers() {
 const builtinsJSON: number = builtins.JSON;
 const builtinsJSONB: number = builtins.JSONB;
 
+/**
+ * The (javascript) types of objects that can be returned by our configured
+ * Postgres clients. For initial-sync, these comes from the postgres.js client:
+ *
+ * https://github.com/porsager/postgres/blob/master/src/types.js
+ *
+ * and for the replication stream these come from the the node-postgres client:
+ *
+ * https://github.com/brianc/node-pg-types/blob/master/lib/textParsers.js
+ */
+export type PostgresValueType = JSONValue | Uint8Array;
+
 /** Configures types for the Postgres.js client library (`postgres`). */
 export const postgresTypeConfig = () => ({
   types: {
