@@ -23,7 +23,7 @@
     "@google-cloud/precise-date": "^4.0.0",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.2.2",
+    "@rocicorp/logger": "^5.3.0",
     "@rocicorp/resolver": "^1.0.2",
     "compare-utf8": "^0.1.1",
     "dotenv": "^16.4.5",
