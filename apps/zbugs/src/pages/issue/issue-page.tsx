@@ -164,7 +164,7 @@ export default function IssuePage() {
         ) : null}
         <br />
         {z.userID === 'anon' ? (
-          <a href="/api/login/github">Login to comment</a>
+          <a href="/api/login/github" className="login-to-comment">Login to comment</a>
         ) : (
           <CommentComposer issueID={issue.id} />
         )}
