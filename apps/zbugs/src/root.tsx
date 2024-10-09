@@ -8,6 +8,7 @@ import {useLogin} from './hooks/use-login.js';
 import ErrorPage from './pages/error/error-page.js';
 import IssuePage from './pages/issue/issue-page.js';
 import ListPage from './pages/list/list-page.js';
+import {mark} from './perf-log.js';
 
 export default function Root() {
   const login = useLogin();
@@ -15,6 +16,7 @@ export default function Root() {
   const [z, setZ] = useState<Zero<Schema> | undefined>();
 
   useEffect(() => {
+    mark('root effect start');
     const z = new Zero({
       logLevel: 'info',
       server: import.meta.env.VITE_PUBLIC_SERVER,
@@ -33,15 +35,8 @@ export default function Root() {
       .related('comments', c => c.limit(10).related('creator'))
       .orderBy('modified', 'desc');
 
-    // Until we have query priorities, preload the first 50 issues then
-    // all the rest.
-    const {cleanup, complete} = baseIssueQuery.limit(50).preload();
-
-    complete.then(() => {
-      // load remainder of issues
-      baseIssueQuery.preload();
-      cleanup();
-    });
+    const {complete} = baseIssueQuery.preload();
+    complete.then(() => mark('issue preload complete'));
 
     z.query.user.preload();
     z.query.label.preload();
