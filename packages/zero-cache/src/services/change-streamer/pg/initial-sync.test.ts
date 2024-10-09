@@ -1,5 +1,6 @@
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {listIndices, listTables} from '../../../db/lite-tables.js';
 import {
   dropReplicationSlot,
@@ -14,7 +15,6 @@ import type {
   IndexSpec,
   TableSpec,
 } from '../../../types/specs.js';
-import {Database} from '../../../../../zqlite/src/db.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
 import {getPublicationInfo} from './schema/published.js';
