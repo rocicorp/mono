@@ -2,7 +2,7 @@ name: Build and Deploy Zero-Cache to ECS
 
 on:
   push:
-    branches: [main]
+    branches: [cesara/zbugs_sandbox]
     # paths:
     #   - 'packages/zero-cache/**'
 env:
