@@ -1,5 +1,5 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useEffect, useMemo, useState} from 'react';
+import {useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
@@ -53,19 +53,6 @@ export default function IssuePage() {
       navigate(`/issue/${next.id}`);
     }
   });
-
-  useEffect(() => {
-    const listener = (e: {shiftKey: boolean}) => {
-      if (issue && e.shiftKey) {
-        const match = issue.title.match(/Issue (\d+)/);
-        const prev = match ? parseInt(match[1]) : 0;
-        const next = prev + 1;
-        z.mutate.issue.update({id: issue.id, title: `Issue ${next}`});
-      }
-    };
-    window.addEventListener('mousemove', listener);
-    return () => window.removeEventListener('mousemove', listener);
-  }, [issue]);
 
   const labelSet = useMemo(
     () => new Set(issue?.labels?.map(l => l.id)),
