@@ -1,6 +1,10 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {
+  ReplicacheImpl,
+  type ReplicacheImplOptions,
+} from '../../../replicache/src/impl.js';
+import {
   type ClientGroupID,
   type ClientID,
   type ExperimentalNoIndexDiff,
@@ -17,10 +21,6 @@ import {
   type UpdateNeededReason as ReplicacheUpdateNeededReason,
   dropDatabase,
 } from '../../../replicache/src/mod.js';
-import {
-  ReplicacheImpl,
-  type ReplicacheImplOptions,
-} from '../../../replicache/src/impl.js';
 import {assert, unreachable} from '../../../shared/src/asserts.js';
 import {
   getBrowserGlobal,
@@ -32,6 +32,7 @@ import {navigator} from '../../../shared/src/navigator.js';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
 import type {MaybePromise} from '../../../shared/src/types.js';
 import * as valita from '../../../shared/src/valita.js';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
 import {
   type CRUDMutation,
   type CRUDMutationArg,
@@ -51,7 +52,6 @@ import {
   downstreamSchema,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
 import type {
   PullRequestMessage,
   PullResponseBody,
@@ -89,6 +89,7 @@ import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 
+// TODO: We should enforce the columns matches primaryKey
 export type Schema = {
   readonly version: number;
   readonly tables: {readonly [table: string]: TableSchema};
@@ -246,7 +247,7 @@ export function getInternalReplicacheImplForTesting<
   return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
-export class Zero<S extends Schema> {
+export class Zero<const S extends Schema> {
   readonly version = version;
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
@@ -443,6 +444,8 @@ export class Zero<S extends Schema> {
     });
     const logOptions = this.#logOptions;
 
+    // TODO: Normalize schemas once and for all!
+
     const replicacheMutators = {
       ['_zero_crud']: makeCRUDMutator(schema),
     };
@@ -540,6 +543,7 @@ export class Zero<S extends Schema> {
       poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
+      schema,
       this.#lc,
     );
 

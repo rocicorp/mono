@@ -9,17 +9,13 @@
 import * as v from '../../shared/src/valita.js';
 import type {CorrelatedSubQuery} from '../../zql/src/zql/ast/ast.js';
 
-function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
-  return t as v.Type<Readonly<T>>;
-}
-
 export const selectorSchema = v.string();
 
-const orderingElementSchema = readonly(
+const orderingElementSchema = v.readonly(
   v.tuple([selectorSchema, v.union(v.literal('asc'), v.literal('desc'))]),
 );
 
-export const orderingSchema = readonly(v.array(orderingElementSchema));
+export const orderingSchema = v.readonlyArray(orderingElementSchema);
 
 export const primitiveSchema = v.union(
   v.string(),
@@ -61,7 +57,7 @@ export const simpleConditionSchema = v.object({
     v.string(),
     v.number(),
     v.boolean(),
-    readonly(v.array(v.union(v.string(), v.number(), v.boolean()))),
+    v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
     v.object({
       type: v.literal('static'),
       anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
@@ -96,8 +92,8 @@ export const astSchema = v.object({
   schema: v.string().optional(),
   table: v.string(),
   alias: v.string().optional(),
-  where: readonly(v.array(conditionSchema)).optional(),
-  related: readonly(v.array(correlatedSubquerySchema)).optional(),
+  where: v.readonlyArray(conditionSchema).optional(),
+  related: v.readonlyArray(correlatedSubquerySchema).optional(),
   limit: v.number().optional(),
   orderBy: orderingSchema.optional(),
   start: v

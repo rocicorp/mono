@@ -11,6 +11,7 @@ import {
 } from 'vitest';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
+import type {Schema} from './zero.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use
@@ -27,6 +28,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const schema: Schema = {
+  version: 1,
+  tables: {
+    issues: {
+      tableName: 'issues',
+      primaryKey: ['id'],
+      columns: {id: {type: 'string'}, title: {type: 'string'}},
+      relationships: {},
+    },
+    labels: {
+      tableName: 'labels',
+      primaryKey: ['id'],
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      relationships: {},
+    },
+  },
+};
+
 test('completed poke plays on first raf', async () => {
   const onPokeErrorStub = vi.fn();
   const replicachePokeStub = vi.fn();
@@ -36,11 +55,12 @@ test('completed poke plays on first raf', async () => {
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -55,7 +75,7 @@ test('completed poke plays on first raf', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -69,13 +89,13 @@ test('completed poke plays on first raf', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -105,17 +125,17 @@ test('completed poke plays on first raf', async () => {
       patch: [
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo2'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           value: {id: 'issue2', title: 'bar1'},
         },
       ],
@@ -139,12 +159,13 @@ test('multiple pokes received before raf callback are merged', async () => {
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -159,7 +180,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -173,13 +194,13 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -192,7 +213,7 @@ test('multiple pokes received before raf callback are merged', async () => {
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
     cookie: '3',
@@ -206,7 +227,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -220,7 +241,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar2'},
       },
@@ -251,27 +272,27 @@ test('multiple pokes received before raf callback are merged', async () => {
       patch: [
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo2'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           value: {id: 'issue2', title: 'bar1'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue3',
+          key: 'e/issues/issue3',
           value: {id: 'issue3', title: 'baz1'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           value: {id: 'issue2', title: 'bar2'},
         },
       ],
@@ -295,12 +316,13 @@ test('playback over series of rafs', async () => {
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -315,7 +337,7 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -329,13 +351,13 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -364,17 +386,17 @@ test('playback over series of rafs', async () => {
       patch: [
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo2'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           value: {id: 'issue2', title: 'bar1'},
         },
       ],
@@ -383,7 +405,7 @@ test('playback over series of rafs', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(2);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
     cookie: '3',
@@ -397,7 +419,7 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -411,7 +433,7 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar2'},
       },
@@ -441,12 +463,12 @@ test('playback over series of rafs', async () => {
       patch: [
         {
           op: 'put',
-          key: 'e/issue/issue3',
+          key: 'e/issues/issue3',
           value: {id: 'issue3', title: 'baz1'},
         },
         {
           op: 'put',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           value: {id: 'issue2', title: 'bar2'},
         },
       ],
@@ -513,6 +535,7 @@ suite('onPokeErrors', () => {
         replicachePokeStub,
         onPokeErrorStub,
         clientID,
+        schema,
         logContext,
       );
 
@@ -532,11 +555,12 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -551,7 +575,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -565,13 +589,13 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -594,7 +618,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
 
   expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
     cookie: '3',
@@ -608,7 +632,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -642,11 +666,12 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -661,7 +686,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -675,13 +700,13 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -695,7 +720,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '3', // gap, should be 2
     cookie: '4',
@@ -720,7 +745,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
 
   expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke3',
     baseCookie: '4',
     cookie: '5',
@@ -734,7 +759,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -767,11 +792,12 @@ test('onDisconnect clears pending pokes', async () => {
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -786,7 +812,7 @@ test('onDisconnect clears pending pokes', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -800,13 +826,13 @@ test('onDisconnect clears pending pokes', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -829,7 +855,7 @@ test('onDisconnect clears pending pokes', async () => {
   expect(rafStub).toHaveBeenCalledTimes(1);
 });
 
-test('handlePoke returns the last mutation id change for this client from pokePart or undefined if none or error', async () => {
+test('handlePoke returns the last mutation id change for this client from pokePart or undefined if none or error', () => {
   const onPokeErrorStub = vi.fn();
   const replicachePokeStub = vi.fn();
   const clientID = 'c1';
@@ -838,11 +864,12 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     replicachePokeStub,
     onPokeErrorStub,
     clientID,
+    schema,
     logContext,
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  await pokeHandler.handlePokeStart({
+  pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
     cookie: '2',
@@ -857,7 +884,7 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -872,13 +899,13 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -894,13 +921,13 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issue',
+        entityType: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -910,26 +937,38 @@ test('handlePoke returns the last mutation id change for this client from pokePa
 });
 
 test('mergePokes with empty array returns undefined', () => {
-  const merged = mergePokes([]);
+  const merged = mergePokes([], schema);
   expect(merged).to.be.undefined;
 });
 
 test('mergePokes with all optionals defined', () => {
-  const result = mergePokes([
-    {
-      pokeStart: {
-        pokeID: 'poke1',
-        baseCookie: '3',
-        cookie: '4',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
-      },
-      parts: [
-        {
+  const result = mergePokes(
+    [
+      {
+        pokeStart: {
           pokeID: 'poke1',
-          lastMutationIDChanges: {c1: 1, c2: 2},
-          clientsPatch: [{op: 'put', clientID: 'c2'}],
-          desiredQueriesPatches: {
-            c1: [
+          baseCookie: '3',
+          cookie: '4',
+          schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+        },
+        parts: [
+          {
+            pokeID: 'poke1',
+            lastMutationIDChanges: {c1: 1, c2: 2},
+            clientsPatch: [{op: 'put', clientID: 'c2'}],
+            desiredQueriesPatches: {
+              c1: [
+                {
+                  op: 'put',
+                  hash: 'h1',
+                  ast: {
+                    table: 'issues',
+                    orderBy: [['id', 'asc']],
+                  },
+                },
+              ],
+            },
+            gotQueriesPatch: [
               {
                 op: 'put',
                 hash: 'h1',
@@ -939,40 +978,40 @@ test('mergePokes with all optionals defined', () => {
                 },
               },
             ],
-          },
-          gotQueriesPatch: [
-            {
-              op: 'put',
-              hash: 'h1',
-              ast: {
-                table: 'issues',
-                orderBy: [['id', 'asc']],
+            entitiesPatch: [
+              {
+                op: 'put',
+                entityType: 'issues',
+                entityID: {id: 'issue1'},
+                value: {id: 'issue1', title: 'foo1'},
               },
-            },
-          ],
-          entitiesPatch: [
-            {
-              op: 'put',
-              entityType: 'issue',
-              entityID: {id: 'issue1'},
-              value: {id: 'issue1', title: 'foo1'},
-            },
-            {
-              op: 'update',
-              entityType: 'issue',
-              entityID: {id: 'issue2'},
-              merge: {id: 'issue2', title: 'bar1'},
-              constrain: ['id', 'title'],
-            },
-          ],
-        },
+              {
+                op: 'update',
+                entityType: 'issues',
+                entityID: {id: 'issue2'},
+                merge: {id: 'issue2', title: 'bar1'},
+                constrain: ['id', 'title'],
+              },
+            ],
+          },
 
-        {
-          pokeID: 'poke1',
-          lastMutationIDChanges: {c2: 3, c3: 4},
-          clientsPatch: [{op: 'put', clientID: 'c3'}],
-          desiredQueriesPatches: {
-            c1: [
+          {
+            pokeID: 'poke1',
+            lastMutationIDChanges: {c2: 3, c3: 4},
+            clientsPatch: [{op: 'put', clientID: 'c3'}],
+            desiredQueriesPatches: {
+              c1: [
+                {
+                  op: 'put',
+                  hash: 'h2',
+                  ast: {
+                    table: 'labels',
+                    orderBy: [['id', 'asc']],
+                  },
+                },
+              ],
+            },
+            gotQueriesPatch: [
               {
                 op: 'put',
                 hash: 'h2',
@@ -982,64 +1021,55 @@ test('mergePokes with all optionals defined', () => {
                 },
               },
             ],
-          },
-          gotQueriesPatch: [
-            {
-              op: 'put',
-              hash: 'h2',
-              ast: {
-                table: 'labels',
-                orderBy: [['id', 'asc']],
+            entitiesPatch: [
+              {
+                op: 'put',
+                entityType: 'issues',
+                entityID: {id: 'issue3'},
+                value: {id: 'issue3', title: 'baz1'},
               },
-            },
-          ],
-          entitiesPatch: [
-            {
-              op: 'put',
-              entityType: 'issue',
-              entityID: {id: 'issue3'},
-              value: {id: 'issue3', title: 'baz1'},
-            },
-          ],
-        },
-      ],
-    },
-    {
-      pokeStart: {
-        pokeID: 'poke2',
-        baseCookie: '4',
-        cookie: '5',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+            ],
+          },
+        ],
       },
-      parts: [
-        {
+      {
+        pokeStart: {
           pokeID: 'poke2',
-          lastMutationIDChanges: {c4: 3},
-          clientsPatch: [
-            {op: 'del', clientID: 'c2'},
-            {op: 'put', clientID: 'c4'},
-          ],
-          desiredQueriesPatches: {
-            c1: [
+          baseCookie: '4',
+          cookie: '5',
+          schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+        },
+        parts: [
+          {
+            pokeID: 'poke2',
+            lastMutationIDChanges: {c4: 3},
+            clientsPatch: [
+              {op: 'del', clientID: 'c2'},
+              {op: 'put', clientID: 'c4'},
+            ],
+            desiredQueriesPatches: {
+              c1: [
+                {
+                  op: 'del',
+                  hash: 'h1',
+                },
+              ],
+            },
+            gotQueriesPatch: [
               {
                 op: 'del',
                 hash: 'h1',
               },
             ],
+            entitiesPatch: [
+              {op: 'del', entityType: 'issues', entityID: {id: 'issue3'}},
+            ],
           },
-          gotQueriesPatch: [
-            {
-              op: 'del',
-              hash: 'h1',
-            },
-          ],
-          entitiesPatch: [
-            {op: 'del', entityType: 'issue', entityID: {id: 'issue3'}},
-          ],
-        },
-      ],
-    },
-  ]);
+        ],
+      },
+    ],
+    schema,
+  );
 
   expect(result).toEqual({
     baseCookie: '3',
@@ -1075,12 +1105,12 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'update',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           merge: {id: 'issue2', title: 'bar1'},
           constrain: ['id', 'title'],
         },
@@ -1107,7 +1137,7 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'put',
-          key: 'e/issue/issue3',
+          key: 'e/issues/issue3',
           value: {id: 'issue3', title: 'baz1'},
         },
         {
@@ -1129,7 +1159,7 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'del',
-          key: 'e/issue/issue3',
+          key: 'e/issues/issue3',
         },
       ],
     },
@@ -1137,92 +1167,95 @@ test('mergePokes with all optionals defined', () => {
 });
 
 test('mergePokes sparse', () => {
-  const result = mergePokes([
-    {
-      pokeStart: {
-        pokeID: 'poke1',
-        baseCookie: '3',
-        cookie: '4',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
-      },
-      parts: [
-        {
+  const result = mergePokes(
+    [
+      {
+        pokeStart: {
           pokeID: 'poke1',
-          lastMutationIDChanges: {c1: 1, c2: 2},
-          gotQueriesPatch: [
-            {
-              op: 'put',
-              hash: 'h1',
-              ast: {
-                table: 'issues',
-                orderBy: [['id', 'asc']],
-              },
-            },
-          ],
-          entitiesPatch: [
-            {
-              op: 'put',
-              entityType: 'issue',
-              entityID: {id: 'issue1'},
-              value: {id: 'issue1', title: 'foo1'},
-            },
-            {
-              op: 'update',
-              entityType: 'issue',
-              entityID: {id: 'issue2'},
-              merge: {id: 'issue2', title: 'bar1'},
-              constrain: ['id', 'title'],
-            },
-          ],
+          baseCookie: '3',
+          cookie: '4',
+          schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         },
-
-        {
-          pokeID: 'poke1',
-          clientsPatch: [{op: 'put', clientID: 'c3'}],
-          desiredQueriesPatches: {
-            c1: [
+        parts: [
+          {
+            pokeID: 'poke1',
+            lastMutationIDChanges: {c1: 1, c2: 2},
+            gotQueriesPatch: [
               {
                 op: 'put',
-                hash: 'h2',
+                hash: 'h1',
                 ast: {
-                  table: 'labels',
+                  table: 'issues',
                   orderBy: [['id', 'asc']],
                 },
               },
             ],
-          },
-        },
-      ],
-    },
-    {
-      pokeStart: {
-        pokeID: 'poke2',
-        baseCookie: '4',
-        cookie: '5',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
-      },
-      parts: [
-        {
-          pokeID: 'poke2',
-          clientsPatch: [
-            {op: 'del', clientID: 'c2'},
-            {op: 'put', clientID: 'c4'},
-          ],
-          desiredQueriesPatches: {
-            c1: [
+            entitiesPatch: [
               {
-                op: 'del',
-                hash: 'h1',
+                op: 'put',
+                entityType: 'issues',
+                entityID: {id: 'issue1'},
+                value: {id: 'issue1', title: 'foo1'},
+              },
+              {
+                op: 'update',
+                entityType: 'issues',
+                entityID: {id: 'issue2'},
+                merge: {id: 'issue2', title: 'bar1'},
+                constrain: ['id', 'title'],
               },
             ],
           },
-          entitiesPatch: [
-            {op: 'del', entityType: 'issue', entityID: {id: 'issue3'}},
-          ],
+
+          {
+            pokeID: 'poke1',
+            clientsPatch: [{op: 'put', clientID: 'c3'}],
+            desiredQueriesPatches: {
+              c1: [
+                {
+                  op: 'put',
+                  hash: 'h2',
+                  ast: {
+                    table: 'labels',
+                    orderBy: [['id', 'asc']],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        pokeStart: {
+          pokeID: 'poke2',
+          baseCookie: '4',
+          cookie: '5',
+          schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         },
-      ],
-    },
-  ]);
+        parts: [
+          {
+            pokeID: 'poke2',
+            clientsPatch: [
+              {op: 'del', clientID: 'c2'},
+              {op: 'put', clientID: 'c4'},
+            ],
+            desiredQueriesPatches: {
+              c1: [
+                {
+                  op: 'del',
+                  hash: 'h1',
+                },
+              ],
+            },
+            entitiesPatch: [
+              {op: 'del', entityType: 'issues', entityID: {id: 'issue3'}},
+            ],
+          },
+        ],
+      },
+    ],
+    schema,
+  );
   expect(result).toEqual({
     baseCookie: '3',
     pullResponse: {
@@ -1241,12 +1274,12 @@ test('mergePokes sparse', () => {
         },
         {
           op: 'put',
-          key: 'e/issue/issue1',
+          key: 'e/issues/issue1',
           value: {id: 'issue1', title: 'foo1'},
         },
         {
           op: 'update',
-          key: 'e/issue/issue2',
+          key: 'e/issues/issue2',
           merge: {id: 'issue2', title: 'bar1'},
           constrain: ['id', 'title'],
         },
@@ -1278,7 +1311,7 @@ test('mergePokes sparse', () => {
         },
         {
           op: 'del',
-          key: 'e/issue/issue3',
+          key: 'e/issues/issue3',
         },
       ],
       cookie: '5',
@@ -1288,35 +1321,38 @@ test('mergePokes sparse', () => {
 
 test('mergePokes throws error on cookie gaps', () => {
   expect(() => {
-    mergePokes([
-      {
-        pokeStart: {
-          pokeID: 'poke1',
-          baseCookie: '3',
-          cookie: '4',
-          schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
-        },
-        parts: [
-          {
+    mergePokes(
+      [
+        {
+          pokeStart: {
             pokeID: 'poke1',
-            lastMutationIDChanges: {c1: 1, c2: 2},
+            baseCookie: '3',
+            cookie: '4',
+            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
-        ],
-      },
-      {
-        pokeStart: {
-          pokeID: 'poke2',
-          baseCookie: '5', // gap, should be 4
-          cookie: '6',
-          schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+          parts: [
+            {
+              pokeID: 'poke1',
+              lastMutationIDChanges: {c1: 1, c2: 2},
+            },
+          ],
         },
-        parts: [
-          {
+        {
+          pokeStart: {
             pokeID: 'poke2',
-            lastMutationIDChanges: {c4: 3},
+            baseCookie: '5', // gap, should be 4
+            cookie: '6',
+            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
-        ],
-      },
-    ]);
+          parts: [
+            {
+              pokeID: 'poke2',
+              lastMutationIDChanges: {c4: 3},
+            },
+          ],
+        },
+      ],
+      schema,
+    );
   }).to.throw();
 });

@@ -1,5 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import * as sinon from 'sinon';
+import {afterEach, beforeEach, expect, expectTypeOf, suite, test} from 'vitest';
 import type {
   PullRequestV1,
   PushRequestV1,
@@ -7,8 +9,6 @@ import type {
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
-import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {
   ErrorKind,
   initConnectionMessageSchema,
@@ -20,7 +20,6 @@ import {
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
-import type {Update} from './crud.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
@@ -931,7 +930,7 @@ test('smokeTest', async () => {
 
     await r.mutate.issues.set({id: 'a', value: 11});
 
-    // Althoug the set() results in a remove and add flowing through the pipeline,
+    // Although the set() results in a remove and add flowing through the pipeline,
     // they are in same tx, so we only get one call coming out.
     expect(calls.length).eq(1);
     expect(calls[0]).toEqual([
@@ -2065,9 +2064,7 @@ suite('CRUD', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = await z.query.comment
-      .select('id', 'issueID', 'text')
-      .materialize();
+    const view = z.query.comment.select('id', 'issueID', 'text').materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
@@ -2093,8 +2090,7 @@ suite('CRUD', () => {
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
-    const updateComment: (comment: Update<Comment>) => Promise<void> =
-      z.mutate.comment.update;
+    const updateComment = z.mutate.comment.update;
     await updateComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AA text'}]);
 
@@ -2128,6 +2124,191 @@ suite('CRUD', () => {
       (z.mutate as unknown as Record<string, unknown>)._zero_crud,
     ).toBeUndefined();
   });
+});
+
+suite('CRUD with compound primary key', () => {
+  type Issue = {
+    ids: string;
+    idn: number;
+    title: string;
+  };
+  type Comment = {
+    ids: string;
+    idn: number;
+    issueIDs: string;
+    issueIDn: number;
+    text: string;
+  };
+  const makeZero = () =>
+    zeroForTest({
+      schema: {
+        version: 1,
+        tables: {
+          issue: {
+            columns: {
+              ids: {type: 'string'},
+              idn: {type: 'number'},
+              title: {type: 'string'},
+            },
+            primaryKey: ['idn', 'ids'],
+            tableName: 'issue',
+            relationships: {},
+          },
+          comment: {
+            columns: {
+              ids: {type: 'string'},
+              idn: {type: 'number'},
+              issueIDs: {type: 'string'},
+              issueIDn: {type: 'number'},
+              text: {type: 'string'},
+            },
+            primaryKey: ['idn', 'ids'],
+            tableName: 'comment',
+            relationships: {},
+          },
+        },
+      },
+    });
+
+  test('create', async () => {
+    const z = makeZero();
+
+    const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
+    const view = z.query.issue.select('ids', 'idn', 'title').materialize();
+    view.hydrate();
+    await createIssue({ids: 'a', idn: 1, title: 'A'});
+    expect(view.data).toEqual([{ids: 'a', idn: 1, title: 'A'}]);
+
+    // create again should not change anything
+    await createIssue({ids: 'a', idn: 1, title: 'Again'});
+    expect(view.data).toEqual([{ids: 'a', idn: 1, title: 'A'}]);
+  });
+
+  test('set', async () => {
+    const z = makeZero();
+
+    const view = z.query.comment
+      .select('ids', 'idn', 'issueIDs', 'issueIDn', 'text')
+      .materialize();
+    await z.mutate.comment.create({
+      ids: 'a',
+      idn: 1,
+      issueIDs: 'a',
+      issueIDn: 1,
+      text: 'A text',
+    });
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'a', issueIDn: 1, text: 'A text'},
+    ]);
+
+    const setComment: (comment: Comment) => Promise<void> =
+      z.mutate.comment.set;
+    await setComment({
+      ids: 'b',
+      idn: 2,
+      issueIDs: 'b',
+      issueIDn: 2,
+      text: 'B text',
+    });
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'a', issueIDn: 1, text: 'A text'},
+      {ids: 'b', idn: 2, issueIDs: 'b', issueIDn: 2, text: 'B text'},
+    ]);
+
+    // set allows updating
+    await setComment({
+      ids: 'a',
+      idn: 1,
+      issueIDs: 'aa',
+      issueIDn: 11,
+      text: 'AA text',
+    });
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'aa', issueIDn: 11, text: 'AA text'},
+      {ids: 'b', idn: 2, issueIDs: 'b', issueIDn: 2, text: 'B text'},
+    ]);
+  });
+
+  test('update', async () => {
+    const z = makeZero();
+    const view = z.query.comment
+      .select('ids', 'idn', 'issueIDs', 'issueIDn')
+      .materialize();
+    await z.mutate.comment.create({
+      ids: 'a',
+      idn: 1,
+      issueIDs: 'a',
+      issueIDn: 1,
+      text: 'A text',
+    });
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'a', issueIDn: 1, text: 'A text'},
+    ]);
+
+    const updateComment = z.mutate.comment.update;
+    await updateComment({
+      ids: 'a',
+      idn: 1,
+      issueIDs: 'aa',
+      issueIDn: 11,
+      text: 'AA text',
+    });
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'aa', issueIDn: 11, text: 'AA text'},
+    ]);
+
+    await updateComment({ids: 'a', idn: 1, text: 'AAA text'});
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'aa', issueIDn: 11, text: 'AAA text'},
+    ]);
+
+    // update is a noop if not existing
+    await updateComment({
+      ids: 'b',
+      idn: 2,
+      issueIDs: 'b',
+      issueIDn: 2,
+      text: 'B text',
+    });
+    expect(view.data).toEqual([
+      {ids: 'a', idn: 1, issueIDs: 'aa', issueIDn: 11, text: 'AAA text'},
+    ]);
+  });
+});
+
+test('CRUD with invalid primary keys', () => {
+  const z = zeroForTest({
+    schema: {
+      version: 1,
+      tables: {
+        issue: {
+          columns: {
+            name: {type: 'string'},
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+          tableName: 'issue',
+          relationships: {},
+        },
+      },
+    },
+  });
+
+  expectTypeOf(z.mutate.issue.create).toMatchTypeOf<
+    (value: never) => Promise<void>
+  >();
+
+  expectTypeOf(z.mutate.issue.set).toMatchTypeOf<
+    (value: never) => Promise<void>
+  >();
+
+  expectTypeOf(z.mutate.issue.update).toMatchTypeOf<
+    (value: never) => Promise<void>
+  >();
+
+  expectTypeOf(z.mutate.issue.delete).toMatchTypeOf<
+    (value: never) => Promise<void>
+  >();
 });
 
 test('mutate is a function for batching', async () => {
