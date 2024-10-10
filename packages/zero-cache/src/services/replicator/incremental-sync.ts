@@ -3,11 +3,11 @@ import {ident} from 'pg-format';
 import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
-import {StatementRunner} from '../../db/statements.js';
-import {liteValues} from '../../types/lite.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {StatementRunner} from '../../db/statements.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
+import {liteValues} from '../../types/lite.js';
 import {liteTableName} from '../../types/names.js';
 import type {Source} from '../../types/streams.js';
 import type {
@@ -103,7 +103,7 @@ export class IncrementalSyncer {
         }
         processor.abort(lc);
       } catch (e) {
-        lc.error?.('Received error from ChangeStreamer', e);
+        lc.error?.('received error from change-streamer', e);
         processor.abort(lc, e);
       } finally {
         downstream.cancel();

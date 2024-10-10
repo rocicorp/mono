@@ -1,7 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {randInt} from '../../../../shared/src/rand.js';
 import {
   afterEach,
   beforeEach,
@@ -12,6 +10,8 @@ import {
   vi,
 } from 'vitest';
 import WebSocket from 'ws';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {randInt} from '../../../../shared/src/rand.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
