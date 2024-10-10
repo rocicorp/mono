@@ -5,3 +5,5 @@ dbs:
       - url: ${REPLICA_URL}
     checkpoint-interval: 10s
     max-checkpoint-page-count: 4000
+logging:
+  level: warn
