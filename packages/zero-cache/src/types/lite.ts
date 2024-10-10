@@ -12,7 +12,7 @@ export type LiteRow = Readonly<Record<string, LiteValueType>>;
 export type LiteRowKey = LiteRow; // just for API readability
 
 /**
- * Creates a LiteValueRow from the supplied RowValue. A copy of the row
+ * Creates a LiteRow from the supplied RowValue. A copy of the `row`
  * is made only if a value conversion is performed.
  */
 export function liteRow(row: RowValue): LiteRow {
