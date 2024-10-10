@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import {toPrimaryKeyString} from './keys.js';
-import type {PrimaryKey} from './make-id-from-primary-key.js';
 
 test('toPrimaryKeyString', () => {
   expect(

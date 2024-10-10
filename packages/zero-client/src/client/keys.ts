@@ -2,7 +2,7 @@ import {h64WithReverse} from '../../../shared/src/h64-with-reverse.js';
 import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
-} from './make-id-from-primary-key.js';
+} from '../../../zero-protocol/src/primary-key.js';
 
 export const CLIENTS_KEY_PREFIX = 'c/';
 export const DESIRED_QUERIES_KEY_PREFIX = 'd/';

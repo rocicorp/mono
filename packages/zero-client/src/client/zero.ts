@@ -89,6 +89,7 @@ import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 
+// TODO: We should enforce the columns matches primaryKey
 export type Schema = {
   readonly version: number;
   readonly tables: {readonly [table: string]: TableSchema};
@@ -246,7 +247,7 @@ export function getInternalReplicacheImplForTesting<
   return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
 }
 
-export class Zero<S extends Schema> {
+export class Zero<const S extends Schema> {
   readonly version = version;
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;

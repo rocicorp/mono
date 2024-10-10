@@ -7,8 +7,6 @@ import {
 } from '../../../zero-protocol/src/primary-key.js';
 import type {Value} from '../../../zql/src/zql/ivm/data.js';
 
-export type {PrimaryKey, PrimaryKeyValue, PrimaryKeyValueRecord};
-
 export function makeIDFromPrimaryKey(
   primaryKey: PrimaryKey,
   value: Record<string, Value>,
