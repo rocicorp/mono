@@ -56,6 +56,10 @@ export class StatementRunner {
     return this.run('BEGIN CONCURRENT');
   }
 
+  beginImmediate(): RunResult {
+    return this.run('BEGIN IMMEDIATE');
+  }
+
   commit(): RunResult {
     return this.run('COMMIT');
   }

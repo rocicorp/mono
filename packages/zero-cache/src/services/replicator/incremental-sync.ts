@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {SqliteError} from 'better-sqlite3';
 import {ident} from 'pg-format';
 import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
@@ -33,7 +34,7 @@ import {
   updateReplicationWatermark,
 } from './schema/replication-state.js';
 
-type TransactionMode = 'DEFAULT' | 'CONCURRENT';
+type TransactionMode = 'IMMEDIATE' | 'CONCURRENT';
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -218,6 +219,33 @@ export class MessageProcessor {
     return false;
   }
 
+  #beginTransaction(lc: LogContext): TransactionProcessor {
+    let start = Date.now();
+    for (let i = 0; ; i++) {
+      try {
+        return new TransactionProcessor(this.#db, this.#txMode);
+      } catch (e) {
+        // The db occasionally errors with a 'database is locked' error when
+        // being concurrently processed by `litestream replicate`, even with
+        // a long busy_timeout. Retry once to see if any deadlock situation
+        // was resolved when aborting the first attempt.
+        if (e instanceof SqliteError) {
+          lc.error?.(
+            `${e.code} after ${Date.now() - start} ms (attempt ${i + 1})`,
+            e,
+          );
+
+          if (i === 0) {
+            // retry once
+            start = Date.now();
+            continue;
+          }
+        }
+        throw e;
+      }
+    }
+  }
+
   /** @return The number of changes committed. */
   #processMessage(
     lc: LogContext,
@@ -228,7 +256,7 @@ export class MessageProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = new TransactionProcessor(this.#db, this.#txMode);
+      this.#currentTx = this.#beginTransaction(lc);
       return false;
     }
 
@@ -317,7 +345,7 @@ class TransactionProcessor {
       // and thus BEGIN CONCURRENT is not necessary. In fact, BEGIN CONCURRENT can cause
       // deadlocks with forced wal-checkpoints (which `litestream replicate` performs),
       // so it is important to use vanilla transactions in this configuration.
-      db.begin();
+      db.beginImmediate();
     }
     const {nextStateVersion} = getReplicationVersions(db);
     this.#db = db;

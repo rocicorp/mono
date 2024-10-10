@@ -72,7 +72,7 @@ export class ReplicatorService implements Replicator, Service {
       id,
       changeStreamer,
       replica,
-      mode === 'serving' ? 'CONCURRENT' : 'DEFAULT',
+      mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE',
     );
   }
 
