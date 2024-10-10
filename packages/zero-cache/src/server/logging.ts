@@ -53,11 +53,13 @@ const consoleJsonLogSink: LogSink = {
         }
       : undefined;
 
-    console[level]({
-      ...context,
-      ...message,
-      ...lastObj,
-    });
+    console[level](
+      stringify({
+        ...context,
+        ...message,
+        ...lastObj,
+      }),
+    );
   },
 };
 
