@@ -22,7 +22,6 @@ import {
   getReplicationVersions,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.js';
-import {liteValue} from '../../types/lite.js';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
