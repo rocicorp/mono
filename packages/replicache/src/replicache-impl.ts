@@ -2,7 +2,7 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../shared/src/abort-error.js';
 import {assert} from '../../shared/src/asserts.js';
-import {getDocument} from '../../shared/src/browser-env.js';
+import {getBrowserGlobal} from '../../shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
 import type {MaybePromise} from '../../shared/src/types.js';
@@ -453,7 +453,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#requestOptions = {maxDelayMs, minDelayMs};
 
     const visibilityWatcher = getDocumentVisibilityWatcher(
-      getDocument(),
+      getBrowserGlobal('document'),
       0,
       this.#closeAbortController.signal,
     );
@@ -592,7 +592,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
     void this.recoverMutations(clients);
 
-    getDocument()?.addEventListener(
+    getBrowserGlobal('document')?.addEventListener(
       'visibilitychange',
       this.#onVisibilityChange,
     );
@@ -604,7 +604,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     }
 
     // In case of running in a worker, we don't have a document.
-    if (getDocument()?.visibilityState !== 'visible') {
+    if (getBrowserGlobal('document')?.visibilityState !== 'visible') {
       return;
     }
 
@@ -686,7 +686,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     this.#closeAbortController.abort();
 
-    getDocument()?.removeEventListener(
+    getBrowserGlobal('document')?.removeEventListener(
       'visibilitychange',
       this.#onVisibilityChange,
     );
