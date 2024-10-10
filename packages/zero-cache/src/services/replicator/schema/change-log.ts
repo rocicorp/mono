@@ -1,5 +1,5 @@
-import type {Database} from '../../../../../zqlite/src/db.js';
 import * as v from '../../../../../shared/src/valita.js';
+import type {Database} from '../../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {
   jsonObjectSchema,
@@ -7,7 +7,8 @@ import {
   stringify,
 } from '../../../types/bigint-json.js';
 import type {LexiVersion} from '../../../types/lexi-version.js';
-import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.js';
+import type {LiteRowKey} from '../../../types/lite.js';
+import {normalizedKeyOrder} from '../../../types/row-key.js';
 
 /**
  * The Change Log tracks the last operation (set or delete) for each row in the
@@ -69,7 +70,7 @@ export function logSetOp(
   db: StatementRunner,
   version: LexiVersion,
   table: string,
-  row: RowKey,
+  row: LiteRowKey,
 ) {
   logRowOp(db, version, table, row, SET_OP);
 }
@@ -78,7 +79,7 @@ export function logDeleteOp(
   db: StatementRunner,
   version: LexiVersion,
   table: string,
-  row: RowKey,
+  row: LiteRowKey,
 ) {
   logRowOp(db, version, table, row, DEL_OP);
 }
@@ -87,7 +88,7 @@ function logRowOp(
   db: StatementRunner,
   version: LexiVersion,
   table: string,
-  row: RowKey,
+  row: LiteRowKey,
   op: string,
 ) {
   const rowKey = stringify(normalizedKeyOrder(row));

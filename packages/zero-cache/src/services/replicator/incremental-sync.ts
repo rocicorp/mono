@@ -8,7 +8,7 @@ import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
-import {liteValues} from '../../types/lite.js';
+import {liteRow} from '../../types/lite.js';
 import {liteTableName} from '../../types/names.js';
 import type {Source} from '../../types/streams.js';
 import type {
@@ -370,12 +370,13 @@ class TransactionProcessor {
    */
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
+    const newRow = liteRow(insert.new);
     const row = {
-      ...insert.new,
+      ...newRow,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
     const key = Object.fromEntries(
-      insert.relation.keyColumns.map(col => [col, insert.new[col]]),
+      insert.relation.keyColumns.map(col => [col, newRow[col]]),
     );
     const rawColumns = Object.keys(row);
     const keyColumns = insert.relation.keyColumns.map(c => ident(c));
@@ -388,7 +389,7 @@ class TransactionProcessor {
         ON CONFLICT (${keyColumns.join(',')})
         DO UPDATE SET ${upsert.join(',')}
       `,
-      liteValues(row),
+      Object.values(row),
     );
 
     logSetOp(this.#db, this.#version, table, key);
@@ -396,14 +397,15 @@ class TransactionProcessor {
 
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
+    const newRow = liteRow(update.new);
     const row = {
-      ...update.new,
+      ...newRow,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
     // update.key is set with the old values if the key has changed.
-    const oldKey = update.key;
+    const oldKey = update.key ? liteRow(update.key) : null;
     const newKey = Object.fromEntries(
-      update.relation.keyColumns.map(col => [col, update.new[col]]),
+      update.relation.keyColumns.map(col => [col, newRow[col]]),
     );
     const currKey = oldKey ?? newKey;
     const setExprs = Object.keys(row).map(col => `${ident(col)}=?`);
@@ -415,7 +417,7 @@ class TransactionProcessor {
         SET ${setExprs.join(',')}
         WHERE ${conds.join(' AND ')}
       `,
-      [...liteValues(row), ...liteValues(currKey)],
+      [...Object.values(row), ...Object.values(currKey)],
     );
 
     if (oldKey) {
@@ -429,13 +431,13 @@ class TransactionProcessor {
     // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
     assert(del.relation.replicaIdentity === 'default');
     assert(del.key);
-    const rowKey = del.key;
+    const rowKey = liteRow(del.key);
     const table = liteTableName(del.relation);
 
     const conds = Object.keys(rowKey).map(col => `${ident(col)}=?`);
     this.#db.run(
       `DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
-      liteValues(rowKey),
+      Object.values(rowKey),
     );
 
     logDeleteOp(this.#db, this.#version, table, rowKey);

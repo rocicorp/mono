@@ -8,6 +8,32 @@ import type {RowValue} from './row-key.js';
 /** Javascript value types supported by better-sqlite3. */
 export type LiteValueType = number | bigint | string | null | Uint8Array;
 
+export type LiteRow = Readonly<Record<string, LiteValueType>>;
+export type LiteRowKey = LiteRow; // just for API readability
+
+/**
+ * Creates a LiteRow from the supplied RowValue. A copy of the `row`
+ * is made only if a value conversion is performed.
+ */
+export function liteRow(row: RowValue): LiteRow {
+  let copyNeeded = false;
+  for (const key in row) {
+    const val = row[key];
+    const liteVal = liteValue(val);
+    if (val !== liteVal) {
+      copyNeeded = true;
+      break;
+    }
+  }
+  if (!copyNeeded) {
+    return row as unknown as LiteRow;
+  }
+  // Slow path for when a conversion is needed.
+  return Object.fromEntries(
+    Object.entries(row).map(([key, val]) => [key, liteValue(val)]),
+  );
+}
+
 export function liteValues(row: RowValue): LiteValueType[] {
   return Object.values(row).map(liteValue);
 }
