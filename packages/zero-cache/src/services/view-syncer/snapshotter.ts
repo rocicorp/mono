@@ -22,6 +22,7 @@ import {
   getReplicationVersions,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.js';
+import {liteValue} from '../../types/lite.js';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -280,7 +281,7 @@ class Snapshot {
     cached.statement.safeIntegers(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return cached.statement.get<any>(Object.values(key));
+      return cached.statement.get<any>(Object.values(key).map(liteValue));
     } finally {
       this.db.statementCache.return(cached);
     }
