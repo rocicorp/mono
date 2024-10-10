@@ -8,7 +8,8 @@ exports[`instance authorization rules 1`] = `
   "replicaDBFile": "",
   "replicaID": "",
   "log": {
-    "level": "info"
+    "level": "info",
+    "format": "text"
   },
   "authorization": {
     "issue": {
@@ -169,7 +170,8 @@ exports[`static authorization rules 1`] = `
   "replicaDBFile": "",
   "replicaID": "",
   "log": {
-    "level": "info"
+    "level": "info",
+    "format": "text"
   },
   "authorization": {
     "user": {
@@ -304,7 +306,8 @@ exports[`static authorization rules 2`] = `
   "replicaDBFile": "",
   "replicaID": "",
   "log": {
-    "level": "info"
+    "level": "info",
+    "format": "text"
   },
   "authorization": {
     "user": {
