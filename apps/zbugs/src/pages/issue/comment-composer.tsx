@@ -53,7 +53,11 @@ export default function CommentComposer({
       <button className="secondary-button" onMouseDown={save}>
         {id ? 'Save' : 'Add comment'}
       </button>{' '}
-      {id ? <button className="edit-comment-cancel" onMouseDown={onDone}>Cancel</button> : null}
+      {id ? (
+        <button className="edit-comment-cancel" onMouseDown={onDone}>
+          Cancel
+        </button>
+      ) : null}
     </>
   );
 }
