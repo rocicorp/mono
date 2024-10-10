@@ -61,5 +61,5 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  exitAfter(runWorker(must(parentWorker), ...process.argv.slice(2)));
+  void exitAfter(() => runWorker(must(parentWorker), ...process.argv.slice(2)));
 }

@@ -161,9 +161,12 @@ export async function runUntilKilled(
   }
 }
 
-export function exitAfter(running: Promise<void>) {
-  void running.then(
-    () => process.exit(0),
-    () => process.exit(-1),
-  );
+export async function exitAfter(run: () => Promise<void>) {
+  try {
+    await run();
+    process.exit(0);
+  } catch (e) {
+    console.error(e);
+    process.exit(-1);
+  }
 }
