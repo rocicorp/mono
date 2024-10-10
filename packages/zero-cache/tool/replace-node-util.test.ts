@@ -1,6 +1,6 @@
 import * as esbuild from 'esbuild';
 import {expect, test} from 'vitest';
-import {replaceNodeUtil} from './replace-node-util.ts';
+import {replaceNodeUtil} from './replace-node-util.js';
 
 async function compile(contents: string) {
   const res = await esbuild.build({
