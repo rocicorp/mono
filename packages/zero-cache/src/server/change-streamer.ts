@@ -55,5 +55,5 @@ export default async function runWorker(parent: Worker): Promise<void> {
 
 // fork()
 if (!singleProcessMode()) {
-  exitAfter(runWorker(must(parentWorker)));
+  void exitAfter(() => runWorker(must(parentWorker)));
 }
