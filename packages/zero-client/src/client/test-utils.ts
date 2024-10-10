@@ -1,8 +1,8 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {SinonFakeTimers} from 'sinon';
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
-import type {SinonFakeTimers} from 'sinon';
 import {
   type ConnectedMessage,
   type Downstream,
@@ -63,7 +63,7 @@ export class MockSocket extends EventTarget {
   }
 }
 
-export class TestZero<S extends Schema> extends Zero<S> {
+export class TestZero<const S extends Schema> extends Zero<S> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -202,7 +202,7 @@ const testZeroInstances = new Set<TestZero<Schema>>();
 
 let testZeroCounter = 0;
 
-export function zeroForTest<S extends Schema>(
+export function zeroForTest<const S extends Schema>(
   options: Partial<ZeroOptions<S>> = {},
   errorOnUpdateNeeded = true,
 ): TestZero<S> {
@@ -222,7 +222,7 @@ export function zeroForTest<S extends Schema>(
     auth: 'test-auth',
     schema,
     ...newOptions,
-  });
+  } as ZeroOptions<S>);
   // We do not want any unexpected onUpdateNeeded calls in tests. If the test
   // needs to call onUpdateNeeded it should set this as needed.
   if (errorOnUpdateNeeded) {
@@ -232,8 +232,8 @@ export function zeroForTest<S extends Schema>(
   }
 
   // Keep track of all instances so we can close them in teardown.
-  testZeroInstances.add(r);
-  return r as TestZero<S>;
+  testZeroInstances.add(r as TestZero<Schema>);
+  return r;
 }
 
 export async function waitForUpstreamMessage(

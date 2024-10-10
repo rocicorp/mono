@@ -1,5 +1,5 @@
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {Catch} from '../../zql/src/zql/ivm/catch.js';
 import type {Change} from '../../zql/src/zql/ivm/change.js';
 import {
@@ -31,7 +31,9 @@ describe('fetching from a table source', () => {
   ] as const;
   const compoundComparator = makeComparator(compoundOrder);
   const db = new Database(createSilentLogContext(), ':memory:');
-  db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c);`);
+  db.exec(
+    /* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c, ignored, columns);`,
+  );
   const stmt = db.prepare(
     /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
   );
@@ -235,7 +237,7 @@ describe('fetched value types', () => {
         '3',
         BigInt(Number.MAX_SAFE_INTEGER),
         BigInt(Number.MIN_SAFE_INTEGER),
-        1n,
+        1,
       ],
       output: {id: '3', a: 9007199254740991, b: -9007199254740991, c: true},
     },
@@ -252,7 +254,9 @@ describe('fetched value types', () => {
   for (const c of cases) {
     test(c.name, () => {
       const db = new Database(createSilentLogContext(), ':memory:');
-      db.exec(/* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c);`);
+      db.exec(
+        /* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c, ignored, columns);`,
+      );
       const stmt = db.prepare(
         /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
       );
@@ -272,8 +276,12 @@ describe('fetched value types', () => {
 test('pushing values does the correct writes and outputs', () => {
   const db1 = new Database(createSilentLogContext(), ':memory:');
   const db2 = new Database(createSilentLogContext(), ':memory:');
-  db1.exec(/* sql */ `CREATE TABLE foo (a, b, c, PRIMARY KEY (a, b));`);
-  db2.exec(/* sql */ `CREATE TABLE foo (a, b, c, PRIMARY KEY (a, b));`);
+  db1.exec(
+    /* sql */ `CREATE TABLE foo (a, b, c, ignored, columns, PRIMARY KEY (a, b));`,
+  );
+  db2.exec(
+    /* sql */ `CREATE TABLE foo (a, b, c, ignored, columns, PRIMARY KEY (a, b));`,
+  );
   const source = new TableSource(
     db1,
     'foo',
@@ -291,7 +299,7 @@ test('pushing values does the correct writes and outputs', () => {
     });
 
   for (const db of [db1, db2]) {
-    const read = db.prepare('SELECT * FROM foo');
+    const read = db.prepare('SELECT a, b, c FROM foo');
     source.setDB(db);
 
     /**
@@ -366,7 +374,7 @@ test('pushing values does the correct writes and outputs', () => {
     expect(() => {
       source.push({
         type: 'add',
-        row: {a: 1, b: 2.123, c: 3},
+        row: {a: 1, b: 2.123, c: 1},
       });
     }).toThrow();
 
@@ -429,8 +437,8 @@ test('pushing values does the correct writes and outputs', () => {
     // edit changes
     source.push({
       type: 'edit',
-      row: {a: BigInt(1), b: 2.123, c: false} as unknown as Row,
-      oldRow: {a: BigInt(1), b: 2.123, c: true} as unknown as Row,
+      row: {a: BigInt(1), b: 2.123, c: 0} as unknown as Row,
+      oldRow: {a: BigInt(1), b: 2.123, c: 1} as unknown as Row,
     });
 
     expect(outputted.shift()).toEqual({
@@ -447,8 +455,8 @@ test('pushing values does the correct writes and outputs', () => {
     // edit pk should fall back to remove and insert
     source.push({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: false},
-      row: {a: 1, b: 3, c: false},
+      oldRow: {a: 1, b: 2.123, c: 0},
+      row: {a: 1, b: 3, c: 0},
     });
     expect(outputted.shift()).toEqual({
       type: 'edit',
@@ -464,8 +472,8 @@ test('pushing values does the correct writes and outputs', () => {
     expect(() => {
       source.push({
         type: 'edit',
-        row: {a: 11, b: 2.123, c: false},
-        oldRow: {a: 12, b: 2.123, c: true},
+        row: {a: 11, b: 2.123, c: 0},
+        oldRow: {a: 12, b: 2.123, c: 1},
       });
     }).toThrow('Row not found');
 
@@ -481,7 +489,7 @@ test('pushing values does the correct writes and outputs', () => {
         oldRow: {
           a: BigInt(Number.MAX_SAFE_INTEGER),
           b: 3.456,
-          c: true,
+          c: 1,
         } as unknown as Row,
       });
     }).toThrow(UnsupportedValueError);
@@ -491,7 +499,7 @@ test('pushing values does the correct writes and outputs', () => {
 test('getByKey', () => {
   const db = new Database(createSilentLogContext(), ':memory:');
   db.exec(
-    /* sql */ `CREATE TABLE foo (id TEXT, a INTEGER, b, c, PRIMARY KEY(id, a));`,
+    /* sql */ `CREATE TABLE foo (id TEXT, a INTEGER, b, c, ignored, columns, PRIMARY KEY(id, a));`,
   );
   const stmt = db.prepare(
     /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,

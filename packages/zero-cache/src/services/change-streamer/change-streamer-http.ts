@@ -5,8 +5,8 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
-import * as v from '../../../../shared/src/valita.js';
 import WebSocket from 'ws';
+import * as v from '../../../../shared/src/valita.js';
 import {jsonValueSchema} from '../../types/bigint-json.js';
 import {type Source, streamIn, streamOut} from '../../types/streams.js';
 import {URLParams} from '../../types/url-params.js';
@@ -97,13 +97,14 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   constructor(lc: LogContext, uriOrPort: string | number = DEFAULT_PORT) {
     this.#lc = lc;
     this.#uri =
-      typeof uriOrPort === 'string'
+      (typeof uriOrPort === 'string'
         ? uriOrPort
-        : `ws://localhost:${uriOrPort}` +
-          CHANGES_URL_PATTERN.replace(':version', 'v0');
+        : `ws://localhost:${uriOrPort}`) +
+      CHANGES_URL_PATTERN.replace(':version', 'v0');
   }
 
   subscribe(ctx: SubscriberContext): Source<Downstream> {
+    this.#lc.info?.(`connecting to change-streamer@${this.#uri}`);
     const params = getParams(ctx);
     const ws = new WebSocket(this.#uri + `?${params.toString()}`);
 

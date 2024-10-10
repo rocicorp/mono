@@ -13,12 +13,12 @@ export function Nav() {
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
-  const addOpenParam = (open: boolean | undefined) => {
+  const addStatusParam = (status: 'closed' | 'all' | undefined) => {
     const newParams = new URLSearchParams(qs);
-    if (open === undefined) {
-      newParams.delete('open');
+    if (status === undefined) {
+      newParams.delete('status');
     } else {
-      newParams.set('open', open ? 'true' : 'false');
+      newParams.set('status', status);
     }
     return '/?' + newParams.toString();
   };
@@ -40,31 +40,32 @@ export function Nav() {
         <div className="section-issues">
           <div className="pt-2 flex flex-col gap-2">
             <Link
-              href={addOpenParam(undefined)}
+              href={addStatusParam(undefined)}
               className={classNames('nav-item', {
-                'nav-active': !qs.has('open'),
-              })}
-            >
-              All
-            </Link>
-            <Link
-              href={addOpenParam(true)}
-              className={classNames('nav-item', {
-                'nav-active': qs.get('open') === 'true',
+                'nav-active': !qs.has('status'),
               })}
             >
               Open
             </Link>
             <Link
-              href={addOpenParam(false)}
+              href={addStatusParam('closed')}
               className={classNames('nav-item', {
-                'nav-active': qs.get('open') === 'false',
+                'nav-active': qs.get('status') === 'closed',
               })}
             >
               Closed
             </Link>
+            <Link
+              href={addStatusParam('all')}
+              className={classNames('nav-item', {
+                'nav-active': qs.get('status') === 'all',
+              })}
+            >
+              All
+            </Link>
           </div>
         </div>
+
         <FPSMeter className="fps-meter" width={192} height={38} />
         <div className="user-login">
           {login.loginState === undefined ? (

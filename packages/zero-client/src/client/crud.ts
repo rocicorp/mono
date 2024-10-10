@@ -1,35 +1,53 @@
-import type {ReadonlyJSONObject} from '../../../shared/src/json.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {MaybePromise} from '../../../shared/src/types.js';
-import type {EntityID} from '../../../zero-protocol/src/entity.js';
+import {type PrimaryKeyValueRecord} from '../../../zero-protocol/src/primary-key.js';
 import {
+  CRUD_MUTATION_NAME,
+  type CreateOp,
   type CRUDMutationArg,
   type CRUDOp,
   type CRUDOpKind,
-  CRUD_MUTATION_NAME,
-  type CreateOp,
   type DeleteOp,
   type SetOp,
   type UpdateOp,
 } from '../../../zero-protocol/src/push.js';
 import type {Row} from '../../../zql/src/zql/ivm/data.js';
+import type {PrimaryKey} from '../../../zql/src/zql/ivm/schema.js';
 import type {SchemaToRow} from '../../../zql/src/zql/query/query.js';
-import {toEntitiesKey} from './keys.js';
+import {toPrimaryKeyString} from './keys.js';
+import {makeIDFromPrimaryKey} from './make-id-from-primary-key.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {Schema} from './zero.js';
 
-export type Parse<E extends Row> = (v: ReadonlyJSONObject) => E;
+export type SetValue<
+  R extends Row,
+  PK extends PrimaryKey,
+> = AsPrimaryKeyValueRecord<Pick<R, PK[number]>> & Omit<R, PK[number]>;
 
-export type Update<E extends Row> = Partial<E>;
+export type CreateValue<R extends Row, PK extends PrimaryKey> = SetValue<R, PK>;
+
+export type UpdateValue<
+  R extends Row,
+  PK extends PrimaryKey,
+> = AsPrimaryKeyValueRecord<Pick<R, PK[number]>> & Partial<Omit<R, PK[number]>>;
+
+export type DeleteID<
+  R extends Row,
+  PK extends PrimaryKey,
+> = AsPrimaryKeyValueRecord<Pick<R, PK[number]>>;
+
+type AsPrimaryKeyValueRecord<R extends Row> = R extends PrimaryKeyValueRecord
+  ? R
+  : never;
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
  */
-export type EntityCRUDMutate<E extends Row> = {
-  create: (value: E) => Promise<void>;
-  set: (value: E) => Promise<void>;
-  update: (value: Update<E>) => Promise<void>;
-  delete: (id: EntityID) => Promise<void>;
+export type RowCRUDMutate<R extends Row, PK extends PrimaryKey> = {
+  create: (value: CreateValue<R, PK>) => Promise<void>;
+  set: (value: SetValue<R, PK>) => Promise<void>;
+  update: (value: UpdateValue<R, PK>) => Promise<void>;
+  delete: (id: DeleteID<R, PK>) => Promise<void>;
 };
 
 /**
@@ -38,7 +56,10 @@ export type EntityCRUDMutate<E extends Row> = {
 export type MakeCRUDMutate<S extends Schema> = BaseCRUDMutate<S> & CRUDBatch<S>;
 
 export type BaseCRUDMutate<S extends Schema> = {
-  [K in keyof S['tables']]: EntityCRUDMutate<SchemaToRow<S['tables'][K]>>;
+  [K in keyof S['tables']]: RowCRUDMutate<
+    SchemaToRow<S['tables'][K]>,
+    S['tables'][K]['primaryKey']
+  >;
 };
 
 export type CRUDBatch<S extends Schema> = <R>(
@@ -54,7 +75,7 @@ type ZeroCRUDMutate = {
  * queries are `issue` and `label`, then this object will have `issue` and
  * `label` properties.
  */
-export function makeCRUDMutate<S extends Schema>(
+export function makeCRUDMutate<const S extends Schema>(
   schema: S,
   repMutate: ZeroCRUDMutate,
 ): MakeCRUDMutate<S> {
@@ -71,7 +92,7 @@ export function makeCRUDMutate<S extends Schema>(
       const ops: CRUDOp[] = [];
       const m = {} as Record<string, unknown>;
       for (const name of Object.keys(schema.tables)) {
-        m[name] = makeBatchCRUDMutate(name, ops);
+        m[name] = makeBatchCRUDMutate(name, schema, ops);
       }
 
       const rv = await body(m as BaseCRUDMutate<S>);
@@ -88,54 +109,96 @@ export function makeCRUDMutate<S extends Schema>(
     }
   };
 
-  for (const name of Object.keys(schema.tables)) {
-    (mutate as unknown as Record<string, EntityCRUDMutate<Row>>)[name] =
-      makeEntityCRUDMutate(name, zeroCRUD, assertNotInBatch);
+  for (const [name, tableSchema] of Object.entries(schema.tables)) {
+    (mutate as unknown as Record<string, RowCRUDMutate<Row, PrimaryKey>>)[
+      name
+    ] = makeEntityCRUDMutate(
+      name,
+      tableSchema.primaryKey,
+      zeroCRUD,
+      assertNotInBatch,
+    );
   }
   return mutate as MakeCRUDMutate<S>;
 }
 
+// type NiceIntersection<S, T> = {[K in keyof (S & T)]: (S & T)[K]};
+
+// type MyRow = {
+//   id: string;
+//   n: number;
+//   b: boolean;
+//   null: null;
+// };
+
+// type XXX = NiceIntersection<
+//   Pick<MyRow, 'id' | 'n'>,
+//   Partial<Omit<MyRow, 'id' | 'n'>>
+//   >
+
+// AsPrimaryKeyValueRecord<{
+//   [K in PK[number]]: R[K] extends PrimaryKeyValue ? R[K] : never;
+// }>;
+//Pick<R, PK[number]>;
+
+// const row = {
+//   id: 'abc',
+//   n: null,
+//   b: true,
+//   null: null,
+// };
+// const pk = ['id', 'n'] as const;
+// export type Test = DeleteID<typeof row, typeof pk>;
+
+// export const id: Test = {id: 'a', n: 456};
+
 /**
  * Creates the `{create, set, update, delete}` object for use outside a batch.
  */
-function makeEntityCRUDMutate<E extends Row>(
+function makeEntityCRUDMutate<R extends Row, PK extends PrimaryKey>(
   entityType: string,
+  primaryKey: PK,
   zeroCRUD: CRUDMutate,
   assertNotInBatch: (entityType: string, op: CRUDOpKind) => void,
-): EntityCRUDMutate<E> {
+): RowCRUDMutate<R, PK> {
   return {
-    create: (value: E) => {
+    create: (value: CreateValue<R, PK>) => {
       assertNotInBatch(entityType, 'create');
-      const {id} = value;
       const op: CreateOp = {
         op: 'create',
         entityType,
-        // TODO: Current crud mutators expect id to always exist
-        id: {id: id as string},
+        id: makeIDFromPrimaryKey(primaryKey, value),
         value,
       };
       return zeroCRUD({ops: [op]});
     },
-    set: (value: E) => {
+    set: (value: SetValue<R, PK>) => {
       assertNotInBatch(entityType, 'set');
-      const {id} = value;
-      const op: SetOp = {op: 'set', entityType, id: {id: id as string}, value};
+      const op: SetOp = {
+        op: 'set',
+        entityType,
+        id: makeIDFromPrimaryKey(primaryKey, value),
+        value,
+      };
       return zeroCRUD({ops: [op]});
     },
-    update: (value: Update<E>) => {
+    update: (value: UpdateValue<R, PK>) => {
       assertNotInBatch(entityType, 'update');
-      const {id} = value;
       const op: UpdateOp = {
         op: 'update',
         entityType,
-        id: {id: id as string},
+        id: makeIDFromPrimaryKey(primaryKey, value),
         partialValue: value,
       };
       return zeroCRUD({ops: [op]});
     },
-    delete: (id: EntityID) => {
+    delete: (id: DeleteID<R, PK>) => {
       assertNotInBatch(entityType, 'delete');
-      const op: DeleteOp = {op: 'delete', entityType, id};
+      const op: DeleteOp = {
+        op: 'delete',
+        entityType,
+        id: makeIDFromPrimaryKey(primaryKey, id),
+      };
       return zeroCRUD({ops: [op]});
     },
   };
@@ -144,41 +207,49 @@ function makeEntityCRUDMutate<E extends Row>(
 /**
  * Creates the `{create, set, update, delete}` object for use inside a batch.
  */
-export function makeBatchCRUDMutate<E extends Row>(
-  entityType: string,
+export function makeBatchCRUDMutate<R extends Row, PK extends PrimaryKey>(
+  tableName: string,
+  schema: Schema,
   ops: CRUDOp[],
-): EntityCRUDMutate<E> {
+): RowCRUDMutate<R, PK> {
+  const {primaryKey} = schema.tables[tableName];
   return {
-    create: (value: E) => {
-      const {id} = value;
+    create: (value: CreateValue<R, PK>) => {
       const op: CreateOp = {
         op: 'create',
-        entityType,
-        id: {id: id as string},
+        entityType: tableName,
+        id: makeIDFromPrimaryKey(primaryKey, value),
         value,
       };
       ops.push(op);
       return promiseVoid;
     },
-    set: (value: E) => {
-      const {id} = value;
-      const op: SetOp = {op: 'set', entityType, id: {id: id as string}, value};
+    set: (value: SetValue<R, PK>) => {
+      const op: SetOp = {
+        op: 'set',
+        entityType: tableName,
+        id: makeIDFromPrimaryKey(primaryKey, value),
+        value,
+      };
       ops.push(op);
       return promiseVoid;
     },
-    update: (value: Update<E>) => {
-      const {id} = value;
+    update: (value: UpdateValue<R, PK>) => {
       const op: UpdateOp = {
         op: 'update',
-        entityType,
-        id: {id: id as string},
+        entityType: tableName,
+        id: makeIDFromPrimaryKey(primaryKey, value),
         partialValue: value,
       };
       ops.push(op);
       return promiseVoid;
     },
-    delete: (id: EntityID) => {
-      const op: DeleteOp = {op: 'delete', entityType, id};
+    delete: (id: DeleteID<R, PK>) => {
+      const op: DeleteOp = {
+        op: 'delete',
+        entityType: tableName,
+        id: makeIDFromPrimaryKey(primaryKey, id),
+      };
       ops.push(op);
       return promiseVoid;
     },
@@ -196,7 +267,7 @@ export type CRUDMutator = (
   crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
-export function makeCRUDMutator<S extends Schema>(_schemas: S): CRUDMutator {
+export function makeCRUDMutator<S extends Schema>(schema: S): CRUDMutator {
   return async function zeroCRUDMutator(
     tx: WriteTransaction,
     crudArg: CRUDMutationArg,
@@ -204,42 +275,60 @@ export function makeCRUDMutator<S extends Schema>(_schemas: S): CRUDMutator {
     for (const op of crudArg.ops) {
       switch (op.op) {
         case 'create':
-          await createImpl(tx, op);
+          await createImpl(tx, op, schema);
           break;
         case 'set':
-          await setImpl(tx, op);
+          await setImpl(tx, op, schema);
           break;
         case 'update':
-          await updateImpl(tx, op);
+          await updateImpl(tx, op, schema);
           break;
         case 'delete':
-          await deleteImpl(tx, op);
+          await deleteImpl(tx, op, schema);
           break;
       }
     }
   };
 }
 
-export async function createImpl(
+async function createImpl(
   tx: WriteTransaction,
   arg: CreateOp,
+  schema: Schema,
 ): Promise<void> {
-  const key = toEntitiesKey(arg.entityType, arg.id);
+  const key = toPrimaryKeyString(
+    arg.entityType,
+    schema.tables[arg.entityType].primaryKey,
+    arg.id,
+  );
   if (!(await tx.has(key))) {
     await tx.set(key, arg.value);
   }
 }
 
-export async function setImpl(tx: WriteTransaction, arg: SetOp): Promise<void> {
-  const key = toEntitiesKey(arg.entityType, arg.id);
+export async function setImpl(
+  tx: WriteTransaction,
+  arg: CreateOp | SetOp,
+  schema: Schema,
+): Promise<void> {
+  const key = toPrimaryKeyString(
+    arg.entityType,
+    schema.tables[arg.entityType].primaryKey,
+    arg.id,
+  );
   await tx.set(key, arg.value);
 }
 
 export async function updateImpl(
   tx: WriteTransaction,
   arg: UpdateOp,
+  schema: Schema,
 ): Promise<void> {
-  const key = toEntitiesKey(arg.entityType, arg.id);
+  const key = toPrimaryKeyString(
+    arg.entityType,
+    schema.tables[arg.entityType].primaryKey,
+    arg.id,
+  );
   const prev = await tx.get(key);
   if (prev === undefined) {
     return;
@@ -252,7 +341,12 @@ export async function updateImpl(
 export async function deleteImpl(
   tx: WriteTransaction,
   arg: DeleteOp,
+  schema: Schema,
 ): Promise<void> {
-  const key = toEntitiesKey(arg.entityType, arg.id);
+  const key = toPrimaryKeyString(
+    arg.entityType,
+    schema.tables[arg.entityType].primaryKey,
+    arg.id,
+  );
   await tx.del(key);
 }

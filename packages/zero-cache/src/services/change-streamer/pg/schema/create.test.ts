@@ -76,14 +76,14 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'TEXT',
+            dataType: 'varchar',
             characterMaximumLength: null,
             notNull: true,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'INTEGER',
+            dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
             dflt: null,
@@ -155,14 +155,14 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'TEXT',
+            dataType: 'varchar',
             characterMaximumLength: null,
             notNull: true,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'INTEGER',
+            dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
             dflt: null,
@@ -279,7 +279,7 @@ describe('tables/create', () => {
         columns: {
           ['user_id']: {
             pos: 1,
-            dataType: 'INTEGER',
+            dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
             dflt: null,
@@ -287,20 +287,20 @@ describe('tables/create', () => {
           handle: {
             pos: 2,
             characterMaximumLength: null,
-            dataType: 'TEXT',
+            dataType: 'varchar',
             notNull: false,
             dflt: null,
           },
           rank: {
             pos: 3,
             characterMaximumLength: null,
-            dataType: 'INTEGER',
+            dataType: 'int8',
             notNull: false,
             dflt: null,
           },
           admin: {
             pos: 4,
-            dataType: 'BOOL',
+            dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
             dflt: null,
@@ -308,7 +308,7 @@ describe('tables/create', () => {
           bigint: {
             pos: 5,
             characterMaximumLength: null,
-            dataType: 'INTEGER',
+            dataType: 'int8',
             notNull: false,
             dflt: null,
           },

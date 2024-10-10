@@ -122,6 +122,7 @@ const baseConfig = {
   replicaID: '',
   log: {
     level: 'info',
+    format: 'text',
   },
 } as const;
 

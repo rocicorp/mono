@@ -48,7 +48,8 @@ defineConfig<AuthData, Schema>(schema, queries => {
       publications: runtimeEnv('PUBLICATIONS'),
     },
     log: {
-      level: 'debug',
+      level: runtimeEnv('LOG_LEVEL'),
+      format: runtimeEnv('LOG_FORMAT'),
     },
     rateLimit: {
       mutationTransactions: {

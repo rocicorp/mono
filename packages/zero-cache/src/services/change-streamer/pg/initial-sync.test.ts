@@ -1,5 +1,6 @@
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {listIndices, listTables} from '../../../db/lite-tables.js';
 import {
   dropReplicationSlot,
@@ -14,7 +15,6 @@ import type {
   IndexSpec,
   TableSpec,
 } from '../../../types/specs.js';
-import {Database} from '../../../../../zqlite/src/db.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
 import {getPublicationInfo} from './schema/published.js';
@@ -103,21 +103,21 @@ const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: TableSpec = {
   columns: {
     minSupportedVersion: {
       characterMaximumLength: null,
-      dataType: 'INTEGER',
+      dataType: 'int4',
       dflt: null,
       notNull: false,
       pos: 1,
     },
     maxSupportedVersion: {
       characterMaximumLength: null,
-      dataType: 'INTEGER',
+      dataType: 'int4',
       dflt: null,
       notNull: false,
       pos: 2,
     },
     lock: {
       characterMaximumLength: null,
-      dataType: 'BOOL',
+      dataType: 'bool',
       dflt: null,
       notNull: true,
       pos: 3,
@@ -154,7 +154,7 @@ const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
     lastMutationID: {
       pos: 4,
       characterMaximumLength: null,
-      dataType: 'INTEGER',
+      dataType: 'int8',
       notNull: true,
       dflt: null,
     },
@@ -200,9 +200,9 @@ describe('replicator/initial-sync', () => {
         ['zero.clients']: [],
         ['zero.schemaVersions']: [
           {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
             ['_0_version']: '00',
           },
         ],
@@ -232,9 +232,9 @@ describe('replicator/initial-sync', () => {
         ['zero.clients']: [],
         ['zero.schemaVersions']: [
           {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
             ['_0_version']: '00',
           },
         ],
@@ -252,6 +252,12 @@ describe('replicator/initial-sync', () => {
           "issueID" INTEGER,
           "orgID" INTEGER,
           "isAdmin" BOOLEAN,
+          "bigint" BIGINT,
+          "time" TIMESTAMPTZ,
+          "bytes" BYTEA,
+          "intArray" INTEGER[],
+          "json" JSON,
+          "jsonb" JSONB,
           PRIMARY KEY ("orgID", "issueID")
         );
       `,
@@ -281,6 +287,48 @@ describe('replicator/initial-sync', () => {
               notNull: false,
               dflt: null,
             },
+            bigint: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'int8',
+              notNull: false,
+              dflt: null,
+            },
+            time: {
+              pos: 5,
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              notNull: false,
+              dflt: null,
+            },
+            bytes: {
+              pos: 6,
+              characterMaximumLength: null,
+              dataType: 'bytea',
+              notNull: false,
+              dflt: null,
+            },
+            intArray: {
+              pos: 7,
+              characterMaximumLength: null,
+              dataType: 'int4[]',
+              notNull: false,
+              dflt: null,
+            },
+            json: {
+              pos: 8,
+              characterMaximumLength: null,
+              dataType: 'json',
+              notNull: false,
+              dflt: null,
+            },
+            jsonb: {
+              pos: 9,
+              characterMaximumLength: null,
+              dataType: 'jsonb',
+              notNull: false,
+              dflt: null,
+            },
           },
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
@@ -295,26 +343,68 @@ describe('replicator/initial-sync', () => {
             issueID: {
               pos: 1,
               characterMaximumLength: null,
-              dataType: 'INTEGER',
+              dataType: 'int4',
               notNull: true,
               dflt: null,
             },
             orgID: {
               pos: 2,
               characterMaximumLength: null,
-              dataType: 'INTEGER',
+              dataType: 'int4',
               notNull: true,
               dflt: null,
             },
             isAdmin: {
               pos: 3,
               characterMaximumLength: null,
-              dataType: 'BOOL',
+              dataType: 'bool',
+              notNull: false,
+              dflt: null,
+            },
+            bigint: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'int8',
+              notNull: false,
+              dflt: null,
+            },
+            time: {
+              pos: 5,
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              notNull: false,
+              dflt: null,
+            },
+            bytes: {
+              pos: 6,
+              characterMaximumLength: null,
+              dataType: 'bytea',
+              notNull: false,
+              dflt: null,
+            },
+            intArray: {
+              pos: 7,
+              characterMaximumLength: null,
+              dataType: 'int4[]',
+              notNull: false,
+              dflt: null,
+            },
+            json: {
+              pos: 8,
+              characterMaximumLength: null,
+              dataType: 'json',
+              notNull: false,
+              dflt: null,
+            },
+            jsonb: {
+              pos: 9,
+              characterMaximumLength: null,
+              dataType: 'jsonb',
               notNull: false,
               dflt: null,
             },
             ['_0_version']: {
-              pos: 4,
+              pos: 10,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: true,
@@ -328,23 +418,86 @@ describe('replicator/initial-sync', () => {
       },
       upstream: {
         issues: [
-          {issueID: 123, orgID: 456, isAdmin: true},
-          {issueID: 321, orgID: 789, isAdmin: null},
-          {issueID: 456, orgID: 789, isAdmin: false},
+          {
+            issueID: 123,
+            orgID: 456,
+            isAdmin: true,
+            bigint: 99999999999999999n,
+            time: null,
+            bytes: null,
+            intArray: null,
+            json: {foo: 'bar'},
+            jsonb: {bar: 'baz'},
+          },
+          {
+            issueID: 321,
+            orgID: 789,
+            isAdmin: null,
+            bigint: null,
+            time: '2019-01-12T00:30:35.381101032Z',
+            bytes: null,
+            intArray: null,
+            json: [1, 2, 3],
+            jsonb: [{boo: 123}],
+          },
+          {
+            issueID: 456,
+            orgID: 789,
+            isAdmin: false,
+            bigint: null,
+            time: null,
+            bytes: Buffer.from('hello'),
+            intArray: [1, 2],
+            json: null,
+            jsonb: null,
+          },
         ],
       },
       replicatedData: {
         ['zero.clients']: [],
         issues: [
-          {issueID: 123, orgID: 456, isAdmin: 1, ['_0_version']: '00'},
-          {issueID: 321, orgID: 789, isAdmin: null, ['_0_version']: '00'},
-          {issueID: 456, orgID: 789, isAdmin: 0, ['_0_version']: '00'},
+          {
+            issueID: 123n,
+            orgID: 456n,
+            isAdmin: 1n,
+            bigint: 99999999999999999n,
+            time: null,
+            bytes: null,
+            intArray: null,
+            json: '{"foo":"bar"}',
+            jsonb: '{"bar":"baz"}',
+            ['_0_version']: '00',
+          },
+          {
+            issueID: 321n,
+            orgID: 789n,
+            isAdmin: null,
+            bigint: null,
+            time: 1547253035381101n,
+            bytes: null,
+            intArray: null,
+            json: '[1,2,3]',
+            jsonb: '[{"boo":123}]',
+            ['_0_version']: '00',
+          },
+          {
+            issueID: 456n,
+            orgID: 789n,
+            isAdmin: 0n,
+            bigint: null,
+            time: null,
+            bytes: Buffer.from('hello'),
+            intArray: '[1,2]',
+            json: null,
+            jsonb: null,
+            ['_0_version']: '00',
+          },
         ],
         ['zero.schemaVersions']: [
           {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
             ['_0_version']: '00',
           },
         ],
@@ -398,7 +551,7 @@ describe('replicator/initial-sync', () => {
             userID: {
               pos: 1,
               characterMaximumLength: null,
-              dataType: 'INTEGER',
+              dataType: 'int4',
               notNull: true,
               dflt: null,
             },
@@ -432,14 +585,14 @@ describe('replicator/initial-sync', () => {
       replicatedData: {
         ['zero.clients']: [],
         users: [
-          {userID: 123, handle: '@zoot', ['_0_version']: '00'},
-          {userID: 456, handle: '@bonk', ['_0_version']: '00'},
+          {userID: 123n, handle: '@zoot', ['_0_version']: '00'},
+          {userID: 456n, handle: '@bonk', ['_0_version']: '00'},
         ],
         ['zero.schemaVersions']: [
           {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
             ['_0_version']: '00',
           },
         ],
@@ -497,7 +650,7 @@ describe('replicator/initial-sync', () => {
             userID: {
               pos: 1,
               characterMaximumLength: null,
-              dataType: 'INTEGER',
+              dataType: 'int4',
               notNull: true,
               dflt: null,
             },
@@ -532,14 +685,14 @@ describe('replicator/initial-sync', () => {
       replicatedData: {
         ['zero.clients']: [],
         users: [
-          {userID: 456, handle: '@bonk', ['_0_version']: '00'},
-          {userID: 1001, handle: '@boom', ['_0_version']: '00'},
+          {userID: 456n, handle: '@bonk', ['_0_version']: '00'},
+          {userID: 1001n, handle: '@boom', ['_0_version']: '00'},
         ],
         ['zero.schemaVersions']: [
           {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
             ['_0_version']: '00',
           },
         ],
@@ -611,14 +764,14 @@ describe('replicator/initial-sync', () => {
             issueID: {
               pos: 1,
               characterMaximumLength: null,
-              dataType: 'INTEGER',
+              dataType: 'int4',
               notNull: true,
               dflt: null,
             },
             orgID: {
               pos: 2,
               characterMaximumLength: null,
-              dataType: 'INTEGER',
+              dataType: 'int4',
               notNull: true,
               dflt: null,
             },
@@ -632,7 +785,7 @@ describe('replicator/initial-sync', () => {
             isAdmin: {
               pos: 4,
               characterMaximumLength: null,
-              dataType: 'BOOL',
+              dataType: 'bool',
               notNull: false,
               dflt: null,
             },
@@ -655,9 +808,9 @@ describe('replicator/initial-sync', () => {
         issues: [],
         ['zero.schemaVersions']: [
           {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
             ['_0_version']: '00',
           },
         ],
@@ -729,7 +882,7 @@ describe('replicator/initial-sync', () => {
       const syncedIndices = listIndices(replica);
       expect(syncedIndices).toEqual(c.replicatedIndices ?? []);
 
-      expectTables(replica, c.replicatedData);
+      expectTables(replica, c.replicatedData, 'bigint');
 
       const replicaState = replica
         .prepare('SELECT * FROM "_zero.ReplicationState"')

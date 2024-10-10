@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../../shared/src/queue.js';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {StatementRunner} from '../../../db/statements.js';
 import {
   dropReplicationSlot,
@@ -45,7 +45,9 @@ describe('change-source/pg', () => {
       int INT4,
       big BIGINT,
       flt FLOAT8,
-      bool BOOLEAN
+      bool BOOLEAN,
+      timea TIMESTAMPTZ,
+      timeb TIMESTAMPTZ
     );
     CREATE PUBLICATION zero_all FOR TABLE foo WHERE (id != 'exclude-me');
     `);
@@ -92,8 +94,15 @@ describe('change-source/pg', () => {
       await tx`INSERT INTO foo(id) VALUES('hello')`;
       await tx`INSERT INTO foo(id) VALUES('world')`;
       await tx`
-      INSERT INTO foo(id, int, big, flt, bool) 
-        VALUES('datatypes', 123456789, 987654321987654321, 123.456, true)`;
+      INSERT INTO foo(id, int, big, flt, bool, timea, timeb) 
+        VALUES('datatypes',
+               123456789, 
+               987654321987654321, 
+               123.456, 
+               true, 
+               '2003-04-12 04:05:06 America/New_York',
+               '2019-01-12T00:30:35.381101032Z'
+               )`;
       // zero.schemaVersions
       await tx`
       UPDATE zero."schemaVersions" SET "maxSupportedVersion" = 2;
@@ -126,6 +135,8 @@ describe('change-source/pg', () => {
           big: 987654321987654321n,
           flt: 123.456,
           bool: true,
+          timea: 1050134706000000n,
+          timeb: 1547253035381101n,
         },
       },
     ]);

@@ -1,21 +1,24 @@
+import {must} from '../../shared/src/must.js';
 import {ZeroContext} from '../../zero-client/src/client/context.js';
 import {
-  type BaseCRUDMutate,
-  type EntityCRUDMutate,
   makeBatchCRUDMutate,
+  type BaseCRUDMutate,
+  type CreateValue,
+  type DeleteID,
   type MakeCRUDMutate,
-  type Update,
+  type RowCRUDMutate,
+  type SetValue,
+  type UpdateValue,
 } from '../../zero-client/src/client/crud.js';
 import * as zeroJs from '../../zero-client/src/client/zero.js';
 import type {Query} from '../../zero-client/src/mod.js';
-import type {EntityID} from '../../zero-protocol/src/entity.js';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import type {CRUDOp, CRUDOpKind} from '../../zero-protocol/src/push.js';
 import type {Row} from '../../zql/src/zql/ivm/data.js';
 import {newQuery} from '../../zql/src/zql/query/query-impl.js';
 import type {TableSchema} from '../../zql/src/zql/query/schema.js';
 import type {Database} from './db.js';
 import type {ZQLiteZeroOptions} from './options.js';
-import {must} from '../../shared/src/must.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
@@ -59,7 +62,7 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
         const ops: CRUDOp[] = [];
         const m = {} as Record<string, unknown>;
         for (const name of Object.keys(schema.tables)) {
-          m[name] = makeBatchCRUDMutate(name, ops);
+          m[name] = makeBatchCRUDMutate(name, schema, ops);
         }
 
         const rv = await body(m as BaseCRUDMutate<S>);
@@ -78,19 +81,20 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
     };
 
     for (const name of Object.keys(schema.tables)) {
-      (mutate as unknown as Record<string, EntityCRUDMutate<Row>>)[name] =
-        this.makeEntityCRUDMutate(name, db, assertNotInBatch);
+      (mutate as unknown as Record<string, RowCRUDMutate<Row, PrimaryKey>>)[
+        name
+      ] = this.makeEntityCRUDMutate(name, db, assertNotInBatch);
     }
     return mutate as MakeCRUDMutate<S>;
   }
 
-  makeEntityCRUDMutate<E extends Row>(
+  makeEntityCRUDMutate<R extends Row, PK extends PrimaryKey>(
     entityType: string,
     db: Database,
     assertNotInBatch: (entityType: string, op: CRUDOpKind) => void,
-  ): EntityCRUDMutate<E> {
+  ): RowCRUDMutate<R, PK> {
     return {
-      create: async (value: E) => {
+      create: async (value: CreateValue<R, PK>) => {
         assertNotInBatch(entityType, 'create');
         const existingEntity = await db
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
@@ -102,14 +106,14 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
           row: value,
         });
       },
-      set: async (value: E) => {
+      set: async (value: SetValue<R, PK>) => {
         assertNotInBatch(entityType, 'set');
         await must(this.zeroContext.getSource(entityType)).push({
           type: 'add',
           row: value,
         });
       },
-      update: async (value: Update<E>) => {
+      update: async (value: UpdateValue<R, PK>) => {
         assertNotInBatch(entityType, 'update');
         const existingEntity = await db
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
@@ -126,8 +130,9 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
           row: mergedValue,
         });
       },
-      delete: async (id: EntityID) => {
+      delete: async (id: DeleteID<R, PK>) => {
         assertNotInBatch(entityType, 'delete');
+        // TODO: Remove the useless awaits here and elsewhere.
         const existingEntity = await db
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
           .get<Row>(id);

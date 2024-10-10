@@ -45,12 +45,14 @@ CVR_DB_URI = "postgresql://user:password@127.0.0.1:6435/postgres"
 # Yet another Postgres database which we used to store a replication log.
 CHANGE_DB_URI = "postgresql://user:password@127.0.0.1:6435/postgres"
 
-# Uniquely identifies a single instance of the zero-cache service.
-REPLICA_ID = "r1"
-
 # Place to store the SQLite data zero-cache maintains. This can be lost, but if
 # it is, zero-cache will have to re-replicate next time it starts up.
 REPLICA_DB_FILE = "/tmp/zbugs-sync-replica.db"
+
+LOG_LEVEL = "info"
+
+# Use "json" for logs consumed by structured logging services.
+LOG_FORMAT = "text"
 
 #### ZBugs API Server Variables ####
 
