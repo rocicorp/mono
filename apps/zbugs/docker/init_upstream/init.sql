@@ -24,6 +24,7 @@ CREATE TABLE issue (
     "modified" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
+    "assigneeID" VARCHAR REFERENCES "user"(id),
     "description" TEXT DEFAULT '',
     -- This is a denormalized column that contains a comma-separated list of
     -- label IDs. This is temporary until Zero imlements support for filter-by-

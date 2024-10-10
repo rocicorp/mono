@@ -20,6 +20,7 @@ const issueSchema = {
     modified: {type: 'number'},
     created: {type: 'number'},
     creatorID: {type: 'string'},
+    assigneeID: {type: 'string', optional: true},
     description: {type: 'string'},
     labelIDs: {type: 'string'},
   },
@@ -46,6 +47,13 @@ const issueSchema = {
     },
     creator: {
       source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => userSchema,
+      },
+    },
+    assignee: {
+      source: 'assigneeID',
       dest: {
         field: 'id',
         schema: () => userSchema,

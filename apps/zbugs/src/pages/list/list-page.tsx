@@ -17,6 +17,7 @@ export default function ListPage() {
   const qs = new URLSearchParams(useSearch());
   const status = qs.get('status');
   const creator = qs.get('creator');
+  const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
 
   // TODO: this can go away once we have filter-by-subquery, you should be able
@@ -24,6 +25,10 @@ export default function ListPage() {
   const creatorID = useQuery(
     z.query.user.where('login', creator ?? '').one(),
     creator !== null,
+  )?.id;
+  const assigneeID = useQuery(
+    z.query.user.where('login', assignee ?? '').one(),
+    assignee !== null,
   )?.id;
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
@@ -38,6 +43,10 @@ export default function ListPage() {
 
   if (creatorID) {
     q = q.where('creatorID', creatorID);
+  }
+
+  if (assigneeID) {
+    q = q.where('assigneeID', assigneeID);
   }
 
   for (const labelID of labelIDs) {
@@ -65,6 +74,8 @@ export default function ListPage() {
   const onFilter = (selection: Selection) => {
     if ('creator' in selection) {
       navigate(addFilter('creator', selection.creator, 'exclusive'));
+    } else if ('assignee' in selection) {
+      navigate(addFilter('assignee', selection.assignee, 'exclusive'));
     } else {
       navigate(addFilter('label', selection.label));
     }
@@ -122,12 +133,12 @@ export default function ListPage() {
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
         {[...qs.entries()].map(([key, val], idx) => {
-          if (key === 'label' || key === 'creator') {
+          if (key === 'label' || key === 'creator' || key === 'assignee') {
             return (
               <span
                 className={classNames('pill', {
                   label: key === 'label',
-                  user: key === 'creator',
+                  user: key === 'creator' || key === 'assignee',
                 })}
                 onMouseDown={() => onDeleteFilter(idx)}
                 key={idx}
