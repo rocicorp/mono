@@ -50,7 +50,7 @@ jobs:
       - name: Deploy to ECS
         uses: imehedi/actions-awscli-v2@latest
         with:
-          args: ecs update-service --cluster roci-zero-service-runner-2 --service zero-service-runner-service --force-new-deployment
+          args: ecs update-service --cluster roci-zero-service-runner-2 --service zero-service-runner-service-2 --force-new-deployment
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
