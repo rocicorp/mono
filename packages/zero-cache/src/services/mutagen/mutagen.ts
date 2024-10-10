@@ -4,7 +4,6 @@ import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
-import {Mode} from '../../db/transaction-pool.js';
 import {ErrorKind} from '../../../../zero-protocol/src/mod.js';
 import {
   MutationType,
@@ -17,12 +16,13 @@ import {
 } from '../../../../zero-protocol/src/push.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {type ZeroConfig} from '../../config/zero-config.js';
+import {Mode} from '../../db/transaction-pool.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
+import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.js';
+import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
-import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
-import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -58,7 +58,7 @@ export class MutagenService implements Mutagen, Service {
   ) {
     this.id = clientGroupID;
     this.#lc = lc
-      .withContext('component', 'Mutagen')
+      .withContext('component', 'mutagen')
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
     this.#shardID = shardID;
