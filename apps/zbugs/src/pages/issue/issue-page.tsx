@@ -205,11 +205,11 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Labels</p>
           <div className="issue-detail-label-container">
-          {issue.labels.map(label => (
-            <span className="pill label" key={label.id}>
-              {label.name}
-            </span>
-          ))}
+            {issue.labels.map(label => (
+              <span className="pill label" key={label.id}>
+                {label.name}
+              </span>
+            ))}
           </div>
           <LabelPicker
             selected={labelSet}

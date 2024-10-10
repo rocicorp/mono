@@ -453,6 +453,10 @@ h1 {
   padding: 1rem;
 }
 
+.edit-description {
+  margin-bottom: 4rem;
+}
+
 .edit-title {
   margin-bottom: 2rem;
 }
