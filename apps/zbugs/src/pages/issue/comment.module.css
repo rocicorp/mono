@@ -3,6 +3,7 @@
   background-color: var(--color-nav-selected);
   padding: 1rem;
   border-radius: 0.5rem;
+  position: relative;
 }
 
 .commentItem:last-child {
@@ -15,12 +16,17 @@
 }
 
 .commentActions {
-  margin-top: 1rem;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
 }
 
 .commentActions button {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 0.75px;
   margin-right: 0.5rem;
+  opacity: 0.6;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.commentActions button:hover {
+  opacity: 1;
 }
