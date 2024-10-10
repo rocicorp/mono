@@ -28,17 +28,17 @@ test('slow queries are logged', () => {
 
   expect(sink.messages).toEqual([
     [
-      'error',
+      'warn',
       {class: 'Database', path: ':memory:', method: 'exec'},
       ['Slow query', 0],
     ],
     [
-      'error',
+      'warn',
       {class: 'Database', path: ':memory:', method: 'exec'},
       ['Slow query', 0],
     ],
     [
-      'error',
+      'warn',
       {
         class: 'Statement',
         path: ':memory:',
@@ -48,7 +48,7 @@ test('slow queries are logged', () => {
       ['Slow query', 0],
     ],
     [
-      'error',
+      'warn',
       {
         class: 'Statement',
         path: ':memory:',
@@ -58,7 +58,7 @@ test('slow queries are logged', () => {
       ['Slow query', 0],
     ],
     [
-      'error',
+      'warn',
       {
         class: 'Statement',
         path: ':memory:',
@@ -68,7 +68,7 @@ test('slow queries are logged', () => {
       ['Slow query', 0],
     ],
     [
-      'error',
+      'warn',
       {
         class: 'Statement',
         path: ':memory:',
@@ -79,7 +79,7 @@ test('slow queries are logged', () => {
       ['Slow query', 200],
     ],
     [
-      'error',
+      'warn',
       {
         class: 'Statement',
         path: ':memory:',
