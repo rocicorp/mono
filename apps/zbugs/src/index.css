@@ -587,3 +587,14 @@ h1 {
   display: block;
   width: 100%;
 }
+
+.edit-comment-cancel {
+  margin-left: 0.5rem;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  opacity: 0.6;
+}
+
+.edit-comment-cancel:hover {
+  opacity: 1;
+}
