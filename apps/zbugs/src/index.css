@@ -72,6 +72,21 @@ h1 {
   background-color: rgba(0, 0, 0, 0.95);
 }
 
+.secondary-button {
+  color: var(--color-text-primary-active);
+  opacity: 0.6;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  transition: opacity 0.3s ease-in-out;
+  border: 1px solid var(--color-text-dimmed-label);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.secondary-button:hover {
+  opacity: 1;
+}
+
 /* Nav */
 
 .nav-container {
@@ -141,6 +156,24 @@ h1 {
 }
 
 .user-login a:hover {
+  opacity: 1;
+}
+
+.logged-in-user-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.logout-button {
+  display: block;
+  height: 1.5rem;
+  width: 1.5rem;
+  background: transparent url(assets/icons/logout.svg) no-repeat;
+  opacity: 0.6;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.logout-button:hover {
   opacity: 1;
 }
 
@@ -445,8 +478,8 @@ h1 {
   overflow: hidden;
 }
 
-.comments-container {
-  margin-top: 4rem;
+.description-container {
+  margin-bottom: 4rem;
 }
 
 .pill {
@@ -512,9 +545,9 @@ h1 {
 }
 
 .selector .item.icon {
-  padding-left: 2.5rem;
+  padding-left: 3.05rem;
   background-repeat: no-repeat;
-  background-position: 0.8175rem center;
+  background-position: 1.1rem center;
   background-size: 14px;
 }
 
@@ -538,6 +571,14 @@ h1 {
   opacity: 1;
 }
 
+.issue-creator-avatar {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.8175rem;
+}
+
 /* Issue Composer */
 
 .save-issue {
@@ -551,4 +592,52 @@ h1 {
 
 .issue-composer-header {
   margin-bottom: 1rem;
+}
+
+/* Comment Composer */
+
+.comment-input {
+  margin: 1rem 0;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-nav-selected);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  display: block;
+  width: 100%;
+}
+
+.edit-comment-cancel {
+  margin-left: 0.5rem;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  opacity: 0.6;
+}
+
+.edit-comment-cancel:hover {
+  opacity: 1;
+}
+
+/* Markup */
+
+.description-container p {
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.description-container ul li {
+  padding: 0.25rem 0;
+  line-height: 2;
+}
+
+.issue-detail code {
+  font-size: 0.9rem;
+  font-family: monospace;
+  padding: 0.25rem 0.5rem;
+}
+
+.issue-detail pre {
+  background-color: var(--color-light-outline);
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 1rem;
 }

@@ -71,9 +71,16 @@ export function Nav() {
           {login.loginState === undefined ? (
             <a href="/api/login/github">Login</a>
           ) : (
-            <button onMouseDown={login.logout}>
-              Logout {login.loginState?.login}
-            </button>
+            <div className="logged-in-user-container">
+              <div className="logged-in-user">
+                {/* Need access to user avatar */}
+                <span>{login.loginState?.login}</span>
+              </div>
+              <button
+                className="logout-button"
+                onMouseDown={login.logout}
+              ></button>
+            </div>
           )}
         </div>
       </div>

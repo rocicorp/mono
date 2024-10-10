@@ -135,7 +135,9 @@ export default function IssuePage() {
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
         {!editing ? (
-          <Markdown>{rendering.description}</Markdown>
+          <div className="description-container">
+            <Markdown>{rendering.description}</Markdown>
+          </div>
         ) : (
           <div className="edit-description-container">
             <p className="issue-detail-label">Edit description</p>
@@ -147,15 +149,14 @@ export default function IssuePage() {
           </div>
         )}
 
+        <h2 className="issue-detail-label">Comments</h2>
         {issue.comments.length > 0 ? (
           <div className="comments-container">
-            <h2 className="issue-detail-label">Comments</h2>
             {issue.comments.map(comment => (
               <Comment key={comment.id} id={comment.id} issueID={issue.id} />
             ))}
           </div>
         ) : null}
-        <br />
         {z.userID === 'anon' ? (
           <a href="/api/login/github" className="login-to-comment">
             Login to comment
@@ -192,7 +193,12 @@ export default function IssuePage() {
         <div className="sidebar-item">
           <p className="issue-detail-label">Creator</p>
           <button className="sidebar-button issue-creator">
-            {issue.creator.name}
+            <img
+              src={issue.creator?.avatar}
+              className="issue-creator-avatar"
+              alt={issue.creator?.name}
+            />
+            <span className="issue-creator-name">{issue.creator.login}</span>
           </button>
         </div>
 
