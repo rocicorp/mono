@@ -90,10 +90,13 @@ export class Terminator {
       return this.#exit(code);
     }
     if (type === 'supporting') {
-      this.#lc.error?.(
+      // The replication-manager has no user-facing workers.
+      // In this case, code === 0 shutdowns are not errors.
+      const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'error';
+      this.#lc[log]?.(
         `shutting down because supporting worker exited with code ${code}`,
       );
-      return this.#exit(-1);
+      return this.#exit(log === 'error' ? -1 : code);
     }
     if (this.#drainStart === 0) {
       this.#lc.error?.(
