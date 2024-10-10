@@ -1,5 +1,5 @@
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {
   ZeroConfig,
@@ -14,7 +14,7 @@ const baseConfig: ZeroConfigType = {
   cvrDBConnStr: 'cvr',
   changeDBConnStr: 'change',
   replicaDBFile: 'replica',
-  log: {level: 'debug'},
+  log: {level: 'debug', format: 'json'},
 };
 
 const allowIfSubject = [
