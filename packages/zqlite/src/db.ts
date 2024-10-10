@@ -180,6 +180,6 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
 
 function logIfSlow(elapsed: number, lc: LogContext, threshold: number): void {
   if (elapsed >= threshold) {
-    lc.error?.('Slow query', elapsed);
+    lc.warn?.('Slow query', elapsed);
   }
 }
