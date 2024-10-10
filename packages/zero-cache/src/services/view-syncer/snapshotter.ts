@@ -281,7 +281,7 @@ class Snapshot {
     cached.statement.safeIntegers(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return cached.statement.get<any>(Object.values(key).map(liteValue));
+      return cached.statement.get<any>(Object.values(key));
     } finally {
       this.db.statementCache.return(cached);
     }
