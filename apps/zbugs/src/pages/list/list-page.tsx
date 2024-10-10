@@ -15,7 +15,7 @@ export default function ListPage() {
   const z = useZero();
 
   const qs = new URLSearchParams(useSearch());
-  const open = qs.get('open');
+  const status = qs.get('status');
   const creator = qs.get('creator');
   const labels = qs.getAll('label');
 
@@ -30,8 +30,10 @@ export default function ListPage() {
   // TODO: Implement infinite scroll
   let q = z.query.issue.orderBy('modified', 'desc').related('labels');
 
-  if (open !== null) {
-    q = q.where('open', open === 'true');
+  if (status === null) {
+    q = q.where('open', true);
+  } else if (status === 'closed') {
+    q = q.where('open', false);
   }
 
   if (creatorID) {
