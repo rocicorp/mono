@@ -5,13 +5,15 @@
 .popover {
   position: absolute;
   left: -80px;
-  float: left;
   display: block;
-  padding: 0.5rem;
-  background-color: var(--color-nav-selected);
-  border: 1px solid #e5e5e5;
-  border-radius: 0.25rem;
-  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  padding: 1.5rem;
+  background-color: var(--color-modal-background);
+  backdrop-filter: var(--filter-backdrop-blur);
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-modal-outline);
+  height: 50vh;
+  overflow-y: scroll;
+  scrollbar-color: var(--color-nav-selected) rgba(0, 0, 0, 0);
 }
 
 .label:hover {
@@ -23,5 +25,5 @@
 }
 
 .selected {
-  background-color: var(--color-primary-cta);
+  background-color: var(--color-nav-selected);
 }

@@ -453,6 +453,10 @@ h1 {
   padding: 1rem;
 }
 
+.edit-description {
+  margin-bottom: 4rem;
+}
+
 .edit-title {
   margin-bottom: 2rem;
 }
@@ -467,6 +471,11 @@ h1 {
   font-size: var(--typo-label-size);
   font-weight: var(--typo-label-weight);
   margin-bottom: 1rem;
+}
+
+.issue-detail-label-container {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .issue-detail p {
@@ -622,6 +631,11 @@ h1 {
 .description-container p {
   line-height: 1.5;
   margin-bottom: 0.5rem;
+}
+
+.description-container ul {
+  list-style-type: disc;
+  list-style-position: inside;
 }
 
 .description-container ul li {

@@ -28,7 +28,7 @@ export default function LabelPicker({
   );
   return (
     <div className={style.root} ref={ref}>
-      <button onMouseDown={() => setIsOpen(!isOpen)}>
+      <button title="Add label" onMouseDown={() => setIsOpen(!isOpen)}>
         <Plus
           style={{
             width: '1em',
