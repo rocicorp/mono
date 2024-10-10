@@ -2,9 +2,9 @@ import {LogContext} from '@rocicorp/logger';
 import {Pgoutput} from 'pg-logical-replication';
 import {assert} from '../../../../shared/src/asserts.js';
 import {h32} from '../../../../shared/src/xxhash.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import type {RowKey, RowValue} from '../../types/row-key.js';
-import {Database} from '../../../../zqlite/src/db.js';
 import type {
   DataChange,
   MessageBegin,
@@ -42,7 +42,7 @@ export function createMessageProcessor(
 ): MessageProcessor {
   return new MessageProcessor(
     new StatementRunner(db),
-    'DEFAULT',
+    'IMMEDIATE',
     ack,
     failures,
   );

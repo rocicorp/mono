@@ -16,4 +16,5 @@ WORKDIR /opt/app/packages/zero-cache
 RUN chmod +x ./restore-litestream-db.sh
 EXPOSE 4848
 ENTRYPOINT ["/bin/sh", "-c"]
+ENV JSON_LOG_FORMAT=1
 CMD ["(./restore-litestream-db.sh || true) && npx tsx ../../apps/zbugs/zero.config.ts && litestream replicate -config /opt/app/litestream.yml"]

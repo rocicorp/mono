@@ -99,46 +99,50 @@ export default function IssuePage() {
     <div className="issue-detail-container">
       {/* Center column of info */}
       <div className="issue-detail">
-        <div className="issue-breadcrumb">
-          <span className="breadcrumb-item">Open issues</span>
-          <span className="breadcrumb-item">&rarr;</span>
-          <span className="breadcrumb-item">ZB-15</span>
+        <div className="issue-topbar">
+          <div className="issue-breadcrumb">
+            <span className="breadcrumb-item">Open issues</span>
+            <span className="breadcrumb-item">&rarr;</span>
+            <span className="breadcrumb-item">ZB-15</span>
+          </div>
+          <div className="edit-buttons">
+            {!editing ? (
+              <>
+                <button
+                  className="edit-button"
+                  onMouseDown={() => setEditing(issue)}
+                >
+                  Edit
+                </button>
+                <button className="delete-button" onMouseDown={() => remove()}>
+                  Delete
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="save-button" onMouseDown={save}>
+                  Save
+                </button>
+                <button className="cancel-button" onMouseDown={cancel}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        <div className="edit-button">
-          {!editing ? (
-            <>
-              <button
-                style={{border: '1px outset white', marginRight: '0.5rem'}}
-                onMouseDown={() => setEditing(issue)}
-              >
-                Edit
-              </button>
-              <button
-                style={{border: '1px outset white'}}
-                onMouseDown={() => remove()}
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <>
-              <button style={{border: '1px outset white'}} onMouseDown={save}>
-                Save
-              </button>
-              <button style={{border: '1px outset white'}} onMouseDown={cancel}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
+
         {!editing ? (
           <h1 className="issue-detail-title">{rendering.title}</h1>
         ) : (
-          <TextareaAutosize
-            value={rendering.title}
-            style={{color: 'black', width: '600px'}}
-            onChange={e => setEdits({...edits, title: e.target.value})}
-          />
+          <div className="edit-title-container">
+            <p className="issue-detail-label">Edit title</p>
+            <TextareaAutosize
+              value={rendering.title}
+              className="edit-title"
+              autoFocus
+              onChange={e => setEdits({...edits, title: e.target.value})}
+            />
+          </div>
         )}
         {/* These comments are actually github markdown which unfortunately has
          HTML mixed in. We need to find some way to render them, or convert to
@@ -146,12 +150,16 @@ export default function IssuePage() {
         {!editing ? (
           <Markdown>{rendering.description}</Markdown>
         ) : (
-          <TextareaAutosize
-            style={{color: 'black', width: '600px'}}
-            value={rendering.description}
-            onChange={e => setEdits({...edits, description: e.target.value})}
-          />
+          <div className="edit-description-container">
+            <p className="issue-detail-label">Edit description</p>
+            <TextareaAutosize
+              className="edit-description"
+              value={rendering.description}
+              onChange={e => setEdits({...edits, description: e.target.value})}
+            />
+          </div>
         )}
+
         {issue.comments.length > 0 ? (
           <div className="comments-container">
             <h2 className="issue-detail-label">Comments</h2>
@@ -162,7 +170,9 @@ export default function IssuePage() {
         ) : null}
         <br />
         {z.userID === 'anon' ? (
-          <a href="/api/login/github">Login to comment</a>
+          <a href="/api/login/github" className="login-to-comment">
+            Login to comment
+          </a>
         ) : (
           <CommentComposer issueID={issue.id} />
         )}

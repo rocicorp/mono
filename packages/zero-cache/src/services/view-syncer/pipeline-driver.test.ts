@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {DbFile} from '../../test/lite.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {Database as DB} from '../../../../zqlite/src/db.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {DbFile} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
@@ -47,17 +47,19 @@ describe('view-syncer/pipeline-driver', () => {
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,
+        ignored TIMESTAMPTZ,
         _0_version TEXT NOT NULL
       );
       CREATE TABLE comments (
         id TEXT PRIMARY KEY, 
         issueID TEXT,
         upvotes INTEGER,
+        ignored BYTEA,
          _0_version TEXT NOT NULL);
 
-      INSERT INTO ISSUES (id, closed, _0_version) VALUES ('1', 0, '00');
-      INSERT INTO ISSUES (id, closed, _0_version) VALUES ('2', 1, '00');
-      INSERT INTO ISSUES (id, closed, _0_version) VALUES ('3', 0, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 0, 1728345600000, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 1, 1722902400000, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 0, null, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('10', '1', 0, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('20', '2', 1, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('21', '2', 10000, '00');

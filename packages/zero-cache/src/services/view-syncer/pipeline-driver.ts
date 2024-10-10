@@ -1,10 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
-import {listTables} from '../../db/lite-tables.js';
-import {mapLiteDataTypeToZqlSchemaValue} from '../../types/lite.js';
-import type {RowKey} from '../../types/row-key.js';
-import type {TableSpec} from '../../types/specs.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import {buildPipeline} from '../../../../zql/src/zql/builder/builder.js';
 import type {Change} from '../../../../zql/src/zql/ivm/change.js';
@@ -13,9 +9,16 @@ import type {Input, Storage} from '../../../../zql/src/zql/ivm/operator.js';
 import type {TableSchema} from '../../../../zql/src/zql/ivm/schema.js';
 import type {Source, SourceChange} from '../../../../zql/src/zql/ivm/source.js';
 import {TableSource} from '../../../../zqlite/src/table-source.js';
+import {listTables} from '../../db/lite-tables.js';
+import {
+  dataTypeToZqlValueType,
+  mapLiteDataTypeToZqlSchemaValue,
+} from '../../types/lite.js';
+import type {RowKey} from '../../types/row-key.js';
+import type {SchemaVersions} from '../../types/schema-versions.js';
+import type {TableSpec} from '../../types/specs.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
-import type {SchemaVersions} from '../../types/schema-versions.js';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -43,25 +46,27 @@ export type RowEdit = {
 
 export type RowChange = RowAdd | RowRemove | RowEdit;
 
-/** Normalized TableSpec information for faster processing. */
-export type NormalizedTableSpec = TableSpec & {
-  readonly boolColumns: Set<string>;
-};
+/** Normalized TableSpec filters out columns with unsupported data types. */
+export type NormalizedTableSpec = TableSpec;
 
 export function normalize(tableSpec: TableSpec): NormalizedTableSpec {
   const {primaryKey, columns} = tableSpec;
-  return {
+  const normalized = {
     ...tableSpec,
+
+    // Only include columns for which the mapped ZQL Value is defined.
+    columns: Object.fromEntries(
+      Object.entries(columns).filter(([_, spec]) =>
+        dataTypeToZqlValueType(spec.dataType),
+      ),
+    ),
+
     // Primary keys are normalized here so that downstream
     // normalization does not need to create new objects.
     // See row-key.ts: normalizedKeyOrder()
     primaryKey: [...primaryKey].sort(),
-    boolColumns: new Set(
-      Object.entries(columns)
-        .filter(([_, spec]) => spec.dataType === 'BOOL')
-        .map(([col]) => col),
-    ),
   };
+  return normalized;
 }
 
 type Pipeline = {
@@ -135,7 +140,7 @@ export class PipelineDriver {
   }
 
   advanceWithoutDiff(): string {
-    const {db, version} = this.#snapshotter.advance().curr;
+    const {db, version} = this.#snapshotter.advanceWithoutDiff().curr;
     for (const table of this.#tables.values()) {
       table.setDB(db.db);
     }
@@ -238,8 +243,8 @@ export class PipelineDriver {
     numChanges: number;
     changes: Iterable<RowChange>;
   } {
-    assert(this.initialized());
-    const diff = this.#snapshotter.advance();
+    assert(this.initialized() && this.#tableSpecs);
+    const diff = this.#snapshotter.advance(this.#tableSpecs);
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
 

@@ -1,7 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {listTables} from '../../db/lite-tables.js';
 import {DbFile, expectTables} from '../../test/lite.js';
+import type {TableSpec} from '../../types/specs.js';
 import {MessageProcessor} from '../replicator/incremental-sync.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
@@ -15,6 +17,7 @@ describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
   let dbFile: DbFile;
   let replicator: MessageProcessor;
+  let tableSpecs: Map<string, TableSpec>;
 
   beforeEach(() => {
     lc = createSilentLogContext();
@@ -31,20 +34,25 @@ describe('view-syncer/snapshotter', () => {
         );
         INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
           VALUES (1, 1, 1, '00');  
-        CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, _0_version TEXT NOT NULL);
-        CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
-        CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, _0_version TEXT NOT NULL);
+        CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, ignore TEXT, _0_version TEXT NOT NULL);
+        CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, ignore TEXT, _0_version TEXT NOT NULL);
+        CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, ignore TEXT, _0_version TEXT NOT NULL);
 
-        INSERT INTO issues(id, owner, desc, _0_version) VALUES(1, 10, 'foo', '00');
-        INSERT INTO issues(id, owner, desc, _0_version) VALUES(2, 10, 'bar', '00');
-        INSERT INTO issues(id, owner, desc, _0_version) VALUES(3, 20, 'baz', '00');
+        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(1, 10, 'foo', 'zzz', '00');
+        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(2, 10, 'bar', 'xyz', '00');
+        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(3, 20, 'baz', 'yyy', '00');
 
-        INSERT INTO users(id, handle, _0_version) VALUES(10, 'alice', '00');
-        INSERT INTO users(id, handle, _0_version) VALUES(20, 'bob', '00');
+        INSERT INTO users(id, handle, ignore, _0_version) VALUES(10, 'alice', 'vvv', '00');
+        INSERT INTO users(id, handle, ignore, _0_version) VALUES(20, 'bob', 'vxv', '00');
       `,
     );
     initReplicationState(db, ['zero_data'], '01');
     initChangeLog(db);
+
+    // The 'ignore' column should not show up in the diffs.
+    const tables = listTables(db);
+    tables.forEach(t => delete (t.columns as Record<string, unknown>).ignore);
+    tableSpecs = new Map(tables.map(spec => [spec.name, spec]));
 
     replicator = createMessageProcessor(db);
   });
@@ -64,13 +72,13 @@ describe('view-syncer/snapshotter', () => {
     });
     expectTables(db.db, {
       issues: [
-        {id: 1, owner: 10, desc: 'foo', ['_0_version']: '00'},
-        {id: 2, owner: 10, desc: 'bar', ['_0_version']: '00'},
-        {id: 3, owner: 20, desc: 'baz', ['_0_version']: '00'},
+        {id: 1, owner: 10, desc: 'foo', ignore: 'zzz', ['_0_version']: '00'},
+        {id: 2, owner: 10, desc: 'bar', ignore: 'xyz', ['_0_version']: '00'},
+        {id: 3, owner: 20, desc: 'baz', ignore: 'yyy', ['_0_version']: '00'},
       ],
       users: [
-        {id: 10, handle: 'alice', ['_0_version']: '00'},
-        {id: 20, handle: 'bob', ['_0_version']: '00'},
+        {id: 10, handle: 'alice', ignore: 'vvv', ['_0_version']: '00'},
+        {id: 20, handle: 'bob', ignore: 'vxv', ['_0_version']: '00'},
       ],
     });
   });
@@ -81,7 +89,7 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');
     expect(diff.curr.version).toBe('00');
     expect(diff.changes).toBe(0);
@@ -125,7 +133,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '07'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
@@ -184,7 +192,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '09'},
     ]);
 
-    const diff1 = s1.advance();
+    const diff1 = s1.advance(tableSpecs);
     expect(diff1.prev.version).toBe('00');
     expect(diff1.curr.version).toBe('01');
     expect(diff1.changes).toBe(5); // The key update results in a del(old) + set(new).
@@ -324,7 +332,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '0d'},
     ]);
 
-    const diff2 = s1.advance();
+    const diff2 = s1.advance(tableSpecs);
     expect(diff2.prev.version).toBe('01');
     expect(diff2.curr.version).toBe('09');
     expect(diff2.changes).toBe(3);
@@ -376,7 +384,7 @@ describe('view-syncer/snapshotter', () => {
     // The diff for s2 goes straight from '00' to '08'.
     // This will coalesce multiple changes to a row, and can result in some noops,
     // (e.g. rows that return to their original state).
-    const diff3 = s2.advance();
+    const diff3 = s2.advance(tableSpecs);
     expect(diff3.prev.version).toBe('00');
     expect(diff3.curr.version).toBe('09');
     expect(diff3.changes).toBe(5);
@@ -440,7 +448,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '07'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
@@ -462,7 +470,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '07'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
@@ -506,7 +514,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '08'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(2);
@@ -587,7 +595,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '09'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(3);
@@ -651,7 +659,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '07'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     let currStmts = 0;
 
     const abortError = new Error('aborted iteration');
@@ -691,7 +699,7 @@ describe('view-syncer/snapshotter', () => {
       {watermark: '07'},
     ]);
 
-    const diff = s.advance();
+    const diff = s.advance(tableSpecs);
     let currStmts = 0;
     let prevStmts = 0;
 

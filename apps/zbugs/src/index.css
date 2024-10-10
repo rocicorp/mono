@@ -52,6 +52,11 @@ body {
   place-items: top;
   min-width: 320px;
   min-height: 100vh;
+  scrollbar-color: var(--color-nav-selected) var(--color-background);
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--color-background);
 }
 
 h1 {
@@ -61,6 +66,10 @@ h1 {
 
 .app-container {
   width: 100vw;
+}
+
+.modal-background {
+  background-color: rgba(0, 0, 0, 0.95);
 }
 
 /* Nav */
@@ -81,7 +90,7 @@ h1 {
   background-color: var(--color-primary-cta);
   padding: 0.4rem 1.2rem;
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 800;
   font-family: inherit;
   cursor: pointer;
 }
@@ -121,15 +130,18 @@ h1 {
 
 .user-login a {
   display: block;
+  font-weight: 800;
+  opacity: 0.6;
   padding: 0.4rem 1.2rem;
   border-radius: 0.5rem;
   text-align: center;
-  border: 1px solid var(--color-light-outline);
-  transition: background-color 0.3s ease;
+  color: var(--color-text-primary-active);
+  border: 1px solid var(--color-text-dimmed-label);
+  transition: opacity 0.3s ease-in-out;
 }
 
 .user-login a:hover {
-  background-color: var(--color-nav-selected);
+  opacity: 1;
 }
 
 /* Primary Content Panel */
@@ -367,7 +379,49 @@ h1 {
 .sidebar-status-closed {
   padding-left: 2.5rem;
   background: var(--color-nav-selected) url(assets/icons/issue-closed.svg)
-    no-repeat 0.8175rem center;
+    no-repeat center left;
+}
+
+.edit-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edit-buttons button {
+  color: var(--color-text-primary-active);
+  opacity: 0.6;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  transition: opacity 0.3s ease-in-out;
+  border: 1px solid var(--color-text-dimmed-label);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.edit-buttons button.cancel-button {
+  border: 1px solid var(--color-background);
+}
+
+.edit-buttons button:hover {
+  opacity: 1;
+}
+
+.edit-title-container {
+  margin-top: 2rem;
+}
+
+.edit-title,
+.edit-description {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-nav-selected);
+  display: block;
+  width: 100%;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.edit-title {
+  margin-bottom: 2rem;
 }
 
 .issue-detail-title {
@@ -423,6 +477,11 @@ h1 {
   cursor: pointer;
 }
 
+.issue-topbar {
+  display: flex;
+  justify-content: space-between;
+}
+
 .breadcrumb-item {
   font-size: var(--typo-label-size);
   font-weight: var(--typo-label-weight);
@@ -461,4 +520,35 @@ h1 {
 
 .selector .dropdown .item:hover {
   background-color: var(--color-row-hover);
+}
+
+.login-to-comment {
+  color: var(--color-text-primary-active);
+  opacity: 0.6;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  transition: opacity 0.3s ease-in-out;
+  border: 1px solid var(--color-text-dimmed-label);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  display: inline-block;
+}
+
+.login-to-comment:hover {
+  opacity: 1;
+}
+
+/* Issue Composer */
+
+.save-issue {
+  font-weight: 800;
+  padding: 0.4rem 1.2rem;
+}
+
+.modal-container .issue-detail-label {
+  margin-bottom: 0;
+}
+
+.issue-composer-header {
+  margin-bottom: 1rem;
 }
