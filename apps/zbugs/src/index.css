@@ -469,6 +469,11 @@ h1 {
   margin-bottom: 1rem;
 }
 
+.issue-detail-label-container {
+  display: flex;
+  flex-wrap: wrap;
+}
+
 .issue-detail p {
   word-wrap: break-word;
   overflow: hidden;
