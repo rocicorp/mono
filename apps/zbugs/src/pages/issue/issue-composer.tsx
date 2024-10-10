@@ -22,6 +22,8 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       description: description ?? '',
       created: Date.now(),
       creatorID: z.userID,
+      // TODO: Should be able to skip passing optional fields.
+      assigneeID: undefined,
       modified: Date.now(),
       open: true,
       labelIDs: '',

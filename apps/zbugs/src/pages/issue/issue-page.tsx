@@ -12,6 +12,7 @@ import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import LabelPicker from '../../components/label-picker.js';
+import UserPicker from '../../components/user-picker.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -21,6 +22,7 @@ export default function IssuePage() {
   const q = z.query.issue
     .where('id', params?.id ?? '')
     .related('creator', creator => creator.one())
+    .related('assignee', assignee => assignee.one())
     .related('labels')
     .related('comments', q => q.orderBy('created', 'asc'))
     .one();
@@ -200,6 +202,18 @@ export default function IssuePage() {
             />
             <span className="issue-creator-name">{issue.creator.login}</span>
           </button>
+        </div>
+
+        <div className="sidebar-item">
+          <p className="issue-detail-label">Assignee</p>
+          <UserPicker
+            selected={{login: issue.assignee?.login}}
+            onSelect={user => {
+              z.mutate.issue.update({id: issue.id, assigneeID: user.id});
+              // 🙄 - this can go away when https://bugs.rocicorp.dev/issue/k_h0Dy_6_6yHFDWFxNke2 is fixed.
+              window.setTimeout(() => location.reload(), 100);
+            }}
+          />
         </div>
 
         <div className="sidebar-item">
