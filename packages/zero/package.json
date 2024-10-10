@@ -69,6 +69,9 @@
   "bin": {
     "zero-cache": "./out/zero/src/cli.js"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "files": [
     "out",
     "!*.tsbuildinfo",
