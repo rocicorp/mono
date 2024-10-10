@@ -219,24 +219,26 @@ export class MessageProcessor {
     return false;
   }
 
-  #startTransaction(lc: LogContext): TransactionProcessor {
+  #beginTransaction(lc: LogContext): TransactionProcessor {
     let start = Date.now();
     for (let i = 0; ; i++) {
       try {
         return new TransactionProcessor(this.#db, this.#txMode);
       } catch (e) {
-        // SQLite occasionally errors with 'databse is locked' error when
-        // running with `litestream replicate`, even with a long busy_timeout.
-        // Try retrying once since the error should have released any deadlock
-        // situation.
+        // The db occasionally errors with a 'database is locked' error when
+        // being concurrently processed by `litestream replicate`, even with
+        // a long busy_timeout. Retry once to see if any deadlock situation
+        // was resolved when aborting the first attempt.
         if (e instanceof SqliteError) {
           lc.error?.(
             `${e.code} after ${Date.now() - start} ms (attempt ${i + 1})`,
             e,
           );
+
           if (i === 0) {
+            // retry once
             start = Date.now();
-            continue; // retry once
+            continue;
           }
         }
         throw e;
@@ -254,7 +256,7 @@ export class MessageProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = this.#startTransaction(lc);
+      this.#currentTx = this.#beginTransaction(lc);
       return false;
     }
 
