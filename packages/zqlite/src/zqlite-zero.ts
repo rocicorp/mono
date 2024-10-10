@@ -1,3 +1,4 @@
+import {must} from '../../shared/src/must.js';
 import {ZeroContext} from '../../zero-client/src/client/context.js';
 import {
   type BaseCRUDMutate,
@@ -8,14 +9,13 @@ import {
 } from '../../zero-client/src/client/crud.js';
 import * as zeroJs from '../../zero-client/src/client/zero.js';
 import type {Query} from '../../zero-client/src/mod.js';
-import type {EntityID} from '../../zero-protocol/src/entity.js';
+import type {PrimaryKeyValueRecord} from '../../zero-protocol/src/primary-key.js';
 import type {CRUDOp, CRUDOpKind} from '../../zero-protocol/src/push.js';
 import type {Row} from '../../zql/src/zql/ivm/data.js';
 import {newQuery} from '../../zql/src/zql/query/query-impl.js';
 import type {TableSchema} from '../../zql/src/zql/query/schema.js';
 import type {Database} from './db.js';
 import type {ZQLiteZeroOptions} from './options.js';
-import {must} from '../../shared/src/must.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
@@ -59,7 +59,7 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
         const ops: CRUDOp[] = [];
         const m = {} as Record<string, unknown>;
         for (const name of Object.keys(schema.tables)) {
-          m[name] = makeBatchCRUDMutate(name, ops);
+          m[name] = makeBatchCRUDMutate(name, schema, ops);
         }
 
         const rv = await body(m as BaseCRUDMutate<S>);
@@ -126,8 +126,9 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
           row: mergedValue,
         });
       },
-      delete: async (id: EntityID) => {
+      delete: async (id: PrimaryKeyValueRecord) => {
         assertNotInBatch(entityType, 'delete');
+        // TODO: Remove the useless awaits here and elsewhere.
         const existingEntity = await db
           .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
           .get<Row>(id);

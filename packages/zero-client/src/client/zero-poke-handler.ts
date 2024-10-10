@@ -1,10 +1,10 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
 import type {
   PatchOperationInternal,
   PokeInternal,
 } from '../../../replicache/src/impl.js';
+import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
 import type {
   ClientsPatchOp,
   EntitiesPatchOp,
@@ -16,9 +16,10 @@ import type {
 import {
   toClientsKey,
   toDesiredQueriesKey,
-  toEntitiesKey,
   toGotQueriesKey,
+  toPrimaryKeyString,
 } from './keys.js';
+import type {Schema} from './zero.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -46,16 +47,19 @@ export class PokeHandler {
   // Serializes calls to this.#replicachePoke otherwise we can cause out of
   // order poke errors.
   readonly #pokeLock = new Lock();
+  readonly #schema: Schema;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
     onPokeError: () => void,
     clientID: ClientID,
+    schema: Schema,
     lc: LogContext,
   ) {
     this.#replicachePoke = replicachePoke;
     this.#onPokeError = onPokeError;
     this.#clientID = clientID;
+    this.#schema = schema;
     this.#lc = lc.withContext('PokeHandler');
   }
 
@@ -138,7 +142,7 @@ export class PokeHandler {
       lc.debug?.('got poke lock at', now);
       lc.debug?.('merging', this.#pokeBuffer.length);
       try {
-        const merged = mergePokes(this.#pokeBuffer);
+        const merged = mergePokes(this.#pokeBuffer, this.#schema);
         this.#pokeBuffer.length = 0;
         if (merged === undefined) {
           lc.debug?.('frame is empty');
@@ -175,6 +179,7 @@ export class PokeHandler {
 
 export function mergePokes(
   pokeBuffer: PokeAccumulator[],
+  schema: Schema,
 ): PokeInternal | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
@@ -233,7 +238,9 @@ export function mergePokes(
       }
       if (pokePart.entitiesPatch) {
         mergedPatch.push(
-          ...pokePart.entitiesPatch.map(entitiesPatchOpToReplicachePatchOp),
+          ...pokePart.entitiesPatch.map(p =>
+            entitiesPatchOpToReplicachePatchOp(p, schema),
+          ),
         );
       }
     }
@@ -291,6 +298,7 @@ function queryPatchOpToReplicachePatchOp(
 
 function entitiesPatchOpToReplicachePatchOp(
   op: EntitiesPatchOp,
+  schema: Schema,
 ): PatchOperationInternal {
   switch (op.op) {
     case 'clear':
@@ -298,18 +306,30 @@ function entitiesPatchOpToReplicachePatchOp(
     case 'del':
       return {
         op: 'del',
-        key: toEntitiesKey(op.entityType, op.entityID),
+        key: toPrimaryKeyString(
+          op.entityType,
+          schema.tables[op.entityType].primaryKey,
+          op.entityID,
+        ),
       };
     case 'put':
       return {
         op: 'put',
-        key: toEntitiesKey(op.entityType, op.entityID),
+        key: toPrimaryKeyString(
+          op.entityType,
+          schema.tables[op.entityType].primaryKey,
+          op.entityID,
+        ),
         value: op.value,
       };
     case 'update':
       return {
         op: 'update',
-        key: toEntitiesKey(op.entityType, op.entityID),
+        key: toPrimaryKeyString(
+          op.entityType,
+          schema.tables[op.entityType].primaryKey,
+          op.entityID,
+        ),
         merge: op.merge,
         constrain: op.constrain,
       };

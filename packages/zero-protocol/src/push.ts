@@ -1,6 +1,6 @@
 import {jsonObjectSchema, jsonSchema} from '../../shared/src/json-schema.js';
 import * as v from '../../shared/src/valita.js';
-import {entityIDSchema} from './entity.js';
+import {primaryKeyValueRecordSchema} from './primary-key.js';
 
 export const CRUD_MUTATION_NAME = '_zero_crud';
 export enum MutationType {
@@ -14,7 +14,7 @@ export enum MutationType {
 const createOpSchema = v.object({
   op: v.literal('create'),
   entityType: v.string(),
-  id: entityIDSchema,
+  id: primaryKeyValueRecordSchema,
   value: jsonObjectSchema,
 });
 
@@ -25,7 +25,7 @@ const createOpSchema = v.object({
 const setOpSchema = v.object({
   op: v.literal('set'),
   entityType: v.string(),
-  id: entityIDSchema,
+  id: primaryKeyValueRecordSchema,
   value: jsonObjectSchema,
 });
 
@@ -35,7 +35,7 @@ const setOpSchema = v.object({
 const updateOpSchema = v.object({
   op: v.literal('update'),
   entityType: v.string(),
-  id: entityIDSchema,
+  id: primaryKeyValueRecordSchema,
   partialValue: jsonObjectSchema,
 });
 
@@ -45,7 +45,7 @@ const updateOpSchema = v.object({
 const deleteOpSchema = v.object({
   op: v.literal('delete'),
   entityType: v.string(),
-  id: entityIDSchema,
+  id: primaryKeyValueRecordSchema,
 });
 
 const crudOpSchema = v.union(

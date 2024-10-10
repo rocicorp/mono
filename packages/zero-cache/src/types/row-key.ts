@@ -1,4 +1,4 @@
-import {h64} from '../../../shared/src/xxhash.js';
+import {h64WithReverse} from '../../../shared/src/h64-with-reverse.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 
 export type ColumnType = {readonly typeOid: number};
@@ -64,21 +64,7 @@ export function rowIDHash(id: RowID): string {
   }
 
   const str = stringify([id.schema, id.table, ...tuples(id.rowKey)]);
-
-  // xxhash only computes 64-bit values. Run it on the forward and reverse string
-  // to get better collision resistance.
-  const forward = h64(str);
-  const backward = h64(reverse(str));
-  const full = (forward << 64n) + backward;
-  hash = full.toString(36);
+  hash = h64WithReverse(str);
   rowIDHashes.set(id, hash);
   return hash;
-}
-
-function reverse(str: string): string {
-  let reversed = '';
-  for (let i = str.length - 1; i >= 0; i--) {
-    reversed += str[i];
-  }
-  return reversed;
 }
