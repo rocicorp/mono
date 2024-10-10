@@ -616,3 +616,28 @@ h1 {
 .edit-comment-cancel:hover {
   opacity: 1;
 }
+
+/* Markup */
+
+.description-container p {
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.description-container ul li {
+  padding: 0.25rem 0;
+  line-height: 2;
+}
+
+.issue-detail code {
+  font-size: 0.9rem;
+  font-family: monospace;
+  padding: 0.25rem 0.5rem;
+}
+
+.issue-detail pre {
+  background-color: var(--color-light-outline);
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 1rem;
+}
