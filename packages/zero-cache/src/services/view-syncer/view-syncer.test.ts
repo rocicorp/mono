@@ -742,7 +742,7 @@ describe('view-syncer/service', () => {
       }),
       messages.delete('issues', {id: '2'}),
       zeroMessages.update('schemaVersions', {
-        lock: 1,
+        lock: true,
         minSupportedVersion: 3,
       }),
     );
