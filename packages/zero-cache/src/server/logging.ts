@@ -55,7 +55,7 @@ const consoleJsonLogSink: LogSink = {
 
     console[level](
       stringify({
-        level,
+        level: level.toUpperCase(),
         ...context,
         ...message,
         ...lastObj,
