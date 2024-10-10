@@ -15,8 +15,13 @@ export type RowValue = RowKey;
 /**
  * Returns the `RowKey` such that key iteration produces a sorted sequence. If the
  * keys are already sorted, the input is returned as is.
+ *
+ * Note that the value type is parameterized as `V` so that this method can be used
+ * for both (pg) RowKeys and LiteRowKeys.
  */
-export function normalizedKeyOrder(rowKey: RowKey) {
+export function normalizedKeyOrder<V>(
+  rowKey: Readonly<Record<string, V>>,
+): Readonly<Record<string, V>> {
   let last = '';
   for (const col in rowKey) {
     if (last > col) {

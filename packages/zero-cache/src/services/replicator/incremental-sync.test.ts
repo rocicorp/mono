@@ -64,8 +64,10 @@ describe('replicator/incremental-sync', () => {
     data: Record<string, Record<string, unknown>[]>;
   };
 
-  const issues = new ReplicationMessages({issues: 'issueID'});
-  const orgIssues = new ReplicationMessages({issues: ['orgID', 'issueID']});
+  const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+  const orgIssues = new ReplicationMessages({
+    issues: ['orgID', 'issueID', 'bool'],
+  });
   const fooBarBaz = new ReplicationMessages({foo: 'id', bar: 'id', baz: 'id'});
 
   const cases: Case[] = [
@@ -73,21 +75,22 @@ describe('replicator/incremental-sync', () => {
       name: 'insert rows',
       setup: `
       CREATE TABLE issues(
-        issueID INTEGER PRIMARY KEY,
+        issueID INTEGER,
+        bool BOOL,
         big INTEGER,
         flt REAL,
-        bool BOOL,
         description TEXT,
         json JSON,
         time TIMESTAMPTZ,
         bytes bytesa,
         intArray int4[],
-        _0_version TEXT NOT NULL
+        _0_version TEXT NOT NULL,
+        PRIMARY KEY(issueID, bool)
       );
       `,
       downstream: [
         ['begin', issues.begin()],
-        ['data', issues.insert('issues', {issueID: 123})],
+        ['data', issues.insert('issues', {issueID: 123, bool: true})],
         ['data', issues.insert('issues', {issueID: 456, bool: false})],
         ['commit', issues.commit(), {watermark: '06'}],
 
@@ -96,6 +99,7 @@ describe('replicator/incremental-sync', () => {
           'data',
           issues.insert('issues', {
             issueID: 789,
+            bool: true,
             big: 9223372036854775807n,
             json: [{foo: 'bar', baz: 123}],
             time: 1728345600123456n,
@@ -104,7 +108,10 @@ describe('replicator/incremental-sync', () => {
           } as unknown as Record<string, JSONObject>),
         ],
         ['data', issues.insert('issues', {issueID: 987, bool: true})],
-        ['data', issues.insert('issues', {issueID: 234, flt: 123.456})],
+        [
+          'data',
+          issues.insert('issues', {issueID: 234, bool: false, flt: 123.456}),
+        ],
         ['commit', issues.commit(), {watermark: '0b'}],
       ],
       data: {
@@ -113,7 +120,7 @@ describe('replicator/incremental-sync', () => {
             issueID: 123n,
             big: null,
             flt: null,
-            bool: null,
+            bool: 1n,
             description: null,
             json: null,
             time: null,
@@ -137,7 +144,7 @@ describe('replicator/incremental-sync', () => {
             issueID: 789n,
             big: 9223372036854775807n,
             flt: null,
-            bool: null,
+            bool: 1n,
             description: null,
             json: '[{"foo":"bar","baz":123}]',
             time: 1728345600123456n,
@@ -161,7 +168,7 @@ describe('replicator/incremental-sync', () => {
             issueID: 234n,
             big: null,
             flt: 123.456,
-            bool: null,
+            bool: 0n,
             description: null,
             json: null,
             time: null,
@@ -175,31 +182,31 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '02',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":123}',
+            rowKey: '{"bool":1,"issueID":123}',
           },
           {
             stateVersion: '02',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":456}',
+            rowKey: '{"bool":0,"issueID":456}',
           },
           {
             stateVersion: '06',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":789}',
+            rowKey: '{"bool":1,"issueID":789}',
           },
           {
             stateVersion: '06',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":987}',
+            rowKey: '{"bool":1,"issueID":987}',
           },
           {
             stateVersion: '06',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":234}',
+            rowKey: '{"bool":0,"issueID":234}',
           },
         ],
       },
@@ -213,14 +220,23 @@ describe('replicator/incremental-sync', () => {
         description TEXT,
         bool BOOL,
         _0_version TEXT NOT NULL,
-        PRIMARY KEY("orgID", "issueID")
+        PRIMARY KEY("orgID", "issueID", "bool")
       );
       `,
       downstream: [
         ['begin', orgIssues.begin()],
-        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 123})],
-        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 456})],
-        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 789})],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
+        ],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 1, issueID: 456, bool: true}),
+        ],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 2, issueID: 789, bool: true}),
+        ],
         ['commit', orgIssues.commit(), {watermark: '06'}],
 
         ['begin', orgIssues.begin()],
@@ -243,7 +259,7 @@ describe('replicator/incremental-sync', () => {
               bool: false,
               description: 'bar',
             },
-            {orgID: 1, issueID: 123},
+            {orgID: 1, issueID: 123, bool: true},
           ),
         ],
         ['commit', orgIssues.commit(), {watermark: '0a'}],
@@ -268,7 +284,7 @@ describe('replicator/incremental-sync', () => {
             orgID: 2n,
             issueID: 789n,
             description: null,
-            bool: null,
+            bool: 1n,
             ['_0_version']: '02',
           },
         ],
@@ -277,25 +293,25 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '02',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":789,"orgID":2}',
+            rowKey: '{"bool":1,"issueID":789,"orgID":2}',
           },
           {
             stateVersion: '06',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":456,"orgID":1}',
+            rowKey: '{"bool":1,"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '06',
             table: 'issues',
             op: 'd',
-            rowKey: '{"issueID":123,"orgID":1}',
+            rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '06',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":123,"orgID":2}',
+            rowKey: '{"bool":0,"issueID":123,"orgID":2}',
           },
         ],
       },
@@ -306,53 +322,81 @@ describe('replicator/incremental-sync', () => {
       CREATE TABLE issues(
         issueID INTEGER,
         orgID INTEGER,
+        bool BOOL,
         description TEXT,
         _0_version TEXT NOT NULL,
-        PRIMARY KEY("orgID", "issueID")
+        PRIMARY KEY("orgID", "issueID","bool")
       );
       `,
       downstream: [
         ['begin', orgIssues.begin()],
-        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 123})],
-        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 456})],
-        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 789})],
-        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 987})],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
+        ],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 1, issueID: 456, bool: false}),
+        ],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 2, issueID: 789, bool: false}),
+        ],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 2, issueID: 987, bool: true}),
+        ],
         ['commit', orgIssues.commit(), {watermark: '07'}],
 
         ['begin', orgIssues.begin()],
-        ['data', orgIssues.delete('issues', {orgID: 1, issueID: 123})],
-        ['data', orgIssues.delete('issues', {orgID: 1, issueID: 456})],
-        ['data', orgIssues.delete('issues', {orgID: 2, issueID: 987})],
+        [
+          'data',
+          orgIssues.delete('issues', {orgID: 1, issueID: 123, bool: true}),
+        ],
+        [
+          'data',
+          orgIssues.delete('issues', {orgID: 1, issueID: 456, bool: false}),
+        ],
+        [
+          'data',
+          orgIssues.delete('issues', {orgID: 2, issueID: 987, bool: true}),
+        ],
         ['commit', orgIssues.commit(), {watermark: '0c'}],
       ],
       data: {
         issues: [
-          {orgID: 2n, issueID: 789n, description: null, ['_0_version']: '02'},
+          {
+            orgID: 2n,
+            issueID: 789n,
+            bool: 0n,
+            description: null,
+            ['_0_version']: '02',
+          },
         ],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '02',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":789,"orgID":2}',
+            rowKey: '{"bool":0,"issueID":789,"orgID":2}',
           },
           {
             stateVersion: '07',
             table: 'issues',
             op: 'd',
-            rowKey: '{"issueID":123,"orgID":1}',
+            rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '07',
             table: 'issues',
             op: 'd',
-            rowKey: '{"issueID":456,"orgID":1}',
+            rowKey: '{"bool":0,"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '07',
             table: 'issues',
             op: 'd',
-            rowKey: '{"issueID":987,"orgID":2}',
+            rowKey: '{"bool":1,"issueID":987,"orgID":2}',
           },
         ],
       },
@@ -438,29 +482,40 @@ describe('replicator/incremental-sync', () => {
       CREATE TABLE issues(
         issueID INTEGER,
         orgID INTEGER,
+        bool BOOL,
         description TEXT,
         _0_version TEXT NOT NULL,
-        PRIMARY KEY("orgID", "issueID")
+        PRIMARY KEY("orgID", "issueID", "bool")
       );
       `,
       downstream: [
         ['begin', orgIssues.begin()],
-        ['data', orgIssues.insert('issues', {orgID: 1, issueID: 123})],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
+        ],
         [
           'data',
           orgIssues.update(
             'issues',
-            {orgID: 1, issueID: 456},
-            {orgID: 1, issueID: 123},
+            {orgID: 1, issueID: 456, bool: false},
+            {orgID: 1, issueID: 123, bool: true},
           ),
         ],
-        ['data', orgIssues.insert('issues', {orgID: 2, issueID: 789})],
-        ['data', orgIssues.delete('issues', {orgID: 2, issueID: 789})],
+        [
+          'data',
+          orgIssues.insert('issues', {orgID: 2, issueID: 789, bool: false}),
+        ],
+        [
+          'data',
+          orgIssues.delete('issues', {orgID: 2, issueID: 789, bool: false}),
+        ],
         [
           'data',
           orgIssues.update('issues', {
             orgID: 1,
             issueID: 456,
+            bool: false,
             description: 'foo',
           }),
         ],
@@ -468,26 +523,32 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         issues: [
-          {orgID: 1n, issueID: 456n, description: 'foo', ['_0_version']: '02'},
+          {
+            orgID: 1n,
+            issueID: 456n,
+            bool: 0n,
+            description: 'foo',
+            ['_0_version']: '02',
+          },
         ],
         ['_zero.ChangeLog']: [
           {
             stateVersion: '02',
             table: 'issues',
             op: 'd',
-            rowKey: '{"issueID":123,"orgID":1}',
+            rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '02',
             table: 'issues',
             op: 's',
-            rowKey: '{"issueID":456,"orgID":1}',
+            rowKey: '{"bool":0,"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '02',
             table: 'issues',
             op: 'd',
-            rowKey: '{"issueID":789,"orgID":2}',
+            rowKey: '{"bool":0,"issueID":789,"orgID":2}',
           },
         ],
       },

@@ -1,8 +1,39 @@
 import {PreciseDate} from '@google-cloud/precise-date';
 import {describe, expect, test} from 'vitest';
-import {liteValue, liteValues} from './lite.js';
+import {liteRow, liteValue, liteValues} from './lite.js';
 
 describe('types/lite', () => {
+  test.each([
+    [{foo: 'bar'}, undefined],
+    [{foo: 'bar', baz: 2n}, undefined],
+    [{foo: 'bar', baz: 2n, boo: 3}, undefined],
+    [{foo: 'bar', baz: 2n, boo: 3, zoo: null}, undefined],
+    [{foo: true}, {foo: 1}],
+    [
+      {foo: 'bar', b: false},
+      {foo: 'bar', b: 0},
+    ],
+    [
+      {foo: 'bar', b: true, baz: 2n},
+      {foo: 'bar', b: 1, baz: 2n},
+    ],
+    [
+      {b: true, foo: 'bar', baz: 2n, boo: 3},
+      {b: 1, foo: 'bar', baz: 2n, boo: 3},
+    ],
+    [
+      {foo: 'bar', baz: 2n, boo: 3, zoo: null, b: false},
+      {foo: 'bar', baz: 2n, boo: 3, zoo: null, b: 0},
+    ],
+  ])('liteRow: %s', (input, output) => {
+    const lite = liteRow(input);
+    if (output) {
+      expect(lite).toEqual(output);
+    } else {
+      expect(lite).toBe(input); // toBe => identity (i.e. no copy)
+    }
+  });
+
   test('values', () => {
     expect(
       liteValues({
