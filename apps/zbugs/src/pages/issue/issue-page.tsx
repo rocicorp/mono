@@ -211,7 +211,7 @@ export default function IssuePage() {
               className="issue-creator-avatar"
               alt={issue.creator?.name}
             />
-            <span className="issue-creator-name">{issue.creator.name}</span>
+            <span className="issue-creator-name">{issue.creator.login}</span>
           </button>
         </div>
 

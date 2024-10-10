@@ -159,6 +159,24 @@ h1 {
   opacity: 1;
 }
 
+.logged-in-user-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.logout-button {
+  display: block;
+  height: 1.5rem;
+  width: 1.5rem;
+  background: transparent url(assets/icons/logout.svg) no-repeat;
+  opacity: 0.6;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.logout-button:hover {
+  opacity: 1;
+}
+
 /* Primary Content Panel */
 
 .primary-content {
