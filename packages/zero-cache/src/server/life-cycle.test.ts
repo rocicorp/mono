@@ -1,8 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
 import EventEmitter from 'node:events';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import {beforeEach, describe, expect, test} from 'vitest';
 import type {SingletonService} from '../services/service.js';
 import {inProcChannel} from '../types/processes.js';
 import {runUntilKilled, Terminator, type WorkerType} from './life-cycle.js';
@@ -133,5 +133,37 @@ describe('shutdown', () => {
         ...additionalEvents,
       ].sort(),
     );
+  });
+
+  test('graceful shutdown with no user-facing workers', async () => {
+    proc = new EventEmitter();
+    terminator = new Terminator(
+      lc,
+      proc,
+      code => proc.emit('exit', code) as never,
+    );
+    const changeStreamer = startWorker('cs', 'supporting');
+    const replicator = startWorker('rep', 'supporting');
+    const all = [changeStreamer, replicator];
+
+    await Promise.all(all.map(w => w.running.promise));
+
+    void changeStreamer.stop();
+
+    await changeStreamer.draining.promise;
+    await replicator.draining.promise;
+
+    changeStreamer.finishDrain.resolve();
+    replicator.finishDrain.resolve();
+
+    await Promise.allSettled(all.map(w => w.stopped.promise));
+
+    expect(events).toEqual([
+      'stop supporting',
+      'drain supporting',
+      'drain supporting',
+      'stop supporting',
+      'stop supporting',
+    ]);
   });
 });
