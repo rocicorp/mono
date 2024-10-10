@@ -14,9 +14,8 @@ import {stringify} from '../types/bigint-json.js';
 const DATADOG_SOURCE = 'zeroWorker';
 
 function createLogSink(config: LogConfig) {
-  const logSink = process.env['JSON_LOG_FORMAT']
-    ? consoleJsonLogSink
-    : consoleLogSink;
+  const logSink =
+    config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
   if (config.datadogLogsApiKey === undefined) {
     return logSink;
   }
@@ -67,6 +66,7 @@ const consoleJsonLogSink: LogSink = {
 function errorOrObject(v: unknown): object | undefined {
   if (v instanceof Error) {
     return {
+      ...v, // some properties of Error subclasses may be enumerable
       name: v.name,
       message: v.message,
       stack: v.stack,

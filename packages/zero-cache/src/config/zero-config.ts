@@ -88,6 +88,12 @@ const logConfigSchema = v.object({
     envRefSchema,
     v.union(v.literal('debug'), v.literal('info'), v.literal('error')),
   ),
+
+  /**
+   * Defaults to `text` for developer-friendly console logging.
+   * Also supports `json` for consumption by structured-logging services.
+   */
+  format: v.union(envRefSchema, v.union(v.literal('text'), v.literal('json'))),
   datadogLogsApiKey: configStringValueSchema.optional(),
   datadogServiceLabel: configStringValueSchema.optional(),
 });
@@ -281,6 +287,10 @@ export class LogConfig {
 
   get level() {
     return mustResolveValue(this.#config.level);
+  }
+
+  get format() {
+    return resolveValue(this.#config.format) ?? 'text';
   }
 
   get datadogLogsApiKey() {
