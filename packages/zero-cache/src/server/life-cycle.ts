@@ -45,7 +45,11 @@ export class Terminator {
     for (const signal of GRACEFUL_SHUTDOWN) {
       proc.on(signal, () => {
         this.#drainStart = Date.now();
-        kill(this.#userFacing, signal);
+        if (this.#userFacing.size) {
+          kill(this.#userFacing, signal);
+        } else {
+          exit(0);
+        }
       });
     }
 

@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
 import {Queue} from '../../../shared/src/queue.js';
 import * as v from '../../../shared/src/valita.js';
-import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
 import {BigIntJSON, type JSONValue} from './bigint-json.js';
 import {Subscription} from './subscription.js';
 
@@ -84,6 +84,7 @@ export async function streamOut<T extends JSONValue>(
         });
       }
     } else {
+      lc.debug?.(`started synchronous outbound stream`);
       for await (const msg of source) {
         const id = ++nextID;
         const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
@@ -147,8 +148,6 @@ class WebSocketCloser<T> {
   readonly #lc: LogContext;
   readonly #ws: WebSocket;
   readonly #stream: Source<T>;
-  readonly #closeHandler: (e: CloseEvent) => void;
-  readonly #errorHandler: (e: ErrorEvent) => void;
   readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
   #closed = false;
 
@@ -163,26 +162,27 @@ class WebSocketCloser<T> {
     this.#stream = stream;
     this.#messageHandler = messageHandler ?? null;
 
-    this.#closeHandler = e => this.#handleClose(e);
-    this.#errorHandler = e => this.#handleError(e);
-
-    ws.addEventListener('close', this.#closeHandler);
-    ws.addEventListener('error', this.#errorHandler);
+    ws.addEventListener('open', this.#handleOpen);
+    ws.addEventListener('close', this.#handleClose);
+    ws.addEventListener('error', this.#handleError);
     if (this.#messageHandler) {
       ws.addEventListener('message', this.#messageHandler);
     }
   }
 
-  #handleClose(e: CloseEvent) {
-    const {code, reason, wasClean} = e;
-    this.#lc.info?.('WebSocket close event', {code, reason, wasClean});
-    this.close();
-  }
+  #handleOpen = () => {
+    this.#lc.info?.('connected');
+  };
 
-  #handleError(e: ErrorEvent) {
-    this.#lc.error?.('WebSocket error event', e.message, e.error);
-    // Should we close here?
-  }
+  #handleClose = (e: CloseEvent) => {
+    const {code, reason, wasClean} = e;
+    this.#lc.info?.('connection closed', {code, reason, wasClean});
+    this.close();
+  };
+
+  #handleError = (e: ErrorEvent) => {
+    this.#lc.error?.('connection error', e.message, e.error);
+  };
 
   close(err?: unknown) {
     if (this.#closed) {
@@ -192,8 +192,9 @@ class WebSocketCloser<T> {
       this.#lc.error?.(`closing stream with error`, err);
     }
     this.#closed = true;
-    this.#ws.removeEventListener('close', this.#closeHandler);
-    this.#ws.removeEventListener('error', this.#errorHandler);
+    this.#ws.removeEventListener('open', this.#handleOpen);
+    this.#ws.removeEventListener('close', this.#handleClose);
+    this.#ws.removeEventListener('error', this.#handleError);
     if (this.#messageHandler) {
       this.#ws.removeEventListener('message', this.#messageHandler);
     }
