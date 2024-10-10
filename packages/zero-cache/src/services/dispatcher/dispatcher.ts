@@ -37,10 +37,6 @@ export class Dispatcher implements Service {
     this.#workersByHostname = workersByHostname;
     this.#fastify = Fastify();
     this.#fastify.get('/', (_req, res) => res.send('OK'));
-    this.#fastify.addHook('onRequest', (req, _, done) => {
-      this.#lc?.debug?.(`received request`, req.hostname, req.url);
-      done();
-    });
     this.#port = port;
 
     installWebSocketHandoff(this.#fastify.server, req => this.#handoff(req));
