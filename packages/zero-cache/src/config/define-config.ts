@@ -5,6 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {Query, SchemaToRow} from '../../../zql/src/zql/query/query.js';
 import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
@@ -76,8 +77,9 @@ export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: (queries: Queries<TSchema>) => ZeroConfig<TAuthDataShape, TSchema>,
 ) {
+  const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
-  for (const [name, tableSchema] of Object.entries(schema.tables)) {
+  for (const [name, tableSchema] of Object.entries(normalizedSchema.tables)) {
     queries[name] = new ConfigQuery(tableSchema);
   }
 

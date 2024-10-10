@@ -13,6 +13,7 @@ import type {
 import {assert} from '../../../shared/src/asserts.js';
 import {deepEqual} from '../../../shared/src/json.js';
 import {randomUint64} from '../../../shared/src/random-uint64.js';
+import type {Writable} from '../../../shared/src/writable.js';
 import type {Bencher, Benchmark} from '../benchmark.js';
 import {
   type TestDataObject,
@@ -22,8 +23,6 @@ import {
 } from '../data.js';
 
 const valSize = 1024;
-
-type Writable<T> = {-readonly [P in keyof T]: T[P]};
 
 export function benchmarkPopulate(opts: {
   numKeys: number;

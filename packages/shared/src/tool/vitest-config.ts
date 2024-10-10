@@ -23,8 +23,7 @@ export const config = {
         log.includes('REPLICACHE LICENSE NOT VALID') ||
         log.includes('enableAnalytics false') ||
         log.includes('no such entity') ||
-        log.includes('TODO: addZQLSubscription') ||
-        log.includes('TODO: removeZQLSubscription')
+        log.includes(`Zero starting up with no server URL`)
       ) {
         return false;
       }

@@ -1,6 +1,6 @@
-import type {PushRequestV1} from '../../../replicache/src/mod.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, test} from 'vitest';
+import type {PushRequestV1} from '../../../replicache/src/mod.js';
 import {ErrorKind} from '../../../zero-protocol/src/error.js';
 import type {Mutation} from '../../../zero-protocol/src/push.js';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.js';
@@ -64,7 +64,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          tableName: 'issues',
+          tableName: 'issue',
           relationships: {},
         },
       },
@@ -110,7 +110,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          tableName: 'issues',
+          tableName: 'issue',
           relationships: {},
         },
       },
