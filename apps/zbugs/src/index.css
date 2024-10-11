@@ -534,10 +534,15 @@ h1 {
   padding-right: 0;
 }
 
+.selector {
+  position: relative;
+}
+
 .selector .dropdown {
   position: absolute;
   z-index: 1;
-  top: 2.3125rem;
+  top: 0;
+  left: 0;
   border-radius: 0.5rem;
   width: 100%;
   background-color: var(--color-nav-selected);

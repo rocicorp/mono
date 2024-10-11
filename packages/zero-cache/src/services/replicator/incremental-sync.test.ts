@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {
   afterEach,
   beforeEach,
@@ -34,7 +35,7 @@ describe('replicator/incremental-sync', () => {
   let syncer: IncrementalSyncer;
   let downstream: Subscription<Downstream>;
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Subscription<Downstream>
+    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
   >;
 
   beforeEach(async () => {
@@ -45,7 +46,7 @@ describe('replicator/incremental-sync', () => {
     subscribeFn = vi.fn();
     syncer = new IncrementalSyncer(
       REPLICA_ID,
-      {subscribe: subscribeFn.mockImplementation(() => downstream)},
+      {subscribe: subscribeFn.mockResolvedValue(downstream)},
       replica,
       'CONCURRENT',
     );
@@ -583,4 +584,58 @@ describe('replicator/incremental-sync', () => {
       expectTables(replica, c.data, 'bigint');
     });
   }
+
+  test('retry on initial change-streamer connection failure', async () => {
+    initReplicationState(replica, ['zero_data'], '02');
+
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const syncer = new IncrementalSyncer(
+      REPLICA_ID,
+      {
+        subscribe: vi
+          .fn()
+          .mockRejectedValueOnce('error')
+          .mockImplementation(() => {
+            retried(true);
+            return resolver().promise;
+          }),
+      },
+      replica,
+      'CONCURRENT',
+    );
+
+    void syncer.run(lc);
+
+    expect(await hasRetried).toBe(true);
+
+    void syncer.stop(lc);
+  });
+
+  test('retry on error in change-stream', async () => {
+    initReplicationState(replica, ['zero_data'], '02');
+
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const syncer = new IncrementalSyncer(
+      REPLICA_ID,
+      {
+        subscribe: vi
+          .fn()
+          .mockImplementationOnce(() => Promise.resolve(downstream))
+          .mockImplementation(() => {
+            retried(true);
+            return resolver().promise;
+          }),
+      },
+      replica,
+      'CONCURRENT',
+    );
+
+    void syncer.run(lc);
+
+    downstream.fail(new Error('doh'));
+
+    expect(await hasRetried).toBe(true);
+
+    void syncer.stop(lc);
+  });
 });

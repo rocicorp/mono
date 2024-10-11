@@ -122,7 +122,7 @@ describe('view-syncer/snapshotter', () => {
     replicator.processMessage(lc, [
       'data',
       zeroMessages.insert('schemaVersions', {
-        lock: '1',
+        lock: true,
         minSupportedVersion: 1,
         maxSupportedVersion: 2,
       }),

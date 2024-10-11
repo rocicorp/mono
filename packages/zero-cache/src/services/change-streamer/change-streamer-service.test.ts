@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert} from '../../../../shared/src/asserts.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../shared/src/queue.js';
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import {Database} from '../../../../zqlite/src/db.js';
 import {
   getSubscriptionState,
   initReplicationState,
@@ -86,7 +86,7 @@ describe('change-streamer/service', () => {
   const messages = new ReplicationMessages({foo: 'id'});
 
   test('immediate forwarding, transaction storage', async () => {
-    const sub = streamer.subscribe({
+    const sub = await streamer.subscribe({
       id: 'myid',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
@@ -143,7 +143,7 @@ describe('change-streamer/service', () => {
     ]);
 
     // Subscribe to the original watermark.
-    const sub = streamer.subscribe({
+    const sub = await streamer.subscribe({
       id: 'myid',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
@@ -203,7 +203,7 @@ describe('change-streamer/service', () => {
   });
 
   test('data types (forwarded and catchup)', async () => {
-    const sub = streamer.subscribe({
+    const sub = await streamer.subscribe({
       id: 'myid',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
@@ -265,7 +265,7 @@ describe('change-streamer/service', () => {
     });
 
     // Also verify when loading from the Store as opposed to direct forwarding.
-    const catchupSub = streamer.subscribe({
+    const catchupSub = await streamer.subscribe({
       id: 'myid2',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
@@ -381,7 +381,7 @@ describe('change-streamer/service', () => {
   });
 
   test('shutdown on unexpected storage error', async () => {
-    streamer.subscribe({
+    await streamer.subscribe({
       id: 'myid',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,

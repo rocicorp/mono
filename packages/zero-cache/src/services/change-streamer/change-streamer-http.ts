@@ -80,7 +80,7 @@ export class ChangeStreamerHttpServer implements Service {
 
   readonly #subscribe = async (ws: WebSocket, req: FastifyRequest) => {
     const ctx = getSubscriberContext(req); // #checkSubscribe guarantees this.
-    const downstream = this.#delegate.subscribe(ctx);
+    const downstream = await this.#delegate.subscribe(ctx);
     await streamOut(this.#lc, downstream, ws);
   };
 
@@ -103,12 +103,14 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
       CHANGES_URL_PATTERN.replace(':version', 'v0');
   }
 
-  subscribe(ctx: SubscriberContext): Source<Downstream> {
+  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
     this.#lc.info?.(`connecting to change-streamer@${this.#uri}`);
     const params = getParams(ctx);
     const ws = new WebSocket(this.#uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema) as Source<Downstream>;
+    return streamIn(this.#lc, ws, downstreamSchema) as Promise<
+      Source<Downstream>
+    >;
   }
 }
 

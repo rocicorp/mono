@@ -407,7 +407,7 @@ describe('view-syncer/pipeline-driver', () => {
       '134',
       messages.insert('issues', {id: '4', closed: 0}),
       zeroMessages.insert('schemaVersions', {
-        lock: '1',
+        lock: true,
         minSupportedVersion: 1,
         maxSupportedVersion: 2,
       }),

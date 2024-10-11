@@ -50,7 +50,7 @@ export interface ChangeStreamer {
    * date.
    */
   // TODO: Also take a Source<Upstream> for receiving ACKs.
-  subscribe(ctx: SubscriberContext): Source<Downstream>;
+  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
 }
 
 export type SubscriberContext = {

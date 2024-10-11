@@ -1,13 +1,14 @@
-name: Build and Deploy Zero-Cache to ECS
+name: Build and Deploy Zero-Cache to ECS Sandbox
 
 on:
   push:
-    branches: [main]
+    branches: [sandbox]
     # paths:
     #   - 'packages/zero-cache/**'
 env:
   # Setting an environment variable with the value of a configuration variable
-  ECR_IMAGE: ${{ vars.ECR_IMAGE }}
+  ECR_IMAGE_ZERO_CACHE: sandbox-zero-cache
+  ECR_IMAGE_REPLICATION_MANAGER: sandbox-replication-manager
   AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
 jobs:
   deploy:
@@ -45,12 +46,20 @@ jobs:
         run: |
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE:latest -f ./prod/zbugs/Dockerfile --push .
-
-      - name: Deploy to ECS
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:latest -f ./prod/sandbox/Dockerfile.zero-cache --push .
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_REPLICATION_MANAGER:latest -f ./prod/sandbox/Dockerfile.replication-manager --push .
+      - name: Deploy to ECS change-streamer
         uses: imehedi/actions-awscli-v2@latest
         with:
-          args: ecs update-service --cluster roci-zero-service-runner-2 --service zero-service-runner-service-2 --force-new-deployment
+          args: ecs update-service --cluster zbugs-sync-sandbox-cluster --service change-streamer --force-new-deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+      - name: Deploy to ECS zero-cache
+        uses: imehedi/actions-awscli-v2@latest
+        with:
+          args: ecs update-service --cluster zbugs-sync-sandbox-cluster --service zbugs-sandbox-zero-cache-service --force-new-deployment
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
