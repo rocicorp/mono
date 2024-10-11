@@ -37,7 +37,7 @@ export const liteIndexSpec = v.object({
   name: v.string(),
   tableName: v.string(),
   unique: v.boolean(),
-  columns: v.array(v.tuple([v.string(), directionSchema])),
+  columns: v.record(directionSchema),
 });
 
 export type MutableLiteIndexSpec = v.Infer<typeof liteIndexSpec>;

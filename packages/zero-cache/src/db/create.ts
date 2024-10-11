@@ -32,7 +32,7 @@ export function createTableStatement(spec: TableSpec): string {
 }
 
 export function createIndexStatement(index: LiteIndexSpec): string {
-  const columns = index.columns
+  const columns = Object.entries(index.columns)
     .map(([name, dir]) => `${id(name)} ${dir}`)
     .join(',');
   const unique = index.unique ? 'UNIQUE' : '';

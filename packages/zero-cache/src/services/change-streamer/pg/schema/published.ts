@@ -17,7 +17,7 @@ function restrictTo(publications: string[] | undefined) {
 }
 
 export function publishedTableQuery(
-  publications: string[] | undefined,
+  publications?: string[] | undefined,
   join = '',
 ) {
   return `
@@ -91,7 +91,7 @@ type IndexDefinitionsQueryResult = {
 };
 
 export function indexDefinitionsQuery(
-  publications: string[] | undefined,
+  publications?: string[] | undefined,
   join = '',
 ) {
   // Note: pg_attribute contains column names for tables and for indexes.
@@ -144,7 +144,7 @@ export function indexDefinitionsQuery(
       'tableName', "tableName",
       'name', "name",
       'unique', "unique",
-      'columns', json_agg(json_build_array("col", "dir"))
+      'columns', json_object_agg(DISTINCT "col", "dir")
     ) AS index FROM indexed_columns 
       GROUP BY "schemaName", "tableName", "name", "unique")
 
