@@ -246,13 +246,13 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
 
 function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   for (const index of indices) {
-    const {schemaName, ...liteIndex} = index;
-    liteIndex.tableName = liteTableName({
-      schema: index.schemaName,
-      name: index.tableName,
-    });
-
-    tx.exec(createIndexStatement(liteIndex));
+    const {schemaName: schema, tableName: name, ...liteIndex} = index;
+    tx.exec(
+      createIndexStatement({
+        tableName: liteTableName({schema, name}),
+        ...liteIndex,
+      }),
+    );
   }
 }
 
