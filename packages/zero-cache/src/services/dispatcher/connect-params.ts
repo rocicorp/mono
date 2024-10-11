@@ -1,5 +1,7 @@
 import type {IncomingHttpHeaders} from 'node:http2';
 import {URLParams} from '../../types/url-params.js';
+import {must} from '../../../../shared/src/must.js';
+import {decodeProtocols} from '../../../../zero-protocol/src/connect.js';
 
 export type ConnectParams = {
   readonly clientID: string;
@@ -12,6 +14,7 @@ export type ConnectParams = {
   readonly debugPerf: boolean;
   readonly auth: string | undefined;
   readonly userID: string;
+  readonly initConnectionMsg: string;
 };
 
 export function getConnectParams(
@@ -38,8 +41,10 @@ export function getConnectParams(
     const wsID = params.get('wsid', false) ?? '';
     const userID = params.get('userID', false) ?? '';
     const debugPerf = params.getBoolean('debugPerf');
+    const [initConnectionMsg, maybeAuthToken] = decodeProtocols(
+      must(headers['sec-websocket-protocol']),
+    );
 
-    const maybeAuthToken = headers['sec-websocket-protocol'];
     return {
       params: {
         clientID,
@@ -50,7 +55,8 @@ export function getConnectParams(
         lmID,
         wsID,
         debugPerf,
-        auth: maybeAuthToken ? decodeURIComponent(maybeAuthToken) : undefined,
+        initConnectionMsg,
+        auth: maybeAuthToken,
         userID,
       },
       error: null,

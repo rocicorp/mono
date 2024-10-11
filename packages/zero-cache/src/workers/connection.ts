@@ -2,7 +2,7 @@ import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../shared/src/asserts.js';
 import * as valita from '../../../shared/src/valita.js';
-import type {CloseEvent, ErrorEvent, MessageEvent} from 'ws';
+import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
 import {
   type ConnectedMessage,
@@ -119,7 +119,11 @@ export class Connection {
     }
   }
 
-  #handleMessage = async (event: MessageEvent) => {
+  handleInitConnection(initConnectionMsg: string) {
+    return this.#handleMessage({data: initConnectionMsg});
+  }
+
+  #handleMessage = async (event: {data: Data}) => {
     const lc = this.#lc;
     const data = event.data.toString();
     const viewSyncer = this.#viewSyncer;

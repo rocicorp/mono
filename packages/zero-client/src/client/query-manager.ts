@@ -4,7 +4,7 @@ import {must} from '../../../shared/src/must.js';
 import {h64} from '../../../shared/src/xxhash.js';
 import type {
   ChangeDesiredQueriesMessage,
-  QueriesPatch,
+  QueriesPatchOp,
 } from '../../../zero-protocol/src/mod.js';
 import {normalizeAST, type AST} from '../../../zql/src/zql/ast/ast.js';
 import type {GotCallback} from '../../../zql/src/zql/query/query-impl.js';
@@ -62,23 +62,59 @@ export class QueryManager {
     }
   }
 
-  async getQueriesPatch(tx: ReadTransaction): Promise<QueriesPatch> {
+  /**
+   * Get the queries that need to be registered with the server.
+   *
+   * An optional `lastPatch` can be provided. This is the last patch that was
+   * sent to the server and may not yet have been acked. If `lastPatch` is provided,
+   * this method will return a patch that does not include any events sent in `lastPatch`.
+   *
+   * This diffing of last patch and current patch is needed since we send
+   * a set of queries to the server when we first connect inside of the `sec-protocol` as
+   * the `initConnectionMessage`.
+   *
+   * While we're waiting for the `connected` response to come back from the server,
+   * the client may have registered more queries. We need to diff the `initConnectionMessage`
+   * queries with the current set of queries to understand what those were.
+   */
+  async getQueriesPatch(
+    tx: ReadTransaction,
+    lastPatch?: Map<string, QueriesPatchOp> | undefined,
+  ): Promise<Map<string, QueriesPatchOp>> {
     const existingQueryHashes = new Set<string>();
     const prefix = desiredQueriesPrefixForClient(this.#clientID);
     for await (const key of tx.scan({prefix}).keys()) {
       existingQueryHashes.add(key.substring(prefix.length, key.length));
     }
-    const patch: QueriesPatch = [];
+    const patch: Map<string, QueriesPatchOp> = new Map();
     for (const hash of existingQueryHashes) {
       if (!this.#queries.has(hash)) {
-        patch.push({op: 'del', hash});
+        patch.set(hash, {op: 'del', hash});
       }
     }
     for (const [hash, {normalized}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
-        patch.push({op: 'put', hash, ast: normalized});
+        patch.set(hash, {op: 'put', hash, ast: normalized});
       }
     }
+
+    if (lastPatch) {
+      // if there are any `puts` in `lastPatch` that are not in `patch` then we need to
+      // send a `del` event in `patch`.
+      for (const [hash, {op}] of lastPatch) {
+        if (op === 'put' && !patch.has(hash)) {
+          patch.set(hash, {op: 'del', hash});
+        }
+      }
+      // Remove everything from `patch` that was already sent in `lastPatch`.
+      for (const [hash, {op}] of patch) {
+        const lastPatchOp = lastPatch.get(hash);
+        if (lastPatchOp && lastPatchOp.op === op) {
+          patch.delete(hash);
+        }
+      }
+    }
+
     return patch;
   }
 
@@ -93,6 +129,7 @@ export class QueryManager {
         gotCallbacks: gotCallback === undefined ? [] : [gotCallback],
       };
       this.#queries.set(astHash, entry);
+
       this.#send([
         'changeDesiredQueries',
         {

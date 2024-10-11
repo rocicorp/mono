@@ -1,3 +1,4 @@
+import {assert} from '../../shared/src/asserts.js';
 import * as v from '../../shared/src/valita.js';
 import {queriesPatchSchema} from './queries-patch.js';
 
@@ -33,3 +34,26 @@ export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
 
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
+
+export function encodeProtocols(
+  initConnectionMessage: InitConnectionMessage,
+  authToken?: string | undefined,
+) {
+  const protocols: string[] = [btoa(JSON.stringify(initConnectionMessage))];
+  if (authToken) {
+    protocols.push(authToken);
+  }
+  return encodeURIComponent(protocols.join(','));
+}
+
+export function decodeProtocols(
+  secProtocol: string,
+): [initConnectionMessage: string, maybeAuthToken: string | undefined] {
+  const ret = decodeURIComponent(secProtocol)
+    .split(',')
+    // base64 encoding the JSON before URI encoding it results in a smaller payload.
+    .map((s, i) => (i === 0 ? atob(s) : s));
+
+  assert(ret.length === 1 || ret.length === 2);
+  return ret.length === 1 ? [ret[0], undefined] : [ret[0], ret[1]];
+}

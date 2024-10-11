@@ -9,7 +9,7 @@ import {
   type ScanOptions,
   type ScanResult,
 } from '../../../replicache/src/mod.js';
-import {expect, test, vi} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/mod.js';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import {QueryManager} from './query-manager.js';
@@ -172,20 +172,24 @@ test('getQueriesPatch', async () => {
   ];
 
   const patch = await queryManager.getQueriesPatch(testReadTransaction);
-  expect(patch).toEqual([
-    {
-      op: 'del',
-      hash: 'shouldBeDeleted',
-    },
-    {
-      op: 'put',
-      hash: '51ea5ipsgcxi',
-      ast: {
-        table: 'issues',
-        orderBy: [['id', 'desc']],
-      } satisfies AST,
-    },
-  ]);
+  expect(patch).toEqual(
+    new Map(
+      [
+        {
+          op: 'del',
+          hash: 'shouldBeDeleted',
+        },
+        {
+          op: 'put',
+          hash: '51ea5ipsgcxi',
+          ast: {
+            table: 'issues',
+            orderBy: [['id', 'desc']],
+          } satisfies AST,
+        },
+      ].map(x => [x.hash, x] as const),
+    ),
+  );
   expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
 });
 
@@ -427,4 +431,97 @@ test('gotCallback, query got after subscription removed', async () => {
   ]);
 
   expect(gotCalback1).toBeCalledTimes(1);
+});
+
+const normalizingFields = {
+  alias: undefined,
+  limit: undefined,
+  related: undefined,
+  schema: undefined,
+  start: undefined,
+  where: undefined,
+} as const;
+
+describe('queriesPatch with lastPatch', () => {
+  test('returns the normal set if no lastPatch is provided', async () => {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => boolean>(
+      () => false,
+    );
+    const queryManager = new QueryManager('client1', send, () => () => {});
+
+    queryManager.add({
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    });
+    const testReadTransaction = new TestTransaction();
+    const patch = await queryManager.getQueriesPatch(testReadTransaction);
+    expect([...patch.values()]).toEqual([
+      {
+        ast: {
+          orderBy: [['id', 'asc']],
+          table: 'issue',
+          ...normalizingFields,
+        },
+        hash: '30l9vgvqhxe1o',
+        op: 'put',
+      },
+    ]);
+  });
+
+  test('removes entries from the patch that are in lastPatch', async () => {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => boolean>(
+      () => false,
+    );
+    const queryManager = new QueryManager('client1', send, () => () => {});
+
+    const clean = queryManager.add({
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    });
+    const testReadTransaction = new TestTransaction();
+
+    // patch and lastPatch are the same
+    const patch1 = await queryManager.getQueriesPatch(
+      testReadTransaction,
+      new Map([
+        [
+          '30l9vgvqhxe1o',
+          {
+            ast: {
+              orderBy: [['id', 'asc']],
+              table: 'issue',
+            },
+            hash: '30l9vgvqhxe1o',
+            op: 'put',
+          },
+        ],
+      ]),
+    );
+    expect([...patch1.values()]).toEqual([]);
+
+    // patch has a `del` event that is not in lastPatch
+    clean();
+    const patch2 = await queryManager.getQueriesPatch(
+      testReadTransaction,
+      new Map([
+        [
+          '30l9vgvqhxe1o',
+          {
+            ast: {
+              orderBy: [['id', 'asc']],
+              table: 'issue',
+            },
+            hash: '30l9vgvqhxe1o',
+            op: 'put',
+          },
+        ],
+      ]),
+    );
+    expect([...patch2.values()]).toEqual([
+      {
+        hash: '30l9vgvqhxe1o',
+        op: 'del',
+      },
+    ]);
+  });
 });
