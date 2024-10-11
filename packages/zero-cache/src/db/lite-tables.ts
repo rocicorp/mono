@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import type {Database} from '../../../zqlite/src/db.js';
-import type {IndexSpec, MutableIndexSpec, TableSpec} from '../types/specs.js';
+import type {LiteIndexSpec, MutableLiteIndexSpec, TableSpec} from './specs.js';
 
 type ColumnInfo = {
   table: string;
@@ -74,7 +74,7 @@ export function listTables(db: Database): TableSpec[] {
   return tables;
 }
 
-export function listIndexes(db: Database): IndexSpec[] {
+export function listIndexes(db: Database): LiteIndexSpec[] {
   const indexes = db
     .prepare(
       `SELECT 
@@ -100,14 +100,13 @@ export function listIndexes(db: Database): IndexSpec[] {
     dir: 'ASC' | 'DESC';
   }[];
 
-  const ret: MutableIndexSpec[] = [];
+  const ret: MutableLiteIndexSpec[] = [];
   for (const {indexName: name, tableName, unique, column, dir} of indexes) {
     if (ret.at(-1)?.name === name) {
       // Aggregate multiple column names into the array.
       must(ret.at(-1)).columns.push([column, dir]);
     } else {
       ret.push({
-        schemaName: '',
         tableName,
         name,
         columns: [[column, dir]],

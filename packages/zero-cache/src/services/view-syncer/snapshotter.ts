@@ -4,6 +4,7 @@ import {assert} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import type {TableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
 import {
@@ -12,7 +13,6 @@ import {
   type RowValue,
 } from '../../types/row-key.js';
 import {type SchemaVersions} from '../../types/schema-versions.js';
-import type {TableSpec} from '../../types/specs.js';
 import {
   changeLogEntrySchema as schema,
   SET_OP,

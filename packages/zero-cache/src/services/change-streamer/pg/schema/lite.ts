@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {ColumnSpec, TableSpec} from '../../../../db/specs.js';
 import {dataTypeToZqlValueType} from '../../../../types/lite.js';
 import {liteTableName} from '../../../../types/names.js';
-import type {ColumnSpec, TableSpec} from '../../../../types/specs.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 
 export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
@@ -41,9 +41,9 @@ function mapPostgresToLiteDefault(
   table: string,
   column: string,
   dataType: string,
-  defaultExpression: string | null,
+  defaultExpression: string | null | undefined,
 ) {
-  if (defaultExpression === null) {
+  if (!defaultExpression) {
     return null;
   }
   if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {
