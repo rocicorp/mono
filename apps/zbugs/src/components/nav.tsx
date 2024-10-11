@@ -15,7 +15,7 @@ export function Nav() {
 
   const zero = useZero();
   const user = useQuery(
-    zero.query.user.where('id', login.loginState?.userID ?? '').one(),
+    zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
@@ -85,7 +85,7 @@ export function Nav() {
                   title={user?.login}
                 />
                 <span className="logged-in-user-name">
-                  {login.loginState?.login}
+                  {login.loginState?.decoded.name}
                 </span>
               </div>
               <button
