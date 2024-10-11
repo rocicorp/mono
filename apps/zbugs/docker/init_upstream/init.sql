@@ -51,9 +51,9 @@ CREATE TABLE label (
 );
 
 CREATE TABLE "issueLabel" (
-    "id" VARCHAR PRIMARY KEY,
     "labelID" VARCHAR REFERENCES label(id),
-    "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE
+    "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
+    PRIMARY KEY ("labelID", "issueID")
 );
 
 -- last modified function and trigger
