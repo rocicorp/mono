@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.js';
+import {must} from '../../../shared/src/must.js';
 import type {Database} from '../../../zqlite/src/db.js';
-import type {IndexSpec, TableSpec} from '../types/specs.js';
+import type {IndexSpec, MutableIndexSpec, TableSpec} from '../types/specs.js';
 
 type ColumnInfo = {
   table: string;
@@ -73,41 +74,42 @@ export function listTables(db: Database): TableSpec[] {
   return tables;
 }
 
-export function listIndices(db: Database): IndexSpec[] {
-  const indices = db
+export function listIndexes(db: Database): IndexSpec[] {
+  const indexes = db
     .prepare(
-      `SELECT name as indexName, tbl_name as tableName FROM sqlite_master WHERE type = 'index' AND tbl_name NOT LIKE '_zero.%'`,
+      `SELECT 
+         idx.name as indexName, 
+         idx.tbl_name as tableName, 
+         info."unique" as "unique",
+         col.name as column FROM sqlite_master as idx
+       JOIN pragma_index_list(idx.tbl_name) AS info ON info.name = idx.name
+       JOIN pragma_index_info(idx.name) as col
+       WHERE idx.type = 'index' AND 
+             info.origin != 'pk' AND
+             idx.tbl_name NOT LIKE '_zero.%'
+       ORDER BY idx.name, col.seqno ASC`,
     )
     .all() as {
     indexName: string;
     tableName: string;
+    unique: number;
+    column: string;
   }[];
-  const ret: IndexSpec[] = [];
-  for (const indexDef of indices) {
-    const uniqueAndOrigin = db
-      .prepare(
-        `SELECT "unique", origin FROM pragma_index_list(?) WHERE name = ?`,
-      )
-      .get(indexDef.tableName, indexDef.indexName) as {
-      unique: number;
-      origin: string;
-    };
-    if (uniqueAndOrigin.origin === 'pk') {
-      continue;
-    }
-    const columns = db
-      .prepare(`SELECT name FROM pragma_index_info(?) ORDER BY seqno ASC`)
-      .all(indexDef.indexName) as {
-      name: string;
-    }[];
 
-    ret.push({
-      schemaName: '',
-      tableName: indexDef.tableName,
-      name: indexDef.indexName,
-      columns: columns.map(col => col.name),
-      unique: uniqueAndOrigin.unique !== 0,
-    });
+  const ret: MutableIndexSpec[] = [];
+  for (const {indexName: name, tableName, unique, column} of indexes) {
+    if (ret.at(-1)?.name === name) {
+      // Aggregate multiple column names into the array.
+      must(ret.at(-1)).columns.push(column);
+    } else {
+      ret.push({
+        schemaName: '',
+        tableName,
+        name,
+        columns: [column],
+        unique: unique !== 0,
+      });
+    }
   }
 
   return ret;
