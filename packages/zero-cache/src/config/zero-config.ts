@@ -84,10 +84,21 @@ const shardConfigSchema = v.object({
 type ShardConfigType = v.Infer<typeof shardConfigSchema>;
 
 const logConfigSchema = v.object({
-  level: v.union(
-    envRefSchema,
-    v.union(v.literal('debug'), v.literal('info'), v.literal('error')),
-  ),
+  /**
+   * `debug`, `info`, `warn`, or `error`.
+   * Defaults to `info`.
+   */
+  level: v
+    .union(
+      envRefSchema,
+      v.union(
+        v.literal('debug'),
+        v.literal('info'),
+        v.literal('warn'),
+        v.literal('error'),
+      ),
+    )
+    .optional(),
 
   /**
    * Defaults to `text` for developer-friendly console logging.
@@ -96,6 +107,7 @@ const logConfigSchema = v.object({
   format: v
     .union(envRefSchema, v.union(v.literal('text'), v.literal('json')))
     .optional(),
+
   datadogLogsApiKey: configStringValueSchema.optional(),
   datadogServiceLabel: configStringValueSchema.optional(),
 });
@@ -145,7 +157,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
 
   jwtSecret: configStringValueSchema.optional(),
 
-  log: logConfigSchema,
+  log: logConfigSchema.optional(),
 
   shard: shardConfigSchema.optional(),
   rateLimit: rateLimitConfigSchema.optional(),
@@ -283,12 +295,12 @@ export class MutationTransactionLimits {
 
 export class LogConfig {
   readonly #config: LogConfigType;
-  constructor(config: LogConfigType) {
-    this.#config = config;
+  constructor(config: LogConfigType | undefined) {
+    this.#config = config ?? {};
   }
 
   get level() {
-    return mustResolveValue(this.#config.level);
+    return resolveValue(this.#config.level) ?? 'info';
   }
 
   get format() {
