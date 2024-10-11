@@ -198,7 +198,7 @@ class WebSocketCloser<T> {
     const {code, reason, wasClean} = e;
     this.#lc.info?.('connection closed', {code, reason, wasClean});
     this.close();
-    this.#connected.reject('websocket closed');
+    this.#connected.reject(`connection closed with code ${code}`);
   };
 
   #handleError = ({message, error}: ErrorEvent) => {
