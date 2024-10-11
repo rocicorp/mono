@@ -39,31 +39,17 @@ describe('change-streamer/forwarder', () => {
         [
           "data",
           {
-            "cascade": false,
             "relations": [
               {
-                "columns": [
-                  {
-                    "flags": 1,
-                    "name": "id",
-                    "parser": [Function],
-                    "typeMod": -1,
-                    "typeName": null,
-                    "typeOid": 23,
-                    "typeSchema": null,
-                  },
-                ],
                 "keyColumns": [
                   "id",
                 ],
                 "name": "issues",
-                "relationOid": 1558331249,
                 "replicaIdentity": "default",
                 "schema": "public",
                 "tag": "relation",
               },
             ],
-            "restartIdentity": false,
             "tag": "truncate",
           },
         ],

@@ -1,7 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {Pgoutput} from 'pg-logical-replication';
 import {assert} from '../../../../shared/src/asserts.js';
-import {h32} from '../../../../shared/src/xxhash.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import type {RowKey, RowValue} from '../../types/row-key.js';
@@ -9,6 +7,11 @@ import type {
   DataChange,
   MessageBegin,
   MessageCommit,
+  MessageDelete,
+  MessageInsert,
+  MessageRelation,
+  MessageTruncate,
+  MessageUpdate,
 } from '../change-streamer/schema/change.js';
 import {MessageProcessor} from './incremental-sync.js';
 
@@ -51,33 +54,23 @@ export function createMessageProcessor(
 export class ReplicationMessages<
   TablesAndKeys extends Record<string, string | string[]>,
 > {
-  readonly #tables = new Map<string, Pgoutput.MessageRelation>();
+  readonly #tables = new Map<string, MessageRelation>();
 
   constructor(tablesAndKeys: TablesAndKeys, schema = 'public') {
     for (const [table, k] of Object.entries(tablesAndKeys)) {
       const keys = typeof k === 'string' ? [k] : [...k];
       const relation = {
         tag: 'relation',
-        relationOid: h32(table), // deterministic for snapshot-friendliness
         schema,
         name: table,
         replicaIdentity: 'default',
-        columns: keys.map(name => ({
-          flags: 1,
-          name,
-          typeOid: 23,
-          typeMod: -1,
-          typeSchema: null,
-          typeName: null,
-          parser: () => {},
-        })),
         keyColumns: keys,
       } as const;
       this.#tables.set(table, relation);
     }
   }
 
-  #relationOrFail(table: string): Pgoutput.MessageRelation {
+  #relationOrFail(table: string): MessageRelation {
     const relation = this.#tables.get(table);
     assert(relation); // Type parameters should guarantee this.
     return relation;
@@ -90,7 +83,7 @@ export class ReplicationMessages<
   insert<TableName extends string & keyof TablesAndKeys>(
     table: TableName,
     row: RowValue,
-  ): Pgoutput.MessageInsert {
+  ): MessageInsert {
     return {tag: 'insert', relation: this.#relationOrFail(table), new: row};
   }
 
@@ -98,7 +91,7 @@ export class ReplicationMessages<
     table: TableName,
     row: RowValue,
     oldKey?: RowKey,
-  ): Pgoutput.MessageUpdate {
+  ): MessageUpdate {
     return {
       tag: 'update',
       relation: this.#relationOrFail(table),
@@ -111,25 +104,22 @@ export class ReplicationMessages<
   delete<TableName extends string & keyof TablesAndKeys>(
     table: TableName,
     key: RowKey,
-  ): Pgoutput.MessageDelete {
+  ): MessageDelete {
     return {
       tag: 'delete',
       relation: this.#relationOrFail(table),
       key,
-      old: null,
     };
   }
 
   truncate<TableName extends string & keyof TablesAndKeys>(
     table: TableName,
     ...moreTables: TableName[]
-  ): Pgoutput.MessageTruncate {
+  ): MessageTruncate {
     const tables = [table, ...moreTables];
     return {
       tag: 'truncate',
       relations: tables.map(t => this.#relationOrFail(t)),
-      cascade: false,
-      restartIdentity: false,
     };
   }
 

@@ -6,16 +6,15 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import WebSocket from 'ws';
-import * as v from '../../../../shared/src/valita.js';
-import {jsonValueSchema} from '../../types/bigint-json.js';
-import {type Source, streamIn, streamOut} from '../../types/streams.js';
+import {streamIn, streamOut, type Source} from '../../types/streams.js';
 import {URLParams} from '../../types/url-params.js';
 import {RunningState} from '../running-state.js';
 import type {Service} from '../service.js';
-import type {
-  ChangeStreamer,
-  Downstream,
-  SubscriberContext,
+import {
+  downstreamSchema,
+  type ChangeStreamer,
+  type Downstream,
+  type SubscriberContext,
 } from './change-streamer.js';
 
 export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
@@ -108,14 +107,9 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const params = getParams(ctx);
     const ws = new WebSocket(this.#uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema) as Promise<
-      Source<Downstream>
-    >;
+    return streamIn(this.#lc, ws, downstreamSchema);
   }
 }
-
-// TODO: Define this more precisely.
-const downstreamSchema = v.array(jsonValueSchema);
 
 function getSubscriberContext(req: FastifyRequest): SubscriberContext {
   const url = new URL(req.url, req.headers.origin ?? 'http://localhost');

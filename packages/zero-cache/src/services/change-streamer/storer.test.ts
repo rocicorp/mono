@@ -1,6 +1,6 @@
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../shared/src/queue.js';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
@@ -493,30 +493,17 @@ describe('change-streamer/storer', () => {
         },
         {
           "change": {
-            "cascade": false,
             "relations": [
               {
-                "columns": [
-                  {
-                    "flags": 1,
-                    "name": "id",
-                    "typeMod": -1,
-                    "typeName": null,
-                    "typeOid": 23,
-                    "typeSchema": null,
-                  },
-                ],
                 "keyColumns": [
                   "id",
                 ],
                 "name": "issues",
-                "relationOid": 1558331249,
                 "replicaIdentity": "default",
                 "schema": "public",
                 "tag": "relation",
               },
             ],
-            "restartIdentity": false,
             "tag": "truncate",
           },
           "pos": 1n,
@@ -542,30 +529,17 @@ describe('change-streamer/storer', () => {
         },
         {
           "change": {
-            "cascade": false,
             "relations": [
               {
-                "columns": [
-                  {
-                    "flags": 1,
-                    "name": "id",
-                    "typeMod": -1,
-                    "typeName": null,
-                    "typeOid": 23,
-                    "typeSchema": null,
-                  },
-                ],
                 "keyColumns": [
                   "id",
                 ],
                 "name": "issues",
-                "relationOid": 1558331249,
                 "replicaIdentity": "default",
                 "schema": "public",
                 "tag": "relation",
               },
             ],
-            "restartIdentity": false,
             "tag": "truncate",
           },
           "pos": 1n,

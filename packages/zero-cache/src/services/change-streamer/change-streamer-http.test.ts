@@ -143,11 +143,6 @@ describe('change-streamer/http', () => {
       big3: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
     });
 
-    // The `parser` field in the PgOutput message is not JSON serializable
-    // (and not part of the exposed type).
-    expect(typeof insert.relation.columns[0].parser).toBe('function');
-
-    // It is automatically omitted from serialization.
     downstream.push(['data', insert]);
     expect(await drain(1, sub)).toMatchInlineSnapshot(`
       [
@@ -161,21 +156,10 @@ describe('change-streamer/http', () => {
               "id": "foo",
             },
             "relation": {
-              "columns": [
-                {
-                  "flags": 1,
-                  "name": "id",
-                  "typeMod": -1,
-                  "typeName": null,
-                  "typeOid": 23,
-                  "typeSchema": null,
-                },
-              ],
               "keyColumns": [
                 "id",
               ],
               "name": "issues",
-              "relationOid": 1558331249,
               "replicaIdentity": "default",
               "schema": "public",
               "tag": "relation",
