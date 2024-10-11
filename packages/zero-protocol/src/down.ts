@@ -8,9 +8,11 @@ import {
 } from './poke.js';
 import {pongMessageSchema} from './pong.js';
 import {pullResponseMessageSchema} from './pull.js';
+import {warmMessageSchema} from './warm.js';
 
 export const downstreamSchema = v.union(
   connectedMessageSchema,
+  warmMessageSchema,
   errorMessageSchema,
   pongMessageSchema,
   pokeStartMessageSchema,

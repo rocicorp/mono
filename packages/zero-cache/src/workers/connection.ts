@@ -21,6 +21,8 @@ import type {
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
 import type {JWTPayload} from 'jose';
+import {randomCharacters} from '../../../shared/src/random-values.js';
+import type {ZeroConfig} from '../config/zero-config.js';
 
 /**
  * Represents a connection between the client and server.
@@ -47,6 +49,7 @@ export class Connection {
 
   constructor(
     lc: LogContext,
+    config: ZeroConfig,
     authData: JWTPayload,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
@@ -79,6 +82,7 @@ export class Connection {
       {wsid: wsID, timestamp: Date.now()},
     ];
     send(ws, connectedMessage);
+    this.#warmConnection(config);
   }
 
   close() {
@@ -99,6 +103,20 @@ export class Connection {
 
     // spin down services if we have
     // no more client connections for the client group?
+  }
+
+  // Landing this to gather some data on time savings, if any.
+  #warmConnection(config: ZeroConfig) {
+    if (config.warmWebsocket) {
+      for (let i = 0; i < config.warmWebsocket; i++) {
+        send(this.#ws, [
+          'warm',
+          {
+            payload: randomCharacters(1024),
+          },
+        ]);
+      }
+    }
   }
 
   #handleMessage = async (event: MessageEvent) => {

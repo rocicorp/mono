@@ -702,7 +702,8 @@ export class Zero<const S extends Schema> {
       return;
     }
     this.#messageCount++;
-    switch (downMessage[0]) {
+    const msgType = downMessage[0];
+    switch (msgType) {
       case 'connected':
         return this.#handleConnectedMessage(lc, downMessage);
 
@@ -723,8 +724,11 @@ export class Zero<const S extends Schema> {
 
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
-
+      case 'warm':
+        // we ignore warming messages
+        break;
       default:
+        msgType satisfies never;
         rejectInvalidMessage();
     }
   };

@@ -45,6 +45,7 @@ export class Syncer implements SingletonService {
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
+  readonly #config: ZeroConfig;
   #jwtSecretBytes: Uint8Array | undefined;
 
   constructor(
@@ -57,6 +58,7 @@ export class Syncer implements SingletonService {
     mutagenFactory: (id: string) => Mutagen & Service,
     parent: Worker,
   ) {
+    this.#config = config;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -102,6 +104,7 @@ export class Syncer implements SingletonService {
 
     const connection = new Connection(
       this.#lc,
+      this.#config,
       decodedToken ?? {},
       this.#viewSyncers.getService(clientGroupID),
       this.#mutagens.getService(clientGroupID),
