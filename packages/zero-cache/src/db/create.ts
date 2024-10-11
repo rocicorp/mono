@@ -1,5 +1,5 @@
-import type {ColumnSpec, TableSpec} from '../../../../types/specs.js';
-import {id, idList} from '../../../../types/sql.js';
+import {id, idList} from '../types/sql.js';
+import type {ColumnSpec, LiteIndexSpec, TableSpec} from './specs.js';
 
 /**
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
@@ -7,7 +7,7 @@ import {id, idList} from '../../../../types/sql.js';
 export function createTableStatement(spec: TableSpec): string {
   function colDef(name: string, colSpec: ColumnSpec): string {
     const parts = [`${id(name)} ${colSpec.dataType}`];
-    if (colSpec.characterMaximumLength !== null) {
+    if (colSpec.characterMaximumLength) {
       parts.push(`(${colSpec.characterMaximumLength})`);
     }
     if (colSpec.notNull) {
@@ -29,4 +29,14 @@ export function createTableStatement(spec: TableSpec): string {
     ? `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`
     : `CREATE TABLE ${id(spec.name)} (`;
   return [createStmt, defs.join(',\n'), ');'].join('\n');
+}
+
+export function createIndexStatement(index: LiteIndexSpec): string {
+  const columns = index.columns
+    .map(([name, dir]) => `${id(name)} ${dir}`)
+    .join(',');
+  const unique = index.unique ? 'UNIQUE' : '';
+  return `CREATE ${unique} INDEX ${id(index.name)} ON ${id(
+    index.tableName,
+  )} (${columns})`;
 }

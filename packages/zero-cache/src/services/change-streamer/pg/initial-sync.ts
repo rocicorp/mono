@@ -3,6 +3,11 @@ import {ident} from 'pg-format';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {
+  createIndexStatement,
+  createTableStatement,
+} from '../../../db/create.js';
+import type {FilteredTableSpec, IndexSpec} from '../../../db/specs.js';
+import {
   importSnapshot,
   Mode,
   TransactionPool,
@@ -10,14 +15,12 @@ import {
 import {liteValues} from '../../../types/lite.js';
 import {liteTableName} from '../../../types/names.js';
 import {pgClient, type PostgresDB} from '../../../types/pg.js';
-import type {FilteredTableSpec, IndexSpec} from '../../../types/specs.js';
 import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
-import {createTableStatement} from './schema/create.js';
 import {mapPostgresToLite, warnIfDataTypeSupported} from './schema/lite.js';
 import {type PublicationInfo} from './schema/published.js';
 import {setupTablesAndReplication} from './schema/zero.js';
@@ -243,16 +246,12 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
 
 function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   for (const index of indices) {
-    const tableName = liteTableName({
-      schema: index.schemaName,
-      name: index.tableName,
-    });
-    const columns = index.columns.map(c => ident(c)).join(',');
-    const unique = index.unique ? 'UNIQUE ' : '';
+    const {schemaName: schema, tableName: name, ...liteIndex} = index;
     tx.exec(
-      `CREATE ${unique} INDEX ${ident(index.name)} ON ${ident(
-        tableName,
-      )} (${columns})`,
+      createIndexStatement({
+        tableName: liteTableName({schema, name}),
+        ...liteIndex,
+      }),
     );
   }
 }

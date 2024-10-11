@@ -665,7 +665,7 @@ describe('tables/published', () => {
       },
     },
     {
-      name: 'indices',
+      name: 'indexes',
       setupQuery: `
       CREATE SCHEMA test;
       CREATE TABLE test.issues (
@@ -723,14 +723,14 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_component_id',
-            columns: ['component_id'],
+            columns: [['component_id', 'ASC']],
             unique: false,
           },
           {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_org_id',
-            columns: ['org_id'],
+            columns: [['org_id', 'ASC']],
             unique: false,
           },
         ],
@@ -795,14 +795,14 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_component_id',
-            columns: ['component_id'],
+            columns: [['component_id', 'ASC']],
             unique: true,
           },
           {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_org_id',
-            columns: ['org_id'],
+            columns: [['org_id', 'ASC']],
             unique: true,
           },
         ],
@@ -817,8 +817,8 @@ describe('tables/published', () => {
         a INTEGER,
         b INTEGER
       );
-      CREATE INDEX foo_a_b ON test.foo (a, b);
-      CREATE INDEX foo_b_a ON test.foo (b, a);
+      CREATE INDEX foo_a_b ON test.foo (a ASC, b DESC);
+      CREATE INDEX foo_b_a ON test.foo (b DESC, a DESC);
       CREATE PUBLICATION zero_data FOR TABLE test.foo;
       `,
       expectedResult: {
@@ -867,14 +867,20 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_a_b',
-            columns: ['a', 'b'],
+            columns: [
+              ['a', 'ASC'],
+              ['b', 'DESC'],
+            ],
             unique: false,
           },
           {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_b_a',
-            columns: ['b', 'a'],
+            columns: [
+              ['b', 'DESC'],
+              ['a', 'DESC'],
+            ],
             unique: false,
           },
         ],
@@ -890,7 +896,7 @@ describe('tables/published', () => {
         b INTEGER
       );
       CREATE INDEX foo_a_b ON test.foo (a, b);
-      CREATE INDEX foo_b_a ON test.foo (b, a);
+      CREATE INDEX foo_b_a ON test.foo (b DESC, a DESC);
       CREATE PUBLICATION zero_data FOR TABLE test.foo;
 
       ALTER TABLE test.foo RENAME a to az;
@@ -942,14 +948,20 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_a_b',
-            columns: ['az', 'bz'],
+            columns: [
+              ['az', 'ASC'],
+              ['bz', 'ASC'],
+            ],
             unique: false,
           },
           {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_b_a',
-            columns: ['bz', 'az'],
+            columns: [
+              ['bz', 'DESC'],
+              ['az', 'DESC'],
+            ],
             unique: false,
           },
         ],

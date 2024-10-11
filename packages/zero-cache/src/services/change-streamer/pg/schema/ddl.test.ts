@@ -3,9 +3,9 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../../../shared/src/queue.js';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -127,21 +127,24 @@ describe('change-source/tables/ddl', () => {
           },
           indexes: [
             {
-              columns: ['a'],
+              columns: [['a', 'ASC']],
               name: 'bar_a_key',
               schemaName: 'pub',
               tableName: 'bar',
               unique: true,
             },
             {
-              columns: ['b', 'a'],
+              columns: [
+                ['b', 'ASC'],
+                ['a', 'ASC'],
+              ],
               name: 'bar_b_a_key',
               schemaName: 'pub',
               tableName: 'bar',
               unique: true,
             },
             {
-              columns: ['b'],
+              columns: [['b', 'ASC']],
               name: 'bar_b_key',
               schemaName: 'pub',
               tableName: 'bar',
@@ -153,15 +156,20 @@ describe('change-source/tables/ddl', () => {
     ],
     [
       'create index',
-      `CREATE INDEX foo_name_index on pub.foo (name, id)`,
+      `CREATE INDEX foo_name_index on pub.foo (name desc, id)`,
       {
         type: 'ddl',
         version: 1,
         event: {
           tag: 'CREATE INDEX',
-          context: {query: `CREATE INDEX foo_name_index on pub.foo (name, id)`},
+          context: {
+            query: `CREATE INDEX foo_name_index on pub.foo (name desc, id)`,
+          },
           index: {
-            columns: ['name', 'id'],
+            columns: [
+              ['name', 'DESC'],
+              ['id', 'ASC'],
+            ],
             name: 'foo_name_index',
             schemaName: 'pub',
             tableName: 'foo',
@@ -220,14 +228,17 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: ['description', 'name'],
+              columns: [
+                ['description', 'ASC'],
+                ['name', 'ASC'],
+              ],
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: ['name'],
+              columns: [['name', 'ASC']],
               unique: true,
             },
           ],
@@ -284,21 +295,24 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: ['description', 'name'],
+              columns: [
+                ['description', 'ASC'],
+                ['name', 'ASC'],
+              ],
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: ['name'],
+              columns: [['name', 'ASC']],
               unique: true,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_username_key',
-              columns: ['username'],
+              columns: [['username', 'ASC']],
               unique: true,
             },
           ],
@@ -355,14 +369,17 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: ['description', 'name'],
+              columns: [
+                ['description', 'ASC'],
+                ['name', 'ASC'],
+              ],
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: ['name'],
+              columns: [['name', 'ASC']],
               unique: true,
             },
           ],
@@ -414,14 +431,17 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: ['description', 'name'],
+              columns: [
+                ['description', 'ASC'],
+                ['name', 'ASC'],
+              ],
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: ['name'],
+              columns: [['name', 'ASC']],
               unique: true,
             },
           ],
@@ -471,14 +491,17 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: ['description', 'handle'],
+              columns: [
+                ['description', 'ASC'],
+                ['handle', 'ASC'],
+              ],
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: ['handle'],
+              columns: [['handle', 'ASC']],
               unique: true,
             },
           ],
@@ -522,7 +545,7 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: ['name'],
+              columns: [['name', 'ASC']],
               unique: true,
             },
           ],

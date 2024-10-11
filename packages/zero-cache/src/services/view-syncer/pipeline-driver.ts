@@ -10,13 +10,13 @@ import type {TableSchema} from '../../../../zql/src/zql/ivm/schema.js';
 import type {Source, SourceChange} from '../../../../zql/src/zql/ivm/source.js';
 import {TableSource} from '../../../../zqlite/src/table-source.js';
 import {listTables} from '../../db/lite-tables.js';
+import type {TableSpec} from '../../db/specs.js';
 import {
   dataTypeToZqlValueType,
   mapLiteDataTypeToZqlSchemaValue,
 } from '../../types/lite.js';
 import type {RowKey} from '../../types/row-key.js';
 import type {SchemaVersions} from '../../types/schema-versions.js';
-import type {TableSpec} from '../../types/specs.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
 

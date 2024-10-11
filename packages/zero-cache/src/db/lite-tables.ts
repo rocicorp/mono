@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import type {Database} from '../../../zqlite/src/db.js';
-import type {IndexSpec, MutableIndexSpec, TableSpec} from '../types/specs.js';
+import type {LiteIndexSpec, MutableLiteIndexSpec, TableSpec} from './specs.js';
 
 type ColumnInfo = {
   table: string;
@@ -74,18 +74,21 @@ export function listTables(db: Database): TableSpec[] {
   return tables;
 }
 
-export function listIndexes(db: Database): IndexSpec[] {
+export function listIndexes(db: Database): LiteIndexSpec[] {
   const indexes = db
     .prepare(
       `SELECT 
          idx.name as indexName, 
          idx.tbl_name as tableName, 
          info."unique" as "unique",
-         col.name as column FROM sqlite_master as idx
+         col.name as column,
+         CASE WHEN col.desc = 0 THEN 'ASC' ELSE 'DESC' END as dir
+      FROM sqlite_master as idx
        JOIN pragma_index_list(idx.tbl_name) AS info ON info.name = idx.name
-       JOIN pragma_index_info(idx.name) as col
+       JOIN pragma_index_xinfo(idx.name) as col
        WHERE idx.type = 'index' AND 
              info.origin != 'pk' AND
+             col.key = 1 AND
              idx.tbl_name NOT LIKE '_zero.%'
        ORDER BY idx.name, col.seqno ASC`,
     )
@@ -94,19 +97,19 @@ export function listIndexes(db: Database): IndexSpec[] {
     tableName: string;
     unique: number;
     column: string;
+    dir: 'ASC' | 'DESC';
   }[];
 
-  const ret: MutableIndexSpec[] = [];
-  for (const {indexName: name, tableName, unique, column} of indexes) {
+  const ret: MutableLiteIndexSpec[] = [];
+  for (const {indexName: name, tableName, unique, column, dir} of indexes) {
     if (ret.at(-1)?.name === name) {
       // Aggregate multiple column names into the array.
-      must(ret.at(-1)).columns.push(column);
+      must(ret.at(-1)).columns.push([column, dir]);
     } else {
       ret.push({
-        schemaName: '',
         tableName,
         name,
-        columns: [column],
+        columns: [[column, dir]],
         unique: unique !== 0,
       });
     }
