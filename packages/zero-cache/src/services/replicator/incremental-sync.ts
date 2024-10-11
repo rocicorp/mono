@@ -13,6 +13,7 @@ import {liteTableName} from '../../types/names.js';
 import type {Source} from '../../types/streams.js';
 import type {
   ChangeStreamer,
+  Downstream,
   DownstreamChange,
 } from '../change-streamer/change-streamer.js';
 import type {
@@ -74,13 +75,6 @@ export class IncrementalSyncer {
 
     while (this.#state.shouldRun()) {
       const {replicaVersion, watermark} = getSubscriptionState(this.#replica);
-      const downstream = this.#changeStreamer.subscribe({
-        id: this.#id,
-        watermark,
-        replicaVersion,
-        initial: watermark === initialWatermark,
-      });
-
       const processor = new MessageProcessor(
         this.#replica,
         this.#txMode,
@@ -88,29 +82,39 @@ export class IncrementalSyncer {
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
 
-      const unregister = this.#state.cancelOnStop(downstream);
+      let downstream: Source<Downstream> | undefined;
+      let unregister = () => {};
+      let err: unknown | undefined;
+
       try {
+        downstream = await this.#changeStreamer.subscribe({
+          id: this.#id,
+          watermark,
+          replicaVersion,
+          initial: watermark === initialWatermark,
+        });
+        this.#state.resetBackoff();
+        unregister = this.#state.cancelOnStop(downstream);
+
         for await (const message of downstream) {
           if (message[0] === 'error') {
             // Unrecoverable error. Stop the service.
             await this.stop(lc, message[1]);
             break;
           }
-          this.#state.resetBackoff();
-
           if (processor.processMessage(lc, message)) {
             this.#notifier.notifySubscribers({state: 'version-ready'});
           }
         }
         processor.abort(lc);
       } catch (e) {
-        lc.error?.('received error from change-streamer', e);
-        processor.abort(lc, e);
+        err = e;
+        processor.abort(lc);
       } finally {
-        downstream.cancel();
+        downstream?.cancel();
         unregister();
       }
-      await this.#state.backoff(lc);
+      await this.#state.backoff(lc, err);
     }
     lc.info?.('IncrementalSyncer stopped');
   }
@@ -183,10 +187,7 @@ export class MessageProcessor {
 
       this.#failure = ensureError(err);
 
-      if (err instanceof AbortError) {
-        // Aborted by the service.
-        lc.info?.('stopping MessageProcessor');
-      } else {
+      if (!(err instanceof AbortError)) {
         // Propagate the failure up to the service.
         lc.error?.('Message Processing failed:', this.#failure);
         this.#failService(lc, this.#failure);
@@ -194,8 +195,8 @@ export class MessageProcessor {
     }
   }
 
-  abort(lc: LogContext, err?: unknown) {
-    this.#fail(lc, err ?? new AbortError());
+  abort(lc: LogContext) {
+    this.#fail(lc, new AbortError());
   }
 
   /** @return If a transaction was committed. */

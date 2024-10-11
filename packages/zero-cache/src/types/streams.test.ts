@@ -2,13 +2,13 @@ import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../shared/src/queue.js';
 import {randInt} from '../../../shared/src/rand.js';
 import {sleep} from '../../../shared/src/sleep.js';
 import * as v from '../../../shared/src/valita.js';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import WebSocket from 'ws';
 import {type Source, streamIn, streamOut} from './streams.js';
 import {Subscription} from './subscription.js';
 
@@ -71,7 +71,7 @@ describe('streams', () => {
 
     producer.push({from: num, to: num + 1, str: 'foo'});
 
-    const consumer = startReceiver();
+    const consumer = await startReceiver();
     for await (const msg of consumer) {
       if (num > 0) {
         expect(await consumed.dequeue()).toEqual({
@@ -98,7 +98,7 @@ describe('streams', () => {
     producer.push({from: 1, to: 2, str: 'bar'});
     producer.push({from: 2, to: 3, str: 'baz'});
 
-    const consumer = startReceiver() as Subscription<Message>;
+    const consumer = (await startReceiver()) as Subscription<Message>;
 
     // Pipelining should send all messages even before they are
     // "consumed" on the receiving end.
@@ -156,7 +156,7 @@ describe('streams', () => {
     producer.push({from: 2, to: 3, str: 'baz'});
 
     let i = 0;
-    const consumer = startReceiver();
+    const consumer = await startReceiver();
     for await (const msg of consumer) {
       switch (i++) {
         case 0:
@@ -212,7 +212,7 @@ describe('streams', () => {
   test('passthrough', async () => {
     producer.push({from: 1, to: 2, str: 'foo', extra: 'bar'} as Message);
 
-    const consumer = startReceiver();
+    const consumer = await startReceiver();
     expect(await drain(1, consumer)).toEqual([
       {from: 1, to: 2, str: 'foo', extra: 'bar'},
     ]);
@@ -232,7 +232,7 @@ describe('streams', () => {
       ],
     } as Message);
 
-    const consumer = startReceiver();
+    const consumer = await startReceiver();
     expect(await drain(1, consumer)).toEqual([
       {
         from: 1,
@@ -247,5 +247,17 @@ describe('streams', () => {
         ],
       },
     ]);
+  });
+
+  test('propagates connection failures', async () => {
+    await server.close();
+
+    let err;
+    try {
+      await startReceiver();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
   });
 });

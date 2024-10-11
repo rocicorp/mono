@@ -29,7 +29,7 @@ describe('change-streamer/http', () => {
   let lc: LogContext;
   let downstream: Subscription<Downstream>;
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Subscription<Downstream>
+    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
   >;
   let port: number;
   let server: ChangeStreamerHttpServer;
@@ -49,7 +49,7 @@ describe('change-streamer/http', () => {
     port = 3000 + Math.floor(randInt(0, 5000));
     server = new ChangeStreamerHttpServer(
       lc,
-      {subscribe: subscribeFn.mockImplementation(() => downstream)},
+      {subscribe: subscribeFn.mockResolvedValue(downstream)},
       {port},
     );
     await server.start();
@@ -109,7 +109,7 @@ describe('change-streamer/http', () => {
       watermark: '123',
       initial: true,
     };
-    const sub = client.subscribe(ctx);
+    const sub = await client.subscribe(ctx);
 
     downstream.push(['begin', {tag: 'begin'}]);
     downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
@@ -128,7 +128,7 @@ describe('change-streamer/http', () => {
   });
 
   test('bigint and non-JSON fields', async () => {
-    const sub = client.subscribe({
+    const sub = await client.subscribe({
       id: 'foo',
       replicaVersion: 'abc',
       watermark: '123',
