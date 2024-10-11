@@ -6,6 +6,7 @@ import {
   createIndexStatement,
   createTableStatement,
 } from '../../../db/create.js';
+import type {FilteredTableSpec, IndexSpec} from '../../../db/specs.js';
 import {
   importSnapshot,
   Mode,
@@ -14,7 +15,6 @@ import {
 import {liteValues} from '../../../types/lite.js';
 import {liteTableName} from '../../../types/names.js';
 import {pgClient, type PostgresDB} from '../../../types/pg.js';
-import type {FilteredTableSpec, IndexSpec} from '../../../types/specs.js';
 import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
   initReplicationState,
@@ -246,16 +246,13 @@ function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
 
 function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   for (const index of indices) {
-    const liteIndex = {
-      ...index,
-      schemaName: '',
-      tableName: liteTableName({
-        schema: index.schemaName,
-        name: index.tableName,
+    const {schemaName: schema, tableName: name, ...liteIndex} = index;
+    tx.exec(
+      createIndexStatement({
+        tableName: liteTableName({schema, name}),
+        ...liteIndex,
       }),
-    } as const;
-
-    tx.exec(createIndexStatement(liteIndex));
+    );
   }
 }
 
