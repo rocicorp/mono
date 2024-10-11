@@ -676,11 +676,19 @@ describe('tables/published', () => {
       CREATE INDEX issues_org_id ON test.issues (org_id);
       CREATE INDEX issues_component_id ON test.issues (component_id);
       CREATE PUBLICATION zero_data FOR TABLE test.issues;
+      CREATE PUBLICATION zero_two FOR TABLE test.issues;
       `,
       expectedResult: {
         publications: [
           {
             pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+          {
+            pubname: 'zero_two',
             pubinsert: true,
             pubupdate: true,
             pubdelete: true,
@@ -715,7 +723,10 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['issue_id'],
-            publications: {['zero_data']: {rowFilter: null}},
+            publications: {
+              ['zero_data']: {rowFilter: null},
+              ['zero_two']: {rowFilter: null},
+            },
           },
         ],
         indices: [
@@ -723,14 +734,14 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_component_id',
-            columns: [['component_id', 'ASC']],
+            columns: {['component_id']: 'ASC'},
             unique: false,
           },
           {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_org_id',
-            columns: [['org_id', 'ASC']],
+            columns: {['org_id']: 'ASC'},
             unique: false,
           },
         ],
@@ -795,14 +806,14 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_component_id',
-            columns: [['component_id', 'ASC']],
+            columns: {['component_id']: 'ASC'},
             unique: true,
           },
           {
             schemaName: 'test',
             tableName: 'issues',
             name: 'issues_org_id',
-            columns: [['org_id', 'ASC']],
+            columns: {['org_id']: 'ASC'},
             unique: true,
           },
         ],
@@ -820,11 +831,19 @@ describe('tables/published', () => {
       CREATE INDEX foo_a_b ON test.foo (a ASC, b DESC);
       CREATE INDEX foo_b_a ON test.foo (b DESC, a DESC);
       CREATE PUBLICATION zero_data FOR TABLE test.foo;
+      CREATE PUBLICATION zero_two FOR TABLE test.foo;
       `,
       expectedResult: {
         publications: [
           {
             pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: true,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+          {
+            pubname: 'zero_two',
             pubinsert: true,
             pubupdate: true,
             pubdelete: true,
@@ -859,7 +878,10 @@ describe('tables/published', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_data']: {rowFilter: null}},
+            publications: {
+              ['zero_data']: {rowFilter: null},
+              ['zero_two']: {rowFilter: null},
+            },
           },
         ],
         indices: [
@@ -867,20 +889,20 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_a_b',
-            columns: [
-              ['a', 'ASC'],
-              ['b', 'DESC'],
-            ],
+            columns: {
+              a: 'ASC',
+              b: 'DESC',
+            },
             unique: false,
           },
           {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_b_a',
-            columns: [
-              ['b', 'DESC'],
-              ['a', 'DESC'],
-            ],
+            columns: {
+              b: 'DESC',
+              a: 'DESC',
+            },
             unique: false,
           },
         ],
@@ -948,20 +970,20 @@ describe('tables/published', () => {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_a_b',
-            columns: [
-              ['az', 'ASC'],
-              ['bz', 'ASC'],
-            ],
+            columns: {
+              az: 'ASC',
+              bz: 'ASC',
+            },
             unique: false,
           },
           {
             schemaName: 'test',
             tableName: 'foo',
             name: 'foo_b_a',
-            columns: [
-              ['bz', 'DESC'],
-              ['az', 'DESC'],
-            ],
+            columns: {
+              bz: 'DESC',
+              az: 'DESC',
+            },
             unique: false,
           },
         ],

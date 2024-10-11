@@ -104,12 +104,12 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
   for (const {indexName: name, tableName, unique, column, dir} of indexes) {
     if (ret.at(-1)?.name === name) {
       // Aggregate multiple column names into the array.
-      must(ret.at(-1)).columns.push([column, dir]);
+      must(ret.at(-1)).columns[column] = dir;
     } else {
       ret.push({
         tableName,
         name,
-        columns: [[column, dir]],
+        columns: {[column]: dir},
         unique: unique !== 0,
       });
     }

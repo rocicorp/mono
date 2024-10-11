@@ -42,6 +42,7 @@ describe('change-source/tables/ddl', () => {
     CREATE INDEX yoo_custom_index ON pub.yoo (description, name);
     
     CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA pub;
+    CREATE PUBLICATION zero_sum FOR TABLE pub.foo, pub.boo;
     `);
 
     await upstream.unsafe(createEventTriggerStatements());
@@ -127,24 +128,24 @@ describe('change-source/tables/ddl', () => {
           },
           indexes: [
             {
-              columns: [['a', 'ASC']],
+              columns: {a: 'ASC'},
               name: 'bar_a_key',
               schemaName: 'pub',
               tableName: 'bar',
               unique: true,
             },
             {
-              columns: [
-                ['b', 'ASC'],
-                ['a', 'ASC'],
-              ],
+              columns: {
+                b: 'ASC',
+                a: 'ASC',
+              },
               name: 'bar_b_a_key',
               schemaName: 'pub',
               tableName: 'bar',
               unique: true,
             },
             {
-              columns: [['b', 'ASC']],
+              columns: {b: 'ASC'},
               name: 'bar_b_key',
               schemaName: 'pub',
               tableName: 'bar',
@@ -166,10 +167,10 @@ describe('change-source/tables/ddl', () => {
             query: `CREATE INDEX foo_name_index on pub.foo (name desc, id)`,
           },
           index: {
-            columns: [
-              ['name', 'DESC'],
-              ['id', 'ASC'],
-            ],
+            columns: {
+              name: 'DESC',
+              id: 'ASC',
+            },
             name: 'foo_name_index',
             schemaName: 'pub',
             tableName: 'foo',
@@ -221,24 +222,27 @@ describe('change-source/tables/ddl', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_all']: {rowFilter: null}},
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
           },
           indexes: [
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: [
-                ['description', 'ASC'],
-                ['name', 'ASC'],
-              ],
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: [['name', 'ASC']],
+              columns: {name: 'ASC'},
               unique: true,
             },
           ],
@@ -288,31 +292,34 @@ describe('change-source/tables/ddl', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_all']: {rowFilter: null}},
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
           },
           indexes: [
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: [
-                ['description', 'ASC'],
-                ['name', 'ASC'],
-              ],
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: [['name', 'ASC']],
+              columns: {name: 'ASC'},
               unique: true,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_username_key',
-              columns: [['username', 'ASC']],
+              columns: {username: 'ASC'},
               unique: true,
             },
           ],
@@ -362,24 +369,27 @@ describe('change-source/tables/ddl', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_all']: {rowFilter: null}},
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
           },
           indexes: [
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: [
-                ['description', 'ASC'],
-                ['name', 'ASC'],
-              ],
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: [['name', 'ASC']],
+              columns: {name: 'ASC'},
               unique: true,
             },
           ],
@@ -424,24 +434,27 @@ describe('change-source/tables/ddl', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_all']: {rowFilter: null}},
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
           },
           indexes: [
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: [
-                ['description', 'ASC'],
-                ['name', 'ASC'],
-              ],
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: [['name', 'ASC']],
+              columns: {name: 'ASC'},
               unique: true,
             },
           ],
@@ -484,24 +497,27 @@ describe('change-source/tables/ddl', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_all']: {rowFilter: null}},
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
           },
           indexes: [
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_custom_index',
-              columns: [
-                ['description', 'ASC'],
-                ['handle', 'ASC'],
-              ],
+              columns: {
+                description: 'ASC',
+                handle: 'ASC',
+              },
               unique: false,
             },
             {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: [['handle', 'ASC']],
+              columns: {handle: 'ASC'},
               unique: true,
             },
           ],
@@ -537,7 +553,10 @@ describe('change-source/tables/ddl', () => {
               },
             },
             primaryKey: ['id'],
-            publications: {['zero_all']: {rowFilter: null}},
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
           },
           indexes: [
             // Note: foo_custom_index is dropped because it depended on the columns.
@@ -545,7 +564,7 @@ describe('change-source/tables/ddl', () => {
               schemaName: 'pub',
               tableName: 'foo',
               name: 'foo_name_key',
-              columns: [['name', 'ASC']],
+              columns: {name: 'ASC'},
               unique: true,
             },
           ],

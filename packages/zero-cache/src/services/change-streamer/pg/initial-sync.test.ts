@@ -817,10 +817,10 @@ describe('replicator/initial-sync', () => {
       },
       replicatedIndices: [
         {
-          columns: [
-            ['orgID', 'DESC'],
-            ['other', 'ASC'],
-          ],
+          columns: {
+            orgID: 'DESC',
+            other: 'ASC',
+          },
           name: 'issues_orgID_other_idx',
           tableName: 'issues',
           unique: false,
