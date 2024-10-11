@@ -43,7 +43,7 @@ defineConfig<AuthData, Schema>(schema, queries => {
     replicaDBFile: runtimeEnv('REPLICA_DB_FILE'),
     jwtSecret: runtimeEnv('JWT_SECRET'),
     litestream: runtimeEnv('LITESTREAM'),
-    warmWebsocket: 12,
+    warmWebsocket: 32,
     shard: {
       id: runtimeEnv('SHARD_ID'),
       publications: runtimeEnv('PUBLICATIONS'),
