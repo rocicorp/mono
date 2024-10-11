@@ -2,7 +2,8 @@ DROP TABLE IF EXISTS "user",
 "issue",
 "comment",
 "label",
-"issueLabel" CASCADE;
+"issueLabel",
+"zero.schemaVersions" CASCADE;
 
 CREATE TABLE "user" (
     "id" VARCHAR PRIMARY KEY,
@@ -55,6 +56,23 @@ CREATE TABLE "issueLabel" (
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
     PRIMARY KEY ("labelID", "issueID")
 );
+
+CREATE SCHEMA IF NOT EXISTS zero;
+
+CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
+    "minSupportedVersion" INT4,
+    "maxSupportedVersion" INT4,
+
+    -- Ensure that there is only a single row in the table.
+    -- Application code can be agnostic to this column, and
+    -- simply invoke UPDATE statements on the version columns.
+    "lock" BOOL PRIMARY KEY DEFAULT true,
+    CONSTRAINT zero_schema_versions_single_row_constraint CHECK (lock)
+);
+
+INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
+VALUES (true, 3, 3) ON CONFLICT DO NOTHING;
+
 
 -- last modified function and trigger
 CREATE OR REPLACE FUNCTION update_modified_column()
