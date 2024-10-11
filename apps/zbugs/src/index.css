@@ -631,11 +631,18 @@ h1 {
   opacity: 1;
 }
 
-/* Markup */
+/************/
+/* Markdown */
+/************/
 
 .description-container p {
   line-height: 1.5;
   margin-bottom: 0.5rem;
+}
+
+.description-container ul,
+.description-container ol {
+  padding-left: 2rem;
 }
 
 .description-container ul {
@@ -643,20 +650,88 @@ h1 {
   list-style-position: inside;
 }
 
+.description-container ol {
+  counter-reset: list-counter;
+  list-style: none;
+  padding-left: 0;
+}
+
+.description-container ol li {
+  counter-increment: list-counter;
+  position: relative;
+  padding: 0.25rem 0 0.25rem 3.35em;
+  line-height: 2;
+}
+
+.description-container ol li::before {
+  content: counter(list-counter) '.';
+  position: absolute;
+  left: 0;
+  width: 2.2em;
+  text-align: right;
+}
+
 .description-container ul li {
   padding: 0.25rem 0;
   line-height: 2;
 }
 
-.issue-detail code {
-  font-size: 0.9rem;
-  font-family: monospace;
-  padding: 0.25rem 0.5rem;
+/* Markdown: Code blocks */
+.issue-detail pre {
+  background-color: var(--color-nav-selected);
+  border-radius: 0.5rem;
+  margin: 2rem 0;
+  padding: 1rem;
+  overflow-x: auto;
 }
 
-.issue-detail pre {
-  background-color: var(--color-light-outline);
-  border-radius: 0.5rem;
-  margin: 0.5rem 0;
-  padding: 1rem;
+.issue-detail code {
+  font-size: 0.9rem;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace;
+  background-color: var(--color-nav-selected);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+}
+
+/* Markdown: Blockquotes */
+.description-container blockquote {
+  margin: 1rem 0;
+  padding: 0.5em 1em;
+  border-left: 0.4rem solid var(--color-nav-selected);
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Markdown: Horizontal rule */
+.description-container hr {
+  margin: 1rem 0;
+  border-color: var(--color-nav-selected);
+}
+
+/* Markdown: Headers */
+.description-container h1 {
+  font-size: 3rem;
+}
+
+.description-container h2 {
+  font-size: 2rem;
+  margin: 3rem 0 1rem;
+}
+
+.description-container h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 2rem 0 1rem;
+}
+
+/* Markdown: Links */
+.description-container a {
+  color: var(--color-primary-cta);
 }
