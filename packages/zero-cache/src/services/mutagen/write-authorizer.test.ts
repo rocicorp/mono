@@ -180,8 +180,9 @@ describe('can insert/update/delete/upsert', () => {
       (['Insert', 'Update', 'Delete', 'Upsert'] as const)) {
       expect(
         authorizer[`can${op}`](jwtPayload, {
-          id: {id: id ?? 1},
-          entityType: 'foo',
+          tableName: 'foo',
+          primaryKey: ['id'] as const,
+          value: {id: id ?? 1},
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any),
       ).toBe(expected);

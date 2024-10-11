@@ -1,8 +1,10 @@
-import {jsonObjectSchema, jsonSchema} from '../../shared/src/json-schema.js';
+import {jsonSchema} from '../../shared/src/json-schema.js';
 import * as v from '../../shared/src/valita.js';
-import {primaryKeyValueRecordSchema} from './primary-key.js';
+import {rowSchema} from './data.js';
+import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.js';
 
 export const CRUD_MUTATION_NAME = '_zero_crud';
+
 export enum MutationType {
   CRUD = 'crud',
   Custom = 'custom',
@@ -13,9 +15,9 @@ export enum MutationType {
  */
 const createOpSchema = v.object({
   op: v.literal('create'),
-  entityType: v.string(),
-  id: primaryKeyValueRecordSchema,
-  value: jsonObjectSchema,
+  tableName: v.string(),
+  primaryKey: primaryKeySchema,
+  value: rowSchema,
 });
 
 /**
@@ -24,9 +26,9 @@ const createOpSchema = v.object({
  */
 const setOpSchema = v.object({
   op: v.literal('set'),
-  entityType: v.string(),
-  id: primaryKeyValueRecordSchema,
-  value: jsonObjectSchema,
+  tableName: v.string(),
+  primaryKey: primaryKeySchema,
+  value: rowSchema,
 });
 
 /**
@@ -34,9 +36,10 @@ const setOpSchema = v.object({
  */
 const updateOpSchema = v.object({
   op: v.literal('update'),
-  entityType: v.string(),
-  id: primaryKeyValueRecordSchema,
-  partialValue: jsonObjectSchema,
+  tableName: v.string(),
+  primaryKey: primaryKeySchema,
+  // Partial value with at least the primary key fields
+  value: rowSchema,
 });
 
 /**
@@ -44,8 +47,10 @@ const updateOpSchema = v.object({
  */
 const deleteOpSchema = v.object({
   op: v.literal('delete'),
-  entityType: v.string(),
-  id: primaryKeyValueRecordSchema,
+  tableName: v.string(),
+  primaryKey: primaryKeySchema,
+  // Partial value representing the primary key
+  value: primaryKeyValueRecordSchema,
 });
 
 const crudOpSchema = v.union(

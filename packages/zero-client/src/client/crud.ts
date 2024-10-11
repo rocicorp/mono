@@ -1,9 +1,6 @@
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {MaybePromise} from '../../../shared/src/types.js';
-import {
-  type PrimaryKeyValue,
-  type PrimaryKeyValueRecord,
-} from '../../../zero-protocol/src/primary-key.js';
+import {type PrimaryKeyValueRecord} from '../../../zero-protocol/src/primary-key.js';
 import {
   CRUD_MUTATION_NAME,
   type CreateOp,
@@ -140,8 +137,8 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       assertNotInBatch(entityType, 'create');
       const op: CreateOp = {
         op: 'create',
-        entityType,
-        id: makeIDFromPrimaryKey(primaryKey, value),
+        tableName: entityType,
+        primaryKey,
         value,
       };
       return zeroCRUD({ops: [op]});
@@ -150,8 +147,8 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       assertNotInBatch(entityType, 'set');
       const op: SetOp = {
         op: 'set',
-        entityType,
-        id: makeIDFromPrimaryKey(primaryKey, value),
+        tableName: entityType,
+        primaryKey,
         value,
       };
       return zeroCRUD({ops: [op]});
@@ -160,9 +157,9 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       assertNotInBatch(entityType, 'update');
       const op: UpdateOp = {
         op: 'update',
-        entityType,
-        id: makeIDFromPrimaryKey(primaryKey, value),
-        partialValue: value,
+        tableName: entityType,
+        primaryKey,
+        value,
       };
       return zeroCRUD({ops: [op]});
     },
@@ -170,8 +167,9 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       assertNotInBatch(entityType, 'delete');
       const op: DeleteOp = {
         op: 'delete',
-        entityType,
-        id: makeIDFromPrimaryKey(primaryKey, id),
+        tableName: entityType,
+        primaryKey,
+        value: id,
       };
       return zeroCRUD({ops: [op]});
     },
@@ -194,8 +192,8 @@ export function makeBatchCRUDMutate<
     create: (value: CreateValue<R, PK>) => {
       const op: CreateOp = {
         op: 'create',
-        entityType: tableName,
-        id: makeIDFromPrimaryKey(primaryKey, value),
+        tableName,
+        primaryKey,
         value,
       };
       ops.push(op);
@@ -204,8 +202,8 @@ export function makeBatchCRUDMutate<
     set: (value: SetValue<R, PK>) => {
       const op: SetOp = {
         op: 'set',
-        entityType: tableName,
-        id: makeIDFromPrimaryKey(primaryKey, value),
+        tableName,
+        primaryKey,
         value,
       };
       ops.push(op);
@@ -214,9 +212,9 @@ export function makeBatchCRUDMutate<
     update: (value: UpdateValue<R, PK>) => {
       const op: UpdateOp = {
         op: 'update',
-        entityType: tableName,
-        id: makeIDFromPrimaryKey(primaryKey, value),
-        partialValue: value,
+        tableName,
+        primaryKey,
+        value,
       };
       ops.push(op);
       return promiseVoid;
@@ -224,8 +222,9 @@ export function makeBatchCRUDMutate<
     delete: (id: DeleteID<R, PK>) => {
       const op: DeleteOp = {
         op: 'delete',
-        entityType: tableName,
-        id: makeIDFromPrimaryKey(primaryKey, id),
+        tableName,
+        primaryKey,
+        value: id,
       };
       ops.push(op);
       return promiseVoid;
@@ -274,9 +273,9 @@ async function createImpl(
   schema: NormalizedSchema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
-    arg.entityType,
-    schema.tables[arg.entityType].primaryKey,
-    arg.id,
+    arg.tableName,
+    schema.tables[arg.tableName].primaryKey,
+    arg.value,
   );
   if (!(await tx.has(key))) {
     await tx.set(key, arg.value);
@@ -289,9 +288,9 @@ async function setImpl(
   schema: NormalizedSchema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
-    arg.entityType,
-    schema.tables[arg.entityType].primaryKey,
-    arg.id,
+    arg.tableName,
+    schema.tables[arg.tableName].primaryKey,
+    arg.value,
   );
   await tx.set(key, arg.value);
 }
@@ -302,15 +301,15 @@ async function updateImpl(
   schema: NormalizedSchema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
-    arg.entityType,
-    schema.tables[arg.entityType].primaryKey,
-    arg.id,
+    arg.tableName,
+    schema.tables[arg.tableName].primaryKey,
+    arg.value,
   );
   const prev = await tx.get(key);
   if (prev === undefined) {
     return;
   }
-  const update = arg.partialValue;
+  const update = arg.value;
   const next = {...(prev as object), ...(update as object)};
   await tx.set(key, next);
 }
@@ -321,20 +320,9 @@ async function deleteImpl(
   schema: NormalizedSchema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
-    arg.entityType,
-    schema.tables[arg.entityType].primaryKey,
-    arg.id,
+    arg.tableName,
+    schema.tables[arg.tableName].primaryKey,
+    arg.value,
   );
   await tx.del(key);
-}
-
-function makeIDFromPrimaryKey(
-  primaryKey: NormalizedPrimaryKey,
-  id: PrimaryKeyValueRecord,
-): PrimaryKeyValueRecord {
-  const rv: Record<string, PrimaryKeyValue> = {};
-  for (const key of primaryKey) {
-    rv[key] = id[key];
-  }
-  return rv;
 }
