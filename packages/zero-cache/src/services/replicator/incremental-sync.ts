@@ -431,7 +431,6 @@ class TransactionProcessor {
     // REPLICA IDENTITY DEFAULT means the `key` must be set.
     // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
     assert(del.relation.replicaIdentity === 'default');
-    assert(del.key);
     const rowKey = liteRow(del.key);
     const table = liteTableName(del.relation);
 

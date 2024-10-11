@@ -1,10 +1,11 @@
+import * as v from '../../../../shared/src/valita.js';
 import type {Source} from '../../types/streams.js';
 import type {Service} from '../service.js';
-import type {
-  Change,
-  DataChange,
-  MessageBegin,
-  MessageCommit,
+import {
+  beginSchema,
+  commitSchema,
+  dataChangeSchema,
+  type Change,
 } from './schema/change.js';
 
 /**
@@ -98,17 +99,32 @@ export const enum ErrorType {
   WatermarkTooOld,
 }
 
-export type SubscriptionError = {
-  type: ErrorType;
-  message?: string | undefined;
-};
+const subscriptionErrorSchema = v.object({
+  type: v.number(), // ErrorType
+  message: v.string().optional(),
+});
 
-export type Begin = ['begin', MessageBegin];
-export type Data = ['data', DataChange];
-export type Commit = ['commit', MessageCommit, {watermark: string}];
-export type Error = ['error', SubscriptionError];
+export type SubscriptionError = v.Infer<typeof subscriptionErrorSchema>;
 
-export type DownstreamChange = Begin | Data | Commit;
+const begin = v.tuple([v.literal('begin'), beginSchema]);
+const data = v.tuple([v.literal('data'), dataChangeSchema]);
+const commit = v.tuple([
+  v.literal('commit'),
+  commitSchema,
+  v.object({watermark: v.string()}),
+]);
+const error = v.tuple([v.literal('error'), subscriptionErrorSchema]);
+
+const downstreamChange = v.union(begin, data, commit);
+
+export const downstreamSchema = v.union(downstreamChange, error);
+
+export type Begin = v.Infer<typeof begin>;
+export type Data = v.Infer<typeof data>;
+export type Commit = v.Infer<typeof commit>;
+export type Error = v.Infer<typeof error>;
+
+export type DownstreamChange = v.Infer<typeof downstreamChange>;
 
 /**
  * A stream of transactions, each starting with a {@link MessageBegin},
@@ -120,6 +136,6 @@ export type DownstreamChange = Begin | Data | Commit;
  * A {@link SubscriptionError} indicates an unrecoverable error that requires
  * manual intervention (e.g. configuration / operational error).
  */
-export type Downstream = DownstreamChange | Error;
+export type Downstream = v.Infer<typeof downstreamSchema>;
 
 export interface ChangeStreamerService extends ChangeStreamer, Service {}
