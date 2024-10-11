@@ -96,12 +96,10 @@ const labelSchema = {
 const issueLabelSchema = {
   tableName: 'issueLabel',
   columns: {
-    id: {type: 'string'},
     issueID: {type: 'string'},
     labelID: {type: 'string'},
   },
-  // mutators require an ID field still.
-  primaryKey: ['id'],
+  primaryKey: ['issueID', 'labelID'],
   relationships: {},
 } as const;
 

@@ -229,13 +229,12 @@ export default function IssuePage() {
             selected={labelSet}
             onAssociateLabel={labelID =>
               z.mutate.issueLabel.create({
-                id: `${issue.id}-${labelID}`,
                 issueID: issue.id,
                 labelID,
               })
             }
             onDisassociateLabel={labelID =>
-              z.mutate.issueLabel.delete({id: `${issue.id}-${labelID}`})
+              z.mutate.issueLabel.delete({issueID: issue.id, labelID})
             }
           />
         </div>
