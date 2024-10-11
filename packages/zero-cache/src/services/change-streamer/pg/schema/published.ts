@@ -103,12 +103,16 @@ export function indexDefinitionsQuery(
   // To address this, the pg_attribute rows are looked up for the index's
   // table rather than the index itself, using the pg_index.indkey array
   // to determine the set and order of columns to include.
+  //
+  // Note: The first bit of indoption is 1 for DESC and 0 for ASC:
+  // https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
   return `
   WITH indexed_columns AS (SELECT
       pg_indexes.schemaname as "schemaName",
       pg_indexes.tablename as "tableName",
       pg_indexes.indexname as "name",
       index_column.name as "col",
+      CASE WHEN pg_index.indoption[index_column.pos-1] & 1 = 1 THEN 'DESC' ELSE 'ASC' END as "dir",
       pg_index.indisunique as "unique"
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
@@ -140,7 +144,7 @@ export function indexDefinitionsQuery(
       'tableName', "tableName",
       'name', "name",
       'unique', "unique",
-      'columns', json_agg("col")
+      'columns', json_agg(json_build_array("col", "dir"))
     ) AS index FROM indexed_columns 
       GROUP BY "schemaName", "tableName", "name", "unique")
 

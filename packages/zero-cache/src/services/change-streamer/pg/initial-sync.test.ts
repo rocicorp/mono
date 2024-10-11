@@ -714,7 +714,7 @@ describe('replicator/initial-sync', () => {
           "isAdmin" BOOLEAN,
           PRIMARY KEY ("orgID", "issueID")
         );
-        CREATE INDEX ON issues ("orgID", "other");
+        CREATE INDEX ON issues ("orgID" DESC, "other");
       `,
       published: {
         ['zero.clients']: ZERO_CLIENTS_SPEC,
@@ -817,7 +817,10 @@ describe('replicator/initial-sync', () => {
       },
       replicatedIndices: [
         {
-          columns: ['orgID', 'other'],
+          columns: [
+            ['orgID', 'DESC'],
+            ['other', 'ASC'],
+          ],
           name: 'issues_orgID_other_idx',
           schemaName: '',
           tableName: 'issues',

@@ -1,14 +1,14 @@
 import type postgres from 'postgres';
-import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.js';
 import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {listTables} from '../../../../db/lite-tables.js';
-import {stripCommentsAndWhitespace} from '../../../../db/query-test-util.js';
-import {testDBs} from '../../../../test/db.js';
-import type {TableSpec} from '../../../../types/specs.js';
-import {Database} from '../../../../../../zqlite/src/db.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../zqlite/src/db.js';
+import {mapPostgresToLite} from '../services/change-streamer/pg/schema/lite.js';
+import {getPublicationInfo} from '../services/change-streamer/pg/schema/published.js';
+import {testDBs} from '../test/db.js';
+import type {TableSpec} from '../types/specs.js';
 import {createTableStatement} from './create.js';
-import {mapPostgresToLite} from './lite.js';
-import {getPublicationInfo} from './published.js';
+import {listTables} from './lite-tables.js';
+import {stripCommentsAndWhitespace} from './query-test-util.js';
 
 describe('tables/create', () => {
   type Case = {

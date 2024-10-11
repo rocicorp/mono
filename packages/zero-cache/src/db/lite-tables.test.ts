@@ -223,7 +223,7 @@ describe('lite/indexes', () => {
           schemaName: '',
           tableName: 'users',
           unique: true,
-          columns: ['handle'],
+          columns: [['handle', 'ASC']],
         },
       ],
     },
@@ -236,7 +236,7 @@ describe('lite/indexes', () => {
       last TEXT,
       handle TEXT UNIQUE
     );
-    CREATE INDEX full_name ON users (last, first);
+    CREATE INDEX full_name ON users (last desc, first);
     `,
       expectedResult: [
         {
@@ -244,14 +244,17 @@ describe('lite/indexes', () => {
           schemaName: '',
           tableName: 'users',
           unique: false,
-          columns: ['last', 'first'],
+          columns: [
+            ['last', 'DESC'],
+            ['first', 'ASC'],
+          ],
         },
         {
           name: 'sqlite_autoindex_users_2',
           schemaName: '',
           tableName: 'users',
           unique: true,
-          columns: ['handle'],
+          columns: [['handle', 'ASC']],
         },
       ],
     },
