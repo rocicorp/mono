@@ -1,5 +1,5 @@
 import './zero-setup.js';
 
-import('./react-main.js').then(module => {
-  module.start();
+import('./react-main.js').catch(err => {
+  console.error(err);
 });
