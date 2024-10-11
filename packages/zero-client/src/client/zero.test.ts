@@ -10,6 +10,9 @@ import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
 import {
+  changeDesiredQueriesMessageSchema,
+  decodeProtocols,
+  encodeProtocols,
   ErrorKind,
   initConnectionMessageSchema,
 } from '../../../zero-protocol/src/mod.js';
@@ -43,6 +46,8 @@ import {
   type UpdateNeededReason,
   createSocket,
 } from './zero.js';
+import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
+import type {QueryManager} from './query-manager.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -273,6 +278,17 @@ test('disconnects if ping fails', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
+const mockRep = {
+  query() {
+    return Promise.resolve([]);
+  },
+} as unknown as ReplicacheImpl;
+const mockQueryManager = {
+  getQueriesPatch() {
+    return Promise.resolve([]);
+  },
+} as unknown as QueryManager;
+
 suite('createSocket', () => {
   const t = (
     socketURL: WSString,
@@ -285,27 +301,32 @@ suite('createSocket', () => {
     debugPerf: boolean,
     now: number,
     expectedURL: string,
-    expectedProtocol = '',
   ) => {
     const schemaVersion = 3;
-    test(expectedURL, () => {
+    test(expectedURL, async () => {
       sinon.stub(performance, 'now').returns(now);
-      const mockSocket = createSocket(
-        socketURL,
-        baseCookie,
-        clientID,
-        'testClientGroupID',
-        schemaVersion,
-        userID,
-        auth,
-        jurisdiction,
-        lmid,
-        'wsidx',
-        debugPerf,
-        new LogContext('error', undefined, new TestLogSink()),
-      ) as unknown as MockSocket;
+      const mockSocket = (
+        await createSocket(
+          mockRep,
+          mockQueryManager,
+          socketURL,
+          baseCookie,
+          clientID,
+          'testClientGroupID',
+          schemaVersion,
+          userID,
+          auth,
+          jurisdiction,
+          lmid,
+          'wsidx',
+          debugPerf,
+          new LogContext('error', undefined, new TestLogSink()),
+        )
+      )[0] as unknown as MockSocket;
       expect(`${mockSocket.url}`).equal(expectedURL);
-      expect(mockSocket.protocol).equal(expectedProtocol);
+      expect(mockSocket.protocol).equal(
+        encodeProtocols(['initConnection', {desiredQueriesPatch: []}], auth),
+      );
     });
   };
 
@@ -385,7 +406,6 @@ suite('createSocket', () => {
     false,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
-    'auth%20with%20%5B%5D',
   );
 
   t(
@@ -399,7 +419,6 @@ suite('createSocket', () => {
     false,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
-    'auth%20with%20%5B%5D',
   );
 
   t(
@@ -413,7 +432,6 @@ suite('createSocket', () => {
     true,
     0,
     'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
-    'auth%20with%20%5B%5D',
   );
 
   t(
@@ -431,22 +449,18 @@ suite('createSocket', () => {
 });
 
 suite('initConnection', () => {
-  test('sent when connected message received but before ConnectionState.Connected', async () => {
+  test('not sent when connected message received but before ConnectionState.Connected', async () => {
     const r = zeroForTest();
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
-      expect(
-        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
-      ).toEqual(['initConnection', {desiredQueriesPatch: []}]);
-      expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
-    expect(mockSocket.messages.length).toEqual(1);
+    // upon receiving `connected` we do not sent `initConnection` since it is sent
+    // when opening the connection.
+    expect(mockSocket.messages.length).toEqual(0);
   });
 
-  test('sends desired queries patch', async () => {
+  test('sends desired queries patch in sec-protocol header', async () => {
     const r = zeroForTest({
       schema: {
         version: 1,
@@ -463,13 +477,62 @@ suite('initConnection', () => {
         },
       },
     });
+
+    const view = r.query.e.select('id', 'value').materialize();
+    view.addListener(() => {});
+
     const mockSocket = await r.socket;
 
+    expect(
+      valita.parse(
+        JSON.parse(decodeProtocols(mockSocket.protocol)[0]),
+        initConnectionMessageSchema,
+      ),
+    ).toEqual([
+      'initConnection',
+      {
+        desiredQueriesPatch: [
+          {
+            ast: {
+              table: 'e',
+              orderBy: [['id', 'asc']],
+            } satisfies AST,
+            hash: '1jnb9n35hhddz',
+            op: 'put',
+          },
+        ],
+      },
+    ]);
+
+    expect(mockSocket.messages.length).toEqual(0);
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(0);
+  });
+
+  test('sends changeDesiredQueries if new queries are added after initConnection but before connected', async () => {
+    const r = zeroForTest({
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            tableName: 'e',
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            relationships: {},
+          },
+        },
+      },
+    });
+
+    const mockSocket = await r.socket;
     mockSocket.onUpstream = msg => {
       expect(
-        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
+        valita.parse(JSON.parse(msg), changeDesiredQueriesMessageSchema),
       ).toEqual([
-        'initConnection',
+        'changeDesiredQueries',
         {
           desiredQueriesPatch: [
             {
@@ -486,10 +549,103 @@ suite('initConnection', () => {
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
 
+    expect(
+      valita.parse(
+        JSON.parse(decodeProtocols(mockSocket.protocol)[0]),
+        initConnectionMessageSchema,
+      ),
+    ).toEqual([
+      'initConnection',
+      {
+        desiredQueriesPatch: [],
+      },
+    ]);
+
     expect(mockSocket.messages.length).toEqual(0);
+
     const view = r.query.e.select('id', 'value').materialize();
     view.addListener(() => {});
+
     await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(1);
+  });
+
+  test('changeDesiredQueries does not include queries sent with initConnection', async () => {
+    const r = zeroForTest({
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            tableName: 'e',
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            relationships: {},
+          },
+        },
+      },
+    });
+
+    const view1 = r.query.e.select('id', 'value').materialize();
+    view1.addListener(() => {});
+
+    const mockSocket = await r.socket;
+    expect(mockSocket.messages.length).toEqual(0);
+
+    const view2 = r.query.e.select('id', 'value').materialize();
+    view2.addListener(() => {});
+    await r.triggerConnected();
+    // no `changeDesiredQueries` sent since the query was already included in `initConnection`
+    expect(mockSocket.messages.length).toEqual(0);
+  });
+
+  test('changeDesiredQueries does include removal of a query sent with initConnection if it was removed before `connected`', async () => {
+    const r = zeroForTest({
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            tableName: 'e',
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            relationships: {},
+          },
+        },
+      },
+    });
+
+    const view1 = r.query.e.select('id', 'value').materialize();
+    const removeListener = view1.addListener(() => {});
+
+    const mockSocket = await r.socket;
+    mockSocket.onUpstream = msg => {
+      expect(
+        valita.parse(JSON.parse(msg), changeDesiredQueriesMessageSchema),
+      ).toEqual([
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              hash: '1jnb9n35hhddz',
+              op: 'del',
+            },
+          ],
+        },
+      ]);
+    };
+    expect(mockSocket.messages.length).toEqual(0);
+
+    removeListener();
+    view1.destroy();
+    // no `changeDesiredQueries` sent yet since we're not connected
+    expect(mockSocket.messages.length).toEqual(0);
+    await r.triggerConnected();
+    // changedDesiredQueries has been sent.
     expect(mockSocket.messages.length).toEqual(1);
   });
 });
@@ -1033,7 +1189,9 @@ test('Authentication', async () => {
     expectedAuthToken: string,
     expectedTimeOfCall: number,
   ) => {
-    expect((await r.socket).protocol).equal(expectedAuthToken);
+    expect(decodeProtocols((await r.socket).protocol)[1]).equal(
+      expectedAuthToken,
+    );
     await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
     expect(r.connectionState).equal(ConnectionState.Disconnected);
     await clock.tickAsync(tickMS);
@@ -1066,7 +1224,7 @@ test('Authentication', async () => {
   {
     await r.waitForConnectionState(ConnectionState.Connecting);
     socket = await r.socket;
-    expect(socket.protocol).equal('new-auth-token-8');
+    expect(decodeProtocols(socket.protocol)[1]).equal('new-auth-token-8');
     await r.triggerConnected();
     await r.waitForConnectionState(ConnectionState.Connected);
     // getAuth should not be called again.
@@ -1077,8 +1235,7 @@ test('Authentication', async () => {
     // Ping/pong should happen every 5 seconds.
     await tickAFewTimes(clock, PING_INTERVAL_MS);
     const socket = await r.socket;
-    expectInitConnectionMessage(socket.messages[0]);
-    expect(socket.messages[1]).deep.equal(JSON.stringify(['ping', {}]));
+    expect(socket.messages[0]).deep.equal(JSON.stringify(['ping', {}]));
     expect(r.connectionState).equal(ConnectionState.Connected);
     await r.triggerPong();
     expect(r.connectionState).equal(ConnectionState.Connected);
@@ -1100,13 +1257,13 @@ test(ErrorKind.AuthInvalidated, async () => {
   });
 
   await r.triggerConnected();
-  expect((await r.socket).protocol).equal('auth-token-1');
+  expect(decodeProtocols((await r.socket).protocol)[1]).equal('auth-token-1');
 
   await r.triggerError(ErrorKind.AuthInvalidated, 'auth error');
   await r.waitForConnectionState(ConnectionState.Disconnected);
 
   await r.waitForConnectionState(ConnectionState.Connecting);
-  expect((await r.socket).protocol).equal('auth-token-2');
+  expect(decodeProtocols((await r.socket).protocol)[1]).equal('auth-token-2');
 });
 
 test('Disconnect on error', async () => {
@@ -1183,12 +1340,6 @@ test('Ping timeout', async () => {
 });
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
-
-function expectInitConnectionMessage(message: string) {
-  expect(
-    valita.parse(JSON.parse(message), initConnectionMessageSchema),
-  ).not.toBeUndefined();
-}
 
 function expectLogMessages(r: TestZero<Schema>) {
   return expect(
