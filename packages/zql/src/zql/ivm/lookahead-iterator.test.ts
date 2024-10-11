@@ -94,7 +94,7 @@ test('basics', () => {
 });
 
 class ExpensiveIterator {
-  #iter = [1, 2, 3][Symbol.iterator]();
+  #iter = [1, 2, 3].values();
 
   returned: unknown[] = [];
   thrown: unknown[] = [];
@@ -103,7 +103,7 @@ class ExpensiveIterator {
     return this.#iter.next();
   }
 
-  return(value?: unknown) {
+  return(value?: undefined) {
     this.returned.push(value);
     this.#iter.return?.(value);
     return {done: true, value: undefined};

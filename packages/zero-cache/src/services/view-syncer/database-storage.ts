@@ -54,7 +54,7 @@ export class DatabaseStorage {
     db.pragma('locking_mode = EXCLUSIVE');
 
     db.prepare(CREATE_STORAGE_TABLE).run();
-    lc.info?.(`Created DatabaseStorage backed by ${path}`);
+    lc.debug?.(`Created DatabaseStorage backed by ${path}`);
     return new DatabaseStorage(db, options);
   }
 
