@@ -32,7 +32,6 @@ export default function ListPage() {
   )?.id;
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
-  // TODO: Implement infinite scroll
   let q = z.query.issue.orderBy('modified', 'desc').related('labels');
 
   if (status === null) {
