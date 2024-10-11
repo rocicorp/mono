@@ -121,6 +121,12 @@ h1 {
   top: 2rem;
 }
 
+.section-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .nav-item {
   padding: 0.375rem 1rem;
   border-radius: 0.5rem;
@@ -164,12 +170,17 @@ h1 {
   justify-content: space-between;
 }
 
+.logged-in-user-name {
+  cursor: default;
+}
+
 .logout-button {
   display: block;
   height: 1.5rem;
   width: 1.5rem;
   background: transparent url(assets/icons/logout.svg) no-repeat;
   opacity: 0.6;
+  transform: scale(0.8);
   transition: opacity 0.3s ease-in-out;
 }
 
@@ -734,4 +745,73 @@ h1 {
 /* Markdown: Links */
 .description-container a {
   color: var(--color-primary-cta);
+}
+
+/**************/
+/* Responsive */
+/**************/
+
+@media (max-width: 900px) {
+  .primary-nav {
+    height: 6.3rem;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 2rem;
+    z-index: 9998;
+    background-color: var(--color-background);
+  }
+
+  .nav-container {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .fps-meter {
+    display: none;
+  }
+
+  .primary-content {
+    padding: 5rem 0 0 0;
+  }
+
+  .section-tabs {
+    flex-direction: row;
+  }
+
+  .primary-cta {
+    position: fixed;
+    bottom: 4rem;
+    right: 4rem;
+    z-index: 9999;
+    height: 4rem;
+    width: 4rem;
+    border-radius: 50%;
+    opacity: 0.95;
+  }
+
+  .primary-cta::after {
+    content: '+';
+    font-weight: 800;
+    font-size: 2rem;
+    line-height: 1;
+    vertical-align: 3px;
+  }
+
+  .primary-cta-text {
+    display: none;
+  }
+
+  .logged-in-user-name {
+    display: none;
+  }
+
+  .issue-sidebar {
+    top: 7rem;
+  }
+
+  .modal {
+    margin-top: 10rem;
+  }
 }

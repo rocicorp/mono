@@ -125,6 +125,7 @@ export default function ListPage() {
     <>
       <div className="list-view-header-container">
         <h1 className="list-view-header">
+          {/* Need to make this dynamic */}
           Open Issues
           <span className="issue-count">{issues.length}</span>
         </h1>
