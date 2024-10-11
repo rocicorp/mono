@@ -48,13 +48,13 @@ export default function UserPicker({onSelect, selected}: Props) {
     <Selector
       onChange={c => handleSelect(c)}
       items={users.map(u => ({
-        text: u.name,
+        text: u.login,
         value: u,
         icon: avatars[u.id],
       }))}
       defaultItem={
         selectedUser
-          ? {text: selectedUser.name, icon: avatars[selectedUser.id]}
+          ? {text: selectedUser.login, icon: avatars[selectedUser.id]}
           : {
               text: 'Select',
               icon: avatarIcon,
