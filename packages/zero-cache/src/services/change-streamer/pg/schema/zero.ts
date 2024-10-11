@@ -23,7 +23,8 @@ const GLOBAL_SETUP = `
     PRIMARY KEY("shardID", "clientGroupID", "clientID")
   );
 
-  CREATE TABLE zero."schemaVersions" (
+  -- Note: this must be kept in sync with init.sql in zbugs.
+  CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
     "minSupportedVersion" INT4,
     "maxSupportedVersion" INT4,
 
@@ -34,7 +35,7 @@ const GLOBAL_SETUP = `
     CONSTRAINT zero_schema_versions_single_row_constraint CHECK (lock)
   );
   INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
-    VALUES (true, 1, 1);
+    VALUES (true, 1, 1) ON CONFLICT DO NOTHING;
 
   CREATE PUBLICATION ${SCHEMA_VERSIONS_PUBLICATION} FOR TABLE zero."schemaVersions";
 `;

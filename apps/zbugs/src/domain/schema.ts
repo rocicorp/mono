@@ -104,7 +104,7 @@ const issueLabelSchema = {
 } as const;
 
 export const schema = {
-  version: 1,
+  version: 3,
   tables: {
     user: userSchema,
     issue: issueSchema,
