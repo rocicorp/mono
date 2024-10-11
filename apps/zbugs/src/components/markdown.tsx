@@ -1,11 +1,11 @@
-import MarkdownBase from 'react-markdown';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
+import {lazy, Suspense} from 'react';
+
+const MarkdownInternal = lazy(() => import('./markdown-internal.js'));
 
 export default function Markdown({children}: {children: string}) {
   return (
-    <MarkdownBase rehypePlugins={[rehypeRaw, rehypeSanitize]}>
-      {children}
-    </MarkdownBase>
+    <Suspense fallback={<div>{children}</div>}>
+      <MarkdownInternal>{children}</MarkdownInternal>
+    </Suspense>
   );
 }
