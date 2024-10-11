@@ -41,36 +41,34 @@ export function Nav() {
           className="primary-cta"
           onMouseDown={() => setShowIssueModal(true)}
         >
-          New Issue
+          <span className="primary-cta-text">New Issue</span>
         </button>
 
-        <div className="section-issues">
-          <div className="pt-2 flex flex-col gap-2">
-            <Link
-              href={addStatusParam(undefined)}
-              className={classNames('nav-item', {
-                'nav-active': !qs.has('status'),
-              })}
-            >
-              Open
-            </Link>
-            <Link
-              href={addStatusParam('closed')}
-              className={classNames('nav-item', {
-                'nav-active': qs.get('status') === 'closed',
-              })}
-            >
-              Closed
-            </Link>
-            <Link
-              href={addStatusParam('all')}
-              className={classNames('nav-item', {
-                'nav-active': qs.get('status') === 'all',
-              })}
-            >
-              All
-            </Link>
-          </div>
+        <div className="section-tabs">
+          <Link
+            href={addStatusParam(undefined)}
+            className={classNames('nav-item', {
+              'nav-active': !qs.has('status'),
+            })}
+          >
+            Open
+          </Link>
+          <Link
+            href={addStatusParam('closed')}
+            className={classNames('nav-item', {
+              'nav-active': qs.get('status') === 'closed',
+            })}
+          >
+            Closed
+          </Link>
+          <Link
+            href={addStatusParam('all')}
+            className={classNames('nav-item', {
+              'nav-active': qs.get('status') === 'all',
+            })}
+          >
+            All
+          </Link>
         </div>
 
         <FPSMeter className="fps-meter" width={192} height={38} />
@@ -84,12 +82,16 @@ export function Nav() {
                   src={user?.avatar}
                   className="issue-creator-avatar"
                   alt={user?.name}
+                  title={user?.login}
                 />
-                <span className="logged-in-user-name">{login.loginState?.login}</span>
+                <span className="logged-in-user-name">
+                  {login.loginState?.login}
+                </span>
               </div>
               <button
                 className="logout-button"
                 onMouseDown={login.logout}
+                title="Log out"
               ></button>
             </div>
           )}
