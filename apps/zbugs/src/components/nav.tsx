@@ -6,10 +6,17 @@ import {useSearch} from 'wouter';
 import {useLogin} from '../hooks/use-login.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
 import {useState} from 'react';
+import {useZero} from '../hooks/use-zero.js';
+import {useQuery} from 'zero-react/src/use-query.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
   const login = useLogin();
+
+  const zero = useZero();
+  const user = useQuery(
+    zero.query.user.where('id', login.loginState?.userID ?? '').one(),
+  );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
@@ -73,8 +80,12 @@ export function Nav() {
           ) : (
             <div className="logged-in-user-container">
               <div className="logged-in-user">
-                {/* Need access to user avatar */}
-                <span>{login.loginState?.login}</span>
+                <img
+                  src={user?.avatar}
+                  className="issue-creator-avatar"
+                  alt={user?.name}
+                />
+                <span className="logged-in-user-name">{login.loginState?.login}</span>
               </div>
               <button
                 className="logout-button"

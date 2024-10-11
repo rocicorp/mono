@@ -164,12 +164,17 @@ h1 {
   justify-content: space-between;
 }
 
+.logged-in-user-name {
+  cursor: default;
+}
+
 .logout-button {
   display: block;
   height: 1.5rem;
   width: 1.5rem;
   background: transparent url(assets/icons/logout.svg) no-repeat;
   opacity: 0.6;
+  transform: scale(0.8);
   transition: opacity 0.3s ease-in-out;
 }
 
