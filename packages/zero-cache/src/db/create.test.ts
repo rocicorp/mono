@@ -5,10 +5,10 @@ import {Database} from '../../../zqlite/src/db.js';
 import {mapPostgresToLite} from '../services/change-streamer/pg/schema/lite.js';
 import {getPublicationInfo} from '../services/change-streamer/pg/schema/published.js';
 import {testDBs} from '../test/db.js';
-import type {TableSpec} from '../types/specs.js';
 import {createTableStatement} from './create.js';
 import {listTables} from './lite-tables.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
+import type {TableSpec} from './specs.js';
 
 describe('tables/create', () => {
   type Case = {

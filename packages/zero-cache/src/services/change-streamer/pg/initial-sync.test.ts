@@ -2,6 +2,11 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {listIndexes, listTables} from '../../../db/lite-tables.js';
+import type {
+  FilteredTableSpec,
+  LiteIndexSpec,
+  TableSpec,
+} from '../../../db/specs.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -10,11 +15,6 @@ import {
 } from '../../../test/db.js';
 import {expectTables, initDB as initLiteDB} from '../../../test/lite.js';
 import type {PostgresDB} from '../../../types/pg.js';
-import type {
-  FilteredTableSpec,
-  IndexSpec,
-  TableSpec,
-} from '../../../types/specs.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
 import {getPublicationInfo} from './schema/published.js';
@@ -180,7 +180,7 @@ describe('replicator/initial-sync', () => {
     published: Record<string, FilteredTableSpec>;
     upstream?: Record<string, object[]>;
     replicatedSchema: Record<string, TableSpec>;
-    replicatedIndices?: IndexSpec[];
+    replicatedIndices?: LiteIndexSpec[];
     replicatedData: Record<string, object[]>;
     resultingPublications: string[];
   };
@@ -822,7 +822,6 @@ describe('replicator/initial-sync', () => {
             ['other', 'ASC'],
           ],
           name: 'issues_orgID_other_idx',
-          schemaName: '',
           tableName: 'issues',
           unique: false,
         },

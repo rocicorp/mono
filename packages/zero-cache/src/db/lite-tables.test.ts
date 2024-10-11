@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../zqlite/src/db.js';
-import type {IndexSpec, TableSpec} from '../types/specs.js';
 import {listIndexes, listTables} from './lite-tables.js';
+import type {LiteIndexSpec, TableSpec} from './specs.js';
 
 describe('lite/tables', () => {
   type Case = {
@@ -195,7 +195,7 @@ describe('lite/indexes', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: IndexSpec[];
+    expectedResult: LiteIndexSpec[];
   };
 
   const cases: Case[] = [
@@ -220,7 +220,6 @@ describe('lite/indexes', () => {
       expectedResult: [
         {
           name: 'sqlite_autoindex_users_2',
-          schemaName: '',
           tableName: 'users',
           unique: true,
           columns: [['handle', 'ASC']],
@@ -241,7 +240,6 @@ describe('lite/indexes', () => {
       expectedResult: [
         {
           name: 'full_name',
-          schemaName: '',
           tableName: 'users',
           unique: false,
           columns: [
@@ -251,7 +249,6 @@ describe('lite/indexes', () => {
         },
         {
           name: 'sqlite_autoindex_users_2',
-          schemaName: '',
           tableName: 'users',
           unique: true,
           columns: [['handle', 'ASC']],

@@ -1,6 +1,5 @@
-import {jsonObjectSchema} from '../../../../../../shared/src/json-schema.js';
 import * as v from '../../../../../../shared/src/valita.js';
-import type {FilteredTableSpec, IndexSpec} from '../../../../types/specs.js';
+import {filteredTableSpec, indexSpec} from '../../../../db/specs.js';
 import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
 
 // Sent in the 'version' tag of "ddl" event messages. This is used to ensure
@@ -24,8 +23,8 @@ const createIndexTagSchema = v.literal('CREATE INDEX');
 
 const createOrAlterTableEventSchema = triggerEvent.extend({
   tag: createOrAlterTableTagSchema,
-  table: jsonObjectSchema.map(t => t as FilteredTableSpec), // TODO: Define FilteredTableSpec schema.
-  indexes: v.array(jsonObjectSchema.map(t => t as IndexSpec)), // TODO: Define IndexSpec schema.
+  table: filteredTableSpec,
+  indexes: v.array(indexSpec),
 });
 
 export type CreateOrAlterTableEvent = v.Infer<
@@ -34,7 +33,7 @@ export type CreateOrAlterTableEvent = v.Infer<
 
 const createIndexEventSchema = triggerEvent.extend({
   tag: createIndexTagSchema,
-  index: jsonObjectSchema.map(t => t as IndexSpec), // TODO: Define IndexSpec schema.
+  index: indexSpec,
 });
 
 export type CreateIndexEvent = v.Infer<typeof createIndexEventSchema>;
