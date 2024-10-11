@@ -93,7 +93,9 @@ const logConfigSchema = v.object({
    * Defaults to `text` for developer-friendly console logging.
    * Also supports `json` for consumption by structured-logging services.
    */
-  format: v.union(envRefSchema, v.union(v.literal('text'), v.literal('json'))),
+  format: v
+    .union(envRefSchema, v.union(v.literal('text'), v.literal('json')))
+    .optional(),
   datadogLogsApiKey: configStringValueSchema.optional(),
   datadogServiceLabel: configStringValueSchema.optional(),
 });
