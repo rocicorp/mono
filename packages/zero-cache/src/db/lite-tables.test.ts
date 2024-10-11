@@ -1,10 +1,10 @@
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../zqlite/src/db.js';
-import type {TableSpec} from '../types/specs.js';
-import {listTables} from './lite-tables.js';
+import type {IndexSpec, TableSpec} from '../types/specs.js';
+import {listIndexes, listTables} from './lite-tables.js';
 
-describe('tables/list', () => {
+describe('lite/tables', () => {
   type Case = {
     name: string;
     setupQuery: string;
@@ -186,6 +186,83 @@ describe('tables/list', () => {
       db.exec(c.setupQuery);
 
       const tables = listTables(db);
+      expect(tables).toEqual(c.expectedResult);
+    });
+  }
+});
+
+describe('lite/indexes', () => {
+  type Case = {
+    name: string;
+    setupQuery: string;
+    expectedResult: IndexSpec[];
+  };
+
+  const cases: Case[] = [
+    {
+      name: 'no indexes',
+      setupQuery: `
+    CREATE TABLE "zero.clients" (
+      "clientID" VARCHAR (180) PRIMARY KEY,
+      "lastMutationID" BIGINT
+    );
+    `,
+      expectedResult: [],
+    },
+    {
+      name: 'unique',
+      setupQuery: `
+    CREATE TABLE users (
+      userID VARCHAR (180) PRIMARY KEY,
+      handle TEXT UNIQUE
+    );
+    `,
+      expectedResult: [
+        {
+          name: 'sqlite_autoindex_users_2',
+          schemaName: '',
+          tableName: 'users',
+          unique: true,
+          columns: ['handle'],
+        },
+      ],
+    },
+    {
+      name: 'multiple columns',
+      setupQuery: `
+    CREATE TABLE users (
+      userID VARCHAR (180) PRIMARY KEY,
+      first TEXT,
+      last TEXT,
+      handle TEXT UNIQUE
+    );
+    CREATE INDEX full_name ON users (last, first);
+    `,
+      expectedResult: [
+        {
+          name: 'full_name',
+          schemaName: '',
+          tableName: 'users',
+          unique: false,
+          columns: ['last', 'first'],
+        },
+        {
+          name: 'sqlite_autoindex_users_2',
+          schemaName: '',
+          tableName: 'users',
+          unique: true,
+          columns: ['handle'],
+        },
+      ],
+    },
+  ];
+
+  for (const c of cases) {
+    test(c.name, () => {
+      const db = new Database(createSilentLogContext(), ':memory:');
+      db.exec(c.setupQuery);
+
+      const tables = listIndexes(db);
       expect(tables).toEqual(c.expectedResult);
     });
   }

@@ -10,8 +10,8 @@ import {
   vi,
 } from 'vitest';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import {normalizeSchema} from './normalized-schema.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
-import type {Schema} from './zero.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use
@@ -28,7 +28,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const schema: Schema = {
+const schema = normalizeSchema({
   version: 1,
   tables: {
     issues: {
@@ -44,7 +44,7 @@ const schema: Schema = {
       relationships: {},
     },
   },
-};
+});
 
 test('completed poke plays on first raf', async () => {
   const onPokeErrorStub = vi.fn();

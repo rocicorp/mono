@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../../zqlite/src/db.js';
-import {listIndices, listTables} from '../../../db/lite-tables.js';
+import {listIndexes, listTables} from '../../../db/lite-tables.js';
 import {
   dropReplicationSlot,
   getConnectionURI,
@@ -879,7 +879,7 @@ describe('replicator/initial-sync', () => {
         new Set(c.resultingPublications),
       );
 
-      const syncedIndices = listIndices(replica);
+      const syncedIndices = listIndexes(replica);
       expect(syncedIndices).toEqual(c.replicatedIndices ?? []);
 
       expectTables(replica, c.replicatedData, 'bigint');

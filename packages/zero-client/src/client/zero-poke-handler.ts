@@ -19,7 +19,7 @@ import {
   toGotQueriesKey,
   toPrimaryKeyString,
 } from './keys.js';
-import type {Schema} from './zero.js';
+import {type NormalizedSchema} from './normalized-schema.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -47,13 +47,13 @@ export class PokeHandler {
   // Serializes calls to this.#replicachePoke otherwise we can cause out of
   // order poke errors.
   readonly #pokeLock = new Lock();
-  readonly #schema: Schema;
+  readonly #schema: NormalizedSchema;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
     onPokeError: () => void,
     clientID: ClientID,
-    schema: Schema,
+    schema: NormalizedSchema,
     lc: LogContext,
   ) {
     this.#replicachePoke = replicachePoke;
@@ -179,7 +179,7 @@ export class PokeHandler {
 
 export function mergePokes(
   pokeBuffer: PokeAccumulator[],
-  schema: Schema,
+  schema: NormalizedSchema,
 ): PokeInternal | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
@@ -298,7 +298,7 @@ function queryPatchOpToReplicachePatchOp(
 
 function entitiesPatchOpToReplicachePatchOp(
   op: EntitiesPatchOp,
-  schema: Schema,
+  schema: NormalizedSchema,
 ): PatchOperationInternal {
   switch (op.op) {
     case 'clear':

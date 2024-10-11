@@ -4,7 +4,12 @@ import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
+import * as v from '../../../../shared/src/valita.js';
 import {ErrorKind} from '../../../../zero-protocol/src/mod.js';
+import {
+  primaryKeyValueSchema,
+  type PrimaryKeyValue,
+} from '../../../../zero-protocol/src/primary-key.js';
 import {
   MutationType,
   type CRUDMutation,
@@ -302,27 +307,17 @@ export function getCreateSQL(
   tx: postgres.TransactionSql,
   create: CreateOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  const table = create.entityType;
-  const {id, value} = create;
-
-  const valueWithIdColumns = {
-    ...value,
-    ...id,
-  };
-
-  return tx`INSERT INTO ${tx(table)} ${tx(valueWithIdColumns)}`;
+  return tx`INSERT INTO ${tx(create.tableName)} ${tx(create.value)}`;
 }
 
 export function getSetSQL(
   tx: postgres.TransactionSql,
   set: SetOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  const table = set.entityType;
-  const {id, value} = set;
-
+  const {tableName, primaryKey, value} = set;
   return tx`
-    INSERT INTO ${tx(table)} ${tx({...value, ...id})}
-    ON CONFLICT (${tx(Object.keys(id))})
+    INSERT INTO ${tx(tableName)} ${tx(value)}
+    ON CONFLICT (${tx(primaryKey)})
     DO UPDATE SET ${tx(value)}
   `;
 }
@@ -331,28 +326,30 @@ function getUpdateSQL(
   tx: postgres.TransactionSql,
   update: UpdateOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  const table = update.entityType;
-  const {id, partialValue} = update;
-
-  return tx`UPDATE ${tx(table)} SET ${tx(partialValue)} WHERE ${tx(id)}`;
+  const table = update.tableName;
+  const {primaryKey, value} = update;
+  const id: Record<string, PrimaryKeyValue> = {};
+  for (const key of primaryKey) {
+    id[key] = v.parse(value[key], primaryKeyValueSchema);
+  }
+  return tx`UPDATE ${tx(table)} SET ${tx(value)} WHERE ${tx(id)}`;
 }
 
 function getDeleteSQL(
   tx: postgres.TransactionSql,
   deleteOp: DeleteOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  const table = deleteOp.entityType;
-  const {id} = deleteOp;
+  const {tableName, primaryKey, value} = deleteOp;
 
   const conditions = [];
-  for (const [key, value] of Object.entries(id)) {
+  for (const key of primaryKey) {
     if (conditions.length > 0) {
       conditions.push(tx`AND`);
     }
-    conditions.push(tx`${tx(key)} = ${value}`);
+    conditions.push(tx`${tx(key)} = ${value[key]}`);
   }
 
-  return tx`DELETE FROM ${tx(table)} WHERE ${conditions}`;
+  return tx`DELETE FROM ${tx(tableName)} WHERE ${conditions}`;
 }
 
 async function checkSchemaVersionAndIncrementLastMutationID(

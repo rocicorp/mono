@@ -84,16 +84,30 @@ const shardConfigSchema = v.object({
 type ShardConfigType = v.Infer<typeof shardConfigSchema>;
 
 const logConfigSchema = v.object({
-  level: v.union(
-    envRefSchema,
-    v.union(v.literal('debug'), v.literal('info'), v.literal('error')),
-  ),
+  /**
+   * `debug`, `info`, `warn`, or `error`.
+   * Defaults to `info`.
+   */
+  level: v
+    .union(
+      envRefSchema,
+      v.union(
+        v.literal('debug'),
+        v.literal('info'),
+        v.literal('warn'),
+        v.literal('error'),
+      ),
+    )
+    .optional(),
 
   /**
    * Defaults to `text` for developer-friendly console logging.
    * Also supports `json` for consumption by structured-logging services.
    */
-  format: v.union(envRefSchema, v.union(v.literal('text'), v.literal('json'))),
+  format: v
+    .union(envRefSchema, v.union(v.literal('text'), v.literal('json')))
+    .optional(),
+
   datadogLogsApiKey: configStringValueSchema.optional(),
   datadogServiceLabel: configStringValueSchema.optional(),
 });
@@ -124,6 +138,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
   taskId: configStringValueSchema.optional(),
   replicaDBFile: configStringValueSchema,
   storageDbTmpDir: configStringValueSchema.optional(),
+  warmWebsocket: numberLiteral.optional(),
 
   // The number of sync workers defaults to available-cores - 1.
   // It should be set to 0 for the `replication-manager`.
@@ -143,7 +158,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
 
   jwtSecret: configStringValueSchema.optional(),
 
-  log: logConfigSchema,
+  log: logConfigSchema.optional(),
 
   shard: shardConfigSchema.optional(),
   rateLimit: rateLimitConfigSchema.optional(),
@@ -230,6 +245,10 @@ export class ZeroConfig {
     return resolveValue(this.#config.litestream);
   }
 
+  get warmWebsocket() {
+    return this.#config.warmWebsocket;
+  }
+
   get jwtSecret() {
     return resolveValue(this.#config.jwtSecret);
   }
@@ -281,12 +300,12 @@ export class MutationTransactionLimits {
 
 export class LogConfig {
   readonly #config: LogConfigType;
-  constructor(config: LogConfigType) {
-    this.#config = config;
+  constructor(config: LogConfigType | undefined) {
+    this.#config = config ?? {};
   }
 
   get level() {
-    return mustResolveValue(this.#config.level);
+    return resolveValue(this.#config.level) ?? 'info';
   }
 
   get format() {

@@ -1,9 +1,25 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import {toPrimaryKeyString} from './keys.js';
+import type {
+  PrimaryKey,
+  PrimaryKeyValueRecord,
+} from '../../../zero-protocol/src/primary-key.js';
+import {normalizePrimaryKey} from '../../../zql/src/zql/query/normalize-table-schema.js';
+import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.js';
 
 test('toPrimaryKeyString', () => {
+  function toPrimaryKeyString(
+    tableName: string,
+    primaryKey: PrimaryKey,
+    id: PrimaryKeyValueRecord,
+  ) {
+    return toPrimaryKeyStringImpl(
+      tableName,
+      normalizePrimaryKey(primaryKey),
+      id,
+    );
+  }
+
   expect(
     toPrimaryKeyString('issue', ['id'], {id: 'issue1'}),
   ).toMatchInlineSnapshot(`"e/issue/issue1"`);
@@ -90,8 +106,16 @@ test('no clashes - single pk', () => {
         fc.tuple(fc.boolean(), fc.boolean()),
       ),
       ([a, b]) => {
-        const keyA = toPrimaryKeyString('issue', ['id'], {id: a});
-        const keyB = toPrimaryKeyString('issue', ['id'], {id: b});
+        const keyA = toPrimaryKeyStringImpl(
+          'issue',
+          normalizePrimaryKey(['id']),
+          {id: a},
+        );
+        const keyB = toPrimaryKeyStringImpl(
+          'issue',
+          normalizePrimaryKey(['id']),
+          {id: b},
+        );
         if (a === b) {
           expect(keyA).toBe(keyB);
         } else {
@@ -103,7 +127,7 @@ test('no clashes - single pk', () => {
 });
 
 test('no clashes - multiple pk', () => {
-  const primaryKey: PrimaryKey = ['id', 'name'];
+  const primaryKey = normalizePrimaryKey(['id', 'name']);
   fc.assert(
     fc.property(
       fc.tuple(
@@ -113,11 +137,11 @@ test('no clashes - multiple pk', () => {
         fc.oneof(fc.string(), fc.double(), fc.boolean()),
       ),
       ([a1, a2, b1, b2]) => {
-        const keyA = toPrimaryKeyString('issue', primaryKey, {
+        const keyA = toPrimaryKeyStringImpl('issue', primaryKey, {
           id: a1,
           name: a2,
         });
-        const keyB = toPrimaryKeyString('issue', primaryKey, {
+        const keyB = toPrimaryKeyStringImpl('issue', primaryKey, {
           id: b1,
           name: b2,
         });

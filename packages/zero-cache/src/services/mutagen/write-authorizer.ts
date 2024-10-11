@@ -1,3 +1,4 @@
+import type {SQLQuery} from '@databases/sql';
 import {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import {tmpdir} from 'node:os';
@@ -6,14 +7,20 @@ import {pid} from 'node:process';
 import {assert} from '../../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../../shared/src/json.js';
 import {randInt} from '../../../../shared/src/rand.js';
+import * as v from '../../../../shared/src/valita.js';
 import type {
   CreateOp,
   DeleteOp,
   SetOp,
   UpdateOp,
 } from '../../../../zero-protocol/src/mod.js';
+import {
+  primaryKeyValueSchema,
+  type PrimaryKeyValue,
+} from '../../../../zero-protocol/src/primary-key.js';
 import type {BuilderDelegate} from '../../../../zql/src/zql/builder/builder.js';
 import {buildPipeline} from '../../../../zql/src/zql/builder/builder.js';
+import {MissingParameterError} from '../../../../zql/src/zql/builder/error.js';
 import type {Row} from '../../../../zql/src/zql/ivm/data.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
@@ -29,7 +36,6 @@ import {mapLiteDataTypeToZqlSchemaValue} from '../../types/lite.js';
 import {DatabaseStorage} from '../view-syncer/database-storage.js';
 import type {NormalizedTableSpec} from '../view-syncer/pipeline-driver.js';
 import {normalize} from '../view-syncer/pipeline-driver.js';
-import {MissingParameterError} from '../../../../zql/src/zql/builder/error.js';
 
 export interface WriteAuthorizer {
   canInsert(authData: JWTPayload, op: CreateOp): boolean;
@@ -89,16 +95,16 @@ export class WriteAuthorizerImpl {
     if (preMutationRow) {
       return this.canUpdate(authData, {
         op: 'update',
-        entityType: op.entityType,
-        id: op.id,
-        partialValue: op.value,
+        tableName: op.tableName,
+        primaryKey: op.primaryKey,
+        value: op.value,
       });
     }
 
     return this.canInsert(authData, {
       op: 'create',
-      entityType: op.entityType,
-      id: op.id,
+      tableName: op.tableName,
+      primaryKey: op.primaryKey,
       value: op.value,
     });
   }
@@ -145,10 +151,10 @@ export class WriteAuthorizerImpl {
         action,
         'duration:',
         performance.now() - start,
-        'entityType:',
-        op.entityType,
-        'id:',
-        op.id,
+        'tableName:',
+        op.tableName,
+        'primaryKey:',
+        op.primaryKey,
       );
     }
   }
@@ -168,7 +174,7 @@ export class WriteAuthorizerImpl {
     authData: JWTPayload,
     op: ActionOpMap[A],
   ) {
-    const rules = this.#authorizationConfig[op.entityType];
+    const rules = this.#authorizationConfig[op.tableName];
     if (!rules) {
       return true;
     }
@@ -216,9 +222,22 @@ export class WriteAuthorizerImpl {
   }
 
   #getPreMutationRow(op: SetOp | UpdateOp | DeleteOp) {
+    const {value} = op;
+    const conditions: SQLQuery[] = [];
+    const values: PrimaryKeyValue[] = [];
+    for (const pk of op.primaryKey) {
+      conditions.push(sql`${sql.ident(pk)}=?`);
+      values.push(v.parse(value[pk], primaryKeyValueSchema));
+    }
+
     return this.#statementCache.use(
-      compile(sql`SELECT * FROM ${sql.ident(op.entityType)} WHERE id = ?`),
-      stmt => stmt.statement.get<Row | undefined>(op.id.id),
+      compile(
+        sql`SELECT * FROM ${sql.ident(op.tableName)} WHERE ${sql.join(
+          conditions,
+          sql` AND `,
+        )}`,
+      ),
+      stmt => stmt.statement.get<Row | undefined>(...values),
     );
   }
 

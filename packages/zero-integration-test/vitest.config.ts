@@ -21,9 +21,7 @@ export default defineConfig({
         log.includes('Skipping license check for TEST_LICENSE_KEY.') ||
         log.includes('REPLICACHE LICENSE NOT VALID') ||
         log.includes('enableAnalytics false') ||
-        log.includes('no such entity') ||
-        log.includes('TODO: addZQLSubscription') ||
-        log.includes('TODO: removeZQLSubscription')
+        log.includes('no such entity')
       ) {
         return false;
       }

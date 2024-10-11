@@ -1,5 +1,6 @@
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {Format} from '../../../zql/src/zql/ivm/array-view.js';
+import type {NormalizedTableSchema} from '../../../zql/src/zql/query/normalize-table-schema.js';
 import {AbstractQuery} from '../../../zql/src/zql/query/query-impl.js';
 import type {
   DefaultQueryResultRow,
@@ -15,7 +16,7 @@ export class ConfigQuery<
   TReturn extends QueryType = DefaultQueryResultRow<TTableSchema>,
 > extends AbstractQuery<TTableSchema, TReturn> {
   constructor(
-    schema: TTableSchema,
+    schema: NormalizedTableSchema,
     ast?: AST | undefined,
     format?: Format | undefined,
   ) {
@@ -27,7 +28,7 @@ export class ConfigQuery<
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
-    schema: TSchema,
+    schema: NormalizedTableSchema,
     ast: AST,
     format: Format | undefined,
   ): Query<TSchema, TReturn> {

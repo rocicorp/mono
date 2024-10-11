@@ -1,11 +1,11 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {Mode} from '../../db/transaction-pool.js';
 import {
   ErrorKind,
   MutationType,
   type CRUDMutation,
 } from '../../../../zero-protocol/src/mod.js';
+import {Mode} from '../../db/transaction-pool.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';
@@ -109,9 +109,9 @@ describe('processMutation', () => {
               ops: [
                 {
                   op: 'create',
-                  entityType: 'idonly',
-                  id: {id: '1'},
-                  value: {},
+                  tableName: 'idonly',
+                  primaryKey: ['id'],
+                  value: {id: '1'},
                 },
               ],
             },
@@ -161,9 +161,9 @@ describe('processMutation', () => {
             ops: [
               {
                 op: 'create',
-                entityType: 'idonly',
-                id: {id: '1'},
-                value: {},
+                tableName: 'idonly',
+                primaryKey: ['id'],
+                value: {id: '1'},
               },
             ],
           },
@@ -211,9 +211,9 @@ describe('processMutation', () => {
             ops: [
               {
                 op: 'create',
-                entityType: 'idonly',
-                id: {id: '1'},
-                value: {},
+                tableName: 'idonly',
+                primaryKey: ['id'],
+                value: {id: '1'},
               },
             ],
           },
@@ -263,9 +263,9 @@ describe('processMutation', () => {
             ops: [
               {
                 op: 'create',
-                entityType: 'idonly',
-                id: {id: '1'}, // This would result in a duplicate key value if applied.
-                value: {},
+                tableName: 'idonly',
+                primaryKey: ['id'],
+                value: {id: '1'}, // This would result in a duplicate key value if applied.
               },
             ],
           },
@@ -314,9 +314,9 @@ describe('processMutation', () => {
               ops: [
                 {
                   op: 'create',
-                  entityType: 'idonly',
-                  id: {id: '1'},
-                  value: {},
+                  tableName: 'idonly',
+                  primaryKey: ['id'],
+                  value: {id: '1'},
                 },
               ],
             },
@@ -368,9 +368,9 @@ describe('processMutation', () => {
               ops: [
                 {
                   op: 'create',
-                  entityType: 'idonly',
-                  id: {id: '1'},
-                  value: {},
+                  tableName: 'idonly',
+                  primaryKey: ['id'],
+                  value: {id: '1'},
                 },
               ],
             },
@@ -422,9 +422,9 @@ describe('processMutation', () => {
               ops: [
                 {
                   op: 'create',
-                  entityType: 'idonly',
-                  id: {id: '1'},
-                  value: {},
+                  tableName: 'idonly',
+                  primaryKey: ['id'],
+                  value: {id: '1'},
                 },
               ],
             },
@@ -469,42 +469,47 @@ describe('processMutation', () => {
             ops: [
               {
                 op: 'create',
-                entityType: 'id_and_cols',
-                id: {id: '1'},
+                tableName: 'id_and_cols',
+                primaryKey: ['id'],
                 value: {
+                  id: '1',
                   col1: 'create',
                   col2: 'create',
                 },
               },
               {
                 op: 'set',
-                entityType: 'id_and_cols',
-                id: {id: '2'},
+                tableName: 'id_and_cols',
+                primaryKey: ['id'],
                 value: {
+                  id: '2',
                   col1: 'set',
                   col2: 'set',
                 },
               },
               {
                 op: 'update',
-                entityType: 'id_and_cols',
-                id: {id: '1'},
-                partialValue: {
+                tableName: 'id_and_cols',
+                primaryKey: ['id'],
+                value: {
+                  id: '1',
                   col1: 'update',
                 },
               },
               {
                 op: 'set',
-                entityType: 'id_and_cols',
-                id: {id: '1'},
+                tableName: 'id_and_cols',
+                primaryKey: ['id'],
                 value: {
+                  id: '1',
                   col2: 'set',
                 },
               },
               {
                 op: 'delete',
-                entityType: 'id_and_cols',
-                id: {id: '2'},
+                tableName: 'id_and_cols',
+                primaryKey: ['id'],
+                value: {id: '2'},
               },
             ],
           },
@@ -554,9 +559,10 @@ describe('processMutation', () => {
             ops: [
               {
                 op: 'create',
-                entityType: 'fk_ref',
-                id: {id: '1'},
+                tableName: 'fk_ref',
+                primaryKey: ['id'],
                 value: {
+                  id: '1',
                   ref: '1',
                 },
               },
@@ -622,9 +628,11 @@ describe('processMutation', () => {
             ops: [
               {
                 op: 'create',
-                entityType: 'idonly',
-                id: {id: '1'},
-                value: {},
+                tableName: 'idonly',
+                primaryKey: ['id'],
+                value: {
+                  id: '1',
+                },
               },
             ],
           },
