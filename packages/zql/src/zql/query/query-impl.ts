@@ -3,9 +3,13 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
 import type {AST, Ordering} from '../ast/ast.js';
-import {type BuilderDelegate, buildPipeline} from '../builder/builder.js';
+import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
 import {ArrayView, type Format} from '../ivm/array-view.js';
 import type {Row} from '../ivm/data.js';
+import {
+  normalizeTableSchema,
+  type NormalizedTableSchema,
+} from './normalize-table-schema.js';
 import type {
   AddSelections,
   AddSubselect,
@@ -23,7 +27,6 @@ import type {
 import {
   isFieldRelationship,
   isJunctionRelationship,
-  type Lazy,
   type PullSchemaForRelationship,
   type TableSchema,
 } from './schema.js';
@@ -33,7 +36,7 @@ export function newQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 >(delegate: QueryDelegate, tableSchema: TSchema): Query<TSchema, TReturn> {
-  return new QueryImpl(delegate, tableSchema);
+  return new QueryImpl(delegate, normalizeTableSchema(tableSchema));
 }
 
 function newQueryWithDetails<
@@ -41,7 +44,7 @@ function newQueryWithDetails<
   TReturn extends QueryType,
 >(
   delegate: QueryDelegate,
-  schema: TSchema,
+  schema: NormalizedTableSchema,
   ast: AST,
   format: Format | undefined,
 ): Query<TSchema, TReturn> {
@@ -72,11 +75,11 @@ export abstract class AbstractQuery<
 > implements Query<TSchema, TReturn>
 {
   readonly #ast: AST;
-  readonly #schema: TSchema;
+  readonly #schema: NormalizedTableSchema;
   readonly #format: Format;
 
   constructor(
-    schema: TSchema,
+    schema: NormalizedTableSchema,
     ast?: AST | undefined,
     format?: Format | undefined,
   ) {
@@ -102,7 +105,7 @@ export abstract class AbstractQuery<
     TSchema extends TableSchema,
     TReturn extends QueryType,
   >(
-    schema: TSchema,
+    schema: NormalizedTableSchema,
     ast: AST,
     format: Format | undefined,
   ): Query<TSchema, TReturn>;
@@ -152,7 +155,7 @@ export abstract class AbstractQuery<
     const related1 = related;
     const related2 = related;
     if (isFieldRelationship(related1)) {
-      const destSchema = resolveSchema(related1.dest.schema);
+      const destSchema = related1.dest.schema;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -190,8 +193,8 @@ export abstract class AbstractQuery<
     }
 
     if (isJunctionRelationship(related2)) {
-      const destSchema = resolveSchema(related2.dest.schema);
-      const junctionSchema = resolveSchema(related2.junction.schema);
+      const destSchema = related2.dest.schema;
+      const junctionSchema = related2.junction.schema;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -369,7 +372,7 @@ export class QueryImpl<
 
   constructor(
     delegate: QueryDelegate,
-    schema: TSchema,
+    schema: NormalizedTableSchema,
     ast?: AST | undefined,
     format?: Format | undefined,
   ) {
@@ -387,7 +390,7 @@ export class QueryImpl<
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
-    schema: TSchema,
+    schema: NormalizedTableSchema,
     ast: AST,
     format: Format | undefined,
   ): Query<TSchema, TReturn> {
@@ -429,18 +432,8 @@ export class QueryImpl<
   }
 }
 
-function resolveSchema(
-  maybeSchema: TableSchema | Lazy<TableSchema>,
-): TableSchema {
-  if (typeof maybeSchema === 'function') {
-    return maybeSchema();
-  }
-
-  return maybeSchema;
-}
-
 function addPrimaryKeys(
-  schema: TableSchema,
+  schema: NormalizedTableSchema,
   orderBy: Ordering | undefined,
 ): Ordering {
   orderBy = orderBy ?? [];
@@ -461,7 +454,7 @@ function addPrimaryKeys(
   ];
 }
 
-function addPrimaryKeysToAst(schema: TableSchema, ast: AST): AST {
+function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
   return {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),

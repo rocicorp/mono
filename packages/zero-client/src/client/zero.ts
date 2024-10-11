@@ -81,6 +81,7 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.js';
+import {type NormalizedSchema, normalizeSchema} from './normalized-schema.js';
 import type {ZeroOptions} from './options.js';
 import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
@@ -445,13 +446,14 @@ export class Zero<const S extends Schema> {
     const logOptions = this.#logOptions;
 
     // TODO: Normalize schemas once and for all!
+    const normalizedSchema = normalizeSchema(schema);
 
     const replicacheMutators = {
-      ['_zero_crud']: makeCRUDMutator(schema),
+      ['_zero_crud']: makeCRUDMutator(normalizedSchema),
     };
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      schemaVersion: schema.version.toString(),
+      schemaVersion: normalizedSchema.version.toString(),
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -504,7 +506,7 @@ export class Zero<const S extends Schema> {
       );
     };
 
-    this.mutate = makeCRUDMutate<S>(schema, rep.mutate);
+    this.mutate = makeCRUDMutate<S>(normalizedSchema, rep.mutate);
 
     this.#queryManager = new QueryManager(
       rep.clientID,
@@ -512,8 +514,9 @@ export class Zero<const S extends Schema> {
       rep.experimentalWatch.bind(rep),
     );
 
-    this.#zeroContext = new ZeroContext(schema.tables, (ast, gotCallback) =>
-      this.#queryManager.add(ast, gotCallback),
+    this.#zeroContext = new ZeroContext(
+      normalizedSchema.tables,
+      (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
     );
 
     rep.experimentalWatch(
@@ -524,7 +527,7 @@ export class Zero<const S extends Schema> {
       },
     );
 
-    this.query = this.#registerQueries(schema);
+    this.query = this.#registerQueries(normalizedSchema);
 
     reportReloadReason(this.#lc);
 
@@ -543,7 +546,7 @@ export class Zero<const S extends Schema> {
       poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
-      schema,
+      normalizedSchema,
       this.#lc,
     );
 
@@ -1560,7 +1563,7 @@ export class Zero<const S extends Schema> {
     // }
   }
 
-  #registerQueries(schema: S): MakeEntityQueriesFromSchema<S> {
+  #registerQueries(schema: NormalizedSchema): MakeEntityQueriesFromSchema<S> {
     const rv = {} as Record<string, Query<TableSchema>>;
     const context = this.#zeroContext;
     // Not using parse yet

@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, expectTypeOf, suite, test} from 'vitest';
+import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import type {
   PullRequestV1,
   PushRequestV1,
@@ -2276,39 +2276,27 @@ suite('CRUD with compound primary key', () => {
   });
 });
 
-test('CRUD with invalid primary keys', () => {
-  const z = zeroForTest({
-    schema: {
-      version: 1,
-      tables: {
-        issue: {
-          columns: {
-            name: {type: 'string'},
-            title: {type: 'string'},
+test('Zero with invalid primary keys', () => {
+  expect(() =>
+    zeroForTest({
+      schema: {
+        version: 1,
+        tables: {
+          issue: {
+            columns: {
+              name: {type: 'string'},
+              title: {type: 'string'},
+            },
+            primaryKey: ['id'],
+            tableName: 'issue',
+            relationships: {},
           },
-          primaryKey: ['id'],
-          tableName: 'issue',
-          relationships: {},
         },
       },
-    },
-  });
-
-  expectTypeOf(z.mutate.issue.create).toMatchTypeOf<
-    (value: never) => Promise<void>
-  >();
-
-  expectTypeOf(z.mutate.issue.set).toMatchTypeOf<
-    (value: never) => Promise<void>
-  >();
-
-  expectTypeOf(z.mutate.issue.update).toMatchTypeOf<
-    (value: never) => Promise<void>
-  >();
-
-  expectTypeOf(z.mutate.issue.delete).toMatchTypeOf<
-    (value: never) => Promise<void>
-  >();
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Primary key column "id" not found]`,
+  );
 });
 
 test('mutate is a function for batching', async () => {

@@ -10,7 +10,14 @@ import {
   type SetValue,
   type UpdateValue,
 } from '../../zero-client/src/client/crud.js';
-import * as zeroJs from '../../zero-client/src/client/zero.js';
+import {
+  normalizeSchema,
+  type NormalizedSchema,
+} from '../../zero-client/src/client/normalized-schema.js';
+import type {
+  MakeEntityQueriesFromSchema,
+  Schema,
+} from '../../zero-client/src/client/zero.js';
 import type {Query} from '../../zero-client/src/mod.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import type {CRUDOp, CRUDOpKind} from '../../zero-protocol/src/push.js';
@@ -22,9 +29,9 @@ import type {ZQLiteZeroOptions} from './options.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TODO = any;
-export class ZQLiteZero<S extends zeroJs.Schema> {
+export class ZQLiteZero<S extends Schema> {
   readonly zeroContext: ZeroContext;
-  readonly query: zeroJs.MakeEntityQueriesFromSchema<S>;
+  readonly query: MakeEntityQueriesFromSchema<S>;
   readonly mutate: MakeCRUDMutate<S>;
   db: Database;
 
@@ -32,22 +39,23 @@ export class ZQLiteZero<S extends zeroJs.Schema> {
     const {schema, db} = options;
     this.db = db;
     this.zeroContext = {} as TODO;
-    this.query = this.#registerQueries(schema);
-    this.mutate = this.#makeCRUDMutate<S>(schema, db);
+    const normalizedSchema = normalizeSchema(schema);
+    this.query = this.#registerQueries(normalizedSchema);
+    this.mutate = this.#makeCRUDMutate<S>(normalizedSchema, db);
   }
 
-  #registerQueries(schema: S): zeroJs.MakeEntityQueriesFromSchema<S> {
+  #registerQueries(schema: NormalizedSchema): MakeEntityQueriesFromSchema<S> {
     const rv = {} as Record<string, Query<TableSchema>>;
     const context = this.zeroContext;
     // Not using parse yet
     for (const [name, table] of Object.entries(schema.tables)) {
       rv[name] = newQuery(context, table);
     }
-    return rv as zeroJs.MakeEntityQueriesFromSchema<S>;
+    return rv as MakeEntityQueriesFromSchema<S>;
   }
 
-  #makeCRUDMutate<S extends zeroJs.Schema>(
-    schema: S,
+  #makeCRUDMutate<S extends Schema>(
+    schema: NormalizedSchema,
     db: Database,
   ): MakeCRUDMutate<S> {
     let inBatch = false;

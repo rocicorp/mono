@@ -11,7 +11,7 @@ export type TableSchema = TableSchemaBase & {
  */
 export type Lazy<T> = () => T;
 
-type Relationship =
+export type Relationship =
   | FieldRelationship<TableSchema, TableSchema>
   | JunctionRelationship<TableSchema, TableSchema, TableSchema>;
 
@@ -19,7 +19,7 @@ type Relationship =
  * A relationship between two entities where
  * that relationship is defined via fields on both entities.
  */
-type FieldRelationship<
+export type FieldRelationship<
   TSourceSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = {
@@ -34,7 +34,7 @@ type FieldRelationship<
  * A relationship between two entities where
  * that relationship is defined via a junction table.
  */
-type JunctionRelationship<
+export type JunctionRelationship<
   TSourceSchema extends TableSchema,
   TJunctionSchema extends TableSchema,
   TDestSchema extends TableSchema,

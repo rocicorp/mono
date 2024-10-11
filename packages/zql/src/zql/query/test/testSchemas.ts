@@ -45,6 +45,7 @@ export const issueLabelSchema = {
     labelId: {type: 'string'},
   },
   primaryKey: ['issueId', 'labelId'],
+  relationships: {},
 } as const;
 
 export const labelSchema = {
@@ -60,6 +61,7 @@ export const labelSchema = {
       junction: {
         sourceField: 'labelId',
         destField: 'issueId',
+        schema: issueLabelSchema,
       },
       dest: {
         field: 'id',
