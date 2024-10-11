@@ -39,11 +39,12 @@ export class ZQLiteZero<S extends Schema> {
     const {schema, db} = options;
     this.db = db;
     this.zeroContext = {} as TODO;
-    this.query = this.#registerQueries(schema);
-    this.mutate = this.#makeCRUDMutate<S>(normalizeSchema(schema), db);
+    const normalizedSchema = normalizeSchema(schema);
+    this.query = this.#registerQueries(normalizedSchema);
+    this.mutate = this.#makeCRUDMutate<S>(normalizedSchema, db);
   }
 
-  #registerQueries(schema: S): MakeEntityQueriesFromSchema<S> {
+  #registerQueries(schema: NormalizedSchema): MakeEntityQueriesFromSchema<S> {
     const rv = {} as Record<string, Query<TableSchema>>;
     const context = this.zeroContext;
     // Not using parse yet
