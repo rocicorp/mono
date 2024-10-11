@@ -24,7 +24,7 @@
     "playwright": "^1.43.1",
     "replicache": "15.2.1",
     "shared": "0.0.0",
-    "typescript": "^5.5.3",
+    "typescript": "^5.6.3",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#ca2084cdd188c56532ba3e272696d0b9e21a23bf",
     "zod": "^3.21.4"
   },
