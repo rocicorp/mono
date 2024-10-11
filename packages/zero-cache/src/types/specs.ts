@@ -13,6 +13,8 @@ export type TableSpec = {
   readonly primaryKey: readonly string[];
 };
 
+export type LiteTableSpec = TableSpec & {readonly schema: ''};
+
 export type FilteredTableSpec = TableSpec & {
   readonly publications: Readonly<Record<string, {rowFilter: string | null}>>;
 };
@@ -22,9 +24,11 @@ export type IndexSpec = {
   readonly tableName: string;
   readonly name: string;
   readonly unique: boolean;
-  readonly columns: readonly string[];
+  readonly columns: readonly [name: string, dir: 'ASC' | 'DESC'][];
 };
 
+export type LiteIndexSpec = IndexSpec & {readonly schemaName: ''};
+
 export type MutableIndexSpec = IndexSpec & {
-  readonly columns: string[];
+  readonly columns: [name: string, dir: 'ASC' | 'DESC'][];
 };
