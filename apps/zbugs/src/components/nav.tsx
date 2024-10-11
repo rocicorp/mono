@@ -74,7 +74,7 @@ export function Nav() {
             <div className="logged-in-user-container">
               <div className="logged-in-user">
                 {/* Need access to user avatar */}
-                <span>{login.loginState?.login}</span>
+                <span>{login.loginState?.decoded.name}</span>
               </div>
               <button
                 className="logout-button"

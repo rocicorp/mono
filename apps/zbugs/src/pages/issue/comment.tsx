@@ -49,7 +49,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       ) : (
         <Markdown>{comment.body}</Markdown>
       )}
-      {editing || comment.creatorID !== login.loginState?.userID ? null : (
+      {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (
         <div className={style.commentActions}>
           <button onMouseDown={edit}>Edit</button>
           <button onMouseDown={remove}>Delete</button>
