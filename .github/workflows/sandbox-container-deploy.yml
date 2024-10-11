@@ -7,7 +7,8 @@ on:
     #   - 'packages/zero-cache/**'
 env:
   # Setting an environment variable with the value of a configuration variable
-  ECR_IMAGE: ${{ vars.ECR_IMAGE }}
+  ECR_IMAGE_ZERO_CACHE: sandbox-zero-cache
+  ECR_IMAGE_REPLICATION_MANAGER: sandbox-replication-manager
   AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
 jobs:
   deploy:
@@ -45,8 +46,8 @@ jobs:
         run: |
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE:latest -f ./prod/sandbox/Dockerfile.zero-cache --push .
-          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE:latest -f ./prod/sandbox/Dockerfile.replication-manager --push .
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:latest -f ./prod/sandbox/Dockerfile.zero-cache --push .
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_REPLICATION_MANAGER:latest -f ./prod/sandbox/Dockerfile.replication-manager --push .
       - name: Deploy to ECS change-streamer
         uses: imehedi/actions-awscli-v2@latest
         with:
