@@ -126,6 +126,7 @@ const zeroConfigSchemaSansAuthorization = v.object({
   taskId: configStringValueSchema.optional(),
   replicaDBFile: configStringValueSchema,
   storageDbTmpDir: configStringValueSchema.optional(),
+  warmWebsocket: numberLiteral.optional(),
 
   // The number of sync workers defaults to available-cores - 1.
   // It should be set to 0 for the `replication-manager`.
@@ -230,6 +231,10 @@ export class ZeroConfig {
 
   get litestream() {
     return resolveValue(this.#config.litestream);
+  }
+
+  get warmWebsocket() {
+    return this.#config.warmWebsocket;
   }
 
   get jwtSecret() {
