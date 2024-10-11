@@ -50,6 +50,7 @@ import {
   type PokeStartMessage,
   type PushMessage,
   downstreamSchema,
+  encodeProtocols,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
 import type {
@@ -806,10 +807,7 @@ export class Zero<const S extends Schema> {
     }
   }
 
-  async #handleConnectedMessage(
-    lc: LogContext,
-    connectedMessage: ConnectedMessage,
-  ) {
+  #handleConnectedMessage(lc: LogContext, connectedMessage: ConnectedMessage) {
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
@@ -863,16 +861,7 @@ export class Zero<const S extends Schema> {
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
-    const queriesPatch = await this.#rep.query(tx =>
-      this.#queryManager.getQueriesPatch(tx),
-    );
     assert(this.#socket);
-    send(this.#socket, [
-      'initConnection',
-      {
-        desiredQueriesPatch: queriesPatch,
-      },
-    ]);
     this.#setConnectionState(ConnectionState.Connected);
     this.#connectResolver.resolve();
   }
@@ -938,7 +927,9 @@ export class Zero<const S extends Schema> {
     };
     this.#closeAbortController.signal.addEventListener('abort', abortHandler);
 
-    const ws = createSocket(
+    const ws = await createSocket(
+      this.#rep,
+      this.#queryManager,
       toWSString(this.#server),
       this.#connectCookie,
       this.clientID,
@@ -1579,7 +1570,9 @@ export class Zero<const S extends Schema> {
   }
 }
 
-export function createSocket(
+export async function createSocket(
+  rep: ReplicacheImpl,
+  queryManager: QueryManager,
   socketOrigin: WSString,
   baseCookie: NullableVersion,
   clientID: string,
@@ -1592,7 +1585,7 @@ export function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: LogContext,
-): WebSocket {
+): Promise<WebSocket> {
   const url = new URL(socketOrigin);
   // Keep this in sync with the server.
   url.pathname = `/api/sync/v${REFLECT_VERSION}/connect`;
@@ -1620,10 +1613,14 @@ export function createSocket(
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
+  const queriesPatch = await rep.query(tx => queryManager.getQueriesPatch(tx));
   return new WS(
     // toString() required for RN URL polyfill.
     url.toString(),
-    auth === '' || auth === undefined ? undefined : encodeURIComponent(auth),
+    encodeProtocols(
+      ['initConnection', {desiredQueriesPatch: queriesPatch}],
+      auth,
+    ),
   );
 }
 

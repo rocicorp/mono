@@ -117,6 +117,7 @@ export class Syncer implements SingletonService {
       },
     );
     this.#connections.set(clientID, connection);
+    await connection.handleInitConnection(params.initConnectionMsg);
   };
 
   run() {

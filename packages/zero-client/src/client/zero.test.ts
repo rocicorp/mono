@@ -10,6 +10,7 @@ import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
 import {
+  decodeProtocols,
   ErrorKind,
   initConnectionMessageSchema,
 } from '../../../zero-protocol/src/mod.js';
@@ -43,6 +44,8 @@ import {
   type UpdateNeededReason,
   createSocket,
 } from './zero.js';
+import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
+import type {QueryManager} from './query-manager.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -273,6 +276,17 @@ test('disconnects if ping fails', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
+const mockRep = {
+  query() {
+    return Promise.resolve([]);
+  },
+} as unknown as ReplicacheImpl;
+const mockQueryManager = {
+  getQueriesPatch() {
+    return Promise.resolve([]);
+  },
+} as unknown as QueryManager;
+
 suite('createSocket', () => {
   const t = (
     socketURL: WSString,
@@ -291,6 +305,8 @@ suite('createSocket', () => {
     test(expectedURL, () => {
       sinon.stub(performance, 'now').returns(now);
       const mockSocket = createSocket(
+        mockRep,
+        mockQueryManager,
         socketURL,
         baseCookie,
         clientID,
@@ -1010,7 +1026,7 @@ test('smokeTest', async () => {
 //   ).to.be.false;
 // });
 
-test('Authentication', async () => {
+test.only('Authentication', async () => {
   const log: number[] = [];
 
   let authCounter = 0;
@@ -1099,14 +1115,15 @@ test(ErrorKind.AuthInvalidated, async () => {
     auth: () => `auth-token-${authCounter++}`,
   });
 
+  console.log('PROTO', (await r.socket).protocol);
   await r.triggerConnected();
-  expect((await r.socket).protocol).equal('auth-token-1');
+  expect(decodeProtocols((await r.socket).protocol)[1]).equal('auth-token-1');
 
   await r.triggerError(ErrorKind.AuthInvalidated, 'auth error');
   await r.waitForConnectionState(ConnectionState.Disconnected);
 
   await r.waitForConnectionState(ConnectionState.Connecting);
-  expect((await r.socket).protocol).equal('auth-token-2');
+  expect(decodeProtocols((await r.socket).protocol)[1]).equal('auth-token-2');
 });
 
 test('Disconnect on error', async () => {
