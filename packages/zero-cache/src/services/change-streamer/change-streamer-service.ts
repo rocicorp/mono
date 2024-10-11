@@ -230,11 +230,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           startAfter ?? this.#replicaVersion,
         );
         this.#stream = stream;
+        this.#state.resetBackoff();
+
         let preCommitWatermark = stream.initialWatermark;
 
         for await (const change of stream.changes) {
-          this.#state.resetBackoff();
-
           let watermark: string;
           if (change[0] !== 'commit') {
             watermark = preCommitWatermark;
@@ -258,7 +258,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#lc.info?.('ChangeStreamer stopped');
   }
 
-  subscribe(ctx: SubscriberContext): Source<Downstream> {
+  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
     const {id, watermark} = ctx;
     const downstream = Subscription.create<Downstream>({
       cleanup: () => this.#forwarder.remove(subscriber),
@@ -272,7 +272,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#forwarder.add(subscriber);
       this.#storer.catchup(subscriber);
     }
-    return downstream;
+    return Promise.resolve(downstream);
   }
 
   async stop(err?: unknown) {

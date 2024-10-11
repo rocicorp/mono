@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
 import {Queue} from '../../../shared/src/queue.js';
 import * as v from '../../../shared/src/valita.js';
@@ -104,11 +105,11 @@ export async function streamOut<T extends JSONValue>(
   }
 }
 
-export function streamIn<T extends JSONValue>(
+export async function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
-): Source<T> {
+): Promise<Source<T>> {
   const streamedSchema = v.object({
     msg: schema,
     id: v.number(),
@@ -141,6 +142,7 @@ export function streamIn<T extends JSONValue>(
     }
   }
 
+  await closer.connected;
   return sink;
 }
 
@@ -149,7 +151,11 @@ class WebSocketCloser<T> {
   readonly #ws: WebSocket;
   readonly #stream: Source<T>;
   readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
-  #closed = false;
+  readonly #connected = resolver();
+
+  get connected(): Promise<void> {
+    return this.#connected.promise;
+  }
 
   constructor(
     lc: LogContext,
@@ -168,43 +174,52 @@ class WebSocketCloser<T> {
     if (this.#messageHandler) {
       ws.addEventListener('message', this.#messageHandler);
     }
+
+    switch (ws.readyState) {
+      case ws.CONNECTING:
+        break; // expected for new connections. resolve or reject in handlers.
+      case ws.OPEN:
+        this.#connected.resolve();
+        break;
+      default:
+        this.#connected.reject(
+          new Error(`websocket already in state ${ws.readyState}`),
+        );
+        break;
+    }
   }
 
   #handleOpen = () => {
     this.#lc.info?.('connected');
+    this.#connected.resolve();
   };
 
   #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
     this.#lc.info?.('connection closed', {code, reason, wasClean});
     this.close();
+    this.#connected.reject(`connection closed with code ${code}`);
   };
 
-  #handleError = (e: ErrorEvent) => {
-    this.#lc.error?.('connection error', e.message, e.error);
+  #handleError = ({message, error}: ErrorEvent) => {
+    this.#lc.error?.('connection error', message, error);
+    this.#connected.reject(error);
   };
 
   close(err?: unknown) {
-    if (this.#closed) {
-      return;
-    }
     if (err) {
       this.#lc.error?.(`closing stream with error`, err);
     }
-    this.#closed = true;
-    this.#ws.removeEventListener('open', this.#handleOpen);
-    this.#ws.removeEventListener('close', this.#handleClose);
-    this.#ws.removeEventListener('error', this.#handleError);
-    if (this.#messageHandler) {
-      this.#ws.removeEventListener('message', this.#messageHandler);
-    }
     this.#stream.cancel();
-    if (this.#ws.readyState !== this.#ws.CLOSED) {
+    if (!this.closed()) {
       this.#ws.close();
     }
   }
 
   closed() {
-    return this.#closed;
+    return (
+      this.#ws.readyState === this.#ws.CLOSED ||
+      this.#ws.readyState === this.#ws.CLOSING
+    );
   }
 }
