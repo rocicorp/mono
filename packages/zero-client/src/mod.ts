@@ -71,3 +71,4 @@ export type {TableSchema} from '../../zql/src/zql/query/schema.js';
 export type {TypedView} from '../../zql/src/zql/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero, type Schema} from './client/zero.js';
+export {Ref} from './client/ref.js';
