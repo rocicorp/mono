@@ -6,9 +6,6 @@ import {
   commitSchema,
   dataChangeSchema,
   type Change,
-  type DataChange,
-  type MessageBegin,
-  type MessageCommit,
 } from './schema/change.js';
 
 /**
