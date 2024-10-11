@@ -5,12 +5,10 @@ import {LoginProvider} from './hooks/use-login.js';
 import './index.css';
 import Root from './root.js';
 
-export function start() {
-  createRoot(must(document.getElementById('root'))).render(
-    <StrictMode>
-      <LoginProvider>
-        <Root />
-      </LoginProvider>
-    </StrictMode>,
-  );
-}
+createRoot(must(document.getElementById('root'))).render(
+  <StrictMode>
+    <LoginProvider>
+      <Root />
+    </LoginProvider>
+  </StrictMode>,
+);
